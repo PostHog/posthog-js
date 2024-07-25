@@ -57,12 +57,6 @@ describe('Decide', () => {
     describe('constructor', () => {
         given('subject', () => () => given.decide.call())
 
-        given('config', () => ({
-            api_host: 'https://test.com',
-            token: 'testtoken',
-            persistence: 'memory',
-        }))
-
         it('should call instance._send_request on constructor', () => {
             given.subject()
 
@@ -249,7 +243,8 @@ describe('Decide', () => {
 
         it('does not run site apps code if not opted in', () => {
             window.POSTHOG_DEBUG = true
-            given('config', () => ({ api_host: 'https://test.com', opt_in_site_apps: false, persistence: 'memory' }))
+            // don't technically need to run this but this test assumes opt_in_site_apps is false, let's make that explicit
+            posthog.config = { api_host: 'https://test.com', opt_in_site_apps: false, persistence: 'memory' }
 
             expect(() => {
                 subject({ siteApps: [{ id: 1, url: '/site_app/1/tokentoken/hash/' }] })
