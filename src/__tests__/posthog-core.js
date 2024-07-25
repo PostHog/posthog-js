@@ -1086,28 +1086,41 @@ describe('posthog core', () => {
 
         describe('capturing pageviews', () => {
             it('captures not capture pageview if disabled', async () => {
-                given('config', () => ({
+                jest.useFakeTimers()
+
+                const instance = await createPosthogInstance(uuidv7(), {
                     capture_pageview: false,
-                    loaded: jest.fn(),
-                }))
+                })
+                instance.capture = jest.fn()
 
-                given.subject()
+                // TODO you shouldn't need to emit an event to get the pending timer to emit the pageview
+                // but you do :shrug:
+                instance.capture('not a pageview', {})
 
-                expect(given.overrides.capture).not.toHaveBeenCalled()
+                jest.runOnlyPendingTimers()
+
+                expect(instance.capture).not.toHaveBeenLastCalledWith(
+                    '$pageview',
+                    { title: 'test' },
+                    { send_instantly: true }
+                )
             })
 
             it('captures pageview if enabled', async () => {
                 jest.useFakeTimers()
-                given('config', () => ({
-                    capture_pageview: true,
-                    loaded: jest.fn(),
-                }))
 
-                given.subject()
+                const instance = await createPosthogInstance(uuidv7(), {
+                    capture_pageview: true,
+                })
+                instance.capture = jest.fn()
+
+                // TODO you shouldn't need to emit an event to get the pending timer to emit the pageview
+                // but you do :shrug:
+                instance.capture('not a pageview', {})
 
                 jest.runOnlyPendingTimers()
 
-                expect(given.overrides.capture).toHaveBeenCalledWith(
+                expect(instance.capture).toHaveBeenLastCalledWith(
                     '$pageview',
                     { title: 'test' },
                     { send_instantly: true }
