@@ -1,6 +1,6 @@
 /*eslint @typescript-eslint/no-empty-function: "off" */
 
-import { PostHogFeatureFlags, parseFeatureFlagDecideResponse, filterActiveFeatureFlags } from '../posthog-featureflags'
+import { filterActiveFeatureFlags, parseFeatureFlagDecideResponse, PostHogFeatureFlags } from '../posthog-featureflags'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 
@@ -17,11 +17,6 @@ describe('featureflags', () => {
         api_host: 'https://app.posthog.com',
     }
 
-    given('decideResponsePayload', () => ({
-        statusCode: 200,
-        json: given.decideResponse,
-    }))
-
     beforeEach(() => {
         instance = {
             config,
@@ -34,7 +29,12 @@ describe('featureflags', () => {
             get_property: (key) => instance.persistence.props[key],
             capture: () => {},
             decideEndpointWasHit: false,
-            _send_request: jest.fn().mockImplementation(({ callback }) => callback(given.decideResponsePayload)),
+            _send_request: jest.fn().mockImplementation(({ callback }) =>
+                callback({
+                    statusCode: 200,
+                    json: {},
+                })
+            ),
             reloadFeatureFlags: () => featureFlags.reloadFeatureFlags(),
         }
 
@@ -221,13 +221,20 @@ describe('featureflags', () => {
     })
 
     describe('onFeatureFlags', () => {
-        given('decideResponse', () => ({
-            featureFlags: {
-                first: 'variant-1',
-                second: true,
-                third: false,
-            },
-        }))
+        beforeEach(() => {
+            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+                callback({
+                    statusCode: 200,
+                    json: {
+                        featureFlags: {
+                            first: 'variant-1',
+                            second: true,
+                            third: false,
+                        },
+                    },
+                })
+            )
+        })
 
         it('onFeatureFlags should not be called immediately if feature flags not loaded', () => {
             var called = false
@@ -330,9 +337,16 @@ describe('featureflags', () => {
             flagKey: 'second-flag',
         }
 
-        given('decideResponse', () => ({
-            earlyAccessFeatures: [EARLY_ACCESS_FEATURE_FIRST],
-        }))
+        beforeEach(() => {
+            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+                callback({
+                    statusCode: 200,
+                    json: {
+                        earlyAccessFeatures: [EARLY_ACCESS_FEATURE_FIRST],
+                    },
+                })
+            )
+        })
 
         it('getEarlyAccessFeatures requests early access features if not present', () => {
             featureFlags.getEarlyAccessFeatures((data) => {
@@ -349,15 +363,20 @@ describe('featureflags', () => {
 
             expect(instance.persistence.props.$early_access_features).toEqual([EARLY_ACCESS_FEATURE_FIRST])
 
-            given('decideResponse', () => ({
-                earlyAccessFeatures: [EARLY_ACCESS_FEATURE_SECOND],
-            }))
+            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+                callback({
+                    statusCode: 200,
+                    json: {
+                        earlyAccessFeatures: [EARLY_ACCESS_FEATURE_SECOND],
+                    },
+                })
+            )
 
             // request again, shouldn't call _send_request again
             featureFlags.getEarlyAccessFeatures((data) => {
                 expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
             })
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request).toHaveBeenCalledTimes(0)
         })
 
         it('getEarlyAccessFeatures force reloads early access features when asked to', () => {
@@ -375,18 +394,20 @@ describe('featureflags', () => {
 
             expect(instance.persistence.props.$early_access_features).toEqual([EARLY_ACCESS_FEATURE_FIRST])
 
-            given('decideResponsePayload', () => ({
-                statusCode: 200,
-                json: {
-                    earlyAccessFeatures: [EARLY_ACCESS_FEATURE_SECOND],
-                },
-            }))
+            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+                callback({
+                    statusCode: 200,
+                    json: {
+                        earlyAccessFeatures: [EARLY_ACCESS_FEATURE_SECOND],
+                    },
+                })
+            )
 
             // request again, should call _send_request because we're forcing a reload
             featureFlags.getEarlyAccessFeatures((data) => {
                 expect(data).toEqual([EARLY_ACCESS_FEATURE_SECOND])
             }, true)
-            expect(instance._send_request).toHaveBeenCalledTimes(2)
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
         })
 
         it('update enrollment should update the early access feature enrollment', () => {
@@ -467,12 +488,19 @@ describe('featureflags', () => {
     })
 
     describe('reloadFeatureFlags', () => {
-        given('decideResponse', () => ({
-            featureFlags: {
-                first: 'variant-1',
-                second: true,
-            },
-        }))
+        beforeEach(() => {
+            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+                callback({
+                    statusCode: 200,
+                    json: {
+                        featureFlags: {
+                            first: 'variant-1',
+                            second: true,
+                        },
+                    },
+                })
+            )
+        })
 
         it('on providing anonDistinctId', () => {
             featureFlags.setAnonymousDistinctId('rando_id')
@@ -607,12 +635,19 @@ describe('featureflags', () => {
     })
 
     describe('override person and group properties', () => {
-        given('decideResponse', () => ({
-            featureFlags: {
-                first: 'variant-1',
-                second: true,
-            },
-        }))
+        beforeEach(() => {
+            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+                callback({
+                    statusCode: 200,
+                    json: {
+                        featureFlags: {
+                            first: 'variant-1',
+                            second: true,
+                        },
+                    },
+                })
+            )
+        })
 
         it('on providing personProperties updates properties successively', () => {
             featureFlags.setPersonPropertiesForFlags({ a: 'b', c: 'd' })
@@ -739,10 +774,17 @@ describe('featureflags', () => {
     })
 
     describe('when subsequent decide calls return partial results', () => {
-        given('decideResponse', () => ({
-            featureFlags: { 'x-flag': 'x-value', 'feature-1': false },
-            errorsWhileComputingFlags: true,
-        }))
+        beforeEach(() => {
+            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+                callback({
+                    statusCode: 200,
+                    json: {
+                        featureFlags: { 'x-flag': 'x-value', 'feature-1': false },
+                        errorsWhileComputingFlags: true,
+                    },
+                })
+            )
+        })
 
         it('should return combined results', () => {
             featureFlags.reloadFeatureFlags()
@@ -761,10 +803,17 @@ describe('featureflags', () => {
     })
 
     describe('when subsequent decide calls return results without errors', () => {
-        given('decideResponse', () => ({
-            featureFlags: { 'x-flag': 'x-value', 'feature-1': false },
-            errorsWhileComputingFlags: false,
-        }))
+        beforeEach(() => {
+            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+                callback({
+                    statusCode: 200,
+                    json: {
+                        featureFlags: { 'x-flag': 'x-value', 'feature-1': false },
+                        errorsWhileComputingFlags: false,
+                    },
+                })
+            )
+        })
 
         it('should return combined results', () => {
             featureFlags.reloadFeatureFlags()
@@ -779,10 +828,14 @@ describe('featureflags', () => {
     })
 
     describe('when decide times out or errors out', () => {
-        given('decideResponsePayload', () => ({
-            statusCode: 500,
-            text: 'Internal Server Error',
-        }))
+        beforeEach(() => {
+            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+                callback({
+                    statusCode: 500,
+                    text: 'Internal Server Error',
+                })
+            )
+        })
 
         it('should not change the existing flags', () => {
             instance.persistence.register({
@@ -856,10 +909,12 @@ describe('featureflags', () => {
         })
 
         it('should call onFeatureFlags with existing flags on timeouts', () => {
-            given('decideResponsePayload', () => ({
-                statusCode: 0,
-                text: '',
-            }))
+            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+                callback({
+                    statusCode: 0,
+                    text: '',
+                })
+            )
 
             var called = false
             let _flags = []
@@ -890,12 +945,14 @@ describe('featureflags', () => {
 })
 
 describe('parseFeatureFlagDecideResponse', () => {
-    given('decideResponse', () => {})
-    given('persistence', () => ({ register: jest.fn(), unregister: jest.fn() }))
-    given('subject', () => () => parseFeatureFlagDecideResponse(given.decideResponse, given.persistence))
+    let persistence
+
+    beforeEach(() => {
+        persistence = { register: jest.fn(), unregister: jest.fn() }
+    })
 
     it('enables multivariate feature flags from decide v2^ response', () => {
-        given('decideResponse', () => ({
+        const decideResponse = {
             featureFlags: {
                 'beta-feature': true,
                 'alpha-feature-2': true,
@@ -905,10 +962,10 @@ describe('parseFeatureFlagDecideResponse', () => {
                 'beta-feature': 300,
                 'alpha-feature-2': 'fake-payload',
             },
-        }))
-        given.subject()
+        }
+        parseFeatureFlagDecideResponse(decideResponse, persistence)
 
-        expect(given.persistence.register).toHaveBeenCalledWith({
+        expect(persistence.register).toHaveBeenCalledWith({
             $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
             $enabled_feature_flags: {
                 'beta-feature': true,
@@ -924,21 +981,21 @@ describe('parseFeatureFlagDecideResponse', () => {
 
     it('enables feature flags from decide response (v1 backwards compatibility)', () => {
         // checks that nothing fails when asking for ?v=2 and getting a ?v=1 response
-        given('decideResponse', () => ({ featureFlags: ['beta-feature', 'alpha-feature-2'] }))
-        given.subject()
+        const decideResponse = { featureFlags: ['beta-feature', 'alpha-feature-2'] }
 
-        expect(given.persistence.register).toHaveBeenLastCalledWith({
+        parseFeatureFlagDecideResponse(decideResponse, persistence)
+
+        expect(persistence.register).toHaveBeenLastCalledWith({
             $active_feature_flags: ['beta-feature', 'alpha-feature-2'],
             $enabled_feature_flags: { 'beta-feature': true, 'alpha-feature-2': true },
         })
     })
 
     it('doesnt remove existing feature flags when no flags are returned', () => {
-        given('decideResponse', () => ({}))
-        given.subject()
+        parseFeatureFlagDecideResponse({}, persistence)
 
-        expect(given.persistence.register).not.toHaveBeenCalled()
-        expect(given.persistence.unregister).not.toHaveBeenCalled()
+        expect(persistence.register).not.toHaveBeenCalled()
+        expect(persistence.unregister).not.toHaveBeenCalled()
     })
 })
 

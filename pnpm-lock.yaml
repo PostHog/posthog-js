@@ -144,9 +144,6 @@ devDependencies:
   fast-check:
     specifier: ^2.17.0
     version: 2.17.0
-  given2:
-    specifier: ^2.1.7
-    version: 2.1.7
   husky:
     specifier: ^8.0.1
     version: 8.0.1
@@ -5846,10 +5843,6 @@ packages:
     dependencies:
       image-q: 1.1.1
       omggif: 1.0.10
-    dev: true
-
-  /given2@2.1.7:
-    resolution: {integrity: sha512-fI3VamsjN2euNVguGpSt2uExyDSMfJoK+SwDxbmV+Thf3v4oF6KKZAFE3LHHuT+PYyMwCsJYXO01TW3euFdPGA==}
     dev: true
 
   /glob-parent@5.1.2:
