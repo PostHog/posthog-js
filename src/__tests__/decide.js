@@ -3,14 +3,14 @@ import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 import { expectScriptToExist, expectScriptToNotExist } from './helpers/script-utils'
 
-const expectDecodedSendRequest = (send_request, data, noCompression) => {
+const expectDecodedSendRequest = (send_request, data, noCompression, posthog) => {
     const lastCall = send_request.mock.calls[send_request.mock.calls.length - 1]
 
     const decoded = lastCall[0].data
     // Helper to give us more accurate error messages
     expect(decoded).toEqual(data)
 
-    expect(given.posthog._send_request).toHaveBeenCalledWith({
+    expect(posthog._send_request).toHaveBeenCalledWith({
         url: 'https://test.com/decide/?v=3',
         data,
         method: 'POST',
@@ -21,36 +21,39 @@ const expectDecodedSendRequest = (send_request, data, noCompression) => {
 }
 
 describe('Decide', () => {
-    given('decide', () => new Decide(given.posthog))
-    given('posthog', () => ({
-        config: given.config,
-        persistence: new PostHogPersistence(given.config),
-        register: (props) => given.posthog.persistence.register(props),
-        unregister: (key) => given.posthog.persistence.unregister(key),
-        get_property: (key) => given.posthog.persistence.props[key],
-        capture: jest.fn(),
-        _addCaptureHook: jest.fn(),
-        _afterDecideResponse: jest.fn(),
-        get_distinct_id: jest.fn().mockImplementation(() => 'distinctid'),
-        _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: given.decideResponse })),
-        featureFlags: {
-            receivedFeatureFlags: jest.fn(),
-            setReloadingPaused: jest.fn(),
-            _startReloadTimer: jest.fn(),
-        },
-        requestRouter: new RequestRouter({ config: given.config }),
-        _hasBootstrappedFeatureFlags: jest.fn(),
-        getGroups: () => ({ organization: '5' }),
-    }))
+    let posthog
+
+    given('decide', () => new Decide(posthog))
 
     given('decideResponse', () => ({}))
 
-    given('config', () => ({ api_host: 'https://test.com', persistence: 'memory' }))
+    given('config', () => ({ token: 'testtoken', api_host: 'https://test.com', persistence: 'memory' }))
 
     beforeEach(() => {
         // clean the JSDOM to prevent interdependencies between tests
         document.body.innerHTML = ''
         document.head.innerHTML = ''
+
+        posthog = {
+            config: given.config,
+            persistence: new PostHogPersistence(given.config),
+            register: (props) => posthog.persistence.register(props),
+            unregister: (key) => posthog.persistence.unregister(key),
+            get_property: (key) => posthog.persistence.props[key],
+            capture: jest.fn(),
+            _addCaptureHook: jest.fn(),
+            _afterDecideResponse: jest.fn(),
+            get_distinct_id: jest.fn().mockImplementation(() => 'distinctid'),
+            _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: given.decideResponse })),
+            featureFlags: {
+                receivedFeatureFlags: jest.fn(),
+                setReloadingPaused: jest.fn(),
+                _startReloadTimer: jest.fn(),
+            },
+            requestRouter: new RequestRouter({ config: given.config }),
+            _hasBootstrappedFeatureFlags: jest.fn(),
+            getGroups: () => ({ organization: '5' }),
+        }
     })
 
     describe('constructor', () => {
@@ -65,60 +68,77 @@ describe('Decide', () => {
         it('should call instance._send_request on constructor', () => {
             given.subject()
 
-            expectDecodedSendRequest(given.posthog._send_request, {
-                token: 'testtoken',
-                distinct_id: 'distinctid',
-                groups: { organization: '5' },
-            })
+            expectDecodedSendRequest(
+                posthog._send_request,
+                {
+                    token: 'testtoken',
+                    distinct_id: 'distinctid',
+                    groups: { organization: '5' },
+                },
+                false,
+                posthog
+            )
         })
 
         it('should send all stored properties with decide request', () => {
-            given.posthog.register({
+            posthog.register({
                 $stored_person_properties: { key: 'value' },
                 $stored_group_properties: { organization: { orgName: 'orgValue' } },
             })
             given.subject()
 
-            expectDecodedSendRequest(given.posthog._send_request, {
-                token: 'testtoken',
-                distinct_id: 'distinctid',
-                groups: { organization: '5' },
-                person_properties: { key: 'value' },
-                group_properties: { organization: { orgName: 'orgValue' } },
-            })
+            expectDecodedSendRequest(
+                posthog._send_request,
+                {
+                    token: 'testtoken',
+                    distinct_id: 'distinctid',
+                    groups: { organization: '5' },
+                    person_properties: { key: 'value' },
+                    group_properties: { organization: { orgName: 'orgValue' } },
+                },
+                false,
+                posthog
+            )
         })
 
         it('should send disable flags with decide request when config is set', () => {
-            given('config', () => ({
+            posthog.config = {
                 api_host: 'https://test.com',
                 token: 'testtoken',
                 persistence: 'memory',
                 advanced_disable_feature_flags: true,
-            }))
-            given.posthog.register({
+            }
+
+            posthog.register({
                 $stored_person_properties: { key: 'value' },
                 $stored_group_properties: { organization: { orgName: 'orgValue' } },
             })
             given.subject()
 
-            expectDecodedSendRequest(given.posthog._send_request, {
-                token: 'testtoken',
-                distinct_id: 'distinctid',
-                groups: { organization: '5' },
-                person_properties: { key: 'value' },
-                group_properties: { organization: { orgName: 'orgValue' } },
-                disable_flags: true,
-            })
+            expectDecodedSendRequest(
+                posthog._send_request,
+                {
+                    token: 'testtoken',
+                    distinct_id: 'distinctid',
+                    groups: { organization: '5' },
+                    person_properties: { key: 'value' },
+                    group_properties: { organization: { orgName: 'orgValue' } },
+                    disable_flags: true,
+                },
+                false,
+                posthog
+            )
         })
 
         it('should disable compression when config is set', () => {
-            given('config', () => ({
+            posthog.config = {
                 api_host: 'https://test.com',
                 token: 'testtoken',
                 persistence: 'memory',
                 disable_compression: true,
-            }))
-            given.posthog.register({
+            }
+
+            posthog.register({
                 $stored_person_properties: {},
                 $stored_group_properties: {},
             })
@@ -126,7 +146,7 @@ describe('Decide', () => {
 
             // noCompression is true
             expectDecodedSendRequest(
-                given.posthog._send_request,
+                posthog._send_request,
                 {
                     token: 'testtoken',
                     distinct_id: 'distinctid',
@@ -134,31 +154,38 @@ describe('Decide', () => {
                     person_properties: {},
                     group_properties: {},
                 },
-                true
+                true,
+                posthog
             )
         })
 
         it('should send disable flags with decide request when config for advanced_disable_feature_flags_on_first_load is set', () => {
-            given('config', () => ({
+            posthog.config = {
                 api_host: 'https://test.com',
                 token: 'testtoken',
                 persistence: 'memory',
                 advanced_disable_feature_flags_on_first_load: true,
-            }))
-            given.posthog.register({
+            }
+
+            posthog.register({
                 $stored_person_properties: { key: 'value' },
                 $stored_group_properties: { organization: { orgName: 'orgValue' } },
             })
             given.subject()
 
-            expectDecodedSendRequest(given.posthog._send_request, {
-                token: 'testtoken',
-                distinct_id: 'distinctid',
-                groups: { organization: '5' },
-                person_properties: { key: 'value' },
-                group_properties: { organization: { orgName: 'orgValue' } },
-                disable_flags: true,
-            })
+            expectDecodedSendRequest(
+                posthog._send_request,
+                {
+                    token: 'testtoken',
+                    distinct_id: 'distinctid',
+                    groups: { organization: '5' },
+                    person_properties: { key: 'value' },
+                    group_properties: { organization: { orgName: 'orgValue' } },
+                    disable_flags: true,
+                },
+                false,
+                posthog
+            )
         })
     })
 
@@ -169,8 +196,8 @@ describe('Decide', () => {
             given('decideResponse', () => ({}))
             given.subject()
 
-            expect(given.posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith(given.decideResponse, false)
-            expect(given.posthog._afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
+            expect(posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith(given.decideResponse, false)
+            expect(posthog._afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
         })
 
         it('Make sure receivedFeatureFlags is called with errors if the decide response fails', () => {
@@ -180,7 +207,7 @@ describe('Decide', () => {
 
             given.subject()
 
-            expect(given.posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith({}, true)
+            expect(posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith({}, true)
             expect(console.error).toHaveBeenCalledWith('[PostHog.js]', 'Failed to fetch feature flags from PostHog.')
         })
 
@@ -188,38 +215,38 @@ describe('Decide', () => {
             given('decideResponse', () => ({
                 featureFlags: { 'test-flag': true },
             }))
-            given('config', () => ({
+            posthog.config = {
                 api_host: 'https://test.com',
                 token: 'testtoken',
                 persistence: 'memory',
                 advanced_disable_feature_flags_on_first_load: true,
-            }))
+            }
 
             given.subject()
 
-            expect(given.posthog._afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
-            expect(given.posthog.featureFlags.receivedFeatureFlags).not.toHaveBeenCalled()
+            expect(posthog._afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
+            expect(posthog.featureFlags.receivedFeatureFlags).not.toHaveBeenCalled()
         })
 
         it('Make sure receivedFeatureFlags is not called if advanced_disable_feature_flags is set', () => {
             given('decideResponse', () => ({
                 featureFlags: { 'test-flag': true },
             }))
-            given('config', () => ({
+            posthog.config = {
                 api_host: 'https://test.com',
                 token: 'testtoken',
                 persistence: 'memory',
                 advanced_disable_feature_flags: true,
-            }))
+            }
 
             given.subject()
 
-            expect(given.posthog._afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
-            expect(given.posthog.featureFlags.receivedFeatureFlags).not.toHaveBeenCalled()
+            expect(posthog._afterDecideResponse).toHaveBeenCalledWith(given.decideResponse)
+            expect(posthog.featureFlags.receivedFeatureFlags).not.toHaveBeenCalled()
         })
 
         it('runs site apps if opted in', () => {
-            given('config', () => ({ api_host: 'https://test.com', opt_in_site_apps: true, persistence: 'memory' }))
+            posthog.config = { api_host: 'https://test.com', opt_in_site_apps: true, persistence: 'memory' }
             given('decideResponse', () => ({ siteApps: [{ id: 1, url: '/site_app/1/tokentoken/hash/' }] }))
             given.subject()
             expectScriptToExist('https://test.com/site_app/1/tokentoken/hash/')
