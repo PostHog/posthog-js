@@ -1064,68 +1064,65 @@ describe('posthog core', () => {
                 Decide.mockReset()
             })
 
-            it('is called by default', () => {
-                given.subject()
+            it('is called by default', async () => {
+                const instance = await createPosthogInstance(uuidv7())
+                instance.featureFlags.setReloadingPaused = jest.fn()
+                instance._loaded()
 
                 expect(new Decide().call).toHaveBeenCalled()
-                expect(given.overrides.featureFlags.setReloadingPaused).toHaveBeenCalledWith(true)
+                expect(instance.featureFlags.setReloadingPaused).toHaveBeenCalledWith(true)
             })
 
-            it('does not call decide if disabled', () => {
-                given('config', () => ({
+            it('does not call decide if disabled', async () => {
+                const instance = await createPosthogInstance(uuidv7(), {
                     advanced_disable_decide: true,
-                    loaded: jest.fn(),
-                }))
-
-                given.subject()
+                })
+                instance.featureFlags.setReloadingPaused = jest.fn()
+                instance._loaded()
 
                 expect(new Decide().call).not.toHaveBeenCalled()
-                expect(given.overrides.featureFlags.setReloadingPaused).not.toHaveBeenCalled()
+                expect(instance.featureFlags.setReloadingPaused).not.toHaveBeenCalled()
             })
         })
+    })
 
-        describe('capturing pageviews', () => {
-            it('captures not capture pageview if disabled', async () => {
-                jest.useFakeTimers()
+    describe('capturing pageviews', () => {
+        it('captures not capture pageview if disabled', async () => {
+            jest.useFakeTimers()
 
-                const instance = await createPosthogInstance(uuidv7(), {
-                    capture_pageview: false,
-                })
-                instance.capture = jest.fn()
-
-                // TODO you shouldn't need to emit an event to get the pending timer to emit the pageview
-                // but you do :shrug:
-                instance.capture('not a pageview', {})
-
-                jest.runOnlyPendingTimers()
-
-                expect(instance.capture).not.toHaveBeenLastCalledWith(
-                    '$pageview',
-                    { title: 'test' },
-                    { send_instantly: true }
-                )
+            const instance = await createPosthogInstance(uuidv7(), {
+                capture_pageview: false,
             })
+            instance.capture = jest.fn()
 
-            it('captures pageview if enabled', async () => {
-                jest.useFakeTimers()
+            // TODO you shouldn't need to emit an event to get the pending timer to emit the pageview
+            // but you do :shrug:
+            instance.capture('not a pageview', {})
 
-                const instance = await createPosthogInstance(uuidv7(), {
-                    capture_pageview: true,
-                })
-                instance.capture = jest.fn()
+            jest.runOnlyPendingTimers()
 
-                // TODO you shouldn't need to emit an event to get the pending timer to emit the pageview
-                // but you do :shrug:
-                instance.capture('not a pageview', {})
+            expect(instance.capture).not.toHaveBeenLastCalledWith(
+                '$pageview',
+                { title: 'test' },
+                { send_instantly: true }
+            )
+        })
 
-                jest.runOnlyPendingTimers()
+        it('captures pageview if enabled', async () => {
+            jest.useFakeTimers()
 
-                expect(instance.capture).toHaveBeenLastCalledWith(
-                    '$pageview',
-                    { title: 'test' },
-                    { send_instantly: true }
-                )
+            const instance = await createPosthogInstance(uuidv7(), {
+                capture_pageview: true,
             })
+            instance.capture = jest.fn()
+
+            // TODO you shouldn't need to emit an event to get the pending timer to emit the pageview
+            // but you do :shrug:
+            instance.capture('not a pageview', {})
+
+            jest.runOnlyPendingTimers()
+
+            expect(instance.capture).toHaveBeenLastCalledWith('$pageview', { title: 'test' }, { send_instantly: true })
         })
     })
 
