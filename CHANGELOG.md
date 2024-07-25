@@ -1,3 +1,7 @@
+## 1.150.0 - 2024-07-25
+
+- feat(surveys): add support for a 7 point likert scale (#1319)
+
 ## 1.149.2 - 2024-07-24
 
 - feat: add debug startup log message (#1318)
