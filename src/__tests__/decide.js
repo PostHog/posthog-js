@@ -25,7 +25,7 @@ describe('Decide', () => {
 
     given('decide', () => new Decide(posthog))
 
-    given('config', () => ({ token: 'testtoken', api_host: 'https://test.com', persistence: 'memory' }))
+    const defaultConfig = { token: 'testtoken', api_host: 'https://test.com', persistence: 'memory' }
 
     beforeEach(() => {
         // clean the JSDOM to prevent interdependencies between tests
@@ -33,8 +33,8 @@ describe('Decide', () => {
         document.head.innerHTML = ''
 
         posthog = {
-            config: given.config,
-            persistence: new PostHogPersistence(given.config),
+            config: defaultConfig,
+            persistence: new PostHogPersistence(defaultConfig),
             register: (props) => posthog.persistence.register(props),
             unregister: (key) => posthog.persistence.unregister(key),
             get_property: (key) => posthog.persistence.props[key],
@@ -48,7 +48,7 @@ describe('Decide', () => {
                 setReloadingPaused: jest.fn(),
                 _startReloadTimer: jest.fn(),
             },
-            requestRouter: new RequestRouter({ config: given.config }),
+            requestRouter: new RequestRouter({ config: defaultConfig }),
             _hasBootstrappedFeatureFlags: jest.fn(),
             getGroups: () => ({ organization: '5' }),
         }
