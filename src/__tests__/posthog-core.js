@@ -1,4 +1,3 @@
-import { PostHogPersistence } from '../posthog-persistence'
 import { Decide } from '../decide'
 
 import { Info } from '../utils/event-utils'
@@ -838,100 +837,94 @@ describe('posthog core', () => {
     })
 
     describe('group()', () => {
-        given('captureQueue', () => jest.fn())
-        given('overrides', () => ({
-            persistence: new PostHogPersistence(given.config),
-            capture: jest.fn(),
-            _captureMetrics: {
-                incr: jest.fn(),
-            },
-            reloadFeatureFlags: jest.fn(),
-        }))
-        given('config', () => ({
-            request_batching: true,
-            persistence: 'memory',
-            property_denylist: [],
-            property_blacklist: [],
-            _onCapture: jest.fn(),
-        }))
+        let posthog
 
         beforeEach(() => {
-            given.overrides.persistence.clear()
+            posthog = defaultPostHog().init(
+                'testtoken',
+                {
+                    persistence: 'memory',
+                },
+                uuidv7()
+            )
+            posthog.persistence.clear()
+            posthog.reloadFeatureFlags = jest.fn()
+            posthog.capture = jest.fn()
         })
 
         it('records info on groups', () => {
-            given.lib.group('organization', 'org::5')
-            expect(given.lib.getGroups()).toEqual({ organization: 'org::5' })
+            posthog.group('organization', 'org::5')
+            expect(posthog.getGroups()).toEqual({ organization: 'org::5' })
 
-            given.lib.group('organization', 'org::6')
-            expect(given.lib.getGroups()).toEqual({ organization: 'org::6' })
+            posthog.group('organization', 'org::6')
+            expect(posthog.getGroups()).toEqual({ organization: 'org::6' })
 
-            given.lib.group('instance', 'app.posthog.com')
-            expect(given.lib.getGroups()).toEqual({ organization: 'org::6', instance: 'app.posthog.com' })
+            posthog.group('instance', 'app.posthog.com')
+            expect(posthog.getGroups()).toEqual({ organization: 'org::6', instance: 'app.posthog.com' })
         })
 
         it('records info on groupProperties for groups', () => {
-            given.lib.group('organization', 'org::5', { name: 'PostHog' })
-            expect(given.lib.getGroups()).toEqual({ organization: 'org::5' })
+            posthog.group('organization', 'org::5', { name: 'PostHog' })
+            expect(posthog.getGroups()).toEqual({ organization: 'org::5' })
 
-            expect(given.lib.persistence.props['$stored_group_properties']).toEqual({
+            expect(posthog.persistence.props['$stored_group_properties']).toEqual({
                 organization: { name: 'PostHog' },
             })
 
-            given.lib.group('organization', 'org::6')
-            expect(given.lib.getGroups()).toEqual({ organization: 'org::6' })
-            expect(given.lib.persistence.props['$stored_group_properties']).toEqual({ organization: {} })
+            posthog.group('organization', 'org::6')
+            expect(posthog.getGroups()).toEqual({ organization: 'org::6' })
+            expect(posthog.persistence.props['$stored_group_properties']).toEqual({ organization: {} })
 
-            given.lib.group('instance', 'app.posthog.com')
-            expect(given.lib.getGroups()).toEqual({ organization: 'org::6', instance: 'app.posthog.com' })
-            expect(given.lib.persistence.props['$stored_group_properties']).toEqual({ organization: {}, instance: {} })
+            posthog.group('instance', 'app.posthog.com')
+            expect(posthog.getGroups()).toEqual({ organization: 'org::6', instance: 'app.posthog.com' })
+            expect(posthog.persistence.props['$stored_group_properties']).toEqual({ organization: {}, instance: {} })
 
             // now add properties to the group
-            given.lib.group('organization', 'org::7', { name: 'PostHog2' })
-            expect(given.lib.getGroups()).toEqual({ organization: 'org::7', instance: 'app.posthog.com' })
-            expect(given.lib.persistence.props['$stored_group_properties']).toEqual({
+            posthog.group('organization', 'org::7', { name: 'PostHog2' })
+            expect(posthog.getGroups()).toEqual({ organization: 'org::7', instance: 'app.posthog.com' })
+            expect(posthog.persistence.props['$stored_group_properties']).toEqual({
                 organization: { name: 'PostHog2' },
                 instance: {},
             })
 
-            given.lib.group('instance', 'app.posthog.com', { a: 'b' })
-            expect(given.lib.getGroups()).toEqual({ organization: 'org::7', instance: 'app.posthog.com' })
-            expect(given.lib.persistence.props['$stored_group_properties']).toEqual({
+            posthog.group('instance', 'app.posthog.com', { a: 'b' })
+            expect(posthog.getGroups()).toEqual({ organization: 'org::7', instance: 'app.posthog.com' })
+            expect(posthog.persistence.props['$stored_group_properties']).toEqual({
                 organization: { name: 'PostHog2' },
                 instance: { a: 'b' },
             })
 
-            given.lib.resetGroupPropertiesForFlags()
-            expect(given.lib.persistence.props['$stored_group_properties']).toEqual(undefined)
+            posthog.resetGroupPropertiesForFlags()
+            expect(posthog.persistence.props['$stored_group_properties']).toEqual(undefined)
         })
 
         it('does not result in a capture call', () => {
-            given.lib.group('organization', 'org::5')
+            posthog.group('organization', 'org::5')
 
-            expect(given.overrides.capture).not.toHaveBeenCalled()
+            expect(posthog.capture).not.toHaveBeenCalled()
         })
 
         it('results in a reloadFeatureFlags call if group changes', () => {
-            given.lib.group('organization', 'org::5', { name: 'PostHog' })
-            given.lib.group('instance', 'app.posthog.com')
-            given.lib.group('organization', 'org::5')
+            posthog.group('organization', 'org::5', { name: 'PostHog' })
+            posthog.group('instance', 'app.posthog.com')
+            posthog.group('organization', 'org::5')
 
-            expect(given.overrides.reloadFeatureFlags).toHaveBeenCalledTimes(2)
+            expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(2)
         })
 
         it('results in a reloadFeatureFlags call if group properties change', () => {
-            given.lib.group('organization', 'org::5')
-            given.lib.group('instance', 'app.posthog.com')
-            given.lib.group('organization', 'org::5', { name: 'PostHog' })
-            given.lib.group('instance', 'app.posthog.com')
+            posthog.group('organization', 'org::5')
+            posthog.group('instance', 'app.posthog.com')
+            posthog.group('organization', 'org::5', { name: 'PostHog' })
+            posthog.group('instance', 'app.posthog.com')
 
-            expect(given.overrides.reloadFeatureFlags).toHaveBeenCalledTimes(3)
+            expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(3)
         })
 
         it('captures $groupidentify event', () => {
-            given.lib.group('organization', 'org::5', { group: 'property', foo: 5 })
+            posthog.group('organization', 'org::5', { group: 'property', foo: 5 })
 
-            expect(given.overrides.capture).toHaveBeenCalledWith('$groupidentify', {
+            expect(posthog.capture).toHaveBeenCalledWith('$groupidentify', {
                 $group_type: 'organization',
                 $group_key: 'org::5',
                 $group_set: {
@@ -942,29 +935,30 @@ describe('posthog core', () => {
         })
 
         describe('subsequent capture calls', () => {
-            given('overrides', () => ({
-                __loaded: true,
-                config: {
-                    api_host: 'https://app.posthog.com',
-                    ...given.config,
-                },
-                persistence: new PostHogPersistence(given.config),
-                sessionPersistence: new PostHogPersistence(given.config),
-                _requestQueue: {
-                    enqueue: given.captureQueue,
-                },
-                reloadFeatureFlags: jest.fn(),
-            }))
+            beforeEach(() => {
+                posthog = defaultPostHog().init(
+                    'testtoken',
+                    {
+                        persistence: 'memory',
+                    },
+                    uuidv7()
+                )
+                posthog.persistence.clear()
+                // mock this internal queue - not capture
+                posthog._requestQueue = {
+                    enqueue: jest.fn(),
+                }
+            })
 
             it('sends group information in event properties', () => {
-                given.lib.group('organization', 'org::5')
-                given.lib.group('instance', 'app.posthog.com')
+                posthog.group('organization', 'org::5')
+                posthog.group('instance', 'app.posthog.com')
 
-                given.lib.capture('some_event', { prop: 5 })
+                posthog.capture('some_event', { prop: 5 })
 
-                expect(given.captureQueue).toHaveBeenCalledTimes(1)
+                expect(posthog._requestQueue.enqueue).toHaveBeenCalledTimes(1)
 
-                const eventPayload = given.captureQueue.mock.calls[0][0]
+                const eventPayload = posthog._requestQueue.enqueue.mock.calls[0][0]
                 expect(eventPayload.data.event).toEqual('some_event')
                 expect(eventPayload.data.properties.$groups).toEqual({
                     organization: 'org::5',
@@ -982,11 +976,11 @@ describe('posthog core', () => {
                 window.console.error = jest.fn()
                 window.console.warn = jest.fn()
 
-                given.lib.group(null, 'foo')
-                given.lib.group('organization', null)
-                given.lib.group('organization', undefined)
-                given.lib.group('organization', '')
-                given.lib.group('', 'foo')
+                posthog.group(null, 'foo')
+                posthog.group('organization', null)
+                posthog.group('organization', undefined)
+                posthog.group('organization', '')
+                posthog.group('', 'foo')
 
                 expect(given.overrides.register).not.toHaveBeenCalled()
             })
@@ -994,15 +988,15 @@ describe('posthog core', () => {
 
         describe('reset group', () => {
             it('groups property is empty and reloads feature flags', () => {
-                given.lib.group('organization', 'org::5')
-                given.lib.group('instance', 'app.posthog.com', { group: 'property', foo: 5 })
+                posthog.group('organization', 'org::5')
+                posthog.group('instance', 'app.posthog.com', { group: 'property', foo: 5 })
 
-                expect(given.lib.persistence.props['$groups']).toEqual({
+                expect(posthog.persistence.props['$groups']).toEqual({
                     organization: 'org::5',
                     instance: 'app.posthog.com',
                 })
 
-                expect(given.lib.persistence.props['$stored_group_properties']).toEqual({
+                expect(posthog.persistence.props['$stored_group_properties']).toEqual({
                     organization: {},
                     instance: {
                         group: 'property',
@@ -1010,12 +1004,12 @@ describe('posthog core', () => {
                     },
                 })
 
-                given.lib.resetGroups()
+                posthog.resetGroups()
 
-                expect(given.lib.persistence.props['$groups']).toEqual({})
-                expect(given.lib.persistence.props['$stored_group_properties']).toEqual(undefined)
+                expect(posthog.persistence.props['$groups']).toEqual({})
+                expect(posthog.persistence.props['$stored_group_properties']).toEqual(undefined)
 
-                expect(given.overrides.reloadFeatureFlags).toHaveBeenCalledTimes(3)
+                expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(3)
             })
         })
     })
