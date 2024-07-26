@@ -775,33 +775,53 @@ describe('posthog core', () => {
         })
 
         describe('device id behavior', () => {
-            it('sets a random UUID as distinct_id/$device_id if distinct_id is unset', () => {
-                given('distinct_id', () => undefined)
-                given('config', () => ({
-                    get_device_id: (uuid) => uuid,
-                }))
+            let uninitialisedPostHog
+            beforeEach(() => {
+                uninitialisedPostHog = defaultPostHog()
+            })
 
-                expect(given.lib.persistence.props).toMatchObject({
+            it('sets a random UUID as distinct_id/$device_id if distinct_id is unset', () => {
+                uninitialisedPostHog.persistence = { props: { distinct_id: undefined } }
+                const posthog = uninitialisedPostHog.init(
+                    'testtoken',
+                    {
+                        get_device_id: (uuid) => uuid,
+                    },
+                    uuidv7()
+                )
+
+                expect(posthog.persistence.props).toMatchObject({
                     $device_id: expect.stringMatching(/^[0-9a-f-]+$/),
                     distinct_id: expect.stringMatching(/^[0-9a-f-]+$/),
                 })
 
-                expect(given.lib.persistence.props.$device_id).toEqual(given.lib.persistence.props.distinct_id)
+                expect(posthog.persistence.props.$device_id).toEqual(posthog.persistence.props.distinct_id)
             })
 
             it('does not set distinct_id/$device_id if distinct_id is unset', () => {
-                given('distinct_id', () => 'existing-id')
+                uninitialisedPostHog.persistence = { props: { distinct_id: 'existing-id' } }
+                const posthog = uninitialisedPostHog.init(
+                    'testtoken',
+                    {
+                        get_device_id: (uuid) => uuid,
+                    },
+                    uuidv7()
+                )
 
-                expect(given.lib.persistence.props.distinct_id).not.toEqual('existing-id')
+                expect(posthog.persistence.props.distinct_id).not.toEqual('existing-id')
             })
 
             it('uses config.get_device_id for uuid generation if passed', () => {
-                given('distinct_id', () => undefined)
-                given('config', () => ({
-                    get_device_id: (uuid) => 'custom-' + uuid.slice(0, 8),
-                }))
+                uninitialisedPostHog.persistence = { props: { distinct_id: undefined } }
+                const posthog = uninitialisedPostHog.init(
+                    'testtoken',
+                    {
+                        get_device_id: (uuid) => 'custom-' + uuid.slice(0, 8),
+                    },
+                    uuidv7()
+                )
 
-                expect(given.lib.persistence.props).toMatchObject({
+                expect(posthog.persistence.props).toMatchObject({
                     $device_id: expect.stringMatching(/^custom-[0-9a-f-]+$/),
                     distinct_id: expect.stringMatching(/^custom-[0-9a-f-]+$/),
                 })
