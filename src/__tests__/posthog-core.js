@@ -731,68 +731,47 @@ describe('posthog core', () => {
     describe('init()', () => {
         jest.spyOn(window, 'window', 'get')
 
-        given('overrides', () => ({
-            get_distinct_id: () => given.distinct_id,
-            advanced_disable_decide: given.advanced_disable_decide,
-            _send_request: jest.fn(),
-            capture: jest.fn(),
-            register_once: jest.fn(),
-        }))
-
         beforeEach(() => {
             jest.spyOn(window.console, 'warn').mockImplementation()
             jest.spyOn(window.console, 'error').mockImplementation()
         })
 
-        given('advanced_disable_decide', () => true)
-
         it('can set an xhr error handler', () => {
             const fakeOnXHRError = 'configured error'
-            given('subject', () =>
-                given.lib.init(
-                    'a-token',
-                    {
-                        on_xhr_error: fakeOnXHRError,
-                    },
-                    'a-name'
-                )
+            const posthog = defaultPostHog().init(
+                'a-token',
+                {
+                    on_xhr_error: fakeOnXHRError,
+                },
+                'a-name'
             )
-            expect(given.subject.config.on_xhr_error).toBe(fakeOnXHRError)
-        })
-
-        it('does not load decide endpoint on advanced_disable_decide', () => {
-            expect(given.decide).toBe(undefined)
-            expect(given.overrides._send_request.mock.calls.length).toBe(0) // No outgoing requests
+            expect(posthog.config.on_xhr_error).toBe(fakeOnXHRError)
         })
 
         it('does not load feature flags, toolbar, session recording', () => {
-            given('overrides', () => ({
-                sessionRecording: {
-                    afterDecideResponse: jest.fn(),
-                    startIfEnabledOrStop: jest.fn(),
-                },
-                toolbar: {
-                    maybeLoadToolbar: jest.fn(),
-                    afterDecideResponse: jest.fn(),
-                },
-                persistence: {
-                    register: jest.fn(),
-                    update_config: jest.fn(),
-                },
-            }))
+            const posthog = defaultPostHog().init('testtoken', given.config, uuidv7())
 
-            jest.spyOn(given.lib.toolbar, 'afterDecideResponse').mockImplementation()
-            jest.spyOn(given.lib.sessionRecording, 'afterDecideResponse').mockImplementation()
-            jest.spyOn(given.lib.persistence, 'register').mockImplementation()
+            posthog.toolbar = {
+                maybeLoadToolbar: jest.fn(),
+                afterDecideResponse: jest.fn(),
+            }
+            posthog.sessionRecording = {
+                afterDecideResponse: jest.fn(),
+                startIfEnabledOrStop: jest.fn(),
+            }
+            posthog.persistence = {
+                register: jest.fn(),
+                update_config: jest.fn(),
+            }
 
             // Feature flags
-            expect(given.lib.persistence.register).not.toHaveBeenCalled() // FFs are saved this way
+            expect(posthog.persistence.register).not.toHaveBeenCalled() // FFs are saved this way
 
             // Toolbar
-            expect(given.lib.toolbar.afterDecideResponse).not.toHaveBeenCalled()
+            expect(posthog.toolbar.afterDecideResponse).not.toHaveBeenCalled()
 
             // Session recording
-            expect(given.lib.sessionRecording.afterDecideResponse).not.toHaveBeenCalled()
+            expect(posthog.sessionRecording.afterDecideResponse).not.toHaveBeenCalled()
         })
 
         describe('device id behavior', () => {
@@ -832,7 +811,12 @@ describe('posthog core', () => {
 
     describe('skipped init()', () => {
         it('capture() does not throw', () => {
-            expect(() => given.lib.capture('$pageview')).not.toThrow()
+            console.error = jest.fn()
+            expect(() => defaultPostHog().capture('$pageview')).not.toThrow()
+            expect(console.error).toHaveBeenCalledWith(
+                '[PostHog.js]',
+                'You must initialize PostHog before calling posthog.capture'
+            )
         })
     })
 
