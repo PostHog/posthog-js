@@ -167,7 +167,6 @@ describe('Web Experimentation', () => {
             const expectedText = 'Sign up'
             testUrlMatch(testLocation, expectedText)
         })
-
     })
 
     describe('utm match conditions', () => {
@@ -189,7 +188,7 @@ describe('Web Experimentation', () => {
             buttonWebExperimentWithUTMConditions.variants['Signup'].conditions = {
                 utm: {
                     utm_campaign: 'marketing',
-                    utm_medium: 'desktop'
+                    utm_medium: 'desktop',
                 },
             }
             const testLocation = 'https://example.com/landing-page?utm_campaign=marketing&utm_medium=mobile'

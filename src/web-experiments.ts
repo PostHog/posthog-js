@@ -41,7 +41,6 @@ export class WebExperiments {
 
     loadIfEnabled() {
         if (this.instance.config.disable_web_experiments || !this.instance.consent.isOptedOut()) {
-            console.log(`is opted out`)
             return
         }
 
@@ -57,12 +56,6 @@ export class WebExperiments {
                     this._featureFlags[webExperiment.feature_flag_key]
                 ) {
                     const selectedVariant = this._featureFlags[webExperiment.feature_flag_key] as unknown as string
-                    console.log(
-                        `selectedVariant is `,
-                        selectedVariant,
-                        ` webExperiment.variants is `,
-                        webExperiment.variants
-                    )
                     if (selectedVariant && webExperiment.variants[selectedVariant]) {
                         WebExperiments.applyTransforms(webExperiment.variants[selectedVariant].transforms)
                     }
@@ -70,7 +63,6 @@ export class WebExperiments {
                     for (const variant in webExperiment.variants) {
                         const testVariant = webExperiment.variants[variant]
                         const matchTest = WebExperiments.matchesTestVariant(testVariant)
-                        console.log(`variant is `, variant, ` matchTest is `, matchTest)
                         if (matchTest) {
                             WebExperiments.applyTransforms(testVariant.transforms)
                         }
@@ -111,16 +103,7 @@ export class WebExperiments {
         if (isUndefined(testVariant.conditions)) {
             return false
         }
-        const match = WebExperiments.matchUrlConditions(testVariant) && WebExperiments.matchUTMConditions(testVariant)
-        console.log(
-            `variant is `,
-            testVariant,
-            `  url match is `,
-            WebExperiments.matchUrlConditions(testVariant),
-            ` utm match is `,
-            WebExperiments.matchUTMConditions(testVariant)
-        )
-        return match
+        return WebExperiments.matchUrlConditions(testVariant) && WebExperiments.matchUTMConditions(testVariant)
     }
 
     private static matchUrlConditions(testVariant: WebExperimentVariant): boolean {
@@ -128,14 +111,6 @@ export class WebExperiments {
             return true
         }
 
-        console.log(
-            ` matching URL of type [`,
-            testVariant.conditions?.urlMatchType,
-            `] with url [`,
-            testVariant.conditions?.url,
-            `]`
-        )
-        // console.log(` window?.location.href is `, window?.location.href)
         const location = WebExperiments.getWindowLocation()
         if (location) {
             const urlCheck = testVariant.conditions?.url
@@ -144,7 +119,6 @@ export class WebExperiments {
                       location
                   )
                 : true
-            console.log(`urlCheck is `, urlCheck, `  manual test is `, location.href == testVariant.conditions?.url)
             return urlCheck
         }
 
