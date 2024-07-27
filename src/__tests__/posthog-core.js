@@ -591,13 +591,6 @@ describe('posthog core', () => {
     })
 
     describe('bootstrapping feature flags', () => {
-        const posthogWith = (config) => {
-            const posthog = defaultPostHog().init('testtoken', config, uuidv7())
-            posthog._send_request = jest.fn()
-            posthog.capture = jest.fn()
-            return posthog
-        }
-
         it('sets the right distinctID', () => {
             const posthog = posthogWith({
                 bootstrap: {
