@@ -7,6 +7,13 @@ import * as globals from '../utils/globals'
 import { USER_STATE } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { logger } from '../utils/logger'
+import { PostHogConfig } from '../types'
+import { PostHog } from '../posthog-core'
+import { PostHogPersistence } from '../posthog-persistence'
+import { SessionIdManager } from '../sessionid'
+import { RequestQueue } from '../request-queue'
+import { SessionRecording } from '../extensions/replay/sessionrecording'
+import { PostHogFeatureFlags } from '../posthog-featureflags'
 
 jest.mock('../decide')
 
@@ -20,9 +27,9 @@ describe('posthog core', () => {
         _send_request: jest.fn(),
     }
 
-    const posthogWith = (config, overrides) => {
+    const posthogWith = (config: Partial<PostHogConfig>, overrides?: Partial<PostHog>) => {
         const posthog = defaultPostHog().init('testtoken', config, uuidv7())
-        return Object.assign(posthog, overrides)
+        return Object.assign(posthog, overrides || {})
     }
 
     beforeEach(() => {
@@ -60,7 +67,7 @@ describe('posthog core', () => {
         })
 
         it('handles recursive objects', () => {
-            const props = {}
+            const props: Record<string, any> = {}
             props.recurse = props
 
             expect(() =>
@@ -102,7 +109,7 @@ describe('posthog core', () => {
                         update_config: jest.fn(),
                         properties: jest.fn(),
                         get_property: () => 'anonymous',
-                    },
+                    } as unknown as PostHogPersistence,
                 }
             )
 
@@ -138,8 +145,7 @@ describe('posthog core', () => {
 
         it('respects opt_out_useragent_filter (default: false)', () => {
             const originalUseragent = globals.userAgent
-            // eslint-disable-next-line no-import-assign
-            globals['userAgent'] =
+            ;(globals as any)['userAgent'] =
                 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36'
 
             const hook = jest.fn()
@@ -148,16 +154,13 @@ describe('posthog core', () => {
 
             posthog.capture(eventName, {}, {})
             expect(hook).not.toHaveBeenCalledWith('$event')
-
-            // eslint-disable-next-line no-import-assign
-            globals['userAgent'] = originalUseragent
+            ;(globals as any)['userAgent'] = originalUseragent
         })
 
         it('respects opt_out_useragent_filter', () => {
             const originalUseragent = globals.userAgent
 
-            // eslint-disable-next-line no-import-assign
-            globals['userAgent'] =
+            ;(globals as any)['userAgent'] =
                 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36'
 
             const hook = jest.fn()
@@ -181,9 +184,7 @@ describe('posthog core', () => {
                 })
             )
             expect(event.properties['$browser_type']).toEqual('bot')
-
-            // eslint-disable-next-line no-import-assign
-            globals['userAgent'] = originalUseragent
+            ;(globals as any)['userAgent'] = originalUseragent
         })
 
         it('truncates long properties', () => {
@@ -208,10 +209,10 @@ describe('posthog core', () => {
             expect(event.properties.key.length).toBe(1000)
         })
 
-        it('keeps long properties if null', () => {
+        it('keeps long properties if undefined', () => {
             const posthog = posthogWith(
                 {
-                    properties_string_max_length: null,
+                    properties_string_max_length: undefined,
                     property_denylist: [],
                     property_blacklist: [],
                     _onCapture: jest.fn(),
@@ -374,24 +375,24 @@ describe('posthog core', () => {
     })
 
     describe('_calculate_event_properties()', () => {
-        let posthog
+        let posthog: PostHog
 
-        const overrides = {
+        const overrides: Partial<PostHog> = {
             persistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop', $is_identified: false }),
                 remove_event_timer: jest.fn(),
                 get_property: () => 'anonymous',
-            },
+            } as unknown as PostHogPersistence,
             sessionPersistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
                 get_property: () => 'anonymous',
-            },
+            } as unknown as PostHogPersistence,
             sessionManager: {
                 checkAndGetSessionAndWindowId: jest.fn().mockReturnValue({
                     windowId: 'windowId',
                     sessionId: 'sessionId',
                 }),
-            },
+            } as unknown as SessionIdManager,
         }
 
         beforeEach(() => {
@@ -473,7 +474,7 @@ describe('posthog core', () => {
                 event: 'prop',
                 distinct_id: 'abc',
             })
-            expect(posthog.sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
+            expect(posthog.sessionManager!.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
         })
 
         it('calls sanitize_properties', () => {
@@ -511,7 +512,7 @@ describe('posthog core', () => {
         })
 
         it('adds page title to $pageview', () => {
-            document.title = 'test'
+            document!.title = 'test'
 
             expect(posthog._calculate_event_properties('$pageview', {})).toEqual(
                 expect.objectContaining({ title: 'test' })
@@ -525,7 +526,7 @@ describe('posthog core', () => {
                 {
                     capture_pageview: true,
                     capture_pageleave: 'if_capture_pageview',
-                    batching: true,
+                    request_batching: true,
                 },
                 { capture: jest.fn() }
             )
@@ -540,7 +541,7 @@ describe('posthog core', () => {
                 {
                     capture_pageview: false,
                     capture_pageleave: 'if_capture_pageview',
-                    batching: true,
+                    request_batching: true,
                 },
                 { capture: jest.fn() }
             )
@@ -555,7 +556,7 @@ describe('posthog core', () => {
                 {
                     capture_pageview: false,
                     capture_pageleave: true,
-                    batching: true,
+                    request_batching: true,
                 },
                 { capture: jest.fn() }
             )
@@ -570,9 +571,9 @@ describe('posthog core', () => {
                 {
                     capture_pageview: true,
                     capture_pageleave: 'if_capture_pageview',
-                    batching: true,
+                    request_batching: true,
                 },
-                { _requestQueue: { enqueue: jest.fn(), unload: jest.fn() } }
+                { _requestQueue: { enqueue: jest.fn(), unload: jest.fn() } as unknown as RequestQueue }
             )
 
             posthog._handle_unload()
@@ -665,7 +666,8 @@ describe('posthog core', () => {
                         multivariant: 'variant-1',
                         enabled: true,
                         disabled: false,
-                        undef: undefined,
+                        // TODO why are we testing that undefined is passed through?
+                        undef: undefined as unknown as string | boolean,
                     },
                 },
             })
@@ -686,7 +688,8 @@ describe('posthog core', () => {
                         enabled: true,
                         jsonString: true,
                         disabled: false,
-                        undef: undefined,
+                        // TODO why are we testing that undefined is passed through?
+                        undef: undefined as unknown as string | boolean,
                     },
                     featureFlagPayloads: {
                         multivariant: 'some-payload',
@@ -766,82 +769,85 @@ describe('posthog core', () => {
     })
 
     describe('init()', () => {
+        // @ts-expect-error - it's fine to spy on window
         jest.spyOn(window, 'window', 'get')
 
         beforeEach(() => {
+            // @ts-expect-error - it's fine to spy on window
             jest.spyOn(window.console, 'warn').mockImplementation()
+            // @ts-expect-error - it's fine to spy on window
             jest.spyOn(window.console, 'error').mockImplementation()
         })
 
         it('can set an xhr error handler', () => {
-            const fakeOnXHRError = 'configured error'
+            const fakeOnXHRError = jest.fn()
             const posthog = posthogWith({
                 on_xhr_error: fakeOnXHRError,
             })
             expect(posthog.config.on_xhr_error).toBe(fakeOnXHRError)
         })
 
-        it('does not load feature flags, toolbar, session recording', () => {
-            const posthog = defaultPostHog().init('testtoken', defaultConfig, uuidv7())
+        it.skip('does not load feature flags, session recording', () => {
+            // TODO this didn't make a tonne of sense in the given form
+            // it makes no sense now
+            // of course mocks added _after_ init will not be called
+            const posthog = defaultPostHog().init('testtoken', defaultConfig, uuidv7())!
 
-            posthog.toolbar = {
-                maybeLoadToolbar: jest.fn(),
-                afterDecideResponse: jest.fn(),
-            }
             posthog.sessionRecording = {
                 afterDecideResponse: jest.fn(),
                 startIfEnabledOrStop: jest.fn(),
-            }
+            } as unknown as SessionRecording
             posthog.persistence = {
                 register: jest.fn(),
                 update_config: jest.fn(),
-            }
+            } as unknown as PostHogPersistence
 
             // Feature flags
             expect(posthog.persistence.register).not.toHaveBeenCalled() // FFs are saved this way
-
-            // Toolbar
-            expect(posthog.toolbar.afterDecideResponse).not.toHaveBeenCalled()
 
             // Session recording
             expect(posthog.sessionRecording.afterDecideResponse).not.toHaveBeenCalled()
         })
 
         describe('device id behavior', () => {
-            let uninitialisedPostHog
+            let uninitialisedPostHog: PostHog
             beforeEach(() => {
                 uninitialisedPostHog = defaultPostHog()
             })
 
             it('sets a random UUID as distinct_id/$device_id if distinct_id is unset', () => {
-                uninitialisedPostHog.persistence = { props: { distinct_id: undefined } }
+                uninitialisedPostHog.persistence = {
+                    props: { distinct_id: undefined },
+                } as unknown as PostHogPersistence
                 const posthog = uninitialisedPostHog.init(
                     uuidv7(),
                     {
                         get_device_id: (uuid) => uuid,
                     },
                     uuidv7()
-                )
+                )!
 
-                expect(posthog.persistence.props).toMatchObject({
+                expect(posthog.persistence!.props).toMatchObject({
                     $device_id: expect.stringMatching(/^[0-9a-f-]+$/),
                     distinct_id: expect.stringMatching(/^[0-9a-f-]+$/),
                 })
 
-                expect(posthog.persistence.props.$device_id).toEqual(posthog.persistence.props.distinct_id)
+                expect(posthog.persistence!.props.$device_id).toEqual(posthog.persistence!.props.distinct_id)
             })
 
             it('does not set distinct_id/$device_id if distinct_id is unset', () => {
-                uninitialisedPostHog.persistence = { props: { distinct_id: 'existing-id' } }
+                uninitialisedPostHog.persistence = {
+                    props: { distinct_id: 'existing-id' },
+                } as unknown as PostHogPersistence
                 const posthog = uninitialisedPostHog.init(
                     uuidv7(),
                     {
                         get_device_id: (uuid) => uuid,
                     },
                     uuidv7()
-                )
+                )!
 
-                expect(posthog.persistence.props.distinct_id).not.toEqual('existing-id')
+                expect(posthog.persistence!.props.distinct_id).not.toEqual('existing-id')
             })
 
             it('uses config.get_device_id for uuid generation if passed', () => {
@@ -852,9 +858,9 @@ describe('posthog core', () => {
                         persistence: 'memory',
                     },
                     uuidv7()
-                )
+                )!
 
-                expect(posthog.persistence.props).toMatchObject({
+                expect(posthog.persistence!.props).toMatchObject({
                     $device_id: expect.stringMatching(/^custom-[0-9a-f-]+$/),
                     distinct_id: expect.stringMatching(/^custom-[0-9a-f-]+$/),
                 })
@@ -873,7 +879,7 @@ describe('posthog core', () => {
     })
 
     describe('group()', () => {
-        let posthog
+        let posthog: PostHog
 
         beforeEach(() => {
             posthog = defaultPostHog().init(
@@ -882,8 +888,8 @@ describe('posthog core', () => {
                     persistence: 'memory',
                 },
                 uuidv7()
-            )
-            posthog.persistence.clear()
+            )!
+            posthog.persistence!.clear()
             posthog.reloadFeatureFlags = jest.fn()
             posthog.capture = jest.fn()
         })
@@ -903,35 +909,35 @@ describe('posthog core', () => {
             posthog.group('organization', 'org::5', { name: 'PostHog' })
             expect(posthog.getGroups()).toEqual({ organization: 'org::5' })
 
-            expect(posthog.persistence.props['$stored_group_properties']).toEqual({
+            expect(posthog.persistence!.props['$stored_group_properties']).toEqual({
                 organization: { name: 'PostHog' },
             })
 
             posthog.group('organization', 'org::6')
             expect(posthog.getGroups()).toEqual({ organization: 'org::6' })
-            expect(posthog.persistence.props['$stored_group_properties']).toEqual({ organization: {} })
+            expect(posthog.persistence!.props['$stored_group_properties']).toEqual({ organization: {} })
 
             posthog.group('instance', 'app.posthog.com')
             expect(posthog.getGroups()).toEqual({ organization: 'org::6', instance: 'app.posthog.com' })
-            expect(posthog.persistence.props['$stored_group_properties']).toEqual({ organization: {}, instance: {} })
+            expect(posthog.persistence!.props['$stored_group_properties']).toEqual({ organization: {}, instance: {} })
 
             // now add properties to the group
             posthog.group('organization', 'org::7', { name: 'PostHog2' })
             expect(posthog.getGroups()).toEqual({ organization: 'org::7', instance: 'app.posthog.com' })
-            expect(posthog.persistence.props['$stored_group_properties']).toEqual({
+            expect(posthog.persistence!.props['$stored_group_properties']).toEqual({
                 organization: { name: 'PostHog2' },
                 instance: {},
             })
 
             posthog.group('instance', 'app.posthog.com', { a: 'b' })
             expect(posthog.getGroups()).toEqual({ organization: 'org::7', instance: 'app.posthog.com' })
-            expect(posthog.persistence.props['$stored_group_properties']).toEqual({
+            expect(posthog.persistence!.props['$stored_group_properties']).toEqual({
                 organization: { name: 'PostHog2' },
                 instance: { a: 'b' },
             })
 
             posthog.resetGroupPropertiesForFlags()
-            expect(posthog.persistence.props['$stored_group_properties']).toEqual(undefined)
+            expect(posthog.persistence!.props['$stored_group_properties']).toEqual(undefined)
         })
 
         it('does not result in a capture call', () => {
@@ -978,12 +984,12 @@ describe('posthog core', () => {
                         persistence: 'memory',
                     },
                     uuidv7()
-                )
-                posthog.persistence.clear()
+                )!
+                posthog.persistence!.clear()
                 // mock this internal queue - not capture
                 posthog._requestQueue = {
                     enqueue: jest.fn(),
-                }
+                } as unknown as RequestQueue
             })
 
             it('sends group information in event properties', () => {
@@ -992,11 +998,16 @@ describe('posthog core', () => {
 
                 posthog.capture('some_event', { prop: 5 })
 
-                expect(posthog._requestQueue.enqueue).toHaveBeenCalledTimes(1)
+                expect(posthog._requestQueue!.enqueue).toHaveBeenCalledTimes(1)
 
-                const eventPayload = posthog._requestQueue.enqueue.mock.calls[0][0]
-                expect(eventPayload.data.event).toEqual('some_event')
-                expect(eventPayload.data.properties.$groups).toEqual({
+                const eventPayload = jest.mocked(posthog._requestQueue!.enqueue).mock.calls[0][0]
+                // need to help TS know event payload data is not an array
+                // eslint-disable-next-line posthog-js/no-direct-array-check
+                if (Array.isArray(eventPayload.data!)) {
+                    throw new Error('')
+                }
+                expect(eventPayload.data!.event).toEqual('some_event')
+                expect(eventPayload.data!.properties.$groups).toEqual({
                     organization: 'org::5',
                     instance: 'app.posthog.com',
                 })
@@ -1005,14 +1016,14 @@ describe('posthog core', () => {
 
         describe('error handling', () => {
             it('handles blank keys being passed', () => {
-                window.console.error = jest.fn()
-                window.console.warn = jest.fn()
+                ;(window as any).console.error = jest.fn()
+                ;(window as any).console.warn = jest.fn()
 
                 posthog.register = jest.fn()
 
-                posthog.group(null, 'foo')
-                posthog.group('organization', null)
-                posthog.group('organization', undefined)
+                posthog.group(null as unknown as string, 'foo')
+                posthog.group('organization', null as unknown as string)
+                posthog.group('organization', undefined as unknown as string)
                 posthog.group('organization', '')
                 posthog.group('', 'foo')
 
@@ -1025,12 +1036,12 @@ describe('posthog core', () => {
                 posthog.group('organization', 'org::5')
                 posthog.group('instance', 'app.posthog.com', { group: 'property', foo: 5 })
 
-                expect(posthog.persistence.props['$groups']).toEqual({
+                expect(posthog.persistence!.props['$groups']).toEqual({
                     organization: 'org::5',
                     instance: 'app.posthog.com',
                 })
 
-                expect(posthog.persistence.props['$stored_group_properties']).toEqual({
+                expect(posthog.persistence!.props['$stored_group_properties']).toEqual({
                     organization: {},
                     instance: {
                         group: 'property',
@@ -1040,8 +1051,8 @@ describe('posthog core', () => {
 
                 posthog.resetGroups()
 
-                expect(posthog.persistence.props['$groups']).toEqual({})
-                expect(posthog.persistence.props['$stored_group_properties']).toEqual(undefined)
+                expect(posthog.persistence!.props['$groups']).toEqual({})
+                expect(posthog.persistence!.props['$stored_group_properties']).toEqual(undefined)
 
                 expect(posthog.reloadFeatureFlags).toHaveBeenCalledTimes(3)
             })
@@ -1058,7 +1069,7 @@ describe('posthog core', () => {
                         setReloadingPaused: jest.fn(),
                         resetRequestQueue: jest.fn(),
                         _startReloadTimer: jest.fn(),
-                    },
+                    } as unknown as PostHogFeatureFlags,
                     _start_queue_if_opted_in: jest.fn(),
                 }
             )
@@ -1083,7 +1094,7 @@ describe('posthog core', () => {
                         setReloadingPaused: jest.fn(),
                         resetRequestQueue: jest.fn(),
                         _startReloadTimer: jest.fn(),
-                    },
+                    } as unknown as PostHogFeatureFlags,
                     _start_queue_if_opted_in: jest.fn(),
                 }
             )
@@ -1096,11 +1107,11 @@ describe('posthog core', () => {
         describe('/decide', () => {
             beforeEach(() => {
                 const call = jest.fn()
-                Decide.mockImplementation(() => ({ call }))
+                ;(Decide as any).mockImplementation(() => ({ call }))
             })
 
             afterEach(() => {
-                Decide.mockReset()
+                ;(Decide as any).mockReset()
             })
 
             it('is called by default', async () => {
@@ -1108,7 +1119,7 @@ describe('posthog core', () => {
                 instance.featureFlags.setReloadingPaused = jest.fn()
                 instance._loaded()
 
-                expect(new Decide().call).toHaveBeenCalled()
+                expect(new Decide(instance).call).toHaveBeenCalled()
                 expect(instance.featureFlags.setReloadingPaused).toHaveBeenCalledWith(true)
             })
 
@@ -1119,7 +1130,7 @@ describe('posthog core', () => {
                 instance.featureFlags.setReloadingPaused = jest.fn()
                 instance._loaded()
 
-                expect(new Decide().call).not.toHaveBeenCalled()
+                expect(new Decide(instance).call).not.toHaveBeenCalled()
                 expect(instance.featureFlags.setReloadingPaused).not.toHaveBeenCalled()
             })
         })
@@ -1166,15 +1177,15 @@ describe('posthog core', () => {
     })
 
     describe('session_id', () => {
-        let instance
-        let token
+        let instance: PostHog
+        let token: string
 
         beforeEach(async () => {
             token = uuidv7()
             instance = await createPosthogInstance(token, {
                 api_host: 'https://us.posthog.com',
             })
-            instance.sessionManager.checkAndGetSessionAndWindowId = jest.fn().mockReturnValue({
+            instance.sessionManager!.checkAndGetSessionAndWindowId = jest.fn().mockReturnValue({
                 windowId: 'windowId',
                 sessionId: 'sessionId',
                 sessionStartTimestamp: new Date().getTime() - 30000,
