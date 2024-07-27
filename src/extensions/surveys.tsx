@@ -32,6 +32,7 @@ import {
     MultipleChoiceQuestion,
 } from './surveys/components/QuestionTypes'
 import { logger } from '../utils/logger'
+import { Cancel } from './surveys/components/QuestionHeader'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -140,6 +141,19 @@ export class SurveyManager {
     private sortSurveysByAppearanceDelay(surveys: Survey[]): Survey[] {
         return surveys.sort(
             (a, b) => (a.appearance?.surveyPopupDelaySeconds || 0) - (b.appearance?.surveyPopupDelaySeconds || 0)
+        )
+    }
+
+    public renderSurvey = (survey: Survey, selector: Element): void => {
+        Preact.render(
+            <SurveyPopup
+                key={'popover-survey'}
+                posthog={this.posthog}
+                survey={survey}
+                removeSurveyFromFocus={this.removeSurveyFromFocus}
+                isPopup={false}
+            />,
+            selector
         )
     }
 
@@ -282,6 +296,7 @@ export function generateSurveys(posthog: PostHog) {
 
     const surveyManager = new SurveyManager(posthog)
     surveyManager.callSurveysAndEvaluateDisplayLogic(true)
+    ;(window as any).__PosthogExtensions__.renderSurvey = surveyManager.renderSurvey
 
     // recalculate surveys every second to check if URL or selectors have changed
     setInterval(() => {
@@ -377,6 +392,7 @@ export function SurveyPopup({
     style,
     previewPageIndex,
     removeSurveyFromFocus,
+    isPopup,
 }: {
     survey: Survey
     forceDisableHtml?: boolean
@@ -384,6 +400,7 @@ export function SurveyPopup({
     style?: React.CSSProperties
     previewPageIndex?: number | undefined
     removeSurveyFromFocus: (id: string) => void
+    isPopup?: boolean
 }) {
     const isPreviewMode = Number.isInteger(previewPageIndex)
     // NB: The client-side code passes the millisecondDelay in seconds, but setTimeout expects milliseconds, so we multiply by 1000
@@ -413,6 +430,7 @@ export function SurveyPopup({
                 isPreviewMode,
                 previewPageIndex: previewPageIndex,
                 handleCloseSurveyPopup: () => dismissedSurveyEvent(survey, posthog, isPreviewMode),
+                isPopup: isPopup || false,
             }}
         >
             {!shouldShowConfirmation ? (
@@ -454,7 +472,7 @@ export function Questions({
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
     )
     const [questionsResponses, setQuestionsResponses] = useState({})
-    const { isPreviewMode, previewPageIndex } = useContext(SurveyContext)
+    const { isPreviewMode, previewPageIndex, handleCloseSurveyPopup, isPopup } = useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
@@ -517,7 +535,14 @@ export function Questions({
                     : currentQuestionIndex === displayQuestionIndex
                 return (
                     isVisible && (
-                        <div>
+                        <div
+                            className="survey-box"
+                            style={{
+                                backgroundColor:
+                                    survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor,
+                            }}
+                        >
+                            {isPopup && <Cancel onClick={() => handleCloseSurveyPopup()} />}
                             {getQuestionComponent({
                                 question,
                                 forceDisableHtml,

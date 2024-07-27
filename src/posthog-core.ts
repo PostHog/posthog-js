@@ -1194,6 +1194,11 @@ export class PostHog {
         this.surveys.getActiveMatchingSurveys(callback, forceReload)
     }
 
+    /** Render a survey on a specific element. */
+    renderSurvey(surveyId: string, selector: string): void {
+        this.surveys.renderSurvey(surveyId, selector)
+    }
+
     /** Get the next step of the survey: a question index or `end` */
     getNextSurveyStep(
         survey: Survey,

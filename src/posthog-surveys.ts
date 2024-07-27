@@ -68,6 +68,7 @@ export class PostHogSurveys {
 
     loadIfEnabled() {
         const surveysGenerator = assignableWindow?.extendPostHogWithSurveys
+        assignableWindow.extendPostHogWithSurveys(this.instance)
 
         if (!this.instance.config.disable_surveys && this._decideServerResponse && !surveysGenerator) {
             if (this._surveyEventReceiver == null) {
@@ -268,5 +269,16 @@ export class PostHogSurveys {
             logger.warn(LOGGER_PREFIX, 'canActivateRepeatedly is not defined, must init before calling')
         }
         return assignableWindow.__PosthogExtensions__.canActivateRepeatedly(survey)
+    }
+
+    renderSurvey(surveyId: string, selector: string) {
+        if (isNullish(assignableWindow.__PosthogExtensions__.renderSurvey)) {
+            logger.warn(LOGGER_PREFIX, 'canActivateRepeatedly is not defined, must init before calling')
+        }
+        this.getSurveys((surveys) => {
+            const survey = surveys.filter((x) => x.id === surveyId)[0]
+
+            assignableWindow.__PosthogExtensions__.renderSurvey(survey, document?.querySelector(selector))
+        })
     }
 }
