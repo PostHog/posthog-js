@@ -2,9 +2,16 @@ import { Decide } from '../decide'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 import { expectScriptToExist, expectScriptToNotExist } from './helpers/script-utils'
+import { PostHog } from '../posthog-core'
+import { DecideResponse, PostHogConfig, Properties } from '../types'
 
-const expectDecodedSendRequest = (send_request, data, noCompression, posthog) => {
-    const lastCall = send_request.mock.calls[send_request.mock.calls.length - 1]
+const expectDecodedSendRequest = (
+    send_request: PostHog['_send_request'],
+    data: Record<string, any>,
+    noCompression: boolean,
+    posthog: PostHog
+) => {
+    const lastCall = jest.mocked(send_request).mock.calls[jest.mocked(send_request).mock.calls.length - 1]
 
     const decoded = lastCall[0].data
     // Helper to give us more accurate error messages
@@ -21,23 +28,28 @@ const expectDecodedSendRequest = (send_request, data, noCompression, posthog) =>
 }
 
 describe('Decide', () => {
-    let posthog
+    let posthog: PostHog
 
     const decide = () => new Decide(posthog)
 
-    const defaultConfig = { token: 'testtoken', api_host: 'https://test.com', persistence: 'memory' }
+    const defaultConfig: Partial<PostHogConfig> = {
+        token: 'testtoken',
+        api_host: 'https://test.com',
+        persistence: 'memory',
+    }
 
     beforeEach(() => {
         // clean the JSDOM to prevent interdependencies between tests
         document.body.innerHTML = ''
         document.head.innerHTML = ''
+        jest.spyOn(window.console, 'error').mockImplementation()
 
         posthog = {
             config: defaultConfig,
-            persistence: new PostHogPersistence(defaultConfig),
-            register: (props) => posthog.persistence.register(props),
-            unregister: (key) => posthog.persistence.unregister(key),
-            get_property: (key) => posthog.persistence.props[key],
+            persistence: new PostHogPersistence(defaultConfig as PostHogConfig),
+            register: (props: Properties) => posthog.persistence!.register(props),
+            unregister: (key: string) => posthog.persistence!.unregister(key),
+            get_property: (key: string) => posthog.persistence!.props[key],
             capture: jest.fn(),
             _addCaptureHook: jest.fn(),
             _afterDecideResponse: jest.fn(),
@@ -48,17 +60,15 @@ describe('Decide', () => {
                 setReloadingPaused: jest.fn(),
                 _startReloadTimer: jest.fn(),
             },
-            requestRouter: new RequestRouter({ config: defaultConfig }),
+            requestRouter: new RequestRouter({ config: defaultConfig } as unknown as PostHog),
             _hasBootstrappedFeatureFlags: jest.fn(),
             getGroups: () => ({ organization: '5' }),
-        }
+        } as unknown as PostHog
     })
 
     describe('constructor', () => {
-        const subject = () => decide().call()
-
         it('should call instance._send_request on constructor', () => {
-            subject()
+            decide().call()
 
             expectDecodedSendRequest(
                 posthog._send_request,
@@ -77,7 +87,8 @@ describe('Decide', () => {
                 $stored_person_properties: { key: 'value' },
                 $stored_group_properties: { organization: { orgName: 'orgValue' } },
             })
-            subject()
+
+            decide().call()
 
             expectDecodedSendRequest(
                 posthog._send_request,
@@ -99,13 +110,13 @@ describe('Decide', () => {
                 token: 'testtoken',
                 persistence: 'memory',
                 advanced_disable_feature_flags: true,
-            }
+            } as PostHogConfig
 
             posthog.register({
                 $stored_person_properties: { key: 'value' },
                 $stored_group_properties: { organization: { orgName: 'orgValue' } },
             })
-            subject()
+            decide().call()
 
             expectDecodedSendRequest(
                 posthog._send_request,
@@ -128,13 +139,13 @@ describe('Decide', () => {
                 token: 'testtoken',
                 persistence: 'memory',
                 disable_compression: true,
-            }
+            } as PostHogConfig
 
             posthog.register({
                 $stored_person_properties: {},
                 $stored_group_properties: {},
             })
-            subject()
+            decide().call()
 
             // noCompression is true
             expectDecodedSendRequest(
@@ -157,13 +168,14 @@ describe('Decide', () => {
                 token: 'testtoken',
                 persistence: 'memory',
                 advanced_disable_feature_flags_on_first_load: true,
-            }
+            } as PostHogConfig
 
             posthog.register({
                 $stored_person_properties: { key: 'value' },
                 $stored_group_properties: { organization: { orgName: 'orgValue' } },
             })
-            subject()
+
+            decide().call()
 
             expectDecodedSendRequest(
                 posthog._send_request,
@@ -182,20 +194,19 @@ describe('Decide', () => {
     })
 
     describe('parseDecideResponse', () => {
-        const subject = (decideResponse) => decide().parseDecideResponse(decideResponse)
+        const subject = (decideResponse: DecideResponse) => decide().parseDecideResponse(decideResponse)
 
         it('properly parses decide response', () => {
-            subject({})
+            subject({} as DecideResponse)
 
             expect(posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith({}, false)
             expect(posthog._afterDecideResponse).toHaveBeenCalledWith({})
         })
 
         it('Make sure receivedFeatureFlags is called with errors if the decide response fails', () => {
-            window.POSTHOG_DEBUG = true
-            console.error = jest.fn()
+            ;(window as any).POSTHOG_DEBUG = true
 
-            subject(undefined)
+            subject(undefined as unknown as DecideResponse)
 
             expect(posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith({}, true)
             expect(console.error).toHaveBeenCalledWith('[PostHog.js]', 'Failed to fetch feature flags from PostHog.')
@@ -207,11 +218,11 @@ describe('Decide', () => {
                 token: 'testtoken',
                 persistence: 'memory',
                 advanced_disable_feature_flags_on_first_load: true,
-            }
+            } as PostHogConfig
 
             const decideResponse = {
                 featureFlags: { 'test-flag': true },
-            }
+            } as unknown as DecideResponse
             subject(decideResponse)
 
             expect(posthog._afterDecideResponse).toHaveBeenCalledWith(decideResponse)
@@ -224,11 +235,11 @@ describe('Decide', () => {
                 token: 'testtoken',
                 persistence: 'memory',
                 advanced_disable_feature_flags: true,
-            }
+            } as PostHogConfig
 
             const decideResponse = {
                 featureFlags: { 'test-flag': true },
-            }
+            } as unknown as DecideResponse
             subject(decideResponse)
 
             expect(posthog._afterDecideResponse).toHaveBeenCalledWith(decideResponse)
@@ -236,21 +247,31 @@ describe('Decide', () => {
         })
 
         it('runs site apps if opted in', () => {
-            posthog.config = { api_host: 'https://test.com', opt_in_site_apps: true, persistence: 'memory' }
-            subject({ siteApps: [{ id: 1, url: '/site_app/1/tokentoken/hash/' }] })
+            posthog.config = {
+                api_host: 'https://test.com',
+                opt_in_site_apps: true,
+                persistence: 'memory',
+            } as PostHogConfig
+
+            subject({ siteApps: [{ id: 1, url: '/site_app/1/tokentoken/hash/' }] } as DecideResponse)
+
             expectScriptToExist('https://test.com/site_app/1/tokentoken/hash/')
         })
 
         it('does not run site apps code if not opted in', () => {
-            window.POSTHOG_DEBUG = true
+            ;(window as any).POSTHOG_DEBUG = true
             // don't technically need to run this but this test assumes opt_in_site_apps is false, let's make that explicit
-            posthog.config = { api_host: 'https://test.com', opt_in_site_apps: false, persistence: 'memory' }
+            posthog.config = {
+                api_host: 'https://test.com',
+                opt_in_site_apps: false,
+                persistence: 'memory',
+            } as unknown as PostHogConfig
 
-            expect(() => {
-                subject({ siteApps: [{ id: 1, url: '/site_app/1/tokentoken/hash/' }] })
-            }).toThrow(
-                // throwing only in tests, just an error in production
-                'Unexpected console.error: [PostHog.js],PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.'
+            subject({ siteApps: [{ id: 1, url: '/site_app/1/tokentoken/hash/' }] } as DecideResponse)
+
+            expect(console.error).toHaveBeenCalledWith(
+                '[PostHog.js]',
+                'PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.'
             )
             expectScriptToNotExist('https://test.com/site_app/1/tokentoken/hash/')
         })
