@@ -521,11 +521,15 @@ export function Questions({
     return (
         <form
             className="survey-form"
-            style={{
-                color: textColor,
-                borderColor: survey.appearance?.borderColor,
-                ...styleOverrides,
-            }}
+            style={
+                isPopup
+                    ? {
+                          color: textColor,
+                          borderColor: survey.appearance?.borderColor,
+                          ...styleOverrides,
+                      }
+                    : {}
+            }
         >
             {surveyQuestions.map((question, displayQuestionIndex) => {
                 const { originalQuestionIndex } = question
@@ -537,10 +541,15 @@ export function Questions({
                     isVisible && (
                         <div
                             className="survey-box"
-                            style={{
-                                backgroundColor:
-                                    survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor,
-                            }}
+                            style={
+                                isPopup
+                                    ? {
+                                          backgroundColor:
+                                              survey.appearance?.backgroundColor ||
+                                              defaultSurveyAppearance.backgroundColor,
+                                      }
+                                    : {}
+                            }
                         >
                             {isPopup && <Cancel onClick={() => handleCloseSurveyPopup()} />}
                             {getQuestionComponent({

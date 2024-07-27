@@ -17,8 +17,9 @@ export function QuestionHeader({
     forceDisableHtml: boolean
     backgroundColor?: string
 }) {
+    const { isPopup } = useContext(SurveyContext)
     return (
-        <div style={{ backgroundColor: backgroundColor || defaultSurveyAppearance.backgroundColor }}>
+        <div style={isPopup ? { backgroundColor: backgroundColor || defaultSurveyAppearance.backgroundColor } : {}}>
             <div className="survey-question">{question}</div>
             {description &&
                 renderChildrenAsTextOrHtml({
