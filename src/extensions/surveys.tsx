@@ -84,6 +84,7 @@ export class SurveyManager {
                     posthog={this.posthog}
                     survey={survey}
                     removeSurveyFromFocus={this.removeSurveyFromFocus}
+                    isPopup={true}
                 />,
                 shadow
             )
@@ -258,6 +259,7 @@ export const renderSurveysPreview = ({
             }}
             previewPageIndex={previewPageIndex}
             removeSurveyFromFocus={() => {}}
+            isPopup={true}
         />,
         parentElement
     )
@@ -637,6 +639,7 @@ export function FeedbackWidget({
                     forceDisableHtml={forceDisableHtml}
                     style={styleOverrides}
                     removeSurveyFromFocus={removeSurveyFromFocus}
+                    isPopup={true}
                 />
             )}
         </>
