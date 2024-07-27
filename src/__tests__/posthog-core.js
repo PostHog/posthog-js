@@ -716,18 +716,17 @@ describe('posthog core', () => {
         })
 
         it('does nothing when empty', () => {
-            jest.spyOn(console, 'warn').mockImplementation()
+            jest.spyOn(logger, 'warn').mockImplementation()
 
             const posthog = posthogWith({
                 bootstrap: {},
+                persistence: 'memory',
             })
-            posthog.persistence.clear()
 
             expect(posthog.get_distinct_id()).not.toBe('abcd')
             expect(posthog.get_distinct_id()).not.toEqual(undefined)
             expect(posthog.getFeatureFlag('multivariant')).toBe(undefined)
-            expect(console.warn).toHaveBeenCalledWith(
-                '[PostHog.js]',
+            expect(logger.warn).toHaveBeenCalledWith(
                 expect.stringContaining('getFeatureFlag for key "multivariant" failed')
             )
             expect(posthog.getFeatureFlag('disabled')).toBe(undefined)
@@ -825,7 +824,7 @@ describe('posthog core', () => {
             it('sets a random UUID as distinct_id/$device_id if distinct_id is unset', () => {
                 uninitialisedPostHog.persistence = { props: { distinct_id: undefined } }
                 const posthog = uninitialisedPostHog.init(
-                    'testtoken',
+                    uuidv7(),
                     {
                         get_device_id: (uuid) => uuid,
                     },
@@ -843,7 +842,7 @@ describe('posthog core', () => {
             it('does not set distinct_id/$device_id if distinct_id is unset', () => {
                 uninitialisedPostHog.persistence = { props: { distinct_id: 'existing-id' } }
                 const posthog = uninitialisedPostHog.init(
-                    'testtoken',
+                    uuidv7(),
                     {
                         get_device_id: (uuid) => uuid,
                     },
@@ -854,9 +853,9 @@ describe('posthog core', () => {
             })
 
             it('uses config.get_device_id for uuid generation if passed', () => {
-                uninitialisedPostHog.persistence = { props: { distinct_id: undefined } }
+                // uninitialisedPostHog.persistence = { props: { distinct_id: undefined } }
                 const posthog = uninitialisedPostHog.init(
-                    'testtoken',
+                    uuidv7(),
                     {
                         get_device_id: (uuid) => 'custom-' + uuid.slice(0, 8),
                         persistence: 'memory',
@@ -874,12 +873,11 @@ describe('posthog core', () => {
 
     describe('skipped init()', () => {
         it('capture() does not throw', () => {
-            console.error = jest.fn()
+            jest.spyOn(logger, 'error').mockImplementation()
+
             expect(() => defaultPostHog().capture('$pageview')).not.toThrow()
-            expect(console.error).toHaveBeenCalledWith(
-                '[PostHog.js]',
-                'You must initialize PostHog before calling posthog.capture'
-            )
+
+            expect(logger.error).toHaveBeenCalledWith('You must initialize PostHog before calling posthog.capture')
         })
     })
 
@@ -1062,37 +1060,48 @@ describe('posthog core', () => {
     })
 
     describe('_loaded()', () => {
-        given('subject', () => () => given.lib._loaded())
-
-        given('overrides', () => ({
-            config: given.config,
-            capture: jest.fn(),
-            featureFlags: {
-                setReloadingPaused: jest.fn(),
-                resetRequestQueue: jest.fn(),
-                _startReloadTimer: jest.fn(),
-            },
-            _start_queue_if_opted_in: jest.fn(),
-        }))
-        given('config', () => ({ loaded: jest.fn() }))
-
         it('calls loaded config option', () => {
-            given.subject()
+            const posthog = posthogWith(
+                { loaded: jest.fn() },
+                {
+                    capture: jest.fn(),
+                    featureFlags: {
+                        setReloadingPaused: jest.fn(),
+                        resetRequestQueue: jest.fn(),
+                        _startReloadTimer: jest.fn(),
+                    },
+                    _start_queue_if_opted_in: jest.fn(),
+                }
+            )
 
-            expect(given.config.loaded).toHaveBeenCalledWith(given.lib)
+            posthog._loaded()
+
+            expect(posthog.config.loaded).toHaveBeenCalledWith(posthog)
         })
 
         it('handles loaded config option throwing gracefully', () => {
-            given('config', () => ({
-                loaded: () => {
-                    throw Error()
+            jest.spyOn(logger, 'critical').mockImplementation()
+
+            const posthog = posthogWith(
+                {
+                    loaded: () => {
+                        throw Error()
+                    },
                 },
-            }))
-            console.error = jest.fn()
+                {
+                    capture: jest.fn(),
+                    featureFlags: {
+                        setReloadingPaused: jest.fn(),
+                        resetRequestQueue: jest.fn(),
+                        _startReloadTimer: jest.fn(),
+                    },
+                    _start_queue_if_opted_in: jest.fn(),
+                }
+            )
 
-            given.subject()
+            posthog._loaded()
 
-            expect(console.error).toHaveBeenCalledWith('[PostHog.js]', '`loaded` function failed', expect.anything())
+            expect(logger.critical).toHaveBeenCalledWith('`loaded` function failed', expect.anything())
         })
 
         describe('/decide', () => {
