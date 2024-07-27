@@ -14,6 +14,46 @@ describe('posthog core', () => {
     const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
     const eventName = '$event'
 
+    const config = {
+        api_host: 'https://app.posthog.com',
+        property_denylist: [],
+        property_blacklist: [],
+        // _onCapture: jest.fn(),
+        get_device_id: jest.fn().mockReturnValue('device-id'),
+    }
+
+    const overrides = {
+        __loaded: true,
+        persistence: {
+            remove_event_timer: jest.fn(),
+            properties: jest.fn(),
+            update_config: jest.fn(),
+            register(properties) {
+                // Simplified version of the real thing
+                Object.assign(this.props, properties)
+            },
+            props: {},
+            get_property: () => 'anonymous',
+            set_initial_person_info: jest.fn(),
+            get_initial_props: () => ({}),
+        },
+        sessionPersistence: {
+            update_search_keyword: jest.fn(),
+            update_campaign_params: jest.fn(),
+            update_referrer_info: jest.fn(),
+            update_config: jest.fn(),
+            properties: jest.fn(),
+            get_property: () => 'anonymous',
+        },
+        _send_request: jest.fn(),
+        compression: {},
+        __captureHooks: [],
+        rateLimiter: {
+            isServerRateLimited: () => false,
+            clientRateLimitContext: () => false,
+        },
+    }
+
     const posthogWith = (config, overrides) => {
         const posthog = defaultPostHog().init('testtoken', config, uuidv7())
         if (overrides) {
@@ -39,46 +79,6 @@ describe('posthog core', () => {
     })
 
     describe('capture()', () => {
-        const config = {
-            api_host: 'https://app.posthog.com',
-            property_denylist: [],
-            property_blacklist: [],
-            // _onCapture: jest.fn(),
-            get_device_id: jest.fn().mockReturnValue('device-id'),
-        }
-
-        const overrides = {
-            __loaded: true,
-            persistence: {
-                remove_event_timer: jest.fn(),
-                properties: jest.fn(),
-                update_config: jest.fn(),
-                register(properties) {
-                    // Simplified version of the real thing
-                    Object.assign(this.props, properties)
-                },
-                props: {},
-                get_property: () => 'anonymous',
-                set_initial_person_info: jest.fn(),
-                get_initial_props: () => ({}),
-            },
-            sessionPersistence: {
-                update_search_keyword: jest.fn(),
-                update_campaign_params: jest.fn(),
-                update_referrer_info: jest.fn(),
-                update_config: jest.fn(),
-                properties: jest.fn(),
-                get_property: () => 'anonymous',
-            },
-            _send_request: jest.fn(),
-            compression: {},
-            __captureHooks: [],
-            rateLimiter: {
-                isServerRateLimited: () => false,
-                clientRateLimitContext: () => false,
-            },
-        }
-
         it('adds a UUID to each message', () => {
             const captureData = posthogWith(config, overrides).capture(eventName, {}, {})
             expect(captureData).toHaveProperty('uuid')
@@ -599,8 +599,6 @@ describe('posthog core', () => {
         })
 
         describe('without batching', () => {
-            given('batching', () => false)
-
             it('captures $pageleave', () => {
                 const posthog = posthogWith({
                     capture_pageview: true,
@@ -790,7 +788,7 @@ describe('posthog core', () => {
         })
 
         it('does not load feature flags, toolbar, session recording', () => {
-            const posthog = defaultPostHog().init('testtoken', given.config, uuidv7())
+            const posthog = defaultPostHog().init('testtoken', config, uuidv7())
 
             posthog.toolbar = {
                 maybeLoadToolbar: jest.fn(),
@@ -1013,13 +1011,11 @@ describe('posthog core', () => {
         })
 
         describe('error handling', () => {
-            given('overrides', () => ({
-                register: jest.fn(),
-            }))
-
             it('handles blank keys being passed', () => {
                 window.console.error = jest.fn()
                 window.console.warn = jest.fn()
+
+                posthog.register = jest.fn()
 
                 posthog.group(null, 'foo')
                 posthog.group('organization', null)
@@ -1027,7 +1023,7 @@ describe('posthog core', () => {
                 posthog.group('organization', '')
                 posthog.group('', 'foo')
 
-                expect(given.overrides.register).not.toHaveBeenCalled()
+                expect(posthog.register).not.toHaveBeenCalled()
             })
         })
 
