@@ -237,7 +237,7 @@ describe('featureflags', () => {
         })
 
         it('onFeatureFlags should not be called immediately if feature flags not loaded', () => {
-            var called = false
+            let called = false
             let _flags = []
             let _variants = {}
             let _error = undefined
@@ -265,7 +265,7 @@ describe('featureflags', () => {
 
         it('onFeatureFlags callback should be called immediately if feature flags were loaded', () => {
             featureFlags.instance.decideEndpointWasHit = true
-            var called = false
+            let called = false
             featureFlags.onFeatureFlags(() => (called = true))
             expect(called).toEqual(true)
 
@@ -855,7 +855,7 @@ describe('featureflags', () => {
         })
 
         it('should call onFeatureFlags even when decide errors out', () => {
-            var called = false
+            let called = false
             let _flags = []
             let _variants = {}
             let _errors = undefined
@@ -882,7 +882,7 @@ describe('featureflags', () => {
         })
 
         it('should call onFeatureFlags with existing flags', () => {
-            var called = false
+            let called = false
             let _flags = []
             let _variants = {}
             let _errors = undefined
@@ -916,7 +916,7 @@ describe('featureflags', () => {
                 })
             )
 
-            var called = false
+            let called = false
             let _flags = []
             let _variants = {}
             let _errors = undefined
