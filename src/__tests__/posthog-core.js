@@ -329,42 +329,44 @@ describe('posthog core', () => {
     })
 
     describe('_afterDecideResponse', () => {
-        given('subject', () => () => given.lib._afterDecideResponse(given.decideResponse))
-
         it('enables compression from decide response', () => {
-            given('decideResponse', () => ({ supportedCompression: ['gzip-js', 'base64'] }))
-            given.subject()
+            const posthog = posthogWith({})
 
-            expect(given.lib.compression).toEqual('gzip-js')
+            posthog._afterDecideResponse({ supportedCompression: ['gzip-js', 'base64'] })
+
+            expect(posthog.compression).toEqual('gzip-js')
         })
 
         it('enables compression from decide response when only one received', () => {
-            given('decideResponse', () => ({ supportedCompression: ['base64'] }))
-            given.subject()
+            const posthog = posthogWith({})
 
-            expect(given.lib.compression).toEqual('base64')
+            posthog._afterDecideResponse({ supportedCompression: ['base64'] })
+
+            expect(posthog.compression).toEqual('base64')
         })
 
         it('does not enable compression from decide response if compression is disabled', () => {
-            given('config', () => ({ disable_compression: true, persistence: 'memory' }))
-            given('decideResponse', () => ({ supportedCompression: ['gzip-js', 'base64'] }))
-            given.subject()
+            const posthog = posthogWith({ disable_compression: true, persistence: 'memory' })
 
-            expect(given.lib.compression).toEqual(undefined)
+            posthog._afterDecideResponse({ supportedCompression: ['gzip-js', 'base64'] })
+
+            expect(posthog.compression).toEqual(undefined)
         })
 
         it('defaults to /e if no endpoint is given', () => {
-            given('decideResponse', () => ({}))
-            given.subject()
+            const posthog = posthogWith({})
 
-            expect(given.lib.analyticsDefaultEndpoint).toEqual('/e/')
+            posthog._afterDecideResponse({})
+
+            expect(posthog.analyticsDefaultEndpoint).toEqual('/e/')
         })
 
         it('uses the specified analytics endpoint if given', () => {
-            given('decideResponse', () => ({ analytics: { endpoint: '/i/v0/e/' } }))
-            given.subject()
+            const posthog = posthogWith({})
 
-            expect(given.lib.analyticsDefaultEndpoint).toEqual('/i/v0/e/')
+            posthog._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } })
+
+            expect(posthog.analyticsDefaultEndpoint).toEqual('/i/v0/e/')
         })
     })
 
