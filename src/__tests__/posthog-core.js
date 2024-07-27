@@ -576,29 +576,27 @@ describe('posthog core', () => {
     })
 
     describe('bootstrapping feature flags', () => {
-        given('overrides', () => ({
-            _send_request: jest.fn(),
-            capture: jest.fn(),
-        }))
-
-        afterEach(() => {
-            given.lib.reset()
-        })
+        const posthogWith = (config) => {
+            const posthog = defaultPostHog().init('testtoken', config, uuidv7())
+            posthog._send_request = jest.fn()
+            posthog.capture = jest.fn()
+            return posthog
+        }
 
         it('sets the right distinctID', () => {
-            given('config', () => ({
+            const posthog = posthogWith({
                 bootstrap: {
                     distinctID: 'abcd',
                 },
-            }))
+            })
 
-            expect(given.lib.get_distinct_id()).toBe('abcd')
-            expect(given.lib.get_property('$device_id')).toBe('abcd')
-            expect(given.lib.persistence.get_property(USER_STATE)).toBe('anonymous')
+            expect(posthog.get_distinct_id()).toBe('abcd')
+            expect(posthog.get_property('$device_id')).toBe('abcd')
+            expect(posthog.persistence.get_property(USER_STATE)).toBe('anonymous')
 
-            given.lib.identify('efgh')
+            posthog.identify('efgh')
 
-            expect(given.overrides.capture).toHaveBeenCalledWith(
+            expect(posthog.capture).toHaveBeenCalledWith(
                 '$identify',
                 {
                     distinct_id: 'efgh',
@@ -609,39 +607,44 @@ describe('posthog core', () => {
         })
 
         it('treats identified distinctIDs appropriately', () => {
-            given('config', () => ({
+            const posthog = posthogWith({
                 bootstrap: {
                     distinctID: 'abcd',
                     isIdentifiedID: true,
                 },
                 get_device_id: () => 'og-device-id',
-            }))
+            })
 
-            expect(given.lib.get_distinct_id()).toBe('abcd')
-            expect(given.lib.get_property('$device_id')).toBe('og-device-id')
-            expect(given.lib.persistence.get_property(USER_STATE)).toBe('identified')
+            expect(posthog.get_distinct_id()).toBe('abcd')
+            expect(posthog.get_property('$device_id')).toBe('og-device-id')
+            expect(posthog.persistence.get_property(USER_STATE)).toBe('identified')
 
-            given.lib.identify('efgh')
-            expect(given.overrides.capture).not.toHaveBeenCalled()
+            posthog.identify('efgh')
+            expect(posthog.capture).not.toHaveBeenCalled()
         })
 
         it('sets the right feature flags', () => {
-            given('config', () => ({
+            const posthog = posthogWith({
                 bootstrap: {
-                    featureFlags: { multivariant: 'variant-1', enabled: true, disabled: false, undef: undefined },
+                    featureFlags: {
+                        multivariant: 'variant-1',
+                        enabled: true,
+                        disabled: false,
+                        undef: undefined,
+                    },
                 },
-            }))
+            })
 
-            expect(given.lib.get_distinct_id()).not.toBe('abcd')
-            expect(given.lib.get_distinct_id()).not.toEqual(undefined)
-            expect(given.lib.getFeatureFlag('multivariant')).toBe('variant-1')
-            expect(given.lib.getFeatureFlag('disabled')).toBe(undefined)
-            expect(given.lib.getFeatureFlag('undef')).toBe(undefined)
-            expect(given.lib.featureFlags.getFlagVariants()).toEqual({ multivariant: 'variant-1', enabled: true })
+            expect(posthog.get_distinct_id()).not.toBe('abcd')
+            expect(posthog.get_distinct_id()).not.toEqual(undefined)
+            expect(posthog.getFeatureFlag('multivariant')).toBe('variant-1')
+            expect(posthog.getFeatureFlag('disabled')).toBe(undefined)
+            expect(posthog.getFeatureFlag('undef')).toBe(undefined)
+            expect(posthog.featureFlags.getFlagVariants()).toEqual({ multivariant: 'variant-1', enabled: true })
         })
 
         it('sets the right feature flag payloads', () => {
-            given('config', () => ({
+            const posthog = posthogWith({
                 bootstrap: {
                     featureFlags: {
                         multivariant: 'variant-1',
@@ -660,70 +663,69 @@ describe('posthog core', () => {
                         jsonString: '{"a":"payload"}',
                     },
                 },
-            }))
+            })
 
-            expect(given.lib.getFeatureFlagPayload('multivariant')).toBe('some-payload')
-            expect(given.lib.getFeatureFlagPayload('enabled')).toEqual({ another: 'value' })
-            expect(given.lib.getFeatureFlagPayload('jsonString')).toEqual({ a: 'payload' })
-            expect(given.lib.getFeatureFlagPayload('disabled')).toBe(undefined)
-            expect(given.lib.getFeatureFlagPayload('undef')).toBe(undefined)
+            expect(posthog.getFeatureFlagPayload('multivariant')).toBe('some-payload')
+            expect(posthog.getFeatureFlagPayload('enabled')).toEqual({ another: 'value' })
+            expect(posthog.getFeatureFlagPayload('jsonString')).toEqual({ a: 'payload' })
+            expect(posthog.getFeatureFlagPayload('disabled')).toBe(undefined)
+            expect(posthog.getFeatureFlagPayload('undef')).toBe(undefined)
         })
 
         it('does nothing when empty', () => {
             jest.spyOn(console, 'warn').mockImplementation()
 
-            given('config', () => ({
+            const posthog = posthogWith({
                 bootstrap: {},
-            }))
+            })
 
-            expect(given.lib.get_distinct_id()).not.toBe('abcd')
-            expect(given.lib.get_distinct_id()).not.toEqual(undefined)
-            expect(given.lib.getFeatureFlag('multivariant')).toBe(undefined)
+            expect(posthog.get_distinct_id()).not.toBe('abcd')
+            expect(posthog.get_distinct_id()).not.toEqual(undefined)
+            expect(posthog.getFeatureFlag('multivariant')).toBe(undefined)
             expect(console.warn).toHaveBeenCalledWith(
                 '[PostHog.js]',
                 expect.stringContaining('getFeatureFlag for key "multivariant" failed')
             )
-            expect(given.lib.getFeatureFlag('disabled')).toBe(undefined)
-            expect(given.lib.getFeatureFlag('undef')).toBe(undefined)
-            expect(given.lib.featureFlags.getFlagVariants()).toEqual({})
+            expect(posthog.getFeatureFlag('disabled')).toBe(undefined)
+            expect(posthog.getFeatureFlag('undef')).toBe(undefined)
+            expect(posthog.featureFlags.getFlagVariants()).toEqual({})
         })
 
         it('onFeatureFlags should be called immediately if feature flags are bootstrapped', () => {
             let called = false
-
-            given('config', () => ({
+            const posthog = posthogWith({
                 bootstrap: {
                     featureFlags: { multivariant: 'variant-1' },
                 },
-            }))
+            })
 
-            given.lib.featureFlags.onFeatureFlags(() => (called = true))
+            posthog.featureFlags.onFeatureFlags(() => (called = true))
             expect(called).toEqual(true)
         })
 
         it('onFeatureFlags should not be called immediately if feature flags bootstrap is empty', () => {
             let called = false
 
-            given('config', () => ({
+            const posthog = posthogWith({
                 bootstrap: {
                     featureFlags: {},
                 },
-            }))
+            })
 
-            given.lib.featureFlags.onFeatureFlags(() => (called = true))
+            posthog.featureFlags.onFeatureFlags(() => (called = true))
             expect(called).toEqual(false)
         })
 
         it('onFeatureFlags should not be called immediately if feature flags bootstrap is undefined', () => {
             let called = false
 
-            given('config', () => ({
+            const posthog = posthogWith({
                 bootstrap: {
                     featureFlags: undefined,
                 },
-            }))
+            })
 
-            given.lib.featureFlags.onFeatureFlags(() => (called = true))
+            posthog.featureFlags.onFeatureFlags(() => (called = true))
             expect(called).toEqual(false)
         })
     })
