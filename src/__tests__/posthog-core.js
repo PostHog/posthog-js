@@ -14,58 +14,15 @@ describe('posthog core', () => {
     const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
     const eventName = '$event'
 
-    const config = {
-        api_host: 'https://app.posthog.com',
-        property_denylist: [],
-        property_blacklist: [],
-        // _onCapture: jest.fn(),
-        get_device_id: jest.fn().mockReturnValue('device-id'),
-    }
+    const defaultConfig = {}
 
-    const overrides = {
-        __loaded: true,
-        persistence: {
-            remove_event_timer: jest.fn(),
-            properties: jest.fn(),
-            update_config: jest.fn(),
-            register(properties) {
-                // Simplified version of the real thing
-                Object.assign(this.props, properties)
-            },
-            props: {},
-            get_property: () => 'anonymous',
-            set_initial_person_info: jest.fn(),
-            get_initial_props: () => ({}),
-        },
-        sessionPersistence: {
-            update_search_keyword: jest.fn(),
-            update_campaign_params: jest.fn(),
-            update_referrer_info: jest.fn(),
-            update_config: jest.fn(),
-            properties: jest.fn(),
-            get_property: () => 'anonymous',
-        },
+    const defaultOverrides = {
         _send_request: jest.fn(),
-        compression: {},
-        __captureHooks: [],
-        rateLimiter: {
-            isServerRateLimited: () => false,
-            clientRateLimitContext: () => false,
-        },
     }
 
     const posthogWith = (config, overrides) => {
         const posthog = defaultPostHog().init('testtoken', config, uuidv7())
-        if (overrides) {
-            return Object.assign(posthog, overrides)
-        }
-
-        posthog._send_request = jest.fn()
-        posthog.capture = jest.fn()
-        posthog._requestQueue = {
-            unload: jest.fn(),
-        }
-        return posthog
+        return Object.assign(posthog, overrides)
     }
 
     beforeEach(() => {
@@ -80,12 +37,12 @@ describe('posthog core', () => {
 
     describe('capture()', () => {
         it('adds a UUID to each message', () => {
-            const captureData = posthogWith(config, overrides).capture(eventName, {}, {})
+            const captureData = posthogWith(defaultConfig, defaultOverrides).capture(eventName, {}, {})
             expect(captureData).toHaveProperty('uuid')
         })
 
         it('adds system time to events', () => {
-            const captureData = posthogWith(config, overrides).capture(eventName, {}, {})
+            const captureData = posthogWith(defaultConfig, defaultOverrides).capture(eventName, {}, {})
 
             expect(captureData).toHaveProperty('timestamp')
             // timer is fixed at 2020-01-01
@@ -93,7 +50,7 @@ describe('posthog core', () => {
         })
 
         it('captures when time is overriden by caller', () => {
-            const captureData = posthogWith(config, overrides).capture(
+            const captureData = posthogWith(defaultConfig, defaultOverrides).capture(
                 eventName,
                 {},
                 { timestamp: new Date(2020, 0, 2, 12, 34) }
@@ -109,13 +66,15 @@ describe('posthog core', () => {
             props.recurse = props
 
             expect(() =>
-                posthogWith(config, overrides).capture(eventName, props, { timestamp: new Date(2020, 0, 2, 12, 34) })
+                posthogWith(defaultConfig, defaultOverrides).capture(eventName, props, {
+                    timestamp: new Date(2020, 0, 2, 12, 34),
+                })
             ).not.toThrow()
         })
 
         it('calls callbacks added via _addCaptureHook', () => {
             const hook = jest.fn()
-            const posthog = posthogWith(config, overrides)
+            const posthog = posthogWith(defaultConfig, defaultOverrides)
             posthog._addCaptureHook(hook)
 
             posthog.capture(eventName, {}, {})
@@ -136,7 +95,17 @@ describe('posthog core', () => {
                     store_google: true,
                     save_referrer: true,
                 },
-                overrides
+                {
+                    ...defaultOverrides,
+                    sessionPersistence: {
+                        update_search_keyword: jest.fn(),
+                        update_campaign_params: jest.fn(),
+                        update_referrer_info: jest.fn(),
+                        update_config: jest.fn(),
+                        properties: jest.fn(),
+                        get_property: () => 'anonymous',
+                    },
+                }
             )
 
             posthog.capture(eventName, {}, {})
@@ -148,7 +117,7 @@ describe('posthog core', () => {
         it('errors with undefined event name', () => {
             const hook = jest.fn()
 
-            const posthog = posthogWith(config, overrides)
+            const posthog = posthogWith(defaultConfig, defaultOverrides)
             posthog._addCaptureHook(hook)
             jest.spyOn(logger, 'error').mockImplementation()
 
@@ -161,7 +130,7 @@ describe('posthog core', () => {
             const hook = jest.fn()
             jest.spyOn(logger, 'error').mockImplementation()
 
-            const posthog = posthogWith(config, overrides)
+            const posthog = posthogWith(defaultConfig, defaultOverrides)
             posthog._addCaptureHook(hook)
 
             expect(() => posthog.capture({ event: 'object as name' })).not.toThrow()
@@ -176,7 +145,7 @@ describe('posthog core', () => {
                 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36'
 
             const hook = jest.fn()
-            const posthog = posthogWith(config, overrides)
+            const posthog = posthogWith(defaultConfig, defaultOverrides)
             posthog._addCaptureHook(hook)
 
             posthog.capture(eventName, {}, {})
@@ -201,7 +170,7 @@ describe('posthog core', () => {
                     property_blacklist: [],
                     _onCapture: jest.fn(),
                 },
-                overrides
+                defaultOverrides
             )
             posthog._addCaptureHook(hook)
 
@@ -227,7 +196,7 @@ describe('posthog core', () => {
                     property_blacklist: [],
                     _onCapture: jest.fn(),
                 },
-                overrides
+                defaultOverrides
             )
 
             const event = posthog.capture(
@@ -249,7 +218,7 @@ describe('posthog core', () => {
                     property_blacklist: [],
                     _onCapture: jest.fn(),
                 },
-                overrides
+                defaultOverrides
             )
 
             const event = posthog.capture(
@@ -273,7 +242,7 @@ describe('posthog core', () => {
             // properties, we also want to ensure capture does the expected thing
             // with them.
 
-            const posthog = posthogWith(config, overrides)
+            const posthog = posthogWith(defaultConfig, defaultOverrides)
 
             const captureResult = posthog.capture(
                 '$identify',
@@ -284,7 +253,10 @@ describe('posthog core', () => {
             // We assume that the returned result is the object we would send to the
             // server.
             expect(captureResult).toEqual(
-                expect.objectContaining({ $set: { email: 'john@example.com' }, $set_once: { howOftenAmISet: 'once!' } })
+                expect.objectContaining({
+                    $set: { email: 'john@example.com' },
+                    $set_once: expect.objectContaining({ howOftenAmISet: 'once!' }),
+                })
             )
         })
 
@@ -295,7 +267,7 @@ describe('posthog core', () => {
                     property_blacklist: [],
                     _onCapture: jest.fn(),
                 },
-                overrides
+                defaultOverrides
             )
 
             posthog.capture(eventName, {
@@ -305,13 +277,13 @@ describe('posthog core', () => {
         })
 
         it('correctly handles the "length" property', () => {
-            const posthog = posthogWith(config, overrides)
+            const posthog = posthogWith(defaultConfig, defaultOverrides)
             const captureResult = posthog.capture('event-name', { foo: 'bar', length: 0 })
             expect(captureResult.properties).toEqual(expect.objectContaining({ foo: 'bar', length: 0 }))
         })
 
         it('sends payloads to /e/ by default', () => {
-            const posthog = posthogWith({ ...config, request_batching: false }, overrides)
+            const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
 
             posthog.capture('event-name', { foo: 'bar', length: 0 })
 
@@ -323,7 +295,7 @@ describe('posthog core', () => {
         })
 
         it('sends payloads to alternative endpoint if given', () => {
-            const posthog = posthogWith({ ...config, request_batching: false }, overrides)
+            const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
             posthog._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } })
 
             posthog.capture('event-name', { foo: 'bar', length: 0 })
@@ -336,7 +308,7 @@ describe('posthog core', () => {
         })
 
         it('sends payloads to overriden endpoint if given', () => {
-            const posthog = posthogWith({ ...config, request_batching: false }, overrides)
+            const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
 
             posthog.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
 
@@ -348,7 +320,7 @@ describe('posthog core', () => {
         })
 
         it('sends payloads to overriden _url, even if alternative endpoint is set', () => {
-            const posthog = posthogWith({ ...config, request_batching: false }, overrides)
+            const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
             posthog._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } })
 
             posthog.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
@@ -551,11 +523,14 @@ describe('posthog core', () => {
 
     describe('_handle_unload()', () => {
         it('captures $pageleave', () => {
-            const posthog = posthogWith({
-                capture_pageview: true,
-                capture_pageleave: 'if_capture_pageview',
-                batching: true,
-            })
+            const posthog = posthogWith(
+                {
+                    capture_pageview: true,
+                    capture_pageleave: 'if_capture_pageview',
+                    batching: true,
+                },
+                { capture: jest.fn() }
+            )
 
             posthog._handle_unload()
 
@@ -563,11 +538,14 @@ describe('posthog core', () => {
         })
 
         it('does not capture $pageleave when capture_pageview=false and capture_pageleave=if_capture_pageview', () => {
-            const posthog = posthogWith({
-                capture_pageview: false,
-                capture_pageleave: 'if_capture_pageview',
-                batching: true,
-            })
+            const posthog = posthogWith(
+                {
+                    capture_pageview: false,
+                    capture_pageleave: 'if_capture_pageview',
+                    batching: true,
+                },
+                { capture: jest.fn() }
+            )
 
             posthog._handle_unload()
 
@@ -575,11 +553,14 @@ describe('posthog core', () => {
         })
 
         it('does capture $pageleave when capture_pageview=false and capture_pageleave=true', () => {
-            const posthog = posthogWith({
-                capture_pageview: false,
-                capture_pageleave: true,
-                batching: true,
-            })
+            const posthog = posthogWith(
+                {
+                    capture_pageview: false,
+                    capture_pageleave: true,
+                    batching: true,
+                },
+                { capture: jest.fn() }
+            )
 
             posthog._handle_unload()
 
@@ -587,11 +568,14 @@ describe('posthog core', () => {
         })
 
         it('calls requestQueue unload', () => {
-            const posthog = posthogWith({
-                capture_pageview: true,
-                capture_pageleave: 'if_capture_pageview',
-                batching: true,
-            })
+            const posthog = posthogWith(
+                {
+                    capture_pageview: true,
+                    capture_pageleave: 'if_capture_pageview',
+                    batching: true,
+                },
+                { _requestQueue: { enqueue: jest.fn(), unload: jest.fn() } }
+            )
 
             posthog._handle_unload()
 
@@ -600,22 +584,28 @@ describe('posthog core', () => {
 
         describe('without batching', () => {
             it('captures $pageleave', () => {
-                const posthog = posthogWith({
-                    capture_pageview: true,
-                    capture_pageleave: 'if_capture_pageview',
-                    request_batching: false,
-                })
+                const posthog = posthogWith(
+                    {
+                        capture_pageview: true,
+                        capture_pageleave: 'if_capture_pageview',
+                        request_batching: false,
+                    },
+                    { capture: jest.fn() }
+                )
                 posthog._handle_unload()
 
                 expect(posthog.capture).toHaveBeenCalledWith('$pageleave', null, { transport: 'sendBeacon' })
             })
 
             it('does not capture $pageleave when capture_pageview=false', () => {
-                const posthog = posthogWith({
-                    capture_pageview: false,
-                    capture_pageleave: 'if_capture_pageview',
-                    request_batching: false,
-                })
+                const posthog = posthogWith(
+                    {
+                        capture_pageview: false,
+                        capture_pageleave: 'if_capture_pageview',
+                        request_batching: false,
+                    },
+                    { capture: jest.fn() }
+                )
                 posthog._handle_unload()
 
                 expect(posthog.capture).not.toHaveBeenCalled()
@@ -625,11 +615,14 @@ describe('posthog core', () => {
 
     describe('bootstrapping feature flags', () => {
         it('sets the right distinctID', () => {
-            const posthog = posthogWith({
-                bootstrap: {
-                    distinctID: 'abcd',
+            const posthog = posthogWith(
+                {
+                    bootstrap: {
+                        distinctID: 'abcd',
+                    },
                 },
-            })
+                { capture: jest.fn() }
+            )
 
             expect(posthog.get_distinct_id()).toBe('abcd')
             expect(posthog.get_property('$device_id')).toBe('abcd')
@@ -648,13 +641,16 @@ describe('posthog core', () => {
         })
 
         it('treats identified distinctIDs appropriately', () => {
-            const posthog = posthogWith({
-                bootstrap: {
-                    distinctID: 'abcd',
-                    isIdentifiedID: true,
+            const posthog = posthogWith(
+                {
+                    bootstrap: {
+                        distinctID: 'abcd',
+                        isIdentifiedID: true,
+                    },
+                    get_device_id: () => 'og-device-id',
                 },
-                get_device_id: () => 'og-device-id',
-            })
+                { capture: jest.fn() }
+            )
 
             expect(posthog.get_distinct_id()).toBe('abcd')
             expect(posthog.get_property('$device_id')).toBe('og-device-id')
@@ -788,7 +784,7 @@ describe('posthog core', () => {
         })
 
         it('does not load feature flags, toolbar, session recording', () => {
-            const posthog = defaultPostHog().init('testtoken', config, uuidv7())
+            const posthog = defaultPostHog().init('testtoken', defaultConfig, uuidv7())
 
             posthog.toolbar = {
                 maybeLoadToolbar: jest.fn(),
