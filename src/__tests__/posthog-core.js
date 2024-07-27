@@ -18,6 +18,16 @@ describe('posthog core', () => {
         return Object.assign(posthog, given.overrides)
     })
 
+    const posthogWith = (config) => {
+        const posthog = defaultPostHog().init('testtoken', config, uuidv7())
+        posthog._send_request = jest.fn()
+        posthog.capture = jest.fn()
+        posthog._requestQueue = {
+            unload: jest.fn(),
+        }
+        return posthog
+    }
+
     beforeEach(() => {
         jest.useFakeTimers().setSystemTime(baseUTCDateTime)
     })
@@ -518,59 +528,76 @@ describe('posthog core', () => {
         given('batching', () => true)
 
         it('captures $pageleave', () => {
-            given.subject()
+            const posthog = posthogWith({
+                capture_pageview: true,
+                capture_pageleave: 'if_capture_pageview',
+                batching: true,
+            })
 
-            expect(given.overrides.capture).toHaveBeenCalledWith('$pageleave')
+            posthog._handle_unload()
+
+            expect(posthog.capture).toHaveBeenCalledWith('$pageleave')
         })
 
         it('does not capture $pageleave when capture_pageview=false and capture_pageleave=if_capture_pageview', () => {
-            given('capturePageleave', () => 'if_capture_pageview')
-            given('capturePageview', () => false)
+            const posthog = posthogWith({
+                capture_pageview: false,
+                capture_pageleave: 'if_capture_pageview',
+                batching: true,
+            })
 
-            given.subject()
+            posthog._handle_unload()
 
-            expect(given.overrides.capture).not.toHaveBeenCalled()
-        })
-
-        it('does capture $pageleave when capture_pageview=true and capture_pageleave=if_capture_pageview', () => {
-            given('capturePageleave', () => 'if_capture_pageview')
-            given('capturePageview', () => true)
-
-            given.subject()
-
-            expect(given.overrides.capture).toHaveBeenCalled()
+            expect(posthog.capture).not.toHaveBeenCalled()
         })
 
         it('does capture $pageleave when capture_pageview=false and capture_pageleave=true', () => {
-            given('capturePageleave', () => true)
-            given('capturePageview', () => false)
+            const posthog = posthogWith({
+                capture_pageview: false,
+                capture_pageleave: true,
+                batching: true,
+            })
 
-            given.subject()
+            posthog._handle_unload()
 
-            expect(given.overrides.capture).toHaveBeenCalled()
+            expect(posthog.capture).toHaveBeenCalledWith('$pageleave')
         })
 
         it('calls requestQueue unload', () => {
-            given.subject()
+            const posthog = posthogWith({
+                capture_pageview: true,
+                capture_pageleave: 'if_capture_pageview',
+                batching: true,
+            })
 
-            expect(given.overrides._requestQueue.unload).toHaveBeenCalledTimes(1)
+            posthog._handle_unload()
+
+            expect(posthog._requestQueue.unload).toHaveBeenCalledTimes(1)
         })
 
         describe('without batching', () => {
             given('batching', () => false)
 
             it('captures $pageleave', () => {
-                given.subject()
+                const posthog = posthogWith({
+                    capture_pageview: true,
+                    capture_pageleave: 'if_capture_pageview',
+                    request_batching: false,
+                })
+                posthog._handle_unload()
 
-                expect(given.overrides.capture).toHaveBeenCalledWith('$pageleave', null, { transport: 'sendBeacon' })
+                expect(posthog.capture).toHaveBeenCalledWith('$pageleave', null, { transport: 'sendBeacon' })
             })
 
             it('does not capture $pageleave when capture_pageview=false', () => {
-                given('capturePageview', () => false)
+                const posthog = posthogWith({
+                    capture_pageview: false,
+                    capture_pageleave: 'if_capture_pageview',
+                    request_batching: false,
+                })
+                posthog._handle_unload()
 
-                given.subject()
-
-                expect(given.overrides.capture).not.toHaveBeenCalled()
+                expect(posthog.capture).not.toHaveBeenCalled()
             })
         })
     })
