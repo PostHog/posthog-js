@@ -721,6 +721,7 @@ describe('posthog core', () => {
             const posthog = posthogWith({
                 bootstrap: {},
             })
+            posthog.persistence.clear()
 
             expect(posthog.get_distinct_id()).not.toBe('abcd')
             expect(posthog.get_distinct_id()).not.toEqual(undefined)
@@ -783,13 +784,9 @@ describe('posthog core', () => {
 
         it('can set an xhr error handler', () => {
             const fakeOnXHRError = 'configured error'
-            const posthog = defaultPostHog().init(
-                'a-token',
-                {
-                    on_xhr_error: fakeOnXHRError,
-                },
-                'a-name'
-            )
+            const posthog = posthogWith({
+                on_xhr_error: fakeOnXHRError,
+            })
             expect(posthog.config.on_xhr_error).toBe(fakeOnXHRError)
         })
 
@@ -862,6 +859,7 @@ describe('posthog core', () => {
                     'testtoken',
                     {
                         get_device_id: (uuid) => 'custom-' + uuid.slice(0, 8),
+                        persistence: 'memory',
                     },
                     uuidv7()
                 )
