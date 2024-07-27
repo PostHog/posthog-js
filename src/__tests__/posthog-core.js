@@ -18,8 +18,12 @@ describe('posthog core', () => {
         return Object.assign(posthog, given.overrides)
     })
 
-    const posthogWith = (config) => {
+    const posthogWith = (config, overrides) => {
         const posthog = defaultPostHog().init('testtoken', config, uuidv7())
+        if (overrides) {
+            return Object.assign(posthog, overrides)
+        }
+
         posthog._send_request = jest.fn()
         posthog.capture = jest.fn()
         posthog._requestQueue = {
@@ -365,22 +369,9 @@ describe('posthog core', () => {
     })
 
     describe('_calculate_event_properties()', () => {
-        given('subject', () =>
-            given.lib._calculate_event_properties(
-                given.event_name,
-                given.properties,
-                given.start_timestamp,
-                given.options
-            )
-        )
+        let posthog
 
-        given('event_name', () => 'custom_event')
-        given('properties', () => ({ event: 'prop' }))
-
-        given('options', () => ({}))
-
-        given('overrides', () => ({
-            config: given.config,
+        const overrides = {
             persistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop', $is_identified: false }),
                 remove_event_timer: jest.fn(),
@@ -396,24 +387,25 @@ describe('posthog core', () => {
                     sessionId: 'sessionId',
                 }),
             },
-        }))
-
-        given('config', () => ({
-            api_host: 'https://app.posthog.com',
-            token: 'testtoken',
-            property_denylist: given.property_denylist,
-            property_blacklist: given.property_blacklist,
-            sanitize_properties: given.sanitize_properties,
-        }))
-        given('property_denylist', () => [])
-        given('property_blacklist', () => [])
+        }
 
         beforeEach(() => {
             jest.spyOn(Info, 'properties').mockReturnValue({ $lib: 'web' })
+
+            posthog = posthogWith(
+                {
+                    api_host: 'https://app.posthog.com',
+                    token: 'testtoken',
+                    property_denylist: [],
+                    property_blacklist: [],
+                    sanitize_properties: undefined,
+                },
+                overrides
+            )
         })
 
         it('returns calculated properties', () => {
-            expect(given.subject).toEqual({
+            expect(posthog._calculate_event_properties('custom_event', { event: 'prop' })).toEqual({
                 token: 'testtoken',
                 event: 'prop',
                 $lib: 'web',
@@ -427,14 +419,14 @@ describe('posthog core', () => {
         })
 
         it('sets $lib_custom_api_host if api_host is not the default', () => {
-            given('config', () => ({
-                api_host: 'https://custom.posthog.com',
-                token: 'testtoken',
-                property_denylist: given.property_denylist,
-                property_blacklist: given.property_blacklist,
-                sanitize_properties: given.sanitize_properties,
-            }))
-            expect(given.subject).toEqual({
+            posthog = posthogWith(
+                {
+                    api_host: 'https://custom.posthog.com',
+                },
+                overrides
+            )
+
+            expect(posthog._calculate_event_properties('custom_event', { event: 'prop' })).toEqual({
                 token: 'testtoken',
                 event: 'prop',
                 $lib: 'web',
@@ -449,37 +441,56 @@ describe('posthog core', () => {
         })
 
         it("can't deny or blacklist $process_person_profile", () => {
-            given('property_denylist', () => ['$process_person_profile'])
-            given('property_blacklist', () => ['$process_person_profile'])
+            posthog = posthogWith(
+                {
+                    api_host: 'https://custom.posthog.com',
+                    property_denylist: ['$process_person_profile'],
+                    property_blacklist: ['$process_person_profile'],
+                },
+                overrides
+            )
 
-            expect(given.subject['$process_person_profile']).toEqual(true)
+            expect(
+                posthog._calculate_event_properties('custom_event', { event: 'prop' })['$process_person_profile']
+            ).toEqual(true)
         })
 
         it('only adds token and distinct_id if event_name is $snapshot', () => {
-            given('event_name', () => '$snapshot')
-            expect(given.subject).toEqual({
+            posthog = posthogWith(
+                {
+                    api_host: 'https://custom.posthog.com',
+                },
+                overrides
+            )
+
+            expect(posthog._calculate_event_properties('$snapshot', { event: 'prop' })).toEqual({
                 token: 'testtoken',
                 event: 'prop',
                 distinct_id: 'abc',
             })
-            expect(given.overrides.sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
+            expect(posthog.sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
         })
 
         it('calls sanitize_properties', () => {
-            given('sanitize_properties', () => (props, event_name) => ({ token: props.token, event_name }))
+            posthog = posthogWith(
+                {
+                    api_host: 'https://custom.posthog.com',
+                    sanitize_properties: (props, event_name) => ({ token: props.token, event_name }),
+                },
+                overrides
+            )
 
-            expect(given.subject).toEqual({
-                event_name: given.event_name,
+            expect(posthog._calculate_event_properties('custom_event', { event: 'prop' })).toEqual({
+                event_name: 'custom_event',
                 token: 'testtoken',
                 $process_person_profile: true,
             })
         })
 
         it('saves $snapshot data and token for $snapshot events', () => {
-            given('event_name', () => '$snapshot')
-            given('properties', () => ({ $snapshot_data: {} }))
+            posthog = posthogWith({}, overrides)
 
-            expect(given.subject).toEqual({
+            expect(posthog._calculate_event_properties('$snapshot', { $snapshot_data: {} })).toEqual({
                 token: 'testtoken',
                 $snapshot_data: {},
                 distinct_id: 'abc',
@@ -488,7 +499,8 @@ describe('posthog core', () => {
 
         it("doesn't modify properties passed into it", () => {
             const properties = { prop1: 'val1', prop2: 'val2' }
-            given.lib._calculate_event_properties(given.event_name, properties, given.start_timestamp, given.options)
+
+            posthog._calculate_event_properties('custom_event', properties)
 
             expect(Object.keys(properties)).toEqual(['prop1', 'prop2'])
         })
@@ -496,37 +508,13 @@ describe('posthog core', () => {
         it('adds page title to $pageview', () => {
             document.title = 'test'
 
-            given('event_name', () => '$pageview')
-
-            expect(given.subject).toEqual(expect.objectContaining({ title: 'test' }))
+            expect(posthog._calculate_event_properties('$pageview', {})).toEqual(
+                expect.objectContaining({ title: 'test' })
+            )
         })
     })
 
     describe('_handle_unload()', () => {
-        given('subject', () => () => given.lib._handle_unload())
-
-        given('overrides', () => ({
-            config: given.config,
-            capture: jest.fn(),
-            compression: {},
-            _requestQueue: {
-                unload: jest.fn(),
-            },
-            _retryQueue: {
-                unload: jest.fn(),
-            },
-        }))
-
-        given('config', () => ({
-            capture_pageview: given.capturePageview,
-            capture_pageleave: given.capturePageleave,
-            request_batching: given.batching,
-        }))
-
-        given('capturePageview', () => true)
-        given('capturePageleave', () => 'if_capture_pageview')
-        given('batching', () => true)
-
         it('captures $pageleave', () => {
             const posthog = posthogWith({
                 capture_pageview: true,
