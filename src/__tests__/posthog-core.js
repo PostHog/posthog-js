@@ -31,8 +31,6 @@ describe('posthog core', () => {
 
     afterEach(() => {
         jest.useRealTimers()
-        // Make sure there's no cached persistence
-        // given.lib.persistence?.clear?.()
     })
 
     describe('capture()', () => {
@@ -847,7 +845,6 @@ describe('posthog core', () => {
             })
 
             it('uses config.get_device_id for uuid generation if passed', () => {
-                // uninitialisedPostHog.persistence = { props: { distinct_id: undefined } }
                 const posthog = uninitialisedPostHog.init(
                     uuidv7(),
                     {
