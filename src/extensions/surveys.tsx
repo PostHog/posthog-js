@@ -296,12 +296,12 @@ export function generateSurveys(posthog: PostHog) {
 
     const surveyManager = new SurveyManager(posthog)
     surveyManager.callSurveysAndEvaluateDisplayLogic(true)
-    ;(window as any).__PosthogExtensions__.renderSurvey = surveyManager.renderSurvey
 
     // recalculate surveys every second to check if URL or selectors have changed
     setInterval(() => {
         surveyManager.callSurveysAndEvaluateDisplayLogic(false)
     }, 1000)
+    return surveyManager
 }
 
 export function usePopupVisibility(
