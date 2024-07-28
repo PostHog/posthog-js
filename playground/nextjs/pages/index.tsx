@@ -41,6 +41,8 @@ export default function Home() {
                 <button className="ph-no-capture">Ignore certain elements</button>
 
                 <button
+                    id="set-user-properties"
+                    suppressHydrationWarning={true}
                     onClick={() =>
                         posthog?.setPersonProperties({
                             email: `user-${randomID()}@posthog.com`,
