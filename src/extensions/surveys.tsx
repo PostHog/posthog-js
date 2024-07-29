@@ -5,6 +5,7 @@ import {
     SurveyQuestion,
     SurveyQuestionBranchingType,
     SurveyQuestionType,
+    SurveyRenderReason,
     SurveyType,
 } from '../posthog-surveys-types'
 
@@ -143,6 +144,47 @@ export class SurveyManager {
         return surveys.sort(
             (a, b) => (a.appearance?.surveyPopupDelaySeconds || 0) - (b.appearance?.surveyPopupDelaySeconds || 0)
         )
+    }
+
+    /**
+     * Checks the feature flags associated with this Survey to see if the survey can be rendered.
+     * @param survey
+     * @param instance
+     */
+    public canRenderSurvey = (survey: Survey, instance: PostHog): SurveyRenderReason => {
+        const renderReason: SurveyRenderReason = {
+            visible: false,
+        }
+
+        const linkedFlagCheck = survey.linked_flag_key
+            ? instance.featureFlags.isFeatureEnabled(survey.linked_flag_key)
+            : true
+
+        if (!linkedFlagCheck) {
+            renderReason.disabledReason = `linked feature flag ${survey.linked_flag_key} is false`
+            return renderReason
+        }
+
+        const targetingFlagCheck = survey.targeting_flag_key
+            ? instance.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
+            : true
+
+        if (!targetingFlagCheck) {
+            renderReason.disabledReason = `targeting feature flag ${survey.targeting_flag_key} is false`
+            return renderReason
+        }
+
+        const internalTargetingFlagCheck = survey.internal_targeting_flag_key
+            ? instance.featureFlags.isFeatureEnabled(survey.internal_targeting_flag_key)
+            : true
+
+        if (!internalTargetingFlagCheck) {
+            renderReason.disabledReason = `internal targeting feature flag ${survey.internal_targeting_flag_key} is false`
+            return renderReason
+        }
+
+        renderReason.visible = true
+        return renderReason
     }
 
     public renderSurvey = (survey: Survey, selector: Element): void => {
