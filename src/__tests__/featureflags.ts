@@ -220,6 +220,54 @@ describe('featureflags', () => {
         })
     })
 
+    it('supports suppressing override warnings', () => {
+        // Setup the initial state
+        instance.persistence.props = {
+            $active_feature_flags: ['beta-feature', 'alpha-feature-2'],
+            $enabled_feature_flags: {
+                'beta-feature': true,
+                'alpha-feature-2': true,
+            },
+        }
+        // Mark the instance as loaded
+        instance.__loaded = true
+
+        // Test without suppressing warning (default behavior)
+        featureFlags.override({
+            'beta-feature': false,
+        })
+
+        // Verify that the override took effect
+        expect(featureFlags.getFlagVariants()).toEqual({
+            'beta-feature': false,
+            'alpha-feature-2': true,
+        })
+        expect(window.console.warn).toHaveBeenCalledWith(
+            '[PostHog.js]',
+            ' Overriding feature flags!',
+            expect.any(Object)
+        )
+
+        // Clear the mock to reset call count
+        window.console.warn.mockClear()
+
+        // Test with suppressing warning (new behavior)
+        featureFlags.override(
+            {
+                'alpha-feature-2': false,
+            },
+            true
+        )
+
+        expect(window.console.warn).not.toHaveBeenCalled()
+
+        // Verify that the override took effect even with no logs
+        expect(featureFlags.getFlagVariants()).toEqual({
+            'beta-feature': true,
+            'alpha-feature-2': false,
+        })
+    })
+
     describe('onFeatureFlags', () => {
         beforeEach(() => {
             instance._send_request = jest.fn().mockImplementation(({ callback }) =>
