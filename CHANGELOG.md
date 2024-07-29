@@ -1,3 +1,8 @@
+## 1.150.1 - 2024-07-29
+
+- fix: Array.from override (#1322)
+- chore: finally remove given (#1321)
+
 ## 1.150.0 - 2024-07-25
 
 - feat(surveys): add support for a 7 point likert scale (#1319)
