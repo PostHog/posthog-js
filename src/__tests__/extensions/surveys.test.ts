@@ -538,7 +538,7 @@ describe('SurveyManager', () => {
             survey.end_date = new Date('11/10/2022').toISOString()
             const result = surveyManager.canRenderSurvey(survey)
             expect(result.visible).toBeFalsy()
-            expect(result.disabledReason).toEqual('survey was completed on 2022-11-10T06:00:00.000Z')
+            expect(result.disabledReason).toEqual(`survey was completed on ${survey.end_date}`)
         })
 
         it('can only render popover surveys', () => {
