@@ -1,3 +1,7 @@
+## 1.151.0 - 2024-07-30
+
+- Accept eventPayload in onEvent handler (#1331)
+
 ## 1.150.1 - 2024-07-29
 
 - fix: Array.from override (#1322)
