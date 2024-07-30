@@ -1733,6 +1733,11 @@ export class PostHog {
             }
             if (this.config.debug) {
                 Config.DEBUG = true
+                logger.info('set_config', {
+                    config,
+                    oldConfig,
+                    newConfig: { ...this.config },
+                })
             }
 
             this.sessionRecording?.startIfEnabledOrStop()
