@@ -156,6 +156,16 @@ export class SurveyManager {
             visible: false,
         }
 
+        if (survey.end_date) {
+            renderReason.disabledReason = `survey was completed on ${survey.end_date}`
+            return renderReason
+        }
+
+        if (survey.type != SurveyType.Popover) {
+            renderReason.disabledReason = `Only Popover survey types can be rendered`
+            return renderReason
+        }
+
         const linkedFlagCheck = survey.linked_flag_key
             ? instance.featureFlags.isFeatureEnabled(survey.linked_flag_key)
             : true
