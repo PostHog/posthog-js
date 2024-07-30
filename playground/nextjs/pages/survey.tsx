@@ -6,7 +6,6 @@ export default function Survey() {
     const [surveys, setSurveys] = useState([] as unknown as Survey[])
     const [selectedSurvey, setSelectedSurvey] = useState('0190bc7b-7096-0000-126d-1e5e7021a80e')
     const handleChange = (event) => {
-        // console.log("changed survey selection")
         setSelectedSurvey(event.target.value)
     }
 
@@ -15,18 +14,6 @@ export default function Survey() {
             setSurveys(surveys)
         })
     }, [])
-    // posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY || '', {
-    //     api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com',
-    //     session_recording: {
-    //         recordCrossOriginIframes: true,
-    //     },
-    //     debug: true,
-    //     scroll_root_selector: ['#scroll_element', 'html'],
-    //     persistence: cookieConsentGiven() ? 'localStorage+cookie' : 'memory',
-    //     person_profiles: PERSON_PROCESSING_MODE === 'never' ? 'identified_only' : PERSON_PROCESSING_MODE,
-    //     persistence_name: `${process.env.NEXT_PUBLIC_POSTHOG_KEY}_nextjs`,
-    //     ...configForConsent(),
-    // })
 
     const arraySurveyItems = surveys.map((survey) => <option value={survey.id}> {survey.name}</option>)
 
