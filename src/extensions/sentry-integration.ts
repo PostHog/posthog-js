@@ -122,7 +122,7 @@ export function createEventProcessor(
                 organization +
                 '/issues/?project=' +
                 projectId +
-                '&query=' +
+                '&query=id%3A' +
                 event.event_id
         }
 
