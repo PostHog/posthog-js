@@ -1,11 +1,12 @@
 import { usePostHog } from 'posthog-js/react'
 import { useEffect, useState } from 'react'
+import { Survey } from 'posthog-js'
 
-export default function Survey() {
+export default function SurveyForm() {
     const posthog = usePostHog()
     const [surveys, setSurveys] = useState([] as unknown as Survey[])
     const [selectedSurvey, setSelectedSurvey] = useState('0190bc7b-7096-0000-126d-1e5e7021a80e')
-    const handleChange = (event) => {
+    const handleChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
         setSelectedSurvey(event.target.value)
     }
 
