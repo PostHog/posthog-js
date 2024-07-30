@@ -106,19 +106,26 @@ describe('survey-event-receiver', () => {
         it('receiver activates survey on event', () => {
             const surveyEventReceiver = new SurveyEventReceiver(instance)
             surveyEventReceiver.register(surveysWithEvents)
-            surveyEventReceiver.onEvent('billing_changed')
+            const registeredHook = instance._addCaptureHook.mock.calls[0][0]
+            registeredHook('billing_changed')
             const activatedSurveys = surveyEventReceiver.getSurveys()
             expect(activatedSurveys).toContain('first-survey')
         })
 
         it('receiver removes survey from list after its shown', () => {
             const surveyEventReceiver = new SurveyEventReceiver(instance)
+            const firstSurvey = surveysWithEvents[0]
+            if (firstSurvey.conditions && firstSurvey.conditions?.events) {
+                firstSurvey.conditions.events.repeatedActivation = true
+            }
+
             surveyEventReceiver.register(surveysWithEvents)
-            surveyEventReceiver.onEvent('billing_changed')
+            const registeredHook = instance._addCaptureHook.mock.calls[0][0]
+            registeredHook('billing_changed')
             const activatedSurveys = surveyEventReceiver.getSurveys()
             expect(activatedSurveys).toContain('first-survey')
 
-            surveyEventReceiver.onEvent('survey shown', {
+            registeredHook('survey shown', {
                 $set: undefined,
                 $set_once: undefined,
                 event: 'survey shown',
@@ -135,25 +142,28 @@ describe('survey-event-receiver', () => {
         it('receiver activates same survey on multiple event', () => {
             const surveyEventReceiver = new SurveyEventReceiver(instance)
             surveyEventReceiver.register(surveysWithEvents)
-            surveyEventReceiver.onEvent('billing_changed')
+            const registeredHook = instance._addCaptureHook.mock.calls[0][0]
+            registeredHook('billing_changed')
             expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey'])
-            surveyEventReceiver.onEvent('billing_removed')
+            registeredHook('billing_removed')
             expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey'])
         })
 
         it('receiver activates multiple surveys on same event', () => {
             const surveyEventReceiver = new SurveyEventReceiver(instance)
             surveyEventReceiver.register(surveysWithEvents)
-            surveyEventReceiver.onEvent('user_subscribed')
+            const registeredHook = instance._addCaptureHook.mock.calls[0][0]
+            registeredHook('user_subscribed')
             expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey', 'third-survey'])
         })
 
         it('receiver activates multiple surveys on different events', () => {
             const surveyEventReceiver = new SurveyEventReceiver(instance)
             surveyEventReceiver.register(surveysWithEvents)
-            surveyEventReceiver.onEvent('billing_changed')
+            const registeredHook = instance._addCaptureHook.mock.calls[0][0]
+            registeredHook('billing_changed')
             expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey'])
-            surveyEventReceiver.onEvent('address_changed')
+            registeredHook('address_changed')
             expect(surveyEventReceiver.getSurveys()).toEqual(['first-survey', 'third-survey'])
         })
     })
