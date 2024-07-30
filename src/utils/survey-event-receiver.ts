@@ -88,8 +88,8 @@ export class SurveyEventReceiver {
         }
 
         // match any events to its corresponding survey.
-        const matchEventToSurvey = (eventName: string) => {
-            this.onEvent(eventName)
+        const matchEventToSurvey = (eventName: string, eventPayload?: CaptureResult) => {
+            this.onEvent(eventName, eventPayload)
         }
         this.instance?._addCaptureHook(matchEventToSurvey)
 
