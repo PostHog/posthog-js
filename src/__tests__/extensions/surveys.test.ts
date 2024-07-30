@@ -466,6 +466,51 @@ describe('SurveyManager', () => {
         ])
     })
 
+    describe('renderSurvey', () => {
+        let surveyManager: SurveyManager
+        const mockSurvey = {
+            id: 'testSurvey1',
+            name: 'Test survey 1',
+            type: SurveyType.Popover,
+            appearance: {},
+            start_date: '2021-01-01T00:00:00.000Z',
+            description: 'This is a survey description',
+            linked_flag_key: null,
+            questions: [
+                {
+                    question: 'How satisfied are you with our newest product?',
+                    description: 'This is a question description',
+                    descriptionContentType: 'text',
+                    type: SurveyQuestionType.Rating,
+                    display: 'number',
+                    scale: 10,
+                    lowerBoundLabel: 'Not Satisfied',
+                    upperBoundLabel: 'Very Satisfied',
+                },
+            ],
+            conditions: {},
+            end_date: null,
+            targeting_flag_key: null,
+        } as unknown as Survey
+
+        beforeEach(() => {
+            surveyManager = new SurveyManager(mockPostHog)
+        })
+
+        it('can render survey', () => {
+            const surveyDiv = document.createElement('div')
+            surveyDiv.id = 'survey-div'
+            expect(surveyDiv.innerHTML).toBe('')
+            surveyManager.renderSurvey(mockSurvey, surveyDiv)
+            // surveys rendered with renderSurvey are unstyled.
+            expect(surveyDiv.getElementsByTagName('style').length).toBe(0)
+            expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
+            expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
+            const descriptionElement = surveyDiv.querySelector('.description')
+            expect(descriptionElement).not.toBeNull()
+        })
+    })
+
     describe('canRenderSurvey', () => {
         let surveyManager: SurveyManager
 
