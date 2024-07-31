@@ -589,7 +589,7 @@ export class SessionRecording {
             maskTextSelector: undefined,
             maskTextFn: undefined,
             maskAllInputs: true,
-            maskInputOptions: {},
+            maskInputOptions: { password: true },
             maskInputFn: undefined,
             slimDOMOptions: {},
             collectFonts: false,
