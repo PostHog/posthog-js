@@ -139,7 +139,7 @@ export class PostHogPersistence {
         if (this.disabled) {
             return
         }
-        this.storage.set(this.name, this.props, this.expire_days, this.cross_subdomain, this.secure)
+        this.storage.set(this.name, this.props, this.expire_days, this.cross_subdomain, this.secure, this.config.debug)
     }
 
     remove(): void {
