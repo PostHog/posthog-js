@@ -60,6 +60,9 @@ export class PostHogPersistence {
         this.name = parseName(config)
         this.storage = this.buildStorage(config)
         this.load()
+        if (config.debug) {
+            logger.info('Persistence loaded', this.props)
+        }
         this.update_config(config, config)
         this.save()
     }
