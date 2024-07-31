@@ -172,7 +172,8 @@ export class WebExperiments {
         transforms.forEach((transform) => {
             WebExperiments.logInfo(`applying transform `, transform)
             if (transform.selector) {
-                const elements = _document?.querySelectorAll(transform.selector)
+                // eslint-disable-next-line no-restricted-globals
+                const elements = document?.querySelectorAll(transform.selector)
                 elements?.forEach((element) => {
                     WebExperiments.logInfo(
                         `applying transform of text [`,
