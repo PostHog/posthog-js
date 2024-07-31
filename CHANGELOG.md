@@ -1,3 +1,7 @@
+## 1.151.1 - 2024-07-31
+
+- fix(surveys): Center the X (#1329)
+
 ## 1.151.0 - 2024-07-30
 
 - Accept eventPayload in onEvent handler (#1331)
