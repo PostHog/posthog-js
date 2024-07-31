@@ -1,3 +1,7 @@
+## 1.152.1 - 2024-07-31
+
+- feat: Add debug messages around storage (#1333)
+
 ## 1.152.0 - 2024-07-31
 
 - feat: add renderSurvey option (#1324)
