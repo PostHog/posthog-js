@@ -1,3 +1,7 @@
+## 1.151.2 - 2024-07-31
+
+- feat: Add debug logic for set_config (#1330)
+
 ## 1.151.1 - 2024-07-31
 
 - fix(surveys): Center the X (#1329)
