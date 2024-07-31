@@ -1,3 +1,7 @@
+## 1.153.0 - 2024-07-31
+
+- chore: mask password by default (#1334)
+
 ## 1.152.1 - 2024-07-31
 
 - feat: Add debug messages around storage (#1333)
