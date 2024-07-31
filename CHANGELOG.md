@@ -1,3 +1,7 @@
+## 1.154.0 - 2024-07-31
+
+- feat(flags): give users the ability to suppress override warning logs, if desired (#1328)
+
 ## 1.153.0 - 2024-07-31
 
 - chore: mask password by default (#1334)
