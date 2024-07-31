@@ -387,7 +387,14 @@ export interface PersistentStore {
     error: (error: any) => void
     parse: (name: string) => any
     get: (name: string) => any
-    set: (name: string, value: any, expire_days?: number | null, cross_subdomain?: boolean, secure?: boolean) => void
+    set: (
+        name: string,
+        value: any,
+        expire_days?: number | null,
+        cross_subdomain?: boolean,
+        secure?: boolean,
+        debug?: boolean
+    ) => void
     remove: (name: string, cross_subdomain?: boolean) => void
 }
 

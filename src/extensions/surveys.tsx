@@ -5,6 +5,7 @@ import {
     SurveyQuestion,
     SurveyQuestionBranchingType,
     SurveyQuestionType,
+    SurveyRenderReason,
     SurveyType,
 } from '../posthog-surveys-types'
 
@@ -32,6 +33,7 @@ import {
     MultipleChoiceQuestion,
 } from './surveys/components/QuestionTypes'
 import { logger } from '../utils/logger'
+import { Cancel } from './surveys/components/QuestionHeader'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -83,6 +85,7 @@ export class SurveyManager {
                     posthog={this.posthog}
                     survey={survey}
                     removeSurveyFromFocus={this.removeSurveyFromFocus}
+                    isPopup={true}
                 />,
                 shadow
             )
@@ -140,6 +143,70 @@ export class SurveyManager {
     private sortSurveysByAppearanceDelay(surveys: Survey[]): Survey[] {
         return surveys.sort(
             (a, b) => (a.appearance?.surveyPopupDelaySeconds || 0) - (b.appearance?.surveyPopupDelaySeconds || 0)
+        )
+    }
+
+    /**
+     * Checks the feature flags associated with this Survey to see if the survey can be rendered.
+     * @param survey
+     * @param instance
+     */
+    public canRenderSurvey = (survey: Survey): SurveyRenderReason => {
+        const renderReason: SurveyRenderReason = {
+            visible: false,
+        }
+
+        if (survey.end_date) {
+            renderReason.disabledReason = `survey was completed on ${survey.end_date}`
+            return renderReason
+        }
+
+        if (survey.type != SurveyType.Popover) {
+            renderReason.disabledReason = `Only Popover survey types can be rendered`
+            return renderReason
+        }
+
+        const linkedFlagCheck = survey.linked_flag_key
+            ? this.posthog.featureFlags.isFeatureEnabled(survey.linked_flag_key)
+            : true
+
+        if (!linkedFlagCheck) {
+            renderReason.disabledReason = `linked feature flag ${survey.linked_flag_key} is false`
+            return renderReason
+        }
+
+        const targetingFlagCheck = survey.targeting_flag_key
+            ? this.posthog.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
+            : true
+
+        if (!targetingFlagCheck) {
+            renderReason.disabledReason = `targeting feature flag ${survey.targeting_flag_key} is false`
+            return renderReason
+        }
+
+        const internalTargetingFlagCheck = survey.internal_targeting_flag_key
+            ? this.posthog.featureFlags.isFeatureEnabled(survey.internal_targeting_flag_key)
+            : true
+
+        if (!internalTargetingFlagCheck) {
+            renderReason.disabledReason = `internal targeting feature flag ${survey.internal_targeting_flag_key} is false`
+            return renderReason
+        }
+
+        renderReason.visible = true
+        return renderReason
+    }
+
+    public renderSurvey = (survey: Survey, selector: Element): void => {
+        Preact.render(
+            <SurveyPopup
+                key={'popover-survey'}
+                posthog={this.posthog}
+                survey={survey}
+                removeSurveyFromFocus={this.removeSurveyFromFocus}
+                isPopup={false}
+            />,
+            selector
         )
     }
 
@@ -244,6 +311,7 @@ export const renderSurveysPreview = ({
             }}
             previewPageIndex={previewPageIndex}
             removeSurveyFromFocus={() => {}}
+            isPopup={true}
         />,
         parentElement
     )
@@ -287,6 +355,7 @@ export function generateSurveys(posthog: PostHog) {
     setInterval(() => {
         surveyManager.callSurveysAndEvaluateDisplayLogic(false)
     }, 1000)
+    return surveyManager
 }
 
 export function usePopupVisibility(
@@ -377,6 +446,7 @@ export function SurveyPopup({
     style,
     previewPageIndex,
     removeSurveyFromFocus,
+    isPopup,
 }: {
     survey: Survey
     forceDisableHtml?: boolean
@@ -384,6 +454,7 @@ export function SurveyPopup({
     style?: React.CSSProperties
     previewPageIndex?: number | undefined
     removeSurveyFromFocus: (id: string) => void
+    isPopup?: boolean
 }) {
     const isPreviewMode = Number.isInteger(previewPageIndex)
     // NB: The client-side code passes the millisecondDelay in seconds, but setTimeout expects milliseconds, so we multiply by 1000
@@ -413,6 +484,7 @@ export function SurveyPopup({
                 isPreviewMode,
                 previewPageIndex: previewPageIndex,
                 handleCloseSurveyPopup: () => dismissedSurveyEvent(survey, posthog, isPreviewMode),
+                isPopup: isPopup || false,
             }}
         >
             {!shouldShowConfirmation ? (
@@ -454,7 +526,7 @@ export function Questions({
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
     )
     const [questionsResponses, setQuestionsResponses] = useState({})
-    const { isPreviewMode, previewPageIndex } = useContext(SurveyContext)
+    const { isPreviewMode, previewPageIndex, handleCloseSurveyPopup, isPopup } = useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
@@ -503,11 +575,15 @@ export function Questions({
     return (
         <form
             className="survey-form"
-            style={{
-                color: textColor,
-                borderColor: survey.appearance?.borderColor,
-                ...styleOverrides,
-            }}
+            style={
+                isPopup
+                    ? {
+                          color: textColor,
+                          borderColor: survey.appearance?.borderColor,
+                          ...styleOverrides,
+                      }
+                    : {}
+            }
         >
             {surveyQuestions.map((question, displayQuestionIndex) => {
                 const { originalQuestionIndex } = question
@@ -517,7 +593,19 @@ export function Questions({
                     : currentQuestionIndex === displayQuestionIndex
                 return (
                     isVisible && (
-                        <div>
+                        <div
+                            className="survey-box"
+                            style={
+                                isPopup
+                                    ? {
+                                          backgroundColor:
+                                              survey.appearance?.backgroundColor ||
+                                              defaultSurveyAppearance.backgroundColor,
+                                      }
+                                    : {}
+                            }
+                        >
+                            {isPopup && <Cancel onClick={() => handleCloseSurveyPopup()} />}
                             {getQuestionComponent({
                                 question,
                                 forceDisableHtml,
@@ -603,6 +691,7 @@ export function FeedbackWidget({
                     forceDisableHtml={forceDisableHtml}
                     style={styleOverrides}
                     removeSurveyFromFocus={removeSurveyFromFocus}
+                    isPopup={true}
                 />
             )}
         </>

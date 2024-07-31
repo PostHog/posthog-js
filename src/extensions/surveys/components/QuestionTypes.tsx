@@ -7,7 +7,7 @@ import {
     SurveyQuestionType,
 } from '../../../posthog-surveys-types'
 import { RefObject } from 'preact'
-import { useRef, useState, useMemo, useContext } from 'preact/hooks'
+import { useRef, useState, useMemo } from 'preact/hooks'
 import { isNull, isArray } from '../../../utils/type-utils'
 import { useContrastingTextColor } from '../hooks/useContrastingTextColor'
 import {
@@ -18,9 +18,9 @@ import {
     veryDissatisfiedEmoji,
     verySatisfiedEmoji,
 } from '../icons'
-import { SurveyContext, defaultSurveyAppearance, getDisplayOrderChoices } from '../surveys-utils'
+import { getDisplayOrderChoices } from '../surveys-utils'
 import { BottomSection } from './BottomSection'
-import { Cancel, QuestionHeader } from './QuestionHeader'
+import { QuestionHeader } from './QuestionHeader'
 
 export function OpenTextQuestion({
     question,
@@ -35,15 +35,9 @@ export function OpenTextQuestion({
 }) {
     const textRef = useRef(null)
     const [text, setText] = useState('')
-    const { handleCloseSurveyPopup } = useContext(SurveyContext)
 
     return (
-        <div
-            className="survey-box"
-            style={{ backgroundColor: appearance.backgroundColor || defaultSurveyAppearance.backgroundColor }}
-            ref={textRef}
-        >
-            <Cancel onClick={() => handleCloseSurveyPopup()} />
+        <div ref={textRef}>
             <QuestionHeader
                 question={question.question}
                 description={question.description}
@@ -73,11 +67,8 @@ export function LinkQuestion({
     appearance: SurveyAppearance
     onSubmit: (clicked: string) => void
 }) {
-    const { handleCloseSurveyPopup } = useContext(SurveyContext)
-
     return (
-        <div className="survey-box">
-            <Cancel onClick={() => handleCloseSurveyPopup()} />
+        <>
             <QuestionHeader
                 question={question.question}
                 description={question.description}
@@ -91,7 +82,7 @@ export function LinkQuestion({
                 appearance={appearance}
                 onSubmit={() => onSubmit('link clicked')}
             />
-        </div>
+        </>
     )
 }
 
@@ -111,11 +102,9 @@ export function RatingQuestion({
     const scale = question.scale
     const starting = question.scale === 10 ? 0 : 1
     const [rating, setRating] = useState<number | null>(null)
-    const { handleCloseSurveyPopup } = useContext(SurveyContext)
 
     return (
-        <div className="survey-box">
-            <Cancel onClick={() => handleCloseSurveyPopup()} />
+        <>
             <QuestionHeader
                 question={question.question}
                 description={question.description}
@@ -187,7 +176,7 @@ export function RatingQuestion({
                 appearance={appearance}
                 onSubmit={() => onSubmit(rating)}
             />
-        </div>
+        </>
     )
 }
 
@@ -246,16 +235,10 @@ export function MultipleChoiceQuestion({
     )
     const [openChoiceSelected, setOpenChoiceSelected] = useState(false)
     const [openEndedInput, setOpenEndedInput] = useState('')
-    const { handleCloseSurveyPopup } = useContext(SurveyContext)
 
     const inputType = question.type === SurveyQuestionType.SingleChoice ? 'radio' : 'checkbox'
     return (
-        <div
-            className="survey-box"
-            style={{ backgroundColor: appearance.backgroundColor || defaultSurveyAppearance.backgroundColor }}
-            ref={textRef}
-        >
-            <Cancel onClick={() => handleCloseSurveyPopup()} />
+        <div ref={textRef}>
             <QuestionHeader
                 question={question.question}
                 description={question.description}
