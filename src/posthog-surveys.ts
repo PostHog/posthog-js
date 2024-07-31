@@ -271,6 +271,18 @@ export class PostHogSurveys {
         return assignableWindow.__PosthogExtensions__.canActivateRepeatedly(survey)
     }
 
+    canRenderSurvey(surveyId: string) {
+        if (isNullish(this._surveyManager)) {
+            logger.warn(LOGGER_PREFIX, 'canActivateRepeatedly is not defined, must init before calling')
+            return
+        }
+        this.getSurveys((surveys) => {
+            const survey = surveys.filter((x) => x.id === surveyId)[0]
+
+            this._surveyManager.canRenderSurvey(survey)
+        })
+    }
+
     renderSurvey(surveyId: string, selector: string) {
         if (isNullish(this._surveyManager)) {
             logger.warn(LOGGER_PREFIX, 'canActivateRepeatedly is not defined, must init before calling')

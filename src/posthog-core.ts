@@ -1199,6 +1199,11 @@ export class PostHog {
         this.surveys.renderSurvey(surveyId, selector)
     }
 
+    /** Checks the feature flags associated with this Survey to see if the survey can be rendered. */
+    canRenderSurvey(surveyId: string): void {
+        this.surveys.canRenderSurvey(surveyId)
+    }
+
     /** Get the next step of the survey: a question index or `end` */
     getNextSurveyStep(
         survey: Survey,
