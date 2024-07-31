@@ -137,6 +137,11 @@ export interface SurveyElement {
     order?: number
     group_id?: number
 }
+export interface SurveyRenderReason {
+    visible: boolean
+    disabledReason?: string
+}
+
 export interface Survey {
     // Sync this with the backend's SurveyAPISerializer!
     id: string

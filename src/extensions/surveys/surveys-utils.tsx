@@ -510,7 +510,7 @@ export const defaultSurveyAppearance: SurveyAppearance = {
 
 export const defaultBackgroundColor = '#eeeded'
 
-export const createShadow = (styleSheet: string, surveyId: string) => {
+export const createShadow = (styleSheet: string, surveyId: string, element?: Element) => {
     const div = document.createElement('div')
     div.className = `PostHogSurvey${surveyId}`
     const shadow = div.attachShadow({ mode: 'open' })
@@ -520,7 +520,7 @@ export const createShadow = (styleSheet: string, surveyId: string) => {
         })
         shadow.appendChild(styleElement)
     }
-    document.body.appendChild(div)
+    ;(element ? element : document.body).appendChild(div)
     return shadow
 }
 
@@ -664,10 +664,12 @@ export const SurveyContext = createContext<{
     isPreviewMode: boolean
     previewPageIndex: number | undefined
     handleCloseSurveyPopup: () => void
+    isPopup: boolean
 }>({
     isPreviewMode: false,
     previewPageIndex: 0,
     handleCloseSurveyPopup: () => {},
+    isPopup: true,
 })
 
 interface RenderProps {

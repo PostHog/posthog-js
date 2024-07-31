@@ -11,6 +11,8 @@ import { renderHook, act } from '@testing-library/preact'
 
 import '@testing-library/jest-dom'
 import { PostHog } from '../../posthog-core'
+import { beforeEach } from '@jest/globals'
+import { DecideResponse } from '../../types'
 
 declare const global: any
 
@@ -241,12 +243,32 @@ describe('SurveyManager', () => {
     let mockPostHog: PostHog
     let surveyManager: SurveyManager
     let mockSurveys: Survey[]
+    const decideResponse = {
+        featureFlags: {
+            'linked-flag-key': true,
+            'survey-targeting-flag-key': true,
+            'linked-flag-key2': true,
+            'survey-targeting-flag-key2': false,
+            'enabled-internal-targeting-flag-key': true,
+            'disabled-internal-targeting-flag-key': false,
+        },
+        surveys: true,
+    } as unknown as DecideResponse
 
     beforeEach(() => {
         mockPostHog = {
             getActiveMatchingSurveys: jest.fn(),
             get_session_replay_url: jest.fn(),
             capture: jest.fn(),
+            featureFlags: {
+                _send_request: jest
+                    .fn()
+                    .mockImplementation(({ callback }) => callback({ statusCode: 200, json: decideResponse })),
+                getFeatureFlag: jest.fn().mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
+                isFeatureEnabled: jest
+                    .fn()
+                    .mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
+            },
         } as unknown as PostHog
 
         surveyManager = new SurveyManager(mockPostHog)
@@ -442,6 +464,119 @@ describe('SurveyManager', () => {
             { id: '1', appearance: { surveyPopupDelaySeconds: 5 } },
             { id: '4', appearance: { surveyPopupDelaySeconds: 8 } },
         ])
+    })
+
+    describe('renderSurvey', () => {
+        let surveyManager: SurveyManager
+        const mockSurvey = {
+            id: 'testSurvey1',
+            name: 'Test survey 1',
+            type: SurveyType.Popover,
+            appearance: {},
+            start_date: '2021-01-01T00:00:00.000Z',
+            description: 'This is a survey description',
+            linked_flag_key: null,
+            questions: [
+                {
+                    question: 'How satisfied are you with our newest product?',
+                    description: 'This is a question description',
+                    descriptionContentType: 'text',
+                    type: SurveyQuestionType.Rating,
+                    display: 'number',
+                    scale: 10,
+                    lowerBoundLabel: 'Not Satisfied',
+                    upperBoundLabel: 'Very Satisfied',
+                },
+            ],
+            conditions: {},
+            end_date: null,
+            targeting_flag_key: null,
+        } as unknown as Survey
+
+        beforeEach(() => {
+            surveyManager = new SurveyManager(mockPostHog)
+        })
+
+        it('can render survey', () => {
+            const surveyDiv = document.createElement('div')
+            surveyDiv.id = 'survey-div'
+            expect(surveyDiv.innerHTML).toBe('')
+            surveyManager.renderSurvey(mockSurvey, surveyDiv)
+            // surveys rendered with renderSurvey are unstyled.
+            expect(surveyDiv.getElementsByTagName('style').length).toBe(0)
+            expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
+            expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
+            const descriptionElement = surveyDiv.querySelector('.description')
+            expect(descriptionElement).not.toBeNull()
+        })
+    })
+
+    describe('canRenderSurvey', () => {
+        let surveyManager: SurveyManager
+
+        const survey: Survey = {
+            id: 'completed-survey',
+            name: 'completed survey',
+            description: 'draft survey description',
+            type: SurveyType.Popover,
+            linked_flag_key: 'linked-flag-key',
+            targeting_flag_key: 'targeting-flag-key',
+            internal_targeting_flag_key: 'internal_targeting_flag_key',
+            start_date: new Date('10/10/2022').toISOString(),
+        } as unknown as Survey
+
+        beforeEach(() => {
+            surveyManager = new SurveyManager(mockPostHog)
+            survey.end_date = undefined
+            survey.type = SurveyType.Popover
+            decideResponse.featureFlags[survey.targeting_flag_key] = true
+            decideResponse.featureFlags[survey.linked_flag_key] = true
+            decideResponse.featureFlags[survey.internal_targeting_flag_key] = true
+        })
+
+        it('cannot render completed surveys', () => {
+            survey.end_date = new Date('11/10/2022').toISOString()
+            const result = surveyManager.canRenderSurvey(survey)
+            expect(result.visible).toBeFalsy()
+            expect(result.disabledReason).toEqual(`survey was completed on ${survey.end_date}`)
+        })
+
+        it('can only render popover surveys', () => {
+            survey.type = SurveyType.API
+
+            const result = surveyManager.canRenderSurvey(survey)
+            expect(result.visible).toBeFalsy()
+            expect(result.disabledReason).toEqual('Only Popover survey types can be rendered')
+        })
+
+        it('cannot render survey if linked_flag is false', () => {
+            decideResponse.featureFlags[survey.targeting_flag_key] = true
+            decideResponse.featureFlags[survey.internal_targeting_flag_key] = true
+            decideResponse.featureFlags[survey.linked_flag_key] = false
+            const result = surveyManager.canRenderSurvey(survey)
+            expect(result.visible).toBeFalsy()
+            expect(result.disabledReason).toEqual('linked feature flag linked-flag-key is false')
+        })
+
+        it('cannot render survey if targeting_feature_flag is false', () => {
+            decideResponse.featureFlags[survey.linked_flag_key] = true
+            decideResponse.featureFlags[survey.internal_targeting_flag_key] = true
+            decideResponse.featureFlags[survey.targeting_flag_key] = false
+            const result = surveyManager.canRenderSurvey(survey)
+            expect(result.visible).toBeFalsy()
+            expect(result.disabledReason).toEqual('targeting feature flag targeting-flag-key is false')
+        })
+
+        it('cannot render survey if internal_targeting_feature_flag is false', () => {
+            decideResponse.featureFlags[survey.targeting_flag_key] = true
+            decideResponse.featureFlags[survey.linked_flag_key] = true
+            decideResponse.featureFlags[survey.internal_targeting_flag_key] = false
+            const result = surveyManager.canRenderSurvey(survey)
+            expect(result.visible).toBeFalsy()
+            expect(result.disabledReason).toEqual(
+                'internal targeting feature flag internal_targeting_flag_key is false'
+            )
+        })
     })
 })
 
