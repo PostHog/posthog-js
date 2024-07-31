@@ -10,6 +10,7 @@ import {
 import { WEB_EXPERIMENTS } from './constants'
 import { isUndefined } from './utils/type-utils'
 import { isUrlMatchingRegex } from './utils/request-utils'
+import { logger } from './utils/logger'
 
 export const webExperimentUrlValidationMap: Record<
     WebExperimentUrlMatchType,
@@ -163,15 +164,17 @@ export class WebExperiments {
         return false
     }
 
+    private static logInfo(...args: any[]) {
+        logger.info(`WEB EXPERIMENTS`, args)
+    }
+
     private static applyTransforms(transforms: WebExperimentTransform[]) {
         transforms.forEach((transform) => {
-            // eslint-disable-next-line no-console
-            console.log(`applying transform `, transform)
+            WebExperiments.logInfo(`applying transform `, transform)
             if (transform.selector) {
                 const elements = _document?.querySelectorAll(transform.selector)
                 elements?.forEach((element) => {
-                    // eslint-disable-next-line no-console
-                    console.log(
+                    WebExperiments.logInfo(
                         `applying transform of text [`,
                         transform.text,
                         `]to element `,
