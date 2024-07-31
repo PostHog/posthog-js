@@ -158,7 +158,7 @@ export function RatingQuestion({
                             className="rating-options-number"
                             style={{ gridTemplateColumns: `repeat(${scale - starting + 1}, minmax(0, 1fr))` }}
                         >
-                            {(question.scale === 5 ? fiveScaleNumbers : tenScaleNumbers).map((number, idx) => {
+                            {getScaleNumbers(question.scale).map((number, idx) => {
                                 const active = rating === number
                                 return (
                                     <RatingButton
@@ -369,4 +369,18 @@ export function MultipleChoiceQuestion({
 const threeScaleEmojis = [dissatisfiedEmoji, neutralEmoji, satisfiedEmoji]
 const fiveScaleEmojis = [veryDissatisfiedEmoji, dissatisfiedEmoji, neutralEmoji, satisfiedEmoji, verySatisfiedEmoji]
 const fiveScaleNumbers = [1, 2, 3, 4, 5]
+const sevenScaleNumbers = [1, 2, 3, 4, 5, 6, 7]
 const tenScaleNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+function getScaleNumbers(scale: number): number[] {
+    switch (scale) {
+        case 5:
+            return fiveScaleNumbers
+        case 7:
+            return sevenScaleNumbers
+        case 10:
+            return tenScaleNumbers
+        default:
+            return fiveScaleNumbers
+    }
+}

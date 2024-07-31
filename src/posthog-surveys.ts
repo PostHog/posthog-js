@@ -10,10 +10,11 @@ import {
 import { isUrlMatchingRegex } from './utils/request-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import { assignableWindow, document, window } from './utils/globals'
-import { CaptureResult, DecideResponse } from './types'
+import { DecideResponse } from './types'
 import { logger } from './utils/logger'
-import { isUndefined } from './utils/type-utils'
-import { canActivateRepeatedly, hasEvents } from './extensions/surveys/surveys-utils'
+import { isNullish } from './utils/type-utils'
+
+const LOGGER_PREFIX = '[Surveys]'
 
 export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: string) => boolean> = {
     icontains: (conditionsUrl) =>
@@ -51,12 +52,10 @@ function getRatingBucketForResponseValue(responseValue: number, scale: number) {
 }
 
 export class PostHogSurveys {
-    instance: PostHog
     private _decideServerResponse?: boolean
     public _surveyEventReceiver: SurveyEventReceiver | null
 
-    constructor(instance: PostHog) {
-        this.instance = instance
+    constructor(private readonly instance: PostHog) {
         // we set this to undefined here because we need the persistence storage for this type
         // but that's not initialized until loadIfEnabled is called.
         this._surveyEventReceiver = null
@@ -72,11 +71,11 @@ export class PostHogSurveys {
 
         if (!this.instance.config.disable_surveys && this._decideServerResponse && !surveysGenerator) {
             if (this._surveyEventReceiver == null) {
-                this._surveyEventReceiver = new SurveyEventReceiver(this.instance.persistence)
+                this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
             }
             this.instance.requestRouter.loadScript('/static/surveys.js', (err) => {
                 if (err) {
-                    return logger.error(`Could not load surveys script`, err)
+                    return logger.error(LOGGER_PREFIX, 'Could not load surveys script', err)
                 }
 
                 assignableWindow.extendPostHogWithSurveys(this.instance)
@@ -92,7 +91,7 @@ export class PostHogSurveys {
         }
 
         if (this._surveyEventReceiver == null) {
-            this._surveyEventReceiver = new SurveyEventReceiver(this.instance.persistence)
+            this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
         }
 
         const existingSurveys = this.instance.get_property(SURVEYS)
@@ -110,19 +109,18 @@ export class PostHogSurveys {
                     }
                     const surveys = response.json.surveys || []
 
-                    const eventBasedSurveys = surveys.filter(
+                    const eventOrActionBasedSurveys = surveys.filter(
                         (survey: Survey) =>
-                            survey.conditions?.events &&
-                            survey.conditions?.events?.values &&
-                            survey.conditions?.events?.values?.length > 0
+                            (survey.conditions?.events &&
+                                survey.conditions?.events?.values &&
+                                survey.conditions?.events?.values?.length > 0) ||
+                            (survey.conditions?.actions &&
+                                survey.conditions?.actions?.values &&
+                                survey.conditions?.actions?.values?.length > 0)
                     )
 
-                    if (eventBasedSurveys.length > 0 && !isUndefined(this.instance._addCaptureHook)) {
-                        this._surveyEventReceiver?.register(eventBasedSurveys)
-                        const onEventName = (eventName: string, eventPayload?: CaptureResult) => {
-                            this._surveyEventReceiver?.on(eventName, eventPayload)
-                        }
-                        this.instance._addCaptureHook(onEventName)
+                    if (eventOrActionBasedSurveys.length > 0) {
+                        this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
                     }
 
                     this.instance.persistence?.register({ [SURVEYS]: surveys })
@@ -168,9 +166,19 @@ export class PostHogSurveys {
                     ? this.instance.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
                     : true
 
-                const eventBasedTargetingFlagCheck = hasEvents(survey) ? activatedSurveys?.includes(survey.id) : true
+                const hasEvents =
+                    survey.conditions?.events &&
+                    survey.conditions?.events?.values &&
+                    survey.conditions?.events?.values.length > 0
 
-                const overrideInternalTargetingFlagCheck = canActivateRepeatedly(survey)
+                const hasActions =
+                    survey.conditions?.actions &&
+                    survey.conditions?.actions?.values &&
+                    survey.conditions?.actions?.values.length > 0
+                const eventBasedTargetingFlagCheck =
+                    hasEvents || hasActions ? activatedSurveys?.includes(survey.id) : true
+
+                const overrideInternalTargetingFlagCheck = this._canActivateRepeatedly(survey)
                 const internalTargetingFlagCheck =
                     survey.internal_targeting_flag_key && !overrideInternalTargetingFlagCheck
                         ? this.instance.featureFlags.isFeatureEnabled(survey.internal_targeting_flag_key)
@@ -250,7 +258,15 @@ export class PostHogSurveys {
             return nextQuestionIndex
         }
 
-        console.warn('Falling back to next question index due to unexpected branching type') // eslint-disable-line no-console
+        logger.warn(LOGGER_PREFIX, 'Falling back to next question index due to unexpected branching type')
         return nextQuestionIndex
+    }
+
+    // this method is lazily loaded onto the window to avoid loading preact and other dependencies if surveys is not enabled
+    private _canActivateRepeatedly(survey: Survey) {
+        if (isNullish(assignableWindow.__PosthogExtensions__.canActivateRepeatedly)) {
+            logger.warn(LOGGER_PREFIX, 'canActivateRepeatedly is not defined, must init before calling')
+        }
+        return assignableWindow.__PosthogExtensions__.canActivateRepeatedly(survey)
     }
 }

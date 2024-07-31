@@ -1,3 +1,80 @@
+## 1.151.2 - 2024-07-31
+
+- feat: Add debug logic for set_config (#1330)
+
+## 1.151.1 - 2024-07-31
+
+- fix(surveys): Center the X (#1329)
+
+## 1.151.0 - 2024-07-30
+
+- Accept eventPayload in onEvent handler (#1331)
+
+## 1.150.1 - 2024-07-29
+
+- fix: Array.from override (#1322)
+- chore: finally remove given (#1321)
+
+## 1.150.0 - 2024-07-25
+
+- feat(surveys): add support for a 7 point likert scale (#1319)
+
+## 1.149.2 - 2024-07-24
+
+- feat: add debug startup log message (#1318)
+
+## 1.149.1 - 2024-07-24
+
+- fix: web vitals ignored error on init (#1317)
+- chore: fix the rollup bundle visualiser output (#1315)
+
+## 1.149.0 - 2024-07-23
+
+- fix: Fix the referrer changing mid-session (#1314)
+
+## 1.148.2 - 2024-07-22
+
+- fix: don't load preact until you have to (#1311)
+- chore: one less posthog mock and two fewer given tests (#1312)
+
+## 1.148.1 - 2024-07-22
+
+- fix: ignore ridonculously large web vitals values (#1309)
+- chore: move test file (#1306)
+
+## 1.148.0 - 2024-07-16
+
+- feat: split large replay buffers before sending (#1305)
+
+## 1.147.0 - 2024-07-12
+
+- feat: add url_ignorelist for autocapture config (#1302)
+
+## 1.146.3 - 2024-07-12
+
+- feat: add new google crawler (#1300)
+- chore: add a test (#1299)
+
+## 1.146.2 - 2024-07-11
+
+- fix: warn when on xhr error used (#1298)
+
+## 1.146.1 - 2024-07-11
+
+- fix: add web vitals to array full (#1297)
+- feat(Surveys): Activate surveys based on actions (#1295)
+- feat(Surveys): Add ActionMatcher to match CaptureResult to any known actions (#1294)
+
+## 1.146.0 - 2024-07-10
+
+- feat: move heatmaps to their own event (#1287)
+
+## 1.145.1 - 2024-07-10
+
+- fix: capture network recording type (#1296)
+- feat(surveys): added close button text customization feature (#1288)
+- chore: fix error tests listener registration (#1291)
+
 ## 1.145.0 - 2024-07-08
 
 - feat: send errors one way (#1289)

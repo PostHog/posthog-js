@@ -70,7 +70,7 @@ export interface LinkSurveyQuestion extends SurveyQuestionBase {
 export interface RatingSurveyQuestion extends SurveyQuestionBase {
     type: SurveyQuestionType.Rating
     display: 'number' | 'emoji'
-    scale: number
+    scale: 3 | 5 | 7 | 10
     lowerBoundLabel: string
     upperBoundLabel: string
 }
@@ -123,6 +123,20 @@ export type SurveyCallback = (surveys: Survey[]) => void
 
 export type SurveyUrlMatchType = 'regex' | 'not_regex' | 'exact' | 'is_not' | 'icontains' | 'not_icontains'
 
+export interface SurveyElement {
+    text?: string
+    $el_text?: string
+    tag_name?: string
+    href?: string
+    attr_id?: string
+    attr_class?: string[]
+    nth_child?: number
+    nth_of_type?: number
+    attributes?: Record<string, any>
+    event_id?: number
+    order?: number
+    group_id?: number
+}
 export interface Survey {
     // Sync this with the backend's SurveyAPISerializer!
     id: string
@@ -145,9 +159,43 @@ export interface Survey {
                 name: string
             }[]
         } | null
+        actions: {
+            values: ActionType[]
+        } | null
     } | null
     start_date: string | null
     end_date: string | null
     current_iteration: number | null
     current_iteration_start_date: string | null
+}
+
+export interface ActionType {
+    count?: number
+    created_at: string
+    deleted?: boolean
+    id: number
+    name: string | null
+    steps?: ActionStepType[]
+    tags?: string[]
+    is_action?: true
+    action_id?: number // alias of id to make it compatible with event definitions uuid
+}
+
+/** Sync with plugin-server/src/types.ts */
+export type ActionStepStringMatching = 'contains' | 'exact' | 'regex'
+
+export interface ActionStepType {
+    event?: string | null
+    selector?: string | null
+    /** @deprecated Only `selector` should be used now. */
+    tag_name?: string
+    text?: string | null
+    /** @default StringMatching.Exact */
+    text_matching?: ActionStepStringMatching | null
+    href?: string | null
+    /** @default ActionStepStringMatching.Exact */
+    href_matching?: ActionStepStringMatching | null
+    url?: string | null
+    /** @default StringMatching.Contains */
+    url_matching?: ActionStepStringMatching | null
 }

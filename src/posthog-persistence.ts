@@ -60,6 +60,9 @@ export class PostHogPersistence {
         this.name = parseName(config)
         this.storage = this.buildStorage(config)
         this.load()
+        if (config.debug) {
+            logger.info('Persistence loaded', this.props)
+        }
         this.update_config(config, config)
         this.save()
     }
@@ -227,7 +230,7 @@ export class PostHogPersistence {
     }
 
     update_referrer_info(): void {
-        this.register(Info.referrerInfo())
+        this.register_once(Info.referrerInfo(), undefined)
     }
 
     set_initial_person_info(): void {

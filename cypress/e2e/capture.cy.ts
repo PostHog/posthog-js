@@ -209,8 +209,8 @@ describe('Event capture', () => {
         })
     })
 
-    describe('opting out of autocapture', () => {
-        it('captures pageviews, custom events', () => {
+    describe('when disabled', () => {
+        it('captures pageviews, custom events when autocapture disabled', () => {
             start({ options: { autocapture: false }, waitForDecide: false })
 
             cy.wait(50)
@@ -226,10 +226,8 @@ describe('Event capture', () => {
                 expect(captures['event']).to.equal('$pageview')
             })
         })
-    })
 
-    describe('opting out of pageviews', () => {
-        it('captures autocapture, custom events', () => {
+        it('captures autocapture, custom events when pageviews disabled', () => {
             start({ options: { capture_pageview: false } })
 
             cy.get('[data-cy-custom-event-button]').click()
@@ -239,35 +237,15 @@ describe('Event capture', () => {
             cy.phCaptures().should('include', '$autocapture')
             cy.phCaptures().should('include', 'custom-event')
         })
-    })
 
-    describe('user opts out after start', () => {
-        it('does not send any autocapture/custom events after that', () => {
-            start({})
-
-            cy.posthog().invoke('opt_out_capturing')
+        it('does not capture things when multiple disabled', () => {
+            start({ options: { capture_pageview: false, capture_pageleave: false, autocapture: false } })
 
             cy.get('[data-cy-custom-event-button]').click()
-            cy.get('[data-cy-feature-flag-button]').click()
             cy.reload()
 
-            cy.phCaptures().should('deep.equal', ['$pageview'])
-        })
-
-        it('does not send session recording events', () => {
-            start({
-                decideResponseOverrides: {
-                    sessionRecording: {
-                        endpoint: '/ses/',
-                    },
-                },
-            })
-
-            cy.posthog().invoke('opt_out_capturing')
-            cy.resetPhCaptures()
-
-            cy.get('[data-cy-custom-event-button]').click()
-            cy.phCaptures().should('deep.equal', [])
+            cy.phCaptures().should('have.length', 1)
+            cy.phCaptures().should('include', 'custom-event')
         })
     })
 

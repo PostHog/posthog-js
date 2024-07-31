@@ -65,7 +65,7 @@ export class ExceptionObserver {
             ),
             (err) => {
                 if (err) {
-                    logger.error(LOGGER_PREFIX + ' failed to load script', err)
+                    return logger.error(LOGGER_PREFIX + ' failed to load script', err)
                 }
                 cb()
             }
@@ -140,7 +140,6 @@ export class ExceptionObserver {
         this.instance.capture('$exception', properties, {
             _noTruncate: true,
             _batchKey: 'exceptionEvent',
-            _noHeatmaps: true,
             _url: this.endpoint,
         })
     }
