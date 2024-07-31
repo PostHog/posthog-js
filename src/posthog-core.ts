@@ -430,8 +430,10 @@ export class PostHog {
         // global debug to be true
         Config.DEBUG = Config.DEBUG || this.config.debug
         if (Config.DEBUG) {
-            // eslint-disable-next-line no-console
-            console.log('[PostHog.js] Starting in debug mode', this)
+            logger.info('Starting in debug mode', {
+                this: this,
+                config: { ...this.config },
+            })
         }
 
         this._sync_opt_out_with_persistence()
@@ -1733,6 +1735,11 @@ export class PostHog {
             }
             if (this.config.debug) {
                 Config.DEBUG = true
+                logger.info('set_config', {
+                    config,
+                    oldConfig,
+                    newConfig: { ...this.config },
+                })
             }
 
             this.sessionRecording?.startIfEnabledOrStop()
