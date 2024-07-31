@@ -293,22 +293,25 @@ export class PostHogFeatureFlags {
     }
 
     /*
-     * Override feature flags for debugging.
+     * Override feature flags on the client-side.  Useful for setting non-persistent feature flags, or for testing/debugging
+     * feature flags in the PostHog app.
      *
      * ### Usage:
      *
      *     - posthog.feature_flags.override(false)
      *     - posthog.feature_flags.override(['beta-feature'])
-     *     - posthog.feature_flags.override({'beta-feature': 'variant', 'other-feature': True})
+     *     - posthog.feature_flags.override({'beta-feature': 'variant', 'other-feature': true})
+     *     - posthog.feature_flags.override({'beta-feature': 'variant'}, true) // Suppress warning log
      *
      * @param {Object|Array|String} flags Flags to override with.
+     * @param {boolean} [suppressWarning=false] Optional parameter to suppress the override warning.
      */
-    override(flags: boolean | string[] | Record<string, string | boolean>): void {
+    override(flags: boolean | string[] | Record<string, string | boolean>, suppressWarning: boolean = false): void {
         if (!this.instance.__loaded || !this.instance.persistence) {
             return logger.uninitializedWarning('posthog.feature_flags.override')
         }
 
-        this._override_warning = false
+        this._override_warning = suppressWarning
 
         if (flags === false) {
             this.instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
