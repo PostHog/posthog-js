@@ -95,6 +95,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               width: 100%;
           }
           .form-cancel {
+              display: flex;
               float: right;
               border: none;
               background: none;
