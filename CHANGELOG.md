@@ -1,3 +1,8 @@
+## 1.154.1 - 2024-08-01
+
+- fix(surveys): fix textarea, and make it easier to query the survey question description in the DOM (#1337)
+- feat: Add debug logging for the initial props that posthog was started with (#1335)
+
 ## 1.154.0 - 2024-07-31
 
 - feat(flags): give users the ability to suppress override warning logs, if desired (#1328)
