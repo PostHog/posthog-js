@@ -22,6 +22,7 @@ import {
     PostHogConfig,
     Property,
     SessionIdChangedCallback,
+    SessionRecordingOptions,
 } from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
 import {
@@ -640,6 +641,51 @@ describe('SessionRecording', () => {
         })
 
         it('calls rrweb.record with the right options', () => {
+            posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: false })
+
+            sessionRecording.startIfEnabledOrStop()
+            // maskAllInputs should change from default
+            // someUnregisteredProp should not be present
+            expect(assignableWindow.rrweb.record).toHaveBeenCalledWith({
+                emit: expect.anything(),
+                maskAllInputs: false,
+                blockClass: 'ph-no-capture',
+                blockSelector: undefined,
+                ignoreClass: 'ph-ignore-input',
+                maskTextClass: 'ph-mask',
+                maskTextSelector: undefined,
+                maskInputOptions: { password: true },
+                maskInputFn: undefined,
+                slimDOMOptions: {},
+                collectFonts: false,
+                plugins: [],
+                inlineStylesheet: true,
+                recordCrossOriginIframes: false,
+            })
+        })
+
+        describe('capturing passwords', () => {
+            it.each([
+                ['no masking options', {} as SessionRecordingOptions, true],
+                ['empty masking options', { maskInputOptions: {} } as SessionRecordingOptions, true],
+                ['password masking option', { maskInputOptions: { password: false } } as SessionRecordingOptions, true],
+                [
+                    'password masking can be dangerously skipped',
+                    { dangerouslyCapturePasswordInputs: true } as SessionRecordingOptions,
+                    false,
+                ],
+            ])('%s', (_name: string, session_recording: SessionRecordingOptions, expected: boolean) => {
+                posthog.config.session_recording = session_recording
+                sessionRecording.startIfEnabledOrStop()
+                expect(assignableWindow.rrweb.record).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        maskInputOptions: { password: expected },
+                    })
+                )
+            })
+        })
+
+        it('only controls passwords with', () => {
             posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: false })
 
             sessionRecording.startIfEnabledOrStop()

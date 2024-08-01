@@ -600,10 +600,23 @@ export class SessionRecording {
         // only allows user to set our allow-listed options
         const userSessionRecordingOptions = this.instance.config.session_recording
         for (const [key, value] of Object.entries(userSessionRecordingOptions || {})) {
-            if (key in sessionRecordingOptions) {
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
-                sessionRecordingOptions[key] = value
+            if (key === 'dangerouslyCapturePasswordInputs') {
+                sessionRecordingOptions.maskInputOptions = {
+                    ...sessionRecordingOptions.maskInputOptions,
+                    password: !value,
+                }
+            } else if (key in sessionRecordingOptions) {
+                if (key === 'maskInputOptions') {
+                    sessionRecordingOptions.maskInputOptions = {
+                        ...value,
+                        // never use user supplied value
+                        password: sessionRecordingOptions.maskInputOptions?.password,
+                    }
+                } else {
+                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                    // @ts-ignore
+                    sessionRecordingOptions[key] = value
+                }
             }
         }
 
