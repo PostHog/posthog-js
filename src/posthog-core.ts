@@ -397,6 +397,8 @@ export class PostHog {
             this.config.persistence === 'sessionStorage'
                 ? this.persistence
                 : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
+        const initialPersistenceProps = { ...this.persistence.props }
+        const initialSessionProps = { ...this.sessionPersistence.props }
 
         this._requestQueue = new RequestQueue((req) => this._send_retriable_request(req))
         this._retryQueue = new RetryQueue(this)
@@ -432,7 +434,10 @@ export class PostHog {
         if (Config.DEBUG) {
             logger.info('Starting in debug mode', {
                 this: this,
-                config: { ...this.config },
+                config,
+                thisC: { ...this.config },
+                p: initialPersistenceProps,
+                s: initialSessionProps,
             })
         }
 
