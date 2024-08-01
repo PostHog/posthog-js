@@ -23,7 +23,7 @@ export function QuestionHeader({
             <div className="survey-question">{question}</div>
             {description &&
                 renderChildrenAsTextOrHtml({
-                    component: h('div', { className: 'description' }),
+                    component: h('div', { className: 'survey-question-description' }),
                     children: description,
                     renderAsHtml: !forceDisableHtml && descriptionContentType !== 'text',
                 })}
