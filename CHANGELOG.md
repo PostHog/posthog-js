@@ -1,3 +1,7 @@
+## 1.154.2 - 2024-08-02
+
+- Add instructions for cross subdomain development (#1336)
+
 ## 1.154.1 - 2024-08-01
 
 - fix(surveys): fix textarea, and make it easier to query the survey question description in the DOM (#1337)
