@@ -37,6 +37,18 @@ export default function Home() {
                     <span>Autocapture a &gt; span</span>
                 </a>
                 <a href={'https://www.google.com'}>External link</a>
+                {isClient && typeof window !== 'undefined' && process.env.NEXT_PUBLIC_CROSSDOMAIN && (
+                    <a
+                        className="Button"
+                        href={
+                            window.location.host === 'www.posthog.dev:3000'
+                                ? 'https://app.posthog.dev:3000'
+                                : 'https://www.posthog.dev:3000'
+                        }
+                    >
+                        Change subdomain
+                    </a>
+                )}
 
                 <button className="ph-no-capture">Ignore certain elements</button>
 
