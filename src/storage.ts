@@ -124,7 +124,7 @@ export const cookieStore: PersistentStore = {
         return cookie
     },
 
-    set: function (name, value, days, cross_subdomain, is_secure, debug) {
+    set: function (name, value, days, cross_subdomain, is_secure) {
         if (!document) {
             return
         }
@@ -156,10 +156,6 @@ export const cookieStore: PersistentStore = {
             // 4096 bytes is the size at which some browsers (e.g. firefox) will not store a cookie, warn slightly before that
             if (new_cookie_val.length > 4096 * 0.9) {
                 logger.warn('cookieStore warning: large cookie, len=' + new_cookie_val.length)
-            }
-
-            if (debug) {
-                logger.info('cookie set', new_cookie_val)
             }
 
             document.cookie = new_cookie_val
@@ -232,11 +228,8 @@ export const localStore: PersistentStore = {
         return null
     },
 
-    set: function (name, value, _days, _cross_subdomain, _secure, debug) {
+    set: function (name, value) {
         try {
-            if (debug) {
-                logger.info('localStorage set', name, value)
-            }
             window?.localStorage.setItem(name, JSON.stringify(value))
         } catch (err) {
             localStore.error(err)
@@ -383,11 +376,8 @@ export const sessionStore: PersistentStore = {
         return null
     },
 
-    set: function (name, value, _days, _cross_subdomain, _secure, debug) {
+    set: function (name, value) {
         try {
-            if (debug) {
-                logger.info('sessionStorage set', name, value)
-            }
             window?.sessionStorage.setItem(name, JSON.stringify(value))
         } catch (err) {
             sessionStore.error(err)

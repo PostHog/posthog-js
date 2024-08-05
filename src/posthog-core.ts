@@ -1467,6 +1467,7 @@ export class PostHog {
      * Useful for clearing data when a user logs out.
      */
     reset(reset_device_id?: boolean): void {
+        logger.info('reset')
         if (!this.__loaded) {
             return logger.uninitializedWarning('posthog.reset')
         }
