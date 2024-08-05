@@ -500,6 +500,7 @@ export function getTextColor(el: HTMLElement) {
 export const defaultSurveyAppearance: SurveyAppearance = {
     backgroundColor: '#eeeded',
     submitButtonColor: 'black',
+    submitButtonTextColor: 'white',
     ratingButtonColor: 'white',
     ratingButtonActiveColor: 'black',
     borderColor: '#c9c6c6',

@@ -20,7 +20,9 @@ export function BottomSection({
     link?: string | null
 }) {
     const { isPreviewMode, isPopup } = useContext(SurveyContext)
-    const textColor = getContrastingTextColor(appearance.submitButtonColor || defaultSurveyAppearance.submitButtonColor)
+    const textColor =
+        appearance.submitButtonTextColor ||
+        getContrastingTextColor(appearance.submitButtonColor || defaultSurveyAppearance.submitButtonColor)
     return (
         <div className="bottom-section">
             <div className="buttons">
