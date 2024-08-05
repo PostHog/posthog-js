@@ -1,3 +1,7 @@
+## 1.154.4 - 2024-08-05
+
+- feat: Remove storage logging and add reset logging (#1342)
+
 ## 1.154.3 - 2024-08-05
 
 - feat(surveys): added a customizable submit button text color (#1339)
