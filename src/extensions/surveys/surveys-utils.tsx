@@ -133,6 +133,8 @@ export const style = (appearance: SurveyAppearance | null) => {
               font-weight: 500;
               background: ${appearance?.backgroundColor || '#eeeded'};
               text-decoration: none;
+              backgroundColor: ${appearance?.backgroundColor || '#eeeded'};
+              color: ${getContrastingTextColor(appearance?.backgroundColor || '#eeeded')};
           }
           .survey-question {
               font-weight: 500;
