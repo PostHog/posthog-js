@@ -71,7 +71,7 @@ Then, once this link has been created, any time you need to make a change to `po
 
 ## Releasing a new version
 
-Just put a `bump patch/minor/major` label on your PR! Once the PR is merged, a new version with the appropriate version bump will be released, and the dependency will be updated in [posthog/PostHog](https://github.com/posthog/PostHog) – automatically.
+Just put a `bump patch/minor/major` label on your PR! Once the PR is merged, a new version with the appropriate version bump will be released, and the dependency will be updated in [posthog/PostHog](https://github.com/posthog/PostHog) automatically.
   
 If you forget to add the label, don't try to update the version locally as you won't be able to push that commit to the main branch. Instead, just make a new PR.
 
