@@ -67,6 +67,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               border-color: ${appearance?.borderColor || '#c9c6c6'};
               margin-top: 14px;
               width: 100%;
+              box-sizing: border-box;
           }
           .survey-box:has(.survey-question:empty):not(:has(.survey-question-description)) textarea {
               margin-top: 0;
