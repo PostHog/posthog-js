@@ -1,3 +1,8 @@
+## 1.154.3 - 2024-08-05
+
+- feat(surveys): added a customizable submit button text color (#1339)
+- fix(surveys): textarea border box was being set in the preview but not in the surveys rendered on user websites (#1340)
+
 ## 1.154.2 - 2024-08-02
 
 - Add instructions for cross subdomain development (#1336)
