@@ -1,3 +1,7 @@
+## 1.154.5 - 2024-08-06
+
+- fix(surveys): style the link button with black text (#1343)
+
 ## 1.154.4 - 2024-08-05
 
 - feat: Remove storage logging and add reset logging (#1342)
