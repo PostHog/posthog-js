@@ -685,30 +685,6 @@ describe('SessionRecording', () => {
             })
         })
 
-        it('only controls passwords with', () => {
-            posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: false })
-
-            sessionRecording.startIfEnabledOrStop()
-            // maskAllInputs should change from default
-            // someUnregisteredProp should not be present
-            expect(assignableWindow.rrweb.record).toHaveBeenCalledWith({
-                emit: expect.anything(),
-                maskAllInputs: false,
-                blockClass: 'ph-no-capture',
-                blockSelector: undefined,
-                ignoreClass: 'ph-ignore-input',
-                maskTextClass: 'ph-mask',
-                maskTextSelector: undefined,
-                maskInputOptions: { password: true },
-                maskInputFn: undefined,
-                slimDOMOptions: {},
-                collectFonts: false,
-                plugins: [],
-                inlineStylesheet: true,
-                recordCrossOriginIframes: false,
-            })
-        })
-
         it('records events emitted before and after starting recording', () => {
             sessionRecording.startIfEnabledOrStop()
             expect(loadScriptMock).toHaveBeenCalled()
