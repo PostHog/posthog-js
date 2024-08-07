@@ -69,7 +69,6 @@ export declare type recordOptions<T> = {
     maskTextSelector?: string
     maskAllInputs?: boolean
     maskInputOptions?: MaskInputOptions
-    dangerouslyCapturePasswordInputs?: boolean
     maskInputFn?: MaskInputFn
     maskTextFn?: MaskTextFn
     slimDOMOptions?: SlimDOMOptions | 'all' | true

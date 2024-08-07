@@ -253,7 +253,6 @@ export interface SessionRecordingOptions {
     maskTextFn?: ((text: string, element: HTMLElement | null) => string) | null
     maskAllInputs?: boolean
     maskInputOptions?: Omit<MaskInputOptions, 'password'>
-    dangerouslyCapturePasswordInputs?: boolean
     maskInputFn?: ((text: string, element?: HTMLElement) => string) | null
     slimDOMOptions?: SlimDOMOptions | 'all' | true
     collectFonts?: boolean
