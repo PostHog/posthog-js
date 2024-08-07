@@ -602,7 +602,7 @@ export class SessionRecording {
         for (const [key, value] of Object.entries(userSessionRecordingOptions || {})) {
             if (key in sessionRecordingOptions) {
                 if (key === 'maskInputOptions') {
-                    // ensures password is set unless explicitly included in options
+                    // ensure password is set if not included
                     sessionRecordingOptions.maskInputOptions = { password: true, ...value }
                 } else {
                     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
