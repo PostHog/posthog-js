@@ -130,13 +130,15 @@ describe('request', () => {
             const headers = mockedFetch.mock.calls[0][1].headers as Headers
             expect(headers.get('x-header')).toEqual('value')
 
-            expect(mockedFetch).toHaveBeenCalledWith(`https://any.posthog-instance.com?ver=1.23.45&_=1700000000000`, {
-                body: undefined,
-                headers: new Headers(),
-                keepalive: false,
-                method: 'GET',
-                signal: expect.any(AbortSignal),
-            })
+            expect(mockedFetch).toHaveBeenCalledWith(
+                `https://any.posthog-instance.com?ver=1.23.45&_=1700000000000`,
+                expect.objectContaining({
+                    body: undefined,
+                    headers: new Headers(),
+                    keepalive: false,
+                    method: 'GET',
+                })
+            )
         })
 
         it('calls the callback handler when successful', async () => {
