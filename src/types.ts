@@ -188,6 +188,9 @@ export interface PostHogConfig {
     advanced_disable_toolbar_metrics: boolean
     feature_flag_request_timeout_ms: number
     get_device_id: (uuid: string) => string
+    segment_config?: {
+        user_id?: string
+    }
     name: string
     _onCapture: (eventName: string, eventData: CaptureResult) => void
     capture_performance?: boolean | PerformanceCaptureConfig

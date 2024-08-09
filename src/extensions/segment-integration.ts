@@ -111,11 +111,13 @@ function setupPostHogFromSegment(posthog: PostHog, done: () => void) {
         // Use segments anonymousId instead
         const getSegmentAnonymousId = () => user.anonymousId() || uuidv7()
         posthog.config.get_device_id = getSegmentAnonymousId
+        const userId = user.id() || posthog.config.segment_config?.user_id
 
         // If a segment user ID exists, set it as the distinct_id
-        if (user.id()) {
+        // If the caller explicitly asked to use the anonymous ID as the distinct ID, use that instead
+        if (userId) {
             posthog.register({
-                distinct_id: user.id(),
+                distinct_id: userId,
                 $device_id: getSegmentAnonymousId(),
             })
             posthog.persistence!.set_property(USER_STATE, 'identified')
