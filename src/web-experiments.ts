@@ -2,13 +2,14 @@ import { PostHog } from './posthog-core'
 import { DecideResponse } from './types'
 import { window } from './utils/globals'
 import {
+    WebExperiment,
     WebExperimentsCallback,
     WebExperimentTransform,
     WebExperimentUrlMatchType,
     WebExperimentVariant,
 } from './web-experiments-types'
 import { WEB_EXPERIMENTS } from './constants'
-import { isUndefined } from './utils/type-utils'
+import { isNullish } from './utils/type-utils'
 import { isUrlMatchingRegex } from './utils/request-utils'
 import { logger } from './utils/logger'
 
@@ -29,9 +30,39 @@ export const webExperimentUrlValidationMap: Record<
 export class WebExperiments {
     instance: PostHog
     private _featureFlags?: Record<string, string | boolean>
+    private _flagToExperiments?: Map<string, WebExperiment>
 
     constructor(instance: PostHog) {
         this.instance = instance
+        const appFeatureFLags = (flags: string[]) => {
+            this.applyFeatureFlagChanges(flags)
+        }
+
+        this.instance.onFeatureFlags(appFeatureFLags)
+        this._flagToExperiments = new Map<string, WebExperiment>()
+    }
+
+    applyFeatureFlagChanges(flags: string[]) {
+        WebExperiments.logInfo('applying feature flags', flags)
+        if (isNullish(this._flagToExperiments)) {
+            return
+        }
+
+        flags.forEach((flag) => {
+            WebExperiments.logInfo(
+                'checking if we know this flag ',
+                flag,
+                `   this._flagToExperiments is `,
+                this._flagToExperiments
+            )
+            if (this._flagToExperiments && this._flagToExperiments?.has(flag)) {
+                const selectedVariant = this.instance.getFeatureFlag(flag) as unknown as string
+                const webExperiment = this._flagToExperiments?.get(flag)
+                if (selectedVariant && webExperiment?.variants[selectedVariant]) {
+                    WebExperiments.applyTransforms(webExperiment.variants[selectedVariant].transforms)
+                }
+            }
+        })
     }
 
     afterDecideResponse(response: DecideResponse) {
@@ -41,7 +72,7 @@ export class WebExperiments {
     }
 
     loadIfEnabled() {
-        if (this.instance.config.disable_web_experiments || !this.instance.consent.isOptedOut()) {
+        if (this.instance.config.disable_web_experiments) {
             return
         }
 
@@ -50,12 +81,27 @@ export class WebExperiments {
 
     public getWebExperimentsAndEvaluateDisplayLogic = (forceReload: boolean = false): void => {
         this.getWebExperiments((webExperiments) => {
+            // if (isNullish(this._flagToExperiments)) {
+            WebExperiments.logInfo(`retrieved web experiments from the server`)
+            this._flagToExperiments = new Map<string, WebExperiment>()
+            // }
+
             webExperiments.forEach((webExperiment) => {
                 if (
                     webExperiment.feature_flag_key &&
                     this._featureFlags &&
                     this._featureFlags[webExperiment.feature_flag_key]
                 ) {
+                    if (this._flagToExperiments) {
+                        WebExperiments.logInfo(
+                            `setting flag key `,
+                            webExperiment.feature_flag_key,
+                            ` to web experiment `,
+                            webExperiment
+                        )
+                        this._flagToExperiments?.set(webExperiment.feature_flag_key, webExperiment)
+                    }
+
                     const selectedVariant = this._featureFlags[webExperiment.feature_flag_key] as unknown as string
                     if (selectedVariant && webExperiment.variants[selectedVariant]) {
                         WebExperiments.applyTransforms(webExperiment.variants[selectedVariant].transforms)
@@ -101,14 +147,14 @@ export class WebExperiments {
     }
 
     private static matchesTestVariant(testVariant: WebExperimentVariant) {
-        if (isUndefined(testVariant.conditions)) {
+        if (isNullish(testVariant.conditions)) {
             return false
         }
         return WebExperiments.matchUrlConditions(testVariant) && WebExperiments.matchUTMConditions(testVariant)
     }
 
     private static matchUrlConditions(testVariant: WebExperimentVariant): boolean {
-        if (isUndefined(testVariant.conditions) || isUndefined(testVariant.conditions?.url)) {
+        if (isNullish(testVariant.conditions) || isNullish(testVariant.conditions?.url)) {
             return true
         }
 
@@ -131,7 +177,7 @@ export class WebExperiments {
     }
 
     private static matchUTMConditions(testVariant: WebExperimentVariant): boolean {
-        if (isUndefined(testVariant.conditions) || isUndefined(testVariant.conditions?.utm)) {
+        if (isNullish(testVariant.conditions) || isNullish(testVariant.conditions?.utm)) {
             return true
         }
         const location = this.getWindowLocation()
@@ -196,6 +242,10 @@ export class WebExperiments {
                         if (htmlElement) {
                             htmlElement.innerHTML = transform.html
                         }
+                    }
+                    if (transform.className) {
+                        const htmlElement = element as HTMLElement
+                        htmlElement.className = transform.className
                     }
                 })
             }

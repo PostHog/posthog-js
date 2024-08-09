@@ -4,6 +4,7 @@ import { DecideResponse, PostHogConfig } from './types'
 import { PostHogPersistence } from './posthog-persistence'
 import { WebExperiment } from './web-experiments-types'
 import { RequestRouter } from './utils/request-router'
+import { ConsentManager } from './consent'
 
 describe('Web Experimentation', () => {
     let webExperiment: WebExperiments
@@ -99,7 +100,7 @@ describe('Web Experimentation', () => {
             _send_request: jest
                 .fn()
                 .mockImplementation(({ callback }) => callback({ statusCode: 200, json: experimentsResponse })),
-            consent: { isOptedOut: () => true },
+            consent: { isOptedOut: () => true } as unknown as ConsentManager,
         })
 
         posthog.requestRouter = new RequestRouter(posthog)

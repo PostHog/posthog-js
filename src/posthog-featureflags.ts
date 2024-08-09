@@ -21,6 +21,7 @@ import {
 
 import { isArray } from './utils/type-utils'
 import { logger } from './utils/logger'
+import { SimpleEventEmitter } from './utils/simple-event-emitter'
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
@@ -86,6 +87,7 @@ export class PostHogFeatureFlags {
     reloadFeatureFlagsQueued: boolean
     reloadFeatureFlagsInAction: boolean
     $anon_distinct_id: string | undefined
+    private _debugEventEmitter = new SimpleEventEmitter()
 
     constructor(instance: PostHog) {
         this.instance = instance
