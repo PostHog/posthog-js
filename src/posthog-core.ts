@@ -802,10 +802,13 @@ export class PostHog {
             this.persistence.set_initial_person_info()
         }
 
+        const systemTime = new Date()
+        const timestamp = options?.timestamp || systemTime
+
         let data: CaptureResult = {
             uuid: uuidv7(),
             event: event_name,
-            properties: this._calculate_event_properties(event_name, properties || {}),
+            properties: this._calculate_event_properties(event_name, properties || {}, timestamp),
         }
 
         if (clientRateLimitContext) {
@@ -822,10 +825,10 @@ export class PostHog {
         }
 
         data = _copyAndTruncateStrings(data, options?._noTruncate ? null : this.config.properties_string_max_length)
-        data.timestamp = options?.timestamp || new Date()
+        data.timestamp = timestamp
         if (!isUndefined(options?.timestamp)) {
             data.properties['$event_time_override_provided'] = true
-            data.properties['$event_time_override_system_time'] = new Date()
+            data.properties['$event_time_override_system_time'] = systemTime
         }
 
         // Top-level $set overriding values from the one from properties is taken from the plugin-server normalizeEvent
@@ -858,7 +861,7 @@ export class PostHog {
         this.on('eventCaptured', (data) => callback(data.event, data))
     }
 
-    _calculate_event_properties(event_name: string, event_properties: Properties): Properties {
+    _calculate_event_properties(event_name: string, event_properties: Properties, timestamp: Date): Properties {
         if (!this.persistence || !this.sessionPersistence) {
             return event_properties
         }
@@ -905,9 +908,9 @@ export class PostHog {
         if (!this.config.disable_scroll_properties) {
             let performanceProperties: Record<string, any> = {}
             if (event_name === '$pageview') {
-                performanceProperties = this.pageViewManager.doPageView()
+                performanceProperties = this.pageViewManager.doPageView(timestamp)
             } else if (event_name === '$pageleave') {
-                performanceProperties = this.pageViewManager.doPageLeave()
+                performanceProperties = this.pageViewManager.doPageLeave(timestamp)
             }
             properties = extend(properties, performanceProperties)
         }
@@ -918,7 +921,7 @@ export class PostHog {
 
         // set $duration if time_event was previously called for this event
         if (!isUndefined(startTimestamp)) {
-            const duration_in_ms = new Date().getTime() - startTimestamp
+            const duration_in_ms = timestamp.getTime() - startTimestamp
             properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
         }
 
