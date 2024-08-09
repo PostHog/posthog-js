@@ -1713,7 +1713,7 @@ export class PostHog {
      *         blockSelector: null,
      *         ignoreClass: 'ph-ignore-input',
      *         maskAllInputs: true,
-     *         maskInputOptions: {},
+     *         maskInputOptions: {password: true},
      *         maskInputFn: null,
      *         slimDOMOptions: {},
      *         collectFonts: false,

@@ -601,9 +601,14 @@ export class SessionRecording {
         const userSessionRecordingOptions = this.instance.config.session_recording
         for (const [key, value] of Object.entries(userSessionRecordingOptions || {})) {
             if (key in sessionRecordingOptions) {
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
-                sessionRecordingOptions[key] = value
+                if (key === 'maskInputOptions') {
+                    // ensure password is set if not included
+                    sessionRecordingOptions.maskInputOptions = { password: true, ...value }
+                } else {
+                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                    // @ts-ignore
+                    sessionRecordingOptions[key] = value
+                }
             }
         }
 

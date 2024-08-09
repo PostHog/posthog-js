@@ -22,6 +22,7 @@ import {
     PostHogConfig,
     Property,
     SessionIdChangedCallback,
+    SessionRecordingOptions,
 } from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
 import {
@@ -660,6 +661,24 @@ describe('SessionRecording', () => {
                 plugins: [],
                 inlineStylesheet: true,
                 recordCrossOriginIframes: false,
+            })
+        })
+
+        describe('capturing passwords', () => {
+            it.each([
+                ['no masking options', {} as SessionRecordingOptions, true],
+                ['empty masking options', { maskInputOptions: {} } as SessionRecordingOptions, true],
+                ['password not set', { maskInputOptions: { input: true } } as SessionRecordingOptions, true],
+                ['password set to true', { maskInputOptions: { password: true } } as SessionRecordingOptions, true],
+                ['password set to false', { maskInputOptions: { password: false } } as SessionRecordingOptions, false],
+            ])('%s', (_name: string, session_recording: SessionRecordingOptions, expected: boolean) => {
+                posthog.config.session_recording = session_recording
+                sessionRecording.startIfEnabledOrStop()
+                expect(assignableWindow.rrweb.record).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        maskInputOptions: expect.objectContaining({ password: expected }),
+                    })
+                )
             })
         })
 
