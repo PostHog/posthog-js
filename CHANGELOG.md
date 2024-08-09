@@ -1,3 +1,7 @@
+## 1.155.0 - 2024-08-09
+
+- feat: Add prev pageview duration (#1348)
+
 ## 1.154.6 - 2024-08-09
 
 - chore: make password capture more explicit (#1345)
