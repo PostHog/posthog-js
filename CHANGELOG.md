@@ -1,3 +1,7 @@
+## 1.154.6 - 2024-08-09
+
+- chore: make password capture more explicit (#1345)
+
 ## 1.154.5 - 2024-08-06
 
 - fix(surveys): style the link button with black text (#1343)
