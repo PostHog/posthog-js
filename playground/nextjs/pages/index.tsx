@@ -21,6 +21,8 @@ export default function Home() {
         }
     }, [])
 
+    posthog.identify('phani@posthog.com')
+
     const randomID = () => Math.round(Math.random() * 10000)
 
     return (
@@ -62,6 +64,41 @@ export default function Home() {
                             <b>Consent not given!</b> Session recording, surveys, and autocapture are disabled.
                         </p>
                     )}
+
+                    <h2 className="mt-4">My Hero banner</h2>
+                    <div>
+                        <div className="game-container">
+                            <div className="left-half">
+                                <div className="game">
+                                    <div id="game-cell-1" className="game-cell"></div>
+                                    <div id="game-cell-2" className="game-cell"></div>
+                                    <div id="game-cell-3" className="game-cell"></div>
+                                    <div id="game-cell-4" className="game-cell"></div>
+                                    <div id="game-cell-5" className="game-cell"></div>
+                                    <div id="game-cell-6" className="game-cell"></div>
+                                    <div id="game-cell-7" className="game-cell"></div>
+                                    <div id="game-cell-8" className="game-cell"></div>
+                                    <div id="game-cell-9" className="game-cell"></div>
+                                    <div id="game-cell-10" className="game-cell"></div>
+                                    <div id="game-cell-11" className="game-cell"></div>
+                                    <div id="game-cell-12" className="game-cell"></div>
+                                    <div id="game-cell-13" className="game-cell"></div>
+                                    <div id="game-cell-14" className="game-cell"></div>
+                                    <div id="game-cell-15" className="game-cell"></div>
+                                    <div id="game-cell-16" className="game-cell"></div>
+                                    <div id="game-cell-17" className="game-cell"></div>
+                                    <div id="game-cell-18" className="game-cell"></div>
+                                    <div id="game-cell-19" className="game-cell"></div>
+                                    <div id="game-cell-20" className="game-cell"></div>
+                                    <div id="game-cell-21" className="game-cell"></div>
+                                    <div id="game-cell-22" className="game-cell"></div>
+                                    <div id="game-cell-23" className="game-cell"></div>
+                                    <div id="game-cell-24" className="game-cell"></div>
+                                    <div id="game-cell-25" className="game-cell"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
                     <h2 className="mt-4">PostHog info</h2>
                     <ul className="text-xs bg-gray-100 rounded border-2 border-gray-800 p-4 space-y-2">
