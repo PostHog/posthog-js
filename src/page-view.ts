@@ -44,6 +44,11 @@ export class PageViewManager {
         const previousTimestamp = this._prevPageviewTimestamp
         const scrollContext = this._instance.scrollManager.getContext()
 
+        if (!previousTimestamp) {
+            // this means there was no previous pageview
+            return {}
+        }
+
         let properties: PageViewEventProperties = {}
         if (scrollContext) {
             let { maxScrollHeight, lastScrollY, maxScrollY, maxContentHeight, lastContentY, maxContentY } =
