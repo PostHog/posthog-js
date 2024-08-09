@@ -627,7 +627,10 @@ export class PostHog {
             // Whether to detect ip info or not
             ip: this.config.ip ? 1 : 0,
         })
-        options.headers = this.config.request_headers
+        options.headers = {
+            ...this.config.request_headers,
+            'x-posthog-token': this.config.token,
+        }
         options.compression = options.compression === 'best-available' ? this.compression : options.compression
 
         request({

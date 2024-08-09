@@ -111,7 +111,7 @@ const _fetch = (options: RequestOptions) => {
 
     // eslint-disable-next-line compat/compat
     const headers = new Headers()
-    each(headers, function (headerValue, headerName) {
+    each(options.headers, function (headerValue, headerName) {
         headers.append(headerName, headerValue)
     })
 

@@ -68,6 +68,9 @@ describe('request', () => {
             request(
                 createRequest({
                     url: 'https://any.posthog-instance.com/',
+                    headers: {
+                        'x-header': 'value',
+                    },
                 })
             )
             expect(mockedXHR.open).toHaveBeenCalledWith(
@@ -75,6 +78,8 @@ describe('request', () => {
                 'https://any.posthog-instance.com/?_=1700000000000&ver=1.23.45',
                 true
             )
+
+            expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('x-header', 'value')
         })
 
         it('calls the on callback handler when successful', async () => {
@@ -114,15 +119,26 @@ describe('request', () => {
         })
 
         it('performs the request with default params', () => {
-            request(createRequest())
+            request(
+                createRequest({
+                    headers: {
+                        'x-header': 'value',
+                    },
+                })
+            )
 
-            expect(mockedFetch).toHaveBeenCalledWith(`https://any.posthog-instance.com?ver=1.23.45&_=1700000000000`, {
-                body: undefined,
-                headers: new Headers(),
-                keepalive: false,
-                method: 'GET',
-                signal: expect.any(AbortSignal),
-            })
+            const headers = mockedFetch.mock.calls[0][1].headers as Headers
+            expect(headers.get('x-header')).toEqual('value')
+
+            expect(mockedFetch).toHaveBeenCalledWith(
+                `https://any.posthog-instance.com?ver=1.23.45&_=1700000000000`,
+                expect.objectContaining({
+                    body: undefined,
+                    headers: new Headers(),
+                    keepalive: false,
+                    method: 'GET',
+                })
+            )
         })
 
         it('calls the callback handler when successful', async () => {
