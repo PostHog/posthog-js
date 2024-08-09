@@ -11,6 +11,10 @@ jest.mock('../utils/globals', () => ({
 }))
 
 describe('PageView ID manager', () => {
+    const firstTimestamp = new Date()
+    const duration = 42
+    const secondTimestamp = new Date(firstTimestamp.getTime() + duration * 1000)
+
     describe('doPageView', () => {
         let instance: PostHog
         let pageViewIdManager: PageViewManager
@@ -51,12 +55,12 @@ describe('PageView ID manager', () => {
                 },
             })
 
-            pageViewIdManager.doPageView()
+            pageViewIdManager.doPageView(firstTimestamp)
 
             // force the manager to update the scroll data by calling an internal method
             instance.scrollManager['_updateScrollData']()
 
-            const secondPageView = pageViewIdManager.doPageView()
+            const secondPageView = pageViewIdManager.doPageView(secondTimestamp)
             expect(secondPageView.$prev_pageview_last_scroll).toEqual(2000)
             expect(secondPageView.$prev_pageview_last_scroll_percentage).toBeCloseTo(2 / 3)
             expect(secondPageView.$prev_pageview_max_scroll).toEqual(2000)
@@ -65,6 +69,7 @@ describe('PageView ID manager', () => {
             expect(secondPageView.$prev_pageview_last_content_percentage).toBeCloseTo(3 / 4)
             expect(secondPageView.$prev_pageview_max_content).toEqual(3000)
             expect(secondPageView.$prev_pageview_max_content_percentage).toBeCloseTo(3 / 4)
+            expect(secondPageView.$prev_pageview_duration).toEqual(duration)
         })
 
         it('includes scroll position properties for a short page', () => {
@@ -81,12 +86,12 @@ describe('PageView ID manager', () => {
                 },
             })
 
-            pageViewIdManager.doPageView()
+            pageViewIdManager.doPageView(firstTimestamp)
 
             // force the manager to update the scroll data by calling an internal method
             instance.scrollManager['_updateScrollData']()
 
-            const secondPageView = pageViewIdManager.doPageView()
+            const secondPageView = pageViewIdManager.doPageView(secondTimestamp)
             expect(secondPageView.$prev_pageview_last_scroll).toEqual(0)
             expect(secondPageView.$prev_pageview_last_scroll_percentage).toEqual(1)
             expect(secondPageView.$prev_pageview_max_scroll).toEqual(0)
@@ -95,22 +100,23 @@ describe('PageView ID manager', () => {
             expect(secondPageView.$prev_pageview_last_content_percentage).toEqual(1)
             expect(secondPageView.$prev_pageview_max_content).toEqual(1000)
             expect(secondPageView.$prev_pageview_max_content_percentage).toEqual(1)
+            expect(secondPageView.$prev_pageview_duration).toEqual(duration)
         })
 
         it('can handle scroll updates before doPageView is called', () => {
             instance.scrollManager['_updateScrollData']()
-            const firstPageView = pageViewIdManager.doPageView()
+            const firstPageView = pageViewIdManager.doPageView(firstTimestamp)
             expect(firstPageView.$prev_pageview_last_scroll).toBeUndefined()
 
-            const secondPageView = pageViewIdManager.doPageView()
+            const secondPageView = pageViewIdManager.doPageView(secondTimestamp)
             expect(secondPageView.$prev_pageview_last_scroll).toBeDefined()
         })
 
         it('should include the pathname', () => {
             instance.scrollManager['_updateScrollData']()
-            const firstPageView = pageViewIdManager.doPageView()
+            const firstPageView = pageViewIdManager.doPageView(firstTimestamp)
             expect(firstPageView.$prev_pageview_pathname).toBeUndefined()
-            const secondPageView = pageViewIdManager.doPageView()
+            const secondPageView = pageViewIdManager.doPageView(secondTimestamp)
             expect(secondPageView.$prev_pageview_pathname).toEqual('/pathname')
         })
     })

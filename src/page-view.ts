@@ -4,6 +4,7 @@ import { isUndefined } from './utils/type-utils'
 
 interface PageViewEventProperties {
     $prev_pageview_pathname?: string
+    $prev_pageview_duration?: number // seconds
     $prev_pageview_last_scroll?: number
     $prev_pageview_last_scroll_percentage?: number
     $prev_pageview_max_scroll?: number
@@ -16,72 +17,87 @@ interface PageViewEventProperties {
 
 export class PageViewManager {
     _currentPath?: string
+    _prevPageviewTimestamp?: Date
     _instance: PostHog
 
     constructor(instance: PostHog) {
         this._instance = instance
     }
 
-    doPageView(): PageViewEventProperties {
-        const response = this._previousScrollProperties()
+    doPageView(timestamp: Date): PageViewEventProperties {
+        const response = this._previousPageViewProperties(timestamp)
 
         // On a pageview we reset the contexts
         this._currentPath = window?.location.pathname ?? ''
         this._instance.scrollManager.resetContext()
+        this._prevPageviewTimestamp = timestamp
 
         return response
     }
 
-    doPageLeave(): PageViewEventProperties {
-        return this._previousScrollProperties()
+    doPageLeave(timestamp: Date): PageViewEventProperties {
+        return this._previousPageViewProperties(timestamp)
     }
 
-    private _previousScrollProperties(): PageViewEventProperties {
+    private _previousPageViewProperties(timestamp: Date): PageViewEventProperties {
         const previousPath = this._currentPath
+        const previousTimestamp = this._prevPageviewTimestamp
         const scrollContext = this._instance.scrollManager.getContext()
 
-        if (!previousPath || !scrollContext) {
+        if (!previousTimestamp) {
+            // this means there was no previous pageview
             return {}
         }
 
-        let { maxScrollHeight, lastScrollY, maxScrollY, maxContentHeight, lastContentY, maxContentY } = scrollContext
+        let properties: PageViewEventProperties = {}
+        if (scrollContext) {
+            let { maxScrollHeight, lastScrollY, maxScrollY, maxContentHeight, lastContentY, maxContentY } =
+                scrollContext
 
-        if (
-            isUndefined(maxScrollHeight) ||
-            isUndefined(lastScrollY) ||
-            isUndefined(maxScrollY) ||
-            isUndefined(maxContentHeight) ||
-            isUndefined(lastContentY) ||
-            isUndefined(maxContentY)
-        ) {
-            return {}
+            if (
+                !isUndefined(maxScrollHeight) &&
+                !isUndefined(lastScrollY) &&
+                !isUndefined(maxScrollY) &&
+                !isUndefined(maxContentHeight) &&
+                !isUndefined(lastContentY) &&
+                !isUndefined(maxContentY)
+            ) {
+                // Use ceil, so that e.g. scrolling 999.5px of a 1000px page is considered 100% scrolled
+                maxScrollHeight = Math.ceil(maxScrollHeight)
+                lastScrollY = Math.ceil(lastScrollY)
+                maxScrollY = Math.ceil(maxScrollY)
+                maxContentHeight = Math.ceil(maxContentHeight)
+                lastContentY = Math.ceil(lastContentY)
+                maxContentY = Math.ceil(maxContentY)
+
+                // if the maximum scroll height is near 0, then the percentage is 1
+                const lastScrollPercentage = maxScrollHeight <= 1 ? 1 : clamp(lastScrollY / maxScrollHeight, 0, 1)
+                const maxScrollPercentage = maxScrollHeight <= 1 ? 1 : clamp(maxScrollY / maxScrollHeight, 0, 1)
+                const lastContentPercentage = maxContentHeight <= 1 ? 1 : clamp(lastContentY / maxContentHeight, 0, 1)
+                const maxContentPercentage = maxContentHeight <= 1 ? 1 : clamp(maxContentY / maxContentHeight, 0, 1)
+
+                properties = {
+                    $prev_pageview_last_scroll: lastScrollY,
+                    $prev_pageview_last_scroll_percentage: lastScrollPercentage,
+                    $prev_pageview_max_scroll: maxScrollY,
+                    $prev_pageview_max_scroll_percentage: maxScrollPercentage,
+                    $prev_pageview_last_content: lastContentY,
+                    $prev_pageview_last_content_percentage: lastContentPercentage,
+                    $prev_pageview_max_content: maxContentY,
+                    $prev_pageview_max_content_percentage: maxContentPercentage,
+                }
+            }
         }
 
-        // Use ceil, so that e.g. scrolling 999.5px of a 1000px page is considered 100% scrolled
-        maxScrollHeight = Math.ceil(maxScrollHeight)
-        lastScrollY = Math.ceil(lastScrollY)
-        maxScrollY = Math.ceil(maxScrollY)
-        maxContentHeight = Math.ceil(maxContentHeight)
-        lastContentY = Math.ceil(lastContentY)
-        maxContentY = Math.ceil(maxContentY)
-
-        // if the maximum scroll height is near 0, then the percentage is 1
-        const lastScrollPercentage = maxScrollHeight <= 1 ? 1 : clamp(lastScrollY / maxScrollHeight, 0, 1)
-        const maxScrollPercentage = maxScrollHeight <= 1 ? 1 : clamp(maxScrollY / maxScrollHeight, 0, 1)
-        const lastContentPercentage = maxContentHeight <= 1 ? 1 : clamp(lastContentY / maxContentHeight, 0, 1)
-        const maxContentPercentage = maxContentHeight <= 1 ? 1 : clamp(maxContentY / maxContentHeight, 0, 1)
-
-        return {
-            $prev_pageview_pathname: previousPath,
-            $prev_pageview_last_scroll: lastScrollY,
-            $prev_pageview_last_scroll_percentage: lastScrollPercentage,
-            $prev_pageview_max_scroll: maxScrollY,
-            $prev_pageview_max_scroll_percentage: maxScrollPercentage,
-            $prev_pageview_last_content: lastContentY,
-            $prev_pageview_last_content_percentage: lastContentPercentage,
-            $prev_pageview_max_content: maxContentY,
-            $prev_pageview_max_content_percentage: maxContentPercentage,
+        if (previousPath) {
+            properties.$prev_pageview_pathname = previousPath
         }
+        if (previousTimestamp) {
+            // Use seconds, for consistency with our other duration-related properties like $duration
+            properties.$prev_pageview_duration = (timestamp.getTime() - previousTimestamp.getTime()) / 1000
+        }
+
+        return properties
     }
 }
 

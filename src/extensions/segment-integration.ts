@@ -81,7 +81,11 @@ const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
             posthog.reloadFeatureFlags()
         }
 
-        const additionalProperties = posthog._calculate_event_properties(eventName, ctx.event.properties ?? {})
+        const additionalProperties = posthog._calculate_event_properties(
+            eventName,
+            ctx.event.properties ?? {},
+            new Date()
+        )
         ctx.event.properties = Object.assign({}, additionalProperties, ctx.event.properties)
         return ctx
     }
