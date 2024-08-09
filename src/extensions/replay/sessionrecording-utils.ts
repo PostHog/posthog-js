@@ -1,17 +1,19 @@
-import type {
+import {
     blockClass,
     eventWithTime,
     hooksParam,
     KeepIframeSrcFn,
     listenerHandler,
     maskTextClass,
+    mutationCallbackParam,
+    mutationData,
     pluginEvent,
     RecordPlugin,
     SamplingStrategy,
 } from '@rrweb/types'
 import type { DataURLOptions, MaskInputFn, MaskInputOptions, MaskTextFn, Mirror, SlimDOMOptions } from 'rrweb-snapshot'
 
-import { isObject } from '../../utils/type-utils'
+import { isNullish, isObject } from '../../utils/type-utils'
 import { SnapshotBuffer } from './sessionrecording'
 
 // taken from https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Cyclic_object_value#circular_references
@@ -163,29 +165,122 @@ export function truncateLargeConsoleLogs(_event: eventWithTime) {
     return _event
 }
 
-export const SEVEN_MEGABYTES = 1024 * 1024 * 7 * 0.9 // ~7mb (with some wiggle room)
+function sliceList(list: any[], sizeLimit: number): any[][] {
+    const size = estimateSize(list)
+    if (size < sizeLimit) {
+        return [list]
+    } else {
+        const times = Math.ceil(size / sizeLimit)
+        const chunkLength = Math.ceil(list.length / times)
+        const chunks = []
+        for (let i = 0; i < list.length; i += chunkLength) {
+            chunks.push(list.slice(i, i + chunkLength))
+        }
+        return chunks
+    }
+}
 
-// recursively splits large buffers into smaller ones
-// uses a pretty high size limit to avoid splitting too much
-export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = SEVEN_MEGABYTES): SnapshotBuffer[] {
-    if (buffer.size >= sizeLimit && buffer.data.length > 1) {
-        const half = Math.floor(buffer.data.length / 2)
-        const firstHalf = buffer.data.slice(0, half)
-        const secondHalf = buffer.data.slice(half)
+function sliceBuffer(buffer: SnapshotBuffer, sizeLimit: number): SnapshotBuffer[] {
+    const bufferChunks = sliceList(buffer.data, sizeLimit)
+    return bufferChunks.map((data) => ({
+        size: estimateSize(data),
+        data,
+        sessionId: buffer.sessionId,
+        windowId: buffer.windowId,
+    }))
+}
+
+function hasIncrementalContent(e: eventWithTime): boolean {
+    const mutationData = e.data as mutationData
+    return (
+        !isNullish(mutationData) &&
+        (!!mutationData?.adds?.length ||
+            !!mutationData?.removes?.length ||
+            !!mutationData?.texts?.length ||
+            !!mutationData?.attributes?.length)
+    )
+}
+
+function countChildren(xs: any[][]): number {
+    return xs.reduce((acc, x) => acc + x.length, 0)
+}
+
+function incrementalSnapshotFrom(mutationData: Partial<mutationCallbackParam>, timestamp: number) {
+    return {
+        type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+        data: {
+            source: MUTATION_SOURCE_TYPE,
+            removes: [],
+            adds: [],
+            texts: [],
+            attributes: [],
+            ...mutationData,
+        },
+        timestamp: timestamp,
+    }
+}
+
+function splitIncrementalData(bufferedData: eventWithTime, sizeLimit: number): eventWithTime[] {
+    // NB: this isn't checking the size so will _always_ split incremental snapshots
+    if (bufferedData.type === INCREMENTAL_SNAPSHOT_EVENT_TYPE && bufferedData.data.source === MUTATION_SOURCE_TYPE) {
+        // so at this point we know that the buffer is too large, and we have a single incremental snapshot
+        // it may be that a single item in the buffer is too large
+        // or that there are many small items of one or more types that end up being too large
+        // rrweb processes removes, then adds, then texts, the attributes,
+        // so we can split them in that order
+        const bufferedMutations = bufferedData.data as mutationData
+        const removes = sliceList(bufferedMutations.removes || [], sizeLimit)
+        const adds = sliceList(bufferedMutations.adds || [], sizeLimit)
+        const texts = sliceList(bufferedMutations.texts || [], sizeLimit)
+        const attributes = sliceList(bufferedMutations.attributes || [], sizeLimit)
+
+        // the incoming data has a single timestamp, so we need to adjust the timestamps of the split data,
+        // so we count how many children we have in total, and then we adjust the timestamp
+        // so that if there are 10 the first item is 9 milliseconds before the original timestamp
+        // and the final item has the original timestamp
+        const alteration =
+            countChildren(removes) + countChildren(adds) + countChildren(texts) + countChildren(attributes)
+        let timestampWiggleMarker = 1
+
         return [
-            splitBuffer({
-                size: estimateSize(firstHalf),
-                data: firstHalf,
-                sessionId: buffer.sessionId,
-                windowId: buffer.windowId,
-            }),
-            splitBuffer({
-                size: estimateSize(secondHalf),
-                data: secondHalf,
-                sessionId: buffer.sessionId,
-                windowId: buffer.windowId,
-            }),
-        ].flatMap((x) => x)
+            ...removes.map((remove) =>
+                incrementalSnapshotFrom(
+                    { removes: remove },
+                    bufferedData.timestamp - alteration + timestampWiggleMarker++
+                )
+            ),
+            ...adds.map((add) =>
+                incrementalSnapshotFrom({ adds: add }, bufferedData.timestamp - alteration + timestampWiggleMarker++)
+            ),
+            ...texts.map((text) =>
+                incrementalSnapshotFrom({ texts: text }, bufferedData.timestamp - alteration + timestampWiggleMarker++)
+            ),
+            ...attributes.map((attribute) =>
+                incrementalSnapshotFrom(
+                    { attributes: attribute },
+                    bufferedData.timestamp - alteration + timestampWiggleMarker++
+                )
+            ),
+        ].filter(hasIncrementalContent)
+    } else {
+        return [bufferedData]
+    }
+}
+
+// uses a pretty high size limit to avoid splitting too much
+export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = MAX_MESSAGE_SIZE): SnapshotBuffer[] {
+    if (buffer.size >= sizeLimit) {
+        // it may be because one or more incremental snapshots is very large
+        const splitData = buffer.data.map((bd) => splitIncrementalData(bd, sizeLimit)).flat()
+        const splitBuffer: SnapshotBuffer = {
+            // NB this is no longer totally accurate but will be replaced in sliceBuffer below
+            size: buffer.size,
+            data: splitData,
+            sessionId: buffer.sessionId,
+            windowId: buffer.windowId,
+        }
+        // or because the array of snapshots in the buffer is now too large
+        return sliceBuffer(splitBuffer, sizeLimit)
     } else {
         return [buffer]
     }
