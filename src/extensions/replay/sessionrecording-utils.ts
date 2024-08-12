@@ -167,24 +167,36 @@ export const SEVEN_MEGABYTES = 1024 * 1024 * 7 * 0.9 // ~7mb (with some wiggle r
 
 // recursively splits large buffers into smaller ones
 // uses a pretty high size limit to avoid splitting too much
-export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = SEVEN_MEGABYTES): SnapshotBuffer[] {
-    if (buffer.size >= sizeLimit && buffer.data.length > 1) {
-        const half = Math.floor(buffer.data.length / 2)
-        const firstHalf = buffer.data.slice(0, half)
-        const secondHalf = buffer.data.slice(half)
+// uses itemsLimit to avoid hitting clientside rate limits when capturing the individual events
+export function splitBuffer(
+    buffer: SnapshotBuffer,
+    itemsLimit: number,
+    sizeLimit: number = SEVEN_MEGABYTES
+): SnapshotBuffer[] {
+    if (buffer.size >= sizeLimit && buffer.data.length > 1 && itemsLimit > 1) {
+        const itemsHalf = Math.floor(itemsLimit / 2)
+        const sizeHalf = Math.floor(buffer.data.length / 2)
+        const firstHalf = buffer.data.slice(0, sizeHalf)
+        const secondHalf = buffer.data.slice(sizeHalf)
         return [
-            splitBuffer({
-                size: estimateSize(firstHalf),
-                data: firstHalf,
-                sessionId: buffer.sessionId,
-                windowId: buffer.windowId,
-            }),
-            splitBuffer({
-                size: estimateSize(secondHalf),
-                data: secondHalf,
-                sessionId: buffer.sessionId,
-                windowId: buffer.windowId,
-            }),
+            splitBuffer(
+                {
+                    size: estimateSize(firstHalf),
+                    data: firstHalf,
+                    sessionId: buffer.sessionId,
+                    windowId: buffer.windowId,
+                },
+                itemsHalf
+            ),
+            splitBuffer(
+                {
+                    size: estimateSize(secondHalf),
+                    data: secondHalf,
+                    sessionId: buffer.sessionId,
+                    windowId: buffer.windowId,
+                },
+                itemsHalf
+            ),
         ].flatMap((x) => x)
     } else {
         return [buffer]

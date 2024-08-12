@@ -662,7 +662,7 @@ export class SessionRecording {
                     this._tryAddCustomEvent('$pageview', { href })
                 }
             } catch (e) {
-                logger.error('Could not add $pageview to rrweb session', e)
+                logger.error(LOGGER_PREFIX + ' ' + 'Could not add $pageview to rrweb session', e)
             }
         })
 
@@ -863,7 +863,11 @@ export class SessionRecording {
         }
 
         if (this.buffer.data.length > 0) {
-            const snapshotEvents = splitBuffer(this.buffer)
+            const captureEventsPerSecond = this.instance.rateLimiter.captureEventsPerSecond
+            const snapshotEvents = splitBuffer(this.buffer, captureEventsPerSecond)
+            if (snapshotEvents.length >= captureEventsPerSecond) {
+                logger.warn(LOGGER_PREFIX + 'This is likely to cause a clientside rate limit.')
+            }
             snapshotEvents.forEach((snapshotBuffer) => {
                 this._captureSnapshot({
                     $snapshot_bytes: snapshotBuffer.size,
