@@ -1,3 +1,7 @@
+## 1.155.2 - 2024-08-13
+
+- remove x-posthog-token header (#1354)
+
 ## 1.155.1 - 2024-08-13
 
 - feat: Added token to headers (#1347)
