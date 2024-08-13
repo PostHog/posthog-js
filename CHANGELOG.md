@@ -1,3 +1,7 @@
+## 1.155.1 - 2024-08-13
+
+- feat: Added token to headers (#1347)
+
 ## 1.155.0 - 2024-08-09
 
 - feat: Add prev pageview duration (#1348)
