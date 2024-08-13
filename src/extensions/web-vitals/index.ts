@@ -119,7 +119,7 @@ export class WebVitalsAutocapture {
             return
         }
 
-        this.buffer = this.buffer || {}
+        this.buffer = this.buffer || { url: undefined, metrics: [], firstMetricTimestamp: undefined }
 
         const $currentUrl = this._currentURL()
         if (isUndefined($currentUrl)) {

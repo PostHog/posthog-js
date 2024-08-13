@@ -47,7 +47,7 @@ export class Heatmaps {
     rageclicks = new RageClick()
     _enabledServerSide: boolean = false
     _initialized = false
-    _mouseMoveTimeout: number | undefined
+    _mouseMoveTimeout: ReturnType<typeof setTimeout> | undefined
 
     // TODO: Periodically flush this if no other event has taken care of it
     private buffer: HeatmapEventBuffer
