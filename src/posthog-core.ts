@@ -629,7 +629,6 @@ export class PostHog {
         })
         options.headers = {
             ...this.config.request_headers,
-            'x-posthog-token': this.config.token,
         }
         options.compression = options.compression === 'best-available' ? this.compression : options.compression
 
