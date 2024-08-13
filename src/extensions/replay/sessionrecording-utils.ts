@@ -15,7 +15,7 @@ import { isObject } from '../../utils/type-utils'
 import { SnapshotBuffer } from './sessionrecording'
 
 // taken from https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Cyclic_object_value#circular_references
-function circularReferenceReplacer() {
+export function circularReferenceReplacer() {
     const ancestors: any[] = []
     return function (this: any, _key: string, value: any) {
         if (isObject(value)) {

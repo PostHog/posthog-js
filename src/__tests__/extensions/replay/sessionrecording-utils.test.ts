@@ -8,6 +8,7 @@ import {
     splitBuffer,
     SEVEN_MEGABYTES,
     estimateSize,
+    circularReferenceReplacer,
 } from '../../../extensions/replay/sessionrecording-utils'
 import { largeString, threeMBAudioURI, threeMBImageURI } from '../test_data/sessionrecording-utils-test-data'
 import { eventWithTime } from '@rrweb/types'
@@ -331,6 +332,24 @@ describe(`SessionRecording utility functions`, () => {
             const result = splitBuffer(buffer)
 
             expect(result).toEqual([buffer])
+        })
+    })
+
+    describe('circularReferenceReplacer', () => {
+        it('should handle circular references', () => {
+            const obj: any = {}
+            obj.obj = obj
+            const result = JSON.stringify(obj, circularReferenceReplacer())
+            expect(result).toEqual('{"obj":"[Circular]"}')
+        })
+
+        it('should handle nested circular references', () => {
+            const a: any = {}
+            const b: any = {}
+            a.b = b
+            b.a = a
+            const result = JSON.stringify(a, circularReferenceReplacer())
+            expect(result).toEqual('{"b":{"a":"[Circular]"}}')
         })
     })
 })
