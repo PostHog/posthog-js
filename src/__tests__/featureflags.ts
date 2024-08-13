@@ -8,8 +8,8 @@ jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
 
 describe('featureflags', () => {
-    let instance
-    let featureFlags
+    let instance: any
+    let featureFlags: any
 
     const config = {
         token: 'random fake token',

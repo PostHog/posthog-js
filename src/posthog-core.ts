@@ -234,6 +234,7 @@ class DeprecatedWebPerformanceObserver {
 export class PostHog {
     __loaded: boolean
     config: PostHogConfig
+    lib_version: string
 
     rateLimiter: RateLimiter
     scrollManager: ScrollManager
@@ -286,6 +287,7 @@ export class PostHog {
         this.__request_queue = []
         this.__loaded = false
         this.analyticsDefaultEndpoint = '/e/'
+        this.lib_version = Config.LIB_VERSION
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)

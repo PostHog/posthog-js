@@ -59,7 +59,7 @@ describe('posthog core', () => {
             })
 
             // act
-            const actual = posthog._calculate_event_properties(eventName, eventProperties)
+            const actual = posthog._calculate_event_properties(eventName, eventProperties, new Date())
 
             // assert
             expect(actual['event']).toBe('prop')

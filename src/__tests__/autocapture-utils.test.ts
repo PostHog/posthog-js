@@ -16,6 +16,7 @@ import {
 } from '../autocapture-utils'
 import { document } from '../utils/globals'
 import { makeMouseEvent } from './autocapture.test'
+import { AutocaptureConfig } from '../types'
 
 describe(`Autocapture utility functions`, () => {
     afterEach(() => {
@@ -252,7 +253,9 @@ describe(`Autocapture utility functions`, () => {
                     true,
                 ],
             ])('correctly respects the allow list: %s', (_, clickTarget, autoCaptureConfig, shouldCapture) => {
-                expect(shouldCaptureDomEvent(clickTarget, makeMouseEvent({}), autoCaptureConfig)).toBe(shouldCapture)
+                expect(
+                    shouldCaptureDomEvent(clickTarget, makeMouseEvent({}), autoCaptureConfig as AutocaptureConfig)
+                ).toBe(shouldCapture)
             })
         })
     })

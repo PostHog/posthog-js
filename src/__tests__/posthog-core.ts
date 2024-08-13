@@ -27,8 +27,11 @@ describe('posthog core', () => {
         _send_request: jest.fn(),
     }
 
-    const posthogWith = (config: Partial<PostHogConfig>, overrides?: Partial<PostHog>) => {
+    const posthogWith = (config: Partial<PostHogConfig>, overrides?: Partial<PostHog>): PostHog => {
         const posthog = defaultPostHog().init('testtoken', config, uuidv7())
+        if (!posthog) {
+            throw new Error('PostHog failed to initialize')
+        }
         return Object.assign(posthog, overrides || {})
     }
 
@@ -47,7 +50,7 @@ describe('posthog core', () => {
         })
 
         it('adds system time to events', () => {
-            const captureData = posthogWith(defaultConfig, defaultOverrides).capture(eventName, {}, {})
+            const captureData = posthogWith(defaultConfig, defaultOverrides).capture(eventName, {}, {})!
 
             expect(captureData).toHaveProperty('timestamp')
             // timer is fixed at 2020-01-01
@@ -59,7 +62,7 @@ describe('posthog core', () => {
                 eventName,
                 {},
                 { timestamp: new Date(2020, 0, 2, 12, 34) }
-            )
+            )!
             expect(captureData).toHaveProperty('timestamp')
             expect(captureData.timestamp).toEqual(new Date(2020, 0, 2, 12, 34))
             expect(captureData.properties['$event_time_override_provided']).toEqual(true)
@@ -115,8 +118,8 @@ describe('posthog core', () => {
 
             posthog.capture(eventName, {}, {})
 
-            expect(posthog.sessionPersistence.update_campaign_params).toHaveBeenCalled()
-            expect(posthog.sessionPersistence.update_referrer_info).toHaveBeenCalled()
+            expect(posthog.sessionPersistence?.update_campaign_params).toHaveBeenCalled()
+            expect(posthog.sessionPersistence?.update_referrer_info).toHaveBeenCalled()
         })
 
         it('errors with undefined event name', () => {
