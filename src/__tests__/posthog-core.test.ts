@@ -35,6 +35,10 @@ describe('posthog core', () => {
         console.error = jest.fn()
     })
 
+    it('exposes the version', () => {
+        expect(defaultPostHog().version).toMatch(/\d+\.\d+\.\d+/)
+    })
+
     describe('capture()', () => {
         const eventName = 'custom_event'
         const eventProperties = {

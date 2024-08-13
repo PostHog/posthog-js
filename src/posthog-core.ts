@@ -264,6 +264,7 @@ export class PostHog {
     __request_queue: QueuedRequestOptions[]
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
+    version = Config.LIB_VERSION
 
     SentryIntegration: typeof SentryIntegration
     sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
