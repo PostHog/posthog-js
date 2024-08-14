@@ -264,6 +264,7 @@ export class PostHog {
     __request_queue: QueuedRequestOptions[]
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
+    version = Config.LIB_VERSION
 
     SentryIntegration: typeof SentryIntegration
     sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
@@ -863,7 +864,8 @@ export class PostHog {
         this.on('eventCaptured', (data) => callback(data.event, data))
     }
 
-    _calculate_event_properties(event_name: string, event_properties: Properties, timestamp: Date): Properties {
+    _calculate_event_properties(event_name: string, event_properties: Properties, timestamp?: Date): Properties {
+        timestamp = timestamp || new Date()
         if (!this.persistence || !this.sessionPersistence) {
             return event_properties
         }
