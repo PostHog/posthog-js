@@ -29,9 +29,6 @@ describe('posthog core', () => {
 
     const posthogWith = (config: Partial<PostHogConfig>, overrides?: Partial<PostHog>): PostHog => {
         const posthog = defaultPostHog().init('testtoken', config, uuidv7())
-        if (!posthog) {
-            throw new Error('PostHog failed to initialize')
-        }
         return Object.assign(posthog, overrides || {})
     }
 
@@ -50,7 +47,7 @@ describe('posthog core', () => {
         })
 
         it('adds system time to events', () => {
-            const captureData = posthogWith(defaultConfig, defaultOverrides).capture(eventName, {}, {})!
+            const captureData = posthogWith(defaultConfig, defaultOverrides).capture(eventName, {}, {})
 
             expect(captureData).toHaveProperty('timestamp')
             // timer is fixed at 2020-01-01
@@ -62,7 +59,7 @@ describe('posthog core', () => {
                 eventName,
                 {},
                 { timestamp: new Date(2020, 0, 2, 12, 34) }
-            )!
+            )
             expect(captureData).toHaveProperty('timestamp')
             expect(captureData.timestamp).toEqual(new Date(2020, 0, 2, 12, 34))
             expect(captureData.properties['$event_time_override_provided']).toEqual(true)
@@ -118,8 +115,8 @@ describe('posthog core', () => {
 
             posthog.capture(eventName, {}, {})
 
-            expect(posthog.sessionPersistence?.update_campaign_params).toHaveBeenCalled()
-            expect(posthog.sessionPersistence?.update_referrer_info).toHaveBeenCalled()
+            expect(posthog.sessionPersistence.update_campaign_params).toHaveBeenCalled()
+            expect(posthog.sessionPersistence.update_referrer_info).toHaveBeenCalled()
         })
 
         it('errors with undefined event name', () => {
@@ -480,7 +477,7 @@ describe('posthog core', () => {
                 event: 'prop',
                 distinct_id: 'abc',
             })
-            expect(posthog.sessionManager!.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
+            expect(posthog.sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
         })
 
         it('calls sanitize_properties', () => {
@@ -794,7 +791,7 @@ describe('posthog core', () => {
             // TODO this didn't make a tonne of sense in the given form
             // it makes no sense now
             // of course mocks added _after_ init will not be called
-            const posthog = defaultPostHog().init('testtoken', defaultConfig, uuidv7())
+            const posthog = defaultPostHog().init('testtoken', defaultConfig, uuidv7())!
 
             posthog.sessionRecording = {
                 afterDecideResponse: jest.fn(),
