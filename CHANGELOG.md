@@ -1,3 +1,7 @@
+## 1.155.3 - 2024-08-14
+
+- feat: default to gzip compression instead of base64 (#1355)
+
 ## 1.155.2 - 2024-08-13
 
 - remove x-posthog-token header (#1354)
