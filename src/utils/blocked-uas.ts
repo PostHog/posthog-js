@@ -102,7 +102,14 @@ export const isLikelyBot = function (navigator: Navigator | undefined, customBlo
             if (
                 uaData.brands &&
                 isArray(uaData.brands) &&
-                uaData.brands.some((brand) => typeof brand === 'string' && isBlockedUA(brand, customBlockedUserAgents))
+                uaData.brands.some(
+                    (brandObj: unknown) =>
+                        typeof brandObj === 'object' &&
+                        brandObj &&
+                        'brand' in brandObj &&
+                        typeof brandObj.brand === 'string' &&
+                        isBlockedUA(brandObj.brand, customBlockedUserAgents)
+                )
             ) {
                 return true
             }

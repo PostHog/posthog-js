@@ -159,12 +159,43 @@ describe('utils', () => {
             expect(isLikelyBot({ webdriver: true } as Navigator, [])).toBe(true)
         })
 
-        it('blocks based on hints in userAgentData', () => {
-            expect(isLikelyBot({ userAgentData: { brands: ['Googlebot'] } } as Navigator, [])).toBe(true)
-            expect(isLikelyBot({ userAgentData: { brands: ['HeadlessChrome'] } } as Navigator, [])).toBe(true)
+        it('blocks based on userAgentData', () => {
+            expect(
+                isLikelyBot(
+                    {
+                        userAgentData: {
+                            brands: [
+                                { brand: 'Not)A;Brand', version: '99' },
+                                { brand: 'HeadlessChrome', version: '127' },
+                                { brand: 'Chromium', version: '127' },
+                            ],
+                        },
+                    } as Navigator,
+                    []
+                )
+            ).toBe(true)
+        })
+
+        it('does not block a normal browser based of userAgentData', () => {
+            expect(
+                isLikelyBot(
+                    {
+                        userAgentData: {
+                            brands: [
+                                { brand: 'Not)A;Brand', version: '99' },
+                                { brand: 'Google Chrome', version: '127' },
+                                { brand: 'Chromium', version: '127' },
+                            ],
+                        },
+                    } as Navigator,
+                    []
+                )
+            ).toBe(false)
         })
 
         it('does not crash if the type of navigatorUAData changes', () => {
+            // we're not checking the return values of these, only that they don't crash
+            isLikelyBot({ userAgentData: { brands: ['HeadlessChrome'] } } as Navigator, [])
             isLikelyBot({ userAgentData: { brands: [() => 'HeadlessChrome'] } } as Navigator, [])
             isLikelyBot({ userAgentData: { brands: () => ['HeadlessChrome'] } } as unknown as Navigator, [])
             isLikelyBot({ userAgentData: 'HeadlessChrome' } as unknown as Navigator, [])
