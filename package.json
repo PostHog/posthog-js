@@ -23,8 +23,7 @@
         "typecheck": "tsc --noEmit --project tsconfig.json",
         "cypress": "cypress open",
         "prepare": "husky install",
-        "deprecate-old-versions": "node scripts/deprecate-old-versions.mjs",
-        "tsc": "tsc"
+        "deprecate-old-versions": "node scripts/deprecate-old-versions.mjs"
     },
     "main": "dist/main.js",
     "module": "dist/module.js",
