@@ -9,7 +9,7 @@
 
 import { _copyAndTruncateStrings, isCrossDomainCookie, _base64Encode } from '../utils'
 import { Info } from '../utils/event-utils'
-import { isLikelyBot, DEFAULT_BLOCKED_UA_STRS, isBlockedUA } from '../utils/blocked-uas'
+import { isLikelyBot, DEFAULT_BLOCKED_UA_STRS, isBlockedUA, NavigatorUAData } from '../utils/blocked-uas'
 import { expect } from '@jest/globals'
 
 function userAgentFor(botString: string) {
@@ -160,16 +160,17 @@ describe('utils', () => {
         })
 
         it('blocks based on userAgentData', () => {
+            const headlessUserAgentData: NavigatorUAData = {
+                brands: [
+                    { brand: 'Not)A;Brand', version: '99' },
+                    { brand: 'HeadlessChrome', version: '127' },
+                    { brand: 'Chromium', version: '127' },
+                ],
+            }
             expect(
                 isLikelyBot(
                     {
-                        userAgentData: {
-                            brands: [
-                                { brand: 'Not)A;Brand', version: '99' },
-                                { brand: 'HeadlessChrome', version: '127' },
-                                { brand: 'Chromium', version: '127' },
-                            ],
-                        },
+                        userAgentData: headlessUserAgentData,
                     } as Navigator,
                     []
                 )
@@ -177,16 +178,17 @@ describe('utils', () => {
         })
 
         it('does not block a normal browser based of userAgentData', () => {
+            const realUserAgentData: NavigatorUAData = {
+                brands: [
+                    { brand: 'Not)A;Brand', version: '99' },
+                    { brand: 'Google Chrome', version: '127' },
+                    { brand: 'Chromium', version: '127' },
+                ],
+            }
             expect(
                 isLikelyBot(
                     {
-                        userAgentData: {
-                            brands: [
-                                { brand: 'Not)A;Brand', version: '99' },
-                                { brand: 'Google Chrome', version: '127' },
-                                { brand: 'Chromium', version: '127' },
-                            ],
-                        },
+                        userAgentData: realUserAgentData,
                     } as Navigator,
                     []
                 )
@@ -195,7 +197,9 @@ describe('utils', () => {
 
         it('does not crash if the type of navigatorUAData changes', () => {
             // we're not checking the return values of these, only that they don't crash
+            // @ts-expect-error testing invalid data
             isLikelyBot({ userAgentData: { brands: ['HeadlessChrome'] } } as Navigator, [])
+            // @ts-expect-error testing invalid data
             isLikelyBot({ userAgentData: { brands: [() => 'HeadlessChrome'] } } as Navigator, [])
             isLikelyBot({ userAgentData: { brands: () => ['HeadlessChrome'] } } as unknown as Navigator, [])
             isLikelyBot({ userAgentData: 'HeadlessChrome' } as unknown as Navigator, [])

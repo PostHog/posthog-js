@@ -1,5 +1,3 @@
-import { isArray } from './type-utils'
-
 export const DEFAULT_BLOCKED_UA_STRS = [
     'ahrefsbot',
     'ahrefssiteaudit',
@@ -78,7 +76,10 @@ export const isBlockedUA = function (ua: string, customBlockedUserAgents: string
 // Be extremely defensive here to ensure backwards and *forwards* compatibility, and remove this defensiveness in the
 // future when it is safe to do so.
 export interface NavigatorUAData {
-    brands?: unknown[]
+    brands?: {
+        brand: string
+        version: string
+    }[]
 }
 declare global {
     interface Navigator {
@@ -100,16 +101,8 @@ export const isLikelyBot = function (navigator: Navigator | undefined, customBlo
         if ('userAgentData' in navigator) {
             const uaData = navigator.userAgentData as NavigatorUAData
             if (
-                uaData.brands &&
-                isArray(uaData.brands) &&
-                uaData.brands.some(
-                    (brandObj: unknown) =>
-                        typeof brandObj === 'object' &&
-                        brandObj &&
-                        'brand' in brandObj &&
-                        typeof brandObj.brand === 'string' &&
-                        isBlockedUA(brandObj.brand, customBlockedUserAgents)
-                )
+                uaData?.brands &&
+                uaData.brands.some((brandObj) => isBlockedUA(brandObj?.brand, customBlockedUserAgents))
             ) {
                 return true
             }
