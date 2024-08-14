@@ -98,22 +98,16 @@ export const isLikelyBot = function (navigator: Navigator | undefined, customBlo
         }
     }
     try {
-        if ('userAgentData' in navigator) {
-            const uaData = navigator.userAgentData as NavigatorUAData
-            if (
-                uaData?.brands &&
-                uaData.brands.some((brandObj) => isBlockedUA(brandObj?.brand, customBlockedUserAgents))
-            ) {
-                return true
-            }
+        // eslint-disable-next-line compat/compat
+        const uaData = navigator?.userAgentData as NavigatorUAData
+        if (uaData?.brands && uaData.brands.some((brandObj) => isBlockedUA(brandObj?.brand, customBlockedUserAgents))) {
+            return true
         }
     } catch {
         // ignore the error, we were using experimental browser features
     }
 
-    if ('webdriver' in navigator && navigator.webdriver) {
-        return true
-    }
+    return !!navigator.webdriver
 
     // There's some more enhancements we could make in this area, e.g. it's possible to check if Chrome dev tools are
     // open, which will detect some bots that are trying to mask themselves and might get past the checks above.
@@ -123,6 +117,4 @@ export const isLikelyBot = function (navigator: Navigator | undefined, customBlo
     // until this stops being experimental. The MDN docs imply that this might eventually require user permission.
     // See https://developer.mozilla.org/en-US/docs/Web/API/NavigatorUAData/getHighEntropyValues
     // It would be very bad if posthog-js caused a permission prompt to appear on every page load.
-
-    return false
 }
