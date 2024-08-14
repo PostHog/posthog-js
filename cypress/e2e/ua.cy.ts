@@ -9,7 +9,7 @@ describe('User Agent Blocking', () => {
 
         // @ts-expect-error awaiting a cypress chainable
         const isLikelyBot = await cy.window().then((win) => {
-            return win.eval('window.posthog._is_likely_bot()')
+            return win.eval('window.posthog._is_bot()')
         })
 
         expect(isLikelyBot).to.eql(true)

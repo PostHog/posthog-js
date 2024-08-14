@@ -771,7 +771,7 @@ export class PostHog {
             return
         }
 
-        if (!this.config.opt_out_useragent_filter && this._is_likely_bot()) {
+        if (!this.config.opt_out_useragent_filter && this._is_bot()) {
             return
         }
 
@@ -926,7 +926,7 @@ export class PostHog {
         // this is only added when this.config.opt_out_useragent_filter is true,
         // or it would always add "browser"
         if (userAgent && this.config.opt_out_useragent_filter) {
-            properties['$browser_type'] = this._is_likely_bot() ? 'bot' : 'browser'
+            properties['$browser_type'] = this._is_bot() ? 'bot' : 'browser'
         }
 
         // note: extend writes to the first object, so lets make sure we
@@ -2032,7 +2032,7 @@ export class PostHog {
         this._sync_opt_out_with_persistence()
     }
 
-    _is_likely_bot(): boolean | undefined {
+    _is_bot(): boolean | undefined {
         if (navigator) {
             return isLikelyBot(navigator, this.config.custom_blocked_useragents)
         } else {
