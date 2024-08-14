@@ -1,3 +1,7 @@
+## 1.155.4 - 2024-08-14
+
+- fix: Expose version (#1357)
+
 ## 1.155.3 - 2024-08-14
 
 - feat: default to gzip compression instead of base64 (#1355)
