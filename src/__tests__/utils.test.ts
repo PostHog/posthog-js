@@ -129,6 +129,9 @@ describe('utils', () => {
             [
                 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/122.0.0.0 Safari/537.36',
             ],
+            [
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Cypress/13.6.3 Chrome/114.0.5735.289 Electron/25.8.4 Safari/537.36',
+            ],
         ])('blocks based on user agent', (botString) => {
             expect(isBlockedUA(botString, [])).toBe(true)
             expect(isBlockedUA(botString.toLowerCase(), [])).toBe(true)
@@ -145,6 +148,9 @@ describe('utils', () => {
             ],
             [
                 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15',
+            ],
+            [
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) elec/1.0.0 Chrome/126.0.6478.127 Electron/31.2.1 Safari/537.36',
             ],
         ])('does not block based on non-bot user agent', (userAgent) => {
             expect(isBlockedUA(userAgent, [])).toBe(false)
