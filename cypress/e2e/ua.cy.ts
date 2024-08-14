@@ -1,7 +1,5 @@
 /// <reference types="cypress" />
 import { start } from '../support/setup'
-import '@cypress/skip-test/support'
-import '@cypress/skip-test'
 
 describe('User Agent Blocking', () => {
     it('should pick up that our automated cypress tests are indeed bot traffic', async () => {
