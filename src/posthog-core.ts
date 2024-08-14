@@ -10,7 +10,7 @@ import {
     isCrossDomainCookie,
     isDistinctIdStringLike,
 } from './utils'
-import { assignableWindow, document, location, userAgent, window } from './utils/globals'
+import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import {
@@ -66,7 +66,7 @@ import {
 import { Info } from './utils/event-utils'
 import { logger } from './utils/logger'
 import { SessionPropsManager } from './session-props'
-import { isBlockedUA } from './utils/blocked-uas'
+import { isLikelyBot } from './utils/blocked-uas'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
 import { Heatmaps } from './heatmaps'
 import { ScrollManager } from './scroll-manager'
@@ -772,9 +772,9 @@ export class PostHog {
         }
 
         if (
-            userAgent &&
+            navigator &&
             !this.config.opt_out_useragent_filter &&
-            isBlockedUA(userAgent, this.config.custom_blocked_useragents)
+            isLikelyBot(navigator, this.config.custom_blocked_useragents)
         ) {
             return
         }
@@ -930,7 +930,7 @@ export class PostHog {
         // this is only added when this.config.opt_out_useragent_filter is true,
         // or it would always add "browser"
         if (userAgent && this.config.opt_out_useragent_filter) {
-            properties['$browser_type'] = isBlockedUA(userAgent, this.config.custom_blocked_useragents)
+            properties['$browser_type'] = isLikelyBot(navigator, this.config.custom_blocked_useragents)
                 ? 'bot'
                 : 'browser'
         }
