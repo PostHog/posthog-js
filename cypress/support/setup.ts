@@ -39,7 +39,10 @@ export const start = ({
     cy.visit(url)
 
     if (initPosthog) {
-        cy.posthogInit(options)
+        cy.posthogInit({
+            opt_out_useragent_filter: true, // we ARE a bot, so we need to enable this opt-out
+            ...options,
+        })
     }
 
     if (resetOnInit) {
