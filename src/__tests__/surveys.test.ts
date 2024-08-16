@@ -8,6 +8,7 @@ import {
     MultipleSurveyQuestion,
     SurveyQuestionBranchingType,
     SurveyQuestion,
+    RatingSurveyQuestion,
 } from '../posthog-surveys-types'
 import {
     canActivateRepeatedly,
@@ -614,11 +615,12 @@ describe('surveys', () => {
         })
 
         it('returns event based surveys that observed an event', () => {
+            // TODO this test fails when run in isolation
+
             surveysResponse = {
                 surveys: [surveyWithEnabledInternalFlag, surveyWithEvents],
             }
-
-            surveys._surveyEventReceiver?.on('user_subscribed')
+            ;(surveys._surveyEventReceiver as any)?.on('user_subscribed')
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithEnabledInternalFlag])
             })
@@ -840,7 +842,7 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Why yes?' },
                 { type: SurveyQuestionType.Open, question: 'Why no?' },
                 { type: SurveyQuestionType.Open, question: 'Why maybe?' },
-            ] as SurveyQuestion[]
+            ] as unknown[] as SurveyQuestion[]
             expect(surveys.getNextSurveyStep(survey, 0, 'Yes')).toEqual(1)
             expect(surveys.getNextSurveyStep(survey, 0, 'No')).toEqual(2)
             expect(surveys.getNextSurveyStep(survey, 0, 'Maybe')).toEqual(3)
@@ -861,7 +863,7 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Sorry to hear that. Tell us more!' },
                 { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
-            ] as SurveyQuestion[]
+            ] as unknown[] as SurveyQuestion[]
 
             expect(surveys.getNextSurveyStep(survey, 0, 1)).toEqual(1)
             expect(surveys.getNextSurveyStep(survey, 0, 2)).toEqual(2)
@@ -883,7 +885,7 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Sorry to hear that. Tell us more!' },
                 { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
-            ] as SurveyQuestion[]
+            ] as unknown as SurveyQuestion[]
 
             expect(surveys.getNextSurveyStep(survey, 0, 1)).toEqual(1)
             expect(surveys.getNextSurveyStep(survey, 0, 3)).toEqual(2)
@@ -905,7 +907,7 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Sorry to hear that. Tell us more!' },
                 { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
-            ] as SurveyQuestion[]
+            ] as unknown as SurveyQuestion[]
 
             expect(surveys.getNextSurveyStep(survey, 0, 1)).toEqual(1)
             expect(surveys.getNextSurveyStep(survey, 0, 8)).toEqual(2)
@@ -1085,7 +1087,7 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Sorry to hear that. Tell us more!' },
                 { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
-            ] as SurveyQuestion[]
+            ] as unknown as SurveyQuestion[]
             expect(() => surveys.getNextSurveyStep(survey, 0, 1)).toThrow('The scale must be one of: 3, 5, 10')
         })
 
@@ -1103,13 +1105,11 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Sorry to hear that. Tell us more!' },
                 { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
-            ] as SurveyQuestion[]
+            ] as unknown as SurveyQuestion[]
             expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-3')
-
-            survey.questions[0].scale = 5
+            ;(survey.questions[0] as RatingSurveyQuestion).scale = 5
             expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-5')
-
-            survey.questions[0].scale = 10
+            ;(survey.questions[0] as RatingSurveyQuestion).scale = 10
             expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 0-10')
         })
 
@@ -1127,7 +1127,7 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Sorry to hear that. Tell us more!' },
                 { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
-            ] as SurveyQuestion[]
+            ] as unknown as SurveyQuestion[]
             expect(() => surveys.getNextSurveyStep(survey, 0, '2')).toThrow('The response type must be an integer')
             expect(() => surveys.getNextSurveyStep(survey, 0, 'some_string')).toThrow(
                 'The response type must be an integer'

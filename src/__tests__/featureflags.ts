@@ -3,6 +3,7 @@
 import { filterActiveFeatureFlags, parseFeatureFlagDecideResponse, PostHogFeatureFlags } from '../posthog-featureflags'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
+import { PostHogConfig } from '../types'
 
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
@@ -15,7 +16,9 @@ describe('featureflags', () => {
         token: 'random fake token',
         persistence: 'memory',
         api_host: 'https://app.posthog.com',
-    }
+    } as PostHogConfig
+
+    let mockWarn
 
     beforeEach(() => {
         instance = {
@@ -23,7 +26,7 @@ describe('featureflags', () => {
             get_distinct_id: () => 'blah id',
             getGroups: () => {},
             persistence: new PostHogPersistence(config),
-            requestRouter: new RequestRouter({ config }),
+            requestRouter: new RequestRouter({ config } as any),
             register: (props) => instance.persistence.register(props),
             unregister: (key) => instance.persistence.unregister(key),
             get_property: (key) => instance.persistence.props[key],
@@ -40,8 +43,8 @@ describe('featureflags', () => {
 
         featureFlags = new PostHogFeatureFlags(instance)
 
-        jest.spyOn(instance, 'capture').mockReturnValue()
-        jest.spyOn(window.console, 'warn').mockImplementation()
+        jest.spyOn(instance, 'capture').mockReturnValue(undefined)
+        mockWarn = jest.spyOn(window.console, 'warn').mockImplementation()
 
         instance.persistence.register({
             $feature_flag_payloads: {
@@ -76,7 +79,7 @@ describe('featureflags', () => {
     })
 
     it('should warn if decide endpoint was not hit and no flags exist', () => {
-        window.POSTHOG_DEBUG = true
+        ;(window as any).POSTHOG_DEBUG = true
         featureFlags.instance.decideEndpointWasHit = false
         instance.persistence.unregister('$enabled_feature_flags')
         instance.persistence.unregister('$active_feature_flags')
@@ -88,7 +91,7 @@ describe('featureflags', () => {
             'isFeatureEnabled for key "beta-feature" failed. Feature flags didn\'t load in time.'
         )
 
-        window.console.warn.mockClear()
+        mockWarn.mockClear()
 
         expect(featureFlags.getFeatureFlag('beta-feature')).toEqual(undefined)
         expect(window.console.warn).toHaveBeenCalledWith(
@@ -249,7 +252,7 @@ describe('featureflags', () => {
         )
 
         // Clear the mock to reset call count
-        window.console.warn.mockClear()
+        mockWarn.mockClear()
 
         // Test with suppressing warning (new behavior)
         featureFlags.override(
@@ -1031,6 +1034,7 @@ describe('parseFeatureFlagDecideResponse', () => {
         // checks that nothing fails when asking for ?v=2 and getting a ?v=1 response
         const decideResponse = { featureFlags: ['beta-feature', 'alpha-feature-2'] }
 
+        // @ts-expect-error testing backwards compatibility
         parseFeatureFlagDecideResponse(decideResponse, persistence)
 
         expect(persistence.register).toHaveBeenLastCalledWith({

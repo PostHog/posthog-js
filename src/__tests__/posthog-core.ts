@@ -7,7 +7,7 @@ import * as globals from '../utils/globals'
 import { USER_STATE } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { logger } from '../utils/logger'
-import { PostHogConfig } from '../types'
+import { DecideResponse, PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
@@ -27,7 +27,7 @@ describe('posthog core', () => {
         _send_request: jest.fn(),
     }
 
-    const posthogWith = (config: Partial<PostHogConfig>, overrides?: Partial<PostHog>) => {
+    const posthogWith = (config: Partial<PostHogConfig>, overrides?: Partial<PostHog>): PostHog => {
         const posthog = defaultPostHog().init('testtoken', config, uuidv7())
         return Object.assign(posthog, overrides || {})
     }
@@ -138,6 +138,7 @@ describe('posthog core', () => {
             const posthog = posthogWith(defaultConfig, defaultOverrides)
             posthog._addCaptureHook(hook)
 
+            // @ts-expect-error - testing invalid input
             expect(() => posthog.capture({ event: 'object as name' })).not.toThrow()
             expect(hook).not.toHaveBeenCalled()
             expect(logger.error).toHaveBeenCalledWith('No event name provided to posthog.capture')
@@ -295,7 +296,7 @@ describe('posthog core', () => {
 
         it('sends payloads to alternative endpoint if given', () => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
-            posthog._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } })
+            posthog._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } } as DecideResponse)
 
             posthog.capture('event-name', { foo: 'bar', length: 0 })
 
@@ -320,7 +321,7 @@ describe('posthog core', () => {
 
         it('sends payloads to overriden _url, even if alternative endpoint is set', () => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
-            posthog._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } })
+            posthog._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } } as DecideResponse)
 
             posthog.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
 
@@ -336,7 +337,7 @@ describe('posthog core', () => {
         it('enables compression from decide response', () => {
             const posthog = posthogWith({})
 
-            posthog._afterDecideResponse({ supportedCompression: ['gzip-js', 'base64'] })
+            posthog._afterDecideResponse({ supportedCompression: ['gzip-js', 'base64'] } as DecideResponse)
 
             expect(posthog.compression).toEqual('gzip-js')
         })
@@ -344,7 +345,7 @@ describe('posthog core', () => {
         it('enables compression from decide response when only one received', () => {
             const posthog = posthogWith({})
 
-            posthog._afterDecideResponse({ supportedCompression: ['base64'] })
+            posthog._afterDecideResponse({ supportedCompression: ['base64'] } as DecideResponse)
 
             expect(posthog.compression).toEqual('base64')
         })
@@ -352,7 +353,7 @@ describe('posthog core', () => {
         it('does not enable compression from decide response if compression is disabled', () => {
             const posthog = posthogWith({ disable_compression: true, persistence: 'memory' })
 
-            posthog._afterDecideResponse({ supportedCompression: ['gzip-js', 'base64'] })
+            posthog._afterDecideResponse({ supportedCompression: ['gzip-js', 'base64'] } as DecideResponse)
 
             expect(posthog.compression).toEqual(undefined)
         })
@@ -360,7 +361,7 @@ describe('posthog core', () => {
         it('defaults to /e if no endpoint is given', () => {
             const posthog = posthogWith({})
 
-            posthog._afterDecideResponse({})
+            posthog._afterDecideResponse({} as DecideResponse)
 
             expect(posthog.analyticsDefaultEndpoint).toEqual('/e/')
         })
@@ -368,7 +369,7 @@ describe('posthog core', () => {
         it('uses the specified analytics endpoint if given', () => {
             const posthog = posthogWith({})
 
-            posthog._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } })
+            posthog._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } } as DecideResponse)
 
             expect(posthog.analyticsDefaultEndpoint).toEqual('/i/v0/e/')
         })
@@ -411,7 +412,7 @@ describe('posthog core', () => {
         })
 
         it('returns calculated properties', () => {
-            expect(posthog._calculate_event_properties('custom_event', { event: 'prop' })).toEqual({
+            expect(posthog._calculate_event_properties('custom_event', { event: 'prop' }, new Date())).toEqual({
                 token: 'testtoken',
                 event: 'prop',
                 $lib: 'web',
@@ -432,7 +433,7 @@ describe('posthog core', () => {
                 overrides
             )
 
-            expect(posthog._calculate_event_properties('custom_event', { event: 'prop' })).toEqual({
+            expect(posthog._calculate_event_properties('custom_event', { event: 'prop' }, new Date())).toEqual({
                 token: 'testtoken',
                 event: 'prop',
                 $lib: 'web',
@@ -457,7 +458,9 @@ describe('posthog core', () => {
             )
 
             expect(
-                posthog._calculate_event_properties('custom_event', { event: 'prop' })['$process_person_profile']
+                posthog._calculate_event_properties('custom_event', { event: 'prop' }, new Date())[
+                    '$process_person_profile'
+                ]
             ).toEqual(true)
         })
 
@@ -469,12 +472,12 @@ describe('posthog core', () => {
                 overrides
             )
 
-            expect(posthog._calculate_event_properties('$snapshot', { event: 'prop' })).toEqual({
+            expect(posthog._calculate_event_properties('$snapshot', { event: 'prop' }, new Date())).toEqual({
                 token: 'testtoken',
                 event: 'prop',
                 distinct_id: 'abc',
             })
-            expect(posthog.sessionManager!.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
+            expect(posthog.sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
         })
 
         it('calls sanitize_properties', () => {
@@ -486,7 +489,7 @@ describe('posthog core', () => {
                 overrides
             )
 
-            expect(posthog._calculate_event_properties('custom_event', { event: 'prop' })).toEqual({
+            expect(posthog._calculate_event_properties('custom_event', { event: 'prop' }, new Date())).toEqual({
                 event_name: 'custom_event',
                 token: 'testtoken',
                 $process_person_profile: true,
@@ -496,7 +499,7 @@ describe('posthog core', () => {
         it('saves $snapshot data and token for $snapshot events', () => {
             posthog = posthogWith({}, overrides)
 
-            expect(posthog._calculate_event_properties('$snapshot', { $snapshot_data: {} })).toEqual({
+            expect(posthog._calculate_event_properties('$snapshot', { $snapshot_data: {} }, new Date())).toEqual({
                 token: 'testtoken',
                 $snapshot_data: {},
                 distinct_id: 'abc',
@@ -506,7 +509,7 @@ describe('posthog core', () => {
         it("doesn't modify properties passed into it", () => {
             const properties = { prop1: 'val1', prop2: 'val2' }
 
-            posthog._calculate_event_properties('custom_event', properties)
+            posthog._calculate_event_properties('custom_event', properties, new Date())
 
             expect(Object.keys(properties)).toEqual(['prop1', 'prop2'])
         })
@@ -514,7 +517,7 @@ describe('posthog core', () => {
         it('adds page title to $pageview', () => {
             document!.title = 'test'
 
-            expect(posthog._calculate_event_properties('$pageview', {})).toEqual(
+            expect(posthog._calculate_event_properties('$pageview', {}, new Date())).toEqual(
                 expect.objectContaining({ title: 'test' })
             )
         })
@@ -769,13 +772,10 @@ describe('posthog core', () => {
     })
 
     describe('init()', () => {
-        // @ts-expect-error - it's fine to spy on window
         jest.spyOn(window, 'window', 'get')
 
         beforeEach(() => {
-            // @ts-expect-error - it's fine to spy on window
             jest.spyOn(window.console, 'warn').mockImplementation()
-            // @ts-expect-error - it's fine to spy on window
             jest.spyOn(window.console, 'error').mockImplementation()
         })
 

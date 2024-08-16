@@ -19,6 +19,8 @@
         "test:react": "cd react; pnpm test",
         "test:functional": "jest functional_tests",
         "test-watch": "jest --watch src",
+        "test:typecheck": "cd src/__tests__ && tsc --noEmit --project tsconfig.json",
+        "typecheck": "tsc --noEmit --project tsconfig.json",
         "cypress": "cypress open",
         "prepare": "husky install",
         "deprecate-old-versions": "node scripts/deprecate-old-versions.mjs"
@@ -33,6 +35,7 @@
         "react/package.json"
     ],
     "dependencies": {
+        "@types/web": "^0.0.154",
         "fflate": "^0.4.8",
         "preact": "^10.19.3",
         "web-vitals": "^4.0.1"

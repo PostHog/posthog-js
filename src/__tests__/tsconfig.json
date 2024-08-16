@@ -1,0 +1,11 @@
+{
+    "extends": "../../tsconfig.json",
+    "compilerOptions": {
+        "skipLibCheck": true,
+        "strict": false,
+        "noImplicitReturns": false,
+        "typeRoots": ["../../node_modules/@types", "../../src/types"]
+    },
+    "include": ["./**/*.ts*"],
+    "exclude": []
+}
