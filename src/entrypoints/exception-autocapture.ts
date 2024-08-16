@@ -48,6 +48,9 @@ const posthogErrorWrappingFunctions = {
     wrapOnError,
     wrapUnhandledRejection,
 }
-;(window as any).posthogErrorWrappingFunctions = posthogErrorWrappingFunctions
+
+if (window) {
+    ;(window as any).posthogErrorWrappingFunctions = posthogErrorWrappingFunctions
+}
 
 export default posthogErrorWrappingFunctions
