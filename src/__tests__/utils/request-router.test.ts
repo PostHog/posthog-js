@@ -85,6 +85,11 @@ describe('request-router', () => {
                 '/decide'
             )
         ).toEqual('https://my-flag-domain.domain.com/decide')
+
+        // specifically test undefined flags_api_host
+        expect(router('https://us.i.posthog.com/', undefined, undefined).endpointFor('api', '/decide')).toEqual(
+            'https://us.i.posthog.com/decide'
+        )
     })
 
     it('should react to config changes', () => {
