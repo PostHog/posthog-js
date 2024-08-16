@@ -1,10 +1,11 @@
 import { RequestRouter, RequestRouterTarget } from '../../utils/request-router'
 
 describe('request-router', () => {
-    const router = (api_host = 'https://app.posthog.com', ui_host?: string) => {
+    const router = (api_host = 'https://app.posthog.com', ui_host?: string, flags_api_host?: string) => {
         return new RequestRouter({
             config: {
                 api_host,
+                flags_api_host,
                 ui_host,
             },
         } as any)
@@ -68,6 +69,22 @@ describe('request-router', () => {
         expect(router('https://my.domain.com/', 'https://app.posthog.com/').endpointFor('ui')).toEqual(
             'https://us.posthog.com'
         )
+    })
+
+    it('should use the flags_api_host if provided for decide requests', () => {
+        expect(
+            router('https://my.domain.com/', undefined, 'https://my-flag-domain.domain.com').endpointFor(
+                'api',
+                '/decide'
+            )
+        ).toEqual('https://my-flag-domain.domain.com/decide')
+
+        expect(
+            router('https://us.i.posthog.com/', undefined, 'https://my-flag-domain.domain.com').endpointFor(
+                'api',
+                '/decide'
+            )
+        ).toEqual('https://my-flag-domain.domain.com/decide')
     })
 
     it('should react to config changes', () => {

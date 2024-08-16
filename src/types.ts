@@ -117,6 +117,13 @@ export interface HeatmapConfig {
 
 export interface PostHogConfig {
     api_host: string
+    /**
+     * An optional url to use for feature flags requests, to prevent
+     * (incorrect) interference from ad blockers. Most people don't need
+     * this unless you already have a reverse proxy set up and
+     * your tracking URL is being blocked by ad blockers.
+     */
+    flags_api_host?: string
     /** @deprecated - This property is no longer supported */
     api_method?: string
     api_transport?: 'XHR' | 'fetch'

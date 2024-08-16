@@ -15,6 +15,7 @@
         "prepublishOnly": "pnpm lint && pnpm test && pnpm build && pnpm test:react",
         "test": "pnpm test:unit && pnpm test:custom-eslint-rules && pnpm test:functional",
         "test:unit": "jest src",
+        "test:specific": "jest",
         "test:custom-eslint-rules": "jest eslint-rules",
         "test:react": "cd react; pnpm test",
         "test:functional": "jest functional_tests",

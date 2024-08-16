@@ -17,6 +17,7 @@ export enum RequestRouterRegion {
 export type RequestRouterTarget = 'api' | 'ui' | 'assets'
 
 const ingestionDomain = 'i.posthog.com'
+const flagsPath = '/decide'
 
 export class RequestRouter {
     instance: PostHog
@@ -28,6 +29,9 @@ export class RequestRouter {
 
     get apiHost(): string {
         return this.instance.config.api_host.trim().replace(/\/$/, '')
+    }
+    get flagsApiHost(): string | undefined {
+        return this.instance.config.flags_api_host?.trim().replace(/\/$/, '')
     }
     get uiHost(): string | undefined {
         const host = this.instance.config.ui_host?.replace(/\/$/, '')
@@ -61,8 +65,9 @@ export class RequestRouter {
             return (this.uiHost || this.apiHost.replace(`.${ingestionDomain}`, '.posthog.com')) + path
         }
 
+        const useFlagsAPIHost = path.startsWith(flagsPath) && this.flagsApiHost
         if (this.region === RequestRouterRegion.CUSTOM) {
-            return this.apiHost + path
+            return useFlagsAPIHost ? this.flagsApiHost + path : this.apiHost + path
         }
 
         const suffix = ingestionDomain + path
@@ -71,7 +76,7 @@ export class RequestRouter {
             case 'assets':
                 return `https://${this.region}-assets.${suffix}`
             case 'api':
-                return `https://${this.region}.${suffix}`
+                return useFlagsAPIHost ? this.flagsApiHost + path : `https://${this.region}.${suffix}`
         }
     }
 

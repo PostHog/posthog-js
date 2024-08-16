@@ -117,6 +117,7 @@ let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 &&
 
 export const defaultConfig = (): PostHogConfig => ({
     api_host: 'https://us.i.posthog.com',
+    flags_api_host: undefined,
     ui_host: null,
     token: '',
     autocapture: true,
@@ -899,6 +900,7 @@ export class PostHog {
 
         if (this.requestRouter.region === RequestRouterRegion.CUSTOM) {
             properties['$lib_custom_api_host'] = this.config.api_host
+            properties['$lib_custom_flags_api_host'] = this.config.flags_api_host
         }
 
         if (

@@ -46,6 +46,7 @@ export const updatePostHogConsent = (consentGiven: boolean) => {
 if (typeof window !== 'undefined') {
     posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY || '', {
         api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com',
+        flags_api_host: process.env.NEXT_PUBLIC_POSTHOG_FLAGS_HOST || undefined,
         session_recording: {
             recordCrossOriginIframes: true,
         },
