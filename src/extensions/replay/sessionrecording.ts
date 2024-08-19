@@ -358,7 +358,7 @@ export class SessionRecording {
 
         this._setupSampling()
 
-        if (!isNullish(this._linkedFlag)) {
+        if (!isNullish(this._linkedFlag) && !this._linkedFlagSeen) {
             const linkedFlag = isString(this._linkedFlag) ? this._linkedFlag : this._linkedFlag.flag
             const linkedVariant = isString(this._linkedFlag) ? null : this._linkedFlag.variant
             this.instance.onFeatureFlags((_flags, variants) => {
@@ -904,5 +904,16 @@ export class SessionRecording {
             _noTruncate: true,
             _batchKey: SESSION_RECORDING_BATCH_KEY,
         })
+    }
+
+    /**
+     * this ignores the linked flag config and causes capture to start
+     * (if recording would have started had the flag been received i.e. it does not override other config).
+     *
+     * It is not usual to call this directly,
+     * instead call `posthog.startSessionRecording({linked_flag: true})`
+     * */
+    public overrideLinkedFlag() {
+        this._linkedFlagSeen = true
     }
 }
