@@ -55,6 +55,7 @@ import { uuidv7 } from './uuidv7'
 import { Survey, SurveyCallback, SurveyQuestionBranchingType } from './posthog-surveys-types'
 import {
     isArray,
+    isBoolean,
     isEmptyObject,
     isEmptyString,
     isFunction,
@@ -1778,9 +1779,11 @@ export class PostHog {
      * turns session recording on, and updates the config option `disable_session_recording` to false
      * @param override.sampling - optional boolean to override the default sampling behavior - ensures the next session recording to start will not be skipped by sampling config.
      * @param override.linked_flag - optional boolean to override the default linked_flag behavior - ensures the next session recording to start will not be skipped by linked_flag config.
+     * @param override - optional boolean to override the default sampling behavior - ensures the next session recording to start will not be skipped by sampling or linked_flag config. `true` is shorthand for { sampling: true, linked_flag: true }
      */
-    startSessionRecording(override?: { sampling?: boolean; linked_flag?: boolean }): void {
-        if (override?.sampling) {
+    startSessionRecording(override?: { sampling?: boolean; linked_flag?: boolean } | true): void {
+        const overrideAll = isBoolean(override) && override
+        if (overrideAll || override?.sampling) {
             // allow the session id check to rotate session id if necessary
             const ids = this.sessionManager?.checkAndGetSessionAndWindowId()
             this.persistence?.register({
@@ -1789,7 +1792,7 @@ export class PostHog {
             })
             logger.info('Session recording started with sampling override for session: ', ids?.sessionId)
         }
-        if (override?.linked_flag) {
+        if (overrideAll || override?.linked_flag) {
             this.sessionRecording?.overrideLinkedFlag()
             logger.info('Session recording started with linked_flags override')
         }
