@@ -21,8 +21,6 @@ jobs:
       matrix:
         browser:
           - chrome
-          - ie
-          - safari
         include:
           - browser: chrome
             name: Chrome

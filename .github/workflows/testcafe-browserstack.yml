@@ -14,18 +14,18 @@ env:
 
 jobs:
   browsers:
-    name: Test on ${{ matrix.name }}
+    name: Test on ${{ matrix.name }} with browserstack
     runs-on: ubuntu-latest
 
     strategy:
       matrix:
-        browser:
+        browserstack:
           - ie
           - safari
         include:
-          - browser: ie
+          - browserstack: ie
             name: IE11
-          - browser: safari
+          - browserstack: safari
             name: Safari
 
     steps:
@@ -48,4 +48,4 @@ jobs:
         run: pnpm build-rollup
 
       - name: Run ${{ matrix.name }} test
-        run: node scripts/run-testcafe-with-retries.mjs --browser "browserstack:${{ matrix.browser }}" --attempts 3
+        run: node scripts/run-testcafe-with-retries.mjs --browser "browserstack:${{ matrix.browserstack }}" --attempts 3
