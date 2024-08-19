@@ -1,4 +1,4 @@
-name: TestCafe
+name: TestCafe BrowserStack
 on: [pull_request]
 env:
   BROWSERSTACK_ACCESS_KEY: "${{ secrets.BROWSERSTACK_ACCESS_KEY }}"
@@ -20,12 +20,13 @@ jobs:
     strategy:
       matrix:
         browser:
-          - chrome
           - ie
           - safari
         include:
-          - browser: chrome
-            name: Chrome
+          - browser: ie
+            name: IE11
+          - browser: safari
+            name: Safari
 
     steps:
       - uses: actions/checkout@v4
@@ -47,4 +48,4 @@ jobs:
         run: pnpm build-rollup
 
       - name: Run ${{ matrix.name }} test
-        run: node scripts/run-testcafe-with-retries.mjs --browser "${{ matrix.browser }}" --attempts 3
+        run: node scripts/run-testcafe-with-retries.mjs --browser "browserstack:${{ matrix.browser }}" --attempts 3
