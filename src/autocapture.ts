@@ -57,7 +57,7 @@ export class Autocapture {
         return config
     }
 
-    private _addDomEventHandlers(): void {
+    _addDomEventHandlers(): void {
         if (!this.isBrowserSupported()) {
             logger.info('Disabling Automatic Event Collection because this browser is not supported')
             return

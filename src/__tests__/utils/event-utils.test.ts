@@ -39,7 +39,7 @@ describe(`event-utils`, () => {
         const browserTestcases: {
             name: string
             userAgent: string
-            vendor: string
+            vendor?: string
             expectedVersion: number | null
             expectedBrowser: string
         }[] = [
@@ -238,11 +238,11 @@ describe(`event-utils`, () => {
         ]
 
         test.each(browserTestcases)('browser version %s', ({ userAgent, vendor, expectedVersion }) => {
-            expect(Info.browserVersion(userAgent, vendor, '')).toBe(expectedVersion)
+            expect(Info.browserVersion(userAgent, vendor)).toBe(expectedVersion)
         })
 
         test.each(browserTestcases)('browser %s', ({ userAgent, vendor, expectedBrowser }) => {
-            expect(Info.browser(userAgent, vendor, '')).toBe(expectedBrowser)
+            expect(Info.browser(userAgent, vendor)).toBe(expectedBrowser)
         })
 
         /**
@@ -287,7 +287,7 @@ describe(`event-utils`, () => {
         test('can rely on vendor string to detect safari', () => {
             const ua = 'Mozilla/5.0 (darwin) AppleWebKit/537.36 (KHTML, like Gecko) jsdom/16.7.0'
             const vendor = 'Apple Computer, Inc.'
-            expect(detectBrowser(ua, vendor, '')).toBe('Safari')
+            expect(detectBrowser(ua, vendor)).toBe('Safari')
         })
 
         test('osVersion', () => {

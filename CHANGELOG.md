@@ -1,3 +1,28 @@
+## 1.155.6 - 2024-08-19
+
+- fix: only add to window when it exists (#1362)
+
+## 1.155.5 - 2024-08-19
+
+- fix: endpoint for is already called inside loadscript (#1365)
+- chore: Run ts on test files (#1358)
+
+## 1.155.4 - 2024-08-14
+
+- fix: Expose version (#1357)
+
+## 1.155.3 - 2024-08-14
+
+- feat: default to gzip compression instead of base64 (#1355)
+
+## 1.155.2 - 2024-08-13
+
+- remove x-posthog-token header (#1354)
+
+## 1.155.1 - 2024-08-13
+
+- feat: Added token to headers (#1347)
+
 ## 1.155.0 - 2024-08-09
 
 - feat: Add prev pageview duration (#1348)

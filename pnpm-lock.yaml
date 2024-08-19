@@ -10,6 +10,9 @@ patchedDependencies:
     path: patches/rrweb@2.0.0-alpha.13.patch
 
 dependencies:
+  '@types/web':
+    specifier: ^0.0.154
+    version: 0.0.154
   fflate:
     specifier: ^0.4.8
     version: 0.4.8
@@ -3017,6 +3020,10 @@ packages:
   /@types/uuid@9.0.1:
     resolution: {integrity: sha512-rFT3ak0/2trgvp4yYZo5iKFEPsET7vKydKF+VRCxlQ9bpheehyAJH89dAkaLEq/j/RZXJIqcgsmPJKUP1Z28HA==}
     dev: true
+
+  /@types/web@0.0.154:
+    resolution: {integrity: sha512-Tc10Nkpbb8AgM3iGnrvpKVb6x8pzrZpMCPqMJe8htXoEdNDKojEevNAkCjxkjCLZF2p1ZB+gknAwdbkypxwxKg==}
+    dev: false
 
   /@types/yargs-parser@15.0.0:
     resolution: {integrity: sha512-FA/BWv8t8ZWJ+gEOnLLd8ygxH/2UFbAvgEonyfN6yWGLKc7zVjbpl2Y4CTjid9h2RfgPP6SEt6uHwEOply00yw==}

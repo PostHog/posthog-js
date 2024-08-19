@@ -264,6 +264,7 @@ export class PostHog {
     __request_queue: QueuedRequestOptions[]
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
+    version = Config.LIB_VERSION
 
     SentryIntegration: typeof SentryIntegration
     sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
@@ -334,7 +335,7 @@ export class PostHog {
         token: string,
         config?: OnlyValidKeys<Partial<PostHogConfig>, Partial<PostHogConfig>>,
         name?: string
-    ): PostHog | void {
+    ): PostHog | undefined {
         if (!name || name === PRIMARY_INSTANCE_NAME) {
             // This means we are initializing the primary instance (i.e. this)
             return this._init(token, config, name)
@@ -390,7 +391,7 @@ export class PostHog {
             logger.error('[posthog] on_xhr_error is deprecated. Use on_request_error instead')
         }
 
-        this.compression = config.disable_compression ? undefined : Compression.Base64
+        this.compression = config.disable_compression ? undefined : Compression.GZipJS
 
         this.persistence = new PostHogPersistence(this.config)
         this.sessionPersistence =
@@ -627,7 +628,9 @@ export class PostHog {
             // Whether to detect ip info or not
             ip: this.config.ip ? 1 : 0,
         })
-        options.headers = this.config.request_headers
+        options.headers = {
+            ...this.config.request_headers,
+        }
         options.compression = options.compression === 'best-available' ? this.compression : options.compression
 
         request({
@@ -752,11 +755,12 @@ export class PostHog {
      * @param {String} [config.transport] Transport method for network request ('XHR' or 'sendBeacon').
      * @param {Date} [config.timestamp] Timestamp is a Date object. If not set, it'll automatically be set to the current time.
      */
-    capture(event_name: string, properties?: Properties | null, options?: CaptureOptions): CaptureResult | void {
+    capture(event_name: string, properties?: Properties | null, options?: CaptureOptions): CaptureResult | undefined {
         // While developing, a developer might purposefully _not_ call init(),
         // in this case, we would like capture to be a noop.
         if (!this.__loaded || !this.persistence || !this.sessionPersistence || !this._requestQueue) {
-            return logger.uninitializedWarning('posthog.capture')
+            logger.uninitializedWarning('posthog.capture')
+            return
         }
 
         if (this.consent.isOptedOut()) {
@@ -861,7 +865,8 @@ export class PostHog {
         this.on('eventCaptured', (data) => callback(data.event, data))
     }
 
-    _calculate_event_properties(event_name: string, event_properties: Properties, timestamp: Date): Properties {
+    _calculate_event_properties(event_name: string, event_properties: Properties, timestamp?: Date): Properties {
+        timestamp = timestamp || new Date()
         if (!this.persistence || !this.sessionPersistence) {
             return event_properties
         }
