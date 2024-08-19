@@ -35,7 +35,6 @@
         "react/package.json"
     ],
     "dependencies": {
-        "@types/web": "^0.0.154",
         "fflate": "^0.4.8",
         "preact": "^10.19.3",
         "web-vitals": "^4.0.1"
@@ -62,6 +61,7 @@
         "@types/react-dom": "^18.0.10",
         "@types/sinon": "^17.0.1",
         "@types/uuid": "^9.0.1",
+        "@types/web": "^0.0.154",
         "@typescript-eslint/eslint-plugin": "^6.19.0",
         "@typescript-eslint/parser": "^6.19.0",
         "babel-eslint": "10.1.0",
