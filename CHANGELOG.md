@@ -1,3 +1,8 @@
+## 1.155.5 - 2024-08-19
+
+- fix: endpoint for is already called inside loadscript (#1365)
+- chore: Run ts on test files (#1358)
+
 ## 1.155.4 - 2024-08-14
 
 - fix: Expose version (#1357)
