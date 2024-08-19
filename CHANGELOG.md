@@ -1,3 +1,7 @@
+## 1.157.0 - 2024-08-19
+
+- feat: allow overriding linked flag (#1368)
+
 ## 1.156.1 - 2024-08-19
 
 - fix: Move @types/web to dev dependencies (#1367)
