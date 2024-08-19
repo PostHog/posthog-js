@@ -27,7 +27,11 @@ export class RequestRouter {
     }
 
     get apiHost(): string {
-        return this.instance.config.api_host.trim().replace(/\/$/, '')
+        const host = this.instance.config.api_host.trim().replace(/\/$/, '')
+        if (host === 'https://app.posthog.com') {
+            return 'https://us.i.posthog.com'
+        }
+        return host
     }
     get uiHost(): string | undefined {
         const host = this.instance.config.ui_host?.replace(/\/$/, '')
