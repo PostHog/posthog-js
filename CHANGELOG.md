@@ -1,3 +1,7 @@
+## 1.155.6 - 2024-08-19
+
+- fix: only add to window when it exists (#1362)
+
 ## 1.155.5 - 2024-08-19
 
 - fix: endpoint for is already called inside loadscript (#1365)
