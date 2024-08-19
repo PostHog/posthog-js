@@ -1,3 +1,7 @@
+## 1.156.1 - 2024-08-19
+
+- fix: Move @types/web to dev dependencies (#1367)
+
 ## 1.156.0 - 2024-08-19
 
 - fix: pass original fetch args along (#1351)
