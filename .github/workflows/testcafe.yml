@@ -27,6 +27,8 @@ jobs:
         include:
           - browser: 'chrome:headless'
             name: Chrome
+          - browser: 'firefox:headless'
+            name: Firefox
           - browser: 'browserstack:ie'
             name: IE11
           - browser: 'browserstack:safari'
