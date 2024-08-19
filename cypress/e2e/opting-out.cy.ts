@@ -188,6 +188,60 @@ describe('opting out', () => {
 
             pollPhCaptures('$snapshot').then(assertThatRecordingStarted)
         })
+
+        it('can override linked_flags when starting session recording', () => {
+            cy.intercept('POST', '/decide/*', {
+                autocapture_opt_out: true,
+                editorParams: {},
+                isAuthenticated: false,
+                sessionRecording: {
+                    endpoint: '/ses/',
+                    // a flag that doesn't exist, can never be recorded
+                    linkedFlag: 'i am a flag that does not exist',
+                },
+            }).as('decide')
+
+            cy.posthogInit({
+                opt_out_capturing_by_default: true,
+            })
+
+            assertWhetherPostHogRequestsWereCalled({
+                '@recorder': false,
+                '@decide': true,
+                '@session-recording': false,
+            })
+
+            cy.posthog().invoke('opt_in_capturing')
+
+            cy.posthog().invoke('startSessionRecording')
+
+            cy.phCaptures({ full: true }).then((captures) => {
+                expect((captures || []).map((c) => c.event)).to.deep.equal(['$opt_in'])
+            })
+
+            assertWhetherPostHogRequestsWereCalled({
+                '@recorder': true,
+                '@decide': true,
+                // no call to session-recording yet
+            })
+
+            cy.resetPhCaptures()
+
+            cy.get('[data-cy-input]')
+                .type('hello posthog!')
+                .then(() => {
+                    cy.phCaptures().then((captures) => {
+                        // no session recording events yet
+                        expect(captures || []).to.deep.equal([])
+                    })
+                })
+
+            cy.posthog().invoke('startSessionRecording', { linked_flag: true })
+
+            cy.get('[data-cy-input]').type('hello posthog!')
+
+            pollPhCaptures('$snapshot').then(assertThatRecordingStarted)
+        })
     })
 
     describe('user opts out after start', () => {

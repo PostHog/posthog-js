@@ -1694,6 +1694,24 @@ describe('SessionRecording', () => {
             expect(sessionRecording['_linkedFlagSeen']).toEqual(false)
             expect(sessionRecording['status']).toEqual('buffering')
         })
+
+        it('can be overriden', () => {
+            expect(sessionRecording['_linkedFlag']).toEqual(null)
+            expect(sessionRecording['_linkedFlagSeen']).toEqual(false)
+
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
+            )
+
+            expect(sessionRecording['_linkedFlag']).toEqual('the-flag-key')
+            expect(sessionRecording['_linkedFlagSeen']).toEqual(false)
+            expect(sessionRecording['status']).toEqual('buffering')
+
+            sessionRecording.overrideLinkedFlag()
+
+            expect(sessionRecording['_linkedFlagSeen']).toEqual(true)
+            expect(sessionRecording['status']).toEqual('active')
+        })
     })
 
     describe('buffering minimum duration', () => {

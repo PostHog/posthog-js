@@ -1775,11 +1775,11 @@ export class PostHog {
     }
 
     /**
-     * turns session recording on, and updates the config option
-     * disable_session_recording to false
+     * turns session recording on, and updates the config option `disable_session_recording` to false
      * @param override.sampling - optional boolean to override the default sampling behavior - ensures the next session recording to start will not be skipped by sampling config.
+     * @param override.linked_flag - optional boolean to override the default linked_flag behavior - ensures the next session recording to start will not be skipped by linked_flag config.
      */
-    startSessionRecording(override?: { sampling?: boolean }): void {
+    startSessionRecording(override?: { sampling?: boolean; linked_flag?: boolean }): void {
         if (override?.sampling) {
             // allow the session id check to rotate session id if necessary
             const ids = this.sessionManager?.checkAndGetSessionAndWindowId()
@@ -1788,6 +1788,10 @@ export class PostHog {
                 [SESSION_RECORDING_IS_SAMPLED]: true,
             })
             logger.info('Session recording started with sampling override for session: ', ids?.sessionId)
+        }
+        if (override?.linked_flag) {
+            this.sessionRecording?.overrideLinkedFlag()
+            logger.info('Session recording started with linked_flags override')
         }
         this.set_config({ disable_session_recording: false })
     }
