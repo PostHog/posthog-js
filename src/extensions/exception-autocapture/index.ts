@@ -58,18 +58,12 @@ export class ExceptionObserver {
             cb()
         }
 
-        this.instance.requestRouter.loadScript(
-            this.instance.requestRouter.endpointFor(
-                'assets',
-                `/static/exception-autocapture.js?v=${Config.LIB_VERSION}`
-            ),
-            (err) => {
-                if (err) {
-                    return logger.error(LOGGER_PREFIX + ' failed to load script', err)
-                }
-                cb()
+        this.instance.requestRouter.loadScript(`/static/exception-autocapture.js?v=${Config.LIB_VERSION}`, (err) => {
+            if (err) {
+                return logger.error(LOGGER_PREFIX + ' failed to load script', err)
             }
-        )
+            cb()
+        })
     }
 
     private startCapturing = () => {
