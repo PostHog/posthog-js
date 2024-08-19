@@ -268,9 +268,9 @@ export const localPlusCookieStore: PersistentStore = {
         return null
     },
 
-    set: function (name, value, days, cross_subdomain, is_secure) {
+    set: function (name, value, days, cross_subdomain, is_secure, debug) {
         try {
-            localStore.set(name, value)
+            localStore.set(name, value, undefined, undefined, debug)
             const cookiePersistedProperties: Record<string, any> = {}
             COOKIE_PERSISTED_PROPERTIES.forEach((key) => {
                 if (value[key]) {
@@ -279,7 +279,7 @@ export const localPlusCookieStore: PersistentStore = {
             })
 
             if (Object.keys(cookiePersistedProperties).length) {
-                cookieStore.set(name, cookiePersistedProperties, days, cross_subdomain, is_secure)
+                cookieStore.set(name, cookiePersistedProperties, days, cross_subdomain, is_secure, debug)
             }
         } catch (err) {
             localStore.error(err)

@@ -70,15 +70,13 @@ export class WebVitalsAutocapture {
             cb()
         }
 
-        this.instance.requestRouter.loadScript(
-            this.instance.requestRouter.endpointFor('assets', `/static/web-vitals.js?v=${Config.LIB_VERSION}`),
-            (err) => {
-                if (err) {
-                    logger.error(LOGGER_PREFIX + ' failed to load script', err)
-                }
-                cb()
+        this.instance.requestRouter.loadScript(`/static/web-vitals.js?v=${Config.LIB_VERSION}`, (err) => {
+            if (err) {
+                logger.error(LOGGER_PREFIX + ' failed to load script', err)
+                return
             }
-        )
+            cb()
+        })
     }
 
     private _currentURL(): string | undefined {
@@ -118,7 +116,7 @@ export class WebVitalsAutocapture {
             return
         }
 
-        this.buffer = this.buffer || {}
+        this.buffer = this.buffer || { url: undefined, metrics: [], firstMetricTimestamp: undefined }
 
         const $currentUrl = this._currentURL()
         if (isUndefined($currentUrl)) {

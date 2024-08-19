@@ -267,6 +267,7 @@ export class PostHog {
     __request_queue: QueuedRequestOptions[]
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
+    version = Config.LIB_VERSION
 
     SentryIntegration: typeof SentryIntegration
     sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
@@ -338,7 +339,7 @@ export class PostHog {
         token: string,
         config?: OnlyValidKeys<Partial<PostHogConfig>, Partial<PostHogConfig>>,
         name?: string
-    ): PostHog | void {
+    ): PostHog | undefined {
         if (!name || name === PRIMARY_INSTANCE_NAME) {
             // This means we are initializing the primary instance (i.e. this)
             return this._init(token, config, name)
@@ -394,13 +395,15 @@ export class PostHog {
             logger.error('[posthog] on_xhr_error is deprecated. Use on_request_error instead')
         }
 
-        this.compression = config.disable_compression ? undefined : Compression.Base64
+        this.compression = config.disable_compression ? undefined : Compression.GZipJS
 
         this.persistence = new PostHogPersistence(this.config)
         this.sessionPersistence =
             this.config.persistence === 'sessionStorage'
                 ? this.persistence
                 : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
+        const initialPersistenceProps = { ...this.persistence.props }
+        const initialSessionProps = { ...this.sessionPersistence.props }
 
         this._requestQueue = new RequestQueue((req) => this._send_retriable_request(req))
         this._retryQueue = new RetryQueue(this)
@@ -433,6 +436,15 @@ export class PostHog {
         // if any instance on the page has debug = true, we set the
         // global debug to be true
         Config.DEBUG = Config.DEBUG || this.config.debug
+        if (Config.DEBUG) {
+            logger.info('Starting in debug mode', {
+                this: this,
+                config,
+                thisC: { ...this.config },
+                p: initialPersistenceProps,
+                s: initialSessionProps,
+            })
+        }
 
         this._sync_opt_out_with_persistence()
 
@@ -621,7 +633,9 @@ export class PostHog {
             // Whether to detect ip info or not
             ip: this.config.ip ? 1 : 0,
         })
-        options.headers = this.config.request_headers
+        options.headers = {
+            ...this.config.request_headers,
+        }
         options.compression = options.compression === 'best-available' ? this.compression : options.compression
 
         request({
@@ -746,11 +760,12 @@ export class PostHog {
      * @param {String} [config.transport] Transport method for network request ('XHR' or 'sendBeacon').
      * @param {Date} [config.timestamp] Timestamp is a Date object. If not set, it'll automatically be set to the current time.
      */
-    capture(event_name: string, properties?: Properties | null, options?: CaptureOptions): CaptureResult | void {
+    capture(event_name: string, properties?: Properties | null, options?: CaptureOptions): CaptureResult | undefined {
         // While developing, a developer might purposefully _not_ call init(),
         // in this case, we would like capture to be a noop.
         if (!this.__loaded || !this.persistence || !this.sessionPersistence || !this._requestQueue) {
-            return logger.uninitializedWarning('posthog.capture')
+            logger.uninitializedWarning('posthog.capture')
+            return
         }
 
         if (this.consent.isOptedOut()) {
@@ -796,10 +811,13 @@ export class PostHog {
             this.persistence.set_initial_person_info()
         }
 
+        const systemTime = new Date()
+        const timestamp = options?.timestamp || systemTime
+
         let data: CaptureResult = {
             uuid: uuidv7(),
             event: event_name,
-            properties: this._calculate_event_properties(event_name, properties || {}),
+            properties: this._calculate_event_properties(event_name, properties || {}, timestamp),
         }
 
         if (clientRateLimitContext) {
@@ -816,10 +834,10 @@ export class PostHog {
         }
 
         data = _copyAndTruncateStrings(data, options?._noTruncate ? null : this.config.properties_string_max_length)
-        data.timestamp = options?.timestamp || new Date()
+        data.timestamp = timestamp
         if (!isUndefined(options?.timestamp)) {
             data.properties['$event_time_override_provided'] = true
-            data.properties['$event_time_override_system_time'] = new Date()
+            data.properties['$event_time_override_system_time'] = systemTime
         }
 
         // Top-level $set overriding values from the one from properties is taken from the plugin-server normalizeEvent
@@ -852,7 +870,8 @@ export class PostHog {
         this.on('eventCaptured', (data) => callback(data.event, data))
     }
 
-    _calculate_event_properties(event_name: string, event_properties: Properties): Properties {
+    _calculate_event_properties(event_name: string, event_properties: Properties, timestamp?: Date): Properties {
+        timestamp = timestamp || new Date()
         if (!this.persistence || !this.sessionPersistence) {
             return event_properties
         }
@@ -899,9 +918,9 @@ export class PostHog {
         if (!this.config.disable_scroll_properties) {
             let performanceProperties: Record<string, any> = {}
             if (event_name === '$pageview') {
-                performanceProperties = this.pageViewManager.doPageView()
+                performanceProperties = this.pageViewManager.doPageView(timestamp)
             } else if (event_name === '$pageleave') {
-                performanceProperties = this.pageViewManager.doPageLeave()
+                performanceProperties = this.pageViewManager.doPageLeave(timestamp)
             }
             properties = extend(properties, performanceProperties)
         }
@@ -912,7 +931,7 @@ export class PostHog {
 
         // set $duration if time_event was previously called for this event
         if (!isUndefined(startTimestamp)) {
-            const duration_in_ms = new Date().getTime() - startTimestamp
+            const duration_in_ms = timestamp.getTime() - startTimestamp
             properties['$duration'] = parseFloat((duration_in_ms / 1000).toFixed(3))
         }
 
@@ -1200,6 +1219,16 @@ export class PostHog {
     //     this.experiments.getWebExperimentsAndEvaluateDisplayLogic(callback, forceReload)
     // }
 
+    /** Render a survey on a specific element. */
+    renderSurvey(surveyId: string, selector: string): void {
+        this.surveys.renderSurvey(surveyId, selector)
+    }
+
+    /** Checks the feature flags associated with this Survey to see if the survey can be rendered. */
+    canRenderSurvey(surveyId: string): void {
+        this.surveys.canRenderSurvey(surveyId)
+    }
+
     /** Get the next step of the survey: a question index or `end` */
     getNextSurveyStep(
         survey: Survey,
@@ -1456,6 +1485,7 @@ export class PostHog {
      * Useful for clearing data when a user logs out.
      */
     reset(reset_device_id?: boolean): void {
+        logger.info('reset')
         if (!this.__loaded) {
             return logger.uninitializedWarning('posthog.reset')
         }
@@ -1701,7 +1731,7 @@ export class PostHog {
      *         blockSelector: null,
      *         ignoreClass: 'ph-ignore-input',
      *         maskAllInputs: true,
-     *         maskInputOptions: {},
+     *         maskInputOptions: {password: true},
      *         maskInputFn: null,
      *         slimDOMOptions: {},
      *         collectFonts: false,
@@ -1739,6 +1769,11 @@ export class PostHog {
             }
             if (this.config.debug) {
                 Config.DEBUG = true
+                logger.info('set_config', {
+                    config,
+                    oldConfig,
+                    newConfig: { ...this.config },
+                })
             }
 
             this.sessionRecording?.startIfEnabledOrStop()

@@ -5,7 +5,7 @@
         "lib": ["dom", "dom.iterable", "esnext"],
         "allowJs": true,
         "checkJs": true,
-        "skipLibCheck": false,
+        "skipLibCheck": true,
         "esModuleInterop": true,
         "allowSyntheticDefaultImports": true,
         "strict": true,
@@ -24,6 +24,6 @@
         "jsxFactory": "h",
         "jsxFragmentFactory": "Fragment"
     },
-    "include": ["src/**/*.ts*"],
-    "exclude": ["src/__tests__/**/*.ts*"]
+    "include": ["./src/**/*.ts*"],
+    "exclude": ["./src/__tests__/**/*.ts*"]
 }

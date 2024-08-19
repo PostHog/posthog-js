@@ -6,7 +6,7 @@ settings:
 
 patchedDependencies:
   rrweb@2.0.0-alpha.13:
-    hash: zfkdpmdytjgvxaxif5jxg5ibpy
+    hash: hd3nuwqin7sbif7quehqsiwvzm
     path: patches/rrweb@2.0.0-alpha.13.patch
 
 dependencies:
@@ -84,6 +84,9 @@ devDependencies:
   '@types/uuid':
     specifier: ^9.0.1
     version: 9.0.1
+  '@types/web':
+    specifier: ^0.0.154
+    version: 0.0.154
   '@typescript-eslint/eslint-plugin':
     specifier: ^6.19.0
     version: 6.19.0(@typescript-eslint/parser@6.19.0)(eslint@8.56.0)(typescript@4.9.5)
@@ -144,9 +147,6 @@ devDependencies:
   fast-check:
     specifier: ^2.17.0
     version: 2.17.0
-  given2:
-    specifier: ^2.1.7
-    version: 2.1.7
   husky:
     specifier: ^8.0.1
     version: 8.0.1
@@ -191,7 +191,7 @@ devDependencies:
     version: 5.12.0(rollup@4.9.6)
   rrweb:
     specifier: 2.0.0-alpha.13
-    version: 2.0.0-alpha.13(patch_hash=zfkdpmdytjgvxaxif5jxg5ibpy)
+    version: 2.0.0-alpha.13(patch_hash=hd3nuwqin7sbif7quehqsiwvzm)
   rrweb-snapshot:
     specifier: 2.0.0-alpha.13
     version: 2.0.0-alpha.13
@@ -3021,6 +3021,10 @@ packages:
     resolution: {integrity: sha512-rFT3ak0/2trgvp4yYZo5iKFEPsET7vKydKF+VRCxlQ9bpheehyAJH89dAkaLEq/j/RZXJIqcgsmPJKUP1Z28HA==}
     dev: true
 
+  /@types/web@0.0.154:
+    resolution: {integrity: sha512-Tc10Nkpbb8AgM3iGnrvpKVb6x8pzrZpMCPqMJe8htXoEdNDKojEevNAkCjxkjCLZF2p1ZB+gknAwdbkypxwxKg==}
+    dev: true
+
   /@types/yargs-parser@15.0.0:
     resolution: {integrity: sha512-FA/BWv8t8ZWJ+gEOnLLd8ygxH/2UFbAvgEonyfN6yWGLKc7zVjbpl2Y4CTjid9h2RfgPP6SEt6uHwEOply00yw==}
     dev: true
@@ -5846,10 +5850,6 @@ packages:
     dependencies:
       image-q: 1.1.1
       omggif: 1.0.10
-    dev: true
-
-  /given2@2.1.7:
-    resolution: {integrity: sha512-fI3VamsjN2euNVguGpSt2uExyDSMfJoK+SwDxbmV+Thf3v4oF6KKZAFE3LHHuT+PYyMwCsJYXO01TW3euFdPGA==}
     dev: true
 
   /glob-parent@5.1.2:
@@ -9319,7 +9319,7 @@ packages:
     resolution: {integrity: sha512-slbhNBCYjxLGCeH95a67ECCy5a22nloXp1F5wF7DCzUNw80FN7tF9Lef1sRGLNo32g3mNqTc2sWLATlKejMxYw==}
     dev: true
 
-  /rrweb@2.0.0-alpha.13(patch_hash=zfkdpmdytjgvxaxif5jxg5ibpy):
+  /rrweb@2.0.0-alpha.13(patch_hash=hd3nuwqin7sbif7quehqsiwvzm):
     resolution: {integrity: sha512-a8GXOCnzWHNaVZPa7hsrLZtNZ3CGjiL+YrkpLo0TfmxGLhjNZbWY2r7pE06p+FcjFNlgUVTmFrSJbK3kO7yxvw==}
     dependencies:
       '@rrweb/types': 2.0.0-alpha.13
