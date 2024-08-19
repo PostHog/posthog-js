@@ -20,10 +20,16 @@ jobs:
     strategy:
       matrix:
         browser:
-          - chrome
+          - 'chrome:headless'
+          - 'browserstack:ie'
+          - 'browserstack:safari'
         include:
-          - browser: chrome
+          - browser: 'chrome:headless'
             name: Chrome
+          - browser: 'browserstack:ie'
+            name: IE11
+          - browser: 'browserstack:safari'
+            name: Safari
 
     steps:
       - uses: actions/checkout@v4
