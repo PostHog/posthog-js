@@ -57,6 +57,7 @@ export const initPosthog = (config) => {
             distinctID: 'automated-tester', // We set this to get around the ingestion delay for new distinctIDs
             isIdentifiedID: true,
         },
+        opt_out_useragent_filter: true,
     })
 }
 

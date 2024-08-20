@@ -36,6 +36,9 @@ devDependencies:
   '@babel/preset-typescript':
     specifier: ^7.18.6
     version: 7.18.6(@babel/core@7.18.9)
+  '@cypress/skip-test':
+    specifier: ^2.6.1
+    version: 2.6.1
   '@jest/globals':
     specifier: ^27.5.1
     version: 27.5.1
@@ -103,11 +106,11 @@ devDependencies:
     specifier: ^6.1.0
     version: 6.1.0
   cypress:
-    specifier: 13.6.3
-    version: 13.6.3
+    specifier: 13.13.2
+    version: 13.13.2
   cypress-localstorage-commands:
-    specifier: ^2.2.5
-    version: 2.2.5(cypress@13.6.3)
+    specifier: ^2.2.6
+    version: 2.2.6(cypress@13.13.2)
   date-fns:
     specifier: ^3.6.0
     version: 3.6.0
@@ -1657,6 +1660,10 @@ packages:
       tough-cookie: 4.1.3
       tunnel-agent: 0.6.0
       uuid: 8.3.2
+    dev: true
+
+  /@cypress/skip-test@2.6.1:
+    resolution: {integrity: sha512-X+ibefBiuOmC5gKG91wRIT0/OqXeETYvu7zXktjZ3yLeO186Y8ia0K7/gQUpAwuUi28DuqMd1+7tBQVtPkzbPA==}
     dev: true
 
   /@cypress/xvfb@1.2.4(supports-color@8.1.1):
@@ -4481,17 +4488,17 @@ packages:
     resolution: {integrity: sha512-d4ZVpCW31eWwCMe1YT3ur7mUDnTXbgwyzaL320DrcRT45rfjYxkt5QWLrmOJ+/UEAI2+fQgKe/fCjR8l4TpRgw==}
     dev: true
 
-  /cypress-localstorage-commands@2.2.5(cypress@13.6.3):
-    resolution: {integrity: sha512-07zpwzWdY+uPi1NEHFhWQNylIJqRxR78Ile05L6WT8h1Gz0OaxgBSZRuzp+pqUni/3Pk4d2ieq/cSh++ZmujEA==}
+  /cypress-localstorage-commands@2.2.6(cypress@13.13.2):
+    resolution: {integrity: sha512-l3nZ+Lu6YbBWk4UIfNrRkNK56BkF8zVbCrqzCf35x4Nlx2wA2r0spBOZXnKjbutQZgo6qDqtS8uXoSqV36YM1Q==}
     engines: {node: '>=14.0.0'}
     peerDependencies:
       cypress: '>=2.1.0'
     dependencies:
-      cypress: 13.6.3
+      cypress: 13.13.2
     dev: true
 
-  /cypress@13.6.3:
-    resolution: {integrity: sha512-d/pZvgwjAyZsoyJ3FOsJT5lDsqnxQ/clMqnNc++rkHjbkkiF2h9s0JsZSyyH4QXhVFW3zPFg82jD25roFLOdZA==}
+  /cypress@13.13.2:
+    resolution: {integrity: sha512-PvJQU33933NvS1StfzEb8/mu2kMy4dABwCF+yd5Bi7Qly1HOVf+Bufrygee/tlmty/6j5lX+KIi8j9Q3JUMbhA==}
     engines: {node: ^16.0.0 || ^18.0.0 || >=20.0.0}
     hasBin: true
     requiresBuild: true
@@ -4535,7 +4542,7 @@ packages:
       request-progress: 3.0.0
       semver: 7.5.4
       supports-color: 8.1.1
-      tmp: 0.2.1
+      tmp: 0.2.3
       untildify: 4.0.0
       yauzl: 2.10.0
     dev: true
@@ -10250,11 +10257,9 @@ packages:
       rimraf: 2.7.1
     dev: true
 
-  /tmp@0.2.1:
-    resolution: {integrity: sha512-76SUhtfqR2Ijn+xllcI5P1oyannHNHByD80W1q447gU3mp9G9PSpGdWmjUOHRDPiHYacIk66W7ubDTuPF3BEtQ==}
-    engines: {node: '>=8.17.0'}
-    dependencies:
-      rimraf: 3.0.2
+  /tmp@0.2.3:
+    resolution: {integrity: sha512-nZD7m9iCPC5g0pYmcaxogYKggSfLsdxl8of3Q/oIbqCqLLIO9IAF0GWjX1z9NZRHPiXv8Wex4yDCaZsgEw0Y8w==}
+    engines: {node: '>=14.14'}
     dev: true
 
   /tmpl@1.0.5:
