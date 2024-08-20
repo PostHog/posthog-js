@@ -48,7 +48,7 @@
         Throw error
     </button>
 
-    <button data-cy-exception-button onclick="debugger;posthog.captureException(new Error('wat even am I'), { extra_prop: 2 })">
+    <button data-cy-exception-button onclick="posthog.captureException(new Error('wat even am I'), { extra_prop: 2 })">
         Capture an exception
     </button>
 
