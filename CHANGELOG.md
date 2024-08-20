@@ -1,3 +1,8 @@
+## 1.157.2 - 2024-08-20
+
+- feat: Use NavigatorUAData and navigator.webdriver to improve bot detection (#1359)
+- chore: Move chrome tests off of browserstack, add firefox (#1369)
+
 ## 1.157.1 - 2024-08-20
 
 - Revert "fix: pass original fetch args along (#1351)" (#1371)
