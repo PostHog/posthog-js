@@ -19,16 +19,19 @@ jobs:
 
     strategy:
       matrix:
-        browserstack:
-          - chrome
-          - ie
-          - safari
+        browser:
+          - 'chrome:headless'
+          - 'firefox:headless'
+          - 'browserstack:ie'
+          - 'browserstack:safari'
         include:
-          - browserstack: chrome
+          - browser: 'chrome:headless'
             name: Chrome
-          - browserstack: ie
+          - browser: 'firefox:headless'
+            name: Firefox
+          - browser: 'browserstack:ie'
             name: IE11
-          - browserstack: safari
+          - browser: 'browserstack:safari'
             name: Safari
 
     steps:
@@ -51,4 +54,4 @@ jobs:
         run: pnpm build-rollup
 
       - name: Run ${{ matrix.name }} test
-        run: node scripts/run-testcafe-with-retries.mjs --browser "browserstack:${{ matrix.browserstack }}" --attempts 3
+        run: node scripts/run-testcafe-with-retries.mjs --browser "${{ matrix.browser }}" --attempts 3
