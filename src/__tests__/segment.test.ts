@@ -122,7 +122,7 @@ describe(`Segment integration`, () => {
                 `test-token`,
                 {
                     debug: true,
-                    persistence: `localStorage`,
+                    persistence: `memory`,
                     api_host: `https://test.com`,
                     segment: segment,
                     loaded: resolve,
