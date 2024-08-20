@@ -1815,6 +1815,11 @@ export class PostHog {
         return !!this.sessionRecording?.started
     }
 
+    /** Checks the feature flags associated with this Survey to see if the survey can be rendered. */
+    captureException(error: Error, additionalProperties?: Properties): void {
+        this.exceptionObserver?.captureException(error, additionalProperties)
+    }
+
     /**
      * returns a boolean indicating whether the toolbar loaded
      * @param toolbarParams

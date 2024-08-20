@@ -16,7 +16,7 @@ describe('Exception autocapture', () => {
         cy.wait('@exception-autocapture-script')
     })
 
-    it('captures exceptions', () => {
+    it('autocaptures exceptions', () => {
         cy.get('[data-cy-button-throws-error]').click()
 
         // ugh
@@ -26,6 +26,24 @@ describe('Exception autocapture', () => {
             expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$autocapture', '$exception'])
             expect(captures[2].event).to.be.eql('$exception')
             expect(captures[2].properties.$exception_message).to.be.eql('This is an error')
+            expect(captures[2].properties.$exception_type).to.be.eql('Error')
+            expect(captures[2].properties.$exception_source).to.match(undefined)
+            expect(captures[2].properties.$exception_personURL).to.match(
+                /http:\/\/localhost:\d+\/project\/test_token\/person\/[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}/
+            )
+        })
+    })
+
+    it('manually captures exceptions', () => {
+        cy.get('[data-cy-exception-button]').click()
+
+        // ugh
+        cy.wait(1500)
+
+        cy.phCaptures({ full: true }).then((captures) => {
+            expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$autocapture', '$exception'])
+            expect(captures[2].event).to.be.eql('$exception')
+            expect(captures[2].properties.$exception_message).to.be.eql('wat even am I')
             expect(captures[2].properties.$exception_type).to.be.eql('Error')
             expect(captures[2].properties.$exception_source).to.match(/http:\/\/localhost:\d+\/playground\/cypress\//)
             expect(captures[2].properties.$exception_personURL).to.match(

@@ -1,11 +1,12 @@
 import { window } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
-import { DecideResponse, Properties } from '../../types'
+import { DecideResponse, ErrorEventArgs, Properties } from '../../types'
 
 import { isObject } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE, EXCEPTION_CAPTURE_ENDPOINT } from '../../constants'
 import Config from '../../config'
+import { errorToProperties } from './error-conversion'
 
 // TODO: move this to /x/ as default
 export const BASE_ERROR_ENDPOINT = '/e/'
@@ -80,8 +81,8 @@ export class ExceptionObserver {
         }
 
         try {
-            this.unwrapOnError = wrapOnError(this.captureException.bind(this))
-            this.unwrapUnhandledRejection = wrapUnhandledRejection(this.captureException.bind(this))
+            this.unwrapOnError = wrapOnError(this._captureException.bind(this))
+            this.unwrapUnhandledRejection = wrapUnhandledRejection(this._captureException.bind(this))
         } catch (e) {
             logger.error(LOGGER_PREFIX + ' failed to start', e)
             this.stopCapturing()
@@ -117,7 +118,13 @@ export class ExceptionObserver {
         this.startIfEnabled()
     }
 
-    captureException(errorProperties: Properties) {
+    captureException(error: Error, additionalProperties: Properties = {}) {
+        const errorEventArgs: ErrorEventArgs = [error.message, undefined, undefined, undefined, error]
+        const errorProperties = errorToProperties(errorEventArgs)
+        this._captureException({ ...errorProperties, ...additionalProperties })
+    }
+
+    _captureException(errorProperties: Properties) {
         const posthogHost = this.instance.requestRouter.endpointFor('ui')
 
         errorProperties.$exception_personURL = `${posthogHost}/project/${
