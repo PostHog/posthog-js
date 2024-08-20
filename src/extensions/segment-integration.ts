@@ -72,9 +72,11 @@ const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
         }
         if (!ctx.event.userId && ctx.event.anonymousId !== posthog.get_distinct_id()) {
             // This is our only way of detecting that segment's analytics.reset() has been called so we also call it
+            logger.info('Segment integration does not have a userId set, resetting PostHog')
             posthog.reset()
         }
         if (ctx.event.userId && ctx.event.userId !== posthog.get_distinct_id()) {
+            logger.info('Segment integration has a userId set, identifying with PostHog')
             posthog.identify(ctx.event.userId)
         }
 
