@@ -10,7 +10,7 @@ import {
     isCrossDomainCookie,
     isDistinctIdStringLike,
 } from './utils'
-import { assignableWindow, document, location, userAgent, window } from './utils/globals'
+import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import {
@@ -67,7 +67,7 @@ import {
 import { Info } from './utils/event-utils'
 import { logger } from './utils/logger'
 import { SessionPropsManager } from './session-props'
-import { isBlockedUA } from './utils/blocked-uas'
+import { isLikelyBot } from './utils/blocked-uas'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
 import { Heatmaps } from './heatmaps'
 import { ScrollManager } from './scroll-manager'
@@ -774,11 +774,7 @@ export class PostHog {
             return
         }
 
-        if (
-            userAgent &&
-            !this.config.opt_out_useragent_filter &&
-            isBlockedUA(userAgent, this.config.custom_blocked_useragents)
-        ) {
+        if (!this.config.opt_out_useragent_filter && this._is_bot()) {
             return
         }
 
@@ -934,9 +930,7 @@ export class PostHog {
         // this is only added when this.config.opt_out_useragent_filter is true,
         // or it would always add "browser"
         if (userAgent && this.config.opt_out_useragent_filter) {
-            properties['$browser_type'] = isBlockedUA(userAgent, this.config.custom_blocked_useragents)
-                ? 'bot'
-                : 'browser'
+            properties['$browser_type'] = this._is_bot() ? 'bot' : 'browser'
         }
 
         // note: extend writes to the first object, so lets make sure we
@@ -2046,6 +2040,14 @@ export class PostHog {
     clear_opt_in_out_capturing(): void {
         this.consent.reset()
         this._sync_opt_out_with_persistence()
+    }
+
+    _is_bot(): boolean | undefined {
+        if (navigator) {
+            return isLikelyBot(navigator, this.config.custom_blocked_useragents)
+        } else {
+            return undefined
+        }
     }
 
     debug(debug?: boolean): void {
