@@ -1,6 +1,6 @@
 import { t } from 'testcafe'
-// import { retryUntilResults, queryAPI, initPosthog, captureLogger, staticFilesMock } from './helpers'
-import { captureLogger, staticFilesMock } from './helpers'
+import { retryUntilResults, queryAPI, initPosthog, captureLogger, staticFilesMock } from './helpers'
+// import { captureLogger, staticFilesMock } from './helpers'
 
 // eslint-disable-next-line no-undef
 fixture('posthog.js capture')
@@ -18,26 +18,26 @@ fixture('posthog.js capture')
         // console.debug('Requests to posthog:', JSON.stringify(captureLogger.requests, null, 2))
     })
 
-test('Custom events work and are accessible via /api/event', () => {
-    // const testSessionId = await initPosthog()
-    // await t
-    //     .wait(5000)
-    //     .click('[data-cy-custom-event-button]')
-    //     .wait(5000)
-    //     .expect(captureLogger.count(() => true))
-    //     .gte(1)
-    //
-    // // Check no requests failed
-    // await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
-    //
-    // const results = await retryUntilResults(() => queryAPI(testSessionId), 3)
-    //
-    // await t.expect(results.length).eql(3)
-    // await t.expect(results.filter(({ event }) => event === 'custom-event').length).eql(1)
-    // await t.expect(results.filter(({ event }) => event === '$pageview').length).eql(1)
-    // await t.expect(results.filter(({ event }) => event === '$autocapture').length).eql(1)
-    // eslint-disable-next-line no-console
-    console.log(`skip all testing to see if anything makes this test pass`)
+test('Custom events work and are accessible via /api/event', async (t) => {
+    const testSessionId = await initPosthog()
+    await t
+        .wait(5000)
+        .click('[data-cy-custom-event-button]')
+        .wait(5000)
+        .expect(captureLogger.count(() => true))
+        .gte(1)
+
+    // Check no requests failed
+    await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
+
+    const results = await retryUntilResults(() => queryAPI(testSessionId), 3)
+
+    await t.expect(results.length).eql(3)
+    await t.expect(results.filter(({ event }) => event === 'custom-event').length).eql(1)
+    await t.expect(results.filter(({ event }) => event === '$pageview').length).eql(1)
+    await t.expect(results.filter(({ event }) => event === '$autocapture').length).eql(1)
+    // // eslint-disable-next-line no-console
+    // console.log(`skip all testing to see if anything makes this test pass`)
 })
 
 test('Autocaptured events work and are accessible via /api/event', () => {
