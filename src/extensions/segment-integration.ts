@@ -34,7 +34,7 @@ export type SegmentAnalytics = {
 }
 
 // Loosely based on https://github.com/segmentio/analytics-next/blob/master/packages/core/src/plugins/index.ts
-interface SegmentContext {
+export interface SegmentContext {
     event: {
         event: string
         userId?: string
@@ -45,7 +45,7 @@ interface SegmentContext {
 
 type SegmentFunction = (ctx: SegmentContext) => Promise<SegmentContext> | SegmentContext
 
-interface SegmentPlugin {
+export interface SegmentPlugin {
     name: string
     version: string
     type: 'enrichment'
