@@ -78,7 +78,10 @@ const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
             posthog.register({
                 distinct_id: ctx.event.userId,
             })
+
+            posthog.persistence!.set_property(USER_STATE, 'identified')
             posthog.reloadFeatureFlags()
+            posthog.identify(ctx.event.userId)
         }
 
         const additionalProperties = posthog._calculate_event_properties(
