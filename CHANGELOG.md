@@ -1,3 +1,7 @@
+## 1.157.1 - 2024-08-20
+
+- Revert "fix: pass original fetch args along (#1351)" (#1371)
+
 ## 1.157.0 - 2024-08-19
 
 - feat: allow overriding linked flag (#1368)
