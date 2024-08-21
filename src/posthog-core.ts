@@ -10,7 +10,7 @@ import {
     isCrossDomainCookie,
     isDistinctIdStringLike,
 } from './utils'
-import { assignableWindow, document, location, userAgent, window } from './utils/globals'
+import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import {
@@ -55,6 +55,7 @@ import { uuidv7 } from './uuidv7'
 import { Survey, SurveyCallback, SurveyQuestionBranchingType } from './posthog-surveys-types'
 import {
     isArray,
+    isBoolean,
     isEmptyObject,
     isEmptyString,
     isFunction,
@@ -66,7 +67,7 @@ import {
 import { Info } from './utils/event-utils'
 import { logger } from './utils/logger'
 import { SessionPropsManager } from './session-props'
-import { isBlockedUA } from './utils/blocked-uas'
+import { isLikelyBot } from './utils/blocked-uas'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
 import { Heatmaps } from './heatmaps'
 import { ScrollManager } from './scroll-manager'
@@ -774,11 +775,7 @@ export class PostHog {
             return
         }
 
-        if (
-            userAgent &&
-            !this.config.opt_out_useragent_filter &&
-            isBlockedUA(userAgent, this.config.custom_blocked_useragents)
-        ) {
+        if (!this.config.opt_out_useragent_filter && this._is_bot()) {
             return
         }
 
@@ -935,9 +932,7 @@ export class PostHog {
         // this is only added when this.config.opt_out_useragent_filter is true,
         // or it would always add "browser"
         if (userAgent && this.config.opt_out_useragent_filter) {
-            properties['$browser_type'] = isBlockedUA(userAgent, this.config.custom_blocked_useragents)
-                ? 'bot'
-                : 'browser'
+            properties['$browser_type'] = this._is_bot() ? 'bot' : 'browser'
         }
 
         // note: extend writes to the first object, so lets make sure we
@@ -1777,12 +1772,14 @@ export class PostHog {
     }
 
     /**
-     * turns session recording on, and updates the config option
-     * disable_session_recording to false
+     * turns session recording on, and updates the config option `disable_session_recording` to false
      * @param override.sampling - optional boolean to override the default sampling behavior - ensures the next session recording to start will not be skipped by sampling config.
+     * @param override.linked_flag - optional boolean to override the default linked_flag behavior - ensures the next session recording to start will not be skipped by linked_flag config.
+     * @param override - optional boolean to override the default sampling behavior - ensures the next session recording to start will not be skipped by sampling or linked_flag config. `true` is shorthand for { sampling: true, linked_flag: true }
      */
-    startSessionRecording(override?: { sampling?: boolean }): void {
-        if (override?.sampling) {
+    startSessionRecording(override?: { sampling?: boolean; linked_flag?: boolean } | true): void {
+        const overrideAll = isBoolean(override) && override
+        if (overrideAll || override?.sampling) {
             // allow the session id check to rotate session id if necessary
             const ids = this.sessionManager?.checkAndGetSessionAndWindowId()
             this.persistence?.register({
@@ -1790,6 +1787,10 @@ export class PostHog {
                 [SESSION_RECORDING_IS_SAMPLED]: true,
             })
             logger.info('Session recording started with sampling override for session: ', ids?.sessionId)
+        }
+        if (overrideAll || override?.linked_flag) {
+            this.sessionRecording?.overrideLinkedFlag()
+            logger.info('Session recording started with linked_flags override')
         }
         this.set_config({ disable_session_recording: false })
     }
@@ -2041,6 +2042,14 @@ export class PostHog {
     clear_opt_in_out_capturing(): void {
         this.consent.reset()
         this._sync_opt_out_with_persistence()
+    }
+
+    _is_bot(): boolean | undefined {
+        if (navigator) {
+            return isLikelyBot(navigator, this.config.custom_blocked_useragents)
+        } else {
+            return undefined
+        }
     }
 
     debug(debug?: boolean): void {

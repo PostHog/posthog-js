@@ -1,3 +1,33 @@
+## 1.157.2 - 2024-08-20
+
+- feat: Use NavigatorUAData and navigator.webdriver to improve bot detection (#1359)
+- chore: Move chrome tests off of browserstack, add firefox (#1369)
+
+## 1.157.1 - 2024-08-20
+
+- Revert "fix: pass original fetch args along (#1351)" (#1371)
+
+## 1.157.0 - 2024-08-19
+
+- feat: allow overriding linked flag (#1368)
+
+## 1.156.1 - 2024-08-19
+
+- fix: Move @types/web to dev dependencies (#1367)
+
+## 1.156.0 - 2024-08-19
+
+- fix: pass original fetch args along (#1351)
+
+## 1.155.6 - 2024-08-19
+
+- fix: only add to window when it exists (#1362)
+
+## 1.155.5 - 2024-08-19
+
+- fix: endpoint for is already called inside loadscript (#1365)
+- chore: Run ts on test files (#1358)
+
 ## 1.155.4 - 2024-08-14
 
 - fix: Expose version (#1357)
