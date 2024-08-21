@@ -18,7 +18,6 @@ export type RequestRouterTarget = 'api' | 'ui' | 'assets'
 
 const ingestionDomain = 'i.posthog.com'
 const flagsPath = '/decide'
-const libPath = '/static/array'
 
 export class RequestRouter {
     instance: PostHog
@@ -66,7 +65,7 @@ export class RequestRouter {
             return (this.uiHost || this.apiHost.replace(`.${ingestionDomain}`, '.posthog.com')) + path
         }
 
-        const useFlagsAPIHost = (path.indexOf(flagsPath) === 0 || path.indexOf(libPath) === 0) && this.flagsApiHost
+        const useFlagsAPIHost = path.indexOf(flagsPath) === 0 && this.flagsApiHost
         if (this.region === RequestRouterRegion.CUSTOM) {
             return useFlagsAPIHost ? this.flagsApiHost + path : this.apiHost + path
         }

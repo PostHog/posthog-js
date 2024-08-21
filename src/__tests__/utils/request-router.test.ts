@@ -71,7 +71,7 @@ describe('request-router', () => {
         )
     })
 
-    it('should use the flags_api_host if provided for decide and static/array.js requests', () => {
+    it('should use the flags_api_host if provided for decide requests', () => {
         expect(
             router('https://my.domain.com/', undefined, 'https://my-flag-domain.domain.com').endpointFor(
                 'api',
@@ -85,13 +85,6 @@ describe('request-router', () => {
                 '/decide'
             )
         ).toEqual('https://my-flag-domain.domain.com/decide')
-
-        expect(
-            router('https://us.i.posthog.com/', undefined, 'https://my-flag-domain.domain.com').endpointFor(
-                'api',
-                '/static/array.js'
-            )
-        ).toEqual('https://my-flag-domain.domain.com/static/array.js')
 
         // specifically test undefined flags_api_host
         expect(router('https://us.i.posthog.com/', undefined, undefined).endpointFor('api', '/decide')).toEqual(
