@@ -1,4 +1,4 @@
-## PostHog demo project
+## PostHog demo project in nextjs
 
 First, run the development server:
 
