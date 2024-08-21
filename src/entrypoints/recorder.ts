@@ -507,7 +507,7 @@ function initFetchObserver(
                 }
 
                 after = win.performance.now()
-                res = await originalFetch(url, init)
+                res = await originalFetch(req)
                 before = win.performance.now()
 
                 const responseHeaders: Headers = {}
