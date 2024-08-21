@@ -81,7 +81,7 @@ export async function retryUntilResults(operation, target_results, limit = 18, d
                     }
                 })
                 .catch(reject)
-        }, delay * count)
+        }, delay)
     }
 
     // new Promise isn't supported in IE11, but we don't care in these tests
