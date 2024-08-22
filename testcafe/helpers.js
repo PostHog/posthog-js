@@ -77,6 +77,9 @@ export async function retryUntilResults(operation, target_results, limit = 18, d
                     } else {
                         // eslint-disable-next-line no-console
                         console.log(`Expected ${target_results} results, got ${results.length} (attempt ${count})`)
+                        if (count === limit - 1) {
+                            resolve(results)
+                        }
                         attempt(count + 1, resolve, reject)
                     }
                 })
