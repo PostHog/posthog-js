@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { RequestLogger, RequestMock, ClientFunction } from 'testcafe'
 import fetch from 'node-fetch'
+import { uuidv7 } from '../src/uuidv7'
 
 // NOTE: These tests are run against a dedicated test project in PostHog cloud
 // but can be overridden to call a local API when running locally
@@ -10,9 +11,13 @@ const currentEnv = process.env
 const {
     POSTHOG_PROJECT_KEY,
     POSTHOG_API_KEY,
-    POSTHOG_API_HOST = 'https://app.posthog.com',
+    POSTHOG_API_HOST = 'https://us.i.posthog.com',
     POSTHOG_API_PROJECT = '11213',
+    BRANCH_NAME,
+    RUN_ID,
+    BROWSER,
 } = currentEnv
+// User admin for the test project: https://us.posthog.com/admin/posthog/organization/0182397e-3df4-0000-52e3-d890b5a16955/change/
 
 const HEADERS = { Authorization: `Bearer ${POSTHOG_API_KEY}` }
 
@@ -41,12 +46,17 @@ export const staticFilesMock = RequestMock()
 
 export const initPosthog = (config) => {
     return ClientFunction((configParams = {}) => {
-        const testSessionId = Math.round(Math.random() * 10000000000).toString()
+        let testSessionId = uuidv7()
+        if (BRANCH_NAME && RUN_ID && BROWSER) {
+            testSessionId = `${BRANCH_NAME} ${BROWSER} ${RUN_ID} ${testSessionId}`
+        }
         configParams.debug = true
         window.posthog.init(configParams.api_key, configParams)
         window.posthog.register({
             testSessionId,
         })
+        // eslint-disable-next-line no-console
+        console.log('Initialized posthog with testSessionId', testSessionId)
 
         return testSessionId
     })({
@@ -68,7 +78,12 @@ export const initPosthog = (config) => {
 export async function retryUntilResults(
     operation,
     target_results,
-    { timeout_seconds = 1200, polling_interval_seconds = 10, max_allowed_api_errors = 5 } = {}
+    {
+        timeout_seconds = 1200,
+        polling_interval_seconds = 10,
+        max_allowed_api_errors = 5,
+        success_function = () => true,
+    } = {}
 ) {
     const start = Date.now()
     const deadline = start + timeout_seconds * 1000
@@ -78,7 +93,7 @@ export async function retryUntilResults(
         setTimeout(() => {
             operation()
                 .then((results) => {
-                    if (results.length >= target_results) {
+                    if (results.length >= target_results && success_function(results)) {
                         // eslint-disable-next-line no-console
                         console.log(
                             `Got correct number of results (${target_results}) after ${Math.floor(

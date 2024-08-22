@@ -54,4 +54,8 @@ jobs:
         run: pnpm build-rollup
 
       - name: Run ${{ matrix.name }} test
+        env:
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+          RUN_ID: ${{ github.run_id }}
+          BROWSER: ${{ matrix.browser }}
         run: pnpm testcafe ${{ matrix.browser }} --stop-on-first-fail
