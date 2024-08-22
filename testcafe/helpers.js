@@ -105,7 +105,8 @@ export async function retryUntilResults(
 }
 
 export async function queryAPI(testSessionId) {
-    const url = `${POSTHOG_API_HOST}/api/projects/${POSTHOG_API_PROJECT}/events?properties=[{"key":"testSessionId","value":["${testSessionId}"],"operator":"exact","type":"event"}]`
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const url = `${POSTHOG_API_HOST}/api/projects/${POSTHOG_API_PROJECT}/events?properties=[{"key":"testSessionId","value":["${testSessionId}"],"operator":"exact","type":"event"}]&after=${yesterday}`
     const response = await fetch(url, {
         headers: HEADERS,
     })
