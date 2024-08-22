@@ -77,9 +77,6 @@ export async function retryUntilResults(operation, target_results, limit = 18, d
                     } else {
                         // eslint-disable-next-line no-console
                         console.log(`Expected ${target_results} results, got ${results.length} (attempt ${count})`)
-                        if (count === limit - 1) {
-                            resolve(results)
-                        }
                         attempt(count + 1, resolve, reject)
                     }
                 })
@@ -107,12 +104,5 @@ export async function queryAPI(testSessionId) {
     }
 
     const { results } = JSON.parse(data)
-    // eslint-disable-next-line no-console
-    console.log('**********************')
-
-    // eslint-disable-next-line no-console
-    console.log(`url is ${url} , results is `, results, ` data is`, data)
-    // eslint-disable-next-line no-console
-    console.log('**********************')
     return results
 }
