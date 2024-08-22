@@ -68,10 +68,11 @@ export const initPosthog = (config) => {
 export async function retryUntilResults(
     operation,
     target_results,
-    { timeout_seconds = 600, polling_interval = 10 } = {}
+    { timeout_seconds = 600, polling_interval_seconds = 10, max_allowed_api_errors = 5 } = {}
 ) {
     const start = Date.now()
     const deadline = start + timeout_seconds * 1000
+    let api_errors = 0
 
     const attempt = (count, resolve, reject) => {
         setTimeout(() => {
@@ -95,8 +96,17 @@ export async function retryUntilResults(
                         }
                     }
                 })
-                .catch(reject)
-        }, polling_interval)
+                .catch((err) => {
+                    api_errors++
+                    if (api_errors > max_allowed_api_errors) {
+                        reject(err)
+                    } else {
+                        // eslint-disable-next-line no-console
+                        console.error('API Error:', err)
+                        attempt(count + 1, resolve, reject)
+                    }
+                })
+        }, polling_interval_seconds * 1000)
     }
 
     // new Promise isn't supported in IE11, but we don't care in these tests
