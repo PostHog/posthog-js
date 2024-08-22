@@ -152,10 +152,10 @@ export async function queryAPI(testSessionId) {
 
 export function log(...args) {
     // eslint-disable-next-line no-console
-    console.log(Date.now().toISOString(), ...args)
+    console.log(new Date().toISOString(), ...args)
 }
 
 export function error(...args) {
     // eslint-disable-next-line no-console
-    console.error(Date.now().toISOString(), ...args)
+    console.error(new Date().toISOString(), ...args)
 }
