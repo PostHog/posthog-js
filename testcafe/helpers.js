@@ -78,6 +78,12 @@ export async function retryUntilResults(
             operation()
                 .then((results) => {
                     if (results.length >= target_results) {
+                        // eslint-disable-next-line no-console
+                        console.log(
+                            `Got correct number of results (${target_results}) after ${Math.floor(
+                                (Date.now() - start) / 1000
+                            )} seconds (attempt ${count})`
+                        )
                         resolve(results)
                     } else {
                         // eslint-disable-next-line no-console
