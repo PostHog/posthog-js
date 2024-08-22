@@ -103,6 +103,9 @@ export async function queryAPI(testSessionId) {
         throw new Error('Bad Response')
     }
 
+    // eslint-disable-next-line no-console
+    console.log(`url is ${url} , response is ${data}`)
+
     const { results } = JSON.parse(data)
     return results
 }
