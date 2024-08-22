@@ -1,4 +1,4 @@
-import { t } from 'testcafe'
+import { t, Selector } from 'testcafe'
 import { retryUntilResults, queryAPI, initPosthog, captureLogger, staticFilesMock } from './helpers'
 
 // eslint-disable-next-line no-undef
@@ -20,9 +20,8 @@ fixture('posthog.js capture')
 test('Custom events work and are accessible via /api/event', async (t) => {
     const testSessionId = await initPosthog()
     await t
-        .wait(5000)
-        .click('[data-cy-custom-event-button]')
-        .wait(5000)
+        .click(Selector('[data-cy-custom-event-button]', { timeout: 10000 }))
+        .wait(1000)
         .expect(captureLogger.count(() => true))
         .gte(1)
 
@@ -40,10 +39,9 @@ test('Custom events work and are accessible via /api/event', async (t) => {
 test('Autocaptured events work and are accessible via /api/event', async (t) => {
     const testSessionId = await initPosthog()
     await t
-        .wait(5000)
-        .click('[data-cy-link-mask-text]')
+        .click(Selector('[data-cy-link-mask-text]', { timeout: 10000 }))
         .click('[data-cy-button-sensitive-attributes]')
-        .wait(5000)
+        .wait(1000)
         .expect(captureLogger.count(() => true))
         .gte(2)
 
@@ -79,10 +77,9 @@ test('Config options change autocapture behavior accordingly', async (t) => {
     const testSessionId = await initPosthog({ mask_all_text: true, mask_all_element_attributes: true })
 
     await t
-        .wait(5000)
-        .click('[data-cy-link-mask-text]')
+        .click(Selector('[data-cy-link-mask-text]', { timeout: 10000 }))
         .click('[data-cy-button-sensitive-attributes]')
-        .wait(5000)
+        .wait(1000)
         .expect(captureLogger.count(() => true))
         .gte(2)
 
