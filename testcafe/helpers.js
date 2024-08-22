@@ -70,7 +70,7 @@ export const initPosthog = (testName, config) => {
         api_host: POSTHOG_API_HOST,
         api_key: POSTHOG_PROJECT_KEY,
         bootstrap: {
-            distinctID: 'user-92876', // We set this to get around the ingestion delay for new distinctIDs
+            distinctID: 'automated-tester', // We set this to get around the ingestion delay for new distinctIDs
             isIdentifiedID: true,
         },
         opt_out_useragent_filter: true,
