@@ -61,14 +61,19 @@ export const initPosthog = (config) => {
     })
 }
 
-// NOTE: Ingestion delays events by up to 60 seconds for new IDs hence we need to wait at least 60 seconds
-// This is annoying but essentially we are allowing up to 3 minutes for the test to complete
-export async function retryUntilResults(operation, target_results, limit = 18, delay = 15000) {
-    const attempt = (count, resolve, reject) => {
-        if (count === limit) {
-            return reject(new Error(`Failed to fetch results in ${limit} attempts`))
-        }
+// NOTE: This is limited by the real production ingestion lag, which you can see in grafana is usually
+// in the low minutes https://grafana.prod-us.posthog.dev/d/homepage/homepage
+// This means that this test can fail if the ingestion lag is higher than the timeout, so we're pretty
+// generous with the timeout here.
+export async function retryUntilResults(
+    operation,
+    target_results,
+    { timeout_seconds = 600, polling_interval = 10 } = {}
+) {
+    const start = Date.now()
+    const deadline = start + timeout_seconds * 1000
 
+    const attempt = (count, resolve, reject) => {
         setTimeout(() => {
             operation()
                 .then((results) => {
@@ -77,11 +82,15 @@ export async function retryUntilResults(operation, target_results, limit = 18, d
                     } else {
                         // eslint-disable-next-line no-console
                         console.log(`Expected ${target_results} results, got ${results.length} (attempt ${count})`)
-                        attempt(count + 1, resolve, reject)
+                        if (Date.now() > deadline) {
+                            reject(new Error(`Timed out after ${timeout_seconds} seconds`))
+                        } else {
+                            attempt(count + 1, resolve, reject)
+                        }
                     }
                 })
                 .catch(reject)
-        }, delay)
+        }, polling_interval)
     }
 
     // new Promise isn't supported in IE11, but we don't care in these tests

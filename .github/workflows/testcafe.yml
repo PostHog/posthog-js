@@ -54,4 +54,4 @@ jobs:
         run: pnpm build-rollup
 
       - name: Run ${{ matrix.name }} test
-        run: node scripts/run-testcafe-with-retries.mjs --browser "${{ matrix.browser }}" --attempts 3
+        run: pnpm testcafe ${{ matrix.browser }}
