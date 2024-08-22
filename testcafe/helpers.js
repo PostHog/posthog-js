@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { RequestLogger, RequestMock, ClientFunction } from 'testcafe'
+import { ClientFunction, RequestLogger, RequestMock } from 'testcafe'
 import fetch from 'node-fetch'
 
 // NOTE: These tests are run against a dedicated test project in PostHog cloud
@@ -43,13 +43,12 @@ export const staticFilesMock = RequestMock()
         res.setBody(html)
     })
 
-export const initPosthog = (config) => {
-    let testSessionId = Math.round(Math.random() * 10000000000).toString()
+export const initPosthog = (testName, config) => {
+    let testSessionId = `${testName} ${Math.round(Math.random() * 10000000000).toString()}`
     if (BRANCH_NAME && RUN_ID && BROWSER) {
         testSessionId = `${BRANCH_NAME} ${BROWSER} ${RUN_ID} ${testSessionId}`
     }
-    // eslint-disable-next-line no-console
-    console.log('Initialized posthog with testSessionId', testSessionId)
+    log(`Initializing posthog with testSessionId "${testSessionId}"`)
 
     return ClientFunction(
         (configParams = {}) => {
@@ -101,16 +100,14 @@ export async function retryUntilResults(
             operation()
                 .then((results) => {
                     if (results.length >= target_results && success_function(results)) {
-                        // eslint-disable-next-line no-console
-                        console.log(
+                        log(
                             `Got correct number of results (${target_results}) after ${Math.floor(
                                 (Date.now() - start) / 1000
                             )} seconds (attempt ${count})`
                         )
                         resolve(results)
                     } else {
-                        // eslint-disable-next-line no-console
-                        console.log(`Expected ${target_results} results, got ${results.length} (attempt ${count})`)
+                        log(`Expected ${target_results} results, got ${results.length} (attempt ${count})`)
                         if (Date.now() > deadline) {
                             reject(new Error(`Timed out after ${timeout_seconds} seconds`))
                         } else {
@@ -123,8 +120,7 @@ export async function retryUntilResults(
                     if (api_errors > max_allowed_api_errors) {
                         reject(err)
                     } else {
-                        // eslint-disable-next-line no-console
-                        console.error('API Error:', err)
+                        error('API Error:', err)
                         attempt(count + 1, resolve, reject)
                     }
                 })
@@ -146,11 +142,20 @@ export async function queryAPI(testSessionId) {
     const data = await response.text()
 
     if (!response.ok) {
-        // eslint-disable-next-line no-console
-        console.error('Bad Response', response.status, data)
+        error('Bad Response', response.status, data)
         throw new Error('Bad Response')
     }
 
     const { results } = JSON.parse(data)
     return results
+}
+
+export function log(...args) {
+    // eslint-disable-next-line no-console
+    console.log(Date.now().toIsoString(), ...args)
+}
+
+export function error(...args) {
+    // eslint-disable-next-line no-console
+    console.error(Date.now().toIsoString(), ...args)
 }
