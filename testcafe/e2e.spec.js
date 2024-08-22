@@ -31,6 +31,11 @@ test('Custom events work and are accessible via /api/event', async (t) => {
 
     const results = await retryUntilResults(() => queryAPI(testSessionId), 3, 5)
 
+    const consoleMessages = await t.getBrowserConsoleMessages()
+
+    // eslint-disable-next-line no-console
+    console.log(`consoleMessages are `, consoleMessages)
+
     await t.expect(results.length).eql(3)
     await t.expect(results.filter(({ event }) => event === 'custom-event').length).eql(1)
     await t.expect(results.filter(({ event }) => event === '$pageview').length).eql(1)
