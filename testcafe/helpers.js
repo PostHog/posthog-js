@@ -104,8 +104,12 @@ export async function queryAPI(testSessionId) {
     }
 
     const { results } = JSON.parse(data)
+    // eslint-disable-next-line no-console
+    console.log('**********************')
 
     // eslint-disable-next-line no-console
-    console.log(`url is ${url} , response.length ${response.length} is data is [${results}]`)
+    console.log(`url is ${url} , results is `, results, ` data is`, data)
+    // eslint-disable-next-line no-console
+    console.log('**********************')
     return results
 }
