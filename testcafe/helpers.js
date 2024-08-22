@@ -68,7 +68,7 @@ export const initPosthog = (config) => {
 export async function retryUntilResults(
     operation,
     target_results,
-    { timeout_seconds = 600, polling_interval_seconds = 10, max_allowed_api_errors = 5 } = {}
+    { timeout_seconds = 1200, polling_interval_seconds = 10, max_allowed_api_errors = 5 } = {}
 ) {
     const start = Date.now()
     const deadline = start + timeout_seconds * 1000

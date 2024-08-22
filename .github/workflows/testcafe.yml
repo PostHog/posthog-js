@@ -54,4 +54,4 @@ jobs:
         run: pnpm build-rollup
 
       - name: Run ${{ matrix.name }} test
-        run: pnpm testcafe ${{ matrix.browser }}
+        run: pnpm testcafe ${{ matrix.browser }} --stop-on-first-fail
