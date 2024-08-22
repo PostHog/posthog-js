@@ -44,22 +44,29 @@ export const staticFilesMock = RequestMock()
     })
 
 export const initPosthog = (config) => {
-    return ClientFunction((configParams = {}) => {
-        let testSessionId = Math.round(Math.random() * 10000000000).toString()
+    let testSessionId = Math.round(Math.random() * 10000000000).toString()
+    if (BRANCH_NAME && RUN_ID && BROWSER) {
+        testSessionId = `${BRANCH_NAME} ${BROWSER} ${RUN_ID} ${testSessionId}`
+    }
+    // eslint-disable-next-line no-console
+    console.log('Initialized posthog with testSessionId', testSessionId)
 
-        if (BRANCH_NAME && RUN_ID && BROWSER) {
-            testSessionId = `${BRANCH_NAME} ${BROWSER} ${RUN_ID} ${testSessionId}`
+    return ClientFunction(
+        (configParams = {}) => {
+            configParams.debug = true
+            window.posthog.init(configParams.api_key, configParams)
+            window.posthog.register({
+                testSessionId,
+            })
+
+            return testSessionId
+        },
+        {
+            dependencies: {
+                testSessionId,
+            },
         }
-        configParams.debug = true
-        window.posthog.init(configParams.api_key, configParams)
-        window.posthog.register({
-            testSessionId,
-        })
-        // eslint-disable-next-line no-console
-        console.log('Initialized posthog with testSessionId', testSessionId)
-
-        return testSessionId
-    })({
+    )({
         ...config,
         api_host: POSTHOG_API_HOST,
         api_key: POSTHOG_PROJECT_KEY,
