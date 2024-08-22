@@ -2,7 +2,6 @@ import fs from 'fs'
 import path from 'path'
 import { RequestLogger, RequestMock, ClientFunction } from 'testcafe'
 import fetch from 'node-fetch'
-import { uuidv7 } from '../src/uuidv7'
 
 // NOTE: These tests are run against a dedicated test project in PostHog cloud
 // but can be overridden to call a local API when running locally
@@ -46,7 +45,8 @@ export const staticFilesMock = RequestMock()
 
 export const initPosthog = (config) => {
     return ClientFunction((configParams = {}) => {
-        let testSessionId = uuidv7()
+        let testSessionId = Math.round(Math.random() * 10000000000).toString()
+
         if (BRANCH_NAME && RUN_ID && BROWSER) {
             testSessionId = `${BRANCH_NAME} ${BROWSER} ${RUN_ID} ${testSessionId}`
         }
