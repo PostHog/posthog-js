@@ -145,24 +145,28 @@ describe('posthog core', () => {
         })
 
         it('respects opt_out_useragent_filter (default: false)', () => {
-            const originalUseragent = globals.userAgent
-            ;(globals as any)['userAgent'] =
-                'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36'
-
+            const originalNavigator = globals.navigator
+            ;(globals as any).navigator = {
+                ...globals.navigator,
+                userAgent:
+                    'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36',
+            }
             const hook = jest.fn()
             const posthog = posthogWith(defaultConfig, defaultOverrides)
             posthog._addCaptureHook(hook)
 
             posthog.capture(eventName, {}, {})
             expect(hook).not.toHaveBeenCalledWith('$event')
-            ;(globals as any)['userAgent'] = originalUseragent
+            ;(globals as any)['navigator'] = originalNavigator
         })
 
         it('respects opt_out_useragent_filter', () => {
-            const originalUseragent = globals.userAgent
-
-            ;(globals as any)['userAgent'] =
-                'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36'
+            const originalNavigator = globals.navigator
+            ;(globals as any).navigator = {
+                ...globals.navigator,
+                userAgent:
+                    'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36',
+            }
 
             const hook = jest.fn()
             const posthog = posthogWith(
@@ -185,7 +189,7 @@ describe('posthog core', () => {
                 })
             )
             expect(event.properties['$browser_type']).toEqual('bot')
-            ;(globals as any)['userAgent'] = originalUseragent
+            ;(globals as any)['navigator'] = originalNavigator
         })
 
         it('truncates long properties', () => {
