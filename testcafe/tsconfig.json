@@ -3,6 +3,8 @@
     "compilerOptions": {
         "target": "esnext",
         "module": "commonjs",
-        "checkJs": false
-    }
+        "checkJs": false,
+        "skipLibCheck": true
+    },
+    "include": ["./**/*"]
 }
