@@ -121,6 +121,8 @@ describe('SessionRecording', () => {
     const loadScriptMock = jest.fn()
     let _emit: any
     let posthog: PostHog
+    let onCapture: Mock
+    let clientRateLimitContext: Mock
     let sessionRecording: SessionRecording
     let sessionId: string
     let sessionManager: SessionIdManager
@@ -172,12 +174,19 @@ describe('SessionRecording', () => {
 
         sessionManager = new SessionIdManager(config, postHogPersistence, sessionIdGeneratorMock, windowIdGeneratorMock)
 
+        onCapture = jest.fn()
+
+        clientRateLimitContext = jest.fn().mockReturnValue({
+            isRateLimited: false,
+            remainingTokens: 10,
+        })
+
         posthog = {
             get_property: (property_key: string): Property | undefined => {
                 return postHogPersistence?.['props'][property_key]
             },
             config: config,
-            capture: jest.fn(),
+            capture: onCapture,
             persistence: postHogPersistence,
             onFeatureFlags: (cb: (flags: string[]) => void) => {
                 onFeatureFlagsCallback = cb
@@ -186,6 +195,7 @@ describe('SessionRecording', () => {
             requestRouter: new RequestRouter({ config } as any),
             _addCaptureHook: jest.fn(),
             consent: { isOptedOut: () => false },
+            rateLimiter: { clientRateLimitContext: clientRateLimitContext },
         } as unknown as PostHog
 
         loadScriptMock.mockImplementation((_path, callback) => {
@@ -732,6 +742,7 @@ describe('SessionRecording', () => {
                     _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
+                    skip_client_rate_limiting: true,
                 }
             )
         })
@@ -767,6 +778,7 @@ describe('SessionRecording', () => {
                     _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
+                    skip_client_rate_limiting: true,
                 }
             )
         })
@@ -849,6 +861,7 @@ describe('SessionRecording', () => {
                     _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
+                    skip_client_rate_limiting: true,
                 }
             )
 
@@ -1514,6 +1527,7 @@ describe('SessionRecording', () => {
                     _batchKey: 'recordings',
                     _noTruncate: true,
                     _url: 'https://test.com/s/',
+                    skip_client_rate_limiting: true,
                 }
             )
 
@@ -1607,6 +1621,7 @@ describe('SessionRecording', () => {
                     _batchKey: 'recordings',
                     _noTruncate: true,
                     _url: 'https://test.com/s/',
+                    skip_client_rate_limiting: true,
                 }
             )
 
@@ -1635,6 +1650,7 @@ describe('SessionRecording', () => {
                     _batchKey: 'recordings',
                     _noTruncate: true,
                     _url: 'https://test.com/s/',
+                    skip_client_rate_limiting: true,
                 }
             )
             expect(sessionRecording['buffer']).toEqual({
@@ -1948,6 +1964,38 @@ describe('SessionRecording', () => {
             _emit(createIncrementalSnapshot({ type: 3 }))
 
             expect((sessionRecording as any)['_tryAddCustomEvent']).not.toHaveBeenCalled()
+        })
+    })
+
+    describe('when client is rate limited', () => {
+        beforeEach(() => {
+            clientRateLimitContext.mockReturnValue({
+                isRateLimited: true,
+                remainingTokens: 0,
+            })
+        })
+
+        it('does not capture if rate limit is in place', () => {
+            jest.useFakeTimers()
+            jest.setSystemTime(Date.now())
+            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            for (let i = 0; i < 50; i++) {
+                posthog.capture('custom_event')
+            }
+            onCapture.mockClear()
+            console.error = jest.fn()
+
+            _emit(createFullSnapshot())
+            // access private method 🤯so we don't need to wait for the timer
+            sessionRecording['_flushBuffer']()
+
+            expect(posthog.capture).not.toHaveBeenCalled()
+            expect(console.error).toHaveBeenCalledWith(
+                '[PostHog.js]',
+                'Cannot capture $snapshot event due to client rate limiting.'
+            )
         })
     })
 })
