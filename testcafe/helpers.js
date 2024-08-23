@@ -161,3 +161,19 @@ export function error(...args) {
     // eslint-disable-next-line no-console
     console.error(new Date().toISOString(), ...args)
 }
+
+export function writeResultsJsonFile(testName, testSessionId, assertFunction) {
+    fs.writeFileSync(
+        path.join(__dirname, `${testName}.results.json`),
+        JSON.stringify({ testSessionId, assert: assertFunction.name })
+    )
+}
+export function getResultsJsonFiles() {
+    return fs
+        .readdirSync(__dirname)
+        .filter((file) => file.endsWith('.results.json'))
+        .map((file) => {
+            const data = fs.readFileSync(path.join(__dirname, file))
+            return JSON.parse(data.toString())
+        })
+}

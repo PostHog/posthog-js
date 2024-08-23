@@ -32,6 +32,7 @@ module.exports = {
         browser: true,
         es6: true,
         'jest/globals': true,
+        node: true,
     },
     globals: {
         given: 'readonly',

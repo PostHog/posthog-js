@@ -1,7 +1,13 @@
 import { Selector, t } from 'testcafe'
-import { captureLogger, initPosthog, queryAPI, retryUntilResults, staticFilesMock } from './helpers'
+import {
+    captureLogger,
+    initPosthog,
+    queryAPI,
+    retryUntilResults,
+    staticFilesMock,
+    writeResultsJsonFile,
+} from './helpers'
 import { expect } from 'expect'
-import fs from 'fs'
 
 // eslint-disable-next-line no-undef
 fixture('posthog.js capture')
@@ -27,10 +33,7 @@ test('Custom events work and are accessible via /api/event', async (t) => {
         .expect(captureLogger.count(() => true))
         .gte(1)
 
-    fs.writeFileSync(
-        `${t.testRun.test.name}.results.json`,
-        JSON.stringify({ testSessionId, assert: 'assertCustomEventsWorkAndAreAccessibleViaApi' })
-    )
+    writeResultsJsonFile(t.testRun.test.name, testSessionId, assertCustomEventsWorkAndAreAccessibleViaApi)
 })
 
 export async function assertCustomEventsWorkAndAreAccessibleViaApi(testSessionId, deadline) {
@@ -50,10 +53,7 @@ test('Autocaptured events work and are accessible via /api/event', async (t) => 
         .expect(captureLogger.count(() => true))
         .gte(2)
 
-    fs.writeFileSync(
-        `${t.testRun.test.name}.results.json`,
-        JSON.stringify({ testSessionId, assert: 'assertAutocapturedEventsWorkAndAreAccessibleViaApi' })
-    )
+    writeResultsJsonFile(t.testRun.test.name, testSessionId, assertAutocapturedEventsWorkAndAreAccessibleViaApi)
 
     // Check no requests failed
     await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
@@ -110,10 +110,7 @@ test('Config options change autocapture behavior accordingly', async (t) => {
     // Check no requests failed
     await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
 
-    fs.writeFileSync(
-        `${t.testRun.test.name}.results.json`,
-        JSON.stringify({ testSessionId, assert: 'assertConfigOptionsChangeAutocaptureBehaviourAccordingly' })
-    )
+    writeResultsJsonFile(t.testRun.test.name, testSessionId, assertConfigOptionsChangeAutocaptureBehaviourAccordingly)
 })
 
 export async function assertConfigOptionsChangeAutocaptureBehaviourAccordingly(testSessionId, deadline) {
