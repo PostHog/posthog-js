@@ -58,7 +58,7 @@ export class Toolbar {
                 try {
                     window.localStorage.setItem('test', 'test')
                     window.localStorage.removeItem('test')
-                } catch (error) {
+                } catch (_) {
                     return false
                 }
 
@@ -118,7 +118,7 @@ export class Toolbar {
             } else {
                 return false
             }
-        } catch (e) {
+        } catch (_) {
             return false
         }
     }

@@ -46,7 +46,7 @@ export function parseStackFrames(ex: Error & { framesToPop?: number; stacktrace?
 
     try {
         return defaultStackParser(stacktrace, popSize)
-    } catch (e) {
+    } catch (_) {
         // no-empty
     }
 
