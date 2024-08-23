@@ -10,10 +10,19 @@ const testCafeMock = {
     requestHooks: () => testCafeMock,
     afterEach: () => testCafeMock,
 }
-// @ts-expect-error globalThis property
-globalThis.fixture = () => testCafeMock
-// @ts-expect-error globalThis property
-globalThis.test = () => testCafeMock
+let isTestCafe = false
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+if (!globalThis.fixture) {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    globalThis.fixture = () => testCafeMock
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    globalThis.test = () => testCafeMock
+} else {
+    isTestCafe = true
+}
 import * as asserts from './e2e.spec'
 import { getResultsJsonFiles } from './helpers'
 
@@ -37,8 +46,10 @@ async function main() {
     }
 }
 
-main().catch((error) => {
-    // eslint-disable-next-line no-console
-    console.error(error)
-    process.exit(1)
-})
+if (!isTestCafe) {
+    main().catch((error) => {
+        // eslint-disable-next-line no-console
+        console.error(error)
+        process.exit(1)
+    })
+}

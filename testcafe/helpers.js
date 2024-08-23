@@ -1,10 +1,11 @@
-import fs from 'fs'
+import * as fs from 'fs'
 import path from 'path'
 import { ClientFunction, RequestLogger, RequestMock } from 'testcafe'
 import fetch from 'node-fetch'
 
 // NOTE: These tests are run against a dedicated test project in PostHog cloud
 // but can be overridden to call a local API when running locally
+// User admin for the test project: https://us.posthog.com/admin/posthog/organization/0182397e-3df4-0000-52e3-d890b5a16955/change/
 // eslint-disable-next-line no-undef
 const currentEnv = process.env
 const {
@@ -16,7 +17,6 @@ const {
     RUN_ID,
     BROWSER,
 } = currentEnv
-// User admin for the test project: https://us.posthog.com/admin/posthog/organization/0182397e-3df4-0000-52e3-d890b5a16955/change/
 
 const HEADERS = { Authorization: `Bearer ${POSTHOG_API_KEY}` }
 
@@ -95,7 +95,7 @@ export async function retryUntilResults(
     } = {}
 ) {
     const start = Date.now()
-    deadline ??= start + 10 * 60 * 1000 // default to 10 minutes
+    deadline = deadline ?? start + 10 * 60 * 1000 // default to 10 minutes
     let api_errors = 0
 
     const attempt = (count, resolve, reject) => {
