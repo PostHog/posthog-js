@@ -38,7 +38,6 @@
     "dependencies": {
         "fflate": "^0.4.8",
         "preact": "^10.19.3",
-        "ts-node": "^10.9.2",
         "web-vitals": "^4.0.1"
     },
     "devDependencies": {
@@ -107,6 +106,7 @@
         "testcafe": "1.19.0",
         "testcafe-browser-provider-browserstack": "1.14.0",
         "tslib": "^2.5.0",
+        "ts-node": "^10.9.2",
         "typescript": "^5.5.4",
         "yargs": "^17.7.2"
     },
