@@ -61,4 +61,4 @@ jobs:
         run: pnpm testcafe ${{ matrix.browser }} --stop-on-first-fail
 
       - name: Check ${{ matrix.name }} events
-        run: pnpm check-testcafe-events
+        run: pnpm check-testcafe-results
