@@ -898,11 +898,19 @@ export class SessionRecording {
     }
 
     private _captureSnapshot(properties: Properties) {
+        const clientRateLimitContext = this.instance.rateLimiter.clientRateLimitContext()
+
+        if (clientRateLimitContext?.isRateLimited) {
+            logger.critical('Cannot capture $snapshot event due to client rate limiting.')
+            return
+        }
+
         // :TRICKY: Make sure we batch these requests, use a custom endpoint and don't truncate the strings.
         this.instance.capture('$snapshot', properties, {
             _url: this.instance.requestRouter.endpointFor('api', this._endpoint),
             _noTruncate: true,
             _batchKey: SESSION_RECORDING_BATCH_KEY,
+            skip_client_rate_limiting: true,
         })
     }
 
