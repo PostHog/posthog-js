@@ -11,14 +11,11 @@ const testCafeMock = {
     afterEach: () => testCafeMock,
 }
 let isTestCafe = false
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
+// eslint-disable-next-line no-undef
 if (!globalThis.fixture) {
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
+    // eslint-disable-next-line no-undef
     globalThis.fixture = () => testCafeMock
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
+    // eslint-disable-next-line no-undef
     globalThis.test = () => testCafeMock
 } else {
     isTestCafe = true
@@ -38,7 +35,7 @@ async function main() {
 
     for (const file of files) {
         const testSessionId = file.testSessionId
-        const assertFunction = asserts[file.assert as keyof typeof asserts]
+        const assertFunction = asserts[file.assert]
         if (!testSessionId || !assertFunction) {
             throw new Error(`Invalid results file: ${file}`)
         }
@@ -50,6 +47,7 @@ if (!isTestCafe) {
     main().catch((error) => {
         // eslint-disable-next-line no-console
         console.error(error)
+        // eslint-disable-next-line no-undef
         process.exit(1)
     })
 }
