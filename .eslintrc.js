@@ -32,7 +32,6 @@ module.exports = {
         browser: true,
         es6: true,
         'jest/globals': true,
-        node: true,
     },
     globals: {
         given: 'readonly',
@@ -106,6 +105,12 @@ module.exports = {
             globals: {
                 cy: true,
                 Cypress: true,
+            },
+        },
+        {
+            files: 'testcafe/**/*',
+            globals: {
+                __dirname: true,
             },
         },
     ],
