@@ -45,9 +45,6 @@ export const staticFilesMock = RequestMock()
 
 export const initPosthog = (testName, config) => {
     let testSessionId = `${testName} ${Math.round(Math.random() * 10000000000).toString()}`
-    if (BRANCH_NAME && RUN_ID && BROWSER) {
-        testSessionId = `${BRANCH_NAME} ${BROWSER} ${RUN_ID} ${testSessionId}`
-    }
     log(`Initializing posthog with testSessionId "${testSessionId}"`)
 
     return ClientFunction(
@@ -56,6 +53,9 @@ export const initPosthog = (testName, config) => {
             window.posthog.init(configParams.api_key, configParams)
             window.posthog.register({
                 testSessionId,
+                testBranchName: BRANCH_NAME,
+                testRunId: RUN_ID,
+                testBrowser: BROWSER,
             })
 
             return testSessionId
@@ -63,6 +63,9 @@ export const initPosthog = (testName, config) => {
         {
             dependencies: {
                 testSessionId,
+                BRANCH_NAME,
+                RUN_ID,
+                BROWSER,
             },
         }
     )({
@@ -85,31 +88,30 @@ export async function retryUntilResults(
     operation,
     target_results,
     {
-        timeout_seconds = 1200,
-        polling_interval_seconds = 10,
+        deadline = undefined,
+        polling_interval_seconds = 30,
         max_allowed_api_errors = 5,
         success_function = () => true,
     } = {}
 ) {
     const start = Date.now()
-    const deadline = start + timeout_seconds * 1000
+    deadline ??= start + 10 * 60 * 1000 // default to 10 minutes
     let api_errors = 0
 
     const attempt = (count, resolve, reject) => {
         setTimeout(() => {
             operation()
                 .then((results) => {
+                    const elapsedSeconds = Math.floor((Date.now() - start) / 1000)
                     if (results.length >= target_results && success_function(results)) {
                         log(
-                            `Got correct number of results (${target_results}) after ${Math.floor(
-                                (Date.now() - start) / 1000
-                            )} seconds (attempt ${count})`
+                            `Got correct number of results (${target_results}) after ${elapsedSeconds} seconds (attempt ${count})`
                         )
                         resolve(results)
                     } else {
                         log(`Expected ${target_results} results, got ${results.length} (attempt ${count})`)
                         if (Date.now() > deadline) {
-                            reject(new Error(`Timed out after ${timeout_seconds} seconds`))
+                            reject(new Error(`Timed out after ${elapsedSeconds} seconds`))
                         } else {
                             attempt(count + 1, resolve, reject)
                         }

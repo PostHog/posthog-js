@@ -23,7 +23,8 @@
         "typecheck": "tsc --noEmit --project tsconfig.json",
         "cypress": "cypress open",
         "prepare": "husky install",
-        "deprecate-old-versions": "node scripts/deprecate-old-versions.mjs"
+        "deprecate-old-versions": "node scripts/deprecate-old-versions.mjs",
+        "check-testcafe-results": "ts-node testcafe/check-testcafe-results.ts"
     },
     "main": "dist/main.js",
     "module": "dist/module.js",
@@ -37,6 +38,7 @@
     "dependencies": {
         "fflate": "^0.4.8",
         "preact": "^10.19.3",
+        "ts-node": "^10.9.2",
         "web-vitals": "^4.0.1"
     },
     "devDependencies": {
@@ -59,6 +61,7 @@
         "@testing-library/preact": "^3.2.4",
         "@types/eslint": "^8.44.6",
         "@types/jest": "^29.5.1",
+        "@types/node": "^22.5.0",
         "@types/react-dom": "^18.0.10",
         "@types/sinon": "^17.0.1",
         "@types/uuid": "^9.0.1",
@@ -81,6 +84,7 @@
         "eslint-plugin-prettier": "^4.2.1",
         "eslint-plugin-react": "^7.30.1",
         "eslint-plugin-react-hooks": "^4.6.0",
+        "expect": "^29.7.0",
         "express": "^4.19.2",
         "fast-check": "^2.17.0",
         "husky": "^8.0.1",
