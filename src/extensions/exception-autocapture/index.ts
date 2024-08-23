@@ -68,7 +68,7 @@ export class ExceptionObserver {
     }
 
     private startCapturing = () => {
-        if (!window || !this.isEnabled || this.hasHandlers || (window.onerror as any)?.__POSTHOG_INSTRUMENTED__) {
+        if (!window || !this.isEnabled || this.hasHandlers || this.isCapturing) {
             return
         }
 
@@ -119,6 +119,11 @@ export class ExceptionObserver {
     }
 
     captureException(error: Error, additionalProperties: Properties = {}) {
+        if (!window || !this.isEnabled || this.isCapturing) {
+            logger.error(LOGGER_PREFIX + ' error tracking is not enabled - cannot capture exception')
+            return
+        }
+
         const errorEventArgs: ErrorEventArgs = [error.message, undefined, undefined, undefined, error]
         const errorProperties = errorToProperties(errorEventArgs)
         this._captureException({ ...errorProperties, ...additionalProperties })
