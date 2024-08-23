@@ -106,11 +106,11 @@ devDependencies:
     specifier: ^6.1.0
     version: 6.1.0
   cypress:
-    specifier: 13.13.2
-    version: 13.13.2
+    specifier: 13.6.3
+    version: 13.6.3
   cypress-localstorage-commands:
     specifier: ^2.2.6
-    version: 2.2.6(cypress@13.13.2)
+    version: 2.2.6(cypress@13.6.3)
   date-fns:
     specifier: ^3.6.0
     version: 3.6.0
@@ -4488,17 +4488,17 @@ packages:
     resolution: {integrity: sha512-d4ZVpCW31eWwCMe1YT3ur7mUDnTXbgwyzaL320DrcRT45rfjYxkt5QWLrmOJ+/UEAI2+fQgKe/fCjR8l4TpRgw==}
     dev: true
 
-  /cypress-localstorage-commands@2.2.6(cypress@13.13.2):
+  /cypress-localstorage-commands@2.2.6(cypress@13.6.3):
     resolution: {integrity: sha512-l3nZ+Lu6YbBWk4UIfNrRkNK56BkF8zVbCrqzCf35x4Nlx2wA2r0spBOZXnKjbutQZgo6qDqtS8uXoSqV36YM1Q==}
     engines: {node: '>=14.0.0'}
     peerDependencies:
       cypress: '>=2.1.0'
     dependencies:
-      cypress: 13.13.2
+      cypress: 13.6.3
     dev: true
 
-  /cypress@13.13.2:
-    resolution: {integrity: sha512-PvJQU33933NvS1StfzEb8/mu2kMy4dABwCF+yd5Bi7Qly1HOVf+Bufrygee/tlmty/6j5lX+KIi8j9Q3JUMbhA==}
+  /cypress@13.6.3:
+    resolution: {integrity: sha512-d/pZvgwjAyZsoyJ3FOsJT5lDsqnxQ/clMqnNc++rkHjbkkiF2h9s0JsZSyyH4QXhVFW3zPFg82jD25roFLOdZA==}
     engines: {node: ^16.0.0 || ^18.0.0 || >=20.0.0}
     hasBin: true
     requiresBuild: true
