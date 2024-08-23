@@ -162,9 +162,13 @@ export function error(...args) {
     console.error(new Date().toISOString(), ...args)
 }
 
+export function santizeTestName(testName) {
+    return `${testName.replaceAll(/[/ ]/g, '_')}.results.json`
+}
+
 export function writeResultsJsonFile(testName, testSessionId, assertFunction) {
     fs.writeFileSync(
-        path.join(__dirname, `${testName}.results.json`),
+        path.join(__dirname, `${santizeTestName(testName)}.results.json`),
         JSON.stringify({ testSessionId, assert: assertFunction.name })
     )
 }
