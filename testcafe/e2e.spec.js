@@ -1,4 +1,4 @@
-import { Selector, t } from 'testcafe'
+import { t } from 'testcafe'
 import {
     captureLogger,
     initPosthog,
@@ -28,8 +28,9 @@ fixture('posthog.js capture')
 test('Custom events work and are accessible via /api/event', async (t) => {
     const testSessionId = await initPosthog(t.testRun.test.name)
     await t
-        .click(Selector('[data-cy-custom-event-button]', { timeout: 10000 }))
-        .wait(1000)
+        .wait(5000)
+        .click('[data-cy-custom-event-button]')
+        .wait(5000)
         .expect(captureLogger.count(() => true))
         .gte(1)
 
@@ -47,9 +48,10 @@ export async function assertCustomEventsWorkAndAreAccessibleViaApi(testSessionId
 test('Autocaptured events work and are accessible via /api/event', async (t) => {
     const testSessionId = await initPosthog(t.testRun.test.name)
     await t
-        .click(Selector('[data-cy-link-mask-text]', { timeout: 10000 }))
+        .wait(5000)
+        .click('[data-cy-link-mask-text]')
         .click('[data-cy-button-sensitive-attributes]')
-        .wait(1000)
+        .wait(5000)
         .expect(captureLogger.count(() => true))
         .gte(2)
 
@@ -101,9 +103,10 @@ test('Config options change autocapture behavior accordingly', async (t) => {
     })
 
     await t
-        .click(Selector('[data-cy-link-mask-text]', { timeout: 10000 }))
+        .wait(5000)
+        .click('[data-cy-link-mask-text]')
         .click('[data-cy-button-sensitive-attributes]')
-        .wait(1000)
+        .wait(5000)
         .expect(captureLogger.count(() => true))
         .gte(2)
 
