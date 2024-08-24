@@ -1,9 +1,9 @@
 import { t } from 'testcafe'
 import {
     captureLogger,
+    capturesMap,
     initPosthog,
     isLoaded,
-    numCaptures,
     queryAPI,
     retryUntilResults,
     staticFilesMock,
@@ -34,9 +34,12 @@ test('Custom events work and are accessible via /api/event', async (t) => {
         .expect(isLoaded())
         .ok()
         .click('[data-cy-custom-event-button]')
-        .expect(numCaptures())
-        .eql(5)
         .wait(10000)
+        .expect(capturesMap())
+        .eql({
+            'custom-event': 1,
+            $pageview: 1,
+        })
         .expect(captureLogger.count(() => true))
         .gte(1)
 
@@ -62,9 +65,12 @@ test('Autocaptured events work and are accessible via /api/event', async (t) => 
         .ok()
         .click('[data-cy-link-mask-text]')
         .click('[data-cy-button-sensitive-attributes]')
-        .expect(numCaptures())
-        .eql(3)
         .wait(10000)
+        .expect(capturesMap())
+        .eql({
+            'custom-event': 1,
+            $pageview: 1,
+        })
         .expect(captureLogger.count(() => true))
         .gte(2)
 
@@ -118,9 +124,12 @@ test('Config options change autocapture behavior accordingly', async (t) => {
         .ok()
         .click('[data-cy-link-mask-text]')
         .click('[data-cy-button-sensitive-attributes]')
-        .expect(numCaptures())
-        .eql(3)
         .wait(10000)
+        .expect(capturesMap())
+        .eql({
+            'custom-event': 1,
+            $pageview: 1,
+        })
         .expect(captureLogger.count(() => true))
         .gte(2)
 

@@ -94,6 +94,17 @@ export const initPosthog = (testName, config) => {
 export const isLoaded = ClientFunction(() => !!window.loaded)
 export const numCaptures = ClientFunction(() => window.captures.length)
 
+export const capturesMap = ClientFunction(() => {
+    const map = {}
+    window.captures.forEach((capture) => {
+        if (!map[capture.event]) {
+            map[capture.event] = 0
+        }
+        map[capture.event]++
+    })
+    return map
+})
+
 // test code, doesn't need to be IE11 compatible
 // eslint-disable-next-line compat/compat
 export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
