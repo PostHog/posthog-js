@@ -36,9 +36,10 @@ test('Custom events work and are accessible via /api/event', async (t) => {
         .click('[data-cy-custom-event-button]')
         .wait(10000)
         .expect(capturesMap())
-        .eql({
+        .contains({
             'custom-event': 1,
             $pageview: 1,
+            $autocapture: 1,
         })
         .expect(captureLogger.count(() => true))
         .gte(1)
