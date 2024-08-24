@@ -70,7 +70,13 @@ export const initPosthog = (testName, config) => {
 
     return ClientFunction(
         (clientPosthogConfig = {}) => {
-            clientPosthogConfig.loaded = () => (window.loaded = true)
+            clientPosthogConfig.loaded = () => {
+                window.loaded = true
+                window.captures = []
+            }
+            clientPosthogConfig._onCapture = (event) => {
+                window.captures.push(event)
+            }
             window.posthog.init(clientPosthogConfig.api_key, clientPosthogConfig)
             window.posthog.register(register)
 
@@ -86,6 +92,7 @@ export const initPosthog = (testName, config) => {
 }
 
 export const isLoaded = ClientFunction(() => !!window.loaded)
+export const numCaptures = ClientFunction(() => window.captures.length)
 
 // test code, doesn't need to be IE11 compatible
 // eslint-disable-next-line compat/compat
