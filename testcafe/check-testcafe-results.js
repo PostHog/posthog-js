@@ -25,7 +25,7 @@ import {
     assertAutocapturedEventsWorkAndAreAccessibleViaApi,
     assertCustomEventsWorkAndAreAccessibleViaApi,
 } from './e2e.spec'
-import { getResultsJsonFiles, POSTHOG_API_PROJECT } from './helpers'
+import { getResultsJsonFiles, log, error, POSTHOG_API_PROJECT } from './helpers'
 const asserts = {
     assertConfigOptionsChangeAutocaptureBehaviourAccordingly,
     assertAutocapturedEventsWorkAndAreAccessibleViaApi,
@@ -33,17 +33,17 @@ const asserts = {
 }
 async function main() {
     // eslint-disable-next-line no-console
-    console.log(
-        ```
+    log(`
 Waiting for events from tests to appear in PostHog.
 You can manually confirm whether the events have shown up at https://us.posthog.com/project/${POSTHOG_API_PROJECT}/activity/explore.
-```
-    )
+`)
     // each test will put a results.json file in this folder, so let's list all the files in this folder
     const files = getResultsJsonFiles()
+
     if (files.length !== 3) {
         throw new Error(`Expected 3 results files, got ${JSON.stringify(files)}`)
     }
+    log(JSON.stringify(files, null, 2))
 
     // the deadline is the same for each assert, as the ingestion lag will be happening in parallel
     const deadline = Date.now() + 1000 * 60 * 20 // 20 minutes
@@ -51,8 +51,7 @@ You can manually confirm whether the events have shown up at https://us.posthog.
     for (const file of files) {
         const testSessionId = file.testSessionId
         const assertFunction = asserts[file.assert]
-        // eslint-disable-next-line no-console
-        console.log(`Asserting ${file.assert} for test session ${testSessionId}`, assertFunction, file)
+        log(`Asserting ${file.assert} for test session ${testSessionId}`, assertFunction, file)
         if (!testSessionId || !assertFunction) {
             throw new Error(`Invalid results file: ${file}`)
         }
@@ -61,9 +60,8 @@ You can manually confirm whether the events have shown up at https://us.posthog.
 }
 
 if (!isTestCafe) {
-    main().catch((error) => {
-        // eslint-disable-next-line no-console
-        console.error(error)
+    main().catch((e) => {
+        error(e)
         // eslint-disable-next-line no-undef
         process.exit(1)
     })
