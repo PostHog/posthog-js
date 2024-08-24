@@ -20,9 +20,17 @@ if (!globalThis.fixture) {
 } else {
     isTestCafe = true
 }
-import * as asserts from './e2e.spec'
+import {
+    assertConfigOptionsChangeAutocaptureBehaviourAccordingly,
+    assertAutocapturedEventsWorkAndAreAccessibleViaApi,
+    assertCustomEventsWorkAndAreAccessibleViaApi,
+} from './e2e.spec'
 import { getResultsJsonFiles, POSTHOG_API_PROJECT } from './helpers'
-
+const asserts = {
+    assertConfigOptionsChangeAutocaptureBehaviourAccordingly,
+    assertAutocapturedEventsWorkAndAreAccessibleViaApi,
+    assertCustomEventsWorkAndAreAccessibleViaApi,
+}
 async function main() {
     // eslint-disable-next-line no-console
     console.log(
@@ -43,6 +51,8 @@ You can manually confirm whether the events have shown up at https://us.posthog.
     for (const file of files) {
         const testSessionId = file.testSessionId
         const assertFunction = asserts[file.assert]
+        // eslint-disable-next-line no-console
+        console.log(`Asserting ${file.assert} for test session ${testSessionId}`, assertFunction, file)
         if (!testSessionId || !assertFunction) {
             throw new Error(`Invalid results file: ${file}`)
         }
