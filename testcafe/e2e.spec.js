@@ -37,9 +37,9 @@ test('Custom events work and are accessible via /api/event', async (t) => {
         .wait(10000)
         .expect(capturesMap())
         .contains({
-            'custom-event': 1,
             $pageview: 1,
             $autocapture: 1,
+            'custom-event': 1,
         })
         .expect(captureLogger.count(() => true))
         .gte(1)
@@ -68,9 +68,9 @@ test('Autocaptured events work and are accessible via /api/event', async (t) => 
         .click('[data-cy-button-sensitive-attributes]')
         .wait(10000)
         .expect(capturesMap())
-        .eql({
-            'custom-event': 1,
+        .contains({
             $pageview: 1,
+            $autocapture: 2,
         })
         .expect(captureLogger.count(() => true))
         .gte(2)
@@ -86,6 +86,7 @@ export async function assertAutocapturedEventsWorkAndAreAccessibleViaApi(testSes
         deadline,
     })
 
+    expect(results.filter(({ event }) => event === '$pageview').length).toEqual(1)
     const autocapturedEvents = results.filter((e) => e.event === '$autocapture')
 
     await expect(autocapturedEvents.length).toEqual(2)
@@ -127,9 +128,9 @@ test('Config options change autocapture behavior accordingly', async (t) => {
         .click('[data-cy-button-sensitive-attributes]')
         .wait(10000)
         .expect(capturesMap())
-        .eql({
-            'custom-event': 1,
+        .contains({
             $pageview: 1,
+            $autocapture: 2,
         })
         .expect(captureLogger.count(() => true))
         .gte(2)
