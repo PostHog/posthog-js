@@ -37,6 +37,9 @@ test('Custom events work and are accessible via /api/event', async (t) => {
         .expect(captureLogger.count(() => true))
         .gte(1)
 
+    // Check no requests failed
+    await t.expect(captureLogger.count(({ response }) => response.statusCode !== 200)).eql(0)
+
     writeResultsJsonFile(t.testRun.test.name, testSessionId, assertCustomEventsWorkAndAreAccessibleViaApi)
 })
 
