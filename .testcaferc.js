@@ -1,5 +1,5 @@
 module.exports = {
-    src: './testcafe',
+    src: './testcafe/*.spec.js',
     compilerOptions: {
         typescript: {
             customCompilerModulePath: require.resolve('typescript'),
