@@ -35,7 +35,7 @@ async function main() {
     // eslint-disable-next-line no-console
     log(`
 Waiting for events from tests to appear in PostHog.
-You can manually confirm whether the events have shown up at https://us.posthog.com/project/${POSTHOG_API_PROJECT}/activity/explore.
+You can manually confirm whether the events have shown up at https://us.posthog.com/project/${POSTHOG_API_PROJECT}/activity/explore
 `)
     // each test will put a results.json file in this folder, so let's list all the files in this folder
     const files = getResultsJsonFiles()
