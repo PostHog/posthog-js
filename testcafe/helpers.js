@@ -47,31 +47,9 @@ export const initPosthog = (testName, config) => {
     let testSessionId = Math.round(Math.random() * 10000000000).toString()
     log(`Initializing posthog with testSessionId "${testSessionId}"`)
 
-    return ClientFunction(
-        (configParams = {}) => {
-            configParams.debug = true
-            window.posthog.init(configParams.api_key, configParams)
-            window.posthog.register({
-                testSessionId,
-                testName,
-                testBranchName: BRANCH_NAME,
-                testRunId: RUN_ID,
-                testBrowser: BROWSER,
-            })
-
-            return testSessionId
-        },
-        {
-            dependencies: {
-                testSessionId,
-                testName,
-                BRANCH_NAME,
-                RUN_ID,
-                BROWSER,
-            },
-        }
-    )({
+    const posthogConfig = {
         ...config,
+        debug: true,
         api_host: POSTHOG_API_HOST,
         api_key: POSTHOG_PROJECT_KEY,
         bootstrap: {
@@ -79,8 +57,34 @@ export const initPosthog = (testName, config) => {
             isIdentifiedID: true,
         },
         opt_out_useragent_filter: true,
-    })
+    }
+
+    const register = {
+        testSessionId,
+        testName,
+        testBranchName: BRANCH_NAME,
+        testRunId: RUN_ID,
+        testBrowser: BROWSER,
+    }
+
+    return ClientFunction(
+        (clientPosthogConfig = {}) => {
+            clientPosthogConfig.loaded = () => (window.loaded = true)
+            window.posthog.init(clientPosthogConfig.api_key, clientPosthogConfig)
+            window.posthog.register(register)
+
+            return testSessionId
+        },
+        {
+            dependencies: {
+                register,
+                testSessionId,
+            },
+        }
+    )(posthogConfig)
 }
+
+export const isLoaded = ClientFunction(() => !!window.loaded)
 
 // NOTE: This is limited by the real production ingestion lag, which you can see in grafana is usually
 // in the low minutes https://grafana.prod-us.posthog.dev/d/homepage/homepage

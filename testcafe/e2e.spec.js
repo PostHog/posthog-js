@@ -2,6 +2,7 @@ import { t } from 'testcafe'
 import {
     captureLogger,
     initPosthog,
+    isLoaded,
     queryAPI,
     retryUntilResults,
     staticFilesMock,
@@ -28,6 +29,9 @@ fixture('posthog.js capture')
 test('Custom events work and are accessible via /api/event', async (t) => {
     const testSessionId = await initPosthog(t.testRun.test.name)
     await t
+        .wait(5000)
+        .expect(isLoaded())
+        .ok()
         .click('[data-cy-custom-event-button]')
         .wait(10000)
         .expect(captureLogger.count(() => true))
@@ -47,6 +51,9 @@ export async function assertCustomEventsWorkAndAreAccessibleViaApi(testSessionId
 test('Autocaptured events work and are accessible via /api/event', async (t) => {
     const testSessionId = await initPosthog(t.testRun.test.name)
     await t
+        .wait(5000)
+        .expect(isLoaded())
+        .ok()
         .click('[data-cy-link-mask-text]')
         .click('[data-cy-button-sensitive-attributes]')
         .wait(10000)
@@ -101,6 +108,9 @@ test('Config options change autocapture behavior accordingly', async (t) => {
     })
 
     await t
+        .wait(5000)
+        .expect(isLoaded())
+        .ok()
         .click('[data-cy-link-mask-text]')
         .click('[data-cy-button-sensitive-attributes]')
         .wait(10000)
