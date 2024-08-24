@@ -8,7 +8,7 @@ import fetch from 'node-fetch'
 // User admin for the test project: https://us.posthog.com/admin/posthog/organization/0182397e-3df4-0000-52e3-d890b5a16955/change/
 // eslint-disable-next-line no-undef
 const currentEnv = process.env
-const {
+export const {
     POSTHOG_PROJECT_KEY,
     POSTHOG_API_KEY,
     POSTHOG_API_HOST = 'https://us.i.posthog.com',
@@ -44,7 +44,7 @@ export const staticFilesMock = RequestMock()
     })
 
 export const initPosthog = (testName, config) => {
-    let testSessionId = `${testName} ${Math.round(Math.random() * 10000000000).toString()}`
+    let testSessionId = Math.round(Math.random() * 10000000000).toString()
     log(`Initializing posthog with testSessionId "${testSessionId}"`)
 
     return ClientFunction(
@@ -53,6 +53,7 @@ export const initPosthog = (testName, config) => {
             window.posthog.init(configParams.api_key, configParams)
             window.posthog.register({
                 testSessionId,
+                testName,
                 testBranchName: BRANCH_NAME,
                 testRunId: RUN_ID,
                 testBrowser: BROWSER,
@@ -63,6 +64,7 @@ export const initPosthog = (testName, config) => {
         {
             dependencies: {
                 testSessionId,
+                testName,
                 BRANCH_NAME,
                 RUN_ID,
                 BROWSER,
