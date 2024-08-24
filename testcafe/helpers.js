@@ -72,10 +72,10 @@ export const initPosthog = (testName, config) => {
         (clientPosthogConfig = {}) => {
             clientPosthogConfig.loaded = () => {
                 window.loaded = true
-                window.captures = []
+                window.fullCaptures = []
             }
             clientPosthogConfig._onCapture = (_, event) => {
-                window.captures.push(event)
+                window.fullCaptures.push(event)
             }
             window.posthog.init(clientPosthogConfig.api_key, clientPosthogConfig)
             window.posthog.register(register)
@@ -95,16 +95,15 @@ export const isLoaded = ClientFunction(() => !!window.loaded)
 export const numCaptures = ClientFunction(() => window.captures.length)
 
 export const capturesMap = ClientFunction(() => {
-    // const map = {}
-    // window.captures.forEach((capture) => {
-    //     const eventName = capture.event.name
-    //     if (!map[eventName]) {
-    //         map[eventName] = 0
-    //     }
-    //     map[eventName]++
-    // })
-    // return map
-    return JSON.stringify(window.captures)
+    const map = {}
+    window.fullCaptures.forEach((capture) => {
+        const eventName = capture.event
+        if (!map[eventName]) {
+            map[eventName] = 0
+        }
+        map[eventName]++
+    })
+    return map
 })
 
 // test code, doesn't need to be IE11 compatible
