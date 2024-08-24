@@ -93,12 +93,7 @@ export const isLoaded = ClientFunction(() => !!window.loaded)
 export async function retryUntilResults(
     operation,
     target_results,
-    {
-        deadline = undefined,
-        polling_interval_seconds = 30,
-        max_allowed_api_errors = 5,
-        success_function = () => true,
-    } = {}
+    { deadline = undefined, polling_interval_seconds = 30, max_allowed_api_errors = 5 } = {}
 ) {
     const start = Date.now()
     deadline = deadline ?? start + 10 * 60 * 1000 // default to 10 minutes
@@ -109,7 +104,7 @@ export async function retryUntilResults(
             operation()
                 .then((results) => {
                     const elapsedSeconds = Math.floor((Date.now() - start) / 1000)
-                    if (results.length >= target_results && success_function(results)) {
+                    if (results.length >= target_results) {
                         log(
                             `Got correct number of results (${target_results}) after ${elapsedSeconds} seconds (attempt ${count})`
                         )
