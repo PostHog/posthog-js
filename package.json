@@ -24,7 +24,8 @@
         "cypress": "cypress open",
         "prepare": "husky install",
         "deprecate-old-versions": "node scripts/deprecate-old-versions.mjs",
-        "check-testcafe-results": "ts-node testcafe/check-testcafe-results.js"
+        "check-testcafe-results": "ts-node testcafe/check-testcafe-results.js",
+        "run-testcafe-localhost": "node scripts/run-testcafe-localhost.mjs"
     },
     "main": "dist/main.js",
     "module": "dist/module.js",
