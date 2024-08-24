@@ -87,6 +87,10 @@ export const initPosthog = (testName, config) => {
 
 export const isLoaded = ClientFunction(() => !!window.loaded)
 
+// test code, doesn't need to be IE11 compatible
+// eslint-disable-next-line compat/compat
+export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
 // NOTE: This is limited by the real production ingestion lag, which you can see in grafana is usually
 // in the low minutes https://grafana.prod-us.posthog.dev/d/homepage/homepage
 // This means that this test can fail if the ingestion lag is higher than the timeout, so we're pretty
@@ -99,41 +103,38 @@ export async function retryUntilResults(
     const start = Date.now()
     deadline = deadline ?? start + 10 * 60 * 1000 // default to 10 minutes
     let api_errors = 0
+    let attempts = 0
+    let last_api_error = null
+    let elapsedSeconds = 0
 
-    const attempt = (count, resolve, reject) => {
-        setTimeout(() => {
-            operation()
-                .then((results) => {
-                    const elapsedSeconds = Math.floor((Date.now() - start) / 1000)
-                    if (results.length >= target_results) {
-                        log(
-                            `Got correct number of results (${target_results}) after ${elapsedSeconds} seconds (attempt ${count})`
-                        )
-                        resolve(results)
-                    } else {
-                        log(`Expected ${target_results} results, got ${results.length} (attempt ${count})`)
-                        if (Date.now() > deadline) {
-                            reject(new Error(`Timed out after ${elapsedSeconds} seconds`))
-                        } else {
-                            attempt(count + 1, resolve, reject)
-                        }
-                    }
-                })
-                .catch((err) => {
-                    api_errors++
-                    if (api_errors > max_allowed_api_errors) {
-                        reject(err)
-                    } else {
-                        error('API Error:', err)
-                        attempt(count + 1, resolve, reject)
-                    }
-                })
-        }, polling_interval_seconds * 1000)
+    do {
+        attempts++
+        let results
+        try {
+            results = await operation()
+        } catch (err) {
+            api_errors++
+            last_api_error = err
+            error('API Error:', err)
+        }
+        if (results) {
+            elapsedSeconds = Math.floor((Date.now() - start) / 1000)
+            if (results.length >= target_results) {
+                log(
+                    `Got correct number of results (${target_results}) after ${elapsedSeconds} seconds (attempt ${attempts})`
+                )
+                return results
+            } else {
+                log(`Expected ${target_results} results, got ${results.length} (attempt ${attempts})`)
+            }
+        }
+        await delay(polling_interval_seconds * 1000)
+    } while (api_errors < max_allowed_api_errors && Date.now() > deadline)
+
+    if (api_errors >= max_allowed_api_errors && last_api_error) {
+        throw last_api_error
     }
-
-    // new Promise isn't supported in IE11, but we don't care in these tests
-    // eslint-disable-next-line compat/compat
-    return new Promise((...args) => attempt(0, ...args))
+    throw new Error(`Timed out after ${elapsedSeconds} seconds`)
 }
 
 export async function queryAPI(testSessionId) {
