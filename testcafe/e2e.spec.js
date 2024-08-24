@@ -67,11 +67,8 @@ test('Autocaptured events work and are accessible via /api/event', async (t) => 
 })
 
 export async function assertAutocapturedEventsWorkAndAreAccessibleViaApi(testSessionId, deadline) {
-    const results = await retryUntilResults(() => queryAPI(testSessionId), 2, {
+    const results = await retryUntilResults(() => queryAPI(testSessionId), 3, {
         deadline,
-        success_function: (results) => {
-            return results.filter((e) => e.event === '$autocapture').length >= 2
-        },
     })
 
     const autocapturedEvents = results.filter((e) => e.event === '$autocapture')
