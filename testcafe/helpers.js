@@ -148,12 +148,12 @@ export async function retryUntilResults(
             }
         }
         await delay(polling_interval_seconds * 1000)
-    } while (api_errors < max_allowed_api_errors && Date.now() > deadline)
+    } while (api_errors < max_allowed_api_errors && Date.now() <= deadline)
 
     if (api_errors >= max_allowed_api_errors && last_api_error) {
         throw last_api_error
     }
-    throw new Error(`Timed out after ${elapsedSeconds} seconds`)
+    throw new Error(`Timed out after ${elapsedSeconds} seconds (attempt ${attempts})`)
 }
 
 export async function queryAPI(testSessionId) {
