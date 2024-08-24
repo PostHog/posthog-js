@@ -57,6 +57,7 @@ export const initPosthog = (testName, config) => {
             isIdentifiedID: true,
         },
         opt_out_useragent_filter: true,
+        request_batching: false,
     }
 
     const register = {
