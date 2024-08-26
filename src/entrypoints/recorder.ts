@@ -538,9 +538,9 @@ function initFetchObserver(
                     networkRequest.requestBody = await _tryReadRequestBody({ r: req, options, url })
                 }
 
-                after = win.performance.now()
-                res = await originalFetch(req)
                 before = win.performance.now()
+                res = await originalFetch(req)
+                after = win.performance.now()
 
                 const responseHeaders: Headers = {}
                 res.headers.forEach((value, header) => {
