@@ -1,3 +1,7 @@
+## 1.158.1 - 2024-08-26
+
+- fix: event listeners should obey start and stop (#1379)
+
 ## 1.158.0 - 2024-08-26
 
 - fix(segment): Posthog can identify after segment identifies a user, not just during bootstrap. (#1373)
