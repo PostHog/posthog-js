@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.157.2",
+    "version": "1.158.1",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "hey@posthog.com",
@@ -68,7 +68,7 @@
         "babel-eslint": "10.1.0",
         "babel-jest": "^26.6.3",
         "compare-versions": "^6.1.0",
-        "cypress": "13.13.2",
+        "cypress": "13.6.3",
         "cypress-localstorage-commands": "^2.2.6",
         "date-fns": "^3.6.0",
         "eslint": "8.56.0",
