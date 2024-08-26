@@ -14,15 +14,12 @@ const testCafeMock = {
     requestHooks: () => testCafeMock,
     afterEach: () => testCafeMock,
 }
-let isTestCafe = false
 // eslint-disable-next-line no-undef
 if (!globalThis.fixture) {
     // eslint-disable-next-line no-undef
     globalThis.fixture = () => testCafeMock
     // eslint-disable-next-line no-undef
     globalThis.test = () => testCafeMock
-} else {
-    isTestCafe = true
 }
 // end of hackiness
 import {
@@ -65,10 +62,8 @@ If they seem to be failing unexpectedly, check grafana for ingestion lag at http
     }
 }
 
-if (!isTestCafe) {
-    main().catch((e) => {
-        error(e)
-        // eslint-disable-next-line no-undef
-        process.exit(1)
-    })
-}
+main().catch((e) => {
+    error(e)
+    // eslint-disable-next-line no-undef
+    process.exit(1)
+})
