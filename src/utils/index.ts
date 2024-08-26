@@ -111,7 +111,7 @@ export function entries<T = any>(obj: Record<string, T>): [string, T][] {
 export const isValidRegex = function (str: string): boolean {
     try {
         new RegExp(str)
-    } catch (_) {
+    } catch {
         return false
     }
     return true
@@ -129,7 +129,7 @@ export const timestamp = function (): number {
 export const trySafe = function <T>(fn: () => T): T | undefined {
     try {
         return fn()
-    } catch (_) {
+    } catch {
         return undefined
     }
 }

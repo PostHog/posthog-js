@@ -6,12 +6,7 @@ const rules = {
     '@typescript-eslint/no-empty-function': 'off',
     '@typescript-eslint/no-this-alias': 'off',
     '@typescript-eslint/no-explicit-any': 'off',
-    '@typescript-eslint/no-unused-vars': [
-        'error',
-        {
-            caughtErrorsIgnorePattern: '^_', // IE11 requires a catch statement to have an error, see https://caniuse.com/mdn-javascript_statements_try_catch_optional_catch_binding
-        },
-    ],
+    '@typescript-eslint/no-unused-vars': ['error'],
     '@typescript-eslint/no-unused-expressions': 'off',
     'no-prototype-builtins': 'off',
     'no-empty': 'off',
