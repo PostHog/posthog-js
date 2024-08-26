@@ -1,3 +1,8 @@
+## 1.158.0 - 2024-08-26
+
+- fix(segment): Posthog can identify after segment identifies a user, not just during bootstrap. (#1373)
+- fix: Revert cypress back to 13.6.3 (#1384)
+
 ## 1.157.2 - 2024-08-20
 
 - feat: Use NavigatorUAData and navigator.webdriver to improve bot detection (#1359)
