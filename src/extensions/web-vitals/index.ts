@@ -18,7 +18,7 @@ export class WebVitalsAutocapture {
     private _initialized = false
 
     private buffer: WebVitalsEventBuffer = { url: undefined, metrics: [], firstMetricTimestamp: undefined }
-    private _delayedFlushTimer: number | undefined
+    private _delayedFlushTimer: ReturnType<typeof setTimeout> | undefined
 
     constructor(private readonly instance: PostHog) {
         this._enabledServerSide = !!this.instance.persistence?.props[WEB_VITALS_ENABLED_SERVER_SIDE]
