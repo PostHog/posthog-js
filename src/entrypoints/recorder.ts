@@ -302,9 +302,6 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                     }
                     getRequestPerformanceEntry(win, 'xmlhttprequest', req.url, after, before)
                         .then((entry) => {
-                            if (isNull(entry)) {
-                                return
-                            }
                             const requests = prepareRequest(entry, req.method, xhr?.status, networkRequest)
                             cb({ requests })
                         })
@@ -326,11 +323,11 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
  *  NB PerformanceNavigationTiming extends PerformanceResourceTiming
  *  Here we don't care which interface it implements as both expose `serverTimings`
  */
-const exposesServerTiming = (event: PerformanceEntry): event is PerformanceResourceTiming =>
-    event.entryType === 'navigation' || event.entryType === 'resource'
+const exposesServerTiming = (event: PerformanceEntry | null): event is PerformanceResourceTiming =>
+    !!event && (event.entryType === 'navigation' || event.entryType === 'resource')
 
 function prepareRequest(
-    entry: PerformanceResourceTiming,
+    entry: PerformanceResourceTiming | null,
     method: string | undefined,
     status: number | undefined,
     networkRequest: Partial<CapturedNetworkRequest>,
@@ -343,17 +340,19 @@ function prepareRequest(
     const timeOrigin = Math.floor(Date.now() - performance.now())
     // clickhouse can't ingest timestamps that are floats
     // (in this case representing fractions of a millisecond we don't care about anyway)
-    const timestamp = Math.floor(timeOrigin + entry.startTime)
+    const timestamp = Math.floor(timeOrigin + (entry ? entry.startTime : 0))
+
+    const entryJSON = entry ? entry.toJSON() : {}
 
     const requests: CapturedNetworkRequest[] = [
         {
-            ...entry.toJSON(),
-            startTime: Math.round(entry.startTime),
-            endTime: Math.round(entry.responseEnd),
+            ...entryJSON,
+            startTime: entry ? Math.round(entry.startTime) : undefined,
+            endTime: entry ? Math.round(entry.responseEnd) : undefined,
             timeOrigin,
             timestamp,
             method: method,
-            initiatorType: entry.initiatorType as InitiatorType,
+            initiatorType: entry ? (entry.initiatorType as InitiatorType) : undefined,
             status,
             requestHeaders: networkRequest.requestHeaders,
             requestBody: networkRequest.requestBody,
@@ -532,9 +531,6 @@ function initFetchObserver(
             } finally {
                 getRequestPerformanceEntry(win, 'fetch', req.url, after, before)
                     .then((entry) => {
-                        if (isNull(entry)) {
-                            return
-                        }
                         const requests = prepareRequest(entry, req.method, res?.status, networkRequest)
                         cb({ requests })
                     })
