@@ -151,8 +151,8 @@ async function getRequestPerformanceEntry(
     win: IWindow,
     initiatorType: string,
     url: string,
-    after?: number,
-    before?: number,
+    start?: number,
+    end?: number,
     attempt = 0
 ): Promise<PerformanceResourceTiming | null> {
     if (attempt > 10) {
@@ -165,12 +165,12 @@ async function getRequestPerformanceEntry(
         (entry) =>
             isResourceTiming(entry) &&
             entry.initiatorType === initiatorType &&
-            (!after || entry.startTime >= after) &&
-            (!before || entry.startTime <= before)
+            (isUndefined(start) || entry.startTime >= start) &&
+            (isUndefined(end) || entry.startTime <= end)
     )
     if (!performanceEntry) {
         await new Promise((resolve) => setTimeout(resolve, 50 * attempt))
-        return getRequestPerformanceEntry(win, initiatorType, url, after, before, attempt + 1)
+        return getRequestPerformanceEntry(win, initiatorType, url, start, end, attempt + 1)
     }
     return performanceEntry
 }
@@ -254,8 +254,8 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                 // eslint-disable-next-line compat/compat
                 const req = new Request(url)
                 const networkRequest: Partial<CapturedNetworkRequest> = {}
-                let after: number | undefined
-                let before: number | undefined
+                let start: number | undefined
+                let end: number | undefined
 
                 const requestHeaders: Headers = {}
                 const originalSetRequestHeader = xhr.setRequestHeader.bind(xhr)
@@ -279,7 +279,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                     ) {
                         networkRequest.requestBody = _tryReadXHRBody({ body, options, url })
                     }
-                    after = win.performance.now()
+                    start = win.performance.now()
                     return originalSend(body)
                 }
 
@@ -287,7 +287,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                     if (xhr.readyState !== xhr.DONE) {
                         return
                     }
-                    before = win.performance.now()
+                    end = win.performance.now()
                     const responseHeaders: Headers = {}
                     const rawHeaders = xhr.getAllResponseHeaders()
                     const headers = rawHeaders.trim().split(/[\r\n]+/)
@@ -312,15 +312,15 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                     ) {
                         networkRequest.responseBody = _tryReadXHRBody({ body: xhr.response, options, url })
                     }
-                    getRequestPerformanceEntry(win, 'xmlhttprequest', req.url, after, before)
+                    getRequestPerformanceEntry(win, 'xmlhttprequest', req.url, start, end)
                         .then((entry) => {
                             const requests = prepareRequest({
                                 entry,
                                 method: req.method,
                                 status: xhr?.status,
                                 networkRequest,
-                                before,
-                                after,
+                                start,
+                                end,
                             })
                             cb({ requests })
                         })
@@ -351,19 +351,19 @@ function prepareRequest({
     status,
     networkRequest,
     isInitial,
-    before,
-    after,
+    start,
+    end,
 }: {
     entry: PerformanceResourceTiming | null
     method: string | undefined
     status: number | undefined
     networkRequest: Partial<CapturedNetworkRequest>
     isInitial?: boolean
-    before?: number
-    after?: number
+    start?: number
+    end?: number
 }): CapturedNetworkRequest[] {
-    const start = entry ? entry.startTime : before
-    const end = entry ? entry.responseEnd : after
+    start = entry ? entry.startTime : start
+    end = entry ? entry.responseEnd : end
 
     // kudos to sentry javascript sdk for excellent background on why to use Date.now() here
     // https://github.com/getsentry/sentry-javascript/blob/e856e40b6e71a73252e788cd42b5260f81c9c88e/packages/utils/src/time.ts#L70
@@ -517,8 +517,9 @@ function initFetchObserver(
             const req = new Request(url, init)
             let res: Response | undefined
             const networkRequest: Partial<CapturedNetworkRequest> = {}
-            let after: number | undefined
-            let before: number | undefined
+            let start: number | undefined
+            let end: number | undefined
+
             try {
                 const requestHeaders: Headers = {}
                 req.headers.forEach((value, header) => {
@@ -538,9 +539,9 @@ function initFetchObserver(
                     networkRequest.requestBody = await _tryReadRequestBody({ r: req, options, url })
                 }
 
-                before = win.performance.now()
+                start = win.performance.now()
                 res = await originalFetch(req)
-                after = win.performance.now()
+                end = win.performance.now()
 
                 const responseHeaders: Headers = {}
                 res.headers.forEach((value, header) => {
@@ -562,15 +563,15 @@ function initFetchObserver(
 
                 return res
             } finally {
-                getRequestPerformanceEntry(win, 'fetch', req.url, after, before)
+                getRequestPerformanceEntry(win, 'fetch', req.url, start, end)
                     .then((entry) => {
                         const requests = prepareRequest({
                             entry,
                             method: req.method,
                             status: res?.status,
                             networkRequest,
-                            before,
-                            after,
+                            start,
+                            end,
                         })
                         cb({ requests })
                     })
