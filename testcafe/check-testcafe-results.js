@@ -1,8 +1,12 @@
-// The testcafe tests hit the production posthog instance, and we want to assert that the events are received.
-// The problem with this is that ingestion lag can cause these events to take a while to show up. Instead of waiting
-// for 10 minutes per test, instead we run the entire suite without asserting on the events, and then run this script.
+// This script checks the events produced by running the testcafe tests and asserts that the events have shown up in
+// our production US cloud posthog. The actual assert functions live alongside the tests themselves, which save the test
+// information to a file. This script reads those files, and then runs relevant assert functions.
 
-// Mock testcafe so that we can import the asserts from the test file without running the tests
+// This happens after the testcafe tests have all finished, so that we are not waiting on ingestion lag per test, only
+// once when all tests have finished.
+
+// Some hackiness follows, allowing us to import the assert function from a test file without running the tests
+// themselves:
 const testCafeMock = {
     test: () => testCafeMock,
     page: () => testCafeMock,
@@ -20,6 +24,7 @@ if (!globalThis.fixture) {
 } else {
     isTestCafe = true
 }
+// end of hackiness
 import {
     assertConfigOptionsChangeAutocaptureBehaviourAccordingly,
     assertAutocapturedEventsWorkAndAreAccessibleViaApi,
