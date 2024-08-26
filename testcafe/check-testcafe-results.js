@@ -15,18 +15,16 @@ const testCafeMock = {
     afterEach: () => testCafeMock,
 }
 // eslint-disable-next-line no-undef
-if (!globalThis.fixture) {
-    // eslint-disable-next-line no-undef
-    globalThis.fixture = () => testCafeMock
-    // eslint-disable-next-line no-undef
-    globalThis.test = () => testCafeMock
-}
-// end of hackiness
+globalThis.fixture = () => testCafeMock
+// eslint-disable-next-line no-undef
+globalThis.test = () => testCafeMock
 import {
     assertConfigOptionsChangeAutocaptureBehaviourAccordingly,
     assertAutocapturedEventsWorkAndAreAccessibleViaApi,
     assertCustomEventsWorkAndAreAccessibleViaApi,
 } from './e2e.spec'
+// end of hackiness
+
 import { getResultsJsonFiles, log, error, POSTHOG_API_PROJECT } from './helpers'
 const asserts = {
     assertConfigOptionsChangeAutocaptureBehaviourAccordingly,
