@@ -18,7 +18,17 @@ import { getRecordConsolePlugin } from 'rrweb/es/rrweb/packages/rrweb/src/plugin
 // copying here so that we can use it before rrweb adopt it
 import type { IWindow, listenerHandler, RecordPlugin } from '@rrweb/types'
 import { CapturedNetworkRequest, Headers, InitiatorType, NetworkRecordOptions } from '../types'
-import { isArray, isBoolean, isDocument, isFormData, isNull, isNullish, isObject, isString } from '../utils/type-utils'
+import {
+    isArray,
+    isBoolean,
+    isDocument,
+    isFormData,
+    isNull,
+    isNullish,
+    isObject,
+    isString,
+    isUndefined,
+} from '../utils/type-utils'
 import { logger } from '../utils/logger'
 import { window } from '../utils/globals'
 import { defaultNetworkOptions } from '../extensions/replay/config'
@@ -68,7 +78,7 @@ function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Req
             )
         cb({
             requests: initialPerformanceEntries.flatMap((entry) =>
-                prepareRequest(entry, undefined, undefined, {}, true)
+                prepareRequest({ entry, method: undefined, status: undefined, networkRequest: {}, isInitial: true })
             ),
             isInitial: true,
         })
@@ -92,7 +102,9 @@ function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Req
         )
 
         cb({
-            requests: performanceEntries.flatMap((entry) => prepareRequest(entry, undefined, undefined, {})),
+            requests: performanceEntries.flatMap((entry) =>
+                prepareRequest({ entry, method: undefined, status: undefined, networkRequest: {} })
+            ),
         })
     })
     // compat checked earlier
@@ -302,7 +314,14 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                     }
                     getRequestPerformanceEntry(win, 'xmlhttprequest', req.url, after, before)
                         .then((entry) => {
-                            const requests = prepareRequest(entry, req.method, xhr?.status, networkRequest)
+                            const requests = prepareRequest({
+                                entry,
+                                method: req.method,
+                                status: xhr?.status,
+                                networkRequest,
+                                before,
+                                after,
+                            })
                             cb({ requests })
                         })
                         .catch(() => {
@@ -326,13 +345,26 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
 const exposesServerTiming = (event: PerformanceEntry | null): event is PerformanceResourceTiming =>
     !!event && (event.entryType === 'navigation' || event.entryType === 'resource')
 
-function prepareRequest(
-    entry: PerformanceResourceTiming | null,
-    method: string | undefined,
-    status: number | undefined,
-    networkRequest: Partial<CapturedNetworkRequest>,
+function prepareRequest({
+    entry,
+    method,
+    status,
+    networkRequest,
+    isInitial,
+    before,
+    after,
+}: {
+    entry: PerformanceResourceTiming | null
+    method: string | undefined
+    status: number | undefined
+    networkRequest: Partial<CapturedNetworkRequest>
     isInitial?: boolean
-): CapturedNetworkRequest[] {
+    before?: number
+    after?: number
+}): CapturedNetworkRequest[] {
+    const start = entry ? entry.startTime : before
+    const end = entry ? entry.responseEnd : after
+
     // kudos to sentry javascript sdk for excellent background on why to use Date.now() here
     // https://github.com/getsentry/sentry-javascript/blob/e856e40b6e71a73252e788cd42b5260f81c9c88e/packages/utils/src/time.ts#L70
     // can't start observer if performance.now() is not available
@@ -340,15 +372,16 @@ function prepareRequest(
     const timeOrigin = Math.floor(Date.now() - performance.now())
     // clickhouse can't ingest timestamps that are floats
     // (in this case representing fractions of a millisecond we don't care about anyway)
-    const timestamp = Math.floor(timeOrigin + (entry ? entry.startTime : 0))
+    // use timeOrigin if we really can't gather a start time
+    const timestamp = Math.floor(timeOrigin + (start || 0))
 
     const entryJSON = entry ? entry.toJSON() : {}
 
     const requests: CapturedNetworkRequest[] = [
         {
             ...entryJSON,
-            startTime: entry ? Math.round(entry.startTime) : undefined,
-            endTime: entry ? Math.round(entry.responseEnd) : undefined,
+            startTime: isUndefined(start) ? undefined : Math.round(start),
+            endTime: isUndefined(end) ? undefined : Math.round(end),
             timeOrigin,
             timestamp,
             method: method,
@@ -531,7 +564,14 @@ function initFetchObserver(
             } finally {
                 getRequestPerformanceEntry(win, 'fetch', req.url, after, before)
                     .then((entry) => {
-                        const requests = prepareRequest(entry, req.method, res?.status, networkRequest)
+                        const requests = prepareRequest({
+                            entry,
+                            method: req.method,
+                            status: res?.status,
+                            networkRequest,
+                            before,
+                            after,
+                        })
                         cb({ requests })
                     })
                     .catch(() => {
