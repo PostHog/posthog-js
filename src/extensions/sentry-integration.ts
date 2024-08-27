@@ -17,7 +17,6 @@
  */
 
 import { PostHog } from '../posthog-core'
-import { BASE_ERROR_ENDPOINT } from '../posthog-exceptions'
 import { SeverityLevel } from '../types'
 
 // NOTE - we can't import from @sentry/types because it changes frequently and causes clashes
