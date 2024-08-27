@@ -732,6 +732,7 @@ describe('SessionRecording', () => {
                     _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
+                    skip_client_rate_limiting: true,
                 }
             )
         })
@@ -767,6 +768,7 @@ describe('SessionRecording', () => {
                     _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
+                    skip_client_rate_limiting: true,
                 }
             )
         })
@@ -849,6 +851,7 @@ describe('SessionRecording', () => {
                     _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
+                    skip_client_rate_limiting: true,
                 }
             )
 
@@ -1514,6 +1517,7 @@ describe('SessionRecording', () => {
                     _batchKey: 'recordings',
                     _noTruncate: true,
                     _url: 'https://test.com/s/',
+                    skip_client_rate_limiting: true,
                 }
             )
 
@@ -1607,6 +1611,7 @@ describe('SessionRecording', () => {
                     _batchKey: 'recordings',
                     _noTruncate: true,
                     _url: 'https://test.com/s/',
+                    skip_client_rate_limiting: true,
                 }
             )
 
@@ -1635,6 +1640,7 @@ describe('SessionRecording', () => {
                     _batchKey: 'recordings',
                     _noTruncate: true,
                     _url: 'https://test.com/s/',
+                    skip_client_rate_limiting: true,
                 }
             )
             expect(sessionRecording['buffer']).toEqual({
