@@ -561,9 +561,8 @@ export class PostHog {
             // NOTE: We want to fire this on the next tick as the previous implementation had this side effect
             // and some clients may rely on it
             setTimeout(() => {
-                if (document && this.consent.isOptedIn() && !this._initialPageviewCaptured) {
-                    this._initialPageviewCaptured = true
-                    this.capture('$pageview', { title: document.title }, { send_instantly: true })
+                if (this.consent.isOptedIn()) {
+                    this._captureInitialPageview()
                 }
             }, 1)
         }
@@ -1985,9 +1984,8 @@ export class PostHog {
             this.capture(options?.captureEventName ?? '$opt_in', options?.captureProperties, { send_instantly: true })
         }
 
-        if (this.config.capture_pageview && !this._initialPageviewCaptured && document) {
-            this._initialPageviewCaptured = true
-            this.capture('$pageview', { title: document.title }, { send_instantly: true })
+        if (this.config.capture_pageview) {
+            this._captureInitialPageview()
         }
     }
 
@@ -2053,6 +2051,13 @@ export class PostHog {
             return isLikelyBot(navigator, this.config.custom_blocked_useragents)
         } else {
             return undefined
+        }
+    }
+
+    _captureInitialPageview(): void {
+        if (document && !this._initialPageviewCaptured) {
+            this._initialPageviewCaptured = true
+            this.capture('$pageview', { title: document.title }, { send_instantly: true })
         }
     }
 
