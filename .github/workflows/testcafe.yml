@@ -54,4 +54,11 @@ jobs:
         run: pnpm build-rollup
 
       - name: Run ${{ matrix.name }} test
-        run: node scripts/run-testcafe-with-retries.mjs --browser "${{ matrix.browser }}" --attempts 3
+        env:
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+          RUN_ID: ${{ github.run_id }}
+          BROWSER: ${{ matrix.browser }}
+        run: pnpm testcafe ${{ matrix.browser }} --stop-on-first-fail
+
+      - name: Check ${{ matrix.name }} events
+        run: pnpm check-testcafe-results

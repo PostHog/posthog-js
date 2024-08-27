@@ -46,7 +46,7 @@ export function parseStackFrames(ex: Error & { framesToPop?: number; stacktrace?
 
     try {
         return defaultStackParser(stacktrace, popSize)
-    } catch (e) {
+    } catch {
         // no-empty
     }
 
@@ -204,7 +204,7 @@ export function unhandledRejectionToProperties([ev]: [ev: PromiseRejectionEvent]
         else if ('detail' in ev && 'reason' in (ev as any).detail) {
             error = (ev as any).detail.reason
         }
-    } catch (_oO) {
+    } catch {
         // no-empty
     }
 

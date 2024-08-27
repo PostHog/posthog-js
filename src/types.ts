@@ -398,7 +398,7 @@ export interface PersistentStore {
     remove: (name: string, cross_subdomain?: boolean) => void
 }
 
-// eslint-disable-next-line @typescript-eslint/ban-types
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export type Breaker = {}
 export type EventHandler = (event: Event) => boolean | void
 
