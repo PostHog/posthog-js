@@ -77,6 +77,8 @@ import { TracingHeaders } from './extensions/tracing-headers'
 import { ConsentManager } from './consent'
 import { ExceptionObserver } from './extensions/exception-autocapture'
 import { WebVitalsAutocapture } from './extensions/web-vitals'
+import { errorPropertiesFromError } from './extensions/exception-autocapture/error-conversion'
+import { PostHogExceptions } from './posthog-exceptions'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -242,6 +244,7 @@ export class PostHog {
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
     toolbar: Toolbar
+    exceptions: PostHogExceptions
     consent: ConsentManager
 
     // These are instance-specific state created after initialisation
@@ -293,6 +296,7 @@ export class PostHog {
         this.scrollManager = new ScrollManager(this)
         this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
+        this.exceptions = new PostHogExceptions(this)
         this.rateLimiter = new RateLimiter(this)
         this.requestRouter = new RequestRouter(this)
         this.consent = new ConsentManager(this)
@@ -534,6 +538,7 @@ export class PostHog {
         this.heatmaps?.afterDecideResponse(response)
         this.surveys?.afterDecideResponse(response)
         this.webVitalsAutocapture?.afterDecideResponse(response)
+        this.exceptions?.afterDecideResponse(response)
         this.exceptionObserver?.afterDecideResponse(response)
     }
 
@@ -1809,9 +1814,10 @@ export class PostHog {
         return !!this.sessionRecording?.started
     }
 
-    /** Checks the feature flags associated with this Survey to see if the survey can be rendered. */
+    /** Captures a thrown exception */
     captureException(error: Error, additionalProperties?: Properties): void {
-        this.exceptionObserver?.captureException(error, additionalProperties)
+        const errorProperties = errorPropertiesFromError(error)
+        this.exceptions.sendExceptionEvent({ ...errorProperties, ...additionalProperties })
     }
 
     /**
