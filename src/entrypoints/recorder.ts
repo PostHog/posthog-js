@@ -343,7 +343,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
  *  Here we don't care which interface it implements as both expose `serverTimings`
  */
 const exposesServerTiming = (event: PerformanceEntry | null): event is PerformanceResourceTiming =>
-    !!event && (event.entryType === 'navigation' || event.entryType === 'resource')
+    !isNull(event) && (event.entryType === 'navigation' || event.entryType === 'resource')
 
 function prepareRequest({
     entry,
