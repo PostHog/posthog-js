@@ -11,7 +11,7 @@ export function isPlainObject(candidate: unknown): candidate is Record<string, u
 export function isInstanceOf(candidate: unknown, base: any): boolean {
     try {
         return candidate instanceof base
-    } catch (_e) {
+    } catch {
         return false
     }
 }

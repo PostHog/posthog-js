@@ -110,7 +110,7 @@ export const cookieStore: PersistentStore = {
                     return decodeURIComponent(c.substring(nameEQ.length, c.length))
                 }
             }
-        } catch (err) {}
+        } catch {}
         return null
     },
 
@@ -118,7 +118,7 @@ export const cookieStore: PersistentStore = {
         let cookie
         try {
             cookie = JSON.parse(cookieStore.get(name)) || {}
-        } catch (err) {
+        } catch {
             // noop
         }
         return cookie
@@ -160,7 +160,7 @@ export const cookieStore: PersistentStore = {
 
             document.cookie = new_cookie_val
             return new_cookie_val
-        } catch (err) {
+        } catch {
             return
         }
     },
@@ -168,7 +168,7 @@ export const cookieStore: PersistentStore = {
     remove: function (name, cross_subdomain) {
         try {
             cookieStore.set(name, '', -1, cross_subdomain)
-        } catch (err) {
+        } catch {
             return
         }
     },
@@ -192,7 +192,7 @@ export const localStore: PersistentStore = {
                     supported = false
                 }
                 localStore.remove(key)
-            } catch (err) {
+            } catch {
                 supported = false
             }
         } else {
@@ -222,7 +222,7 @@ export const localStore: PersistentStore = {
     parse: function (name) {
         try {
             return JSON.parse(localStore.get(name)) || {}
-        } catch (err) {
+        } catch {
             // noop
         }
         return null
@@ -258,11 +258,11 @@ export const localPlusCookieStore: PersistentStore = {
             try {
                 // See if there's a cookie stored with data.
                 cookieProperties = cookieStore.parse(name) || {}
-            } catch (err) {}
+            } catch {}
             const value = extend(cookieProperties, JSON.parse(localStore.get(name) || '{}'))
             localStore.set(name, value)
             return value
-        } catch (err) {
+        } catch {
             // noop
         }
         return null
@@ -345,7 +345,7 @@ export const sessionStore: PersistentStore = {
                     sessionStorageSupported = false
                 }
                 sessionStore.remove(key)
-            } catch (err) {
+            } catch {
                 sessionStorageSupported = false
             }
         } else {
@@ -370,7 +370,7 @@ export const sessionStore: PersistentStore = {
     parse: function (name) {
         try {
             return JSON.parse(sessionStore.get(name)) || null
-        } catch (err) {
+        } catch {
             // noop
         }
         return null
