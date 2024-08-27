@@ -49,12 +49,6 @@ export class WebExperiments {
         }
 
         flags.forEach((flag) => {
-            WebExperiments.logInfo(
-                'checking if we know this flag ',
-                flag,
-                `   this._flagToExperiments is `,
-                this._flagToExperiments
-            )
             if (this._flagToExperiments && this._flagToExperiments?.has(flag)) {
                 const selectedVariant = this.instance.getFeatureFlag(flag) as unknown as string
                 const webExperiment = this._flagToExperiments?.get(flag)
@@ -221,6 +215,7 @@ export class WebExperiments {
                 // eslint-disable-next-line no-restricted-globals
                 const elements = document?.querySelectorAll(transform.selector)
                 elements?.forEach((element) => {
+                    const htmlElement = element as HTMLElement
                     WebExperiments.logInfo(
                         `applying transform of text [`,
                         transform.text,
@@ -230,21 +225,36 @@ export class WebExperiments {
                         element.nodeType
                     )
 
+                    if (transform.attributes) {
+                        transform.attributes.forEach((attribute) => {
+                            switch (attribute.name) {
+                                case 'text':
+                                    htmlElement.innerText = attribute.value
+                                    break
+
+                                case 'html':
+                                    htmlElement.innerHTML = attribute.value
+                                    break
+
+                                case 'cssClass':
+                                    htmlElement.className = attribute.value
+                                    break
+
+                                default:
+                                    htmlElement.setAttribute(attribute.name, attribute.value)
+                            }
+                        })
+                    }
+
                     if (transform.text) {
-                        const htmlElement = element as HTMLElement
-                        if (htmlElement) {
-                            htmlElement.innerText = transform.text
-                        }
+                        htmlElement.innerText = transform.text
                     }
 
                     if (transform.html) {
-                        const htmlElement = element as HTMLElement
-                        if (htmlElement) {
-                            htmlElement.innerHTML = transform.html
-                        }
+                        htmlElement.innerHTML = transform.html
                     }
+
                     if (transform.className) {
-                        const htmlElement = element as HTMLElement
                         htmlElement.className = transform.className
                     }
                 })

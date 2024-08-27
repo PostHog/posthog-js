@@ -1,4 +1,10 @@
 export interface WebExperimentTransform {
+    attributes:
+        | {
+              name: string
+              value: string
+          }[]
+        | null
     selector?: string
     text?: string
     html?: string
