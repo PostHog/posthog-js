@@ -10,10 +10,12 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals'
 
 import { PostHog } from '../posthog-core'
+import { SegmentContext, SegmentPlugin } from '../extensions/segment-integration'
+import { USER_STATE } from '../constants'
 
 describe(`Segment integration`, () => {
     let segment: any
-    let segmentIntegration: any
+    let segmentIntegration: SegmentPlugin
     let posthogName: string
 
     jest.setTimeout(500)
@@ -28,7 +30,7 @@ describe(`Segment integration`, () => {
                 anonymousId: () => 'test-anonymous-id',
                 id: () => 'test-id',
             }),
-            register: (integration: any) => {
+            register: (integration: SegmentPlugin) => {
                 // IMPORTANT: the real register function returns a Promise. We
                 // want to do the same thing and have some way to verify that
                 // the integration is setup in time for the `loaded` callback.
@@ -107,5 +109,42 @@ describe(`Segment integration`, () => {
 
         expect(posthog.get_distinct_id()).toBe('test-id')
         expect(posthog.get_property('$device_id')).toBe('test-anonymous-id')
+    })
+
+    it('should handle segment.identify after bootstrap', async () => {
+        segment.user = () => ({
+            anonymousId: () => 'test-anonymous-id',
+            id: () => '',
+        })
+
+        const posthog = await new Promise<PostHog>((resolve) => {
+            return new PostHog().init(
+                `test-token`,
+                {
+                    debug: true,
+                    persistence: `memory`,
+                    api_host: `https://test.com`,
+                    segment: segment,
+                    loaded: resolve,
+                },
+                posthogName
+            )
+        })
+
+        expect(posthog.get_distinct_id()).not.toEqual('test-id')
+        expect(posthog.persistence?.get_property(USER_STATE)).toEqual('anonymous')
+
+        if (segmentIntegration && segmentIntegration.identify) {
+            segmentIntegration.identify({
+                event: {
+                    event: '$identify',
+                    userId: 'distinguished user',
+                    anonymousId: 'anonymous segment user',
+                },
+            } as unknown as SegmentContext)
+
+            expect(posthog.get_distinct_id()).toEqual('distinguished user')
+            expect(posthog.persistence?.get_property(USER_STATE)).toEqual('identified')
+        }
     })
 })

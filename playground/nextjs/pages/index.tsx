@@ -62,7 +62,9 @@ export default function Home() {
                     Set user properties
                 </button>
 
-                <button onClick={() => posthog?.reset()}>Reset</button>
+                <button onClick={() => posthog?.reset()} id="set-user-properties">
+                    Reset
+                </button>
             </div>
 
             {isClient && (

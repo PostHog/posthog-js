@@ -244,25 +244,6 @@ export class SessionRecording {
         this.stopRrweb = undefined
         this.receivedDecide = false
 
-        window?.addEventListener('beforeunload', () => {
-            this._flushBuffer()
-        })
-
-        window?.addEventListener('offline', () => {
-            this._tryAddCustomEvent('browser offline', {})
-        })
-
-        window?.addEventListener('online', () => {
-            this._tryAddCustomEvent('browser online', {})
-        })
-
-        window?.addEventListener('visibilitychange', () => {
-            if (document?.visibilityState) {
-                const label = 'window ' + document.visibilityState
-                this._tryAddCustomEvent(label, {})
-            }
-        })
-
         if (!this.instance.sessionManager) {
             logger.error(LOGGER_PREFIX + ' started without valid sessionManager')
             throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
@@ -280,9 +261,34 @@ export class SessionRecording {
         this._setupSampling()
     }
 
+    private _onBeforeUnload = (): void => {
+        this._flushBuffer()
+    }
+
+    private _onOffline = (): void => {
+        this._tryAddCustomEvent('browser offline', {})
+    }
+
+    private _onOnline = (): void => {
+        this._tryAddCustomEvent('browser online', {})
+    }
+
+    private _onVisibilityChange = (): void => {
+        if (document?.visibilityState) {
+            const label = 'window ' + document.visibilityState
+            this._tryAddCustomEvent(label, {})
+        }
+    }
+
     startIfEnabledOrStop() {
         if (this.isRecordingEnabled) {
             this._startCapture()
+
+            window?.addEventListener('beforeunload', this._onBeforeUnload)
+            window?.addEventListener('offline', this._onOffline)
+            window?.addEventListener('online', this._onOnline)
+            window?.addEventListener('visibilitychange', this._onVisibilityChange)
+
             logger.info(LOGGER_PREFIX + ' started')
         } else {
             this.stopRecording()
@@ -295,6 +301,12 @@ export class SessionRecording {
             this.stopRrweb()
             this.stopRrweb = undefined
             this._captureStarted = false
+
+            window?.removeEventListener('beforeunload', this._onBeforeUnload)
+            window?.removeEventListener('offline', this._onOffline)
+            window?.removeEventListener('online', this._onOnline)
+            window?.removeEventListener('visibilitychange', this._onVisibilityChange)
+
             logger.info(LOGGER_PREFIX + ' stopped')
         }
     }

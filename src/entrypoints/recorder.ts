@@ -203,7 +203,7 @@ function _tryReadXHRBody({
     if (isObject(body)) {
         try {
             return JSON.stringify(body)
-        } catch (e) {
+        } catch {
             return '[SessionReplay] Failed to stringify response object'
         }
     }
