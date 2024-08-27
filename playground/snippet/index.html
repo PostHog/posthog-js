@@ -3,63 +3,32 @@
     <title>PostHog JS Snippet test</title>
 </head>
 <body>
-<script>
-if (false) { // unminified code
-    (function(x, a) {
-        if (!a.__SV) {
-            var l, h, s, n;
-            window.posthog = a;
-            a._i = [];
-            a.init = function(b, d, g) {
-                s = x.createElement("script");
-                s.type = "text/javascript";
-                s.async = !0;
-                s.src = d.api_host + "/static/array.full.js";
-                n = x.getElementsByTagName("script")[0];
-                n.parentNode.insertBefore(s, n)
-
-                function c(b, i) {
-                    var a = i.split(".");
-                    2 == a.length && (b = b[a[0]], i = a[1]);
-                    b[i] = function() {
-                        b.push([i].concat(Array.prototype.slice.call(arguments,
-                            0)))
-                    }
-                }
-                var e = a;
-                "undefined" !== typeof g ? e = a[g] = [] : g = "posthog";
-                e.people = e.people || [];
-                e.toString = function(b) {
-                    var a = "posthog";
-                    "posthog" !== g && (a += "." + g);
-                    b || (a += " (stub)");
-                    return a
-                };
-                e.people.toString = function() {
-                    return e.toString(1) + ".people (stub)"
-                };
-                l = "capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset".split(" ");
-                for (h = 0; h < l.length; h++) c(e, l[h]);
-                a._i.push([b, d, g])
-            };
-            a.__SV = 1.0;
-        }
-    })(document, window.posthog || []);
-    console.log('starting everything')
-    posthog.init('BrpS4SctoaCCsyjlnlun3OzyNJAafdlv__jUWaaJWXg', { api_host: 'https://app.posthog.com' })
-    posthog.capture('bla111-before-init2')
-    posthog.identify('user-00002');
-    posthog.people.set({email: 'john@gmail.com'});
-    posthog.people.set('peoplesetkey', 'that is correct')
-}
-</script>
 
 <script>
-if (true) { // minified code
-    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.full.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
-    posthog.init('BrpS4SctoaCCsyjlnlun3OzyNJAafdlv__jUWaaJWXg', {api_host: 'https://app.posthog.com'})
-}
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init push capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    // config = posthog.defaultConfig()
+    // config.api_host ='http://localhost:8000'
+    // config.loaded = (instance) => {
+    //
+    //     console.log('posthog laoded')
+    // }
+    posthog.init('phc_lPwXKkvW2VtByfTsibDzFKAxn02rdVgMUiHWkZ5kW31',
+        {
+            api_host:'http://localhost:8000',
+            person_profiles: 'identified_only',
+            autocapture: true,
+            loaded: (instance) => {
+                console.log("posthog loaded")
+            },
+            _onCapture: (event, data) =>{
+                console.log(`captured event: `, event, ` data is `, data)
+            }
+        })
 </script>
+
+<input>
+    <button>Click me </button>
+</div>
 
 </body>
 </html>
