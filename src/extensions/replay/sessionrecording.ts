@@ -875,21 +875,15 @@ export class SessionRecording {
         }
 
         if (this.buffer.data.length > 0) {
-            const clientRateLimitContext = this.instance.rateLimiter.clientRateLimitContext()
-
-            if (!clientRateLimitContext?.isRateLimited) {
-                const snapshotEvents = splitBuffer(this.buffer)
-                snapshotEvents.forEach((snapshotBuffer) => {
-                    this._captureSnapshot({
-                        $snapshot_bytes: snapshotBuffer.size,
-                        $snapshot_data: snapshotBuffer.data,
-                        $session_id: snapshotBuffer.sessionId,
-                        $window_id: snapshotBuffer.windowId,
-                    })
+            const snapshotEvents = splitBuffer(this.buffer)
+            snapshotEvents.forEach((snapshotBuffer) => {
+                this._captureSnapshot({
+                    $snapshot_bytes: snapshotBuffer.size,
+                    $snapshot_data: snapshotBuffer.data,
+                    $session_id: snapshotBuffer.sessionId,
+                    $window_id: snapshotBuffer.windowId,
                 })
-            } else {
-                logger.critical('Cannot capture $snapshot event due to client rate limiting.')
-            }
+            })
         }
 
         // buffer is empty, we clear it in case the session id has changed
