@@ -1815,12 +1815,19 @@ export class PostHog {
 
     /** Capture a caught exception manually */
     captureException(error: Error, additionalProperties?: Properties): void {
-        this.exceptions.sendExceptionEvent({
+        const properties: Properties = {
             $exception_type: error.name,
             $exception_message: error.message,
             $exception_level: 'error',
             ...additionalProperties,
-        })
+        }
+
+        if (isFunction(assignableWindow.parseErrorStackFrames)) {
+            const frames = assignableWindow.parseErrorStackFrames(error)
+            properties.$exception_stack_trace_raw = JSON.stringify(frames)
+        }
+
+        this.exceptions.sendExceptionEvent(properties)
     }
 
     /**

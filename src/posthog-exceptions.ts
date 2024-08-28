@@ -1,6 +1,6 @@
 import { EXCEPTION_CAPTURE_ENDPOINT_SUFFIX } from './constants'
 import { PostHog } from './posthog-core'
-import { DecideResponse } from './types'
+import { DecideResponse, Properties } from './types'
 import { isObject } from './utils/type-utils'
 
 // TODO: move this to /x/ as default
@@ -40,7 +40,7 @@ export class PostHogExceptions {
     /**
      * :TRICKY: Make sure we batch these requests
      */
-    sendExceptionEvent(properties: { [key: string]: any }) {
+    sendExceptionEvent(properties: Properties) {
         this.instance.capture('$exception', properties, {
             _noTruncate: true,
             _batchKey: 'exceptionEvent',
