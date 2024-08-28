@@ -1,8 +1,4 @@
-import {
-    errorToProperties,
-    parseStackFrames,
-    unhandledRejectionToProperties,
-} from '../extensions/exception-autocapture/error-conversion'
+import { errorToProperties, unhandledRejectionToProperties } from '../extensions/exception-autocapture/error-conversion'
 import { window } from '../utils/globals'
 import { ErrorEventArgs, Properties } from '../types'
 import { logger } from '../utils/logger'
