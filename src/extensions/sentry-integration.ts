@@ -129,7 +129,10 @@ export function createEventProcessor(
         // we take the URL from the exception observer
         // so that when we add error specific URL for ingestion
         // these errors are sent there too
-        _posthog.capture('$exception', data, { _url: _posthog.exceptionObserver?.endpoint || BASE_ERROR_ENDPOINT })
+        _posthog.capture('$exception', data, {
+            _url:
+                _posthog.exceptionObserver?.endpoint || _posthog.requestRouter.endpointFor('api', BASE_ERROR_ENDPOINT),
+        })
 
         return event
     }
