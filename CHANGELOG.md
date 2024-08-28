@@ -1,3 +1,7 @@
+## 1.158.3 - 2024-08-28
+
+- fix(errors): Build endpoint for sentry integration & exception observer correctly (#1390)
+
 ## 1.158.2 - 2024-08-27
 
 - chore: skip rate limiting of snapshot events (#1383)
