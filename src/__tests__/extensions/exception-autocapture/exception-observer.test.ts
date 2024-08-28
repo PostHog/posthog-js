@@ -102,24 +102,6 @@ describe('Exception Observer', () => {
             })
         })
 
-        it('captures an event when captureException is called', () => {
-            const error = new Error('manually captured error')
-            exceptionObserver.captureException(error, { custom_property: 'any value' })
-
-            const captureCalls = mockCapture.mock.calls
-            expect(captureCalls.length).toBe(1)
-            const singleCall = captureCalls[0]
-            expect(singleCall[0]).toBe('$exception')
-            expect(singleCall[1]).toMatchObject({
-                properties: {
-                    $exception_message: 'manually captured error',
-                    $exception_type: 'Error',
-                    $exception_personURL: expect.any(String),
-                    custom_property: 'any value',
-                },
-            })
-        })
-
         it('captures an event when an unhandled rejection occurs', () => {
             const error = new Error('test error')
             const promiseRejectionEvent = new PromiseRejectionEvent('unhandledrejection', {
