@@ -77,7 +77,6 @@ import { TracingHeaders } from './extensions/tracing-headers'
 import { ConsentManager } from './consent'
 import { ExceptionObserver } from './extensions/exception-autocapture'
 import { WebVitalsAutocapture } from './extensions/web-vitals'
-import { errorPropertiesFromError } from './extensions/exception-autocapture/error-conversion'
 import { PostHogExceptions } from './posthog-exceptions'
 
 /*
@@ -1816,7 +1815,11 @@ export class PostHog {
 
     /** Captures a thrown exception */
     captureException(error: Error, additionalProperties?: Properties): void {
-        const errorProperties = errorPropertiesFromError(error)
+        const errorProperties = {
+            $exception_type: error.name,
+            $exception_message: error.message,
+            $exception_level: 'error',
+        }
         this.exceptions.sendExceptionEvent({ ...errorProperties, ...additionalProperties })
     }
 
