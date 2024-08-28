@@ -121,6 +121,16 @@ describe('Exception Observer', () => {
                 },
             })
         })
+
+        it('sends event to the correct endpoint', () => {
+            const error = new Error('test error')
+            window!.onerror?.call(window, 'message', 'source', 0, 0, error)
+
+            const captureCalls = mockCapture.mock.calls
+            expect(captureCalls.length).toBe(1)
+            const singleCall = captureCalls[0]
+            expect(singleCall[2]).toMatchObject({ _url: exceptionObserver.endpoint })
+        })
     })
 
     describe('when there are handlers already', () => {

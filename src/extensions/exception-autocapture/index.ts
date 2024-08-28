@@ -24,7 +24,11 @@ export class ExceptionObserver {
         this.remoteEnabled = !!this.instance.persistence?.props[EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]
 
         // TODO: once BASE_ERROR_ENDPOINT is no longer /e/ this can be removed
-        this._endpoint = this.instance.persistence?.props[EXCEPTION_CAPTURE_ENDPOINT] || BASE_ERROR_ENDPOINT
+        // TRICKY: Always respect any api_host set by the client config
+        this._endpoint = this.instance.requestRouter.endpointFor(
+            'api',
+            this.instance.persistence?.props[EXCEPTION_CAPTURE_ENDPOINT] || BASE_ERROR_ENDPOINT
+        )
 
         this.startIfEnabled()
     }
