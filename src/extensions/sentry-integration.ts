@@ -125,9 +125,6 @@ export function createEventProcessor(
                 event.event_id
         }
 
-        // we take the URL from the exception observer
-        // so that when we add error specific URL for ingestion
-        // these errors are sent there too
         _posthog.exceptions.sendExceptionEvent(data)
 
         return event

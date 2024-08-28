@@ -1813,14 +1813,14 @@ export class PostHog {
         return !!this.sessionRecording?.started
     }
 
-    /** Captures a thrown exception */
+    /** Capture a caught exception manually */
     captureException(error: Error, additionalProperties?: Properties): void {
-        const errorProperties = {
+        this.exceptions.sendExceptionEvent({
             $exception_type: error.name,
             $exception_message: error.message,
             $exception_level: 'error',
-        }
-        this.exceptions.sendExceptionEvent({ ...errorProperties, ...additionalProperties })
+            ...additionalProperties,
+        })
     }
 
     /**

@@ -53,19 +53,13 @@ export function parseStackFrames(ex: Error & { framesToPop?: number; stacktrace?
     return []
 }
 
-function errorPropertiesFromErrorWithStack(error: Error): ErrorProperties {
+function errorPropertiesFromError(error: Error): ErrorProperties {
     const frames = parseStackFrames(error)
 
     return {
-        ...errorPropertiesFromError(error),
-        $exception_stack_trace_raw: JSON.stringify(frames),
-    }
-}
-
-export function errorPropertiesFromError(error: Error): ErrorProperties {
-    return {
         $exception_type: error.name,
         $exception_message: error.message,
+        $exception_stack_trace_raw: JSON.stringify(frames),
         $exception_level: 'error',
     }
 }
@@ -148,7 +142,7 @@ export function errorToProperties([event, source, lineno, colno, error]: ErrorEv
         const domException = candidate as unknown as DOMException
 
         if (isErrorWithStack(candidate)) {
-            errorProperties = errorPropertiesFromErrorWithStack(candidate as Error)
+            errorProperties = errorPropertiesFromError(candidate as Error)
         } else {
             const name = domException.name || (isDOMError(domException) ? 'DOMError' : 'DOMException')
             const message = domException.message ? `${name}: ${domException.message}` : name
@@ -160,9 +154,9 @@ export function errorToProperties([event, source, lineno, colno, error]: ErrorEv
             errorProperties['$exception_DOMException_code'] = `${domException.code}`
         }
     } else if (isErrorEvent(candidate as ErrorEvent) && (candidate as ErrorEvent).error) {
-        errorProperties = errorPropertiesFromErrorWithStack((candidate as ErrorEvent).error as Error)
+        errorProperties = errorPropertiesFromError((candidate as ErrorEvent).error as Error)
     } else if (isError(candidate)) {
-        errorProperties = errorPropertiesFromErrorWithStack(candidate)
+        errorProperties = errorPropertiesFromError(candidate)
     } else if (isPlainObject(candidate) || isEvent(candidate)) {
         // group these by using the keys available on the object
         const objectException = candidate as Record<string, unknown>

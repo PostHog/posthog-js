@@ -10,7 +10,7 @@ export class PostHogExceptions {
     private _endpointSuffix: string
 
     constructor(private readonly instance: PostHog) {
-        // TODO: once BASE_ERROR_ENDPOINT is no longer /e/ this can be removed
+        // TODO: once BASE_ERROR_ENDPOINT_SUFFIX is no longer /e/ this can be removed
         this._endpointSuffix =
             this.instance.persistence?.props[EXCEPTION_CAPTURE_ENDPOINT_SUFFIX] || BASE_ERROR_ENDPOINT_SUFFIX
     }
