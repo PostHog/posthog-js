@@ -1,3 +1,13 @@
+## 1.158.3 - 2024-08-28
+
+- fix(errors): Build endpoint for sentry integration & exception observer correctly (#1390)
+
+## 1.158.2 - 2024-08-27
+
+- chore: skip rate limiting of snapshot events (#1383)
+- chore: Remove retries for testcafe tests but increase timeout. Wait for lag in parallel (#1380)
+- feat: default api host to new ingestion domain (#1370)
+
 ## 1.158.1 - 2024-08-26
 
 - fix: event listeners should obey start and stop (#1379)
