@@ -32,6 +32,15 @@ export const CAMPAIGN_PARAMS = [
 ]
 
 export const Info = {
+    location: function (): { href?: string; hrefIncludingHash?: string; host?: string; pathname?: string } {
+        return {
+            href: location?.href?.split('#')[0],
+            hrefIncludingHash: location?.href,
+            host: location?.host,
+            pathname: location?.pathname,
+        }
+    },
+
     campaignParams: function (customParams?: string[]): Record<string, string> {
         if (!document) {
             return {}
@@ -148,7 +157,7 @@ export const Info = {
         // we're being a bit more economical with bytes here because this is stored in the cookie
         return {
             r: this.referrer(),
-            u: location?.href,
+            u: Info.location().href,
         }
     },
 
@@ -198,9 +207,9 @@ export const Info = {
                 $device_type: Info.deviceType(userAgent),
             }),
             {
-                $current_url: location?.href,
-                $host: location?.host,
-                $pathname: location?.pathname,
+                $current_url: Info.location().href,
+                $host: Info.location().host,
+                $pathname: Info.location().pathname,
                 $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,
                 $browser_version: Info.browserVersion(userAgent, navigator.vendor),
                 $browser_language: Info.browserLanguage(),

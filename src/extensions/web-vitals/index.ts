@@ -5,6 +5,7 @@ import { isBoolean, isNullish, isNumber, isObject, isUndefined } from '../../uti
 import { WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { assignableWindow, window } from '../../utils/globals'
 import Config from '../../config'
+import { Info } from '../../utils/event-utils'
 
 export const FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS = 8000
 const ONE_MINUTE_IN_MILLIS = 60 * 1000
@@ -81,7 +82,7 @@ export class WebVitalsAutocapture {
 
     private _currentURL(): string | undefined {
         // TODO you should be able to mask the URL here
-        const href = window ? window.location.href : undefined
+        const href = Info.location().href
         if (!href) {
             logger.error(LOGGER_PREFIX + 'Could not determine current URL')
         }

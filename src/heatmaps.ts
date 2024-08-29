@@ -8,6 +8,7 @@ import { getParentElement, isTag } from './autocapture-utils'
 import { HEATMAPS_ENABLED_SERVER_SIDE, TOOLBAR_ID } from './constants'
 import { isEmptyObject, isObject, isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
+import { Info } from './utils/event-utils'
 
 const DEFAULT_FLUSH_INTERVAL = 5000
 const HEATMAPS = 'heatmaps'
@@ -179,12 +180,12 @@ export class Heatmaps {
     }
 
     private _capture(properties: Properties): void {
-        if (!window) {
+        // TODO we should be able to mask this
+        const url = Info.location().href
+
+        if (!url) {
             return
         }
-
-        // TODO we should be able to mask this
-        const url = window.location.href
 
         this.buffer = this.buffer || {}
 
