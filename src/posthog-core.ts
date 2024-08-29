@@ -260,6 +260,7 @@ export class PostHog {
     sessionRecording?: SessionRecording
     webPerformance = new DeprecatedWebPerformanceObserver()
 
+    _initialPageviewCaptured: boolean
     _triggered_notifs: any
     compression?: Compression
     __request_queue: QueuedRequestOptions[]
@@ -287,6 +288,7 @@ export class PostHog {
         this.__request_queue = []
         this.__loaded = false
         this.analyticsDefaultEndpoint = '/e/'
+        this._initialPageviewCaptured = false
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
@@ -559,8 +561,8 @@ export class PostHog {
             // NOTE: We want to fire this on the next tick as the previous implementation had this side effect
             // and some clients may rely on it
             setTimeout(() => {
-                if (document) {
-                    this.capture('$pageview', { title: document.title }, { send_instantly: true })
+                if (this.consent.isOptedIn()) {
+                    this._captureInitialPageview()
                 }
             }, 1)
         }
@@ -1977,12 +1979,14 @@ export class PostHog {
         this.consent.optInOut(true)
         this._sync_opt_out_with_persistence()
 
-        if (!isUndefined(options?.captureEventName) && !options?.captureEventName) {
-            // Don't capture if captureEventName is null or false
-            return
+        // Don't capture if captureEventName is null or false
+        if (isUndefined(options?.captureEventName) || options?.captureEventName) {
+            this.capture(options?.captureEventName ?? '$opt_in', options?.captureProperties, { send_instantly: true })
         }
 
-        this.capture(options?.captureEventName ?? '$opt_in', options?.captureProperties, { send_instantly: true })
+        if (this.config.capture_pageview) {
+            this._captureInitialPageview()
+        }
     }
 
     /**
@@ -2047,6 +2051,13 @@ export class PostHog {
             return isLikelyBot(navigator, this.config.custom_blocked_useragents)
         } else {
             return undefined
+        }
+    }
+
+    _captureInitialPageview(): void {
+        if (document && !this._initialPageviewCaptured) {
+            this._initialPageviewCaptured = true
+            this.capture('$pageview', { title: document.title }, { send_instantly: true })
         }
     }
 
