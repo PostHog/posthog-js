@@ -38,6 +38,7 @@ import { assignableWindow, document, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
 import { MutationRateLimiter } from './mutation-rate-limiter'
+import { Info } from '../../utils/event-utils'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -667,7 +668,8 @@ export class SessionRecording {
             // so we catch all errors.
             try {
                 if (eventName === '$pageview') {
-                    const href = window ? this._maskUrl(window.location.href) : ''
+                    let href = Info.location().href
+                    href = href ? this._maskUrl(href) : ''
                     if (!href) {
                         return
                     }
