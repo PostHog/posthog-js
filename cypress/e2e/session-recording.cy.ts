@@ -127,7 +127,8 @@ describe('Session recording', () => {
                 // yay, includes type 6 network data
                 expect(capturedRequests).to.have.length.above(0)
 
-                // the HTML file that cypress is operating on-click makes a post to https://example.com
+                // the HTML file that cypress is operating on (playground/cypress/index.html)
+                // when the button for this test is click makes a post to https://example.com
                 const capturedFetchRequest = capturedRequests.find((cr) => cr.name === 'https://example.com/')
 
                 expect(capturedFetchRequest.fetchStart).to.be.greaterThan(0) // proxy for including network timing info
