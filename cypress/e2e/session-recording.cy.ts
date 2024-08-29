@@ -113,14 +113,29 @@ describe('Session recording', () => {
             cy.phCaptures({ full: true }).then((captures) => {
                 const snapshots = captures.filter((c) => c.event === '$snapshot')
 
-                const snapshotTypes: number[] = []
+                const capturedRequests: Record<string, any>[] = []
                 for (const snapshot of snapshots) {
                     for (const snapshotData of snapshot.properties['$snapshot_data']) {
-                        snapshotTypes.push(snapshotData.type)
+                        if (snapshotData.type === 6) {
+                            for (const req of snapshotData.data.payload.requests) {
+                                capturedRequests.push(req)
+                            }
+                        }
                     }
                 }
+
                 // yay, includes type 6 network data
-                expect(snapshotTypes.filter((x) => x === 6)).to.have.length.above(0)
+                expect(capturedRequests).to.have.length.above(0)
+
+                // the HTML file that cypress is operating on (playground/cypress/index.html)
+                // when the button for this test is click makes a post to https://example.com
+                const capturedFetchRequest = capturedRequests.find((cr) => cr.name === 'https://example.com/')
+
+                expect(capturedFetchRequest.fetchStart).to.be.greaterThan(0) // proxy for including network timing info
+
+                expect(capturedFetchRequest.initiatorType).to.eql('fetch')
+                expect(capturedFetchRequest.isInitial).to.be.undefined
+                expect(capturedFetchRequest.requestBody).to.eq('i am the fetch body')
             })
         })
     })
