@@ -19,6 +19,7 @@ describe('Exception capture', () => {
             expect(captures[2].event).to.be.eql('$exception')
             expect(captures[2].properties.$exception_message).to.be.eql('wat even am I')
             expect(captures[2].properties.$exception_type).to.be.eql('Error')
+            expect(captures[2].properties.extra_prop).to.be.eql(2)
             expect(captures[2].properties.$exception_source).to.eql(undefined)
             expect(captures[2].properties.$exception_personURL).to.eql(undefined)
             expect(captures[2].properties.$exception_stack_trace_raw).not.to.exist
@@ -68,6 +69,7 @@ describe('Exception capture', () => {
             cy.wait(1500)
 
             cy.phCaptures({ full: true }).then((captures) => {
+                expect(captures[2].properties.$exception_message).to.be.eql('wat even am I')
                 expect(captures[2].properties.$exception_stack_trace_raw).to.exist
             })
         })
