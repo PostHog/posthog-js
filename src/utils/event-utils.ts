@@ -34,6 +34,7 @@ export const CAMPAIGN_PARAMS = [
 export const Info = {
     location: function (): { href?: string; hrefIncludingHash?: string; host?: string; pathname?: string } {
         return {
+            // NOTE: Hash params are typically sensitive and not designed to be sent to servers so we exclude them here by default
             href: location?.href?.split('#')[0],
             hrefIncludingHash: location?.href,
             host: location?.host,
