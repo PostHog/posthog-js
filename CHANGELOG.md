@@ -1,3 +1,7 @@
+## 1.160.0 - 2024-08-29
+
+- feat: manually capture errors (#1374)
+
 ## 1.159.0 - 2024-08-29
 
 - fix: capture a $pageview event on opting in (#1372)
