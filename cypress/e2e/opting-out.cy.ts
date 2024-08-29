@@ -97,7 +97,7 @@ describe('opting out', () => {
             cy.posthog().invoke('startSessionRecording')
 
             cy.phCaptures({ full: true }).then((captures) => {
-                expect((captures || []).map((c) => c.event)).to.deep.equal(['$opt_in'])
+                expect((captures || []).map((c) => c.event)).to.deep.equal(['$opt_in', '$pageview'])
             })
 
             assertWhetherPostHogRequestsWereCalled({
@@ -173,7 +173,7 @@ describe('opting out', () => {
             cy.posthog().invoke('startSessionRecording', { sampling: true })
 
             cy.phCaptures({ full: true }).then((captures) => {
-                expect((captures || []).map((c) => c.event)).to.deep.equal(['$opt_in'])
+                expect((captures || []).map((c) => c.event)).to.deep.equal(['$opt_in', '$pageview'])
             })
 
             assertWhetherPostHogRequestsWereCalled({
@@ -216,7 +216,7 @@ describe('opting out', () => {
             cy.posthog().invoke('startSessionRecording')
 
             cy.phCaptures({ full: true }).then((captures) => {
-                expect((captures || []).map((c) => c.event)).to.deep.equal(['$opt_in'])
+                expect((captures || []).map((c) => c.event)).to.deep.equal(['$opt_in', '$pageview'])
             })
 
             assertWhetherPostHogRequestsWereCalled({
@@ -272,7 +272,7 @@ describe('opting out', () => {
             cy.posthog().invoke('startSessionRecording')
 
             cy.phCaptures({ full: true }).then((captures) => {
-                expect((captures || []).map((c) => c.event)).to.deep.equal(['$opt_in'])
+                expect((captures || []).map((c) => c.event)).to.deep.equal(['$opt_in', '$pageview'])
             })
 
             assertWhetherPostHogRequestsWereCalled({
@@ -333,7 +333,7 @@ describe('opting out', () => {
             cy.posthog().invoke('startSessionRecording')
 
             cy.phCaptures({ full: true }).then((captures) => {
-                expect((captures || []).map((c) => c.event)).to.deep.equal(['$opt_in'])
+                expect((captures || []).map((c) => c.event)).to.deep.equal(['$opt_in', '$pageview'])
             })
 
             assertWhetherPostHogRequestsWereCalled({
@@ -358,6 +358,60 @@ describe('opting out', () => {
             cy.get('[data-cy-input]').type('hello posthog!')
 
             pollPhCaptures('$snapshot').then(assertThatRecordingStarted)
+        })
+
+        it('sends a $pageview event when opting in', () => {
+            cy.intercept('POST', '/decide/*', {
+                autocapture_opt_out: true,
+                editorParams: {},
+                isAuthenticated: false,
+                sessionRecording: {
+                    endpoint: '/ses/',
+                    // will never record a session with rate of 0
+                    sampleRate: '0',
+                },
+            }).as('decide')
+
+            cy.posthogInit({
+                opt_out_capturing_by_default: true,
+            })
+            // Wait for the pageview timeout
+            cy.wait(100)
+            cy.phCaptures({ full: true }).then((captures) => {
+                expect(captures || []).to.have.length(0)
+            })
+
+            cy.posthog().invoke('opt_in_capturing')
+
+            cy.phCaptures({ full: true }).then((captures) => {
+                expect((captures || []).map((c) => c.event)).to.deep.equal(['$opt_in', '$pageview'])
+            })
+        })
+
+        it('does not send a duplicate $pageview event when opting in', () => {
+            cy.intercept('POST', '/decide/*', {
+                autocapture_opt_out: true,
+                editorParams: {},
+                isAuthenticated: false,
+                sessionRecording: {
+                    endpoint: '/ses/',
+                    // will never record a session with rate of 0
+                    sampleRate: '0',
+                },
+            }).as('decide')
+
+            cy.posthogInit({})
+            // Wait for the pageview timeout
+            cy.wait(100)
+            cy.phCaptures({ full: true }).then((captures) => {
+                expect((captures || []).map((c) => c.event)).to.deep.equal(['$pageview'])
+            })
+
+            cy.posthog().invoke('opt_in_capturing')
+
+            cy.phCaptures({ full: true }).then((captures) => {
+                expect((captures || []).map((c) => c.event)).to.deep.equal(['$pageview', '$opt_in'])
+            })
         })
     })
 
