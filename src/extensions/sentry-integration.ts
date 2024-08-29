@@ -18,7 +18,6 @@
 
 import { PostHog } from '../posthog-core'
 import { SeverityLevel } from '../types'
-import { BASE_ERROR_ENDPOINT } from './exception-autocapture'
 
 // NOTE - we can't import from @sentry/types because it changes frequently and causes clashes
 // We only use a small subset of the types, so we can just define the integration overall and use any for the rest
@@ -126,13 +125,7 @@ export function createEventProcessor(
                 event.event_id
         }
 
-        // we take the URL from the exception observer
-        // so that when we add error specific URL for ingestion
-        // these errors are sent there too
-        _posthog.capture('$exception', data, {
-            _url:
-                _posthog.exceptionObserver?.endpoint || _posthog.requestRouter.endpointFor('api', BASE_ERROR_ENDPOINT),
-        })
+        _posthog.exceptions.sendExceptionEvent(data)
 
         return event
     }
