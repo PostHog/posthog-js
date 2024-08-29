@@ -1,3 +1,7 @@
+## 1.159.0 - 2024-08-29
+
+- fix: capture a $pageview event on opting in (#1372)
+
 ## 1.158.3 - 2024-08-28
 
 - fix(errors): Build endpoint for sentry integration & exception observer correctly (#1390)
