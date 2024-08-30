@@ -30,27 +30,14 @@ export function patch(
                     value: true,
                 },
             })
-
-            console.log('wrapping something!')
-            console.log('wrapped', wrapped)
-            console.log('wrapped __p', (wrapped as any).__posthog_wrapped__)
         }
 
         source[name] = wrapped
 
-        console.log('wat', {
-            winFetch: source.fetch,
-            wrapped,
-            source,
-            name,
-            wat: source[name],
-        })
-
         return () => {
             source[name] = original
         }
-    } catch (ex) {
-        console.error('Error in patching:', ex)
+    } catch {
         return () => {
             //
         }

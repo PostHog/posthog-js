@@ -430,7 +430,7 @@ function _tryReadBody(r: Request | Response): Promise<string> {
                     (reason) => reject(reason)
                 )
                 .finally(() => clearTimeout(timeout))
-        } catch (e) {
+        } catch {
             clearTimeout(timeout)
             resolve('[SessionReplay] Failed to read body')
         }
@@ -483,9 +483,6 @@ function initFetchObserver(
     }
     const recordRequestHeaders = shouldRecordHeaders('request', options.recordHeaders)
     const recordResponseHeaders = shouldRecordHeaders('response', options.recordHeaders)
-
-    // eslint-disable-next-line no-console
-    console.log('initialising fetch observer', { recordRequestHeaders, recordResponseHeaders })
 
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
