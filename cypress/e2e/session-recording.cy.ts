@@ -54,39 +54,17 @@ function wrapFetchInCypress({
     return async function (requestOrURL: URL | RequestInfo, init?: RequestInit | undefined) {
         // eslint-disable-next-line compat/compat
         const req = new Request(requestOrURL, init)
-        const body = typeof requestOrURL !== 'string' && 'body' in requestOrURL ? requestOrURL.body : init?.body
-        if (body) {
-            // read the body out of the request, this uses up the request object
-            // and won't work on a used up request object
-            // eslint-disable-next-line no-console
-            console.log('Request body:', body)
+
+        const hasBody = typeof requestOrURL !== 'string' && 'body' in requestOrURL
+        if (hasBody) {
+            // we read the body to (maybe) exhaust it
+            badlyBehaved ? await requestOrURL.text() : await requestOrURL.clone().text()
         }
 
         const res = badlyBehaved ? await originalFetch(requestOrURL, init) : await originalFetch(req)
 
-        const reader = res.clone().body.getReader()
-        // eslint-disable-next-line compat/compat
-        const decoder = new TextDecoder()
-        let result = ''
-
-        // eslint-disable-next-line no-inner-declarations
-        function readStream() {
-            return reader.read().then(({ done, value }) => {
-                if (done) {
-                    // Stream is fully read
-                    return result
-                }
-
-                // Decode the current chunk and append it to the result
-                result += decoder.decode(value, { stream: true })
-
-                // Read the next chunk
-                return readStream()
-            })
-        }
-
-        // we read the body to exhaust it
-        await readStream()
+        // we read the body to (maybe) exhaust it
+        badlyBehaved ? await res.text() : await res.clone().text()
 
         return res
     }
