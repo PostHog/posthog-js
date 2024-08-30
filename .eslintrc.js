@@ -7,6 +7,7 @@ const rules = {
     '@typescript-eslint/no-this-alias': 'off',
     '@typescript-eslint/no-explicit-any': 'off',
     '@typescript-eslint/no-unused-vars': ['error'],
+    '@typescript-eslint/no-unused-expressions': 'off',
     'no-prototype-builtins': 'off',
     'no-empty': 'off',
     'no-console': 'error',
@@ -99,6 +100,12 @@ module.exports = {
             globals: {
                 cy: true,
                 Cypress: true,
+            },
+        },
+        {
+            files: 'testcafe/**/*',
+            globals: {
+                __dirname: true,
             },
         },
     ],

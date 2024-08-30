@@ -77,6 +77,7 @@ import { TracingHeaders } from './extensions/tracing-headers'
 import { ConsentManager } from './consent'
 import { ExceptionObserver } from './extensions/exception-autocapture'
 import { WebVitalsAutocapture } from './extensions/web-vitals'
+import { PostHogExceptions } from './posthog-exceptions'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -242,6 +243,7 @@ export class PostHog {
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
     toolbar: Toolbar
+    exceptions: PostHogExceptions
     consent: ConsentManager
 
     // These are instance-specific state created after initialisation
@@ -260,6 +262,7 @@ export class PostHog {
     sessionRecording?: SessionRecording
     webPerformance = new DeprecatedWebPerformanceObserver()
 
+    _initialPageviewCaptured: boolean
     _triggered_notifs: any
     compression?: Compression
     __request_queue: QueuedRequestOptions[]
@@ -287,12 +290,14 @@ export class PostHog {
         this.__request_queue = []
         this.__loaded = false
         this.analyticsDefaultEndpoint = '/e/'
+        this._initialPageviewCaptured = false
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
         this.scrollManager = new ScrollManager(this)
         this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
+        this.exceptions = new PostHogExceptions(this)
         this.rateLimiter = new RateLimiter(this)
         this.requestRouter = new RequestRouter(this)
         this.consent = new ConsentManager(this)
@@ -534,6 +539,7 @@ export class PostHog {
         this.heatmaps?.afterDecideResponse(response)
         this.surveys?.afterDecideResponse(response)
         this.webVitalsAutocapture?.afterDecideResponse(response)
+        this.exceptions?.afterDecideResponse(response)
         this.exceptionObserver?.afterDecideResponse(response)
     }
 
@@ -559,8 +565,8 @@ export class PostHog {
             // NOTE: We want to fire this on the next tick as the previous implementation had this side effect
             // and some clients may rely on it
             setTimeout(() => {
-                if (document) {
-                    this.capture('$pageview', { title: document.title }, { send_instantly: true })
+                if (this.consent.isOptedIn()) {
+                    this._captureInitialPageview()
                 }
             }, 1)
         }
@@ -1809,6 +1815,20 @@ export class PostHog {
         return !!this.sessionRecording?.started
     }
 
+    /** Capture a caught exception manually */
+    captureException(error: Error, additionalProperties?: Properties): void {
+        const properties: Properties = isFunction(assignableWindow.parseErrorAsProperties)
+            ? assignableWindow.parseErrorAsProperties([error.message, undefined, undefined, undefined, error])
+            : {
+                  $exception_type: error.name,
+                  $exception_message: error.message,
+                  $exception_level: 'error',
+                  ...additionalProperties,
+              }
+
+        this.exceptions.sendExceptionEvent(properties)
+    }
+
     /**
      * returns a boolean indicating whether the toolbar loaded
      * @param toolbarParams
@@ -1977,12 +1997,14 @@ export class PostHog {
         this.consent.optInOut(true)
         this._sync_opt_out_with_persistence()
 
-        if (!isUndefined(options?.captureEventName) && !options?.captureEventName) {
-            // Don't capture if captureEventName is null or false
-            return
+        // Don't capture if captureEventName is null or false
+        if (isUndefined(options?.captureEventName) || options?.captureEventName) {
+            this.capture(options?.captureEventName ?? '$opt_in', options?.captureProperties, { send_instantly: true })
         }
 
-        this.capture(options?.captureEventName ?? '$opt_in', options?.captureProperties, { send_instantly: true })
+        if (this.config.capture_pageview) {
+            this._captureInitialPageview()
+        }
     }
 
     /**
@@ -2047,6 +2069,13 @@ export class PostHog {
             return isLikelyBot(navigator, this.config.custom_blocked_useragents)
         } else {
             return undefined
+        }
+    }
+
+    _captureInitialPageview(): void {
+        if (document && !this._initialPageviewCaptured) {
+            this._initialPageviewCaptured = true
+            this.capture('$pageview', { title: document.title }, { send_instantly: true })
         }
     }
 

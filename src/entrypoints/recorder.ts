@@ -215,7 +215,7 @@ function _tryReadXHRBody({
     if (isObject(body)) {
         try {
             return JSON.stringify(body)
-        } catch (e) {
+        } catch {
             return '[SessionReplay] Failed to stringify response object'
         }
     }
@@ -452,13 +452,18 @@ function _tryReadBody(r: Request | Response): Promise<string> {
     // eslint-disable-next-line compat/compat
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => resolve('[SessionReplay] Timeout while trying to read body'), 500)
-        r.clone()
-            .text()
-            .then(
-                (txt) => resolve(txt),
-                (reason) => reject(reason)
-            )
-            .finally(() => clearTimeout(timeout))
+        try {
+            r.clone()
+                .text()
+                .then(
+                    (txt) => resolve(txt),
+                    (reason) => reject(reason)
+                )
+                .finally(() => clearTimeout(timeout))
+        } catch {
+            clearTimeout(timeout)
+            resolve('[SessionReplay] Failed to read body')
+        }
     })
 }
 
@@ -508,6 +513,7 @@ function initFetchObserver(
     }
     const recordRequestHeaders = shouldRecordHeaders('request', options.recordHeaders)
     const recordResponseHeaders = shouldRecordHeaders('response', options.recordHeaders)
+
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     const restorePatch = patch(win, 'fetch', (originalFetch: typeof fetch) => {

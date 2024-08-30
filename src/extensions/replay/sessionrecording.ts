@@ -915,6 +915,7 @@ export class SessionRecording {
             _url: this.instance.requestRouter.endpointFor('api', this._endpoint),
             _noTruncate: true,
             _batchKey: SESSION_RECORDING_BATCH_KEY,
+            skip_client_rate_limiting: true,
         })
     }
 

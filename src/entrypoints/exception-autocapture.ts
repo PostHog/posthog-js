@@ -51,6 +51,7 @@ const posthogErrorWrappingFunctions = {
 
 if (window) {
     ;(window as any).posthogErrorWrappingFunctions = posthogErrorWrappingFunctions
+    ;(window as any).parseErrorAsProperties = errorToProperties
 }
 
 export default posthogErrorWrappingFunctions
