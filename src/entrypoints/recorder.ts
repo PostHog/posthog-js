@@ -220,8 +220,6 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
     const recordRequestHeaders = shouldRecordHeaders('request', options.recordHeaders)
     const recordResponseHeaders = shouldRecordHeaders('response', options.recordHeaders)
 
-    logger.info('initialising xhr observer', { recordRequestHeaders, recordResponseHeaders })
-
     const restorePatch = patch(
         win.XMLHttpRequest.prototype,
         'open',
