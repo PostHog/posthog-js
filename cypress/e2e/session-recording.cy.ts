@@ -3,6 +3,7 @@
 import { isNull } from '../../src/utils/type-utils'
 import { start } from '../support/setup'
 import { assertWhetherPostHogRequestsWereCalled, pollPhCaptures } from '../support/assertions'
+import { patch } from '../../src/extensions/replay/rrweb-plugins/patch'
 
 function ensureRecordingIsStopped() {
     cy.resetPhCaptures()
@@ -82,60 +83,310 @@ describe('Session recording', () => {
         })
     })
 
-    describe('with network capture', () => {
-        beforeEach(() => {
-            start({
-                decideResponseOverrides: {
-                    isAuthenticated: false,
-                    sessionRecording: {
-                        endpoint: '/ses/',
-                        networkPayloadCapture: { recordBody: true },
+    describe('network capture', () => {
+        let originalFetch: typeof fetch | null = null
+
+        afterEach(() => {
+            if (originalFetch) {
+                cy.window().then((win) => {
+                    console.log('replacing original fetch')
+                    win.fetch = originalFetch
+                    originalFetch = null
+                })
+            }
+        })
+        describe('with safe wrapped network capture', () => {
+            beforeEach(() => {
+                start({
+                    decideResponseOverrides: {
+                        isAuthenticated: false,
+                        sessionRecording: {
+                            endpoint: '/ses/',
+                            networkPayloadCapture: { recordBody: true },
+                        },
+                        capturePerformance: true,
+                        autocapture_opt_out: true,
                     },
-                    capturePerformance: true,
-                    autocapture_opt_out: true,
-                },
-                url: './playground/cypress',
-                options: {
-                    loaded: (ph) => {
-                        ph.sessionRecording._forceAllowLocalhostNetworkCapture = true
+                    url: './playground/cypress',
+                    options: {
+                        loaded: (ph) => {
+                            ph.sessionRecording._forceAllowLocalhostNetworkCapture = true
+                        },
                     },
-                },
+                })
+
+                cy.wait('@recorder')
+
+                // wrap fetch to log the body of the request
+                // this simulates various libraries that require
+                // being able to read the request
+                // and possibly alter it
+                // see: https://github.com/PostHog/posthog/issues/24471
+                // for the catastrophic but hard to detect impact of
+                // interfering with that with our wrapper
+                cy.window().then((win) => {
+                    originalFetch = win.fetch
+                    win.fetch = async function (requestOrURL: URL | RequestInfo, init?: RequestInit | undefined) {
+                        try {
+                            console.log('in the fetch wrapper')
+
+                            const req = new Request(requestOrURL, init)
+                            const body =
+                                typeof requestOrURL !== 'string' && 'body' in requestOrURL
+                                    ? requestOrURL.body
+                                    : init?.body
+                            if (body) {
+                                // read the body out of the request, this uses up the request object
+                                // and won't work on a used up request object
+                                // eslint-disable-next-line no-console
+                                console.log('Request body:', body)
+                            }
+
+                            const res = await originalFetch(req)
+                            // also read the body
+
+                            const reader = res.clone().body.getReader()
+                            // eslint-disable-next-line compat/compat
+                            const decoder = new TextDecoder()
+                            let result = ''
+
+                            function readStream() {
+                                return reader.read().then(({ done, value }) => {
+                                    if (done) {
+                                        // Stream is fully read
+                                        return result
+                                    }
+
+                                    // Decode the current chunk and append it to the result
+                                    result += decoder.decode(value, { stream: true })
+
+                                    // Read the next chunk
+                                    return readStream()
+                                })
+                            }
+
+                            // we read the body to exhaust it
+                            await readStream()
+
+                            return res
+                        } catch (e) {
+                            console.error('fetch wrapper error', e)
+                            throw e
+                        } finally {
+                            console.log('fetch wrapper finally')
+                        }
+                    }
+                })
             })
 
-            cy.wait('@recorder')
-        })
+            it('it sends network payloads', () => {
+                cy.intercept({url: 'https://example.com', times: 1 }, (req) => {
+                    req.reply({
+                        statusCode: 200,
+                        headers: { 'Content-Type': 'application/json' },
+                        body: {
+                            message: 'This is a JSON response',
+                        },
+                    })
+                }).as('example.com')
 
-        it('it sends network payloads', () => {
-            cy.intercept('https://example.com', 'success').as('example.com')
-            cy.get('[data-cy-network-call-button]').click()
-            cy.wait('@example.com')
-            cy.wait('@session-recording')
-            cy.phCaptures({ full: true }).then((captures) => {
-                const snapshots = captures.filter((c) => c.event === '$snapshot')
+                cy.get('[data-cy-network-call-button]').click()
+                cy.wait('@example.com')
+                cy.wait('@session-recording')
+                cy.phCaptures({ full: true }).then((captures) => {
+                    const snapshots = captures.filter((c) => c.event === '$snapshot')
 
-                const capturedRequests: Record<string, any>[] = []
-                for (const snapshot of snapshots) {
-                    for (const snapshotData of snapshot.properties['$snapshot_data']) {
-                        if (snapshotData.type === 6) {
-                            for (const req of snapshotData.data.payload.requests) {
-                                capturedRequests.push(req)
+                    const capturedRequests: Record<string, any>[] = []
+                    for (const snapshot of snapshots) {
+                        for (const snapshotData of snapshot.properties['$snapshot_data']) {
+                            if (snapshotData.type === 6) {
+                                for (const req of snapshotData.data.payload.requests) {
+                                    capturedRequests.push(req)
+                                }
                             }
                         }
                     }
-                }
 
-                // yay, includes type 6 network data
-                expect(capturedRequests).to.have.length.above(0)
+                    const expectedCaptureds: [RegExp, string][] = [
+                        [/http:\/\/localhost:\d+\/playground\/cypress\//, 'navigation'],
+                        [/http:\/\/localhost:\d+\/static\/array.js/, 'script'],
+                        [
+                            /http:\/\/localhost:\d+\/decide\/\?v=3&ip=1&_=\d+&ver=1\.\d\d\d\.\d+&compression=base64/,
+                            'xmlhttprequest',
+                        ],
+                        [/http:\/\/localhost:\d+\/static\/recorder.js\?v=1\.\d\d\d\.\d+/, 'script'],
+                        [/https:\/\/example.com/, 'fetch'],
+                    ]
 
-                // the HTML file that cypress is operating on (playground/cypress/index.html)
-                // when the button for this test is click makes a post to https://example.com
-                const capturedFetchRequest = capturedRequests.find((cr) => cr.name === 'https://example.com/')
+                    // yay, includes expected type 6 network data
+                    expect(capturedRequests.length).to.equal(expectedCaptureds.length)
+                    expectedCaptureds.forEach(([url, initiatorType], index) => {
+                        expect(capturedRequests[index].name).to.match(url)
+                        expect(capturedRequests[index].initiatorType).to.equal(initiatorType)
+                    })
 
-                expect(capturedFetchRequest.fetchStart).to.be.greaterThan(0) // proxy for including network timing info
+                    // the HTML file that cypress is operating on (playground/cypress/index.html)
+                    // when the button for this test is click makes a post to https://example.com
+                    const capturedFetchRequest = capturedRequests.find((cr) => cr.name === 'https://example.com/')
+                    expect(capturedFetchRequest).to.not.be.undefined
 
-                expect(capturedFetchRequest.initiatorType).to.eql('fetch')
-                expect(capturedFetchRequest.isInitial).to.be.undefined
-                expect(capturedFetchRequest.requestBody).to.eq('i am the fetch body')
+                    expect(capturedFetchRequest.fetchStart).to.be.greaterThan(0) // proxy for including network timing info
+
+                    expect(capturedFetchRequest.initiatorType).to.eql('fetch')
+                    expect(capturedFetchRequest.isInitial).to.be.undefined
+                    expect(capturedFetchRequest.requestBody).to.eq('i am the fetch body')
+
+                    expect(capturedFetchRequest.responseBody).to.eq(
+                        JSON.stringify({
+                            message: 'This is a JSON response',
+                        })
+                    )
+                })
+            })
+        })
+
+        describe('with badly wrapped network capture', () => {
+            beforeEach(() => {
+                start({
+                    decideResponseOverrides: {
+                        isAuthenticated: false,
+                        sessionRecording: {
+                            endpoint: '/ses/',
+                            networkPayloadCapture: { recordBody: true },
+                        },
+                        capturePerformance: true,
+                        autocapture_opt_out: true,
+                    },
+                    url: './playground/cypress',
+                    options: {
+                        loaded: (ph) => {
+                            ph.sessionRecording._forceAllowLocalhostNetworkCapture = true
+                        },
+                    },
+                })
+
+                cy.wait('@recorder')
+
+                // wrap fetch to log the body of the request
+                // this simulates various libraries that require
+                // being able to read the request
+                // and possibly alter it
+                // see: https://github.com/PostHog/posthog/issues/24471
+                // for the catastrophic but hard to detect impact of
+                // interfering with that with our wrapper
+                cy.window().then((win) => {
+                    originalFetch = win.fetch
+                    win.fetch = async function (requestOrURL: URL | RequestInfo, init?: RequestInit | undefined) {
+                        try {
+                            console.log('in the fetch wrapper')
+
+                            const body =
+                                typeof requestOrURL !== 'string' && 'body' in requestOrURL
+                                    ? requestOrURL.body
+                                    : init?.body
+                            if (body) {
+                                // read the body out of the request, this uses up the request object
+                                // and won't work on a used up request object
+                                // eslint-disable-next-line no-console
+                                console.log('Request body:', body)
+                            }
+
+                            const res = await originalFetch(requestOrURL, init)
+                            // also read the body
+
+                            const reader = res.body.getReader()
+                            // eslint-disable-next-line compat/compat
+                            const decoder = new TextDecoder()
+                            let result = ''
+
+                            function readStream() {
+                                return reader.read().then(({ done, value }) => {
+                                    if (done) {
+                                        // Stream is fully read
+                                        return result
+                                    }
+
+                                    // Decode the current chunk and append it to the result
+                                    result += decoder.decode(value, { stream: true })
+
+                                    // Read the next chunk
+                                    return readStream()
+                                })
+                            }
+
+                            // we read the body to exhaust it
+                            await readStream()
+
+                            return res
+                        } catch (e) {
+                            console.error('fetch wrapper error', e)
+                            throw e
+                        } finally {
+                            console.log('fetch wrapper finally')
+                        }
+                    }
+                })
+            })
+
+            it('it sends network payloads', () => {
+                cy.intercept({url: 'https://example.com', times: 1 }, (req) => {
+                    req.reply({
+                        statusCode: 200,
+                        headers: { 'Content-Type': 'application/json' },
+                        body: {
+                            message: 'This is a JSON response',
+                        },
+                    })
+                }).as('example.com')
+
+                cy.get('[data-cy-network-call-button]').click()
+                cy.wait('@example.com')
+                cy.wait('@session-recording')
+                cy.phCaptures({ full: true }).then((captures) => {
+                    const snapshots = captures.filter((c) => c.event === '$snapshot')
+
+                    const capturedRequests: Record<string, any>[] = []
+                    for (const snapshot of snapshots) {
+                        for (const snapshotData of snapshot.properties['$snapshot_data']) {
+                            if (snapshotData.type === 6) {
+                                for (const req of snapshotData.data.payload.requests) {
+                                    capturedRequests.push(req)
+                                }
+                            }
+                        }
+                    }
+
+                    const expectedCaptureds: [RegExp, string][] = [
+                        [/http:\/\/localhost:\d+\/playground\/cypress\//, 'navigation'],
+                        [/http:\/\/localhost:\d+\/static\/array.js/, 'script'],
+                        [
+                            /http:\/\/localhost:\d+\/decide\/\?v=3&ip=1&_=\d+&ver=1\.\d\d\d\.\d+&compression=base64/,
+                            'xmlhttprequest',
+                        ],
+                        [/http:\/\/localhost:\d+\/static\/recorder.js\?v=1\.\d\d\d\.\d+/, 'script'],
+                        [/https:\/\/example.com/, 'fetch'],
+                    ]
+
+                    // yay, includes expected type 6 network data
+                    expect(capturedRequests.length).to.equal(expectedCaptureds.length)
+                    expectedCaptureds.forEach(([url, initiatorType], index) => {
+                        expect(capturedRequests[index].name).to.match(url)
+                        expect(capturedRequests[index].initiatorType).to.equal(initiatorType)
+                    })
+
+                    // the HTML file that cypress is operating on (playground/cypress/index.html)
+                    // when the button for this test is click makes a post to https://example.com
+                    const capturedFetchRequest = capturedRequests.find((cr) => cr.name === 'https://example.com/')
+                    expect(capturedFetchRequest).to.not.be.undefined
+
+                    expect(capturedFetchRequest.fetchStart).to.be.greaterThan(0) // proxy for including network timing info
+
+                    expect(capturedFetchRequest.initiatorType).to.eql('fetch')
+                    expect(capturedFetchRequest.isInitial).to.be.undefined
+                    expect(capturedFetchRequest.requestBody).to.eq('i am the fetch body')
+
+                    expect(capturedFetchRequest.responseBody).to.eq('[SessionReplay] Failed to read body')
+                })
             })
         })
     })

@@ -20,23 +20,37 @@ export function patch(
 
         // Make sure it's a function first, as we need to attach an empty prototype for `defineProperties` to work
         // otherwise it'll throw "TypeError: Object.defineProperties called on non-object"
-        if (isFunction(wrapped)) {
+        if (isFunction(wrapped) && !(wrapped as any).__posthog_wrapped__) {
             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             wrapped.prototype = wrapped.prototype || {}
+
             Object.defineProperties(wrapped, {
                 __posthog_wrapped__: {
                     enumerable: false,
                     value: true,
                 },
             })
+
+            console.log('wrapping something!')
+            console.log('wrapped', wrapped)
+            console.log('wrapped __p', (wrapped as any).__posthog_wrapped__)
         }
 
         source[name] = wrapped
 
+        console.log('wat', {
+            winFetch: source.fetch,
+            wrapped,
+            source,
+            name,
+            wat: source[name],
+        })
+
         return () => {
             source[name] = original
         }
-    } catch {
+    } catch (ex) {
+        console.error('Error in patching:', ex)
         return () => {
             //
         }
