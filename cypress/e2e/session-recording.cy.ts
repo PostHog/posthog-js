@@ -114,6 +114,19 @@ describe('Session recording', () => {
             let originalFetch: typeof fetch | null = null
 
             beforeEach(() => {
+                // wrap fetch to log the body of the request
+                // this simulates various libraries that require
+                // being able to read the request
+                // and possibly alter it
+                // see: https://github.com/PostHog/posthog/issues/24471
+                // for the catastrophic but hard to detect impact of
+                // interfering with that with our wrapper
+                // we wrap before PostHog and...
+                cy.window().then((win) => {
+                    originalFetch = win.fetch
+                    win.fetch = wrapFetchInCypress({ originalFetch, badlyBehaved: isBadlyBehavedWrapper })
+                })
+
                 start({
                     decideResponseOverrides: {
                         isAuthenticated: false,
@@ -144,13 +157,7 @@ describe('Session recording', () => {
                     })
                 }).as('example.com')
 
-                // wrap fetch to log the body of the request
-                // this simulates various libraries that require
-                // being able to read the request
-                // and possibly alter it
-                // see: https://github.com/PostHog/posthog/issues/24471
-                // for the catastrophic but hard to detect impact of
-                // interfering with that with our wrapper
+                // we wrap after PostHog
                 cy.window().then((win) => {
                     originalFetch = win.fetch
                     win.fetch = wrapFetchInCypress({ originalFetch, badlyBehaved: isBadlyBehavedWrapper })
@@ -214,11 +221,9 @@ describe('Session recording', () => {
                     expect(capturedFetchRequest.requestBody).to.eq('i am the fetch body')
 
                     expect(capturedFetchRequest.responseBody).to.eq(
-                        isBadlyBehavedWrapper
-                            ? '[SessionReplay] Failed to read body'
-                            : JSON.stringify({
-                                  message: 'This is a JSON response',
-                              })
+                        JSON.stringify({
+                            message: 'This is a JSON response',
+                        })
                     )
                 })
             })
