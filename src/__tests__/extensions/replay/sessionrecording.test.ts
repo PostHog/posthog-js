@@ -37,6 +37,7 @@ import {
     EventType,
     eventWithTime,
     fullSnapshotEvent,
+    incrementalData,
     incrementalSnapshotEvent,
     IncrementalSource,
     metaEvent,
@@ -84,7 +85,7 @@ const createIncrementalSnapshot = (event = {}): incrementalSnapshotEvent => ({
     type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     data: {
         source: 1,
-    },
+    } as Partial<incrementalData> as incrementalData,
     ...event,
 })
 
@@ -1032,6 +1033,7 @@ describe('SessionRecording', () => {
                 // we always take a full snapshot when there hasn't been one
                 // and use _fullSnapshotTimer to track that
                 // we want to avoid that behavior here, so we set it to any value
+                // @ts-expect-error -- detected as Timeout because the test is picking up `NodeJS.Timeout` as the type not `number` as in the browser
                 sessionRecording['_fullSnapshotTimer'] = 1
 
                 sessionIdGeneratorMock.mockImplementation(() => 'old-session-id')
