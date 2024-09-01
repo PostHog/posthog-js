@@ -1362,7 +1362,7 @@ describe('SessionRecording', () => {
             })
         })
 
-        it('emits custom events even when idle', () => {
+        it('emits custom events even only when returning from idle', () => {
             // force idle state
             sessionRecording['isIdle'] = true
             // buffer is empty
@@ -1389,6 +1389,10 @@ describe('SessionRecording', () => {
                 size: 47,
                 windowId: 'windowId',
             })
+            emitInactiveEvent(startingTimestamp + 100, true)
+            expect(posthog.capture).not.toHaveBeenCalled()
+
+            expect(sessionRecording['flushBufferTimer']).toBeUndefined()
         })
 
         it('drops full snapshots when idle - so we must make sure not to take them while idle!', () => {

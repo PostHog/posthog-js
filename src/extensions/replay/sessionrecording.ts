@@ -902,7 +902,7 @@ export class SessionRecording {
         this.buffer.size += properties.$snapshot_bytes
         this.buffer.data.push(properties.$snapshot_data)
 
-        if (!this.flushBufferTimer) {
+        if (!this.flushBufferTimer && !this.isIdle) {
             this.flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)
