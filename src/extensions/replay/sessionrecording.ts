@@ -893,8 +893,9 @@ export class SessionRecording {
     private _captureSnapshotBuffered(properties: Properties) {
         const additionalBytes = 2 + (this.buffer?.data.length || 0) // 2 bytes for the array brackets and 1 byte for each comma
         if (
-            this.buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE ||
-            this.buffer.sessionId !== this.sessionId
+            !this.isIdle && // we never want to flush when idle
+            (this.buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE ||
+                this.buffer.sessionId !== this.sessionId)
         ) {
             this.buffer = this._flushBuffer()
         }
