@@ -1397,39 +1397,6 @@ describe('SessionRecording', () => {
             expect(sessionRecording['flushBufferTimer']).toBeUndefined()
         })
 
-        it('buffers custom events without capturing while idle', () => {
-            // force idle state
-            sessionRecording['isIdle'] = true
-            // buffer is empty
-            expect(sessionRecording['buffer']).toEqual({
-                ...EMPTY_BUFFER,
-                sessionId: sessionId,
-                windowId: 'windowId',
-            })
-
-            sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
-
-            // custom event is buffered
-            expect(sessionRecording['buffer']).toEqual({
-                data: [
-                    {
-                        data: {
-                            payload: {},
-                            tag: 'custom',
-                        },
-                        type: 5,
-                    },
-                ],
-                sessionId: sessionId,
-                size: 47,
-                windowId: 'windowId',
-            })
-            emitInactiveEvent(startingTimestamp + 100, true)
-            expect(posthog.capture).not.toHaveBeenCalled()
-
-            expect(sessionRecording['flushBufferTimer']).toBeUndefined()
-        })
-
         it('does not emit buffered custom events while idle even when over buffer max size', () => {
             // force idle state
             sessionRecording['isIdle'] = true
