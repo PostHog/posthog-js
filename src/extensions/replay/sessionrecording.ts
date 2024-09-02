@@ -293,6 +293,7 @@ export class SessionRecording {
         } else {
             this.stopRecording()
             this.clearBuffer()
+            clearInterval(this._fullSnapshotTimer)
         }
     }
 
@@ -516,7 +517,7 @@ export class SessionRecording {
             if (event.timestamp - this._lastActivityTimestamp > RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) {
                 this.isIdle = true
                 // don't take full snapshots while idle
-                clearTimeout(this._fullSnapshotTimer)
+                clearInterval(this._fullSnapshotTimer)
                 // proactively flush the buffer in case the session is idle for a long time
                 this._flushBuffer()
             }
