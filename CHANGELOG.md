@@ -1,3 +1,9 @@
+## 1.160.1 - 2024-09-02
+
+- fix: flushing the buffer for debug signal while idle extends session activity (#1396)
+- fix: network capture tests should fail if we exhaust the body (#1395)
+- chore: clarify that tests are exercising our fetch wrapper (#1393)
+
 ## 1.160.0 - 2024-08-29
 
 - feat: manually capture errors (#1374)
