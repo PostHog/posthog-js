@@ -293,6 +293,7 @@ export class SessionRecording {
         } else {
             this.stopRecording()
             this.clearBuffer()
+            clearInterval(this._fullSnapshotTimer)
         }
     }
 
@@ -516,7 +517,7 @@ export class SessionRecording {
             if (event.timestamp - this._lastActivityTimestamp > RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) {
                 this.isIdle = true
                 // don't take full snapshots while idle
-                clearTimeout(this._fullSnapshotTimer)
+                clearInterval(this._fullSnapshotTimer)
                 // proactively flush the buffer in case the session is idle for a long time
                 this._flushBuffer()
             }
@@ -893,8 +894,9 @@ export class SessionRecording {
     private _captureSnapshotBuffered(properties: Properties) {
         const additionalBytes = 2 + (this.buffer?.data.length || 0) // 2 bytes for the array brackets and 1 byte for each comma
         if (
-            this.buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE ||
-            this.buffer.sessionId !== this.sessionId
+            !this.isIdle && // we never want to flush when idle
+            (this.buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE ||
+                this.buffer.sessionId !== this.sessionId)
         ) {
             this.buffer = this._flushBuffer()
         }
@@ -902,7 +904,7 @@ export class SessionRecording {
         this.buffer.size += properties.$snapshot_bytes
         this.buffer.data.push(properties.$snapshot_data)
 
-        if (!this.flushBufferTimer) {
+        if (!this.flushBufferTimer && !this.isIdle) {
             this.flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)
