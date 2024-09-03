@@ -867,7 +867,7 @@ export class PostHog {
     /**
      * Capture a page view event.
      *
-     * This is a wrapper around capture and is 
+     * This is a wrapper around capture and is
      * equivalent to capture('$pageview', {'$current_url': <url>})
      *
      * ### Usage:
@@ -880,8 +880,8 @@ export class PostHog {
      * @param {String} [config.transport] Transport method for network request ('XHR' or 'sendBeacon').
      * @param {Date} [config.timestamp] Timestamp is a Date object. If not set, it'll automatically be set to the current time.
      */
-    page(url: string, properties?: Properties | null, options?: CaptureOptions): CaptureResult | undefined { 
-        properties['current_url'] = url;
+    page(url: string, properties?: Properties | null, options?: CaptureOptions): CaptureResult | undefined {
+        properties['current_url'] = url
         return this.capture('$pageview', properties, options)
     }
     _addCaptureHook(callback: (eventName: string, eventPayload?: CaptureResult) => void): void {
