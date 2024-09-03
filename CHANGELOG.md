@@ -1,3 +1,7 @@
+## 1.160.3 - 2024-09-03
+
+- fix: captured network requests must always have name property (#1398)
+
 ## 1.160.2 - 2024-09-03
 
 - fix: report requests even without timing (#1386)
