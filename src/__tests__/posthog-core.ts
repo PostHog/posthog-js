@@ -337,6 +337,14 @@ describe('posthog core', () => {
         })
     })
 
+    describe('page', () => {
+        it('has the correct url', () => {
+            const testUrl = 'https://example.com'
+            const captureData = posthogWith(defaultConfig, defaultOverrides).page(testUrl, {}, {})
+            expect(captureData.properties['current_url']).toEqual(testUrl)
+        })
+    })
+
     describe('_afterDecideResponse', () => {
         it('enables compression from decide response', () => {
             const posthog = posthogWith({})
