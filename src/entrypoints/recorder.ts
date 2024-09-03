@@ -321,6 +321,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                                 networkRequest,
                                 start,
                                 end,
+                                url: url.toString(),
                             })
                             cb({ requests })
                         })
@@ -353,6 +354,7 @@ function prepareRequest({
     isInitial,
     start,
     end,
+    url,
 }: {
     entry: PerformanceResourceTiming | null
     method: string | undefined
@@ -361,6 +363,8 @@ function prepareRequest({
     isInitial?: boolean
     start?: number
     end?: number
+    // if there is no entry, we still need to know the url
+    url?: string
 }): CapturedNetworkRequest[] {
     start = entry ? entry.startTime : start
     end = entry ? entry.responseEnd : end
@@ -375,7 +379,7 @@ function prepareRequest({
     // use timeOrigin if we really can't gather a start time
     const timestamp = Math.floor(timeOrigin + (start || 0))
 
-    const entryJSON = entry ? entry.toJSON() : {}
+    const entryJSON = entry ? entry.toJSON() : { name: url }
 
     const requests: CapturedNetworkRequest[] = [
         {
@@ -578,6 +582,7 @@ function initFetchObserver(
                             networkRequest,
                             start,
                             end,
+                            url: req.url,
                         })
                         cb({ requests })
                     })
