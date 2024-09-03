@@ -1,3 +1,7 @@
+## 1.160.2 - 2024-09-03
+
+- fix: report requests even without timing (#1386)
+
 ## 1.160.1 - 2024-09-02
 
 - fix: flushing the buffer for debug signal while idle extends session activity (#1396)
