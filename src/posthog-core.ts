@@ -864,6 +864,26 @@ export class PostHog {
         return data
     }
 
+    /**
+     * Capture a page view event.
+     *
+     * This is a wrapper around capture and is 
+     * equivalent to capture('$pageview', {'$current_url': <url>})
+     *
+     * ### Usage:
+     *
+     *    posthog.page('https://example.com')
+     *
+     * @param {String} url The URL of the page. This will be included in the properties as '$current_url'.
+     * @param {Object} [properties] A set of properties to include with the event you're sending. These describe the user who did the event or details about the event itself.
+     * @param {Object} [config] Optional configuration for this capture request.
+     * @param {String} [config.transport] Transport method for network request ('XHR' or 'sendBeacon').
+     * @param {Date} [config.timestamp] Timestamp is a Date object. If not set, it'll automatically be set to the current time.
+     */
+    page(url: string, properties?: Properties | null, options?: CaptureOptions): CaptureResult | undefined { 
+        properties['current_url'] = url;
+        return this.capture('$pageview', properties, options)
+    }
     _addCaptureHook(callback: (eventName: string, eventPayload?: CaptureResult) => void): void {
         this.on('eventCaptured', (data) => callback(data.event, data))
     }
