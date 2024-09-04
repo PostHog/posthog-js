@@ -341,7 +341,7 @@ describe('posthog core', () => {
         it('has the correct url', () => {
             const testUrl = 'https://example.com'
             const captureData = posthogWith(defaultConfig, defaultOverrides).page(testUrl, {}, {})
-            expect(captureData.properties['current_url']).toEqual(testUrl)
+            expect(captureData.properties['$current_url']).toEqual(testUrl)
         })
     })
 
