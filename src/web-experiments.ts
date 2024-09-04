@@ -38,7 +38,9 @@ export class WebExperiments {
             this.applyFeatureFlagChanges(flags)
         }
 
-        this.instance.onFeatureFlags(appFeatureFLags)
+        if (this.instance.onFeatureFlags) {
+            this.instance.onFeatureFlags(appFeatureFLags)
+        }
         this._flagToExperiments = new Map<string, WebExperiment>()
     }
 
@@ -126,7 +128,7 @@ export class WebExperiments {
         this.instance._send_request({
             url: this.instance.requestRouter.endpointFor(
                 'api',
-                `/api/experiments/?token=${this.instance.config.token}`
+                `/api/toolbar_experiments/?token=${this.instance.config.token}`
             ),
             method: 'GET',
             transport: 'XHR',
@@ -216,15 +218,6 @@ export class WebExperiments {
                 const elements = document?.querySelectorAll(transform.selector)
                 elements?.forEach((element) => {
                     const htmlElement = element as HTMLElement
-                    WebExperiments.logInfo(
-                        `applying transform of text [`,
-                        transform.text,
-                        `]to element `,
-                        element,
-                        ` element.nodeType is `,
-                        element.nodeType
-                    )
-
                     if (transform.attributes) {
                         transform.attributes.forEach((attribute) => {
                             switch (attribute.name) {
@@ -272,14 +265,4 @@ export class WebExperiments {
 
         return undefined
     }
-
-    //
-    // _isVarianttransform(obj: any): obj is ExperimentVarianttransform {
-    //     return obj && typeof obj.name === 'string'
-    // }
-
-    //         function isAnimal(obj: any):
-    //     obj is Animal {
-    //
-    // }
 }
