@@ -2,12 +2,12 @@
 
 import {
     errorToProperties,
-    ErrorProperties,
     unhandledRejectionToProperties,
 } from '../../../extensions/exception-autocapture/error-conversion'
 
 import { isNull } from '../../../utils/type-utils'
 import { expect } from '@jest/globals'
+import { ErrorProperties } from '../../../types'
 
 // ugh, jest
 // can't reference PromiseRejectionEvent to construct it 🤷

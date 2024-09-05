@@ -4,6 +4,9 @@ import { SurveyAppearance, SurveyQuestionDescriptionContentType } from '../../..
 import { defaultSurveyAppearance, getContrastingTextColor, renderChildrenAsTextOrHtml } from '../surveys-utils'
 import { h } from 'preact'
 
+import { useContext } from 'preact/hooks'
+import { SurveyContext } from '../../surveys/surveys-utils'
+
 export function ConfirmationMessage({
     header,
     description,
@@ -23,11 +26,13 @@ export function ConfirmationMessage({
 }) {
     const textColor = getContrastingTextColor(appearance.backgroundColor || defaultSurveyAppearance.backgroundColor)
 
+    const { isPopup } = useContext(SurveyContext)
+
     return (
         <>
             <div className="thank-you-message" style={{ ...styleOverrides }}>
                 <div className="thank-you-message-container">
-                    <Cancel onClick={() => onClose()} />
+                    {isPopup && <Cancel onClick={() => onClose()} />}
                     <h3 className="thank-you-message-header" style={{ color: textColor }}>
                         {header}
                     </h3>
@@ -38,12 +43,14 @@ export function ConfirmationMessage({
                             renderAsHtml: !forceDisableHtml && contentType !== 'text',
                             style: { color: textColor },
                         })}
-                    <BottomSection
-                        text={appearance.thankYouMessageCloseButtonText || 'Close'}
-                        submitDisabled={false}
-                        appearance={appearance}
-                        onSubmit={() => onClose()}
-                    />
+                    {isPopup && (
+                        <BottomSection
+                            text={appearance.thankYouMessageCloseButtonText || 'Close'}
+                            submitDisabled={false}
+                            appearance={appearance}
+                            onSubmit={() => onClose()}
+                        />
+                    )}
                 </div>
             </div>
         </>

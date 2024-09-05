@@ -29,7 +29,9 @@ export function getClassNames(el: Element): string[] {
         // TODO: when is this ever used?
         case 'object': // handle cases where className might be SVGAnimatedString or some other type
             className =
-                ('baseVal' in el.className ? (el.className as any).baseVal : null) || el.getAttribute('class') || ''
+                (el.className && 'baseVal' in el.className ? (el.className as any).baseVal : null) ||
+                el.getAttribute('class') ||
+                ''
             break
         default:
             className = ''

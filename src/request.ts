@@ -95,7 +95,7 @@ const xhr = (options: RequestOptions) => {
             if (req.status === 200) {
                 try {
                     response.json = JSON.parse(req.responseText)
-                } catch (e) {
+                } catch {
                     // logger.error(e)
                 }
             }
@@ -111,7 +111,7 @@ const _fetch = (options: RequestOptions) => {
 
     // eslint-disable-next-line compat/compat
     const headers = new Headers()
-    each(headers, function (headerValue, headerName) {
+    each(options.headers, function (headerValue, headerName) {
         headers.append(headerName, headerValue)
     })
 
@@ -177,7 +177,7 @@ const _sendBeacon = (options: RequestOptions) => {
         // sendBeacon requires a blob so we convert it
         const sendBeaconBody = typeof body === 'string' ? new Blob([body], { type: contentType }) : body
         navigator!.sendBeacon!(url, sendBeaconBody)
-    } catch (e) {
+    } catch {
         // send beacon is a best-effort, fire-and-forget mechanism on page unload,
         // we don't want to throw errors here
     }

@@ -111,7 +111,7 @@ export function entries<T = any>(obj: Record<string, T>): [string, T][] {
 export const isValidRegex = function (str: string): boolean {
     try {
         new RegExp(str)
-    } catch (error) {
+    } catch {
         return false
     }
     return true
@@ -129,7 +129,7 @@ export const timestamp = function (): number {
 export const trySafe = function <T>(fn: () => T): T | undefined {
     try {
         return fn()
-    } catch (e) {
+    } catch {
         return undefined
     }
 }
@@ -149,7 +149,7 @@ export const safewrap = function <F extends (...args: any[]) => any = (...args: 
     } as F
 }
 
-// eslint-disable-next-line @typescript-eslint/ban-types
+// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
 export const safewrapClass = function (klass: Function, functions: string[]): void {
     for (let i = 0; i < functions.length; i++) {
         klass.prototype[functions[i]] = safewrap(klass.prototype[functions[i]])

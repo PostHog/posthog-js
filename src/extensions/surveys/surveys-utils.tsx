@@ -66,8 +66,10 @@ export const style = (appearance: SurveyAppearance | null) => {
               border-radius: 6px;
               border-color: ${appearance?.borderColor || '#c9c6c6'};
               margin-top: 14px;
+              width: 100%;
+              box-sizing: border-box;
           }
-          .survey-box:has(.survey-question:empty):not(:has(.description)) textarea {
+          .survey-box:has(.survey-question:empty):not(:has(.survey-question-description)) textarea {
               margin-top: 0;
           }
           .form-submit {
@@ -95,6 +97,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               width: 100%;
           }
           .form-cancel {
+              display: flex;
               float: right;
               border: none;
               background: none;
@@ -130,6 +133,8 @@ export const style = (appearance: SurveyAppearance | null) => {
               font-weight: 500;
               background: ${appearance?.backgroundColor || '#eeeded'};
               text-decoration: none;
+              backgroundColor: ${appearance?.backgroundColor || '#eeeded'};
+              color: ${getContrastingTextColor(appearance?.backgroundColor || '#eeeded')};
           }
           .survey-question {
               font-weight: 500;
@@ -140,7 +145,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               display: flex;
               flex-direction: column;
           }
-          .description {
+          .survey-question-description {
               font-size: 13px;
               padding-top: 5px;
               background: ${appearance?.backgroundColor || '#eeeded'};
@@ -204,7 +209,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               margin-top: 13px;
               font-size: 14px;
           }
-          .survey-box:has(.survey-question:empty):not(:has(.description)) .multiple-choice-options {
+          .survey-box:has(.survey-question:empty):not(:has(.survey-question-description)) .multiple-choice-options {
               margin-top: 0;
           }
           .multiple-choice-options .choice-option {
@@ -497,6 +502,7 @@ export function getTextColor(el: HTMLElement) {
 export const defaultSurveyAppearance: SurveyAppearance = {
     backgroundColor: '#eeeded',
     submitButtonColor: 'black',
+    submitButtonTextColor: 'white',
     ratingButtonColor: 'white',
     ratingButtonActiveColor: 'black',
     borderColor: '#c9c6c6',
@@ -509,7 +515,7 @@ export const defaultSurveyAppearance: SurveyAppearance = {
 
 export const defaultBackgroundColor = '#eeeded'
 
-export const createShadow = (styleSheet: string, surveyId: string) => {
+export const createShadow = (styleSheet: string, surveyId: string, element?: Element) => {
     const div = document.createElement('div')
     div.className = `PostHogSurvey${surveyId}`
     const shadow = div.attachShadow({ mode: 'open' })
@@ -519,7 +525,7 @@ export const createShadow = (styleSheet: string, surveyId: string) => {
         })
         shadow.appendChild(styleElement)
     }
-    document.body.appendChild(div)
+    ;(element ? element : document.body).appendChild(div)
     return shadow
 }
 
@@ -663,10 +669,12 @@ export const SurveyContext = createContext<{
     isPreviewMode: boolean
     previewPageIndex: number | undefined
     handleCloseSurveyPopup: () => void
+    isPopup: boolean
 }>({
     isPreviewMode: false,
     previewPageIndex: 0,
     handleCloseSurveyPopup: () => {},
+    isPopup: true,
 })
 
 interface RenderProps {

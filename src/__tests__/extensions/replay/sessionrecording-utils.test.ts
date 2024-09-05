@@ -7,6 +7,13 @@ import {
     replacementImageURI,
     splitBuffer,
     truncateLargeConsoleLogs,
+    CONSOLE_LOG_PLUGIN_NAME,
+    PLUGIN_EVENT_TYPE,
+    FULL_SNAPSHOT_EVENT_TYPE,
+    splitBuffer,
+    SEVEN_MEGABYTES,
+    estimateSize,
+    circularReferenceReplacer,
 } from '../../../extensions/replay/sessionrecording-utils'
 import { largeString, threeMBAudioURI, threeMBImageURI } from '../test_data/sessionrecording-utils-test-data'
 import { eventWithTime, incrementalSnapshotEvent, IncrementalSource } from '@rrweb/types'
@@ -461,6 +468,24 @@ describe(`SessionRecording utility functions`, () => {
                     data: expectedSplitAddsTwo,
                 })
             })
+        })
+    })
+
+    describe('circularReferenceReplacer', () => {
+        it('should handle circular references', () => {
+            const obj: any = {}
+            obj.obj = obj
+            const result = JSON.stringify(obj, circularReferenceReplacer())
+            expect(result).toEqual('{"obj":"[Circular]"}')
+        })
+
+        it('should handle nested circular references', () => {
+            const a: any = {}
+            const b: any = {}
+            a.b = b
+            b.a = a
+            const result = JSON.stringify(a, circularReferenceReplacer())
+            expect(result).toEqual('{"b":{"a":"[Circular]"}}')
         })
     })
 })

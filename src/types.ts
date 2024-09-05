@@ -98,6 +98,13 @@ export interface PerformanceCaptureConfig {
     network_timing?: boolean
     /** works as a passenger event to use chrome's web vitals library to wrap fetch and capture web vitals */
     web_vitals?: boolean
+    /**
+     * We observe very large values reported by the Chrome web vitals library
+     * These outliers are likely not real, useful values, and we exclude them
+     * You can set this to 0 in order to include all values, NB this is not recommended
+     * if not set this defaults to 15 minutes
+     */
+    __web_vitals_max_value?: number
 }
 
 export interface HeatmapConfig {
@@ -380,11 +387,18 @@ export interface PersistentStore {
     error: (error: any) => void
     parse: (name: string) => any
     get: (name: string) => any
-    set: (name: string, value: any, expire_days?: number | null, cross_subdomain?: boolean, secure?: boolean) => void
+    set: (
+        name: string,
+        value: any,
+        expire_days?: number | null,
+        cross_subdomain?: boolean,
+        secure?: boolean,
+        debug?: boolean
+    ) => void
     remove: (name: string, cross_subdomain?: boolean) => void
 }
 
-// eslint-disable-next-line @typescript-eslint/ban-types
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export type Breaker = {}
 export type EventHandler = (event: Event) => boolean | void
 

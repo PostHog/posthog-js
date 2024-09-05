@@ -1,11 +1,11 @@
-import { createPosthogInstance } from './helpers/posthog-instance'
-import { uuidv7 } from '../uuidv7'
-import { PostHog } from '../posthog-core'
-import { DecideResponse } from '../types'
-import { assignableWindow } from '../utils/globals'
-import { FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS } from '../extensions/web-vitals'
+import { createPosthogInstance } from '../helpers/posthog-instance'
+import { uuidv7 } from '../../uuidv7'
+import { PostHog } from '../../posthog-core'
+import { DecideResponse } from '../../types'
+import { assignableWindow } from '../../utils/globals'
+import { FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, FIFTEEN_MINUTES_IN_MILLIS } from '../../extensions/web-vitals'
 
-jest.mock('../utils/logger')
+jest.mock('../../utils/logger')
 jest.useFakeTimers()
 
 describe('web vitals', () => {
@@ -49,6 +49,8 @@ describe('web vitals', () => {
             posthog = await createPosthogInstance(uuidv7(), {
                 _onCapture: onCapture,
                 capture_performance: { web_vitals: true },
+                // sometimes pageviews sneak in and make asserting on mock capture tricky
+                capture_pageview: false,
             })
 
             loadScriptMock.mockImplementation((_path, callback) => {
@@ -120,6 +122,27 @@ describe('web vitals', () => {
                     },
                 },
             ])
+        })
+
+        it('should ignore a ridiculous value', async () => {
+            randomlyAddAMetric('LCP', FIFTEEN_MINUTES_IN_MILLIS, { extra: 'property' })
+
+            expect(onCapture).toBeCalledTimes(0)
+
+            jest.advanceTimersByTime(FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+
+            expect(onCapture).toBeCalledTimes(0)
+        })
+
+        it('can be configured not to ignore a ridiculous value', async () => {
+            posthog.config.capture_performance = { __web_vitals_max_value: 0 }
+            randomlyAddAMetric('LCP', FIFTEEN_MINUTES_IN_MILLIS, { extra: 'property' })
+
+            expect(onCapture).toBeCalledTimes(0)
+
+            jest.advanceTimersByTime(FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+
+            expect(onCapture).toBeCalledTimes(1)
         })
     })
 

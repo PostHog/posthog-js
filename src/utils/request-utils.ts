@@ -67,7 +67,7 @@ export const getQueryParam = function (url: string, param: string): string {
         let result = keyValuePair[1]
         try {
             result = decodeURIComponent(result)
-        } catch (err) {
+        } catch {
             logger.error('Skipping decoding for malformed query param: ' + result)
         }
         return result.replace(/\+/g, ' ')

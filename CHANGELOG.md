@@ -1,3 +1,180 @@
+## 1.160.3 - 2024-09-03
+
+- fix: captured network requests must always have name property (#1398)
+
+## 1.160.2 - 2024-09-03
+
+- fix: report requests even without timing (#1386)
+
+## 1.160.1 - 2024-09-02
+
+- fix: flushing the buffer for debug signal while idle extends session activity (#1396)
+- fix: network capture tests should fail if we exhaust the body (#1395)
+- chore: clarify that tests are exercising our fetch wrapper (#1393)
+
+## 1.160.0 - 2024-08-29
+
+- feat: manually capture errors (#1374)
+
+## 1.159.0 - 2024-08-29
+
+- fix: capture a $pageview event on opting in (#1372)
+
+## 1.158.3 - 2024-08-28
+
+- fix(errors): Build endpoint for sentry integration & exception observer correctly (#1390)
+
+## 1.158.2 - 2024-08-27
+
+- chore: skip rate limiting of snapshot events (#1383)
+- chore: Remove retries for testcafe tests but increase timeout. Wait for lag in parallel (#1380)
+- feat: default api host to new ingestion domain (#1370)
+
+## 1.158.1 - 2024-08-26
+
+- fix: event listeners should obey start and stop (#1379)
+
+## 1.158.0 - 2024-08-26
+
+- fix(segment): Posthog can identify after segment identifies a user, not just during bootstrap. (#1373)
+- fix: Revert cypress back to 13.6.3 (#1384)
+
+## 1.157.2 - 2024-08-20
+
+- feat: Use NavigatorUAData and navigator.webdriver to improve bot detection (#1359)
+- chore: Move chrome tests off of browserstack, add firefox (#1369)
+
+## 1.157.1 - 2024-08-20
+
+- Revert "fix: pass original fetch args along (#1351)" (#1371)
+
+## 1.157.0 - 2024-08-19
+
+- feat: allow overriding linked flag (#1368)
+
+## 1.156.1 - 2024-08-19
+
+- fix: Move @types/web to dev dependencies (#1367)
+
+## 1.156.0 - 2024-08-19
+
+- fix: pass original fetch args along (#1351)
+
+## 1.155.6 - 2024-08-19
+
+- fix: only add to window when it exists (#1362)
+
+## 1.155.5 - 2024-08-19
+
+- fix: endpoint for is already called inside loadscript (#1365)
+- chore: Run ts on test files (#1358)
+
+## 1.155.4 - 2024-08-14
+
+- fix: Expose version (#1357)
+
+## 1.155.3 - 2024-08-14
+
+- feat: default to gzip compression instead of base64 (#1355)
+
+## 1.155.2 - 2024-08-13
+
+- remove x-posthog-token header (#1354)
+
+## 1.155.1 - 2024-08-13
+
+- feat: Added token to headers (#1347)
+
+## 1.155.0 - 2024-08-09
+
+- feat: Add prev pageview duration (#1348)
+
+## 1.154.6 - 2024-08-09
+
+- chore: make password capture more explicit (#1345)
+
+## 1.154.5 - 2024-08-06
+
+- fix(surveys): style the link button with black text (#1343)
+
+## 1.154.4 - 2024-08-05
+
+- feat: Remove storage logging and add reset logging (#1342)
+
+## 1.154.3 - 2024-08-05
+
+- feat(surveys): added a customizable submit button text color (#1339)
+- fix(surveys): textarea border box was being set in the preview but not in the surveys rendered on user websites (#1340)
+
+## 1.154.2 - 2024-08-02
+
+- Add instructions for cross subdomain development (#1336)
+
+## 1.154.1 - 2024-08-01
+
+- fix(surveys): fix textarea, and make it easier to query the survey question description in the DOM (#1337)
+- feat: Add debug logging for the initial props that posthog was started with (#1335)
+
+## 1.154.0 - 2024-07-31
+
+- feat(flags): give users the ability to suppress override warning logs, if desired (#1328)
+
+## 1.153.0 - 2024-07-31
+
+- chore: mask password by default (#1334)
+
+## 1.152.1 - 2024-07-31
+
+- feat: Add debug messages around storage (#1333)
+
+## 1.152.0 - 2024-07-31
+
+- feat: add renderSurvey option (#1324)
+
+## 1.151.2 - 2024-07-31
+
+- feat: Add debug logic for set_config (#1330)
+
+## 1.151.1 - 2024-07-31
+
+- fix(surveys): Center the X (#1329)
+
+## 1.151.0 - 2024-07-30
+
+- Accept eventPayload in onEvent handler (#1331)
+
+## 1.150.1 - 2024-07-29
+
+- fix: Array.from override (#1322)
+- chore: finally remove given (#1321)
+
+## 1.150.0 - 2024-07-25
+
+- feat(surveys): add support for a 7 point likert scale (#1319)
+
+## 1.149.2 - 2024-07-24
+
+- feat: add debug startup log message (#1318)
+
+## 1.149.1 - 2024-07-24
+
+- fix: web vitals ignored error on init (#1317)
+- chore: fix the rollup bundle visualiser output (#1315)
+
+## 1.149.0 - 2024-07-23
+
+- fix: Fix the referrer changing mid-session (#1314)
+
+## 1.148.2 - 2024-07-22
+
+- fix: don't load preact until you have to (#1311)
+- chore: one less posthog mock and two fewer given tests (#1312)
+
+## 1.148.1 - 2024-07-22
+
+- fix: ignore ridonculously large web vitals values (#1309)
+- chore: move test file (#1306)
+
 ## 1.148.0 - 2024-07-16
 
 - feat: split large replay buffers before sending (#1305)

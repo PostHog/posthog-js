@@ -9,7 +9,8 @@
 
 import { _copyAndTruncateStrings, isCrossDomainCookie, _base64Encode } from '../utils'
 import { Info } from '../utils/event-utils'
-import { isBlockedUA, DEFAULT_BLOCKED_UA_STRS } from '../utils/blocked-uas'
+import { isLikelyBot, DEFAULT_BLOCKED_UA_STRS, isBlockedUA, NavigatorUAData } from '../utils/blocked-uas'
+import { expect } from '@jest/globals'
 
 function userAgentFor(botString: string) {
     const randOne = (Math.random() + 1).toString(36).substring(7)
@@ -103,13 +104,13 @@ describe('utils', () => {
         })
     })
 
-    describe('user agent blocking', () => {
+    describe('isLikelyBot', () => {
         it.each(DEFAULT_BLOCKED_UA_STRS.concat('testington'))(
             'blocks a bot based on the user agent %s',
             (botString) => {
                 const randomisedUserAgent = userAgentFor(botString)
 
-                expect(isBlockedUA(randomisedUserAgent, ['testington'])).toBe(true)
+                expect(isLikelyBot({ userAgent: randomisedUserAgent } as Navigator, ['testington'])).toBe(true)
             }
         )
 
@@ -125,10 +126,93 @@ describe('utils', () => {
             [
                 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.175 Safari/537.36 (compatible; Google-HotelAdsVerifier/2.0)',
             ],
+            [
+                'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/122.0.0.0 Safari/537.36',
+            ],
+            [
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Cypress/13.6.3 Chrome/114.0.5735.289 Electron/25.8.4 Safari/537.36',
+            ],
         ])('blocks based on user agent', (botString) => {
             expect(isBlockedUA(botString, [])).toBe(true)
             expect(isBlockedUA(botString.toLowerCase(), [])).toBe(true)
             expect(isBlockedUA(botString.toUpperCase(), [])).toBe(true)
+            expect(isLikelyBot({ userAgent: botString } as Navigator, [])).toBe(true)
+            expect(isLikelyBot({ userAgent: botString.toLowerCase() } as Navigator, [])).toBe(true)
+            expect(isLikelyBot({ userAgent: botString.toUpperCase() } as Navigator, [])).toBe(true)
+        })
+
+        it.each([
+            ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:129.0) Gecko/20100101 Firefox/129.0'],
+            [
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
+            ],
+            [
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15',
+            ],
+            [
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) elec/1.0.0 Chrome/126.0.6478.127 Electron/31.2.1 Safari/537.36',
+            ],
+        ])('does not block based on non-bot user agent', (userAgent) => {
+            expect(isBlockedUA(userAgent, [])).toBe(false)
+            expect(isBlockedUA(userAgent.toLowerCase(), [])).toBe(false)
+            expect(isBlockedUA(userAgent.toUpperCase(), [])).toBe(false)
+            expect(isLikelyBot({ userAgent } as Navigator, [])).toBe(false)
+            expect(isLikelyBot({ userAgent: userAgent.toLowerCase() } as Navigator, [])).toBe(false)
+            expect(isLikelyBot({ userAgent: userAgent.toUpperCase() } as Navigator, [])).toBe(false)
+        })
+
+        it('blocks based on the webdriver property being set to true', () => {
+            expect(isLikelyBot({ webdriver: true } as Navigator, [])).toBe(true)
+        })
+
+        it('blocks based on userAgentData', () => {
+            const headlessUserAgentData: NavigatorUAData = {
+                brands: [
+                    { brand: 'Not)A;Brand', version: '99' },
+                    { brand: 'HeadlessChrome', version: '127' },
+                    { brand: 'Chromium', version: '127' },
+                ],
+            }
+            expect(
+                isLikelyBot(
+                    {
+                        userAgentData: headlessUserAgentData,
+                    } as Navigator,
+                    []
+                )
+            ).toBe(true)
+        })
+
+        it('does not block a normal browser based of userAgentData', () => {
+            const realUserAgentData: NavigatorUAData = {
+                brands: [
+                    { brand: 'Not)A;Brand', version: '99' },
+                    { brand: 'Google Chrome', version: '127' },
+                    { brand: 'Chromium', version: '127' },
+                ],
+            }
+            expect(
+                isLikelyBot(
+                    {
+                        userAgentData: realUserAgentData,
+                    } as Navigator,
+                    []
+                )
+            ).toBe(false)
+        })
+
+        it('does not crash if the type of navigatorUAData changes', () => {
+            // we're not checking the return values of these, only that they don't crash
+            // @ts-expect-error testing invalid data
+            isLikelyBot({ userAgentData: { brands: ['HeadlessChrome'] } } as Navigator, [])
+            // @ts-expect-error testing invalid data
+            isLikelyBot({ userAgentData: { brands: [() => 'HeadlessChrome'] } } as Navigator, [])
+            isLikelyBot({ userAgentData: { brands: () => ['HeadlessChrome'] } } as unknown as Navigator, [])
+            isLikelyBot({ userAgentData: 'HeadlessChrome' } as unknown as Navigator, [])
+            isLikelyBot({ userAgentData: {} } as unknown as Navigator, [])
+            isLikelyBot({ userAgentData: null } as unknown as Navigator, [])
+            isLikelyBot({ userAgentData: () => ['HeadlessChrome'] } as unknown as Navigator, [])
+            isLikelyBot({ userAgentData: true } as unknown as Navigator, [])
         })
     })
 

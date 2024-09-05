@@ -214,7 +214,10 @@ describe('Surveys', () => {
                 .shadow()
                 .find('.survey-question')
                 .should('have.text', 'What feedback do you have for us?')
-            cy.get('.PostHogSurvey123').shadow().find('.description').should('have.text', 'plain text description')
+            cy.get('.PostHogSurvey123')
+                .shadow()
+                .find('.survey-question-description')
+                .should('have.text', 'plain text description')
             survey.find('textarea').type('This is great!')
             cy.get('.PostHogSurvey123').shadow().find('.form-submit').click()
             cy.phCaptures().should('include', 'survey sent')
@@ -369,7 +372,10 @@ describe('Surveys', () => {
                 .shadow()
                 .find('.survey-question')
                 .should('have.text', 'What feedback do you have for us?')
-            cy.get('.PostHogSurvey123').shadow().find('.description').should('have.text', 'plain text description')
+            cy.get('.PostHogSurvey123')
+                .shadow()
+                .find('.survey-question-description')
+                .should('have.text', 'plain text description')
             // text should be white on a dark background
             cy.get('.PostHogSurvey123').shadow().find('.survey-question').should('have.css', 'background-color', black)
             cy.get('.PostHogSurvey123').shadow().find('.survey-question').should('have.css', 'color', white)
@@ -418,7 +424,10 @@ describe('Surveys', () => {
                 .shadow()
                 .find('.survey-question')
                 .should('have.text', 'Book an interview with us')
-            cy.get('.PostHogSurvey123').shadow().find('.description').should('have.html', '<h2>html description</h2>')
+            cy.get('.PostHogSurvey123')
+                .shadow()
+                .find('.survey-question-description')
+                .should('have.html', '<h2>html description</h2>')
         })
 
         it('allows html customization for question missing the descriptionContentType field (backfilling against surveys made before we introduced this field)', () => {
@@ -440,7 +449,10 @@ describe('Surveys', () => {
                 .shadow()
                 .find('.survey-question')
                 .should('have.text', 'Book an interview with us')
-            cy.get('.PostHogSurvey123').shadow().find('.description').should('have.html', '<h2>html description</h2>')
+            cy.get('.PostHogSurvey123')
+                .shadow()
+                .find('.survey-question-description')
+                .should('have.html', '<h2>html description</h2>')
         })
 
         it('allows html customization for thank you message body', () => {
@@ -467,7 +479,10 @@ describe('Surveys', () => {
                 .shadow()
                 .find('.survey-question')
                 .should('have.text', 'What feedback do you have for us?')
-            cy.get('.PostHogSurvey123').shadow().find('.description').should('have.text', 'plain text description')
+            cy.get('.PostHogSurvey123')
+                .shadow()
+                .find('.survey-question-description')
+                .should('have.text', 'plain text description')
             cy.get('.PostHogSurvey123').shadow().find('textarea').type('This is great!')
             cy.get('.PostHogSurvey123').shadow().find('.form-submit').click()
             cy.get('.PostHogSurvey123')
@@ -477,7 +492,7 @@ describe('Surveys', () => {
             cy.phCaptures().should('include', 'survey sent')
         })
 
-        it('does not render html customization for question descriptions if the question.descriptionContentType does not permit it', () => {
+        it('does not render html customization for question descriptions if the question.survey-question-descriptionContentType does not permit it', () => {
             cy.intercept('GET', '**/surveys/*', {
                 surveys: [
                     {
@@ -498,7 +513,7 @@ describe('Surveys', () => {
                 .should('have.text', 'Book an interview with us')
             cy.get('.PostHogSurvey123')
                 .shadow()
-                .find('.description')
+                .find('.survey-question-description')
                 .should('have.html', '&lt;h2&gt;html description&lt;/h2&gt;')
         })
 
@@ -526,7 +541,10 @@ describe('Surveys', () => {
                 .shadow()
                 .find('.survey-question')
                 .should('have.text', 'What feedback do you have for us?')
-            cy.get('.PostHogSurvey123').shadow().find('.description').should('have.text', 'plain text description')
+            cy.get('.PostHogSurvey123')
+                .shadow()
+                .find('.survey-question-description')
+                .should('have.text', 'plain text description')
             cy.get('.PostHogSurvey123').shadow().find('textarea').type('This is great!')
             cy.get('.PostHogSurvey123').shadow().find('.form-submit').click()
             cy.get('.PostHogSurvey123')
@@ -563,7 +581,10 @@ describe('Surveys', () => {
             cy.get('.PostHogWidget123').shadow().find('.ph-survey-widget-tab').click()
             cy.get('.PostHogWidget123').shadow().find('.survey-form').should('be.visible')
             cy.get('.PostHogWidget123').shadow().find('.survey-question').should('have.text', 'Feedback for us?')
-            cy.get('.PostHogWidget123').shadow().find('.description').should('have.text', 'tab feedback widget')
+            cy.get('.PostHogWidget123')
+                .shadow()
+                .find('.survey-question-description')
+                .should('have.text', 'tab feedback widget')
             cy.get('.PostHogWidget123').shadow().find('textarea').type("Why can't I use behavioral cohorts in flags?")
             cy.get('.PostHogWidget123').shadow().find('.form-submit').click()
             cy.phCaptures().should('include', 'survey sent')
@@ -596,7 +617,10 @@ describe('Surveys', () => {
             cy.get('.test-surveys').click()
             cy.get('.PostHogWidget123').shadow().find('.survey-form').should('be.visible')
             cy.get('.PostHogWidget123').shadow().find('.survey-question').should('have.text', 'Feedback for us?')
-            cy.get('.PostHogWidget123').shadow().find('.description').should('have.text', 'custom selector widget')
+            cy.get('.PostHogWidget123')
+                .shadow()
+                .find('.survey-question-description')
+                .should('have.text', 'custom selector widget')
             cy.get('.PostHogWidget123').shadow().find('textarea').type('PostHog is awesome!')
             cy.get('.PostHogWidget123').shadow().find('.form-submit').click()
             cy.phCaptures().should('include', 'survey sent')

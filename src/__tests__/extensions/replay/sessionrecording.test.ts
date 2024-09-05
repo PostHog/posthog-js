@@ -22,6 +22,7 @@ import {
     PostHogConfig,
     Property,
     SessionIdChangedCallback,
+    SessionRecordingOptions,
 } from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
 import {
@@ -36,6 +37,7 @@ import {
     EventType,
     eventWithTime,
     fullSnapshotEvent,
+    incrementalData,
     incrementalSnapshotEvent,
     IncrementalSource,
     metaEvent,
@@ -83,7 +85,7 @@ const createIncrementalSnapshot = (event = {}): incrementalSnapshotEvent => ({
     type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     data: {
         source: 1,
-    },
+    } as Partial<incrementalData> as incrementalData,
     ...event,
 })
 
@@ -318,7 +320,7 @@ describe('SessionRecording', () => {
                     inlineStylesheet: true,
                     maskAllInputs: false,
                     maskInputFn: undefined,
-                    maskInputOptions: {},
+                    maskInputOptions: { password: true },
                     maskTextClass: 'ph-mask',
                     maskTextFn: undefined,
                     maskTextSelector: undefined,
@@ -653,13 +655,31 @@ describe('SessionRecording', () => {
                 ignoreClass: 'ph-ignore-input',
                 maskTextClass: 'ph-mask',
                 maskTextSelector: undefined,
-                maskInputOptions: {},
+                maskInputOptions: { password: true },
                 maskInputFn: undefined,
                 slimDOMOptions: {},
                 collectFonts: false,
                 plugins: [],
                 inlineStylesheet: true,
                 recordCrossOriginIframes: false,
+            })
+        })
+
+        describe('capturing passwords', () => {
+            it.each([
+                ['no masking options', {} as SessionRecordingOptions, true],
+                ['empty masking options', { maskInputOptions: {} } as SessionRecordingOptions, true],
+                ['password not set', { maskInputOptions: { input: true } } as SessionRecordingOptions, true],
+                ['password set to true', { maskInputOptions: { password: true } } as SessionRecordingOptions, true],
+                ['password set to false', { maskInputOptions: { password: false } } as SessionRecordingOptions, false],
+            ])('%s', (_name: string, session_recording: SessionRecordingOptions, expected: boolean) => {
+                posthog.config.session_recording = session_recording
+                sessionRecording.startIfEnabledOrStop()
+                expect(assignableWindow.rrweb.record).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        maskInputOptions: expect.objectContaining({ password: expected }),
+                    })
+                )
             })
         })
 
@@ -713,6 +733,7 @@ describe('SessionRecording', () => {
                     _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
+                    skip_client_rate_limiting: true,
                 }
             )
         })
@@ -748,6 +769,7 @@ describe('SessionRecording', () => {
                     _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
+                    skip_client_rate_limiting: true,
                 }
             )
         })
@@ -830,6 +852,7 @@ describe('SessionRecording', () => {
                     _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
+                    skip_client_rate_limiting: true,
                 }
             )
 
@@ -1010,6 +1033,7 @@ describe('SessionRecording', () => {
                 // we always take a full snapshot when there hasn't been one
                 // and use _fullSnapshotTimer to track that
                 // we want to avoid that behavior here, so we set it to any value
+                // @ts-expect-error -- detected as Timeout because the test is picking up `NodeJS.Timeout` as the type not `number` as in the browser
                 sessionRecording['_fullSnapshotTimer'] = 1
 
                 sessionIdGeneratorMock.mockImplementation(() => 'old-session-id')
@@ -1340,7 +1364,7 @@ describe('SessionRecording', () => {
             })
         })
 
-        it('emits custom events even when idle', () => {
+        it('buffers custom events without capturing while idle', () => {
             // force idle state
             sessionRecording['isIdle'] = true
             // buffer is empty
@@ -1367,6 +1391,37 @@ describe('SessionRecording', () => {
                 size: 47,
                 windowId: 'windowId',
             })
+            emitInactiveEvent(startingTimestamp + 100, true)
+            expect(posthog.capture).not.toHaveBeenCalled()
+
+            expect(sessionRecording['flushBufferTimer']).toBeUndefined()
+        })
+
+        it('does not emit buffered custom events while idle even when over buffer max size', () => {
+            // force idle state
+            sessionRecording['isIdle'] = true
+            // buffer is empty
+            expect(sessionRecording['buffer']).toEqual({
+                ...EMPTY_BUFFER,
+                sessionId: sessionId,
+                windowId: 'windowId',
+            })
+
+            // ensure buffer isn't empty
+            sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
+
+            // fake having a large buffer
+            // in reality we would need a very long idle period emitting custom events to reach 1MB of buffer data
+            // particularly since we flush the buffer on entering idle
+            sessionRecording['buffer'].size = RECORDING_MAX_EVENT_SIZE - 1
+            sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
+
+            // we're still idle
+            expect(sessionRecording['isIdle']).toBe(true)
+            // return from idle
+
+            // we did not capture
+            expect(posthog.capture).not.toHaveBeenCalled()
         })
 
         it('drops full snapshots when idle - so we must make sure not to take them while idle!', () => {
@@ -1495,6 +1550,7 @@ describe('SessionRecording', () => {
                     _batchKey: 'recordings',
                     _noTruncate: true,
                     _url: 'https://test.com/s/',
+                    skip_client_rate_limiting: true,
                 }
             )
 
@@ -1588,6 +1644,7 @@ describe('SessionRecording', () => {
                     _batchKey: 'recordings',
                     _noTruncate: true,
                     _url: 'https://test.com/s/',
+                    skip_client_rate_limiting: true,
                 }
             )
 
@@ -1616,6 +1673,7 @@ describe('SessionRecording', () => {
                     _batchKey: 'recordings',
                     _noTruncate: true,
                     _url: 'https://test.com/s/',
+                    skip_client_rate_limiting: true,
                 }
             )
             expect(sessionRecording['buffer']).toEqual({
@@ -1674,6 +1732,24 @@ describe('SessionRecording', () => {
             onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'control' })
             expect(sessionRecording['_linkedFlagSeen']).toEqual(false)
             expect(sessionRecording['status']).toEqual('buffering')
+        })
+
+        it('can be overriden', () => {
+            expect(sessionRecording['_linkedFlag']).toEqual(null)
+            expect(sessionRecording['_linkedFlagSeen']).toEqual(false)
+
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
+            )
+
+            expect(sessionRecording['_linkedFlag']).toEqual('the-flag-key')
+            expect(sessionRecording['_linkedFlagSeen']).toEqual(false)
+            expect(sessionRecording['status']).toEqual('buffering')
+
+            sessionRecording.overrideLinkedFlag()
+
+            expect(sessionRecording['_linkedFlagSeen']).toEqual(true)
+            expect(sessionRecording['status']).toEqual('active')
         })
     })
 

@@ -25,14 +25,14 @@ describe('FunctionalTests / Feature Flags', () => {
         resetRequests(token)
 
         // wait for decide callback
-        await new Promise((res) => setTimeout(res, 500))
+        await new Promise<void>((resolve: () => void) => setTimeout(resolve, 500))
 
         // Person properties set here should also be sent to the decide endpoint.
         posthog.identify('test-id', {
             email: 'test@email.com',
         })
 
-        await new Promise((res) => setTimeout(res, 500))
+        await new Promise((resolve: () => void) => setTimeout(resolve, 500))
 
         await waitFor(() => {
             expect(getRequests(token)['/decide/']).toEqual([
@@ -72,7 +72,7 @@ describe('FunctionalTests / Feature Flags', () => {
 
         // wait for decide callback
         // eslint-disable-next-line compat/compat
-        await new Promise((res) => setTimeout(res, 500))
+        await new Promise((resolve: () => void) => setTimeout(resolve, 500))
 
         // First we identify with a new distinct_id but with no properties set
         posthog.identify('test-id')
@@ -140,7 +140,7 @@ describe('FunctionalTests / Feature Flags', () => {
 
         // wait for decide callback
         // eslint-disable-next-line compat/compat
-        await new Promise((res) => setTimeout(res, 500))
+        await new Promise((resolve: () => void) => setTimeout(resolve, 500))
 
         // now second call should've fired
         await waitFor(() => {

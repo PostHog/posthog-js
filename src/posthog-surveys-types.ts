@@ -12,6 +12,7 @@ export interface SurveyAppearance {
     textColor?: string
     // deprecate submit button text eventually
     submitButtonText?: string
+    submitButtonTextColor?: string
     descriptionTextColor?: string
     ratingButtonColor?: string
     ratingButtonActiveColor?: string
@@ -70,7 +71,7 @@ export interface LinkSurveyQuestion extends SurveyQuestionBase {
 export interface RatingSurveyQuestion extends SurveyQuestionBase {
     type: SurveyQuestionType.Rating
     display: 'number' | 'emoji'
-    scale: number
+    scale: 3 | 5 | 7 | 10
     lowerBoundLabel: string
     upperBoundLabel: string
 }
@@ -137,6 +138,11 @@ export interface SurveyElement {
     order?: number
     group_id?: number
 }
+export interface SurveyRenderReason {
+    visible: boolean
+    disabledReason?: string
+}
+
 export interface Survey {
     // Sync this with the backend's SurveyAPISerializer!
     id: string
