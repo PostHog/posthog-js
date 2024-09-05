@@ -267,6 +267,7 @@ export class PostHogSurveys {
     private _canActivateRepeatedly(survey: Survey) {
         if (isNullish(assignableWindow.__PosthogExtensions__?.canActivateRepeatedly)) {
             logger.warn(LOGGER_PREFIX, 'canActivateRepeatedly is not defined, must init before calling')
+            return false // TODO does it make sense to have a default here?
         }
         return assignableWindow.__PosthogExtensions__.canActivateRepeatedly(survey)
     }
