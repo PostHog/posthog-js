@@ -881,9 +881,11 @@ export class PostHog {
      * @param {Date} [config.timestamp] Timestamp is a Date object. If not set, it'll automatically be set to the current time.
      */
     page(url: string, properties?: Properties | null, options?: CaptureOptions): CaptureResult | undefined {
+        properties = properties || {}
         properties['$current_url'] = url
         return this.capture('$pageview', properties, options)
     }
+
     _addCaptureHook(callback: (eventName: string, eventPayload?: CaptureResult) => void): void {
         this.on('eventCaptured', (data) => callback(data.event, data))
     }
