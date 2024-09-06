@@ -1,8 +1,8 @@
 import { PostHog } from '../../posthog-core'
-import { DecideResponse } from '../../types'
+import { DecideResponse, SupportedWebVitalsMetrics } from '../../types'
 import { logger } from '../../utils/logger'
 import { isBoolean, isNullish, isNumber, isObject, isUndefined } from '../../utils/type-utils'
-import { WEB_VITALS_ENABLED_SERVER_SIDE, WEB_VITALS_SAMPLE_RATE } from '../../constants'
+import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE, WEB_VITALS_SAMPLE_RATE } from '../../constants'
 import { assignableWindow, window } from '../../utils/globals'
 import Config from '../../config'
 
@@ -19,18 +19,31 @@ export class WebVitalsAutocapture {
 
     private buffer: WebVitalsEventBuffer = { url: undefined, metrics: [], firstMetricTimestamp: undefined }
     private _delayedFlushTimer: ReturnType<typeof setTimeout> | undefined
-    private _sampleRate: number | undefined
 
     constructor(private readonly instance: PostHog) {
         this._enabledServerSide = !!this.instance.persistence?.props[WEB_VITALS_ENABLED_SERVER_SIDE]
+
+        this.startIfEnabled()
+    }
+
+    public get sampleRate(): number | undefined {
         const clientConfigSampleRate = isObject(this.instance.config.capture_performance)
             ? this.instance.config.capture_performance?.web_vitals_sample_rate
             : undefined
-        this._sampleRate = isUndefined(clientConfigSampleRate)
+        return isUndefined(clientConfigSampleRate)
             ? this.instance.persistence?.props[WEB_VITALS_SAMPLE_RATE]
             : clientConfigSampleRate
+    }
 
-        this.startIfEnabled()
+    public get allowedMetrics(): SupportedWebVitalsMetrics[] {
+        const clientConfigMetricAllowList: SupportedWebVitalsMetrics[] | undefined = isObject(
+            this.instance.config.capture_performance
+        )
+            ? this.instance.config.capture_performance?.web_vitals_metrics
+            : undefined
+        return !isUndefined(clientConfigMetricAllowList)
+            ? clientConfigMetricAllowList
+            : this.instance.persistence?.props[WEB_VITALS_ALLOWED_METRICS] || ['CLS', 'FCP', 'INP', 'LCP']
     }
 
     public get _maxAllowedValue(): number {
@@ -63,6 +76,9 @@ export class WebVitalsAutocapture {
         const webVitalsSampleRate = isObject(response.capturePerformance)
             ? response.capturePerformance.web_vitals_sample_rate
             : undefined
+        const allowedMetrics = isObject(response.capturePerformance)
+            ? response.capturePerformance.web_vitals_metrics
+            : undefined
 
         if (this.instance.persistence) {
             this.instance.persistence.register({
@@ -71,11 +87,12 @@ export class WebVitalsAutocapture {
             this.instance.persistence.register({
                 [WEB_VITALS_SAMPLE_RATE]: webVitalsSampleRate,
             })
+            this.instance.persistence.register({
+                [WEB_VITALS_ALLOWED_METRICS]: allowedMetrics,
+            })
         }
         // store this in-memory in case persistence is disabled
         this._enabledServerSide = webVitalsOptIn
-        // locally configured sample rate takes precedence over server config
-        this._sampleRate = isUndefined(this._sampleRate) ? webVitalsSampleRate : this._sampleRate
 
         this.startIfEnabled()
     }
@@ -132,7 +149,7 @@ export class WebVitalsAutocapture {
             return
         }
 
-        const isSampled = isUndefined(this._sampleRate) ? true : Math.random() < this._sampleRate
+        const isSampled = isUndefined(this.sampleRate) ? true : Math.random() < this.sampleRate
         if (!isSampled) {
             logger.info(LOGGER_PREFIX + 'Dropping metric due to sample rate', metric)
             return
@@ -199,10 +216,18 @@ export class WebVitalsAutocapture {
         }
 
         // register performance observers
-        onLCP(this._addToBuffer)
-        onCLS(this._addToBuffer)
-        onFCP(this._addToBuffer)
-        onINP(this._addToBuffer)
+        if (this.allowedMetrics.indexOf('LCP') > -1) {
+            onLCP(this._addToBuffer)
+        }
+        if (this.allowedMetrics.indexOf('CLS') > -1) {
+            onCLS(this._addToBuffer)
+        }
+        if (this.allowedMetrics.indexOf('FCP') > -1) {
+            onFCP(this._addToBuffer)
+        }
+        if (this.allowedMetrics.indexOf('INP') > -1) {
+            onINP(this._addToBuffer)
+        }
 
         this._initialized = true
     }

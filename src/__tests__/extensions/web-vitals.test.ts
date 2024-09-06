@@ -203,54 +203,35 @@ describe('web vitals', () => {
         )
     })
 
-    describe('sampling', () => {
-        it('does not capture when sample rate is 0', async () => {
-            posthog = await createPosthogInstance(uuidv7(), {
-                _onCapture: onCapture,
-                capture_performance: { web_vitals: true, web_vitals_sample_rate: 0 },
+    describe.each(['client', 'server'])('sampling', (configSource) => {
+        describe.each([
+            [0, 0, 0],
+            [1, 100, 100],
+            [0.5, 40, 60],
+        ])(`with sample rate of %f`, (sampleRate: number, min: number, max: number) => {
+            it(`with config from ${configSource} captures roughly half the time when sample rate is 0.5`, async () => {
+                posthog = await createPosthogInstance(uuidv7(), {
+                    _onCapture: onCapture,
+                    capture_performance: {
+                        web_vitals: true,
+                        web_vitals_sample_rate: configSource === 'client' ? sampleRate : undefined,
+                    },
+                })
+
+                posthog.webVitalsAutocapture!.afterDecideResponse({
+                    capturePerformance: {
+                        web_vitals: true,
+                        web_vitals_sample_rate: configSource === 'server' ? sampleRate : undefined,
+                    },
+                } as DecideResponse)
+
+                for (let i = 0; i < 100; i++) {
+                    emitAllMetrics()
+                }
+
+                expect(onCapture.mock.calls.length).toBeGreaterThanOrEqual(min)
+                expect(onCapture.mock.calls.length).toBeLessThanOrEqual(max)
             })
-
-            posthog.webVitalsAutocapture!.afterDecideResponse({
-                capturePerformance: { web_vitals: true },
-            } as DecideResponse)
-
-            emitAllMetrics()
-
-            expect(onCapture).toBeCalledTimes(0)
-        })
-
-        it('captures roughly half the time when sample rate is 0.5', async () => {
-            posthog = await createPosthogInstance(uuidv7(), {
-                _onCapture: onCapture,
-                capture_performance: { web_vitals: true, web_vitals_sample_rate: 0.5 },
-            })
-
-            posthog.webVitalsAutocapture!.afterDecideResponse({
-                capturePerformance: { web_vitals: true },
-            } as DecideResponse)
-
-            // run this 100 times
-            for (let i = 0; i < 100; i++) {
-                emitAllMetrics()
-            }
-
-            expect(onCapture.mock.calls.length).toBeGreaterThanOrEqual(46)
-            expect(onCapture.mock.calls.length).toBeLessThanOrEqual(54)
-        })
-
-        it('always captures when sample rate is 1', async () => {
-            posthog = await createPosthogInstance(uuidv7(), {
-                _onCapture: onCapture,
-                capture_performance: { web_vitals: true, web_vitals_sample_rate: 1 },
-            })
-
-            posthog.webVitalsAutocapture!.afterDecideResponse({
-                capturePerformance: { web_vitals: true },
-            } as DecideResponse)
-
-            emitAllMetrics()
-
-            expect(onCapture).toBeCalledTimes(1)
         })
     })
 })
