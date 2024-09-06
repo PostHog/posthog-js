@@ -91,6 +91,7 @@ describe('web vitals', () => {
             expectedProperties: Record<string, any>
         ) => {
             beforeEach(async () => {
+                onCapture.mockClear()
                 posthog = await createPosthogInstance(uuidv7(), {
                     _onCapture: onCapture,
                     capture_performance: { web_vitals: true, web_vitals_metrics: clientConfig },
@@ -100,7 +101,8 @@ describe('web vitals', () => {
 
                 loadScriptMock.mockImplementation((_path, callback) => {
                     // we need a set of fake web vitals handlers, so we can manually trigger the events
-                    assignableWindow.postHogWebVitalsCallbacks = {
+                    assignableWindow.__PosthogExtensions__ = {}
+                    assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
                         onLCP: (cb: any) => {
                             onLCPCallback = cb
                         },
@@ -187,8 +189,9 @@ describe('web vitals', () => {
 
     describe('afterDecideResponse()', () => {
         beforeEach(async () => {
-            // we need a set of fake web vitals handlers so we can manually trigger the events
-            assignableWindow.postHogWebVitalsCallbacks = {
+            // we need a set of fake web vitals handlers, so we can manually trigger the events
+            assignableWindow.__PosthogExtensions__ = {}
+            assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
                 onLCP: (cb: any) => {
                     onLCPCallback = cb
                 },
@@ -248,6 +251,25 @@ describe('web vitals', () => {
             [1, 100, 100],
             [0.5, 40, 60],
         ])(`with sample rate of %f`, (sampleRate: number, min: number, max: number) => {
+            beforeEach(async () => {
+                // we need a set of fake web vitals handlers, so we can manually trigger the events
+                assignableWindow.__PosthogExtensions__ = {}
+                assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
+                    onLCP: (cb: any) => {
+                        onLCPCallback = cb
+                    },
+                    onCLS: (cb: any) => {
+                        onCLSCallback = cb
+                    },
+                    onFCP: (cb: any) => {
+                        onFCPCallback = cb
+                    },
+                    onINP: (cb: any) => {
+                        onINPCallback = cb
+                    },
+                }
+            })
+
             it(`with config from ${configSource} captures roughly half the time when sample rate is 0.5`, async () => {
                 posthog = await createPosthogInstance(uuidv7(), {
                     _onCapture: onCapture,

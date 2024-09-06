@@ -6,6 +6,8 @@ import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE, WEB_VITALS_
 import { assignableWindow, window } from '../../utils/globals'
 import Config from '../../config'
 
+type WebVitalsMetricCallback = (metric: any) => void
+
 export const FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS = 8000
 const ONE_MINUTE_IN_MILLIS = 60 * 1000
 export const FIFTEEN_MINUTES_IN_MILLIS = 15 * ONE_MINUTE_IN_MILLIS
@@ -98,7 +100,7 @@ export class WebVitalsAutocapture {
     }
 
     private loadScript(cb: () => void): void {
-        if ((window as any).postHogWebVitalsCallbacks) {
+        if (assignableWindow.__PosthogExtensions__?.postHogWebVitalsCallbacks) {
             // already loaded
             cb()
         }
@@ -208,7 +210,15 @@ export class WebVitalsAutocapture {
     }
 
     private _startCapturing = () => {
-        const { onLCP, onCLS, onFCP, onINP } = assignableWindow.postHogWebVitalsCallbacks
+        let onLCP: WebVitalsMetricCallback | undefined
+        let onCLS: WebVitalsMetricCallback | undefined
+        let onFCP: WebVitalsMetricCallback | undefined
+        let onINP: WebVitalsMetricCallback | undefined
+
+        const posthogExtensions = assignableWindow.__PosthogExtensions__
+        if (!isUndefined(posthogExtensions)) {
+            ;({ onLCP, onCLS, onFCP, onINP } = posthogExtensions.postHogWebVitalsCallbacks)
+        }
 
         if (!onLCP || !onCLS || !onFCP || !onINP) {
             logger.error(LOGGER_PREFIX + 'web vitals callbacks not loaded - not starting')
@@ -217,16 +227,16 @@ export class WebVitalsAutocapture {
 
         // register performance observers
         if (this.allowedMetrics.indexOf('LCP') > -1) {
-            onLCP(this._addToBuffer)
+            onLCP(this._addToBuffer.bind(this))
         }
         if (this.allowedMetrics.indexOf('CLS') > -1) {
-            onCLS(this._addToBuffer)
+            onCLS(this._addToBuffer.bind(this))
         }
         if (this.allowedMetrics.indexOf('FCP') > -1) {
-            onFCP(this._addToBuffer)
+            onFCP(this._addToBuffer.bind(this))
         }
         if (this.allowedMetrics.indexOf('INP') > -1) {
-            onINP(this._addToBuffer)
+            onINP(this._addToBuffer.bind(this))
         }
 
         this._initialized = true
