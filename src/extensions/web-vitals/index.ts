@@ -201,8 +201,8 @@ export class WebVitalsAutocapture {
             timestamp: Date.now(),
         })
 
-        if (this.buffer.metrics.length === 4) {
-            // we have all 4 metrics
+        if (this.buffer.metrics.length === this.allowedMetrics.length) {
+            // we have all allowed metrics
             this._flushToCapture()
         }
     }
