@@ -2,7 +2,7 @@ import { PostHog } from '../../posthog-core'
 import { DecideResponse } from '../../types'
 import { logger } from '../../utils/logger'
 import { isBoolean, isNullish, isNumber, isObject, isUndefined } from '../../utils/type-utils'
-import { WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
+import { WEB_VITALS_ENABLED_SERVER_SIDE, WEB_VITALS_SAMPLE_RATE } from '../../constants'
 import { assignableWindow, window } from '../../utils/globals'
 import Config from '../../config'
 
@@ -19,9 +19,17 @@ export class WebVitalsAutocapture {
 
     private buffer: WebVitalsEventBuffer = { url: undefined, metrics: [], firstMetricTimestamp: undefined }
     private _delayedFlushTimer: ReturnType<typeof setTimeout> | undefined
+    private _sampleRate: number | undefined
 
     constructor(private readonly instance: PostHog) {
         this._enabledServerSide = !!this.instance.persistence?.props[WEB_VITALS_ENABLED_SERVER_SIDE]
+        const clientConfigSampleRate = isObject(this.instance.config.capture_performance)
+            ? this.instance.config.capture_performance?.web_vitals_sample_rate
+            : undefined
+        this._sampleRate = isUndefined(clientConfigSampleRate)
+            ? this.instance.persistence?.props[WEB_VITALS_SAMPLE_RATE]
+            : clientConfigSampleRate
+
         this.startIfEnabled()
     }
 
@@ -52,14 +60,22 @@ export class WebVitalsAutocapture {
 
     public afterDecideResponse(response: DecideResponse) {
         const webVitalsOptIn = isObject(response.capturePerformance) && !!response.capturePerformance.web_vitals
+        const webVitalsSampleRate = isObject(response.capturePerformance)
+            ? response.capturePerformance.web_vitals_sample_rate
+            : undefined
 
         if (this.instance.persistence) {
             this.instance.persistence.register({
                 [WEB_VITALS_ENABLED_SERVER_SIDE]: webVitalsOptIn,
             })
+            this.instance.persistence.register({
+                [WEB_VITALS_SAMPLE_RATE]: webVitalsSampleRate,
+            })
         }
         // store this in-memory in case persistence is disabled
         this._enabledServerSide = webVitalsOptIn
+        // locally configured sample rate takes precedence over server config
+        this._sampleRate = isUndefined(this._sampleRate) ? webVitalsSampleRate : this._sampleRate
 
         this.startIfEnabled()
     }
@@ -113,6 +129,12 @@ export class WebVitalsAutocapture {
         const sessionIds = this.instance.sessionManager?.checkAndGetSessionAndWindowId(true)
         if (isUndefined(sessionIds)) {
             logger.error(LOGGER_PREFIX + 'Could not read session ID. Dropping metrics!')
+            return
+        }
+
+        const isSampled = isUndefined(this._sampleRate) ? true : Math.random() < this._sampleRate
+        if (!isSampled) {
+            logger.info(LOGGER_PREFIX + 'Dropping metric due to sample rate', metric)
             return
         }
 
