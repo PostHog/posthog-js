@@ -10,6 +10,6 @@ const postHogWebVitalsCallbacks = {
 }
 
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
-assignableWindow.__POSTHOG_EXTENSIONS__postHogWebVitalsCallbacks = postHogWebVitalsCallbacks
+assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = postHogWebVitalsCallbacks
 
 export default postHogWebVitalsCallbacks
