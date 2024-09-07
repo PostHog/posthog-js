@@ -84,7 +84,7 @@ describe('web vitals', () => {
                 onCapture.mockClear()
                 posthog = await createPosthogInstance(uuidv7(), {
                     _onCapture: onCapture,
-                    capture_performance: { web_vitals: true, web_vitals_metrics: clientConfig },
+                    capture_performance: { web_vitals: true, web_vitals_allowed_metrics: clientConfig },
                     // sometimes pageviews sneak in and make asserting on mock capture tricky
                     capture_pageview: false,
                 })
@@ -233,56 +233,5 @@ describe('web vitals', () => {
                 expect(posthog.webVitalsAutocapture!.isEnabled).toBe(expected)
             }
         )
-    })
-
-    describe.each(['client', 'server'])('sampling', (configSource) => {
-        describe.each([
-            [0, 0, 0],
-            [1, 100, 100],
-            [0.5, 40, 60],
-        ])(`with sample rate of %f`, (sampleRate: number, min: number, max: number) => {
-            beforeEach(async () => {
-                // we need a set of fake web vitals handlers, so we can manually trigger the events
-                assignableWindow.__PosthogExtensions__ = {}
-                assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
-                    onLCP: (cb: any) => {
-                        onLCPCallback = cb
-                    },
-                    onCLS: (cb: any) => {
-                        onCLSCallback = cb
-                    },
-                    onFCP: (cb: any) => {
-                        onFCPCallback = cb
-                    },
-                    onINP: (cb: any) => {
-                        onINPCallback = cb
-                    },
-                }
-            })
-
-            it(`with config from ${configSource} captures roughly half the time when sample rate is 0.5`, async () => {
-                posthog = await createPosthogInstance(uuidv7(), {
-                    _onCapture: onCapture,
-                    capture_performance: {
-                        web_vitals: true,
-                        web_vitals_sample_rate: configSource === 'client' ? sampleRate : undefined,
-                    },
-                })
-
-                posthog.webVitalsAutocapture!.afterDecideResponse({
-                    capturePerformance: {
-                        web_vitals: true,
-                        web_vitals_sample_rate: configSource === 'server' ? sampleRate : undefined,
-                    },
-                } as DecideResponse)
-
-                for (let i = 0; i < 100; i++) {
-                    emitAllMetrics()
-                }
-
-                expect(onCapture.mock.calls.length).toBeGreaterThanOrEqual(min)
-                expect(onCapture.mock.calls.length).toBeLessThanOrEqual(max)
-            })
-        })
     })
 })

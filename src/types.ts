@@ -107,14 +107,13 @@ export interface PerformanceCaptureConfig {
      * if not set this defaults to 15 minutes
      */
     __web_vitals_max_value?: number
-    web_vitals_sample_rate?: number
     /**
      * By default all 4 metrics are captured
      * You can set this config to restrict which metrics are captured
      * e.g. ['CLS', 'FCP'] to only capture those two metrics
      * NB setting this does not override whether the capture is enabled
      */
-    web_vitals_metrics?: SupportedWebVitalsMetrics[]
+    web_vitals_allowed_metrics?: SupportedWebVitalsMetrics[]
 }
 
 export interface HeatmapConfig {

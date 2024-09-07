@@ -2,7 +2,7 @@ import { PostHog } from '../../posthog-core'
 import { DecideResponse, SupportedWebVitalsMetrics } from '../../types'
 import { logger } from '../../utils/logger'
 import { isBoolean, isNullish, isNumber, isObject, isUndefined } from '../../utils/type-utils'
-import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE, WEB_VITALS_SAMPLE_RATE } from '../../constants'
+import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { assignableWindow, window } from '../../utils/globals'
 import Config from '../../config'
 
@@ -28,20 +28,11 @@ export class WebVitalsAutocapture {
         this.startIfEnabled()
     }
 
-    public get sampleRate(): number | undefined {
-        const clientConfigSampleRate = isObject(this.instance.config.capture_performance)
-            ? this.instance.config.capture_performance?.web_vitals_sample_rate
-            : undefined
-        return isUndefined(clientConfigSampleRate)
-            ? this.instance.persistence?.props[WEB_VITALS_SAMPLE_RATE]
-            : clientConfigSampleRate
-    }
-
     public get allowedMetrics(): SupportedWebVitalsMetrics[] {
         const clientConfigMetricAllowList: SupportedWebVitalsMetrics[] | undefined = isObject(
             this.instance.config.capture_performance
         )
-            ? this.instance.config.capture_performance?.web_vitals_metrics
+            ? this.instance.config.capture_performance?.web_vitals_allowed_metrics
             : undefined
         return !isUndefined(clientConfigMetricAllowList)
             ? clientConfigMetricAllowList
@@ -75,20 +66,16 @@ export class WebVitalsAutocapture {
 
     public afterDecideResponse(response: DecideResponse) {
         const webVitalsOptIn = isObject(response.capturePerformance) && !!response.capturePerformance.web_vitals
-        const webVitalsSampleRate = isObject(response.capturePerformance)
-            ? response.capturePerformance.web_vitals_sample_rate
-            : undefined
+
         const allowedMetrics = isObject(response.capturePerformance)
-            ? response.capturePerformance.web_vitals_metrics
+            ? response.capturePerformance.web_vitals_allowed_metrics
             : undefined
 
         if (this.instance.persistence) {
             this.instance.persistence.register({
                 [WEB_VITALS_ENABLED_SERVER_SIDE]: webVitalsOptIn,
             })
-            this.instance.persistence.register({
-                [WEB_VITALS_SAMPLE_RATE]: webVitalsSampleRate,
-            })
+
             this.instance.persistence.register({
                 [WEB_VITALS_ALLOWED_METRICS]: allowedMetrics,
             })
@@ -148,12 +135,6 @@ export class WebVitalsAutocapture {
         const sessionIds = this.instance.sessionManager?.checkAndGetSessionAndWindowId(true)
         if (isUndefined(sessionIds)) {
             logger.error(LOGGER_PREFIX + 'Could not read session ID. Dropping metrics!')
-            return
-        }
-
-        const isSampled = isUndefined(this.sampleRate) ? true : Math.random() < this.sampleRate
-        if (!isSampled) {
-            logger.info(LOGGER_PREFIX + 'Dropping metric due to sample rate', metric)
             return
         }
 
