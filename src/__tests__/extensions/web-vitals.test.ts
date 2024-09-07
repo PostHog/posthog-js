@@ -17,16 +17,6 @@ describe('web vitals', () => {
     let onINPCallback: ((metric: Record<string, any>) => void) | undefined = undefined
     const loadScriptMock = jest.fn()
 
-    const randomlyAddAMetric = (
-        metricName: string = 'metric',
-        metricValue: number = 600.1,
-        metricProperties: Record<string, any> = {}
-    ) => {
-        const callbacks = [onLCPCallback, onCLSCallback, onFCPCallback, onINPCallback]
-        const randomIndex = Math.floor(Math.random() * callbacks.length)
-        callbacks[randomIndex]?.({ name: metricName, value: metricValue, ...metricProperties })
-    }
-
     const emitAllMetrics = () => {
         onLCPCallback?.({ name: 'LCP', value: 123.45, extra: 'property' })
         onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
@@ -144,7 +134,7 @@ describe('web vitals', () => {
             })
 
             it('should emit after 8 seconds even when only 1 to 3 metrics captured', async () => {
-                randomlyAddAMetric('CLS', 123.45, { extra: 'property' })
+                onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
 
                 expect(onCapture).toBeCalledTimes(0)
 
@@ -165,18 +155,18 @@ describe('web vitals', () => {
             })
 
             it('should ignore a ridiculous value', async () => {
-                randomlyAddAMetric('LCP', FIFTEEN_MINUTES_IN_MILLIS, { extra: 'property' })
+                onCLSCallback?.({ name: 'CLS', value: FIFTEEN_MINUTES_IN_MILLIS, extra: 'property' })
 
                 expect(onCapture).toBeCalledTimes(0)
 
                 jest.advanceTimersByTime(FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
-                expect(onCapture).toBeCalledTimes(0)
+                expect(onCapture.mock.calls).toEqual([])
             })
 
             it('can be configured not to ignore a ridiculous value', async () => {
                 posthog.config.capture_performance = { __web_vitals_max_value: 0 }
-                randomlyAddAMetric('LCP', FIFTEEN_MINUTES_IN_MILLIS, { extra: 'property' })
+                onCLSCallback?.({ name: 'CLS', value: FIFTEEN_MINUTES_IN_MILLIS, extra: 'property' })
 
                 expect(onCapture).toBeCalledTimes(0)
 
