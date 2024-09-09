@@ -164,8 +164,12 @@ describe('SessionRecording', () => {
             persistence: 'memory',
         } as unknown as PostHogConfig
 
+        assignableWindow.__PosthogExtensions__ = {}
         assignableWindow.__PosthogExtensions__.rrweb = undefined
-        assignableWindow.__PosthogExtensions__.rrwebPlugins.getRecordConsolePlugin = undefined
+        assignableWindow.__PosthogExtensions__.rrwebPlugins = {
+            getRecordConsolePlugin: undefined,
+            getRecordNetworkPlugin: undefined,
+        }
 
         sessionIdGeneratorMock = jest.fn().mockImplementation(() => sessionId)
         windowIdGeneratorMock = jest.fn().mockImplementation(() => 'windowId')
