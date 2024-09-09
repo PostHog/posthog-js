@@ -1,3 +1,7 @@
+## 1.161.0 - 2024-09-09
+
+- feat: web vitals 3000 (#1401)
+
 ## 1.160.3 - 2024-09-03
 
 - fix: captured network requests must always have name property (#1398)
