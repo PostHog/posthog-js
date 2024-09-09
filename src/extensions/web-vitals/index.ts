@@ -1,10 +1,12 @@
 import { PostHog } from '../../posthog-core'
-import { DecideResponse } from '../../types'
+import { DecideResponse, SupportedWebVitalsMetrics } from '../../types'
 import { logger } from '../../utils/logger'
 import { isBoolean, isNullish, isNumber, isObject, isUndefined } from '../../utils/type-utils'
-import { WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
+import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { assignableWindow, window } from '../../utils/globals'
 import Config from '../../config'
+
+type WebVitalsMetricCallback = (metric: any) => void
 
 export const FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS = 8000
 const ONE_MINUTE_IN_MILLIS = 60 * 1000
@@ -22,7 +24,19 @@ export class WebVitalsAutocapture {
 
     constructor(private readonly instance: PostHog) {
         this._enabledServerSide = !!this.instance.persistence?.props[WEB_VITALS_ENABLED_SERVER_SIDE]
+
         this.startIfEnabled()
+    }
+
+    public get allowedMetrics(): SupportedWebVitalsMetrics[] {
+        const clientConfigMetricAllowList: SupportedWebVitalsMetrics[] | undefined = isObject(
+            this.instance.config.capture_performance
+        )
+            ? this.instance.config.capture_performance?.web_vitals_allowed_metrics
+            : undefined
+        return !isUndefined(clientConfigMetricAllowList)
+            ? clientConfigMetricAllowList
+            : this.instance.persistence?.props[WEB_VITALS_ALLOWED_METRICS] || ['CLS', 'FCP', 'INP', 'LCP']
     }
 
     public get _maxAllowedValue(): number {
@@ -53,9 +67,17 @@ export class WebVitalsAutocapture {
     public afterDecideResponse(response: DecideResponse) {
         const webVitalsOptIn = isObject(response.capturePerformance) && !!response.capturePerformance.web_vitals
 
+        const allowedMetrics = isObject(response.capturePerformance)
+            ? response.capturePerformance.web_vitals_allowed_metrics
+            : undefined
+
         if (this.instance.persistence) {
             this.instance.persistence.register({
                 [WEB_VITALS_ENABLED_SERVER_SIDE]: webVitalsOptIn,
+            })
+
+            this.instance.persistence.register({
+                [WEB_VITALS_ALLOWED_METRICS]: allowedMetrics,
             })
         }
         // store this in-memory in case persistence is disabled
@@ -65,7 +87,7 @@ export class WebVitalsAutocapture {
     }
 
     private loadScript(cb: () => void): void {
-        if ((window as any).postHogWebVitalsCallbacks) {
+        if (assignableWindow.__PosthogExtensions__?.postHogWebVitalsCallbacks) {
             // already loaded
             cb()
         }
@@ -162,14 +184,22 @@ export class WebVitalsAutocapture {
             timestamp: Date.now(),
         })
 
-        if (this.buffer.metrics.length === 4) {
-            // we have all 4 metrics
+        if (this.buffer.metrics.length === this.allowedMetrics.length) {
+            // we have all allowed metrics
             this._flushToCapture()
         }
     }
 
     private _startCapturing = () => {
-        const { onLCP, onCLS, onFCP, onINP } = assignableWindow.postHogWebVitalsCallbacks
+        let onLCP: WebVitalsMetricCallback | undefined
+        let onCLS: WebVitalsMetricCallback | undefined
+        let onFCP: WebVitalsMetricCallback | undefined
+        let onINP: WebVitalsMetricCallback | undefined
+
+        const posthogExtensions = assignableWindow.__PosthogExtensions__
+        if (!isUndefined(posthogExtensions)) {
+            ;({ onLCP, onCLS, onFCP, onINP } = posthogExtensions.postHogWebVitalsCallbacks)
+        }
 
         if (!onLCP || !onCLS || !onFCP || !onINP) {
             logger.error(LOGGER_PREFIX + 'web vitals callbacks not loaded - not starting')
@@ -177,10 +207,18 @@ export class WebVitalsAutocapture {
         }
 
         // register performance observers
-        onLCP(this._addToBuffer)
-        onCLS(this._addToBuffer)
-        onFCP(this._addToBuffer)
-        onINP(this._addToBuffer)
+        if (this.allowedMetrics.indexOf('LCP') > -1) {
+            onLCP(this._addToBuffer.bind(this))
+        }
+        if (this.allowedMetrics.indexOf('CLS') > -1) {
+            onCLS(this._addToBuffer.bind(this))
+        }
+        if (this.allowedMetrics.indexOf('FCP') > -1) {
+            onFCP(this._addToBuffer.bind(this))
+        }
+        if (this.allowedMetrics.indexOf('INP') > -1) {
+            onINP(this._addToBuffer.bind(this))
+        }
 
         this._initialized = true
     }

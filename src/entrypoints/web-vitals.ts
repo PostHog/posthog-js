@@ -1,7 +1,6 @@
-import { onLCP, onINP, onCLS, onFCP } from 'web-vitals'
+import { onLCP, onCLS, onFCP } from 'web-vitals'
+import { onINP } from 'web-vitals/attribution'
 import { assignableWindow } from '../utils/globals'
-
-// TODO export types here as well?
 
 const postHogWebVitalsCallbacks = {
     onLCP,
@@ -10,6 +9,7 @@ const postHogWebVitalsCallbacks = {
     onINP,
 }
 
-assignableWindow.postHogWebVitalsCallbacks = postHogWebVitalsCallbacks
+assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
+assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = postHogWebVitalsCallbacks
 
 export default postHogWebVitalsCallbacks
