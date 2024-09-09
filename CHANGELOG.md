@@ -1,3 +1,7 @@
+## 1.161.1 - 2024-09-09
+
+- fix: warn on unavailable lazy load not throw (#1400)
+
 ## 1.161.0 - 2024-09-09
 
 - feat: web vitals 3000 (#1401)
