@@ -16,7 +16,7 @@ assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = postHogWebVit
 // but that means that old clients which lazily load this extension are looking in the wrong place
 // yuck,
 // so we also put it directly on the window
-// when 1.161.1 is the older version seen in production we can remove this
+// when 1.161.1 is the oldest version seen in production we can remove this
 assignableWindow.postHogWebVitalsCallbacks = postHogWebVitalsCallbacks
 
 export default postHogWebVitalsCallbacks
