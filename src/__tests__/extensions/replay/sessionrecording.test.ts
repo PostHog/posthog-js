@@ -131,19 +131,21 @@ describe('SessionRecording', () => {
     let onFeatureFlagsCallback: ((flags: string[], variants: Record<string, string | boolean>) => void) | null
 
     const addRRwebToWindow = () => {
-        assignableWindow.rrweb = {
+        assignableWindow.__PosthogExtensions__.rrweb = {
             record: jest.fn(({ emit }) => {
                 _emit = emit
                 return () => {}
             }),
+            version: 'fake',
+            rrwebVersion: 'fake',
         }
-        assignableWindow.rrweb.record.takeFullSnapshot = jest.fn(() => {
+        assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = jest.fn(() => {
             // we pretend to be rrweb and call emit
             _emit(createFullSnapshot())
         })
-        assignableWindow.rrweb.record.addCustomEvent = _addCustomEvent
+        assignableWindow.__PosthogExtensions__.rrweb.record.addCustomEvent = _addCustomEvent
 
-        assignableWindow.rrwebConsoleRecord = {
+        assignableWindow.__PosthogExtensions__.rrwebPlugins = {
             getRecordConsolePlugin: jest.fn(),
         }
     }

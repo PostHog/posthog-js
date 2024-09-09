@@ -1,3 +1,6 @@
+import { SessionIdManager } from '../sessionid'
+import { ErrorEventArgs, ErrorProperties, Properties } from '../types'
+
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
  * like DOM, SSR, Web workers etc.
@@ -10,6 +13,27 @@
 
 // eslint-disable-next-line no-restricted-globals
 const win: (Window & typeof globalThis) | undefined = typeof window !== 'undefined' ? window : undefined
+
+interface PosthogExtensions {
+    parseErrorAsProperties?: ([event, source, lineno, colno, error]: ErrorEventArgs) => ErrorProperties
+    errorWrappingFunctions?: {
+        wrapOnError: (captureFn: (props: Properties) => void) => () => void
+        wrapUnhandledRejection: (captureFn: (props: Properties) => void) => () => void
+    }
+    rrweb?: { record: any; version: string; rrwebVersion: string }
+    rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
+    canActivateRepeatedly?: (survey: any) => boolean
+    webVitalsCallbacks?: {
+        onLCP: (metric: any) => void
+        onCLS: (metric: any) => void
+        onFCP: (metric: any) => void
+        onINP: (metric: any) => void
+    }
+    tracingHeadersPatchFns?: {
+        _patchFetch: (sessionManager: SessionIdManager) => () => void
+        _patchXHR: (sessionManager: any) => () => void
+    }
+}
 
 const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win
 
@@ -25,6 +49,10 @@ export const XMLHttpRequest =
     global?.XMLHttpRequest && 'withCredentials' in new global.XMLHttpRequest() ? global.XMLHttpRequest : undefined
 export const AbortController = global?.AbortController
 export const userAgent = navigator?.userAgent
-export const assignableWindow: Window & typeof globalThis & Record<string, any> = win ?? ({} as any)
+export const assignableWindow: Window &
+    typeof globalThis &
+    Record<string, any> & {
+        __PosthogExtensions__?: PosthogExtensions
+    } = win ?? ({} as any)
 
 export { win as window }

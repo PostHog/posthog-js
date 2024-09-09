@@ -1,4 +1,4 @@
-import { window } from '../../utils/globals'
+import { assignableWindow, window } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, Properties } from '../../types'
 
@@ -60,8 +60,9 @@ export class ExceptionObserver {
             return
         }
 
-        const wrapOnError = (window as any).posthogErrorWrappingFunctions.wrapOnError
-        const wrapUnhandledRejection = (window as any).posthogErrorWrappingFunctions.wrapUnhandledRejection
+        const wrapOnError = assignableWindow.__PosthogExtensions__?.errorWrappingFunctions?.wrapOnError
+        const wrapUnhandledRejection =
+            assignableWindow.__PosthogExtensions__?.errorWrappingFunctions?.wrapUnhandledRejection
 
         if (!wrapOnError || !wrapUnhandledRejection) {
             logger.error(LOGGER_PREFIX + ' failed to load error wrapping functions - cannot start')

@@ -87,7 +87,7 @@ export class WebVitalsAutocapture {
     }
 
     private loadScript(cb: () => void): void {
-        if (assignableWindow.__PosthogExtensions__?.postHogWebVitalsCallbacks) {
+        if (assignableWindow.__PosthogExtensions__?.webVitalsCallbacks) {
             // already loaded
             cb()
         }
@@ -197,8 +197,8 @@ export class WebVitalsAutocapture {
         let onINP: WebVitalsMetricCallback | undefined
 
         const posthogExtensions = assignableWindow.__PosthogExtensions__
-        if (!isUndefined(posthogExtensions)) {
-            ;({ onLCP, onCLS, onFCP, onINP } = posthogExtensions.postHogWebVitalsCallbacks)
+        if (!isUndefined(posthogExtensions) && !isUndefined(posthogExtensions.webVitalsCallbacks)) {
+            ;({ onLCP, onCLS, onFCP, onINP } = posthogExtensions.webVitalsCallbacks)
         }
 
         if (!onLCP || !onCLS || !onFCP || !onINP) {
