@@ -1,3 +1,7 @@
+## 1.161.2 - 2024-09-09
+
+- fix: some clients need web vitals directly on window (#1406)
+
 ## 1.161.1 - 2024-09-09
 
 - fix: warn on unavailable lazy load not throw (#1400)
