@@ -983,7 +983,7 @@ describe('SessionRecording', () => {
                 sessionRecording.startIfEnabledOrStop()
 
                 expect(
-                    assignableWindow.__PosthogExtensions__.rrwebConsoleRecord.getRecordConsolePlugin
+                    assignableWindow.__PosthogExtensions__.rrwebPlugins.getRecordConsolePlugin
                 ).not.toHaveBeenCalled()
             })
 
@@ -992,9 +992,7 @@ describe('SessionRecording', () => {
 
                 sessionRecording.startIfEnabledOrStop()
 
-                expect(
-                    assignableWindow.__PosthogExtensions__.rrwebConsoleRecord.getRecordConsolePlugin
-                ).toHaveBeenCalled()
+                expect(assignableWindow.__PosthogExtensions__.rrwebPlugins.getRecordConsolePlugin).toHaveBeenCalled()
             })
         })
 
