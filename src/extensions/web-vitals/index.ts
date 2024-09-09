@@ -195,17 +195,20 @@ export class WebVitalsAutocapture {
         let onCLS: WebVitalsMetricCallback | undefined
         let onFCP: WebVitalsMetricCallback | undefined
         let onINP: WebVitalsMetricCallback | undefined
-
+    
         const posthogExtensions = assignableWindow.__PosthogExtensions__
         if (!isUndefined(posthogExtensions)) {
             ;({ onLCP, onCLS, onFCP, onINP } = posthogExtensions.postHogWebVitalsCallbacks)
         }
-
+        else if (assignableWindow.postHogWebVitalsCallbacks) {
+            ({ onLCP, onCLS, onFCP, onINP } = assignableWindow.postHogWebVitalsCallbacks);
+        }
+    
         if (!onLCP || !onCLS || !onFCP || !onINP) {
             logger.error(LOGGER_PREFIX + 'web vitals callbacks not loaded - not starting')
             return
         }
-
+ 
         // register performance observers
         if (this.allowedMetrics.indexOf('LCP') > -1) {
             onLCP(this._addToBuffer.bind(this))
@@ -219,7 +222,7 @@ export class WebVitalsAutocapture {
         if (this.allowedMetrics.indexOf('INP') > -1) {
             onINP(this._addToBuffer.bind(this))
         }
-
+    
         this._initialized = true
     }
 }
