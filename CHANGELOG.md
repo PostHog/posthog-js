@@ -1,3 +1,7 @@
+## 1.161.3 - 2024-09-10
+
+- fix: manage capture pageview hook lifecycle (#1408)
+
 ## 1.161.2 - 2024-09-09
 
 - fix: some clients need web vitals directly on window (#1406)
