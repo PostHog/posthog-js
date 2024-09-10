@@ -303,7 +303,7 @@ export class SessionRecording {
                             if (!href) {
                                 return
                             }
-                            this._tryAddCustomEvent('$pageview', { href })
+                            this._tryAddCustomEvent('$pageview', { href, title: this._documentTitle() })
                         }
                     } catch (e) {
                         logger.error('Could not add $pageview to rrweb session', e)
@@ -807,9 +807,13 @@ export class SessionRecording {
         }
         const currentUrl = this._maskUrl(window.location.href)
         if (this._lastHref !== currentUrl) {
-            this._tryAddCustomEvent('$url_changed', { href: currentUrl })
+            this._tryAddCustomEvent('$url_changed', { href: currentUrl, title: this._documentTitle() })
             this._lastHref = currentUrl
         }
+    }
+
+    private _documentTitle() {
+        return document?.title || null
     }
 
     private _processQueuedEvents() {
