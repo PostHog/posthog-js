@@ -312,8 +312,11 @@ describe('SessionRecording', () => {
         })
 
         it('sets the pageview capture hook once', () => {
+            expect(sessionRecording['_removePageViewCaptureHook']).toBeUndefined()
+
             sessionRecording.startIfEnabledOrStop()
-            expect(sessionRecording['_pageviewCaptureHook']).not.toBeNull()
+
+            expect(sessionRecording['_removePageViewCaptureHook']).not.toBeUndefined()
             expect(posthog._addCaptureHook).toHaveBeenCalledTimes(1)
 
             // calling a second time doesn't add another capture hook
