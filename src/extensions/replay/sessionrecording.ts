@@ -332,6 +332,7 @@ export class SessionRecording {
             clearInterval(this._fullSnapshotTimer)
 
             this._removePageViewCaptureHook?.()
+            this._removePageViewCaptureHook = undefined
 
             logger.info(LOGGER_PREFIX + ' stopped')
         }

@@ -129,6 +129,8 @@ describe('SessionRecording', () => {
     let sessionIdGeneratorMock: Mock
     let windowIdGeneratorMock: Mock
     let onFeatureFlagsCallback: ((flags: string[], variants: Record<string, string | boolean>) => void) | null
+    let removeCaptureHookMock: Mock
+    let addCaptureHookMock: Mock
 
     const addRRwebToWindow = () => {
         assignableWindow.rrweb = {
@@ -174,7 +176,8 @@ describe('SessionRecording', () => {
         sessionManager = new SessionIdManager(config, postHogPersistence, sessionIdGeneratorMock, windowIdGeneratorMock)
 
         // add capture hook returns an unsubscribe function
-        const addCaptureHookMock = jest.fn().mockImplementation(() => () => {})
+        removeCaptureHookMock = jest.fn()
+        addCaptureHookMock = jest.fn().mockImplementation(() => removeCaptureHookMock)
 
         posthog = {
             get_property: (property_key: string): Property | undefined => {
@@ -322,6 +325,17 @@ describe('SessionRecording', () => {
             // calling a second time doesn't add another capture hook
             sessionRecording.startIfEnabledOrStop()
             expect(posthog._addCaptureHook).toHaveBeenCalledTimes(1)
+        })
+
+        it('removes the pageview capture hook on stop', () => {
+            sessionRecording.startIfEnabledOrStop()
+            expect(sessionRecording['_removePageViewCaptureHook']).not.toBeUndefined()
+
+            expect(removeCaptureHookMock).not.toHaveBeenCalled()
+            sessionRecording.stopRecording()
+
+            expect(removeCaptureHookMock).toHaveBeenCalledTimes(1)
+            expect(sessionRecording['_removePageViewCaptureHook']).toBeUndefined()
         })
 
         it('sets the window event listeners', () => {
