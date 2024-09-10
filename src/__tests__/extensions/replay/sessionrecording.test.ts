@@ -173,6 +173,9 @@ describe('SessionRecording', () => {
 
         sessionManager = new SessionIdManager(config, postHogPersistence, sessionIdGeneratorMock, windowIdGeneratorMock)
 
+        // add capture hook returns an unsubscribe function
+        const addCaptureHookMock = jest.fn().mockImplementation(() => () => {})
+
         posthog = {
             get_property: (property_key: string): Property | undefined => {
                 return postHogPersistence?.['props'][property_key]
@@ -185,7 +188,7 @@ describe('SessionRecording', () => {
             },
             sessionManager: sessionManager,
             requestRouter: new RequestRouter({ config } as any),
-            _addCaptureHook: jest.fn(),
+            _addCaptureHook: addCaptureHookMock,
             consent: { isOptedOut: () => false },
         } as unknown as PostHog
 
@@ -306,6 +309,30 @@ describe('SessionRecording', () => {
         it('call _startCapture if its enabled', () => {
             sessionRecording.startIfEnabledOrStop()
             expect((sessionRecording as any)._startCapture).toHaveBeenCalled()
+        })
+
+        it('sets the pageview capture hook once', () => {
+            sessionRecording.startIfEnabledOrStop()
+            expect(sessionRecording['_pageviewCaptureHook']).not.toBeNull()
+            expect(posthog._addCaptureHook).toHaveBeenCalledTimes(1)
+
+            // calling a second time doesn't add another capture hook
+            sessionRecording.startIfEnabledOrStop()
+            expect(posthog._addCaptureHook).toHaveBeenCalledTimes(1)
+        })
+
+        it('sets the window event listeners', () => {
+            //mock window add event listener to check if it is called
+            const addEventListener = jest.fn().mockImplementation(() => () => {})
+            window.addEventListener = addEventListener
+
+            sessionRecording.startIfEnabledOrStop()
+            expect(sessionRecording['_onBeforeUnload']).not.toBeNull()
+            // we register 4 event listeners
+            expect(window.addEventListener).toHaveBeenCalledTimes(4)
+
+            // window.addEventListener('blah', someFixedListenerInstance) is safe to call multiple times,
+            // so we don't need to test if the addEvenListener registrations are called multiple times
         })
 
         it('emits an options event', () => {
