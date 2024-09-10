@@ -208,7 +208,7 @@ export class WebExperiments {
     }
 
     private static logInfo(msg: string, ...args: any[]) {
-        logger.info(`WEB-EXPERIMENTS : ${msg}`, args)
+        logger.info(`[WebExperiments] ${msg}`, args)
     }
 
     private static applyTransforms(experiment: string, variant: string, transforms: WebExperimentTransform[]) {

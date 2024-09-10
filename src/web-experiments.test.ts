@@ -90,6 +90,7 @@ describe('Web Experimentation', () => {
         persistence = { props: {}, register: jest.fn() } as unknown as PostHogPersistence
         posthog = makePostHog({
             config: {
+                disable_web_experiments: false,
                 api_host: 'https://test.com',
                 token: 'testtoken',
                 autocapture: true,
