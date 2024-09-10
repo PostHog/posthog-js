@@ -129,6 +129,8 @@ describe('SessionRecording', () => {
     let sessionIdGeneratorMock: Mock
     let windowIdGeneratorMock: Mock
     let onFeatureFlagsCallback: ((flags: string[], variants: Record<string, string | boolean>) => void) | null
+    let removeCaptureHookMock: Mock
+    let addCaptureHookMock: Mock
 
     const addRRwebToWindow = () => {
         assignableWindow.rrweb = {
@@ -173,6 +175,10 @@ describe('SessionRecording', () => {
 
         sessionManager = new SessionIdManager(config, postHogPersistence, sessionIdGeneratorMock, windowIdGeneratorMock)
 
+        // add capture hook returns an unsubscribe function
+        removeCaptureHookMock = jest.fn()
+        addCaptureHookMock = jest.fn().mockImplementation(() => removeCaptureHookMock)
+
         posthog = {
             get_property: (property_key: string): Property | undefined => {
                 return postHogPersistence?.['props'][property_key]
@@ -185,7 +191,7 @@ describe('SessionRecording', () => {
             },
             sessionManager: sessionManager,
             requestRouter: new RequestRouter({ config } as any),
-            _addCaptureHook: jest.fn(),
+            _addCaptureHook: addCaptureHookMock,
             consent: { isOptedOut: () => false },
         } as unknown as PostHog
 
@@ -306,6 +312,44 @@ describe('SessionRecording', () => {
         it('call _startCapture if its enabled', () => {
             sessionRecording.startIfEnabledOrStop()
             expect((sessionRecording as any)._startCapture).toHaveBeenCalled()
+        })
+
+        it('sets the pageview capture hook once', () => {
+            expect(sessionRecording['_removePageViewCaptureHook']).toBeUndefined()
+
+            sessionRecording.startIfEnabledOrStop()
+
+            expect(sessionRecording['_removePageViewCaptureHook']).not.toBeUndefined()
+            expect(posthog._addCaptureHook).toHaveBeenCalledTimes(1)
+
+            // calling a second time doesn't add another capture hook
+            sessionRecording.startIfEnabledOrStop()
+            expect(posthog._addCaptureHook).toHaveBeenCalledTimes(1)
+        })
+
+        it('removes the pageview capture hook on stop', () => {
+            sessionRecording.startIfEnabledOrStop()
+            expect(sessionRecording['_removePageViewCaptureHook']).not.toBeUndefined()
+
+            expect(removeCaptureHookMock).not.toHaveBeenCalled()
+            sessionRecording.stopRecording()
+
+            expect(removeCaptureHookMock).toHaveBeenCalledTimes(1)
+            expect(sessionRecording['_removePageViewCaptureHook']).toBeUndefined()
+        })
+
+        it('sets the window event listeners', () => {
+            //mock window add event listener to check if it is called
+            const addEventListener = jest.fn().mockImplementation(() => () => {})
+            window.addEventListener = addEventListener
+
+            sessionRecording.startIfEnabledOrStop()
+            expect(sessionRecording['_onBeforeUnload']).not.toBeNull()
+            // we register 4 event listeners
+            expect(window.addEventListener).toHaveBeenCalledTimes(4)
+
+            // window.addEventListener('blah', someFixedListenerInstance) is safe to call multiple times,
+            // so we don't need to test if the addEvenListener registrations are called multiple times
         })
 
         it('emits an options event', () => {
