@@ -41,7 +41,7 @@ export const staticFilesMock = RequestMock()
 
 export const initPosthog = (config) => {
     return ClientFunction((configParams = {}) => {
-        const testSessionId = Math.round(Math.random() * 10000000000).toString()
+        const testSessionId = '5717146623'
         configParams.debug = true
         window.posthog.init(configParams.api_key, configParams)
         window.posthog.register({
@@ -57,6 +57,7 @@ export const initPosthog = (config) => {
             distinctID: 'automated-tester', // We set this to get around the ingestion delay for new distinctIDs
             isIdentifiedID: true,
         },
+        opt_out_useragent_filter: true,
     })
 }
 

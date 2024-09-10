@@ -10,7 +10,7 @@ import {
     isCrossDomainCookie,
     isDistinctIdStringLike,
 } from './utils'
-import { assignableWindow, document, location, userAgent, window } from './utils/globals'
+import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import {
@@ -55,6 +55,7 @@ import { uuidv7 } from './uuidv7'
 import { Survey, SurveyCallback, SurveyQuestionBranchingType } from './posthog-surveys-types'
 import {
     isArray,
+    isBoolean,
     isEmptyObject,
     isEmptyString,
     isFunction,
@@ -66,7 +67,7 @@ import {
 import { Info } from './utils/event-utils'
 import { logger } from './utils/logger'
 import { SessionPropsManager } from './session-props'
-import { isBlockedUA } from './utils/blocked-uas'
+import { isLikelyBot } from './utils/blocked-uas'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
 import { Heatmaps } from './heatmaps'
 import { ScrollManager } from './scroll-manager'
@@ -77,6 +78,7 @@ import { ConsentManager } from './consent'
 import { ExceptionObserver } from './extensions/exception-autocapture'
 import { WebVitalsAutocapture } from './extensions/web-vitals'
 import { WebExperiments } from './web-experiments'
+import { PostHogExceptions } from './posthog-exceptions'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -244,6 +246,7 @@ export class PostHog {
     surveys: PostHogSurveys
     experiments: WebExperiments
     toolbar: Toolbar
+    exceptions: PostHogExceptions
     consent: ConsentManager
 
     // These are instance-specific state created after initialisation
@@ -262,6 +265,7 @@ export class PostHog {
     sessionRecording?: SessionRecording
     webPerformance = new DeprecatedWebPerformanceObserver()
 
+    _initialPageviewCaptured: boolean
     _triggered_notifs: any
     compression?: Compression
     __request_queue: QueuedRequestOptions[]
@@ -289,6 +293,7 @@ export class PostHog {
         this.__request_queue = []
         this.__loaded = false
         this.analyticsDefaultEndpoint = '/e/'
+        this._initialPageviewCaptured = false
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
@@ -296,6 +301,7 @@ export class PostHog {
         this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
         this.experiments = new WebExperiments(this)
+        this.exceptions = new PostHogExceptions(this)
         this.rateLimiter = new RateLimiter(this)
         this.requestRouter = new RequestRouter(this)
         this.consent = new ConsentManager(this)
@@ -538,6 +544,7 @@ export class PostHog {
         this.experiments?.afterDecideResponse(response)
         this.surveys?.afterDecideResponse(response)
         this.webVitalsAutocapture?.afterDecideResponse(response)
+        this.exceptions?.afterDecideResponse(response)
         this.exceptionObserver?.afterDecideResponse(response)
     }
 
@@ -563,8 +570,8 @@ export class PostHog {
             // NOTE: We want to fire this on the next tick as the previous implementation had this side effect
             // and some clients may rely on it
             setTimeout(() => {
-                if (document) {
-                    this.capture('$pageview', { title: document.title }, { send_instantly: true })
+                if (this.consent.isOptedIn()) {
+                    this._captureInitialPageview()
                 }
             }, 1)
         }
@@ -778,11 +785,7 @@ export class PostHog {
             return
         }
 
-        if (
-            userAgent &&
-            !this.config.opt_out_useragent_filter &&
-            isBlockedUA(userAgent, this.config.custom_blocked_useragents)
-        ) {
+        if (!this.config.opt_out_useragent_filter && this._is_bot()) {
             return
         }
 
@@ -866,8 +869,8 @@ export class PostHog {
         return data
     }
 
-    _addCaptureHook(callback: (eventName: string, eventPayload?: CaptureResult) => void): void {
-        this.on('eventCaptured', (data) => callback(data.event, data))
+    _addCaptureHook(callback: (eventName: string, eventPayload?: CaptureResult) => void): () => void {
+        return this.on('eventCaptured', (data) => callback(data.event, data))
     }
 
     _calculate_event_properties(event_name: string, event_properties: Properties, timestamp?: Date): Properties {
@@ -938,9 +941,7 @@ export class PostHog {
         // this is only added when this.config.opt_out_useragent_filter is true,
         // or it would always add "browser"
         if (userAgent && this.config.opt_out_useragent_filter) {
-            properties['$browser_type'] = isBlockedUA(userAgent, this.config.custom_blocked_useragents)
-                ? 'bot'
-                : 'browser'
+            properties['$browser_type'] = this._is_bot() ? 'bot' : 'browser'
         }
 
         // note: extend writes to the first object, so lets make sure we
@@ -1785,12 +1786,14 @@ export class PostHog {
     }
 
     /**
-     * turns session recording on, and updates the config option
-     * disable_session_recording to false
+     * turns session recording on, and updates the config option `disable_session_recording` to false
      * @param override.sampling - optional boolean to override the default sampling behavior - ensures the next session recording to start will not be skipped by sampling config.
+     * @param override.linked_flag - optional boolean to override the default linked_flag behavior - ensures the next session recording to start will not be skipped by linked_flag config.
+     * @param override - optional boolean to override the default sampling behavior - ensures the next session recording to start will not be skipped by sampling or linked_flag config. `true` is shorthand for { sampling: true, linked_flag: true }
      */
-    startSessionRecording(override?: { sampling?: boolean }): void {
-        if (override?.sampling) {
+    startSessionRecording(override?: { sampling?: boolean; linked_flag?: boolean } | true): void {
+        const overrideAll = isBoolean(override) && override
+        if (overrideAll || override?.sampling) {
             // allow the session id check to rotate session id if necessary
             const ids = this.sessionManager?.checkAndGetSessionAndWindowId()
             this.persistence?.register({
@@ -1798,6 +1801,10 @@ export class PostHog {
                 [SESSION_RECORDING_IS_SAMPLED]: true,
             })
             logger.info('Session recording started with sampling override for session: ', ids?.sessionId)
+        }
+        if (overrideAll || override?.linked_flag) {
+            this.sessionRecording?.overrideLinkedFlag()
+            logger.info('Session recording started with linked_flags override')
         }
         this.set_config({ disable_session_recording: false })
     }
@@ -1816,6 +1823,20 @@ export class PostHog {
      */
     sessionRecordingStarted(): boolean {
         return !!this.sessionRecording?.started
+    }
+
+    /** Capture a caught exception manually */
+    captureException(error: Error, additionalProperties?: Properties): void {
+        const properties: Properties = isFunction(assignableWindow.parseErrorAsProperties)
+            ? assignableWindow.parseErrorAsProperties([error.message, undefined, undefined, undefined, error])
+            : {
+                  $exception_type: error.name,
+                  $exception_message: error.message,
+                  $exception_level: 'error',
+                  ...additionalProperties,
+              }
+
+        this.exceptions.sendExceptionEvent(properties)
     }
 
     /**
@@ -1986,12 +2007,14 @@ export class PostHog {
         this.consent.optInOut(true)
         this._sync_opt_out_with_persistence()
 
-        if (!isUndefined(options?.captureEventName) && !options?.captureEventName) {
-            // Don't capture if captureEventName is null or false
-            return
+        // Don't capture if captureEventName is null or false
+        if (isUndefined(options?.captureEventName) || options?.captureEventName) {
+            this.capture(options?.captureEventName ?? '$opt_in', options?.captureProperties, { send_instantly: true })
         }
 
-        this.capture(options?.captureEventName ?? '$opt_in', options?.captureProperties, { send_instantly: true })
+        if (this.config.capture_pageview) {
+            this._captureInitialPageview()
+        }
     }
 
     /**
@@ -2049,6 +2072,21 @@ export class PostHog {
     clear_opt_in_out_capturing(): void {
         this.consent.reset()
         this._sync_opt_out_with_persistence()
+    }
+
+    _is_bot(): boolean | undefined {
+        if (navigator) {
+            return isLikelyBot(navigator, this.config.custom_blocked_useragents)
+        } else {
+            return undefined
+        }
+    }
+
+    _captureInitialPageview(): void {
+        if (document && !this._initialPageviewCaptured) {
+            this._initialPageviewCaptured = true
+            this.capture('$pageview', { title: document.title }, { send_instantly: true })
+        }
     }
 
     debug(debug?: boolean): void {

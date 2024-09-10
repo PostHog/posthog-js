@@ -27,14 +27,25 @@ export class RequestRouter {
     }
 
     get apiHost(): string {
-        return this.instance.config.api_host.trim().replace(/\/$/, '')
+        const host = this.instance.config.api_host.trim().replace(/\/$/, '')
+        if (host === 'https://app.posthog.com') {
+            return 'https://us.i.posthog.com'
+        }
+        return host
     }
     get uiHost(): string | undefined {
-        const host = this.instance.config.ui_host?.replace(/\/$/, '')
+        let host = this.instance.config.ui_host?.replace(/\/$/, '')
+
+        if (!host) {
+            // No ui_host set, get it from the api_host. But api_host differs
+            // from the actual UI host, so replace the ingestion subdomain with just posthog.com
+            host = this.apiHost.replace(`.${ingestionDomain}`, '.posthog.com')
+        }
 
         if (host === 'https://app.posthog.com') {
             return 'https://us.posthog.com'
         }
+
         return host
     }
 
@@ -58,7 +69,7 @@ export class RequestRouter {
         }
 
         if (target === 'ui') {
-            return (this.uiHost || this.apiHost.replace(`.${ingestionDomain}`, '.posthog.com')) + path
+            return this.uiHost + path
         }
 
         if (this.region === RequestRouterRegion.CUSTOM) {

@@ -97,7 +97,7 @@ describe('opting out', () => {
             cy.posthog().invoke('startSessionRecording')
 
             cy.phCaptures({ full: true }).then((captures) => {
-                expect((captures || []).map((c) => c.event)).to.deep.equal(['$opt_in'])
+                expect((captures || []).map((c) => c.event)).to.deep.equal(['$opt_in', '$pageview'])
             })
 
             assertWhetherPostHogRequestsWereCalled({
@@ -173,7 +173,7 @@ describe('opting out', () => {
             cy.posthog().invoke('startSessionRecording', { sampling: true })
 
             cy.phCaptures({ full: true }).then((captures) => {
-                expect((captures || []).map((c) => c.event)).to.deep.equal(['$opt_in'])
+                expect((captures || []).map((c) => c.event)).to.deep.equal(['$opt_in', '$pageview'])
             })
 
             assertWhetherPostHogRequestsWereCalled({
@@ -187,6 +187,231 @@ describe('opting out', () => {
             cy.get('[data-cy-input]').type('hello posthog!')
 
             pollPhCaptures('$snapshot').then(assertThatRecordingStarted)
+        })
+
+        it('can override linked_flags when starting session recording', () => {
+            cy.intercept('POST', '/decide/*', {
+                autocapture_opt_out: true,
+                editorParams: {},
+                isAuthenticated: false,
+                sessionRecording: {
+                    endpoint: '/ses/',
+                    // a flag that doesn't exist, can never be recorded
+                    linkedFlag: 'i am a flag that does not exist',
+                },
+            }).as('decide')
+
+            cy.posthogInit({
+                opt_out_capturing_by_default: true,
+            })
+
+            assertWhetherPostHogRequestsWereCalled({
+                '@recorder': false,
+                '@decide': true,
+                '@session-recording': false,
+            })
+
+            cy.posthog().invoke('opt_in_capturing')
+
+            cy.posthog().invoke('startSessionRecording')
+
+            cy.phCaptures({ full: true }).then((captures) => {
+                expect((captures || []).map((c) => c.event)).to.deep.equal(['$opt_in', '$pageview'])
+            })
+
+            assertWhetherPostHogRequestsWereCalled({
+                '@recorder': true,
+                '@decide': true,
+                // no call to session-recording yet
+            })
+
+            cy.resetPhCaptures()
+
+            cy.get('[data-cy-input]')
+                .type('hello posthog!')
+                .then(() => {
+                    cy.phCaptures().then((captures) => {
+                        // no session recording events yet
+                        expect(captures || []).to.deep.equal([])
+                    })
+                })
+
+            cy.posthog().invoke('startSessionRecording', { linked_flag: true })
+
+            cy.get('[data-cy-input]').type('hello posthog!')
+
+            pollPhCaptures('$snapshot').then(assertThatRecordingStarted)
+        })
+
+        it('respects sampling when overriding linked_flags when starting session recording', () => {
+            cy.intercept('POST', '/decide/*', {
+                autocapture_opt_out: true,
+                editorParams: {},
+                isAuthenticated: false,
+                sessionRecording: {
+                    endpoint: '/ses/',
+                    // a flag that doesn't exist, can never be recorded
+                    linkedFlag: 'i am a flag that does not exist',
+                    // will never record a session with rate of 0
+                    sampleRate: '0',
+                },
+            }).as('decide')
+
+            cy.posthogInit({
+                opt_out_capturing_by_default: true,
+            })
+
+            assertWhetherPostHogRequestsWereCalled({
+                '@recorder': false,
+                '@decide': true,
+                '@session-recording': false,
+            })
+
+            cy.posthog().invoke('opt_in_capturing')
+
+            cy.posthog().invoke('startSessionRecording')
+
+            cy.phCaptures({ full: true }).then((captures) => {
+                expect((captures || []).map((c) => c.event)).to.deep.equal(['$opt_in', '$pageview'])
+            })
+
+            assertWhetherPostHogRequestsWereCalled({
+                '@recorder': true,
+                '@decide': true,
+                // no call to session-recording yet
+            })
+
+            cy.resetPhCaptures()
+
+            cy.get('[data-cy-input]')
+                .type('hello posthog!')
+                .then(() => {
+                    cy.phCaptures().then((captures) => {
+                        // no session recording events yet
+                        expect(captures || []).to.deep.equal([])
+                    })
+                })
+
+            cy.posthog().invoke('startSessionRecording', { linked_flag: true })
+
+            cy.get('[data-cy-input]')
+                .type('hello posthog!')
+                .then(() => {
+                    cy.phCaptures().then((captures) => {
+                        // no session recording events yet
+                        expect((captures || []).length).to.equal(0)
+                    })
+                })
+        })
+
+        it('can override all ingestion controls when starting session recording', () => {
+            cy.intercept('POST', '/decide/*', {
+                autocapture_opt_out: true,
+                editorParams: {},
+                isAuthenticated: false,
+                sessionRecording: {
+                    endpoint: '/ses/',
+                    // a flag that doesn't exist, can never be recorded
+                    linkedFlag: 'i am a flag that does not exist',
+                    // will never record a session with rate of 0
+                    sampleRate: '0',
+                },
+            }).as('decide')
+
+            cy.posthogInit({
+                opt_out_capturing_by_default: true,
+            })
+
+            assertWhetherPostHogRequestsWereCalled({
+                '@recorder': false,
+                '@decide': true,
+                '@session-recording': false,
+            })
+
+            cy.posthog().invoke('opt_in_capturing')
+
+            cy.posthog().invoke('startSessionRecording')
+
+            cy.phCaptures({ full: true }).then((captures) => {
+                expect((captures || []).map((c) => c.event)).to.deep.equal(['$opt_in', '$pageview'])
+            })
+
+            assertWhetherPostHogRequestsWereCalled({
+                '@recorder': true,
+                '@decide': true,
+                // no call to session-recording yet
+            })
+
+            cy.resetPhCaptures()
+
+            cy.get('[data-cy-input]')
+                .type('hello posthog!')
+                .then(() => {
+                    cy.phCaptures().then((captures) => {
+                        // no session recording events yet
+                        expect(captures || []).to.deep.equal([])
+                    })
+                })
+
+            cy.posthog().invoke('startSessionRecording', true)
+
+            cy.get('[data-cy-input]').type('hello posthog!')
+
+            pollPhCaptures('$snapshot').then(assertThatRecordingStarted)
+        })
+
+        it('sends a $pageview event when opting in', () => {
+            cy.intercept('POST', '/decide/*', {
+                autocapture_opt_out: true,
+                editorParams: {},
+                isAuthenticated: false,
+                sessionRecording: {
+                    endpoint: '/ses/',
+                    // will never record a session with rate of 0
+                    sampleRate: '0',
+                },
+            }).as('decide')
+
+            cy.posthogInit({
+                opt_out_capturing_by_default: true,
+            })
+            // Wait for the pageview timeout
+            cy.wait(100)
+            cy.phCaptures({ full: true }).then((captures) => {
+                expect(captures || []).to.have.length(0)
+            })
+
+            cy.posthog().invoke('opt_in_capturing')
+
+            cy.phCaptures({ full: true }).then((captures) => {
+                expect((captures || []).map((c) => c.event)).to.deep.equal(['$opt_in', '$pageview'])
+            })
+        })
+
+        it('does not send a duplicate $pageview event when opting in', () => {
+            cy.intercept('POST', '/decide/*', {
+                autocapture_opt_out: true,
+                editorParams: {},
+                isAuthenticated: false,
+                sessionRecording: {
+                    endpoint: '/ses/',
+                    // will never record a session with rate of 0
+                    sampleRate: '0',
+                },
+            }).as('decide')
+
+            cy.posthogInit({})
+            // Wait for the pageview timeout
+            cy.wait(100)
+            cy.phCaptures({ full: true }).then((captures) => {
+                expect((captures || []).map((c) => c.event)).to.deep.equal(['$pageview'])
+            })
+
+            cy.posthog().invoke('opt_in_capturing')
+
+            cy.phCaptures({ full: true }).then((captures) => {
+                expect((captures || []).map((c) => c.event)).to.deep.equal(['$pageview', '$opt_in'])
+            })
         })
     })
 

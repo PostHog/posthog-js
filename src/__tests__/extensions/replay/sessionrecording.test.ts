@@ -37,6 +37,7 @@ import {
     EventType,
     eventWithTime,
     fullSnapshotEvent,
+    incrementalData,
     incrementalSnapshotEvent,
     IncrementalSource,
     metaEvent,
@@ -84,7 +85,7 @@ const createIncrementalSnapshot = (event = {}): incrementalSnapshotEvent => ({
     type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     data: {
         source: 1,
-    },
+    } as Partial<incrementalData> as incrementalData,
     ...event,
 })
 
@@ -128,6 +129,8 @@ describe('SessionRecording', () => {
     let sessionIdGeneratorMock: Mock
     let windowIdGeneratorMock: Mock
     let onFeatureFlagsCallback: ((flags: string[], variants: Record<string, string | boolean>) => void) | null
+    let removeCaptureHookMock: Mock
+    let addCaptureHookMock: Mock
 
     const addRRwebToWindow = () => {
         assignableWindow.rrweb = {
@@ -172,6 +175,10 @@ describe('SessionRecording', () => {
 
         sessionManager = new SessionIdManager(config, postHogPersistence, sessionIdGeneratorMock, windowIdGeneratorMock)
 
+        // add capture hook returns an unsubscribe function
+        removeCaptureHookMock = jest.fn()
+        addCaptureHookMock = jest.fn().mockImplementation(() => removeCaptureHookMock)
+
         posthog = {
             get_property: (property_key: string): Property | undefined => {
                 return postHogPersistence?.['props'][property_key]
@@ -184,7 +191,7 @@ describe('SessionRecording', () => {
             },
             sessionManager: sessionManager,
             requestRouter: new RequestRouter({ config } as any),
-            _addCaptureHook: jest.fn(),
+            _addCaptureHook: addCaptureHookMock,
             consent: { isOptedOut: () => false },
         } as unknown as PostHog
 
@@ -305,6 +312,44 @@ describe('SessionRecording', () => {
         it('call _startCapture if its enabled', () => {
             sessionRecording.startIfEnabledOrStop()
             expect((sessionRecording as any)._startCapture).toHaveBeenCalled()
+        })
+
+        it('sets the pageview capture hook once', () => {
+            expect(sessionRecording['_removePageViewCaptureHook']).toBeUndefined()
+
+            sessionRecording.startIfEnabledOrStop()
+
+            expect(sessionRecording['_removePageViewCaptureHook']).not.toBeUndefined()
+            expect(posthog._addCaptureHook).toHaveBeenCalledTimes(1)
+
+            // calling a second time doesn't add another capture hook
+            sessionRecording.startIfEnabledOrStop()
+            expect(posthog._addCaptureHook).toHaveBeenCalledTimes(1)
+        })
+
+        it('removes the pageview capture hook on stop', () => {
+            sessionRecording.startIfEnabledOrStop()
+            expect(sessionRecording['_removePageViewCaptureHook']).not.toBeUndefined()
+
+            expect(removeCaptureHookMock).not.toHaveBeenCalled()
+            sessionRecording.stopRecording()
+
+            expect(removeCaptureHookMock).toHaveBeenCalledTimes(1)
+            expect(sessionRecording['_removePageViewCaptureHook']).toBeUndefined()
+        })
+
+        it('sets the window event listeners', () => {
+            //mock window add event listener to check if it is called
+            const addEventListener = jest.fn().mockImplementation(() => () => {})
+            window.addEventListener = addEventListener
+
+            sessionRecording.startIfEnabledOrStop()
+            expect(sessionRecording['_onBeforeUnload']).not.toBeNull()
+            // we register 4 event listeners
+            expect(window.addEventListener).toHaveBeenCalledTimes(4)
+
+            // window.addEventListener('blah', someFixedListenerInstance) is safe to call multiple times,
+            // so we don't need to test if the addEvenListener registrations are called multiple times
         })
 
         it('emits an options event', () => {
@@ -732,6 +777,7 @@ describe('SessionRecording', () => {
                     _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
+                    skip_client_rate_limiting: true,
                 }
             )
         })
@@ -767,6 +813,7 @@ describe('SessionRecording', () => {
                     _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
+                    skip_client_rate_limiting: true,
                 }
             )
         })
@@ -849,6 +896,7 @@ describe('SessionRecording', () => {
                     _url: 'https://test.com/s/',
                     _noTruncate: true,
                     _batchKey: 'recordings',
+                    skip_client_rate_limiting: true,
                 }
             )
 
@@ -1029,6 +1077,7 @@ describe('SessionRecording', () => {
                 // we always take a full snapshot when there hasn't been one
                 // and use _fullSnapshotTimer to track that
                 // we want to avoid that behavior here, so we set it to any value
+                // @ts-expect-error -- detected as Timeout because the test is picking up `NodeJS.Timeout` as the type not `number` as in the browser
                 sessionRecording['_fullSnapshotTimer'] = 1
 
                 sessionIdGeneratorMock.mockImplementation(() => 'old-session-id')
@@ -1359,7 +1408,7 @@ describe('SessionRecording', () => {
             })
         })
 
-        it('emits custom events even when idle', () => {
+        it('buffers custom events without capturing while idle', () => {
             // force idle state
             sessionRecording['isIdle'] = true
             // buffer is empty
@@ -1386,6 +1435,37 @@ describe('SessionRecording', () => {
                 size: 47,
                 windowId: 'windowId',
             })
+            emitInactiveEvent(startingTimestamp + 100, true)
+            expect(posthog.capture).not.toHaveBeenCalled()
+
+            expect(sessionRecording['flushBufferTimer']).toBeUndefined()
+        })
+
+        it('does not emit buffered custom events while idle even when over buffer max size', () => {
+            // force idle state
+            sessionRecording['isIdle'] = true
+            // buffer is empty
+            expect(sessionRecording['buffer']).toEqual({
+                ...EMPTY_BUFFER,
+                sessionId: sessionId,
+                windowId: 'windowId',
+            })
+
+            // ensure buffer isn't empty
+            sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
+
+            // fake having a large buffer
+            // in reality we would need a very long idle period emitting custom events to reach 1MB of buffer data
+            // particularly since we flush the buffer on entering idle
+            sessionRecording['buffer'].size = RECORDING_MAX_EVENT_SIZE - 1
+            sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
+
+            // we're still idle
+            expect(sessionRecording['isIdle']).toBe(true)
+            // return from idle
+
+            // we did not capture
+            expect(posthog.capture).not.toHaveBeenCalled()
         })
 
         it('drops full snapshots when idle - so we must make sure not to take them while idle!', () => {
@@ -1514,6 +1594,7 @@ describe('SessionRecording', () => {
                     _batchKey: 'recordings',
                     _noTruncate: true,
                     _url: 'https://test.com/s/',
+                    skip_client_rate_limiting: true,
                 }
             )
 
@@ -1607,6 +1688,7 @@ describe('SessionRecording', () => {
                     _batchKey: 'recordings',
                     _noTruncate: true,
                     _url: 'https://test.com/s/',
+                    skip_client_rate_limiting: true,
                 }
             )
 
@@ -1635,6 +1717,7 @@ describe('SessionRecording', () => {
                     _batchKey: 'recordings',
                     _noTruncate: true,
                     _url: 'https://test.com/s/',
+                    skip_client_rate_limiting: true,
                 }
             )
             expect(sessionRecording['buffer']).toEqual({
@@ -1693,6 +1776,24 @@ describe('SessionRecording', () => {
             onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'control' })
             expect(sessionRecording['_linkedFlagSeen']).toEqual(false)
             expect(sessionRecording['status']).toEqual('buffering')
+        })
+
+        it('can be overriden', () => {
+            expect(sessionRecording['_linkedFlag']).toEqual(null)
+            expect(sessionRecording['_linkedFlagSeen']).toEqual(false)
+
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
+            )
+
+            expect(sessionRecording['_linkedFlag']).toEqual('the-flag-key')
+            expect(sessionRecording['_linkedFlagSeen']).toEqual(false)
+            expect(sessionRecording['status']).toEqual('buffering')
+
+            sessionRecording.overrideLinkedFlag()
+
+            expect(sessionRecording['_linkedFlagSeen']).toEqual(true)
+            expect(sessionRecording['status']).toEqual('active')
         })
     })
 

@@ -2,6 +2,7 @@
 
 import { PostHog } from '../../src/posthog-core'
 import { PostHogConfig } from '../../src/types'
+import '@cypress/skip-test'
 
 declare global {
     // eslint-disable-next-line @typescript-eslint/no-namespace
