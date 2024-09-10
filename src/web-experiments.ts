@@ -12,6 +12,7 @@ import { WEB_EXPERIMENTS } from './constants'
 import { isNullish } from './utils/type-utils'
 import { isUrlMatchingRegex } from './utils/request-utils'
 import { logger } from './utils/logger'
+import { Info } from './utils/event-utils'
 
 export const webExperimentUrlValidationMap: Record<
     WebExperimentUrlMatchType,
@@ -53,7 +54,11 @@ export class WebExperiments {
                 const selectedVariant = this.instance.getFeatureFlag(flag) as unknown as string
                 const webExperiment = this._flagToExperiments?.get(flag)
                 if (selectedVariant && webExperiment?.variants[selectedVariant]) {
-                    WebExperiments.applyTransforms(webExperiment.variants[selectedVariant].transforms)
+                    WebExperiments.applyTransforms(
+                        webExperiment.name,
+                        selectedVariant,
+                        webExperiment.variants[selectedVariant].transforms
+                    )
                 }
             }
         })
@@ -75,11 +80,8 @@ export class WebExperiments {
 
     public getWebExperimentsAndEvaluateDisplayLogic = (forceReload: boolean = false): void => {
         this.getWebExperiments((webExperiments) => {
-            // if (isNullish(this._flagToExperiments)) {
             WebExperiments.logInfo(`retrieved web experiments from the server`)
             this._flagToExperiments = new Map<string, WebExperiment>()
-            // }
-
             webExperiments.forEach((webExperiment) => {
                 if (
                     webExperiment.feature_flag_key &&
@@ -98,14 +100,18 @@ export class WebExperiments {
 
                     const selectedVariant = this._featureFlags[webExperiment.feature_flag_key] as unknown as string
                     if (selectedVariant && webExperiment.variants[selectedVariant]) {
-                        WebExperiments.applyTransforms(webExperiment.variants[selectedVariant].transforms)
+                        WebExperiments.applyTransforms(
+                            webExperiment.name,
+                            selectedVariant,
+                            webExperiment.variants[selectedVariant].transforms
+                        )
                     }
                 } else if (webExperiment.variants) {
                     for (const variant in webExperiment.variants) {
                         const testVariant = webExperiment.variants[variant]
                         const matchTest = WebExperiments.matchesTestVariant(testVariant)
                         if (matchTest) {
-                            WebExperiments.applyTransforms(testVariant.transforms)
+                            WebExperiments.applyTransforms(webExperiment.name, variant, testVariant.transforms)
                         }
                     }
                 }
@@ -126,7 +132,7 @@ export class WebExperiments {
         this.instance._send_request({
             url: this.instance.requestRouter.endpointFor(
                 'api',
-                `/api/experiments/?token=${this.instance.config.token}`
+                `/api/web_experiments/?token=${this.instance.config.token}`
             ),
             method: 'GET',
             transport: 'XHR',
@@ -174,29 +180,24 @@ export class WebExperiments {
         if (isNullish(testVariant.conditions) || isNullish(testVariant.conditions?.utm)) {
             return true
         }
-        const location = this.getWindowLocation()
-        if (location) {
+        const campaignParams = Info.campaignParams()
+        if (campaignParams['utm_source']) {
             // eslint-disable-next-line compat/compat
-            const urlParams = new URLSearchParams(location.search)
-            let utmCampaignMatched = true
-            let utmSourceMatched = true
-            let utmMediumMatched = true
-            let utmTermMatched = true
-            if (testVariant.conditions?.utm?.utm_campaign) {
-                utmCampaignMatched = testVariant.conditions?.utm?.utm_campaign == urlParams.get('utm_campaign')
-            }
+            const utmCampaignMatched = testVariant.conditions?.utm?.utm_campaign
+                ? testVariant.conditions?.utm?.utm_campaign == campaignParams['utm_campaign']
+                : true
 
-            if (testVariant.conditions?.utm?.utm_source) {
-                utmSourceMatched = testVariant.conditions?.utm?.utm_source == urlParams.get('utm_source')
-            }
+            const utmSourceMatched = testVariant.conditions?.utm?.utm_source
+                ? testVariant.conditions?.utm?.utm_source == campaignParams['utm_source']
+                : true
 
-            if (testVariant.conditions?.utm?.utm_campaign) {
-                utmMediumMatched = testVariant.conditions?.utm?.utm_medium == urlParams.get('utm_medium')
-            }
+            const utmMediumMatched = testVariant.conditions?.utm?.utm_medium
+                ? testVariant.conditions?.utm?.utm_medium == campaignParams['utm_medium']
+                : true
 
-            if (testVariant.conditions?.utm?.utm_term) {
-                utmTermMatched = testVariant.conditions?.utm?.utm_term == urlParams.get('utm_term')
-            }
+            const utmTermMatched = testVariant.conditions?.utm?.utm_term
+                ? testVariant.conditions?.utm?.utm_term == campaignParams['utm_term']
+                : true
 
             return utmCampaignMatched && utmMediumMatched && utmTermMatched && utmSourceMatched
         }
@@ -204,27 +205,21 @@ export class WebExperiments {
         return false
     }
 
-    private static logInfo(...args: any[]) {
-        logger.info(`WEB EXPERIMENTS`, args)
+    private static logInfo(msg: string, ...args: any[]) {
+        logger.info(`WEB-EXPERIMENTS : ${msg}`, args)
     }
 
-    private static applyTransforms(transforms: WebExperimentTransform[]) {
+    private static applyTransforms(experiment: string, variant: string, transforms: WebExperimentTransform[]) {
         transforms.forEach((transform) => {
-            WebExperiments.logInfo(`applying transform `, transform)
             if (transform.selector) {
+                WebExperiments.logInfo(
+                    `applying transform of variant ${variant} for experiment ${experiment} `,
+                    transform
+                )
                 // eslint-disable-next-line no-restricted-globals
                 const elements = document?.querySelectorAll(transform.selector)
                 elements?.forEach((element) => {
                     const htmlElement = element as HTMLElement
-                    WebExperiments.logInfo(
-                        `applying transform of text [`,
-                        transform.text,
-                        `]to element `,
-                        element,
-                        ` element.nodeType is `,
-                        element.nodeType
-                    )
-
                     if (transform.attributes) {
                         transform.attributes.forEach((attribute) => {
                             switch (attribute.name) {
@@ -260,17 +255,6 @@ export class WebExperiments {
                 })
             }
         })
-    }
-
-    private static safeParseJson(payload: string): any | undefined {
-        try {
-            const parsed = JSON.parse(payload)
-            return parsed
-        } catch (e) {
-            return undefined
-        }
-
-        return undefined
     }
 
     //

@@ -25,6 +25,7 @@ export interface WebExperimentVariant {
             utm_term?: string
         }
     } | null
+    variant_name: string
     transforms: WebExperimentTransform[]
 }
 export interface WebExperiment {
