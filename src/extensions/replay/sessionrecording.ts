@@ -309,6 +309,12 @@ export class SessionRecording {
                 })
             }
 
+            this.sessionManager.onSessionId((sessionId, windowId, changeReason) => {
+                if (changeReason) {
+                    this._tryAddCustomEvent('session_id_change', { sessionId, windowId, changeReason })
+                }
+            })
+
             logger.info(LOGGER_PREFIX + ' started')
         } else {
             this.stopRecording()
@@ -542,6 +548,13 @@ export class SessionRecording {
                 this.isIdle = true
                 // don't take full snapshots while idle
                 clearInterval(this._fullSnapshotTimer)
+                this._tryAddCustomEvent('sessionIdle', {
+                    eventTimestamp: event.timestamp,
+                    lastActivityTimestamp: this._lastActivityTimestamp,
+                    threshold: RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
+                    bufferLength: this.buffer.data.length,
+                    bufferSize: this.buffer.size,
+                })
                 // proactively flush the buffer in case the session is idle for a long time
                 this._flushBuffer()
             }

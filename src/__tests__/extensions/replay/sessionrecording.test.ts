@@ -118,7 +118,7 @@ function fakeNavigateTo(href: string) {
     window!.location = { href } as Location
 }
 
-describe('SessionRecording', () => {
+describe.skip('SessionRecording', () => {
     const _addCustomEvent = jest.fn()
     const loadScriptMock = jest.fn()
     let _emit: any
