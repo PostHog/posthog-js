@@ -397,10 +397,18 @@ describe('Session recording', () => {
                     // a meta and then a full snapshot
                     expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
                     expect(captures[1]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
-                    expect(captures[1]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
-                    expect(captures[1]['properties']['$snapshot_data'][3].type).to.equal(5) // custom event with posthog config
+
+                    expect(captures[1]['properties']['$snapshot_data'][2].type).to.equal(5)
+                    expect(captures[1]['properties']['$snapshot_data'][2].data.tag).to.equal('$pageview')
+
+                    expect(captures[1]['properties']['$snapshot_data'][3].type).to.equal(5) // custom event with options
+                    expect(captures[1]['properties']['$snapshot_data'][3].data.tag).to.equal('$session_options')
+
+                    expect(captures[1]['properties']['$snapshot_data'][4].type).to.equal(5) // custom event with posthog config
+                    expect(captures[1]['properties']['$snapshot_data'][4].data.tag).to.equal('$posthog_config') // custom event with posthog config
+
                     const xPositions = []
-                    for (let i = 4; i < captures[1]['properties']['$snapshot_data'].length; i++) {
+                    for (let i = 5; i < captures[1]['properties']['$snapshot_data'].length; i++) {
                         expect(captures[1]['properties']['$snapshot_data'][i].type).to.equal(3)
                         expect(captures[1]['properties']['$snapshot_data'][i].data.source).to.equal(
                             6,
