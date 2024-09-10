@@ -25,6 +25,7 @@ const handleRequest = (group: string) => (req: RestRequest, res: ResponseComposi
             } else if (gzipCompressed) {
                 const data = new Uint8Array(req._body)
                 const decoded = strFromU8(decompressSync(data))
+                console.log(decoded)
                 body = JSON.parse(decoded)
             } else {
                 body = JSON.parse(decodeURIComponent(body.split('=')[1]))

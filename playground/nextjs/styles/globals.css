@@ -47,36 +47,3 @@ button, .Button {
     }
 }
 
-div.game {
-  display: grid;
-  width: 50vw;
-  height: 50vh;
-  grid-template-columns: repeat(5, 1fr);
-  grid-template-rows: repeat(5, 1fr);
-  width: 120px;
-  height: 120px
-}
-
-.game-cell {
-  width: 130px;
-  height: 130px;
-  border: 1px solid ;
-  box-sizing: border-box;
-}
-
-.game-cell-dark {
-  width: 130px;
-  height: 130px;
-  border: 1px solid ;
-    background-color: #000000;
-  box-sizing: border-box;
-}
-
-.left-half {
-  width: 50vw;
-  height: 100vh;
-  /*border: 1px solid red;*/
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}

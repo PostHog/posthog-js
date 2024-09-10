@@ -1215,11 +1215,6 @@ export class PostHog {
         this.surveys.getActiveMatchingSurveys(callback, forceReload)
     }
 
-    /** Get web experiments that should be enabled for the current user. */
-    // getActiveMatchingWebExperiments(callback: WebExperimentsCallback, forceReload = false): void {
-    //     this.experiments.getWebExperimentsAndEvaluateDisplayLogic(callback, forceReload)
-    // }
-
     /** Render a survey on a specific element. */
     renderSurvey(surveyId: string, selector: string): void {
         this.surveys.renderSurvey(surveyId, selector)
