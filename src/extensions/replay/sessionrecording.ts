@@ -9,9 +9,7 @@ import {
 } from '../../constants'
 import {
     estimateSize,
-    FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-    META_EVENT_TYPE,
     recordOptions,
     rrwebRecord,
     splitBuffer,
@@ -579,12 +577,11 @@ export class SessionRecording {
         this.windowId = windowId
         this.sessionId = sessionId
 
-        if (
-            returningFromIdle ||
-            ([FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1 &&
-                (windowIdChanged || sessionIdChanged || isUndefined(this._fullSnapshotTimer)))
-        ) {
-            this._tryTakeFullSnapshot()
+        if (sessionIdChanged || windowIdChanged) {
+            this.stopRecording()
+            this.startIfEnabledOrStop()
+        } else if (returningFromIdle) {
+            this._scheduleFullSnapshot()
         }
     }
 
