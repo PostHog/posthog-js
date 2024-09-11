@@ -1,3 +1,4 @@
+import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
 import { ErrorEventArgs, ErrorProperties, Properties } from '../types'
 
@@ -14,7 +15,21 @@ import { ErrorEventArgs, ErrorProperties, Properties } from '../types'
 // eslint-disable-next-line no-restricted-globals
 const win: (Window & typeof globalThis) | undefined = typeof window !== 'undefined' ? window : undefined
 
-interface PosthogExtensions {
+export type PostHogExtensionKind = 'toolbar' | 'exception-autocapture' | 'web-vitals' | 'replay' | 'tracing-headers' | "surveys"
+
+interface PostHogExtensions {
+    loadExternalDependency?: (
+        posthog: PostHog,
+        kind: PostHogExtensionKind,
+        callback: (error?: string | Event, event?: Event) => void
+    ) => void
+
+    loadSiteApp?: (
+        posthog: PostHog,
+        appUrl: string,
+        callback: (error?: string | Event, event?: Event) => void
+    ) => void
+
     parseErrorAsProperties?: ([event, source, lineno, colno, error]: ErrorEventArgs) => ErrorProperties
     errorWrappingFunctions?: {
         wrapOnError: (captureFn: (props: Properties) => void) => () => void
@@ -52,7 +67,7 @@ export const userAgent = navigator?.userAgent
 export const assignableWindow: Window &
     typeof globalThis &
     Record<string, any> & {
-        __PosthogExtensions__?: PosthogExtensions
+        __PosthogExtensions__?: PostHogExtensions
     } = win ?? ({} as any)
 
 export { win as window }

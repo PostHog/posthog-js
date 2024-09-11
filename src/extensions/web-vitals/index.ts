@@ -91,8 +91,7 @@ export class WebVitalsAutocapture {
             // already loaded
             cb()
         }
-
-        this.instance.requestRouter.loadScript(`/static/web-vitals.js?v=${Config.LIB_VERSION}`, (err) => {
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, "web-vitals", (err) => {
             if (err) {
                 logger.error(LOGGER_PREFIX + ' failed to load script', err)
                 return

@@ -47,7 +47,7 @@ export class ExceptionObserver {
             cb()
         }
 
-        this.instance.requestRouter.loadScript(`/static/exception-autocapture.js?v=${Config.LIB_VERSION}`, (err) => {
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, "exception-autocapture", (err) => {
             if (err) {
                 return logger.error(LOGGER_PREFIX + ' failed to load script', err)
             }

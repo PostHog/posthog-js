@@ -1,4 +1,9 @@
-import "./external-scripts-loader"
+import './recorder'
+import './surveys'
+import './exception-autocapture'
+import './tracing-headers'
+import './web-vitals'
+
 import { init_as_module } from '../posthog-core'
 export { PostHog } from '../posthog-core'
 export * from '../types'
