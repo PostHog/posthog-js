@@ -1,2 +1,2 @@
 import './external-scripts-loader'
-import "./module.no-external.es"
+export * from './module.no-external.es'

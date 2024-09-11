@@ -1,2 +1,2 @@
 import "./all-external-dependencies"
-import "./module.no-external.es"
+export * from "./module.no-external.es"
