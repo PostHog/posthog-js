@@ -485,7 +485,7 @@ export class SessionRecording {
         // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
         // imported), don't load script. Otherwise, remotely import recorder.js from cdn since it hasn't been loaded.
         if (!this.rrwebRecord) {
-            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'replay', (err) => {
+            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'recorder', (err) => {
                 if (err) {
                     return logger.error(LOGGER_PREFIX + ` could not load recorder`, err)
                 }

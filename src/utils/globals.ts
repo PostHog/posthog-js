@@ -19,7 +19,7 @@ export type PostHogExtensionKind =
     | 'toolbar'
     | 'exception-autocapture'
     | 'web-vitals'
-    | 'replay'
+    | 'recorder'
     | 'tracing-headers'
     | 'surveys'
 
