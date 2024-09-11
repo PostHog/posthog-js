@@ -108,6 +108,7 @@ export class SessionRecording {
     private _removePageViewCaptureHook: (() => void) | undefined = undefined
     private _onSessionIdListener: (() => void) | undefined = undefined
     private _persistDecideOnSessionListener: (() => void) | undefined = undefined
+    private _samplingSessionListener: (() => void) | undefined = undefined
 
     // if pageview capture is disabled
     // then we can manually track href changes
@@ -423,8 +424,6 @@ export class SessionRecording {
         this.receivedDecide = true
         this.startIfEnabledOrStop()
     }
-
-    private _samplingSessionListener: (() => void) | undefined = undefined
 
     /**
      * This might be called more than once so needs to be idempotent
