@@ -311,7 +311,7 @@ export class SessionRecording {
 
             this.sessionManager.onSessionId((sessionId, windowId, changeReason) => {
                 if (changeReason) {
-                    this._tryAddCustomEvent('session_id_change', { sessionId, windowId, changeReason })
+                    this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
                 }
             })
 
