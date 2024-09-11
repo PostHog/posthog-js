@@ -1,4 +1,4 @@
 import "./all-external-dependencies"
-import posthog from './module.no-external.es'
-export * from './module.no-external.es'
+import posthog from './module.es'
+export * from './module.es'
 export default posthog

@@ -54,6 +54,8 @@ describe('external-scripts-loader', () => {
         })
 
         it('should add a timestamp to the toolbar loader', () => {
+            jest.useFakeTimers()
+            jest.setSystemTime(1726067100000)
             assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'toolbar', callback)
             const scripts = document!.getElementsByTagName('script')
             const new_script = scripts[0]
