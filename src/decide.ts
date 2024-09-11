@@ -67,7 +67,7 @@ export class Decide {
 
         if (response['siteApps']) {
             if (this.instance.config.opt_in_site_apps) {
-                for(const { id, url } of response['siteApps']) {
+                for (const { id, url } of response['siteApps']) {
                     assignableWindow[`__$$ph_site_app_${id}`] = this.instance
                     assignableWindow.__PosthogExtensions__?.loadSiteApp?.(this.instance, url, (err) => {
                         if (err) {

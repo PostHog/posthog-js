@@ -158,8 +158,7 @@ export class Toolbar {
             // only load the toolbar once, even if there are multiple instances of PostHogLib
             this.setToolbarState(ToolbarState.LOADING)
 
-            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, "toolbar", (err) => {
-
+            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'toolbar', (err) => {
                 if (err) {
                     logger.error('Failed to load toolbar', err)
                     this.setToolbarState(ToolbarState.UNINITIALIZED)

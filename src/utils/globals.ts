@@ -15,7 +15,13 @@ import { ErrorEventArgs, ErrorProperties, Properties } from '../types'
 // eslint-disable-next-line no-restricted-globals
 const win: (Window & typeof globalThis) | undefined = typeof window !== 'undefined' ? window : undefined
 
-export type PostHogExtensionKind = 'toolbar' | 'exception-autocapture' | 'web-vitals' | 'replay' | 'tracing-headers' | "surveys"
+export type PostHogExtensionKind =
+    | 'toolbar'
+    | 'exception-autocapture'
+    | 'web-vitals'
+    | 'replay'
+    | 'tracing-headers'
+    | 'surveys'
 
 interface PostHogExtensions {
     loadExternalDependency?: (
@@ -24,11 +30,7 @@ interface PostHogExtensions {
         callback: (error?: string | Event, event?: Event) => void
     ) => void
 
-    loadSiteApp?: (
-        posthog: PostHog,
-        appUrl: string,
-        callback: (error?: string | Event, event?: Event) => void
-    ) => void
+    loadSiteApp?: (posthog: PostHog, appUrl: string, callback: (error?: string | Event, event?: Event) => void) => void
 
     parseErrorAsProperties?: ([event, source, lineno, colno, error]: ErrorEventArgs) => ErrorProperties
     errorWrappingFunctions?: {

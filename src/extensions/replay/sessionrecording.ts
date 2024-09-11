@@ -20,7 +20,6 @@ import {
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, FlagVariant, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
 import { EventType, type eventWithTime, IncrementalSource, type listenerHandler, RecordPlugin } from '@rrweb/types'
-import Config from '../../config'
 import { timestamp } from '../../utils'
 
 import {
@@ -486,7 +485,7 @@ export class SessionRecording {
         // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
         // imported), don't load script. Otherwise, remotely import recorder.js from cdn since it hasn't been loaded.
         if (!this.rrwebRecord) {
-            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, "replay", (err) => {
+            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'replay', (err) => {
                 if (err) {
                     return logger.error(LOGGER_PREFIX + ` could not load recorder.js`, err)
                 }

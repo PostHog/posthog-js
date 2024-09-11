@@ -75,7 +75,7 @@ export class PostHogSurveys {
                 this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
             }
 
-            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, "surveys", (err) => {
+            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'surveys', (err) => {
                 if (err) {
                     return logger.error(LOGGER_PREFIX, 'Could not load surveys script', err)
                 }
