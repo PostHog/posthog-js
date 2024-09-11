@@ -48,7 +48,6 @@ function expectSessionOptionsCustomEvent(snapshot: RRWebCustomEvent) {
     expect(snapshot.data.tag).to.equal('$session_options')
 }
 
-// there are a set of custom events captured when a recording starts
 function sortByTag(snapshots: RRWebCustomEvent[]) {
     return snapshots.sort((a, b) => a.data.tag?.localeCompare(b.data.tag))
 }
