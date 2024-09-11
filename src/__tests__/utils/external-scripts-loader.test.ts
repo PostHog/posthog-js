@@ -1,7 +1,7 @@
-import { RequestRouter, RequestRouterTarget } from '../../utils/request-router'
-import '../../entrypoints/external-scripts-loader'
+import { RequestRouter } from '../../utils/request-router'
 import { assignableWindow } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
+import '../../entrypoints/external-scripts-loader'
 
 describe('external-scripts-loader', () => {
     describe('loadScript', () => {
