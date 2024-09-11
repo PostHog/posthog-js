@@ -487,7 +487,7 @@ export class SessionRecording {
         if (!this.rrwebRecord) {
             assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'replay', (err) => {
                 if (err) {
-                    return logger.error(LOGGER_PREFIX + ` could not load recorder.js`, err)
+                    return logger.error(LOGGER_PREFIX + ` could not load recorder`, err)
                 }
 
                 this._onScriptLoaded()
