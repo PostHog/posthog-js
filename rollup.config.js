@@ -1,9 +1,8 @@
 import babel from '@rollup/plugin-babel'
-import json from '@rollup/plugin-json'
+import json from '@rollup/plugin-json'  
 import resolve from '@rollup/plugin-node-resolve'
 import typescript from '@rollup/plugin-typescript'
-import { dts } from 'rollup-plugin-dts'
-import pkg from './package.json'
+import dts from 'rollup-plugin-ts'
 import terser from '@rollup/plugin-terser'
 import { visualizer } from 'rollup-plugin-visualizer'
 import fs from 'fs'
@@ -22,7 +21,9 @@ const plugins = [
 
 /** @type {import('rollup').RollupOptions[]} */
 
-const entrypoints = fs.readdirSync('./src/entrypoints').map((file) => {
+const entrypoints = fs.readdirSync('./src/entrypoints')
+
+const entrypointTargets = entrypoints.map((file) => {
     const fileParts = file.split('.')
     // pop the extension
     fileParts.pop()
@@ -62,15 +63,21 @@ const entrypoints = fs.readdirSync('./src/entrypoints').map((file) => {
     }
 })
 
-export default [
-    ...entrypoints,
-    {
-        input: './lib/src/entrypoints/module.es.d.ts',
-        output: [{ file: pkg.types, format: 'es' }],
-        plugins: [
-            dts({
-                respectExternal: true,
-            }),
-        ],
-    },
-]
+const typeTargets = entrypoints
+    .filter((file) => file.endsWith('.es.ts'))
+    .map((file) => {
+        const source = `./lib/src/entrypoints/${file.replace('.ts', '.d.ts')}`
+        const dest = `./dist/${file.replace('.es.ts', '.d.ts')}`
+
+        return {
+            input: source,
+            output: [{ file: dest, format: 'es' }],
+            plugins: [
+                dts({
+                    exclude: [],
+                }),
+            ],
+        }
+    })
+
+export default [...entrypointTargets, ...typeTargets]
