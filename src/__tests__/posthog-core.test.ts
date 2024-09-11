@@ -1,4 +1,5 @@
 import { defaultPostHog } from './helpers/posthog-instance'
+import { defaultPostHog } from './helpers/posthog-instance'
 import type { PostHogConfig } from '../types'
 import { uuidv7 } from '../uuidv7'
 
