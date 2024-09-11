@@ -10,10 +10,10 @@ describe('Array entrypoint', () => {
     const arrayFullNoExternalJs = fs.readFileSync(path.join(__dirname, '../../../dist/array.full.no-external.js'), 'utf-8')
 
     it('should not contain any script loaders', () => {
-        expect(arrayJs).toContain('loadExternalDependency')
-        expect(arrayFullJs).toContain('loadExternalDependency')
-        expect(arrayNoExternalJs).not.toContain('loadExternalDependency')
-        expect(arrayFullNoExternalJs).not.toContain('loadExternalDependency')
+        expect(arrayJs).toContain('loadExternalDependency=')
+        expect(arrayFullJs).toContain('loadExternalDependency=')
+        expect(arrayNoExternalJs).not.toContain('loadExternalDependency=')
+        expect(arrayFullNoExternalJs).not.toContain('loadExternalDependency=')
     })
 })
 
@@ -27,9 +27,10 @@ describe('Module entrypoint', () => {
     )
 
     it('should not contain any script loaders', () => {
-        expect(moduleJs).toContain('loadExternalDependency')
-        expect(moduleFullJs).toContain('loadExternalDependency')
-        expect(moduleNoExternalJs).not.toContain('loadExternalDependency')
-        expect(moduleFullNoExternalJs).not.toContain('loadExternalDependency')
+        // For the module loader, the code isn't minified 
+        expect(moduleJs).toContain('loadExternalDependency=')
+        expect(moduleFullJs).toContain('loadExternalDependency=')
+        expect(moduleNoExternalJs).not.toContain('loadExternalDependency=')
+        expect(moduleFullNoExternalJs).not.toContain('loadExternalDependency=')
     })
 })
