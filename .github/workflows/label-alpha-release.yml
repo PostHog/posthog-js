@@ -21,7 +21,8 @@ jobs:
     warn-when-failed:
         name: Warn when the user does not have the required permissions
         runs-on: ubuntu-latest
-        if: steps.check.outputs.check-result == false
+        if: |
+          steps.check.outputs.check-result == false
         steps:
           - run: echo "The user does not have the required permissions to trigger this action."
           - run: echo "user-permission = ${{ steps.check-permissions.outputs.user-permission }}"
