@@ -7,21 +7,26 @@ on:
 
 jobs:
     check-permissions:
+      name: "Check user has permission to release"
       runs-on: ubuntu-latest
       steps:
         - uses: actions-cool/check-user-permission@v2
-          id: check
+          id: check-permissions
           with:
             require: 'write'
 
-        - run: echo "user-permission = ${{ steps.check.outputs.user-permission }}"
-        - run: echo "require-result = ${{ steps.check.outputs.require-result }}"
-        - run: echo "check-result = ${{ steps.check.outputs.check-result }}"
+        - run: echo "user-permission = ${{ steps.check-permissions.outputs.user-permission }}"
+        - run: echo "require-result = ${{ steps.check-permissions.outputs.require-result }}"
+        - run: echo "check-result = ${{ steps.check-permissions.outputs.check-result }}"
     warn-when-failed:
+        name: Warn when the user does not have the required permissions
         runs-on: ubuntu-latest
         if: steps.check.outputs.check-result == false
         steps:
-            - run: echo "The user does not have the required permissions to trigger this action."
+          - run: echo "The user does not have the required permissions to trigger this action."
+          - run: echo "user-permission = ${{ steps.check-permissions.outputs.user-permission }}"
+          - run: echo "require-result = ${{ steps.check-permissions.outputs.require-result }}"
+          - run: echo "check-result = ${{ steps.check-permissions.outputs.check-result }}"
     label-alpha-release:
         name: Release alpha version based on PR label
         runs-on: ubuntu-20.04
