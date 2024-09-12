@@ -15,8 +15,11 @@ jobs:
       steps:
         - name: output debug info
           run: |
-            echo ${{ github.event.check_suite.conclusion }}
-            echo ${{ github.event.pull_request.labels.*.name }}
+            echo "Check Suite JSON:"
+            echo '${{ toJson(github.event.check_suite) }}' | jq .
+            
+            echo "Pull Request Labels JSON:"
+            echo '${{ toJson(github.event.pull_request.labels) }}' | jq .
     label-alpha-bump:
         name: Release alpha version based on PR label
         runs-on: ubuntu-20.04
