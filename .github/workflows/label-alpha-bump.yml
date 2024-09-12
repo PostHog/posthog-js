@@ -9,6 +9,14 @@ on:
       completed # or when a check suite completes
 
 jobs:
+    debug:
+      name: debug
+      runs-on: ubuntu-20.04
+      steps:
+        - name: output debug info
+          run: |
+            echo ${{ github.event.check_suite.conclusion }}
+            echo ${{ github.event.pull_request.labels.*.name }}
     label-alpha-bump:
         name: Release alpha version based on PR label
         runs-on: ubuntu-20.04
