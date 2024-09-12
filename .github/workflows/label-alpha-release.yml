@@ -18,7 +18,9 @@ jobs:
         id: check-permissions
         with:
           require: 'write'
-
+      - run: echo "user-permission = ${{ steps.check-permissions.outputs.user-permission }}"
+      - run: echo "require-result = ${{ steps.check-permissions.outputs.require-result }}"
+      - run: echo "check-result = ${{ steps.check-permissions.outputs.check-result }}"
   warn-when-failed:
     name: Warn when the user does not have the required permissions
     runs-on: ubuntu-latest
