@@ -4,7 +4,6 @@ on:
   pull_request:
     types:
       - labeled  # Triggers when any label is added to the PR
-  on: workflow_dispatch # Triggers when the workflow is manually triggered
 
 jobs:
     debug:
@@ -22,8 +21,7 @@ jobs:
         name: Release alpha version based on PR label
         runs-on: ubuntu-20.04
         if: |
-            github.event.check_suite.conclusion == 'success'
-            && contains(github.event.pull_request.labels.*.name, 'bump alpha')
+            contains(github.event.pull_request.labels.*.name, 'bump alpha')
         steps:
             - name: Check out repository
               uses: actions/checkout@v4
