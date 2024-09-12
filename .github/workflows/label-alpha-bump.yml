@@ -16,7 +16,7 @@ jobs:
         - name: output debug info
           run: |
             echo "Check Suite JSON:"
-            echo '${{ toJson(github.event.check_suite) }}' | jq .
+            echo '${{ toJson(github.event) }}' | jq .
             
             echo "Pull Request Labels JSON:"
             echo '${{ toJson(github.event.pull_request.labels) }}' | jq .
