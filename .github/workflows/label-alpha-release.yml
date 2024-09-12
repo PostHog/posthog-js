@@ -22,7 +22,7 @@ jobs:
         name: Warn when the user does not have the required permissions
         runs-on: ubuntu-latest
         if: |
-          steps.check.outputs.check-result == false
+          steps.check-permissions.outputs.check-result == false
         steps:
           - run: echo "The user does not have the required permissions to trigger this action."
           - run: echo "user-permission = ${{ steps.check-permissions.outputs.user-permission }}"
@@ -32,7 +32,7 @@ jobs:
         name: Release alpha version based on PR label
         runs-on: ubuntu-20.04
         if: |
-            steps.check.outputs.check-result && 
+            steps.check-permissions.outputs.check-result && 
             contains(github.event.pull_request.labels.*.name, 'release alpha')
         steps:
             - name: Check out repository
