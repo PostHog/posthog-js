@@ -1,4 +1,4 @@
-name: Autobump
+name: Autorelease alpha version
 
 on:
   pull_request:
@@ -6,22 +6,11 @@ on:
       - labeled  # Triggers when any label is added to the PR
 
 jobs:
-    debug:
-      name: debug
-      runs-on: ubuntu-20.04
-      steps:
-        - name: output debug info
-          run: |
-            echo "Check Suite JSON:"
-            echo '${{ toJson(github.event) }}' | jq .
-            
-            echo "Pull Request Labels JSON:"
-            echo '${{ toJson(github.event.pull_request.labels) }}' | jq .
-    label-alpha-bump:
+    label-alpha-release:
         name: Release alpha version based on PR label
         runs-on: ubuntu-20.04
         if: |
-            contains(github.event.pull_request.labels.*.name, 'bump alpha')
+            contains(github.event.pull_request.labels.*.name, 'release alpha')
         steps:
             - name: Check out repository
               uses: actions/checkout@v4
@@ -56,7 +45,7 @@ jobs:
                   rm package.old.json
 
             - name: Publish the alpha in the npm registry
-              run: npm publish --access public --dry-run
+              run: npm publish --access public
               env:
                   NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
