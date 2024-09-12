@@ -1,0 +1,47 @@
+name: Autobump
+
+on:
+  check_suite:
+    types:
+      completed
+
+jobs:
+    label-alpha-bump:
+        name: Bump version based on PR label
+        runs-on: ubuntu-20.04
+        if: |
+            github.event.check_suite.conclusion == 'success'
+            && contains(github.event.pull_request.labels.*.name, 'bump alpha')
+        steps:
+            - name: Check out repository
+              uses: actions/checkout@v4
+              with:
+                  ref: ${{ github.event.pull_request.base.ref }}
+                  token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+                  fetch-depth: 0
+
+            - uses: pnpm/action-setup@v4
+              with:
+                version: 8.x.x
+
+            - name: Determine new version
+              id: versions
+              if: steps.bump-type.outputs.bump-type != 'null'
+              run: |
+                  OLD_VERSION=$(jq ".version" package.json -r)
+                  NEW_VERSION=$(npx semver $OLD_VERSION -i pre-release --preid alpha)
+                  echo "old-version=$OLD_VERSION" >> "$GITHUB_OUTPUT"
+                  echo "new-version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+            - name: Update version in package.json
+              if: steps.bump-type.outputs.bump-type != 'null'
+              run: |
+                  mv package.json package.old.json
+                  jq --indent 4 '.version = "${{ steps.versions.outputs.new-version }}"' package.old.json > package.json
+                  rm package.old.json
+
+            - name: Publish the alpha in the npm registry
+              run: npm publish --access public --dry-run
+              env:
+                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
