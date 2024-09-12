@@ -6,10 +6,27 @@ on:
       - labeled  # Triggers when any label is added to the PR
 
 jobs:
+    check-permissions:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions-cool/check-user-permission@v2
+          id: check
+          with:
+            require: 'write'
+
+        - run: echo "user-permission = ${{ steps.check.outputs.user-permission }}"
+        - run: echo "require-result = ${{ steps.check.outputs.require-result }}"
+        - run: echo "check-result = ${{ steps.check.outputs.check-result }}"
+    warn-when-failed:
+        runs-on: ubuntu-latest
+        if: steps.check.outputs.check-result == false
+        steps:
+            - run: echo "The user does not have the required permissions to trigger this action."
     label-alpha-release:
         name: Release alpha version based on PR label
         runs-on: ubuntu-20.04
         if: |
+            steps.check.outputs.check-result && 
             contains(github.event.pull_request.labels.*.name, 'release alpha')
         steps:
             - name: Check out repository
@@ -45,7 +62,7 @@ jobs:
                   rm package.old.json
 
             - name: Publish the alpha in the npm registry
-              run: npm publish --access public
+              run: npm publish --access public --dry-run
               env:
                   NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
