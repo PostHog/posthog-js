@@ -44,7 +44,7 @@ jobs:
               if: steps.bump-type.outputs.bump-type != 'null'
               run: |
                   OLD_VERSION=$(jq ".version" package.json -r)
-                  NEW_VERSION=$(npx semver $OLD_VERSION -i pre-release --preid alpha)
+                  NEW_VERSION=$(pnpx semver $OLD_VERSION -i pre-release --preid alpha)
                   echo "old-version=$OLD_VERSION" >> "$GITHUB_OUTPUT"
                   echo "new-version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
 
