@@ -1,13 +1,16 @@
 name: Autobump
 
 on:
+  pull_request:
+    types:
+      - labeled  # Triggers when any label is added to the PR
   check_suite:
     types:
-      completed
+      completed # or when a check suite completes
 
 jobs:
     label-alpha-bump:
-        name: Bump version based on PR label
+        name: Release alpha version based on PR label
         runs-on: ubuntu-20.04
         if: |
             github.event.check_suite.conclusion == 'success'
