@@ -4,9 +4,7 @@ on:
   pull_request:
     types:
       - labeled  # Triggers when any label is added to the PR
-  check_suite:
-    types:
-      completed # or when a check suite completes
+  on: workflow_dispatch # Triggers when the workflow is manually triggered
 
 jobs:
     debug:
