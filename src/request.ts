@@ -133,7 +133,9 @@ const _fetch = (options: RequestOptions) => {
     fetch!(url, {
         method: options?.method || 'GET',
         headers,
-        keepalive: options.method === 'POST',
+        // if body is greater than 64kb, then fetch with keepalive will error
+        // see 8:10:5 at https://fetch.spec.whatwg.org/#http-network-or-cache-fetch
+        keepalive: false,
         body,
         signal: aborter?.signal,
     })
