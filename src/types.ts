@@ -157,6 +157,7 @@ export interface PostHogConfig {
     /** @deprecated - use `disable_persistence` instead  */
     disable_cookie?: boolean
     disable_surveys: boolean
+    disable_web_experiments: boolean
     /** If set, posthog-js will never load external scripts such as those needed for Session Replay or Surveys. */
     disable_external_dependency_loading?: boolean
     enable_recording_console_log?: boolean
@@ -432,7 +433,8 @@ export interface ToolbarParams {
 
 export type SnippetArrayItem = [method: string, ...args: any[]]
 
-export type JsonType = string | number | boolean | null | { [key: string]: JsonType } | Array<JsonType>
+export type JsonRecord = { [key: string]: JsonType }
+export type JsonType = string | number | boolean | null | JsonRecord | Array<JsonType>
 
 /** A feature that isn't publicly available yet.*/
 export interface EarlyAccessFeature {
