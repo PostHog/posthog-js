@@ -106,6 +106,26 @@ const xhr = (options: RequestOptions) => {
     req.send(body)
 }
 
+function estimateBodySize(body: EncodedBody | undefined): number {
+    try {
+        if (!body) {
+            return 0
+        }
+        if (typeof body.body === 'string') {
+            return new Blob([body.body]).size
+        }
+        if (body.body instanceof Blob) {
+            return body.body.size
+        }
+        return body.body.byteLength
+    } catch (e) {
+        logger.error(e)
+        // if we can't estimate the size, let's assume it's large
+        // that's safer (for fetch keepalive) than assuming it's small
+        return 64 * 1025
+    }
+}
+
 const _fetch = (options: RequestOptions) => {
     const { contentType, body } = encodePostData(options) ?? {}
 
@@ -134,8 +154,13 @@ const _fetch = (options: RequestOptions) => {
         method: options?.method || 'GET',
         headers,
         // if body is greater than 64kb, then fetch with keepalive will error
-        // see 8:10:5 at https://fetch.spec.whatwg.org/#http-network-or-cache-fetch
-        keepalive: false,
+        // see 8:10:5 at https://fetch.spec.whatwg.org/#http-network-or-cache-fetch,
+        // but we do want to set keepalive sometimes as it can  help with success
+        // when e.g. a page is being closed
+        // so let's get the best of both worlds and only set keepalive for POST requests
+        // where the body is less than 64kb
+        // NB this is fetch keepalive and not http keepalive
+        keepalive: options.method === 'POST' && estimateBodySize(body) < 64 * 1024,
         body,
         signal: aborter?.signal,
     })
