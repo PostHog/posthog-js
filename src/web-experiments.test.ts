@@ -217,6 +217,30 @@ describe('Web Experimentation', () => {
     })
 
     describe('with feature flags', () => {
+        it('experiments are disabled by default', async () => {
+            const expResponse = {
+                experiments: [signupButtonWebExperimentWithFeatureFlag],
+            }
+            const disabledPostHog = makePostHog({
+                config: {
+                    api_host: 'https://test.com',
+                    token: 'testtoken',
+                    autocapture: true,
+                    region: 'us-east-1',
+                } as unknown as PostHogConfig,
+                persistence: persistence,
+                get_property: jest.fn(),
+                _send_request: jest
+                    .fn()
+                    .mockImplementation(({ callback }) => callback({ statusCode: 200, json: expResponse })),
+                consent: { isOptedOut: () => true } as unknown as ConsentManager,
+            })
+
+            posthog.requestRouter = new RequestRouter(disabledPostHog)
+            webExperiment = new WebExperiments(disabledPostHog)
+            assertElementChanged('control', 'innerText', 'unassigned')
+        })
+
         it('can set text of Span Element', async () => {
             experimentsResponse = {
                 experiments: [signupButtonWebExperimentWithFeatureFlag],

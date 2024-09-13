@@ -47,7 +47,7 @@ export class WebExperiments {
 
     applyFeatureFlagChanges(flags: string[]) {
         WebExperiments.logInfo('applying feature flags', flags)
-        if (isNullish(this._flagToExperiments)) {
+        if (isNullish(this._flagToExperiments) || this.instance.config.disable_web_experiments) {
             return
         }
 
