@@ -17,6 +17,7 @@ const CONTENT_TYPE_FORM = 'application/x-www-form-urlencoded'
 type EncodedBody = {
     contentType: string
     body: string | BlobPart
+    estimatedSize: number
 }
 
 export const extendURLParams = (url: string, params: Record<string, any>): string => {
@@ -45,24 +46,30 @@ const encodePostData = ({ data, compression }: RequestOptions): EncodedBody | un
 
     if (compression === Compression.GZipJS) {
         const gzipData = gzipSync(strToU8(JSON.stringify(data)), { mtime: 0 })
+        const blob = new Blob([gzipData], { type: CONTENT_TYPE_PLAIN })
         return {
             contentType: CONTENT_TYPE_PLAIN,
-            body: new Blob([gzipData], { type: CONTENT_TYPE_PLAIN }),
+            body: blob,
+            estimatedSize: blob.size,
         }
     }
 
     if (compression === Compression.Base64) {
         const b64data = _base64Encode(JSON.stringify(data))
+        const encodedBody = encodeToDataString(b64data)
 
         return {
             contentType: CONTENT_TYPE_FORM,
-            body: encodeToDataString(b64data),
+            body: encodedBody,
+            estimatedSize: new Blob([encodedBody]).size,
         }
     }
 
+    const jsonBody = JSON.stringify(data)
     return {
         contentType: CONTENT_TYPE_JSON,
-        body: JSON.stringify(data),
+        body: jsonBody,
+        estimatedSize: new Blob([jsonBody]).size,
     }
 }
 
@@ -106,28 +113,8 @@ const xhr = (options: RequestOptions) => {
     req.send(body)
 }
 
-function estimateBodySize(body: EncodedBody | undefined): number {
-    try {
-        if (!body) {
-            return 0
-        }
-        if (typeof body.body === 'string') {
-            return new Blob([body.body]).size
-        }
-        if (body.body instanceof Blob) {
-            return body.body.size
-        }
-        return body.body.byteLength
-    } catch (e) {
-        logger.error(e)
-        // if we can't estimate the size, let's assume it's large
-        // that's safer (for fetch keepalive) than assuming it's small
-        return 64 * 1025
-    }
-}
-
 const _fetch = (options: RequestOptions) => {
-    const { contentType, body } = encodePostData(options) ?? {}
+    const { contentType, body, estimatedSize } = encodePostData(options) ?? {}
 
     // eslint-disable-next-line compat/compat
     const headers = new Headers()
@@ -160,7 +147,7 @@ const _fetch = (options: RequestOptions) => {
         // so let's get the best of both worlds and only set keepalive for POST requests
         // where the body is less than 64kb
         // NB this is fetch keepalive and not http keepalive
-        keepalive: options.method === 'POST' && estimateBodySize(body) < 64 * 1024,
+        keepalive: options.method === 'POST' && (estimatedSize || 0) < 64 * 1024,
         body,
         signal: aborter?.signal,
     })
