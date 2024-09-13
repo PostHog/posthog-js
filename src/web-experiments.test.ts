@@ -217,7 +217,7 @@ describe('Web Experimentation', () => {
     })
 
     describe('with feature flags', () => {
-        it('can set text of Span Element', () => {
+        it('can set text of Span Element', async () => {
             experimentsResponse = {
                 experiments: [signupButtonWebExperimentWithFeatureFlag],
             }
@@ -225,7 +225,7 @@ describe('Web Experimentation', () => {
             assertElementChanged('control', 'innerText', 'Sign up')
         })
 
-        it('can set className of Span Element', () => {
+        it('can set className of Span Element', async () => {
             experimentsResponse = {
                 experiments: [signupButtonWebExperimentWithFeatureFlag],
             }
@@ -233,7 +233,7 @@ describe('Web Experimentation', () => {
             assertElementChanged('css-transform', 'className', 'primary')
         })
 
-        it('can set innerHtml of Span Element', () => {
+        it('can set innerHtml of Span Element', async () => {
             experimentsResponse = {
                 experiments: [signupButtonWebExperimentWithFeatureFlag],
             }
