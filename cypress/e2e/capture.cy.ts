@@ -13,13 +13,13 @@ describe('Event capture', () => {
 
         cy.get('[data-cy-custom-event-button]').click()
         cy.phCaptures().should('have.length', 3)
+        cy.phCaptures().should('include', '$pageview')
         cy.phCaptures().should('include', {
             event: '$pageview',
             properties: {
                 '$current_url': './playground/cypress-full'
             }
         })
-        cy.phCaptures().should('include', '$pageview')
         cy.phCaptures().should('include', '$autocapture')
         cy.phCaptures().should('include', 'custom-event')
 
