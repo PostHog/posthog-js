@@ -343,6 +343,58 @@ describe('posthog core', () => {
             const captureData = posthogWith(defaultConfig, defaultOverrides).page(testUrl, {}, {})
             expect(captureData.properties['$current_url']).toEqual(testUrl)
         })
+
+        it('should call capture internally', () => {
+            const testUrl = 'https://example.com'
+            const posthog = posthogWith({})
+            const captureMock = jest.spyOn(posthog, 'capture').mockImplementation
+            posthog.page(testUrl)
+            expect(captureMock).toHaveBeenCalled()
+        })
+
+        it('should pass the url to capture', () => {
+            const testUrl = 'https://example.com'
+            const posthog = posthogWith({})
+            const captureMock = jest.spyOn(posthog, 'capture').mockImplementation
+            posthog.page(testUrl)
+            expect(captureMock).toHaveBeenCalledWith('$pageview', expect.objectContaining({ '$current_url': testUrl }), undefined)
+        })
+
+        it('should call capture with empty properties and options', () => {
+            const testUrl = 'https://example.com'
+            const posthog = posthogWith({})
+            const captureMock = jest.spyOn(posthog, 'capture').mockImplementation
+            posthog.page(testUrl, {}, {})
+            expect(captureMock).toHaveBeenCalledWith('$pageview', expect.objectContaining({ '$current_url': testUrl }), {})
+        })
+
+        it('should pass properties to capture', () => {
+            const testUrl = 'https://example.com'
+            const posthog = posthogWith({})
+            const captureMock = jest.spyOn(posthog, 'capture').mockImplementation
+            const properties = { some: 'property' }
+            posthog.page(testUrl, properties)
+            expect(captureMock).toHaveBeenCalledWith('$pageview', expect.objectContaining(properties), undefined)
+        })
+
+        it('should pass options to capture', () => {
+            const testUrl = 'https://example.com'
+            const posthog = posthogWith({})
+            const captureMock = jest.spyOn(posthog, 'capture').mockImplementation
+            const options = { some: 'option' }
+            posthog.page(testUrl, {}, options)
+            expect(captureMock).toHaveBeenCalledWith('$pageview', expect.objectContaining({ '$current_url': testUrl }, expect.objectContaining(options))
+        })
+
+        it('should pass both, properties and options to capture', () => {
+            const testUrl = 'https://example.com'
+            const posthog = posthogWith({})
+            const captureMock = jest.spyOn(posthog, 'capture').mockImplementation
+            const properties = { some: 'property' }
+            const options = { some: 'option' }
+            posthog.page(testUrl, properties, options)
+            expect(captureMock).toHaveBeenCalledWith('$pageview', expect.objectContaining(properties), expect.objectContaining(options))
+        })
     })
 
     describe('_afterDecideResponse', () => {
