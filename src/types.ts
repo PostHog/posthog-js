@@ -93,10 +93,12 @@ export interface BootstrapConfig {
     sessionID?: string
 }
 
+export type SupportedWebVitalsMetrics = 'LCP' | 'CLS' | 'FCP' | 'INP'
+
 export interface PerformanceCaptureConfig {
     /** works with session replay to use the browser's native performance observer to capture performance metrics */
     network_timing?: boolean
-    /** works as a passenger event to use chrome's web vitals library to wrap fetch and capture web vitals */
+    /** use chrome's web vitals library to wrap fetch and capture web vitals */
     web_vitals?: boolean
     /**
      * We observe very large values reported by the Chrome web vitals library
@@ -105,6 +107,13 @@ export interface PerformanceCaptureConfig {
      * if not set this defaults to 15 minutes
      */
     __web_vitals_max_value?: number
+    /**
+     * By default all 4 metrics are captured
+     * You can set this config to restrict which metrics are captured
+     * e.g. ['CLS', 'FCP'] to only capture those two metrics
+     * NB setting this does not override whether the capture is enabled
+     */
+    web_vitals_allowed_metrics?: SupportedWebVitalsMetrics[]
 }
 
 export interface HeatmapConfig {
@@ -148,6 +157,7 @@ export interface PostHogConfig {
     /** @deprecated - use `disable_persistence` instead  */
     disable_cookie?: boolean
     disable_surveys: boolean
+    disable_web_experiments: boolean
     /** If set, posthog-js will never load external scripts such as those needed for Session Replay or Surveys. */
     disable_external_dependency_loading?: boolean
     enable_recording_console_log?: boolean
@@ -423,7 +433,8 @@ export interface ToolbarParams {
 
 export type SnippetArrayItem = [method: string, ...args: any[]]
 
-export type JsonType = string | number | boolean | null | { [key: string]: JsonType } | Array<JsonType>
+export type JsonRecord = { [key: string]: JsonType }
+export type JsonType = string | number | boolean | null | JsonRecord | Array<JsonType>
 
 /** A feature that isn't publicly available yet.*/
 export interface EarlyAccessFeature {

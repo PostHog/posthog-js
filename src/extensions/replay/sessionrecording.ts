@@ -116,6 +116,7 @@ export class SessionRecording {
 
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
 
+    private _removePageViewCaptureHook: (() => void) | undefined = undefined
     // if pageview capture is disabled
     // then we can manually track href changes
     private _lastHref?: string
@@ -284,16 +285,35 @@ export class SessionRecording {
         if (this.isRecordingEnabled) {
             this._startCapture()
 
+            // calling addEventListener multiple times is safe and will not add duplicates
             window?.addEventListener('beforeunload', this._onBeforeUnload)
             window?.addEventListener('offline', this._onOffline)
             window?.addEventListener('online', this._onOnline)
             window?.addEventListener('visibilitychange', this._onVisibilityChange)
 
+            if (isNullish(this._removePageViewCaptureHook)) {
+                // :TRICKY: rrweb does not capture navigation within SPA-s, so hook into our $pageview events to get access to all events.
+                //   Dropping the initial event is fine (it's always captured by rrweb).
+                this._removePageViewCaptureHook = this.instance._addCaptureHook((eventName) => {
+                    // If anything could go wrong here it has the potential to block the main loop,
+                    // so we catch all errors.
+                    try {
+                        if (eventName === '$pageview') {
+                            const href = window ? this._maskUrl(window.location.href) : ''
+                            if (!href) {
+                                return
+                            }
+                            this._tryAddCustomEvent('$pageview', { href })
+                        }
+                    } catch (e) {
+                        logger.error('Could not add $pageview to rrweb session', e)
+                    }
+                })
+            }
+
             logger.info(LOGGER_PREFIX + ' started')
         } else {
             this.stopRecording()
-            this.clearBuffer()
-            clearInterval(this._fullSnapshotTimer)
         }
     }
 
@@ -307,6 +327,12 @@ export class SessionRecording {
             window?.removeEventListener('offline', this._onOffline)
             window?.removeEventListener('online', this._onOnline)
             window?.removeEventListener('visibilitychange', this._onVisibilityChange)
+
+            this.clearBuffer()
+            clearInterval(this._fullSnapshotTimer)
+
+            this._removePageViewCaptureHook?.()
+            this._removePageViewCaptureHook = undefined
 
             logger.info(LOGGER_PREFIX + ' stopped')
         }
@@ -659,24 +685,6 @@ export class SessionRecording {
             },
             plugins: activePlugins,
             ...sessionRecordingOptions,
-        })
-
-        // :TRICKY: rrweb does not capture navigation within SPA-s, so hook into our $pageview events to get access to all events.
-        //   Dropping the initial event is fine (it's always captured by rrweb).
-        this.instance._addCaptureHook((eventName) => {
-            // If anything could go wrong here it has the potential to block the main loop,
-            // so we catch all errors.
-            try {
-                if (eventName === '$pageview') {
-                    const href = window ? this._maskUrl(window.location.href) : ''
-                    if (!href) {
-                        return
-                    }
-                    this._tryAddCustomEvent('$pageview', { href })
-                }
-            } catch (e) {
-                logger.error('Could not add $pageview to rrweb session', e)
-            }
         })
 
         // We reset the last activity timestamp, resetting the idle timer

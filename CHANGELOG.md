@@ -1,3 +1,27 @@
+## 1.161.3 - 2024-09-10
+
+- fix: manage capture pageview hook lifecycle (#1408)
+
+## 1.161.2 - 2024-09-09
+
+- fix: some clients need web vitals directly on window (#1406)
+
+## 1.161.1 - 2024-09-09
+
+- fix: warn on unavailable lazy load not throw (#1400)
+
+## 1.161.0 - 2024-09-09
+
+- feat: web vitals 3000 (#1401)
+
+## 1.160.3 - 2024-09-03
+
+- fix: captured network requests must always have name property (#1398)
+
+## 1.160.2 - 2024-09-03
+
+- fix: report requests even without timing (#1386)
+
 ## 1.160.1 - 2024-09-02
 
 - fix: flushing the buffer for debug signal while idle extends session activity (#1396)

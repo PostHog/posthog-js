@@ -1,7 +1,7 @@
 import { createPosthogInstance } from '../helpers/posthog-instance'
 import { uuidv7 } from '../../uuidv7'
 import { PostHog } from '../../posthog-core'
-import { DecideResponse } from '../../types'
+import { DecideResponse, SupportedWebVitalsMetrics } from '../../types'
 import { assignableWindow } from '../../utils/globals'
 import { FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, FIFTEEN_MINUTES_IN_MILLIS } from '../../extensions/web-vitals'
 
@@ -16,16 +16,6 @@ describe('web vitals', () => {
     let onFCPCallback: ((metric: Record<string, any>) => void) | undefined = undefined
     let onINPCallback: ((metric: Record<string, any>) => void) | undefined = undefined
     const loadScriptMock = jest.fn()
-
-    const randomlyAddAMetric = (
-        metricName: string = 'metric',
-        metricValue: number = 600.1,
-        metricProperties: Record<string, any> = {}
-    ) => {
-        const callbacks = [onLCPCallback, onCLSCallback, onFCPCallback, onINPCallback]
-        const randomIndex = Math.floor(Math.random() * callbacks.length)
-        callbacks[randomIndex]?.({ name: metricName, value: metricValue, ...metricProperties })
-    }
 
     const emitAllMetrics = () => {
         onLCPCallback?.({ name: 'LCP', value: 123.45, extra: 'property' })
@@ -44,112 +34,154 @@ describe('web vitals', () => {
         extra: 'property',
     })
 
-    describe('the behaviour', () => {
-        beforeEach(async () => {
-            posthog = await createPosthogInstance(uuidv7(), {
-                _onCapture: onCapture,
-                capture_performance: { web_vitals: true },
-                // sometimes pageviews sneak in and make asserting on mock capture tricky
-                capture_pageview: false,
+    describe.each([
+        [
+            undefined,
+            ['CLS', 'FCP', 'INP', 'LCP'] as SupportedWebVitalsMetrics[],
+            {
+                $web_vitals_LCP_event: expectedEmittedWebVitals('LCP'),
+                $web_vitals_LCP_value: 123.45,
+                $web_vitals_CLS_event: expectedEmittedWebVitals('CLS'),
+                $web_vitals_CLS_value: 123.45,
+                $web_vitals_FCP_event: expectedEmittedWebVitals('FCP'),
+                $web_vitals_FCP_value: 123.45,
+                $web_vitals_INP_event: expectedEmittedWebVitals('INP'),
+                $web_vitals_INP_value: 123.45,
+            },
+        ],
+        [
+            ['CLS', 'FCP', 'INP', 'LCP'] as SupportedWebVitalsMetrics[],
+            ['CLS', 'FCP', 'INP', 'LCP'] as SupportedWebVitalsMetrics[],
+            {
+                $web_vitals_LCP_event: expectedEmittedWebVitals('LCP'),
+                $web_vitals_LCP_value: 123.45,
+                $web_vitals_CLS_event: expectedEmittedWebVitals('CLS'),
+                $web_vitals_CLS_value: 123.45,
+                $web_vitals_FCP_event: expectedEmittedWebVitals('FCP'),
+                $web_vitals_FCP_value: 123.45,
+                $web_vitals_INP_event: expectedEmittedWebVitals('INP'),
+                $web_vitals_INP_value: 123.45,
+            },
+        ],
+        [
+            ['CLS', 'FCP'] as SupportedWebVitalsMetrics[],
+            ['CLS', 'FCP'] as SupportedWebVitalsMetrics[],
+            {
+                $web_vitals_CLS_event: expectedEmittedWebVitals('CLS'),
+                $web_vitals_CLS_value: 123.45,
+                $web_vitals_FCP_event: expectedEmittedWebVitals('FCP'),
+                $web_vitals_FCP_value: 123.45,
+            },
+        ],
+    ])(
+        'the behaviour when client config is %s',
+        (
+            clientConfig: SupportedWebVitalsMetrics[] | undefined,
+            expectedAllowedMetrics: SupportedWebVitalsMetrics[],
+            expectedProperties: Record<string, any>
+        ) => {
+            beforeEach(async () => {
+                onCapture.mockClear()
+                posthog = await createPosthogInstance(uuidv7(), {
+                    _onCapture: onCapture,
+                    capture_performance: { web_vitals: true, web_vitals_allowed_metrics: clientConfig },
+                    // sometimes pageviews sneak in and make asserting on mock capture tricky
+                    capture_pageview: false,
+                })
+
+                loadScriptMock.mockImplementation((_path, callback) => {
+                    // we need a set of fake web vitals handlers, so we can manually trigger the events
+                    assignableWindow.__PosthogExtensions__ = {}
+                    assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
+                        onLCP: (cb: any) => {
+                            onLCPCallback = cb
+                        },
+                        onCLS: (cb: any) => {
+                            onCLSCallback = cb
+                        },
+                        onFCP: (cb: any) => {
+                            onFCPCallback = cb
+                        },
+                        onINP: (cb: any) => {
+                            onINPCallback = cb
+                        },
+                    }
+                    callback()
+                })
+
+                posthog.requestRouter.loadScript = loadScriptMock
+
+                // need to force this to get the web vitals script loaded
+                posthog.webVitalsAutocapture!.afterDecideResponse({
+                    capturePerformance: { web_vitals: true },
+                } as unknown as DecideResponse)
+
+                expect(posthog.webVitalsAutocapture.allowedMetrics).toEqual(expectedAllowedMetrics)
             })
 
-            loadScriptMock.mockImplementation((_path, callback) => {
-                // we need a set of fake web vitals handlers, so we can manually trigger the events
-                assignableWindow.postHogWebVitalsCallbacks = {
-                    onLCP: (cb: any) => {
-                        onLCPCallback = cb
+            it('should emit when all allowed metrics are captured', async () => {
+                emitAllMetrics()
+
+                expect(onCapture).toBeCalledTimes(1)
+
+                expect(onCapture.mock.lastCall).toMatchObject([
+                    '$web_vitals',
+                    {
+                        event: '$web_vitals',
+                        properties: expectedProperties,
                     },
-                    onCLS: (cb: any) => {
-                        onCLSCallback = cb
-                    },
-                    onFCP: (cb: any) => {
-                        onFCPCallback = cb
-                    },
-                    onINP: (cb: any) => {
-                        onINPCallback = cb
-                    },
-                }
-                callback()
+                ])
             })
 
-            posthog.requestRouter.loadScript = loadScriptMock
+            it('should emit after 8 seconds even when only 1 to 3 metrics captured', async () => {
+                onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
 
-            // need to force this to get the web vitals script loaded
-            posthog.webVitalsAutocapture!.afterDecideResponse({
-                capturePerformance: { web_vitals: true },
-            } as unknown as DecideResponse)
-        })
+                expect(onCapture).toBeCalledTimes(0)
 
-        it('should emit when all 4 metrics are captured', async () => {
-            emitAllMetrics()
+                jest.advanceTimersByTime(FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
-            expect(onCapture).toBeCalledTimes(1)
-
-            expect(onCapture.mock.lastCall).toMatchObject([
-                '$web_vitals',
-                {
-                    event: '$web_vitals',
-                    properties: {
-                        $web_vitals_LCP_event: expectedEmittedWebVitals('LCP'),
-                        $web_vitals_LCP_value: 123.45,
-                        $web_vitals_CLS_event: expectedEmittedWebVitals('CLS'),
-                        $web_vitals_CLS_value: 123.45,
-                        $web_vitals_FCP_event: expectedEmittedWebVitals('FCP'),
-                        $web_vitals_FCP_value: 123.45,
-                        $web_vitals_INP_event: expectedEmittedWebVitals('INP'),
-                        $web_vitals_INP_value: 123.45,
+                // for some reason advancing the timer emits a $pageview event as well 🤷
+                // expect(onCapture).toBeCalledTimes(2)
+                expect(onCapture.mock.lastCall).toMatchObject([
+                    '$web_vitals',
+                    {
+                        event: '$web_vitals',
+                        properties: {
+                            $web_vitals_CLS_event: expectedEmittedWebVitals('CLS'),
+                            $web_vitals_CLS_value: 123.45,
+                        },
                     },
-                },
-            ])
-        })
+                ])
+            })
 
-        it('should emit after 8 seconds even when only 1 to 3 metrics captured', async () => {
-            randomlyAddAMetric('LCP', 123.45, { extra: 'property' })
+            it('should ignore a ridiculous value', async () => {
+                onCLSCallback?.({ name: 'CLS', value: FIFTEEN_MINUTES_IN_MILLIS, extra: 'property' })
 
-            expect(onCapture).toBeCalledTimes(0)
+                expect(onCapture).toBeCalledTimes(0)
 
-            jest.advanceTimersByTime(FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+                jest.advanceTimersByTime(FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
-            // for some reason advancing the timer emits a $pageview event as well 🤷
-            // expect(onCapture).toBeCalledTimes(2)
-            expect(onCapture.mock.lastCall).toMatchObject([
-                '$web_vitals',
-                {
-                    event: '$web_vitals',
-                    properties: {
-                        $web_vitals_LCP_event: expectedEmittedWebVitals('LCP'),
-                        $web_vitals_LCP_value: 123.45,
-                    },
-                },
-            ])
-        })
+                expect(onCapture.mock.calls).toEqual([])
+            })
 
-        it('should ignore a ridiculous value', async () => {
-            randomlyAddAMetric('LCP', FIFTEEN_MINUTES_IN_MILLIS, { extra: 'property' })
+            it('can be configured not to ignore a ridiculous value', async () => {
+                posthog.config.capture_performance = { __web_vitals_max_value: 0 }
+                onCLSCallback?.({ name: 'CLS', value: FIFTEEN_MINUTES_IN_MILLIS, extra: 'property' })
 
-            expect(onCapture).toBeCalledTimes(0)
+                expect(onCapture).toBeCalledTimes(0)
 
-            jest.advanceTimersByTime(FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+                jest.advanceTimersByTime(FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
-            expect(onCapture).toBeCalledTimes(0)
-        })
-
-        it('can be configured not to ignore a ridiculous value', async () => {
-            posthog.config.capture_performance = { __web_vitals_max_value: 0 }
-            randomlyAddAMetric('LCP', FIFTEEN_MINUTES_IN_MILLIS, { extra: 'property' })
-
-            expect(onCapture).toBeCalledTimes(0)
-
-            jest.advanceTimersByTime(FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
-
-            expect(onCapture).toBeCalledTimes(1)
-        })
-    })
+                expect(onCapture).toBeCalledTimes(1)
+            })
+        }
+    )
 
     describe('afterDecideResponse()', () => {
         beforeEach(async () => {
-            // we need a set of fake web vitals handlers so we can manually trigger the events
-            assignableWindow.postHogWebVitalsCallbacks = {
+            // we need a set of fake web vitals handlers, so we can manually trigger the events
+            assignableWindow.__PosthogExtensions__ = {}
+            assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
                 onLCP: (cb: any) => {
                     onLCPCallback = cb
                 },
