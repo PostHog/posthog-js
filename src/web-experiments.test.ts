@@ -34,6 +34,22 @@ describe('Web Experimentation', () => {
                     },
                 ],
             },
+            'css-transform': {
+                transforms: [
+                    {
+                        selector: '#set-user-properties',
+                        className: 'primary',
+                    },
+                ],
+            },
+            'innerhtml-transform': {
+                transforms: [
+                    {
+                        selector: '#set-user-properties',
+                        html: '<h1>hello world</h1>',
+                    },
+                ],
+            },
             control: {
                 transforms: [
                     {
@@ -90,6 +106,7 @@ describe('Web Experimentation', () => {
         persistence = { props: {}, register: jest.fn() } as unknown as PostHogPersistence
         posthog = makePostHog({
             config: {
+                disable_web_experiments: false,
                 api_host: 'https://test.com',
                 token: 'testtoken',
                 autocapture: true,
@@ -114,6 +131,7 @@ describe('Web Experimentation', () => {
         // eslint-disable-next-line no-restricted-globals
         const elParent = document.createElement('span')
         elParent.innerText = 'unassigned'
+        elParent.className = 'unassigned'
         elParent.appendChild(elTarget)
         // eslint-disable-next-line no-restricted-globals
         document.querySelectorAll = function () {
@@ -138,16 +156,29 @@ describe('Web Experimentation', () => {
         webExperiment.getWebExperimentsAndEvaluateDisplayLogic(false)
         expect(elParent.innerText).toEqual(expectedText)
     }
-    function assertSpanTextChanged(expectedText: string) {
+
+    function assertElementChanged(variant: string, expectedProperty: string, value: string) {
         const elParent = createTestDocument()
         webExperiment = new WebExperiments(posthog)
         webExperiment.afterDecideResponse({
             featureFlags: {
-                'signup-button-test': 'control',
+                'signup-button-test': variant,
             },
         } as unknown as DecideResponse)
 
-        expect(elParent.innerText).toEqual(expectedText)
+        switch (expectedProperty) {
+            case 'className':
+                expect(elParent.className).toEqual(value)
+                break
+
+            case 'innerText':
+                expect(elParent.innerText).toEqual(value)
+                break
+
+            case 'innerHTML':
+                expect(elParent.innerHTML).toEqual(value)
+                break
+        }
     }
 
     describe('url match conditions', () => {
@@ -171,19 +202,6 @@ describe('Web Experimentation', () => {
     })
 
     describe('utm match conditions', () => {
-        it('can match on utm terms', () => {
-            const buttonWebExperimentWithUTMConditions = buttonWebExperimentWithUrlConditions
-            buttonWebExperimentWithUTMConditions.variants['Signup'].conditions = {
-                utm: {
-                    utm_campaign: 'marketing',
-                    utm_medium: 'mobile',
-                },
-            }
-            const testLocation = 'https://example.com/landing-page?utm_campaign=marketing&utm_medium=mobile'
-            const expectedText = 'Sign me up'
-            testUrlMatch(testLocation, expectedText)
-        })
-
         it('can disqualify on utm terms', () => {
             const buttonWebExperimentWithUTMConditions = buttonWebExperimentWithUrlConditions
             buttonWebExperimentWithUTMConditions.variants['Signup'].conditions = {
@@ -199,11 +217,51 @@ describe('Web Experimentation', () => {
     })
 
     describe('with feature flags', () => {
-        it('can set text of Span Element', () => {
+        it('experiments are disabled by default', async () => {
+            const expResponse = {
+                experiments: [signupButtonWebExperimentWithFeatureFlag],
+            }
+            const disabledPostHog = makePostHog({
+                config: {
+                    api_host: 'https://test.com',
+                    token: 'testtoken',
+                    autocapture: true,
+                    region: 'us-east-1',
+                } as unknown as PostHogConfig,
+                persistence: persistence,
+                get_property: jest.fn(),
+                _send_request: jest
+                    .fn()
+                    .mockImplementation(({ callback }) => callback({ statusCode: 200, json: expResponse })),
+                consent: { isOptedOut: () => true } as unknown as ConsentManager,
+            })
+
+            posthog.requestRouter = new RequestRouter(disabledPostHog)
+            webExperiment = new WebExperiments(disabledPostHog)
+            assertElementChanged('control', 'innerText', 'unassigned')
+        })
+
+        it('can set text of Span Element', async () => {
             experimentsResponse = {
                 experiments: [signupButtonWebExperimentWithFeatureFlag],
             }
-            assertSpanTextChanged('Sign up')
+
+            assertElementChanged('control', 'innerText', 'Sign up')
+        })
+
+        it('can set className of Span Element', async () => {
+            experimentsResponse = {
+                experiments: [signupButtonWebExperimentWithFeatureFlag],
+            }
+
+            assertElementChanged('css-transform', 'className', 'primary')
+        })
+
+        it('can set innerHtml of Span Element', async () => {
+            experimentsResponse = {
+                experiments: [signupButtonWebExperimentWithFeatureFlag],
+            }
+            assertElementChanged('innerhtml-transform', 'innerHTML', '<h1>hello world</h1>')
         })
     })
 

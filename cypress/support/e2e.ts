@@ -1,4 +1,5 @@
 import './commands'
+import '@cypress/skip-test/support'
 
 // Add console errors into cypress logs.
 Cypress.on('window:before:load', (win) => {

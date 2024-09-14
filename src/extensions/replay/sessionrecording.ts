@@ -116,6 +116,7 @@ export class SessionRecording {
 
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
 
+    private _removePageViewCaptureHook: (() => void) | undefined = undefined
     // if pageview capture is disabled
     // then we can manually track href changes
     private _lastHref?: string
@@ -244,25 +245,6 @@ export class SessionRecording {
         this.stopRrweb = undefined
         this.receivedDecide = false
 
-        window?.addEventListener('beforeunload', () => {
-            this._flushBuffer()
-        })
-
-        window?.addEventListener('offline', () => {
-            this._tryAddCustomEvent('browser offline', {})
-        })
-
-        window?.addEventListener('online', () => {
-            this._tryAddCustomEvent('browser online', {})
-        })
-
-        window?.addEventListener('visibilitychange', () => {
-            if (document?.visibilityState) {
-                const label = 'window ' + document.visibilityState
-                this._tryAddCustomEvent(label, {})
-            }
-        })
-
         if (!this.instance.sessionManager) {
             logger.error(LOGGER_PREFIX + ' started without valid sessionManager')
             throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
@@ -280,13 +262,58 @@ export class SessionRecording {
         this._setupSampling()
     }
 
+    private _onBeforeUnload = (): void => {
+        this._flushBuffer()
+    }
+
+    private _onOffline = (): void => {
+        this._tryAddCustomEvent('browser offline', {})
+    }
+
+    private _onOnline = (): void => {
+        this._tryAddCustomEvent('browser online', {})
+    }
+
+    private _onVisibilityChange = (): void => {
+        if (document?.visibilityState) {
+            const label = 'window ' + document.visibilityState
+            this._tryAddCustomEvent(label, {})
+        }
+    }
+
     startIfEnabledOrStop() {
         if (this.isRecordingEnabled) {
             this._startCapture()
+
+            // calling addEventListener multiple times is safe and will not add duplicates
+            window?.addEventListener('beforeunload', this._onBeforeUnload)
+            window?.addEventListener('offline', this._onOffline)
+            window?.addEventListener('online', this._onOnline)
+            window?.addEventListener('visibilitychange', this._onVisibilityChange)
+
+            if (isNullish(this._removePageViewCaptureHook)) {
+                // :TRICKY: rrweb does not capture navigation within SPA-s, so hook into our $pageview events to get access to all events.
+                //   Dropping the initial event is fine (it's always captured by rrweb).
+                this._removePageViewCaptureHook = this.instance._addCaptureHook((eventName) => {
+                    // If anything could go wrong here it has the potential to block the main loop,
+                    // so we catch all errors.
+                    try {
+                        if (eventName === '$pageview') {
+                            const href = window ? this._maskUrl(window.location.href) : ''
+                            if (!href) {
+                                return
+                            }
+                            this._tryAddCustomEvent('$pageview', { href })
+                        }
+                    } catch (e) {
+                        logger.error('Could not add $pageview to rrweb session', e)
+                    }
+                })
+            }
+
             logger.info(LOGGER_PREFIX + ' started')
         } else {
             this.stopRecording()
-            this.clearBuffer()
         }
     }
 
@@ -295,6 +322,18 @@ export class SessionRecording {
             this.stopRrweb()
             this.stopRrweb = undefined
             this._captureStarted = false
+
+            window?.removeEventListener('beforeunload', this._onBeforeUnload)
+            window?.removeEventListener('offline', this._onOffline)
+            window?.removeEventListener('online', this._onOnline)
+            window?.removeEventListener('visibilitychange', this._onVisibilityChange)
+
+            this.clearBuffer()
+            clearInterval(this._fullSnapshotTimer)
+
+            this._removePageViewCaptureHook?.()
+            this._removePageViewCaptureHook = undefined
+
             logger.info(LOGGER_PREFIX + ' stopped')
         }
     }
@@ -358,7 +397,7 @@ export class SessionRecording {
 
         this._setupSampling()
 
-        if (!isNullish(this._linkedFlag)) {
+        if (!isNullish(this._linkedFlag) && !this._linkedFlagSeen) {
             const linkedFlag = isString(this._linkedFlag) ? this._linkedFlag : this._linkedFlag.flag
             const linkedVariant = isString(this._linkedFlag) ? null : this._linkedFlag.variant
             this.instance.onFeatureFlags((_flags, variants) => {
@@ -504,7 +543,7 @@ export class SessionRecording {
             if (event.timestamp - this._lastActivityTimestamp > RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) {
                 this.isIdle = true
                 // don't take full snapshots while idle
-                clearTimeout(this._fullSnapshotTimer)
+                clearInterval(this._fullSnapshotTimer)
                 // proactively flush the buffer in case the session is idle for a long time
                 this._flushBuffer()
             }
@@ -646,24 +685,6 @@ export class SessionRecording {
             },
             plugins: activePlugins,
             ...sessionRecordingOptions,
-        })
-
-        // :TRICKY: rrweb does not capture navigation within SPA-s, so hook into our $pageview events to get access to all events.
-        //   Dropping the initial event is fine (it's always captured by rrweb).
-        this.instance._addCaptureHook((eventName) => {
-            // If anything could go wrong here it has the potential to block the main loop,
-            // so we catch all errors.
-            try {
-                if (eventName === '$pageview') {
-                    const href = window ? this._maskUrl(window.location.href) : ''
-                    if (!href) {
-                        return
-                    }
-                    this._tryAddCustomEvent('$pageview', { href })
-                }
-            } catch (e) {
-                logger.error('Could not add $pageview to rrweb session', e)
-            }
         })
 
         // We reset the last activity timestamp, resetting the idle timer
@@ -881,8 +902,9 @@ export class SessionRecording {
     private _captureSnapshotBuffered(properties: Properties) {
         const additionalBytes = 2 + (this.buffer?.data.length || 0) // 2 bytes for the array brackets and 1 byte for each comma
         if (
-            this.buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE ||
-            this.buffer.sessionId !== this.sessionId
+            !this.isIdle && // we never want to flush when idle
+            (this.buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE ||
+                this.buffer.sessionId !== this.sessionId)
         ) {
             this.buffer = this._flushBuffer()
         }
@@ -890,7 +912,7 @@ export class SessionRecording {
         this.buffer.size += properties.$snapshot_bytes
         this.buffer.data.push(properties.$snapshot_data)
 
-        if (!this.flushBufferTimer) {
+        if (!this.flushBufferTimer && !this.isIdle) {
             this.flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)
@@ -903,6 +925,18 @@ export class SessionRecording {
             _url: this.instance.requestRouter.endpointFor('api', this._endpoint),
             _noTruncate: true,
             _batchKey: SESSION_RECORDING_BATCH_KEY,
+            skip_client_rate_limiting: true,
         })
+    }
+
+    /**
+     * this ignores the linked flag config and causes capture to start
+     * (if recording would have started had the flag been received i.e. it does not override other config).
+     *
+     * It is not usual to call this directly,
+     * instead call `posthog.startSessionRecording({linked_flag: true})`
+     * */
+    public overrideLinkedFlag() {
+        this._linkedFlagSeen = true
     }
 }

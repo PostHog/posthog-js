@@ -1,3 +1,73 @@
+## 1.161.3 - 2024-09-10
+
+- fix: manage capture pageview hook lifecycle (#1408)
+
+## 1.161.2 - 2024-09-09
+
+- fix: some clients need web vitals directly on window (#1406)
+
+## 1.161.1 - 2024-09-09
+
+- fix: warn on unavailable lazy load not throw (#1400)
+
+## 1.161.0 - 2024-09-09
+
+- feat: web vitals 3000 (#1401)
+
+## 1.160.3 - 2024-09-03
+
+- fix: captured network requests must always have name property (#1398)
+
+## 1.160.2 - 2024-09-03
+
+- fix: report requests even without timing (#1386)
+
+## 1.160.1 - 2024-09-02
+
+- fix: flushing the buffer for debug signal while idle extends session activity (#1396)
+- fix: network capture tests should fail if we exhaust the body (#1395)
+- chore: clarify that tests are exercising our fetch wrapper (#1393)
+
+## 1.160.0 - 2024-08-29
+
+- feat: manually capture errors (#1374)
+
+## 1.159.0 - 2024-08-29
+
+- fix: capture a $pageview event on opting in (#1372)
+
+## 1.158.3 - 2024-08-28
+
+- fix(errors): Build endpoint for sentry integration & exception observer correctly (#1390)
+
+## 1.158.2 - 2024-08-27
+
+- chore: skip rate limiting of snapshot events (#1383)
+- chore: Remove retries for testcafe tests but increase timeout. Wait for lag in parallel (#1380)
+- feat: default api host to new ingestion domain (#1370)
+
+## 1.158.1 - 2024-08-26
+
+- fix: event listeners should obey start and stop (#1379)
+
+## 1.158.0 - 2024-08-26
+
+- fix(segment): Posthog can identify after segment identifies a user, not just during bootstrap. (#1373)
+- fix: Revert cypress back to 13.6.3 (#1384)
+
+## 1.157.2 - 2024-08-20
+
+- feat: Use NavigatorUAData and navigator.webdriver to improve bot detection (#1359)
+- chore: Move chrome tests off of browserstack, add firefox (#1369)
+
+## 1.157.1 - 2024-08-20
+
+- Revert "fix: pass original fetch args along (#1351)" (#1371)
+
+## 1.157.0 - 2024-08-19
+
+- feat: allow overriding linked flag (#1368)
+
 ## 1.156.1 - 2024-08-19
 
 - fix: Move @types/web to dev dependencies (#1367)

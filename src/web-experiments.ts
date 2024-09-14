@@ -39,13 +39,15 @@ export class WebExperiments {
             this.applyFeatureFlagChanges(flags)
         }
 
-        this.instance.onFeatureFlags(appFeatureFLags)
+        if (this.instance.onFeatureFlags) {
+            this.instance.onFeatureFlags(appFeatureFLags)
+        }
         this._flagToExperiments = new Map<string, WebExperiment>()
     }
 
     applyFeatureFlagChanges(flags: string[]) {
         WebExperiments.logInfo('applying feature flags', flags)
-        if (isNullish(this._flagToExperiments)) {
+        if (isNullish(this._flagToExperiments) || this.instance.config.disable_web_experiments) {
             return
         }
 
@@ -206,7 +208,7 @@ export class WebExperiments {
     }
 
     private static logInfo(msg: string, ...args: any[]) {
-        logger.info(`WEB-EXPERIMENTS : ${msg}`, args)
+        logger.info(`[WebExperiments] ${msg}`, args)
     }
 
     private static applyTransforms(experiment: string, variant: string, transforms: WebExperimentTransform[]) {
@@ -256,14 +258,4 @@ export class WebExperiments {
             }
         })
     }
-
-    //
-    // _isVarianttransform(obj: any): obj is ExperimentVarianttransform {
-    //     return obj && typeof obj.name === 'string'
-    // }
-
-    //         function isAnimal(obj: any):
-    //     obj is Animal {
-    //
-    // }
 }

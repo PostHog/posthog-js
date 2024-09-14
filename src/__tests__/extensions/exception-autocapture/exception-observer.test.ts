@@ -34,6 +34,7 @@ export class PromiseRejectionEvent extends Event {
 describe('Exception Observer', () => {
     let exceptionObserver: ExceptionObserver
     let posthog: PostHog
+    let sendRequestSpy: jest.SpyInstance
     const mockCapture = jest.fn()
     const loadScriptMock = jest.fn()
 
@@ -52,6 +53,8 @@ describe('Exception Observer', () => {
 
         posthog = await createPosthogInstance(uuidv7(), { _onCapture: mockCapture })
         posthog.requestRouter.loadScript = loadScriptMock
+
+        sendRequestSpy = jest.spyOn(posthog, '_send_request')
 
         exceptionObserver = new ExceptionObserver(posthog)
     })
@@ -120,6 +123,25 @@ describe('Exception Observer', () => {
                     $exception_personURL: expect.any(String),
                 },
             })
+        })
+
+        it('sends captured events to the right URL', () => {
+            const error = new Error('test error')
+            window!.onerror?.call(window, 'message', 'source', 0, 0, error)
+
+            expect(sendRequestSpy).toHaveBeenCalled()
+            const request = sendRequestSpy.mock.calls[0][0]
+            expect(request.url).toBe('http://localhost/e/?ip=1')
+            expect(request.data).toMatchObject({
+                event: '$exception',
+                properties: {
+                    $exception_message: 'test error',
+                    $exception_type: 'Error',
+                    $exception_personURL: expect.any(String),
+                    $exception_stack_trace_raw: expect.any(String),
+                },
+            })
+            expect(request.batchKey).toBe('exceptionEvent')
         })
     })
 

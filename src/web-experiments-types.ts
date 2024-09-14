@@ -1,10 +1,9 @@
 export interface WebExperimentTransform {
-    attributes:
+    attributes?:
         | {
               name: string
               value: string
           }[]
-        | null
     selector?: string
     text?: string
     html?: string
@@ -15,16 +14,16 @@ export interface WebExperimentTransform {
 export type WebExperimentUrlMatchType = 'regex' | 'not_regex' | 'exact' | 'is_not' | 'icontains' | 'not_icontains'
 
 export interface WebExperimentVariant {
-    conditions: {
+    conditions?: {
         url?: string
         urlMatchType?: WebExperimentUrlMatchType
-        utm: {
+        utm?: {
             utm_source?: string
             utm_medium?: string
             utm_campaign?: string
             utm_term?: string
         }
-    } | null
+    }
     variant_name: string
     transforms: WebExperimentTransform[]
 }

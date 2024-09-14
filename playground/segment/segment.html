@@ -9,7 +9,8 @@
                 analytics.load("GOEDfA21zZTtR7clsBuDvmBKAtAdZ6Np");
 
                 analytics.ready(() => {
-                    posthog.init('phc_mxO23D02CR3QU7V1u95ae3YEGNAFGuvyUlRpVNwX89B', {
+                    posthog.init('phc_lPwXKkvW2VtByfTsibDzFKAxn02rdVgMUiHWkZ5kW31', {
+                        api_host: "http://localhost:8000",
                         capture_pageview: false,
                         autocapture: false,
                         segment: window.analytics,

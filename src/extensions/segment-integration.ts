@@ -34,7 +34,7 @@ export type SegmentAnalytics = {
 }
 
 // Loosely based on https://github.com/segmentio/analytics-next/blob/master/packages/core/src/plugins/index.ts
-interface SegmentContext {
+export interface SegmentContext {
     event: {
         event: string
         userId?: string
@@ -45,7 +45,7 @@ interface SegmentContext {
 
 type SegmentFunction = (ctx: SegmentContext) => Promise<SegmentContext> | SegmentContext
 
-interface SegmentPlugin {
+export interface SegmentPlugin {
     name: string
     version: string
     type: 'enrichment'
@@ -72,13 +72,12 @@ const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
         }
         if (!ctx.event.userId && ctx.event.anonymousId !== posthog.get_distinct_id()) {
             // This is our only way of detecting that segment's analytics.reset() has been called so we also call it
+            logger.info('Segment integration does not have a userId set, resetting PostHog')
             posthog.reset()
         }
         if (ctx.event.userId && ctx.event.userId !== posthog.get_distinct_id()) {
-            posthog.register({
-                distinct_id: ctx.event.userId,
-            })
-            posthog.reloadFeatureFlags()
+            logger.info('Segment integration has a userId set, identifying with PostHog')
+            posthog.identify(ctx.event.userId)
         }
 
         const additionalProperties = posthog._calculate_event_properties(
