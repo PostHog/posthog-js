@@ -758,9 +758,7 @@ export class PostHog {
      *
      * @param {String} event_name The name of the event. This can be anything the user does - 'Button Click', 'Sign Up', 'Item Purchased', etc.
      * @param {Object} [properties] A set of properties to include with the event you're sending. These describe the user who did the event or details about the event itself.
-     * @param {Object} [config] Optional configuration for this capture request.
-     * @param {String} [config.transport] Transport method for network request ('XHR' or 'sendBeacon').
-     * @param {Date} [config.timestamp] Timestamp is a Date object. If not set, it'll automatically be set to the current time.
+     * @param {Object} [options] Optional configuration for this capture request.
      */
     capture(event_name: string, properties?: Properties | null, options?: CaptureOptions): CaptureResult | undefined {
         // While developing, a developer might purposefully _not_ call init(),
@@ -876,9 +874,7 @@ export class PostHog {
      *
      * @param {String} url The URL of the page. This will be included in the properties as '$current_url'.
      * @param {Object} [properties] A set of properties to include with the event you're sending. These describe the user who did the event or details about the event itself.
-     * @param {Object} [config] Optional configuration for this capture request.
-     * @param {String} [config.transport] Transport method for network request ('XHR' or 'sendBeacon').
-     * @param {Date} [config.timestamp] Timestamp is a Date object. If not set, it'll automatically be set to the current time.
+     * @param {Object} [options] Optional configuration for this capture request.
      */
     page(url: string, properties?: Properties | null, options?: CaptureOptions): CaptureResult | undefined {
         properties = properties || {}
