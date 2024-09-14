@@ -4,7 +4,7 @@ import { Compression, RequestOptions, RequestResponse } from './types'
 import { formDataToQuery } from './utils/request-utils'
 
 import { logger } from './utils/logger'
-import { fetch, XMLHttpRequest, AbortController, navigator } from './utils/globals'
+import { AbortController, fetch, navigator, XMLHttpRequest } from './utils/globals'
 import { gzipSync, strToU8 } from 'fflate'
 
 // eslint-disable-next-line compat/compat
