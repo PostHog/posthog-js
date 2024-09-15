@@ -14,12 +14,6 @@ describe('Event capture', () => {
         cy.get('[data-cy-custom-event-button]').click()
         cy.phCaptures().should('have.length', 3)
         cy.phCaptures().should('include', '$pageview')
-        cy.phCaptures().should('include', {
-            event: '$pageview',
-            properties: {
-                '$current_url': './playground/cypress-full'
-            }
-        })
         cy.phCaptures().should('include', '$autocapture')
         cy.phCaptures().should('include', 'custom-event')
 
@@ -29,6 +23,20 @@ describe('Event capture', () => {
         cy.phCaptures().should('include', '$pageleave')
         cy.phCaptures().should('include', '$autocapture')
         cy.phCaptures().should('include', 'custom-event')
+    })
+
+    it('captures pageviews with current url', () => {
+        start({})
+
+        cy.get('[data-cy-custom-event-button]').click()
+        cy.phCaptures({ full: true }).then((captures) => {
+            const pageView = captures.some((capture) => {
+                const event_result = capture.event === '$pageview'
+                const url_result = capture.properties.$current_url.includes('playground/cypress-full')
+                return event_result && url_result
+            })
+            expect(pageView).to.be.true
+        })
     })
 
     describe('autocapture config', () => {
