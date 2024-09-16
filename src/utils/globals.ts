@@ -16,6 +16,10 @@ import { SurveyManager } from '../extensions/surveys'
 // eslint-disable-next-line no-restricted-globals
 const win: (Window & typeof globalThis) | undefined = typeof window !== 'undefined' ? window : undefined
 
+/**
+ * This is our contract between (potentially) lazily loaded extensions and the SDK
+ * changes to this interface can be breaking changes for users of the SDK
+ */
 interface PosthogExtensions {
     parseErrorAsProperties?: ([event, source, lineno, colno, error]: ErrorEventArgs) => ErrorProperties
     errorWrappingFunctions?: {
