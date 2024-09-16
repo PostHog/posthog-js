@@ -1,3 +1,8 @@
+## 1.161.4 - 2024-09-16
+
+- fix: no keep alive for large payloads (#1416)
+- feat(experiments): Apply no-code experiments to the webpage. (#1409)
+
 ## 1.161.3 - 2024-09-10
 
 - fix: manage capture pageview hook lifecycle (#1408)
