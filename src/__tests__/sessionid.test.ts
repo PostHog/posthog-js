@@ -1,7 +1,7 @@
 import { SessionIdManager } from '../sessionid'
 import { SESSION_ID } from '../constants'
 import { sessionStore } from '../storage'
-import { uuidv7, uuid7ToTimestampMs } from '../uuidv7'
+import { uuid7ToTimestampMs, uuidv7 } from '../uuidv7'
 import { BootstrapConfig, PostHogConfig, Properties } from '../types'
 import { PostHogPersistence } from '../posthog-persistence'
 import { assignableWindow } from '../utils/globals'
@@ -19,8 +19,6 @@ describe('Session ID manager', () => {
 
     let persistence: { props: Properties } & Partial<PostHogPersistence>
 
-    const subject = (sessionIdManager: SessionIdManager, isReadOnly?: boolean) =>
-        sessionIdManager.checkAndGetSessionAndWindowId(isReadOnly, timestamp)
     const sessionIdMgr = (phPersistence: Partial<PostHogPersistence>) =>
         new SessionIdManager(config, phPersistence as PostHogPersistence)
 
@@ -43,7 +41,7 @@ describe('Session ID manager', () => {
 
     describe('new session id manager', () => {
         it('generates an initial session id and window id, and saves them', () => {
-            expect(subject(sessionIdMgr(persistence))).toMatchObject({
+            expect(sessionIdMgr(persistence).checkAndGetSessionAndWindowId(undefined, timestamp)).toMatchObject({
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
                 sessionStartTimestamp: timestamp,
@@ -55,7 +53,7 @@ describe('Session ID manager', () => {
         })
 
         it('generates an initial session id and window id, and saves them even if readOnly is true', () => {
-            expect(subject(sessionIdMgr(persistence), true)).toMatchObject({
+            expect(sessionIdMgr(persistence).checkAndGetSessionAndWindowId(true, timestamp)).toMatchObject({
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
                 sessionStartTimestamp: timestamp,
@@ -91,7 +89,7 @@ describe('Session ID manager', () => {
         })
 
         it('reuses old ids and updates the session timestamp if not much time has passed', () => {
-            expect(subject(sessionIdMgr(persistence))).toEqual({
+            expect(sessionIdMgr(persistence).checkAndGetSessionAndWindowId(undefined, timestamp)).toEqual({
                 windowId: 'oldWindowID',
                 sessionId: 'oldSessionID',
                 sessionStartTimestamp: timestampOfSessionStart,
@@ -108,7 +106,7 @@ describe('Session ID manager', () => {
 
             persistence.props[SESSION_ID] = [oldTimestamp, 'oldSessionID', sessionStart]
 
-            expect(subject(sessionIdMgr(persistence), true)).toEqual({
+            expect(sessionIdMgr(persistence).checkAndGetSessionAndWindowId(true, timestamp)).toEqual({
                 windowId: 'oldWindowID',
                 sessionId: 'oldSessionID',
                 sessionStartTimestamp: sessionStart,
@@ -120,10 +118,15 @@ describe('Session ID manager', () => {
 
         it('generates only a new window id, and saves it when there is no previous window id set', () => {
             ;(sessionStore.parse as jest.Mock).mockReturnValue(null)
-            expect(subject(sessionIdMgr(persistence))).toEqual({
+            expect(sessionIdMgr(persistence).checkAndGetSessionAndWindowId(undefined, timestamp)).toEqual({
                 windowId: 'newUUID',
                 sessionId: 'oldSessionID',
                 sessionStartTimestamp: timestampOfSessionStart,
+                changeReason: {
+                    activityTimeout: false,
+                    noSessionId: false,
+                    sessionPastMaximumLength: false,
+                },
             })
             expect(persistence.register).toHaveBeenCalledWith({
                 [SESSION_ID]: [timestamp, 'oldSessionID', timestampOfSessionStart],
@@ -135,10 +138,15 @@ describe('Session ID manager', () => {
             const oldTimestamp = 1602107460000
             persistence.props[SESSION_ID] = [oldTimestamp, 'oldSessionID', timestampOfSessionStart]
 
-            expect(subject(sessionIdMgr(persistence))).toEqual({
+            expect(sessionIdMgr(persistence).checkAndGetSessionAndWindowId(undefined, timestamp)).toEqual({
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
                 sessionStartTimestamp: timestamp,
+                changeReason: {
+                    activityTimeout: true,
+                    noSessionId: false,
+                    sessionPastMaximumLength: false,
+                },
             })
             expect(persistence.register).toHaveBeenCalledWith({
                 [SESSION_ID]: [timestamp, 'newUUID', timestamp],
@@ -152,10 +160,15 @@ describe('Session ID manager', () => {
             persistence.props[SESSION_ID] = [oldTimestamp, 'oldSessionID', timestampOfSessionStart]
             timestamp = timestampOfSessionStart + twentyFourHours
 
-            expect(subject(sessionIdMgr(persistence))).toEqual({
+            expect(sessionIdMgr(persistence).checkAndGetSessionAndWindowId(undefined, timestamp)).toEqual({
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
                 sessionStartTimestamp: timestamp,
+                changeReason: {
+                    activityTimeout: true,
+                    noSessionId: false,
+                    sessionPastMaximumLength: false,
+                },
             })
 
             expect(persistence.register).toHaveBeenCalledWith({
@@ -171,10 +184,15 @@ describe('Session ID manager', () => {
             timestamp = timestampOfSessionStart + twentyFourHoursAndOneSecond
             now = timestamp + 1000
 
-            expect(subject(sessionIdMgr(persistence), true)).toEqual({
+            expect(sessionIdMgr(persistence).checkAndGetSessionAndWindowId(true, timestamp)).toEqual({
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
                 sessionStartTimestamp: timestamp,
+                changeReason: {
+                    activityTimeout: false,
+                    noSessionId: false,
+                    sessionPastMaximumLength: true,
+                },
             })
 
             expect(persistence.register).toHaveBeenCalledWith({
@@ -188,10 +206,15 @@ describe('Session ID manager', () => {
             const oldTimestamp = 1601107460000
             persistence.props[SESSION_ID] = [oldTimestamp, 'oldSessionID', timestampOfSessionStart]
             timestamp = undefined
-            expect(subject(sessionIdMgr(persistence))).toEqual({
+            expect(sessionIdMgr(persistence).checkAndGetSessionAndWindowId(undefined, timestamp)).toEqual({
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
                 sessionStartTimestamp: now,
+                changeReason: {
+                    activityTimeout: true,
+                    noSessionId: false,
+                    sessionPastMaximumLength: false,
+                },
             })
             expect(persistence.register).toHaveBeenCalledWith({
                 [SESSION_ID]: [now, 'newUUID', now],
@@ -200,7 +223,7 @@ describe('Session ID manager', () => {
 
         it('populates the session start timestamp for a browser with no start time stored', () => {
             persistence.props[SESSION_ID] = [timestamp, 'oldSessionID']
-            expect(subject(sessionIdMgr(persistence))).toEqual({
+            expect(sessionIdMgr(persistence).checkAndGetSessionAndWindowId(undefined, timestamp)).toEqual({
                 windowId: 'oldWindowID',
                 sessionId: 'oldSessionID',
                 sessionStartTimestamp: timestamp,
@@ -253,7 +276,7 @@ describe('Session ID manager', () => {
         it('a new session id is generated when called', () => {
             persistence.props[SESSION_ID] = [null, null, null]
             expect(sessionIdMgr(persistence)['_getSessionId']()).toEqual([null, null, null])
-            expect(subject(sessionIdMgr(persistence))).toMatchObject({
+            expect(sessionIdMgr(persistence).checkAndGetSessionAndWindowId(undefined, timestamp)).toMatchObject({
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
             })

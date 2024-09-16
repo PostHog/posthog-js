@@ -9,9 +9,7 @@ import {
 } from '../../constants'
 import {
     estimateSize,
-    FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-    META_EVENT_TYPE,
     recordOptions,
     rrwebRecord,
     splitBuffer,
@@ -23,16 +21,7 @@ import { EventType, type eventWithTime, IncrementalSource, type listenerHandler,
 import Config from '../../config'
 import { timestamp } from '../../utils'
 
-import {
-    isBoolean,
-    isFunction,
-    isNull,
-    isNullish,
-    isNumber,
-    isObject,
-    isString,
-    isUndefined,
-} from '../../utils/type-utils'
+import { isBoolean, isFunction, isNullish, isNumber, isObject, isString, isUndefined } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
 import { assignableWindow, document, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
@@ -115,6 +104,11 @@ export class SessionRecording {
     private _linkedFlag: string | FlagVariant | null = null
 
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
+
+    private _removePageViewCaptureHook: (() => void) | undefined = undefined
+    private _onSessionIdListener: (() => void) | undefined = undefined
+    private _persistDecideOnSessionListener: (() => void) | undefined = undefined
+    private _samplingSessionListener: (() => void) | undefined = undefined
 
     // if pageview capture is disabled
     // then we can manually track href changes
@@ -255,10 +249,6 @@ export class SessionRecording {
         this.windowId = windowId
 
         this.buffer = this.clearBuffer()
-
-        // on reload there might be an already sampled session that should be continued before decide response,
-        // so we call this here _and_ in the decide response
-        this._setupSampling()
     }
 
     private _onBeforeUnload = (): void => {
@@ -284,16 +274,47 @@ export class SessionRecording {
         if (this.isRecordingEnabled) {
             this._startCapture()
 
+            // calling addEventListener multiple times is safe and will not add duplicates
             window?.addEventListener('beforeunload', this._onBeforeUnload)
             window?.addEventListener('offline', this._onOffline)
             window?.addEventListener('online', this._onOnline)
             window?.addEventListener('visibilitychange', this._onVisibilityChange)
 
+            // on reload there might be an already sampled session that should be continued before decide response,
+            // so we call this here _and_ in the decide response
+            this._setupSampling()
+
+            if (isNullish(this._removePageViewCaptureHook)) {
+                // :TRICKY: rrweb does not capture navigation within SPA-s, so hook into our $pageview events to get access to all events.
+                //   Dropping the initial event is fine (it's always captured by rrweb).
+                this._removePageViewCaptureHook = this.instance._addCaptureHook((eventName) => {
+                    // If anything could go wrong here it has the potential to block the main loop,
+                    // so we catch all errors.
+                    try {
+                        if (eventName === '$pageview') {
+                            const href = window ? this._maskUrl(window.location.href) : ''
+                            if (!href) {
+                                return
+                            }
+                            this._tryAddCustomEvent('$pageview', { href })
+                        }
+                    } catch (e) {
+                        logger.error('Could not add $pageview to rrweb session', e)
+                    }
+                })
+            }
+
+            if (!this._onSessionIdListener) {
+                this._onSessionIdListener = this.sessionManager.onSessionId((sessionId, windowId, changeReason) => {
+                    if (changeReason) {
+                        this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
+                    }
+                })
+            }
+
             logger.info(LOGGER_PREFIX + ' started')
         } else {
             this.stopRecording()
-            this.clearBuffer()
-            clearInterval(this._fullSnapshotTimer)
         }
     }
 
@@ -307,6 +328,16 @@ export class SessionRecording {
             window?.removeEventListener('offline', this._onOffline)
             window?.removeEventListener('online', this._onOnline)
             window?.removeEventListener('visibilitychange', this._onVisibilityChange)
+
+            this.clearBuffer()
+            clearInterval(this._fullSnapshotTimer)
+
+            this._removePageViewCaptureHook?.()
+            this._removePageViewCaptureHook = undefined
+            this._onSessionIdListener?.()
+            this._onSessionIdListener = undefined
+            this._samplingSessionListener?.()
+            this._samplingSessionListener = undefined
 
             logger.info(LOGGER_PREFIX + ' stopped')
         }
@@ -394,13 +425,11 @@ export class SessionRecording {
         this.startIfEnabledOrStop()
     }
 
-    private _samplingSessionListener: (() => void) | null = null
-
     /**
      * This might be called more than once so needs to be idempotent
      */
     private _setupSampling() {
-        if (isNumber(this.sampleRate) && isNull(this._samplingSessionListener)) {
+        if (isNumber(this.sampleRate) && isNullish(this._samplingSessionListener)) {
             this._samplingSessionListener = this.sessionManager.onSessionId((sessionId) => {
                 this.makeSamplingDecision(sessionId)
             })
@@ -437,7 +466,10 @@ export class SessionRecording {
             }
 
             persistResponse()
-            this.sessionManager.onSessionId(persistResponse)
+
+            // in case we see multiple decide responses, we should only listen with the response from the most recent one
+            this._persistDecideOnSessionListener?.()
+            this._persistDecideOnSessionListener = this.sessionManager.onSessionId(persistResponse)
         }
     }
 
@@ -518,6 +550,13 @@ export class SessionRecording {
                 this.isIdle = true
                 // don't take full snapshots while idle
                 clearInterval(this._fullSnapshotTimer)
+                this._tryAddCustomEvent('sessionIdle', {
+                    eventTimestamp: event.timestamp,
+                    lastActivityTimestamp: this._lastActivityTimestamp,
+                    threshold: RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
+                    bufferLength: this.buffer.data.length,
+                    bufferSize: this.buffer.size,
+                })
                 // proactively flush the buffer in case the session is idle for a long time
                 this._flushBuffer()
             }
@@ -553,12 +592,11 @@ export class SessionRecording {
         this.windowId = windowId
         this.sessionId = sessionId
 
-        if (
-            returningFromIdle ||
-            ([FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1 &&
-                (windowIdChanged || sessionIdChanged || isUndefined(this._fullSnapshotTimer)))
-        ) {
-            this._tryTakeFullSnapshot()
+        if (sessionIdChanged || windowIdChanged) {
+            this.stopRecording()
+            this.startIfEnabledOrStop()
+        } else if (returningFromIdle) {
+            this._scheduleFullSnapshot()
         }
     }
 
@@ -659,24 +697,6 @@ export class SessionRecording {
             },
             plugins: activePlugins,
             ...sessionRecordingOptions,
-        })
-
-        // :TRICKY: rrweb does not capture navigation within SPA-s, so hook into our $pageview events to get access to all events.
-        //   Dropping the initial event is fine (it's always captured by rrweb).
-        this.instance._addCaptureHook((eventName) => {
-            // If anything could go wrong here it has the potential to block the main loop,
-            // so we catch all errors.
-            try {
-                if (eventName === '$pageview') {
-                    const href = window ? this._maskUrl(window.location.href) : ''
-                    if (!href) {
-                        return
-                    }
-                    this._tryAddCustomEvent('$pageview', { href })
-                }
-            } catch (e) {
-                logger.error('Could not add $pageview to rrweb session', e)
-            }
         })
 
         // We reset the last activity timestamp, resetting the idle timer
