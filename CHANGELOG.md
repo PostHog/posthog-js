@@ -1,3 +1,7 @@
+## 1.161.5 - 2024-09-16
+
+- fix: teardown and restart recording on session id change (#1411)
+
 ## 1.161.4 - 2024-09-16
 
 - fix: no keep alive for large payloads (#1416)
