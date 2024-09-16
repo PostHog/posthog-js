@@ -279,7 +279,11 @@ export interface SessionRecordingOptions {
     full_snapshot_interval_millis?: number
 }
 
-export type SessionIdChangedCallback = (sessionId: string, windowId: string | null | undefined) => void
+export type SessionIdChangedCallback = (
+    sessionId: string,
+    windowId: string | null | undefined,
+    changeReason?: { noSessionId: boolean; activityTimeout: boolean; sessionPastMaximumLength: boolean }
+) => void
 
 export enum Compression {
     GZipJS = 'gzip-js',
