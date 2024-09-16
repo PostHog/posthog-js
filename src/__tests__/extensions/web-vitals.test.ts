@@ -92,7 +92,7 @@ describe('web vitals', () => {
                 loadScriptMock.mockImplementation((_path, callback) => {
                     // we need a set of fake web vitals handlers, so we can manually trigger the events
                     assignableWindow.__PosthogExtensions__ = {}
-                    assignableWindow.__PosthogExtensions__.webVitalsCallbacks = {
+                    assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
                         onLCP: (cb: any) => {
                             onLCPCallback = cb
                         },
@@ -181,7 +181,7 @@ describe('web vitals', () => {
         beforeEach(async () => {
             // we need a set of fake web vitals handlers, so we can manually trigger the events
             assignableWindow.__PosthogExtensions__ = {}
-            assignableWindow.__PosthogExtensions__.webVitalsCallbacks = {
+            assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
                 onLCP: (cb: any) => {
                     onLCPCallback = cb
                 },
