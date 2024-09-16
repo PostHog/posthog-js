@@ -1,0 +1,73 @@
+name: Autorelease alpha version
+
+on:
+  pull_request:
+    types:
+      - labeled
+
+jobs:
+  check-permissions:
+    name: "Check user has permission to release"
+    runs-on: ubuntu-latest
+    outputs:
+# can have multiple outputs
+#      check-result: ${{ steps.check-permissions.outputs.check-result }}
+#      user-permission: ${{ steps.check-permissions.outputs.user-permission }}
+      require-result: ${{ steps.check-permissions.outputs.require-result }}
+    steps:
+      - uses: actions-cool/check-user-permission@v2
+        id: check-permissions
+        with:
+          require: 'write'
+  warn-when-failed:
+    name: Warn when the user does not have the required permissions
+    runs-on: ubuntu-latest
+    needs: check-permissions
+    if: needs.check-permissions.outputs.require-result == 'false'
+    steps:
+      - run: echo "The user does not have the write permissions to trigger this action (pun intended)."
+      - run: echo "require-result = ${{ needs.check-permissions.outputs.require-result }}"
+
+  label-alpha-release:
+    name: Release alpha version based on PR label
+    runs-on: ubuntu-latest
+    needs: check-permissions
+    if: needs.check-permissions.outputs.require-result == 'true' && 
+        contains(github.event.pull_request.labels.*.name, 'release alpha')
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8.x.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+      - run: pnpm install
+
+      - name: Determine new version
+        id: versions
+        if: steps.bump-type.outputs.bump-type != 'null'
+        run: |
+          OLD_VERSION=$(jq ".version" package.json -r)
+          NEW_VERSION=$(pnpx semver $OLD_VERSION -i prerelease --preid alpha)
+          echo "old-version=$OLD_VERSION" >> "$GITHUB_OUTPUT"
+          echo "new-version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Update version in package.json
+        if: steps.bump-type.outputs.bump-type != 'null'
+        run: |
+          mv package.json package.old.json
+          jq --indent 4 '.version = "${{ steps.versions.outputs.new-version }}"' package.old.json > package.json
+          rm package.old.json
+
+      - name: Publish the alpha in the npm registry
+        run: npm publish --access public --tag alpha
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
