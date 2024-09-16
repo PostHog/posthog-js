@@ -344,15 +344,7 @@ describe('posthog core', () => {
             expect(captureData.properties['$current_url']).toEqual(testUrl)
         })
 
-        it('should call capture internally', () => {
-            const testUrl = 'https://example.com'
-            const posthog = posthogWith({})
-            const captureMock = jest.spyOn(posthog, 'capture').mockImplementation()
-            posthog.page(testUrl)
-            expect(captureMock).toHaveBeenCalled()
-        })
-
-        it('should pass the url to capture', () => {
+        it('should call capture internally and pass the url', () => {
             const testUrl = 'https://example.com'
             const posthog = posthogWith({})
             const captureMock = jest.spyOn(posthog, 'capture').mockImplementation()
