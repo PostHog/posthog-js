@@ -28,11 +28,21 @@ describe('Event capture', () => {
     it('captures pageviews with current url', () => {
         start({})
 
-        cy.get('[data-cy-custom-event-button]').click()
         cy.phCaptures({ full: true }).then((captures) => {
             const pageView = captures.some((capture) => {
                 const event_result = capture.event === '$pageview'
                 const url_result = capture.properties.$current_url.includes('playground/cypress-full')
+                return event_result && url_result
+            })
+            expect(pageView).to.be.true
+        })
+
+        cy.posthog().invoke('page', 'https://example.com')
+
+        cy.phCaptures({ full: true }).then((captures) => {
+            const pageView = captures.some((capture) => {
+                const event_result = capture.event === '$pageview'
+                const url_result = capture.properties.$current_url === 'https://example.com'
                 return event_result && url_result
             })
             expect(pageView).to.be.true
