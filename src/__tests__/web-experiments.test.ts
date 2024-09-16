@@ -1,10 +1,10 @@
-import { WebExperiments } from './web-experiments'
-import { PostHog } from './posthog-core'
-import { DecideResponse, PostHogConfig } from './types'
-import { PostHogPersistence } from './posthog-persistence'
-import { WebExperiment } from './web-experiments-types'
-import { RequestRouter } from './utils/request-router'
-import { ConsentManager } from './consent'
+import { WebExperiments } from '../web-experiments'
+import { PostHog } from '../posthog-core'
+import { DecideResponse, PostHogConfig } from '../types'
+import { PostHogPersistence } from '../posthog-persistence'
+import { WebExperiment } from '../web-experiments-types'
+import { RequestRouter } from '../utils/request-router'
+import { ConsentManager } from '../consent'
 
 describe('Web Experimentation', () => {
     let webExperiment: WebExperiments
