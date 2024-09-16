@@ -4,7 +4,7 @@ import { Compression, RequestOptions, RequestResponse } from './types'
 import { formDataToQuery } from './utils/request-utils'
 
 import { logger } from './utils/logger'
-import { fetch, XMLHttpRequest, AbortController, navigator } from './utils/globals'
+import { AbortController, fetch, navigator, XMLHttpRequest } from './utils/globals'
 import { gzipSync, strToU8 } from 'fflate'
 
 // eslint-disable-next-line compat/compat
@@ -17,6 +17,7 @@ const CONTENT_TYPE_FORM = 'application/x-www-form-urlencoded'
 type EncodedBody = {
     contentType: string
     body: string | BlobPart
+    estimatedSize: number
 }
 
 export const extendURLParams = (url: string, params: Record<string, any>): string => {
@@ -45,24 +46,30 @@ const encodePostData = ({ data, compression }: RequestOptions): EncodedBody | un
 
     if (compression === Compression.GZipJS) {
         const gzipData = gzipSync(strToU8(JSON.stringify(data)), { mtime: 0 })
+        const blob = new Blob([gzipData], { type: CONTENT_TYPE_PLAIN })
         return {
             contentType: CONTENT_TYPE_PLAIN,
-            body: new Blob([gzipData], { type: CONTENT_TYPE_PLAIN }),
+            body: blob,
+            estimatedSize: blob.size,
         }
     }
 
     if (compression === Compression.Base64) {
         const b64data = _base64Encode(JSON.stringify(data))
+        const encodedBody = encodeToDataString(b64data)
 
         return {
             contentType: CONTENT_TYPE_FORM,
-            body: encodeToDataString(b64data),
+            body: encodedBody,
+            estimatedSize: new Blob([encodedBody]).size,
         }
     }
 
+    const jsonBody = JSON.stringify(data)
     return {
         contentType: CONTENT_TYPE_JSON,
-        body: JSON.stringify(data),
+        body: jsonBody,
+        estimatedSize: new Blob([jsonBody]).size,
     }
 }
 
@@ -107,7 +114,7 @@ const xhr = (options: RequestOptions) => {
 }
 
 const _fetch = (options: RequestOptions) => {
-    const { contentType, body } = encodePostData(options) ?? {}
+    const { contentType, body, estimatedSize } = encodePostData(options) ?? {}
 
     // eslint-disable-next-line compat/compat
     const headers = new Headers()
@@ -133,7 +140,14 @@ const _fetch = (options: RequestOptions) => {
     fetch!(url, {
         method: options?.method || 'GET',
         headers,
-        keepalive: options.method === 'POST',
+        // if body is greater than 64kb, then fetch with keepalive will error
+        // see 8:10:5 at https://fetch.spec.whatwg.org/#http-network-or-cache-fetch,
+        // but we do want to set keepalive sometimes as it can  help with success
+        // when e.g. a page is being closed
+        // so let's get the best of both worlds and only set keepalive for POST requests
+        // where the body is less than 64kb
+        // NB this is fetch keepalive and not http keepalive
+        keepalive: options.method === 'POST' && (estimatedSize || 0) < 64 * 1024,
         body,
         signal: aborter?.signal,
     })

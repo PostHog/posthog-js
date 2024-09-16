@@ -14,6 +14,7 @@ jest.mock('../utils/globals', () => ({
 }))
 
 import { fetch, XMLHttpRequest, navigator } from '../utils/globals'
+import { uuidv7 } from '../uuidv7'
 
 jest.mock('../config', () => ({ DEBUG: false, LIB_VERSION: '1.23.45' }))
 
@@ -22,6 +23,16 @@ const flushPromises = async () => {
     await new Promise((res) => setTimeout(res, 0))
     jest.useRealTimers()
 }
+
+const bodyData = () => ({ key: uuidv7() })
+const arrayOfBodyData = (n: number) => {
+    const arr = []
+    for (let i = 0; i < n; i++) {
+        arr.push(bodyData())
+    }
+    return arr
+}
+const veryLargeBodyData = arrayOfBodyData(8024)
 
 describe('request', () => {
     const mockedFetch: jest.MockedFunction<any> = fetch as jest.MockedFunction<any>
@@ -173,6 +184,76 @@ describe('request', () => {
                 json: undefined,
                 text: 'oh no!',
             })
+        })
+
+        describe('keepalive with fetch and large bodies can cause some browsers to reject network calls', () => {
+            it.each([
+                ['always keepalive with small json POST', 'POST', 'small', undefined, true, ''],
+                [
+                    'always keepalive with small gzip POST',
+                    'POST',
+                    'small',
+                    Compression.GZipJS,
+                    true,
+                    '&compression=gzip-js',
+                ],
+                [
+                    'always keepalive with small base64 POST',
+                    'POST',
+                    'small',
+                    Compression.Base64,
+                    true,
+                    '&compression=base64',
+                ],
+                ['never keepalive with GET', 'GET', undefined, Compression.GZipJS, false, '&compression=gzip-js'],
+                ['never keepalive with large JSON POST', 'POST', veryLargeBodyData, undefined, false, ''],
+                [
+                    'never keepalive with large GZIP POST',
+                    'POST',
+                    veryLargeBodyData,
+                    Compression.GZipJS,
+                    false,
+                    '&compression=gzip-js',
+                ],
+                [
+                    'never keepalive with large base64 POST',
+                    'POST',
+                    veryLargeBodyData,
+                    Compression.Base64,
+                    false,
+                    '&compression=base64',
+                ],
+            ])(
+                `uses keep alive: %s`,
+                (
+                    _name: string,
+                    method: 'POST' | 'GET',
+                    body: any,
+                    compression: Compression | undefined,
+                    expectedKeepAlive: boolean,
+                    expectedURLParams: string
+                ) => {
+                    request(
+                        createRequest({
+                            headers: {
+                                'x-header': 'value',
+                            },
+                            method,
+                            compression,
+                            data: body,
+                        })
+                    )
+
+                    expect(mockedFetch).toHaveBeenCalledWith(
+                        `https://any.posthog-instance.com?ver=1.23.45&_=1700000000000${expectedURLParams}`,
+                        expect.objectContaining({
+                            headers: new Headers(),
+                            keepalive: expectedKeepAlive,
+                            method,
+                        })
+                    )
+                }
+            )
         })
     })
 

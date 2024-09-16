@@ -77,6 +77,7 @@ import { TracingHeaders } from './extensions/tracing-headers'
 import { ConsentManager } from './consent'
 import { ExceptionObserver } from './extensions/exception-autocapture'
 import { WebVitalsAutocapture } from './extensions/web-vitals'
+import { WebExperiments } from './web-experiments'
 import { PostHogExceptions } from './posthog-exceptions'
 
 /*
@@ -139,6 +140,7 @@ export const defaultConfig = (): PostHogConfig => ({
     upgrade: false,
     disable_session_recording: false,
     disable_persistence: false,
+    disable_web_experiments: true, // disabled in beta.
     disable_surveys: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
@@ -242,6 +244,7 @@ export class PostHog {
     pageViewManager: PageViewManager
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
+    experiments: WebExperiments
     toolbar: Toolbar
     exceptions: PostHogExceptions
     consent: ConsentManager
@@ -297,6 +300,7 @@ export class PostHog {
         this.scrollManager = new ScrollManager(this)
         this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
+        this.experiments = new WebExperiments(this)
         this.exceptions = new PostHogExceptions(this)
         this.rateLimiter = new RateLimiter(this)
         this.requestRouter = new RequestRouter(this)
@@ -537,6 +541,7 @@ export class PostHog {
         this.sessionRecording?.afterDecideResponse(response)
         this.autocapture?.afterDecideResponse(response)
         this.heatmaps?.afterDecideResponse(response)
+        this.experiments?.afterDecideResponse(response)
         this.surveys?.afterDecideResponse(response)
         this.webVitalsAutocapture?.afterDecideResponse(response)
         this.exceptions?.afterDecideResponse(response)
