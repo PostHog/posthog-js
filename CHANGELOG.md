@@ -1,3 +1,9 @@
+## 1.161.6 - 2024-09-18
+
+- fix: when capturing without performance entry we can capture manual initiator type (#1422)
+- chore: auto publish alpha versions (#1414)
+- chore: move test file into __tests__ (#1418)
+
 ## 1.161.5 - 2024-09-16
 
 - fix: teardown and restart recording on session id change (#1411)
