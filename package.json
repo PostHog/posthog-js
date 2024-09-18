@@ -8,7 +8,7 @@
     "scripts": {
         "start": "pnpm build-react && pnpm build-rollup -w",
         "build": "pnpm build-rollup && pnpm build-react",
-        "build-rollup": "rm -rf lib && tsc -b && rollup -c --bundleConfigAsCjs",
+        "build-rollup": "tsc -b && rollup -c --bundleConfigAsCjs",
         "build-react": "cd react; NODE_ENV=dev pnpm i; pnpm build;",
         "lint": "eslint src && eslint cypress",
         "lint:fix": "eslint src --fix && eslint cypress --fix",
@@ -100,6 +100,7 @@
         "preact-render-to-string": "^6.3.1",
         "prettier": "^2.7.1",
         "rollup": "^4.9.6",
+        "rollup-plugin-dts": "^6.1.0",
         "rollup-plugin-ts": "^3.4.5",
         "rollup-plugin-visualizer": "^5.12.0",
         "rrweb": "2.0.0-alpha.13",

@@ -1,11 +1,12 @@
 import babel from '@rollup/plugin-babel'
-import json from '@rollup/plugin-json'  
+import json from '@rollup/plugin-json'
 import resolve from '@rollup/plugin-node-resolve'
 import typescript from '@rollup/plugin-typescript'
-import dts from 'rollup-plugin-ts'
+import { dts } from 'rollup-plugin-dts'
 import terser from '@rollup/plugin-terser'
 import { visualizer } from 'rollup-plugin-visualizer'
 import fs from 'fs'
+import path from 'path'
 
 const plugins = [
     json(),
@@ -18,8 +19,6 @@ const plugins = [
     }),
     terser({ toplevel: true }),
 ]
-
-/** @type {import('rollup').RollupOptions[]} */
 
 const entrypoints = fs.readdirSync('./src/entrypoints')
 
@@ -41,6 +40,8 @@ const entrypointTargets = entrypoints.map((file) => {
     // we're allowed to console log in this file :)
     // eslint-disable-next-line no-console
     console.log(`Building ${fileName} in ${format} format`)
+
+    /** @type {import('rollup').RollupOptions} */
     return {
         input: `src/entrypoints/${file}`,
         output: [
@@ -67,12 +68,17 @@ const typeTargets = entrypoints
     .filter((file) => file.endsWith('.es.ts'))
     .map((file) => {
         const source = `./lib/src/entrypoints/${file.replace('.ts', '.d.ts')}`
-        const dest = `./dist/${file.replace('.es.ts', '.d.ts')}`
-
+        /** @type {import('rollup').RollupOptions} */
         return {
             input: source,
-            output: [{ file: dest, format: 'es' }],
+            output: [
+                {
+                    dir: path.resolve('./dist'),
+                    entryFileNames: file.replace('.es.ts', '.d.ts'),
+                },
+            ],
             plugins: [
+                json(),
                 dts({
                     exclude: [],
                 }),
