@@ -1088,7 +1088,7 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
             ] as unknown as SurveyQuestion[]
-            expect(() => surveys.getNextSurveyStep(survey, 0, 1)).toThrow('The scale must be one of: 3, 5, 10')
+            expect(() => surveys.getNextSurveyStep(survey, 0, 1)).toThrow('The scale must be one of: 3, 5, 7, 10')
         })
 
         it('should throw an error for a response value out of the valid range', () => {
@@ -1109,6 +1109,8 @@ describe('surveys', () => {
             expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-3')
             ;(survey.questions[0] as RatingSurveyQuestion).scale = 5
             expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-5')
+            ;(survey.questions[0] as RatingSurveyQuestion).scale = 7
+            expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-7')
             ;(survey.questions[0] as RatingSurveyQuestion).scale = 10
             expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 0-10')
         })
