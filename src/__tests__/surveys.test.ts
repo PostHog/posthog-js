@@ -163,7 +163,7 @@ describe('surveys', () => {
             },
         } as unknown as PostHog
 
-        assignableWindow.__PosthogExtensions__= {
+        assignableWindow.__PosthogExtensions__ = {
             loadExternalDependency: loadScriptMock,
         }
 

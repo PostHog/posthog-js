@@ -1,2 +1,2 @@
 import './external-scripts-loader'
-import "./array.no-external"
+import './array.no-external'

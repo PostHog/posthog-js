@@ -53,7 +53,7 @@ describe('Exception Observer', () => {
 
         posthog = await createPosthogInstance(uuidv7(), { _onCapture: mockCapture })
         assignableWindow.__PosthogExtensions__ = {
-            loadExternalDependency: loadScriptMock
+            loadExternalDependency: loadScriptMock,
         }
 
         sendRequestSpy = jest.spyOn(posthog, '_send_request')

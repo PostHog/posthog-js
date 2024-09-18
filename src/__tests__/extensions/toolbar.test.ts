@@ -28,9 +28,9 @@ describe('Toolbar', () => {
         } as unknown as PostHog
 
         assignableWindow.__PosthogExtensions__ = {
-            loadExternalDependency: jest.fn((_ph, _path: any, callback: any) => callback())
+            loadExternalDependency: jest.fn((_ph, _path: any, callback: any) => callback()),
         }
-        
+
         toolbar = new Toolbar(instance)
     })
 
