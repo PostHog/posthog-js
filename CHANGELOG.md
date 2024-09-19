@@ -1,3 +1,7 @@
+## 1.162.0 - 2024-09-19
+
+- fix(surveys): 7-point likert scale didn't work with branching logic (#1424)
+
 ## 1.161.6 - 2024-09-18
 
 - fix: when capturing without performance entry we can capture manual initiator type (#1422)
