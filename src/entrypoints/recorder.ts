@@ -322,6 +322,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                                 start,
                                 end,
                                 url: url.toString(),
+                                initiatorType: 'xmlhttprequest',
                             })
                             cb({ requests })
                         })
@@ -355,6 +356,7 @@ function prepareRequest({
     start,
     end,
     url,
+    initiatorType,
 }: {
     entry: PerformanceResourceTiming | null
     method: string | undefined
@@ -363,8 +365,10 @@ function prepareRequest({
     isInitial?: boolean
     start?: number
     end?: number
-    // if there is no entry, we still need to know the url
+    // if there is no performance observer entry, we still need to know the url
     url?: string
+    // if there is no performance observer entry, we can provide the initiatorType
+    initiatorType?: string
 }): CapturedNetworkRequest[] {
     start = entry ? entry.startTime : start
     end = entry ? entry.responseEnd : end
@@ -389,7 +393,7 @@ function prepareRequest({
             timeOrigin,
             timestamp,
             method: method,
-            initiatorType: entry ? (entry.initiatorType as InitiatorType) : undefined,
+            initiatorType: entry ? (entry.initiatorType as InitiatorType) : initiatorType,
             status,
             requestHeaders: networkRequest.requestHeaders,
             requestBody: networkRequest.requestBody,
@@ -583,6 +587,7 @@ function initFetchObserver(
                             start,
                             end,
                             url: req.url,
+                            initiatorType: 'fetch',
                         })
                         cb({ requests })
                     })
