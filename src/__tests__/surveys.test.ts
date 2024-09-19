@@ -892,6 +892,32 @@ describe('surveys', () => {
             expect(surveys.getNextSurveyStep(survey, 0, 5)).toEqual(3)
         })
 
+        // Response-based branching, scale 1-7
+        it('should branch out the negative/neutral/positive respondents correctly (scale 1-7)', () => {
+            survey.questions = [
+                {
+                    question: 'How satisfied are you?',
+                    type: SurveyQuestionType.Rating,
+                    scale: 7,
+                    branching: {
+                        type: SurveyQuestionBranchingType.ResponseBased,
+                        responseValues: { negative: 1, neutral: 2, positive: 3 },
+                    },
+                },
+                { type: SurveyQuestionType.Open, question: 'We apologize for your experience. Can you tell us more?' },
+                { type: SurveyQuestionType.Open, question: 'What could we do to improve your experience?' },
+                { type: SurveyQuestionType.Open, question: 'Great! What did you enjoy the most?' },
+            ] as unknown as SurveyQuestion[]
+
+            expect(surveys.getNextSurveyStep(survey, 0, 1)).toEqual(1)
+            expect(surveys.getNextSurveyStep(survey, 0, 2)).toEqual(1)
+            expect(surveys.getNextSurveyStep(survey, 0, 3)).toEqual(1)
+            expect(surveys.getNextSurveyStep(survey, 0, 4)).toEqual(2)
+            expect(surveys.getNextSurveyStep(survey, 0, 5)).toEqual(3)
+            expect(surveys.getNextSurveyStep(survey, 0, 6)).toEqual(3)
+            expect(surveys.getNextSurveyStep(survey, 0, 7)).toEqual(3)
+        })
+
         // Response-based branching, scale 0-10 (NPS)
         it('should branch out detractors/passives/promoters correctly', () => {
             survey.questions = [
@@ -1088,7 +1114,7 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
             ] as unknown as SurveyQuestion[]
-            expect(() => surveys.getNextSurveyStep(survey, 0, 1)).toThrow('The scale must be one of: 3, 5, 10')
+            expect(() => surveys.getNextSurveyStep(survey, 0, 1)).toThrow('The scale must be one of: 3, 5, 7, 10')
         })
 
         it('should throw an error for a response value out of the valid range', () => {
@@ -1109,6 +1135,8 @@ describe('surveys', () => {
             expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-3')
             ;(survey.questions[0] as RatingSurveyQuestion).scale = 5
             expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-5')
+            ;(survey.questions[0] as RatingSurveyQuestion).scale = 7
+            expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-7')
             ;(survey.questions[0] as RatingSurveyQuestion).scale = 10
             expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 0-10')
         })
