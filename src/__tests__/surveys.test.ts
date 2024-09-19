@@ -179,8 +179,6 @@ describe('surveys', () => {
             // eslint-disable-next-line compat/compat
             value: new URL('https://example.com'),
         })
-
-        surveys.afterDecideResponse(decideResponse)
     })
 
     afterEach(() => {

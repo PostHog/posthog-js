@@ -97,6 +97,7 @@ export class PostHogSurveys {
         }
 
         const existingSurveys = this.instance.get_property(SURVEYS)
+
         if (!existingSurveys || forceReload) {
             this.instance._send_request({
                 url: this.instance.requestRouter.endpointFor(
