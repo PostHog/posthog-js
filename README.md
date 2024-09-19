@@ -79,6 +79,10 @@ If you forget to add the label, don't try to update the version locally as you w
 
 To release an alpha or beta version, you'll need to use the CLI locally:
 
+#### CLI
+
+Only one person is set as a collaborator on NPM, so they're the only person that can manually publish alphas
+
 1. Make sure you're a collaborator on `posthog-js` in npm ([check here](https://www.npmjs.com/package/posthog-js)).
 2. Make sure you're logged into the npm CLI (`npm login`).
 3. Check out your work-in-progress branch (do not release an alpha/beta from `main`).
@@ -91,3 +95,9 @@ To release an alpha or beta version, you'll need to use the CLI locally:
     ```
 
 5. Enjoy the new prerelease version. You can now use it locally, in a dummy app, or in the [main repo](https://github.com/posthog/PostHog).
+
+#### Automagically
+
+Use the "release alpha" label on your PR to have an alpha version published automatically. This automation currently doesn't check whether an alpha exists for the version it will try to publish. If you need to publish two alphas from one PR you'll need to fix that
+
+Remember that these versions are public and folk might use them, so make sure they're not _too_ alpha 🙈

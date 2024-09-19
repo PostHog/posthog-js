@@ -43,6 +43,8 @@ export const INITIAL_PERSON_INFO = '$initial_person_info'
 export const ENABLE_PERSON_PROCESSING = '$epp'
 export const TOOLBAR_ID = '__POSTHOG_TOOLBAR__'
 
+export const WEB_EXPERIMENTS = '$web_experiments'
+
 // These are properties that are reserved and will not be automatically included in events
 export const PERSISTENCE_RESERVED_PROPERTIES = [
     PEOPLE_DISTINCT_ID_KEY,

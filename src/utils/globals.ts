@@ -1,6 +1,7 @@
 import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
 import { ErrorEventArgs, ErrorProperties, Properties } from '../types'
+import { SurveyManager } from '../extensions/surveys'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
@@ -14,6 +15,11 @@ import { ErrorEventArgs, ErrorProperties, Properties } from '../types'
 
 // eslint-disable-next-line no-restricted-globals
 const win: (Window & typeof globalThis) | undefined = typeof window !== 'undefined' ? window : undefined
+
+/**
+ * This is our contract between (potentially) lazily loaded extensions and the SDK
+ * changes to this interface can be breaking changes for users of the SDK
+ */
 
 export type PostHogExtensionKind =
     | 'toolbar'
@@ -40,7 +46,8 @@ interface PostHogExtensions {
     rrweb?: { record: any; version: string; rrwebVersion: string }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
     canActivateRepeatedly?: (survey: any) => boolean
-    webVitalsCallbacks?: {
+    generateSurveys?: (posthog: PostHog) => SurveyManager | undefined
+    postHogWebVitalsCallbacks?: {
         onLCP: (metric: any) => void
         onCLS: (metric: any) => void
         onFCP: (metric: any) => void
