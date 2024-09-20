@@ -1,3 +1,7 @@
+## 1.163.0 - 2024-09-20
+
+- feat: type safe posthog extensions (#1407)
+
 ## 1.162.0 - 2024-09-19
 
 - fix(surveys): 7-point likert scale didn't work with branching logic (#1424)
