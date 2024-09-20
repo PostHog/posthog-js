@@ -42,7 +42,7 @@ describe('Exception Observer', () => {
         // assignableWindow.onerror = jest.fn()
         // assignableWindow.onerror__POSTHOG_INSTRUMENTED__ = true
 
-        assignableWindow.posthogErrorHandlers = posthogErrorWrappingFunctions
+        assignableWindow.__PosthogExtensions__.errorWrappingFunctions = posthogErrorWrappingFunctions
     }
 
     beforeEach(async () => {

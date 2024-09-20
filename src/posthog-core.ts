@@ -1822,8 +1822,14 @@ export class PostHog {
 
     /** Capture a caught exception manually */
     captureException(error: Error, additionalProperties?: Properties): void {
-        const properties: Properties = isFunction(assignableWindow.parseErrorAsProperties)
-            ? assignableWindow.parseErrorAsProperties([error.message, undefined, undefined, undefined, error])
+        const properties: Properties = isFunction(assignableWindow.__PosthogExtensions__?.parseErrorAsProperties)
+            ? assignableWindow.__PosthogExtensions__.parseErrorAsProperties([
+                  error.message,
+                  undefined,
+                  undefined,
+                  undefined,
+                  error,
+              ])
             : {
                   $exception_type: error.name,
                   $exception_message: error.message,

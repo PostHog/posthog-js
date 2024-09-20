@@ -30,7 +30,7 @@ import {
     isUndefined,
 } from '../utils/type-utils'
 import { logger } from '../utils/logger'
-import { window } from '../utils/globals'
+import { assignableWindow } from '../utils/globals'
 import { defaultNetworkOptions } from '../extensions/replay/config'
 import { formDataToQuery } from '../utils/request-utils'
 import { patch } from '../extensions/replay/rrweb-plugins/patch'
@@ -674,10 +674,17 @@ export const getRecordNetworkPlugin: (options?: NetworkRecordOptions) => RecordP
 
 // rrweb/networ@1 ends
 
-if (window) {
-    ;(window as any).rrweb = { record: rrwebRecord, version: 'v2', rrwebVersion: version }
-    ;(window as any).rrwebConsoleRecord = { getRecordConsolePlugin }
-    ;(window as any).getRecordNetworkPlugin = getRecordNetworkPlugin
-}
+assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
+assignableWindow.__PosthogExtensions__.rrwebPlugins = { getRecordConsolePlugin, getRecordNetworkPlugin }
+assignableWindow.__PosthogExtensions__.rrweb = { record: rrwebRecord, version: 'v2', rrwebVersion: version }
+
+// we used to put all of these items directly on window, and now we put it on __PosthogExtensions__
+// but that means that old clients which lazily load this extension are looking in the wrong place
+// yuck,
+// so we also put them directly on the window
+// when 1.161.1 is the oldest version seen in production we can remove this
+assignableWindow.rrweb = { record: rrwebRecord, version: 'v2', rrwebVersion: version }
+assignableWindow.rrwebConsoleRecord = { getRecordConsolePlugin }
+assignableWindow.getRecordNetworkPlugin = getRecordNetworkPlugin
 
 export default rrwebRecord

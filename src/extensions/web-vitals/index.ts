@@ -197,7 +197,7 @@ export class WebVitalsAutocapture {
         let onINP: WebVitalsMetricCallback | undefined
 
         const posthogExtensions = assignableWindow.__PosthogExtensions__
-        if (!isUndefined(posthogExtensions)) {
+        if (!isUndefined(posthogExtensions) && !isUndefined(posthogExtensions.postHogWebVitalsCallbacks)) {
             ;({ onLCP, onCLS, onFCP, onINP } = posthogExtensions.postHogWebVitalsCallbacks)
         }
 

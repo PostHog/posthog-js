@@ -13,7 +13,7 @@ export class TracingHeaders {
     constructor(private readonly instance: PostHog) {}
 
     private _loadScript(cb: () => void): void {
-        if (assignableWindow.postHogTracingHeadersPatchFns) {
+        if (assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns) {
             // already loaded
             cb()
         }
@@ -40,10 +40,10 @@ export class TracingHeaders {
     private _startCapturing = () => {
         // NB: we can assert sessionManager is present only because we've checked previously
         if (isUndefined(this._restoreXHRPatch)) {
-            assignableWindow.postHogTracingHeadersPatchFns._patchXHR(this.instance.sessionManager!)
+            assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchXHR(this.instance.sessionManager!)
         }
         if (isUndefined(this._restoreFetchPatch)) {
-            assignableWindow.postHogTracingHeadersPatchFns._patchFetch(this.instance.sessionManager!)
+            assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchFetch(this.instance.sessionManager!)
         }
     }
 }

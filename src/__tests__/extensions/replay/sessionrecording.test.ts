@@ -134,19 +134,21 @@ describe('SessionRecording', () => {
     let addCaptureHookMock: Mock
 
     const addRRwebToWindow = () => {
-        assignableWindow.rrweb = {
+        assignableWindow.__PosthogExtensions__.rrweb = {
             record: jest.fn(({ emit }) => {
                 _emit = emit
                 return () => {}
             }),
+            version: 'fake',
+            rrwebVersion: 'fake',
         }
-        assignableWindow.rrweb.record.takeFullSnapshot = jest.fn(() => {
+        assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = jest.fn(() => {
             // we pretend to be rrweb and call emit
             _emit(createFullSnapshot())
         })
-        assignableWindow.rrweb.record.addCustomEvent = _addCustomEvent
+        assignableWindow.__PosthogExtensions__.rrweb.record.addCustomEvent = _addCustomEvent
 
-        assignableWindow.rrwebConsoleRecord = {
+        assignableWindow.__PosthogExtensions__.rrwebPlugins = {
             getRecordConsolePlugin: jest.fn(),
         }
     }
@@ -165,8 +167,13 @@ describe('SessionRecording', () => {
             persistence: 'memory',
         } as unknown as PostHogConfig
 
-        assignableWindow.rrweb = undefined
-        assignableWindow.rrwebConsoleRecord = undefined
+        assignableWindow.__PosthogExtensions__ = {
+            rrweb: undefined,
+            rrwebPlugins: {
+                getRecordConsolePlugin: undefined,
+                getRecordNetworkPlugin: undefined,
+            },
+        }
 
         sessionIdGeneratorMock = jest.fn().mockImplementation(() => sessionId)
         windowIdGeneratorMock = jest.fn().mockImplementation(() => 'windowId')
@@ -636,7 +643,7 @@ describe('SessionRecording', () => {
                 sessionRecording.startIfEnabledOrStop()
 
                 sessionRecording['_onScriptLoaded']()
-                expect(assignableWindow.rrweb.record).toHaveBeenCalledWith(
+                expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
                     expect.objectContaining({
                         recordCanvas: true,
                         sampling: { canvas: 6 },
@@ -659,7 +666,7 @@ describe('SessionRecording', () => {
 
                 sessionRecording['_onScriptLoaded']()
 
-                const mockParams = assignableWindow.rrweb.record.mock.calls[0][0]
+                const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
                 expect(mockParams).not.toHaveProperty('recordCanvas')
                 expect(mockParams).not.toHaveProperty('canvasFps')
                 expect(mockParams).not.toHaveProperty('canvasQuality')
@@ -672,7 +679,7 @@ describe('SessionRecording', () => {
             sessionRecording.startIfEnabledOrStop()
             // maskAllInputs should change from default
             // someUnregisteredProp should not be present
-            expect(assignableWindow.rrweb.record).toHaveBeenCalledWith({
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith({
                 emit: expect.anything(),
                 maskAllInputs: false,
                 blockClass: 'ph-no-capture',
@@ -700,7 +707,7 @@ describe('SessionRecording', () => {
             ])('%s', (_name: string, session_recording: SessionRecordingOptions, expected: boolean) => {
                 posthog.config.session_recording = session_recording
                 sessionRecording.startIfEnabledOrStop()
-                expect(assignableWindow.rrweb.record).toHaveBeenCalledWith(
+                expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
                     expect.objectContaining({
                         maskInputOptions: expect.objectContaining({ password: expected }),
                     })
@@ -999,7 +1006,9 @@ describe('SessionRecording', () => {
 
                 sessionRecording.startIfEnabledOrStop()
 
-                expect(assignableWindow.rrwebConsoleRecord.getRecordConsolePlugin).not.toHaveBeenCalled()
+                expect(
+                    assignableWindow.__PosthogExtensions__.rrwebPlugins.getRecordConsolePlugin
+                ).not.toHaveBeenCalled()
             })
 
             it('if enabled, plugin is used', () => {
@@ -1007,7 +1016,7 @@ describe('SessionRecording', () => {
 
                 sessionRecording.startIfEnabledOrStop()
 
-                expect(assignableWindow.rrwebConsoleRecord.getRecordConsolePlugin).toHaveBeenCalled()
+                expect(assignableWindow.__PosthogExtensions__.rrwebPlugins.getRecordConsolePlugin).toHaveBeenCalled()
             })
         })
 
@@ -1246,7 +1255,7 @@ describe('SessionRecording', () => {
             startingTimestamp = sessionRecording['_lastActivityTimestamp']
             expect(startingTimestamp).toBeGreaterThan(0)
 
-            expect(assignableWindow.rrweb.record.takeFullSnapshot).toHaveBeenCalledTimes(0)
+            expect(assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot).toHaveBeenCalledTimes(0)
 
             // the buffer starts out empty
             expect(sessionRecording['buffer']).toEqual({

@@ -129,7 +129,7 @@ describe('surveys', () => {
 
         loadScriptMock.mockImplementation((_path, callback) => {
             assignableWindow.__PosthogExtensions__ = assignableWindow.__Posthog__ || {}
-            assignableWindow.extendPostHogWithSurveys = generateSurveys
+            assignableWindow.__PosthogExtensions__.generateSurveys = generateSurveys
             assignableWindow.__PosthogExtensions__.canActivateRepeatedly = canActivateRepeatedly
 
             callback()

@@ -118,7 +118,7 @@ export class SessionRecording {
     _forceAllowLocalhostNetworkCapture = false
 
     private get rrwebRecord(): rrwebRecord | undefined {
-        return assignableWindow?.rrweb?.record
+        return assignableWindow?.__PosthogExtensions__?.rrweb?.record
     }
 
     public get started(): boolean {
@@ -735,18 +735,18 @@ export class SessionRecording {
     private _gatherRRWebPlugins() {
         const plugins: RecordPlugin<unknown>[] = []
 
-        if (assignableWindow.rrwebConsoleRecord && this.isConsoleLogCaptureEnabled) {
-            plugins.push(assignableWindow.rrwebConsoleRecord.getRecordConsolePlugin())
+        const recordConsolePlugin = assignableWindow.__PosthogExtensions__?.rrwebPlugins?.getRecordConsolePlugin
+        if (recordConsolePlugin && this.isConsoleLogCaptureEnabled) {
+            plugins.push(recordConsolePlugin())
         }
 
-        if (this.networkPayloadCapture && isFunction(assignableWindow.getRecordNetworkPlugin)) {
+        const networkPlugin = assignableWindow.__PosthogExtensions__?.rrwebPlugins?.getRecordNetworkPlugin
+        if (this.networkPayloadCapture && isFunction(networkPlugin)) {
             const canRecordNetwork = !isLocalhost() || this._forceAllowLocalhostNetworkCapture
 
             if (canRecordNetwork) {
                 plugins.push(
-                    assignableWindow.getRecordNetworkPlugin(
-                        buildNetworkRequestOptions(this.instance.config, this.networkPayloadCapture)
-                    )
+                    networkPlugin(buildNetworkRequestOptions(this.instance.config, this.networkPayloadCapture))
                 )
             } else {
                 logger.info(LOGGER_PREFIX + ' NetworkCapture not started because we are on localhost.')

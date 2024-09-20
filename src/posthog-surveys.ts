@@ -74,7 +74,7 @@ export class PostHogSurveys {
     }
 
     loadIfEnabled() {
-        const surveysGenerator = assignableWindow?.extendPostHogWithSurveys
+        const surveysGenerator = assignableWindow?.__PosthogExtensions__?.generateSurveys
 
         if (!this.instance.config.disable_surveys && this._decideServerResponse && !surveysGenerator) {
             if (this._surveyEventReceiver == null) {
@@ -85,7 +85,7 @@ export class PostHogSurveys {
                     return logger.error(LOGGER_PREFIX, 'Could not load surveys script', err)
                 }
 
-                this._surveyManager = assignableWindow.extendPostHogWithSurveys(this.instance)
+                this._surveyManager = assignableWindow.__PosthogExtensions__?.generateSurveys?.(this.instance)
             })
         }
     }
