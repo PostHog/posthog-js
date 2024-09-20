@@ -4,6 +4,7 @@ import { uuidv7 } from '../uuidv7'
 
 const mockReferrerGetter = jest.fn()
 const mockURLGetter = jest.fn()
+const mockHostGetter = jest.fn()
 jest.mock('../utils/globals', () => {
     const orig = jest.requireActual('../utils/globals')
     return {
@@ -22,6 +23,7 @@ jest.mock('../utils/globals', () => {
             const url = mockURLGetter?.()
             return {
                 href: url,
+                host: mockHostGetter?.(),
                 toString: () => url,
             }
         },
@@ -192,6 +194,27 @@ describe('posthog core', () => {
                 // arrange
                 const token = uuidv7()
                 mockReferrerGetter.mockReturnValue('')
+                const { posthog, onCapture } = setup({
+                    token,
+                    persistence_name: token,
+                })
+
+                // act
+                posthog.capture(eventName, eventProperties)
+
+                // assert
+                const { $set_once, properties } = onCapture.mock.calls[0][1]
+                expect($set_once['$initial_referrer']).toBe('$direct')
+                expect($set_once['$initial_referring_domain']).toBe('$direct')
+                expect(properties['$referrer']).toBe('$direct')
+                expect(properties['$referring_domain']).toBe('$direct')
+            })
+
+            it('should use $direct when the referrer is the same as the current host', () => {
+                // arrange
+                const token = uuidv7()
+                mockReferrerGetter.mockReturnValue('https://tracked.example.com')
+                mockHostGetter.mockReturnValue('tracked.example.com')
                 const { posthog, onCapture } = setup({
                     token,
                     persistence_name: token,
