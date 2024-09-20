@@ -1,7 +1,6 @@
 import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
 import { ErrorEventArgs, ErrorProperties, Properties } from '../types'
-import { SurveyManager } from '../extensions/surveys'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
@@ -46,7 +45,7 @@ interface PostHogExtensions {
     rrweb?: { record: any; version: string; rrwebVersion: string }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
     canActivateRepeatedly?: (survey: any) => boolean
-    generateSurveys?: (posthog: PostHog) => SurveyManager | undefined
+    generateSurveys?: (posthog: PostHog) => any | undefined
     postHogWebVitalsCallbacks?: {
         onLCP: (metric: any) => void
         onCLS: (metric: any) => void
