@@ -126,22 +126,27 @@ export const Info = {
 
     deviceType: detectDeviceType,
 
+    referrerInfo: function (): Record<string, any> {
+        const referrer = document?.referrer
+        const referring_domain = referrer ? convertToURL(referrer)?.host : undefined
+        if (!referrer || !referring_domain || referring_domain === location?.host) {
+            return {
+                $referrer: '$direct',
+                $referring_domain: '$direct',
+            }
+        }
+        return {
+            $referrer: referrer,
+            $referring_domain: referring_domain,
+        }
+    },
+
     referrer: function (): string {
-        return document?.referrer || '$direct'
+        return this.referrerInfo().$referrer
     },
 
     referringDomain: function (): string {
-        if (!document?.referrer) {
-            return '$direct'
-        }
-        return convertToURL(document.referrer)?.host || '$direct'
-    },
-
-    referrerInfo: function (): Record<string, any> {
-        return {
-            $referrer: this.referrer(),
-            $referring_domain: this.referringDomain(),
-        }
+        return this.referrerInfo().$referring_domain
     },
 
     initialPersonInfo: function (): Record<string, any> {
