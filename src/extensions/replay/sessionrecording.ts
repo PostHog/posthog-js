@@ -558,7 +558,6 @@ export class SessionRecording {
                 this.isIdle = true
                 // don't take full snapshots while idle
                 clearInterval(this._fullSnapshotTimer)
-                // need to override the timestamp on the session idle events so they appear at the point we last saw activity, not this new point in time
                 this._tryAddCustomEvent('sessionIdle', {
                     eventTimestamp: event.timestamp,
                     lastActivityTimestamp: this._lastActivityTimestamp,
