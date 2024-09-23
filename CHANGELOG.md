@@ -1,3 +1,7 @@
+## 1.164.1 - 2024-09-23
+
+
+
 ## 1.164.0 - 2024-09-23
 
 - feat: Bundle option without any external scripts (#1413)
