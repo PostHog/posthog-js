@@ -61,6 +61,9 @@ jobs:
             - name: Install package.json dependencies with pnpm
               run: pnpm install --frozen-lockfile
 
+            - name: Build the package
+            - run: pnpm build
+
             - name: Publish the package in the npm registry
               run: npm publish --access public
               env:
