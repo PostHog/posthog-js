@@ -1,3 +1,7 @@
+## 1.163.1 - 2024-09-23
+
+- fix: session idle timestamp correction (#1428)
+
 ## 1.163.0 - 2024-09-20
 
 - feat: type safe posthog extensions (#1407)
