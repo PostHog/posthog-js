@@ -1,6 +1,6 @@
 import { json, Links, Meta, Outlet, Scripts, ScrollRestoration, useLoaderData } from '@remix-run/react'
-import { PostHogProvider } from 'posthog-js/react'
 import './tailwind.css'
+import { PostHogProvider } from './PostHogProvider'
 
 export async function loader() {
     return json({
