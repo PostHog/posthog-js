@@ -74,6 +74,14 @@ interface QueuedRRWebEvent {
     enqueuedAt: number
 }
 
+interface SessionIdlePayload {
+    eventTimestamp: number
+    lastActivityTimestamp: number
+    threshold: number
+    bufferLength: number
+    bufferSize: number
+}
+
 const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
     rrwebMethod,
     enqueuedAt: Date.now(),
@@ -797,6 +805,18 @@ export class SessionRecording {
         // but we allow custom events even when idle
         if (this.isIdle && event.type !== EventType.Custom) {
             return
+        }
+
+        if (event.type === EventType.Custom && event.data.tag === 'sessionIdle') {
+            // session idle events have a timestamp when rrweb sees them
+            // which can artificially lengthen a session
+            // we know when we detected it based on the payload and can correct the timestamp
+            const payload = event.data.payload as SessionIdlePayload
+            if (payload) {
+                const lastActivity = payload.lastActivityTimestamp
+                const threshold = payload.threshold
+                event.timestamp = lastActivity + threshold
+            }
         }
 
         const properties = {
