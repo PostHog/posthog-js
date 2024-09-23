@@ -1,3 +1,7 @@
+## 1.164.0 - 2024-09-23
+
+- feat: Bundle option without any external scripts (#1413)
+
 ## 1.163.1 - 2024-09-23
 
 - fix: session idle timestamp correction (#1428)
