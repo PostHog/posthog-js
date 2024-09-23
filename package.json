@@ -13,7 +13,7 @@
         "lint": "eslint src && eslint cypress",
         "lint:fix": "eslint src --fix && eslint cypress --fix",
         "prettier": "prettier --write src/ functional_tests/",
-        "prepublishOnly": "pnpm lint && pnpm test && pnpm build && pnpm test:react",
+        "prepublishOnly": "pnpm lint && pnpm build && pnpm test && pnpm test:react",
         "test": "pnpm test:unit && pnpm test:custom-eslint-rules && pnpm test:functional",
         "test:unit": "jest src",
         "test:custom-eslint-rules": "jest eslint-rules",
