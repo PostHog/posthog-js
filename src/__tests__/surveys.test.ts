@@ -127,7 +127,7 @@ describe('surveys', () => {
 
         const loadScriptMock = jest.fn()
 
-        loadScriptMock.mockImplementation((_path, callback) => {
+        loadScriptMock.mockImplementation((_ph, _path, callback) => {
             assignableWindow.__PosthogExtensions__ = assignableWindow.__Posthog__ || {}
             assignableWindow.__PosthogExtensions__.generateSurveys = generateSurveys
             assignableWindow.__PosthogExtensions__.canActivateRepeatedly = canActivateRepeatedly
@@ -163,7 +163,9 @@ describe('surveys', () => {
             },
         } as unknown as PostHog
 
-        instance.requestRouter.loadScript = loadScriptMock
+        assignableWindow.__PosthogExtensions__ = {
+            loadExternalDependency: loadScriptMock,
+        }
 
         surveys = new PostHogSurveys(instance)
         instance.surveys = surveys
@@ -177,8 +179,6 @@ describe('surveys', () => {
             // eslint-disable-next-line compat/compat
             value: new URL('https://example.com'),
         })
-
-        surveys.afterDecideResponse(decideResponse)
     })
 
     afterEach(() => {

@@ -46,13 +46,15 @@ describe('Exception Observer', () => {
     }
 
     beforeEach(async () => {
-        loadScriptMock.mockImplementation((_path, callback) => {
+        loadScriptMock.mockImplementation((_ph, _path, callback) => {
             addErrorWrappingFlagToWindow()
             callback()
         })
 
         posthog = await createPosthogInstance(uuidv7(), { _onCapture: mockCapture })
-        posthog.requestRouter.loadScript = loadScriptMock
+        assignableWindow.__PosthogExtensions__ = {
+            loadExternalDependency: loadScriptMock,
+        }
 
         sendRequestSpy = jest.spyOn(posthog, '_send_request')
 

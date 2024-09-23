@@ -68,11 +68,8 @@ export class Decide {
         if (response['siteApps']) {
             if (this.instance.config.opt_in_site_apps) {
                 for (const { id, url } of response['siteApps']) {
-                    const scriptUrl = this.instance.requestRouter.endpointFor('api', url)
-
                     assignableWindow[`__$$ph_site_app_${id}`] = this.instance
-
-                    this.instance.requestRouter.loadScript(scriptUrl, (err) => {
+                    assignableWindow.__PosthogExtensions__?.loadSiteApp?.(this.instance, url, (err) => {
                         if (err) {
                             return logger.error(`Error while initializing PostHog app with config id ${id}`, err)
                         }

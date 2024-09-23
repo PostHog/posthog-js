@@ -4,7 +4,6 @@ import { logger } from '../../utils/logger'
 import { isBoolean, isNullish, isNumber, isObject, isUndefined } from '../../utils/type-utils'
 import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { assignableWindow, window } from '../../utils/globals'
-import Config from '../../config'
 
 type WebVitalsMetricCallback = (metric: any) => void
 
@@ -91,8 +90,7 @@ export class WebVitalsAutocapture {
             // already loaded
             cb()
         }
-
-        this.instance.requestRouter.loadScript(`/static/web-vitals.js?v=${Config.LIB_VERSION}`, (err) => {
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'web-vitals', (err) => {
             if (err) {
                 logger.error(LOGGER_PREFIX + ' failed to load script', err)
                 return

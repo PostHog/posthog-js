@@ -4,7 +4,6 @@ import { DecideResponse, Properties } from '../../types'
 
 import { logger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
-import Config from '../../config'
 
 const LOGGER_PREFIX = '[Exception Autocapture]'
 
@@ -47,12 +46,16 @@ export class ExceptionObserver {
             cb()
         }
 
-        this.instance.requestRouter.loadScript(`/static/exception-autocapture.js?v=${Config.LIB_VERSION}`, (err) => {
-            if (err) {
-                return logger.error(LOGGER_PREFIX + ' failed to load script', err)
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
+            this.instance,
+            'exception-autocapture',
+            (err) => {
+                if (err) {
+                    return logger.error(LOGGER_PREFIX + ' failed to load script', err)
+                }
+                cb()
             }
-            cb()
-        })
+        )
     }
 
     private startCapturing = () => {

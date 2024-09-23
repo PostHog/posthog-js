@@ -203,12 +203,12 @@ describe('SessionRecording', () => {
             consent: { isOptedOut: () => false },
         } as unknown as PostHog
 
-        loadScriptMock.mockImplementation((_path, callback) => {
+        loadScriptMock.mockImplementation((_ph, _path, callback) => {
             addRRwebToWindow()
             callback()
         })
 
-        posthog.requestRouter.loadScript = loadScriptMock
+        assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
 
         // defaults
         posthog.persistence?.register({
@@ -908,7 +908,7 @@ describe('SessionRecording', () => {
         it('loads recording script from right place', () => {
             sessionRecording.startIfEnabledOrStop()
 
-            expect(loadScriptMock).toHaveBeenCalledWith('/static/recorder.js?v=v0.0.1', expect.anything())
+            expect(loadScriptMock).toHaveBeenCalledWith(expect.anything(), 'recorder', expect.anything())
         })
 
         it('loads script after `_startCapture` if not previously loaded', () => {
@@ -1825,7 +1825,7 @@ describe('SessionRecording', () => {
     describe('when rrweb is not available', () => {
         beforeEach(() => {
             // Fake rrweb not being available
-            loadScriptMock.mockImplementation((_path, callback) => {
+            loadScriptMock.mockImplementation((_ph, _path, callback) => {
                 callback()
             })
 

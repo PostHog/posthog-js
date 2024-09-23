@@ -89,7 +89,7 @@ describe('web vitals', () => {
                     capture_pageview: false,
                 })
 
-                loadScriptMock.mockImplementation((_path, callback) => {
+                loadScriptMock.mockImplementation((_ph, _path, callback) => {
                     // we need a set of fake web vitals handlers, so we can manually trigger the events
                     assignableWindow.__PosthogExtensions__ = {}
                     assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
@@ -109,7 +109,8 @@ describe('web vitals', () => {
                     callback()
                 })
 
-                posthog.requestRouter.loadScript = loadScriptMock
+                assignableWindow.__PosthogExtensions__ = {}
+                assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
 
                 // need to force this to get the web vitals script loaded
                 posthog.webVitalsAutocapture!.afterDecideResponse({

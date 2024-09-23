@@ -1,7 +1,6 @@
 import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
 import { logger } from '../utils/logger'
-import Config from '../config'
 import { isUndefined } from '../utils/type-utils'
 
 const LOGGER_PREFIX = '[TRACING-HEADERS]'
@@ -18,7 +17,7 @@ export class TracingHeaders {
             cb()
         }
 
-        this.instance.requestRouter.loadScript(`/static/tracing-headers.js?v=${Config.LIB_VERSION}`, (err) => {
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'tracing-headers', (err) => {
             if (err) {
                 return logger.error(LOGGER_PREFIX + ' failed to load script', err)
             }

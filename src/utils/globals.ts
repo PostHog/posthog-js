@@ -1,6 +1,6 @@
+import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
 import { ErrorEventArgs, ErrorProperties, Properties } from '../types'
-import { PostHog } from '../posthog-core'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
@@ -19,7 +19,24 @@ const win: (Window & typeof globalThis) | undefined = typeof window !== 'undefin
  * This is our contract between (potentially) lazily loaded extensions and the SDK
  * changes to this interface can be breaking changes for users of the SDK
  */
-interface PosthogExtensions {
+
+export type PostHogExtensionKind =
+    | 'toolbar'
+    | 'exception-autocapture'
+    | 'web-vitals'
+    | 'recorder'
+    | 'tracing-headers'
+    | 'surveys'
+
+interface PostHogExtensions {
+    loadExternalDependency?: (
+        posthog: PostHog,
+        kind: PostHogExtensionKind,
+        callback: (error?: string | Event, event?: Event) => void
+    ) => void
+
+    loadSiteApp?: (posthog: PostHog, appUrl: string, callback: (error?: string | Event, event?: Event) => void) => void
+
     parseErrorAsProperties?: ([event, source, lineno, colno, error]: ErrorEventArgs) => ErrorProperties
     errorWrappingFunctions?: {
         wrapOnError: (captureFn: (props: Properties) => void) => () => void
@@ -58,7 +75,7 @@ export const userAgent = navigator?.userAgent
 export const assignableWindow: Window &
     typeof globalThis &
     Record<string, any> & {
-        __PosthogExtensions__?: PosthogExtensions
+        __PosthogExtensions__?: PostHogExtensions
     } = win ?? ({} as any)
 
 export { win as window }
