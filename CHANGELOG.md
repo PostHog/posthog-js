@@ -1,9 +1,6 @@
 ## 1.164.1 - 2024-09-23
 
-
-
-## 1.164.0 - 2024-09-23
-
+- chore: build when publishing (#1430)
 - feat: Bundle option without any external scripts (#1413)
 
 ## 1.163.1 - 2024-09-23
