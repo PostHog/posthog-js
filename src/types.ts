@@ -157,6 +157,7 @@ export interface PostHogConfig {
     /** @deprecated - use `disable_persistence` instead  */
     disable_cookie?: boolean
     disable_surveys: boolean
+    disable_survey_partial_response: boolean
     disable_web_experiments: boolean
     /** If set, posthog-js will never load external scripts such as those needed for Session Replay or Surveys. */
     disable_external_dependency_loading?: boolean
@@ -332,7 +333,7 @@ export interface CaptureOptions {
     skip_client_rate_limiting?: boolean /** if set skips the client side rate limiting */
     transport?: RequestOptions['transport'] /** if set, overrides the desired transport method */
     timestamp?: Date
-    uuid?: string
+    insert_id?: string
 }
 
 export type FlagVariant = { flag: string; variant: string }

@@ -35,6 +35,7 @@ import {
 import { logger } from '../utils/logger'
 import { Cancel } from './surveys/components/QuestionHeader'
 import { uuidv7 } from '../uuidv7'
+import {uuid} from "fast-check";
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -298,13 +299,10 @@ export const renderSurveysPreview = ({
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor || 'white'
     )
 
-    const surveyResponseUUID = uuidv7()
-
     Preact.render(
         <SurveyPopup
             key="surveys-render-preview"
             survey={survey}
-            surveyResponseUUID={surveyResponseUUID}
             forceDisableHtml={forceDisableHtml}
             style={{
                 position: 'relative',
@@ -446,7 +444,6 @@ export function usePopupVisibility(
 export function SurveyPopup({
     survey,
     forceDisableHtml,
-    surveyResponseUUID,
     posthog,
     style,
     previewPageIndex,
@@ -455,7 +452,6 @@ export function SurveyPopup({
 }: {
     survey: Survey
     forceDisableHtml?: boolean
-    surveyResponseUUID?: string
     posthog?: PostHog
     style?: React.CSSProperties
     previewPageIndex?: number | undefined
@@ -496,7 +492,6 @@ export function SurveyPopup({
             {!shouldShowConfirmation ? (
                 <Questions
                     survey={survey}
-                    surveyResponseUUID={surveyResponseUUID}
                     forceDisableHtml={!!forceDisableHtml}
                     posthog={posthog}
                     styleOverrides={style}
@@ -522,13 +517,11 @@ export function Questions({
     survey,
     forceDisableHtml,
     posthog,
-    surveyResponseUUID,
     styleOverrides,
 }: {
     survey: Survey
     forceDisableHtml: boolean
     posthog?: PostHog
-    surveyResponseUUID?: string
     styleOverrides?: React.CSSProperties
 }) {
     const textColor = getContrastingTextColor(
@@ -538,6 +531,7 @@ export function Questions({
     const { isPreviewMode, previewPageIndex, handleCloseSurveyPopup, isPopup } = useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
+    const surveyResponseUUID = useMemo(() => uuidv7(), [survey])
 
     // Sync preview state
     useEffect(() => {
@@ -565,7 +559,9 @@ export function Questions({
         // Old SDK, no branching
         if (!posthog.getNextSurveyStep) {
             const isLastDisplayedQuestion = displayQuestionIndex === survey.questions.length - 1
-            logger.info('POSTHOG SURVEYS: Sending survey response', questionsResponses)
+            logger.info(`POSTHOG SURVEYS: Sending survey response with id : ${surveyResponseUUID} `, questionsResponses)
+            // eslint-disable-next-line no-console
+            console.log(`POSTHOG SURVEYS: Sending survey response with id : ${surveyResponseUUID} `, questionsResponses)
             sendSurveyEvent(
                 { ...questionsResponses, [responseKey]: res },
                 survey,
@@ -578,7 +574,9 @@ export function Questions({
         }
 
         const nextStep = posthog.getNextSurveyStep(survey, displayQuestionIndex, res)
-        logger.info('POSTHOG SURVEYS: Sending survey response', questionsResponses)
+        logger.info(`POSTHOG SURVEYS: Sending survey response  with id : ${surveyResponseUUID}`, questionsResponses)
+        // eslint-disable-next-line no-console
+        console.log(`POSTHOG SURVEYS: Sending survey response  with id : ${surveyResponseUUID}`, questionsResponses)
         sendSurveyEvent(
             { ...questionsResponses, [responseKey]: res },
             survey,

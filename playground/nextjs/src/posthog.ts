@@ -49,6 +49,7 @@ if (typeof window !== 'undefined') {
         session_recording: {
             recordCrossOriginIframes: true,
         },
+        disable_survey_partial_response: false,
         debug: true,
         scroll_root_selector: ['#scroll_element', 'html'],
         persistence: cookieConsentGiven() ? 'localStorage+cookie' : 'memory',

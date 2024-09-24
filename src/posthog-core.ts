@@ -142,6 +142,7 @@ export const defaultConfig = (): PostHogConfig => ({
     disable_persistence: false,
     disable_web_experiments: true, // disabled in beta.
     disable_surveys: false,
+    disable_survey_partial_response: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
     ip: true,
@@ -817,6 +818,7 @@ export class PostHog {
         const systemTime = new Date()
         const timestamp = options?.timestamp || systemTime
 
+        logger.info(`CORE: in capture function, uuid is : `, options?.uuid)
         let data: CaptureResult = {
             uuid: options?.uuid || uuidv7(),
             event: event_name,

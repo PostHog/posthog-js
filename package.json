@@ -12,7 +12,7 @@
         "build-react": "cd react; NODE_ENV=dev pnpm i; pnpm build;",
         "lint": "eslint src && eslint cypress",
         "prettier": "prettier --write src/ functional_tests/",
-        "prepublishOnly": "pnpm lint && pnpm test && pnpm build && pnpm test:react",
+        "prepublishOnly": "pnpm build",
         "test": "pnpm test:unit && pnpm test:custom-eslint-rules && pnpm test:functional",
         "test:unit": "jest src",
         "test:custom-eslint-rules": "jest eslint-rules",

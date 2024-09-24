@@ -534,17 +534,23 @@ export const sendSurveyEvent = (
     responses: Record<string, string | number | string[] | null> = {},
     survey: Survey,
     posthog?: PostHog,
-    closeSurvey?: boolean,
+    surveyCompleted?: boolean,
     surveyResponseUUID?: string
 ) => {
     if (!posthog) return
+
+    if (!surveyCompleted && posthog.config.disable_survey_partial_response) {
+        // do not send partial  responses
+        return
+    }
+
     localStorage.setItem(getSurveySeenKey(survey), 'true')
 
     posthog.capture(
         'survey sent',
         {
             $survey_name: survey.name,
-            $survey_completed: closeSurvey || false,
+            $survey_completed: surveyCompleted || false,
             $survey_id: survey.id,
             $survey_iteration: survey.current_iteration,
             $survey_iteration_start_date: survey.current_iteration_start_date,
@@ -557,10 +563,10 @@ export const sendSurveyEvent = (
         },
         {
             uuid: surveyResponseUUID,
-        } as unknown as CaptureOptions
+        }
     )
 
-    if (closeSurvey) {
+    if (surveyCompleted) {
         window.dispatchEvent(new Event('PHSurveySent'))
     }
 }
