@@ -34,6 +34,7 @@ import {
 } from './surveys/components/QuestionTypes'
 import { logger } from '../utils/logger'
 import { Cancel } from './surveys/components/QuestionHeader'
+import { uuidv7 } from '../uuidv7'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -297,10 +298,13 @@ export const renderSurveysPreview = ({
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor || 'white'
     )
 
+    const surveyResponseUUID = uuidv7()
+
     Preact.render(
         <SurveyPopup
             key="surveys-render-preview"
             survey={survey}
+            surveyResponseUUID={surveyResponseUUID}
             forceDisableHtml={forceDisableHtml}
             style={{
                 position: 'relative',
@@ -442,6 +446,7 @@ export function usePopupVisibility(
 export function SurveyPopup({
     survey,
     forceDisableHtml,
+    surveyResponseUUID,
     posthog,
     style,
     previewPageIndex,
@@ -450,6 +455,7 @@ export function SurveyPopup({
 }: {
     survey: Survey
     forceDisableHtml?: boolean
+    surveyResponseUUID?: string
     posthog?: PostHog
     style?: React.CSSProperties
     previewPageIndex?: number | undefined
@@ -490,6 +496,7 @@ export function SurveyPopup({
             {!shouldShowConfirmation ? (
                 <Questions
                     survey={survey}
+                    surveyResponseUUID={surveyResponseUUID}
                     forceDisableHtml={!!forceDisableHtml}
                     posthog={posthog}
                     styleOverrides={style}
@@ -515,11 +522,13 @@ export function Questions({
     survey,
     forceDisableHtml,
     posthog,
+    surveyResponseUUID,
     styleOverrides,
 }: {
     survey: Survey
     forceDisableHtml: boolean
     posthog?: PostHog
+    surveyResponseUUID?: string
     styleOverrides?: React.CSSProperties
 }) {
     const textColor = getContrastingTextColor(
@@ -555,15 +564,28 @@ export function Questions({
 
         // Old SDK, no branching
         if (!posthog.getNextSurveyStep) {
+            const isLastDisplayedQuestion = displayQuestionIndex === survey.questions.length - 1
             logger.info('POSTHOG SURVEYS: Sending survey response', questionsResponses)
-            sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
+            sendSurveyEvent(
+                { ...questionsResponses, [responseKey]: res },
+                survey,
+                posthog,
+                isLastDisplayedQuestion,
+                surveyResponseUUID
+            )
             setCurrentQuestionIndex(displayQuestionIndex + 1)
             return
         }
 
         const nextStep = posthog.getNextSurveyStep(survey, displayQuestionIndex, res)
         logger.info('POSTHOG SURVEYS: Sending survey response', questionsResponses)
-        sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
+        sendSurveyEvent(
+            { ...questionsResponses, [responseKey]: res },
+            survey,
+            posthog,
+            nextStep === SurveyQuestionBranchingType.End,
+            surveyResponseUUID
+        )
         if (nextStep !== SurveyQuestionBranchingType.End) {
             setCurrentQuestionIndex(nextStep)
         }

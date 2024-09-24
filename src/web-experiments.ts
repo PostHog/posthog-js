@@ -13,8 +13,6 @@ import { isNullish } from './utils/type-utils'
 import { isUrlMatchingRegex } from './utils/request-utils'
 import { logger } from './utils/logger'
 import { Info } from './utils/event-utils'
-import { Survey } from './posthog-surveys-types'
-import { getSurveySeenKey } from './extensions/surveys/surveys-utils'
 
 export const webExperimentUrlValidationMap: Record<
     WebExperimentUrlMatchType,
@@ -82,15 +80,6 @@ export class WebExperiments {
         this.getWebExperimentsAndEvaluateDisplayLogic()
     }
 
-    sendExperimentAppliedEvent(experiment: string, variant: string) {
-        if (!this.instance) return
-
-        this.instance.capture('$webexperiment_applied', {
-            $experiment_name: experiment,
-            $experiment_variant: variant,
-        })
-    }
-
     public getWebExperimentsAndEvaluateDisplayLogic = (forceReload: boolean = false): void => {
         this.getWebExperiments((webExperiments) => {
             WebExperiments.logInfo(`retrieved web experiments from the server`)
@@ -113,7 +102,6 @@ export class WebExperiments {
 
                     const selectedVariant = this._featureFlags[webExperiment.feature_flag_key] as unknown as string
                     if (selectedVariant && webExperiment.variants[selectedVariant]) {
-                        this.sendExperimentAppliedEvent(webExperiment.name, selectedVariant)
                         WebExperiments.applyTransforms(
                             webExperiment.name,
                             selectedVariant,
@@ -125,7 +113,6 @@ export class WebExperiments {
                         const testVariant = webExperiment.variants[variant]
                         const matchTest = WebExperiments.matchesTestVariant(testVariant)
                         if (matchTest) {
-                            this.sendExperimentAppliedEvent(webExperiment.name, variant)
                             WebExperiments.applyTransforms(webExperiment.name, variant, testVariant.transforms)
                         }
                     }
@@ -225,7 +212,6 @@ export class WebExperiments {
     }
 
     private static applyTransforms(experiment: string, variant: string, transforms: WebExperimentTransform[]) {
-        sendExperimentEvent(experiment, variant)
         transforms.forEach((transform) => {
             if (transform.selector) {
                 WebExperiments.logInfo(

@@ -818,7 +818,7 @@ export class PostHog {
         const timestamp = options?.timestamp || systemTime
 
         let data: CaptureResult = {
-            uuid: uuidv7(),
+            uuid: options?.uuid || uuidv7(),
             event: event_name,
             properties: this._calculate_event_properties(event_name, properties || {}, timestamp),
         }

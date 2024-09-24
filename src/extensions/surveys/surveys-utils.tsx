@@ -2,6 +2,7 @@ import { PostHog } from '../../posthog-core'
 import { Survey, SurveyAppearance, MultipleSurveyQuestion, SurveyQuestion } from '../../posthog-surveys-types'
 import { window as _window, document as _document } from '../../utils/globals'
 import { VNode, cloneElement, createContext } from 'preact'
+import { CaptureOptions } from '../../types'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
@@ -532,24 +533,36 @@ export const createShadow = (styleSheet: string, surveyId: string, element?: Ele
 export const sendSurveyEvent = (
     responses: Record<string, string | number | string[] | null> = {},
     survey: Survey,
-    posthog?: PostHog
+    posthog?: PostHog,
+    closeSurvey?: boolean,
+    surveyResponseUUID?: string
 ) => {
     if (!posthog) return
     localStorage.setItem(getSurveySeenKey(survey), 'true')
 
-    posthog.capture('survey sent', {
-        $survey_name: survey.name,
-        $survey_id: survey.id,
-        $survey_iteration: survey.current_iteration,
-        $survey_iteration_start_date: survey.current_iteration_start_date,
-        $survey_questions: survey.questions.map((question) => question.question),
-        sessionRecordingUrl: posthog.get_session_replay_url?.(),
-        ...responses,
-        $set: {
-            [getSurveyInteractionProperty(survey, 'responded')]: true,
+    posthog.capture(
+        'survey sent',
+        {
+            $survey_name: survey.name,
+            $survey_completed: closeSurvey || false,
+            $survey_id: survey.id,
+            $survey_iteration: survey.current_iteration,
+            $survey_iteration_start_date: survey.current_iteration_start_date,
+            $survey_questions: survey.questions.map((question) => question.question),
+            sessionRecordingUrl: posthog.get_session_replay_url?.(),
+            ...responses,
+            $set: {
+                [getSurveyInteractionProperty(survey, 'responded')]: true,
+            },
         },
-    })
-    window.dispatchEvent(new Event('PHSurveySent'))
+        {
+            uuid: surveyResponseUUID,
+        } as unknown as CaptureOptions
+    )
+
+    if (closeSurvey) {
+        window.dispatchEvent(new Event('PHSurveySent'))
+    }
 }
 
 export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {
