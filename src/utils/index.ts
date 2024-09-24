@@ -118,12 +118,7 @@ export const isValidRegex = function (str: string): boolean {
 }
 
 export const timestamp = function (): number {
-    Date.now =
-        Date.now ||
-        function () {
-            return +new Date()
-        }
-    return Date.now()
+    return Date.now ? Date.now() : +new Date()
 }
 
 export const trySafe = function <T>(fn: () => T): T | undefined {
