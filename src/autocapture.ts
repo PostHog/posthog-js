@@ -4,6 +4,7 @@ import {
     getClassNames,
     getDirectAndNestedSpanText,
     getElementsChainString,
+    getEventTarget,
     getSafeText,
     isAngularStyleAttr,
     isDocumentFragment,
@@ -22,7 +23,7 @@ import { AutocaptureConfig, DecideResponse, Properties } from './types'
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
-import { isBoolean, isFunction, isNull, isObject, isUndefined } from './utils/type-utils'
+import { isBoolean, isFunction, isNull, isObject } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { document, window } from './utils/globals'
 import { convertToURL } from './utils/request-utils'
@@ -243,25 +244,13 @@ export class Autocapture {
         }
     }
 
-    private _getEventTarget(e: Event): Element | null {
-        // https://developer.mozilla.org/en-US/docs/Web/API/Event/target#Compatibility_notes
-        if (isUndefined(e.target)) {
-            return (e.srcElement as Element) || null
-        } else {
-            if ((e.target as HTMLElement)?.shadowRoot) {
-                return (e.composedPath()[0] as Element) || null
-            }
-            return (e.target as Element) || null
-        }
-    }
-
     private _captureEvent(e: Event, eventName = '$autocapture'): boolean | void {
         if (!this.isEnabled) {
             return
         }
 
         /*** Don't mess with this code without running IE8 tests on it ***/
-        let target = this._getEventTarget(e)
+        let target = getEventTarget(e)
         if (isTextNode(target)) {
             // defeat Safari bug (see: http://www.quirksmode.org/js/events_properties.html)
             target = (target.parentNode || null) as Element | null

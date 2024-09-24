@@ -4,7 +4,7 @@ import { DecideResponse, Properties } from './types'
 import { PostHog } from './posthog-core'
 
 import { document, window } from './utils/globals'
-import { getParentElement, isTag } from './autocapture-utils'
+import { getEventTarget, getParentElement, isElementNode, isTag } from './autocapture-utils'
 import { HEATMAPS_ENABLED_SERVER_SIDE, TOOLBAR_ID } from './constants'
 import { isEmptyObject, isObject, isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
@@ -19,10 +19,10 @@ type HeatmapEventBuffer =
       }
     | undefined
 
-function elementOrParentPositionMatches(el: Element, matches: string[], breakOnElement?: Element): boolean {
-    let curEl: Element | false = el
+function elementOrParentPositionMatches(el: Element | null, matches: string[], breakOnElement?: Element): boolean {
+    let curEl: Element | null | false = el
 
-    while (curEl && !isTag(curEl, 'body')) {
+    while (curEl && isElementNode(curEl) && !isTag(curEl, 'body')) {
         if (curEl === breakOnElement) {
             return false
         }
@@ -139,7 +139,7 @@ export class Heatmaps {
         const scrollX = this.instance.scrollManager.scrollX()
         const scrollElement = this.instance.scrollManager.scrollElement()
 
-        const isFixedOrSticky = elementOrParentPositionMatches(e.target as Element, ['fixed', 'sticky'], scrollElement)
+        const isFixedOrSticky = elementOrParentPositionMatches(getEventTarget(e), ['fixed', 'sticky'], scrollElement)
 
         return {
             x: e.clientX + (isFixedOrSticky ? 0 : scrollX),
