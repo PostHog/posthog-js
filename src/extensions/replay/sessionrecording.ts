@@ -18,7 +18,6 @@ import {
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, FlagVariant, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
 import { EventType, type eventWithTime, IncrementalSource, type listenerHandler, RecordPlugin } from '@rrweb/types'
-import { timestamp } from '../../utils'
 
 import { isBoolean, isFunction, isNullish, isNumber, isObject, isString, isUndefined } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
@@ -492,7 +491,7 @@ export class SessionRecording {
                     payload: [JSON.stringify(message)],
                 },
             },
-            timestamp: timestamp(),
+            timestamp: Date.now(),
         })
     }
 
