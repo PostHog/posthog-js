@@ -1,3 +1,7 @@
+## 1.164.3 - 2024-09-24
+
+- fix: it's just rude to assign to date now (#1435)
+
 ## 1.164.2 - 2024-09-24
 
 - fix: get computed style error (#1433)
