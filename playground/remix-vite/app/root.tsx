@@ -1,6 +1,7 @@
 import { json, Links, Meta, Outlet, Scripts, ScrollRestoration, useLoaderData } from '@remix-run/react'
 import './tailwind.css'
 import { PostHogProvider } from './PostHogProvider'
+import { PostHogRoot } from './components/PostHogRoot'
 
 export async function loader() {
     return json({
@@ -29,8 +30,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
     const { PUBLIC_POSTHOG_KEY, PUBLIC_POSTHOG_HOST } = useLoaderData<typeof loader>()
+
     return (
         <PostHogProvider apiKey={PUBLIC_POSTHOG_KEY} options={{ api_host: PUBLIC_POSTHOG_HOST }}>
+            <PostHogRoot />
             <Outlet />
         </PostHogProvider>
     )
