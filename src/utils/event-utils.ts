@@ -2,7 +2,7 @@ import { getQueryParam, convertToURL } from './request-utils'
 import { isNull } from './type-utils'
 import { Properties } from '../types'
 import Config from '../config'
-import { each, extend, stripEmptyProperties, stripLeadingDollar, timestamp } from './index'
+import { each, extend, stripEmptyProperties, stripLeadingDollar } from './index'
 import { document, location, userAgent, window } from './globals'
 import { detectBrowser, detectBrowserVersion, detectDevice, detectDeviceType, detectOS } from './user-agent-utils'
 
@@ -211,7 +211,7 @@ export const Info = {
                 $lib: 'web',
                 $lib_version: Config.LIB_VERSION,
                 $insert_id: Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10),
-                $time: timestamp() / 1000, // epoch time in seconds
+                $time: Date.now() / 1000, // epoch time in seconds
             }
         )
     },
