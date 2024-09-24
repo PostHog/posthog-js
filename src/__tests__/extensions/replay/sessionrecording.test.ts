@@ -1988,6 +1988,13 @@ describe('SessionRecording', () => {
     })
 
     describe('when compression is active', () => {
+        const captureOptions = {
+            _batchKey: 'recordings',
+            _noTruncate: true,
+            _url: 'https://test.com/s/',
+            skip_client_rate_limiting: true,
+        }
+
         beforeEach(() => {
             posthog.config.session_recording.compress_events = true
             sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
@@ -2004,6 +2011,7 @@ describe('SessionRecording', () => {
                     $snapshot_data: [
                         {
                             data: expect.any(String),
+                            cv: '2024-10',
                             type: 2,
                         },
                     ],
@@ -2011,12 +2019,7 @@ describe('SessionRecording', () => {
                     $snapshot_bytes: expect.any(Number),
                     $window_id: 'windowId',
                 },
-                {
-                    _batchKey: 'recordings',
-                    _noTruncate: true,
-                    _url: 'https://test.com/s/',
-                    skip_client_rate_limiting: true,
-                }
+                captureOptions
             )
         })
 
@@ -2029,6 +2032,7 @@ describe('SessionRecording', () => {
                 {
                     $snapshot_data: [
                         {
+                            cv: '2024-10',
                             data: {
                                 adds: expect.any(String),
                                 texts: expect.any(String),
@@ -2044,12 +2048,7 @@ describe('SessionRecording', () => {
                     $snapshot_bytes: expect.any(Number),
                     $window_id: 'windowId',
                 },
-                {
-                    _batchKey: 'recordings',
-                    _noTruncate: true,
-                    _url: 'https://test.com/s/',
-                    skip_client_rate_limiting: true,
-                }
+                captureOptions
             )
         })
 
@@ -2071,6 +2070,7 @@ describe('SessionRecording', () => {
                                 source: 8,
                                 styleId: 1,
                             },
+                            cv: '2024-10',
                             type: 3,
                         },
                     ],
@@ -2078,12 +2078,7 @@ describe('SessionRecording', () => {
                     $snapshot_bytes: expect.any(Number),
                     $window_id: 'windowId',
                 },
-                {
-                    _batchKey: 'recordings',
-                    _noTruncate: true,
-                    _url: 'https://test.com/s/',
-                    skip_client_rate_limiting: true,
-                }
+                captureOptions
             )
         })
 
@@ -2100,12 +2095,7 @@ describe('SessionRecording', () => {
                     $snapshot_bytes: 86,
                     $window_id: 'windowId',
                 },
-                {
-                    _batchKey: 'recordings',
-                    _noTruncate: true,
-                    _url: 'https://test.com/s/',
-                    skip_client_rate_limiting: true,
-                }
+                captureOptions
             )
         })
 
@@ -2129,12 +2119,7 @@ describe('SessionRecording', () => {
                     $snapshot_bytes: 58,
                     $window_id: 'windowId',
                 },
-                {
-                    _batchKey: 'recordings',
-                    _noTruncate: true,
-                    _url: 'https://test.com/s/',
-                    skip_client_rate_limiting: true,
-                }
+                captureOptions
             )
         })
 
@@ -2157,12 +2142,7 @@ describe('SessionRecording', () => {
                     $snapshot_bytes: 69,
                     $window_id: 'windowId',
                 },
-                {
-                    _batchKey: 'recordings',
-                    _noTruncate: true,
-                    _url: 'https://test.com/s/',
-                    skip_client_rate_limiting: true,
-                }
+                captureOptions
             )
         })
     })

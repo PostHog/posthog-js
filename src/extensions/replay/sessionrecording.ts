@@ -125,10 +125,12 @@ export type compressedEvent =
 export type compressedEventWithTime = compressedEvent & {
     timestamp: number
     delay?: number
+    // marker for compression version
+    cv: '2024-10'
 }
 
 function gzipToString(data: unknown): string {
-    return strFromU8(gzipSync(strToU8(JSON.stringify(data))))
+    return strFromU8(gzipSync(strToU8(JSON.stringify(data))), true)
 }
 
 // rrweb's packer takes an event and returns a string or the reverse on unpact,
@@ -140,11 +142,13 @@ function compressEvent(event: eventWithTime, ph: PostHog): eventWithTime | compr
             return {
                 ...event,
                 data: gzipToString(event.data),
+                cv: '2024-10',
             }
         }
         if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.Mutation) {
             return {
                 ...event,
+                cv: '2024-10',
                 data: {
                     ...event.data,
                     texts: gzipToString(event.data.texts),
@@ -157,6 +161,7 @@ function compressEvent(event: eventWithTime, ph: PostHog): eventWithTime | compr
         if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.StyleSheetRule) {
             return {
                 ...event,
+                cv: '2024-10',
                 data: {
                     ...event.data,
                     adds: gzipToString(event.data.adds),
