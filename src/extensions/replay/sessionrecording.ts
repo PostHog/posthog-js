@@ -105,7 +105,23 @@ type compressedIncrementalSnapshotEvent = {
     }
 }
 
-export type compressedEvent = compressedFullSnapshotEvent | compressedIncrementalSnapshotEvent
+type compressedIncrementalStyleSnapshotEvent = {
+    type: EventType.IncrementalSnapshot
+    data: {
+        source: IncrementalSource.StyleSheetRule
+        id?: number
+        styleId?: number
+        replace?: string
+        replaceSync?: string
+        adds: string
+        removes: string
+    }
+}
+
+export type compressedEvent =
+    | compressedIncrementalStyleSnapshotEvent
+    | compressedFullSnapshotEvent
+    | compressedIncrementalSnapshotEvent
 export type compressedEventWithTime = compressedEvent & {
     timestamp: number
     delay?: number
@@ -135,6 +151,16 @@ function compressEvent(event: eventWithTime, ph: PostHog): eventWithTime | compr
                     attributes: gzipToString(event.data.attributes),
                     removes: gzipToString(event.data.removes),
                     adds: gzipToString(event.data.adds),
+                },
+            }
+        }
+        if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.StyleSheetRule) {
+            return {
+                ...event,
+                data: {
+                    ...event.data,
+                    adds: gzipToString(event.data.adds),
+                    removes: gzipToString(event.data.removes),
                 },
             }
         }
@@ -854,11 +880,10 @@ export class SessionRecording {
 
         // TODO: Re-add ensureMaxMessageSize once we are confident in it
         const event = truncateLargeConsoleLogs(throttledEvent)
-        const size = estimateSize(event)
 
         this._updateWindowAndSessionIds(event)
 
-        // When in an idle state we keep recording, but don't capture the events
+        // When in an idle state we keep recording, but don't capture the events,
         // but we allow custom events even when idle
         if (this.isIdle && event.type !== EventType.Custom) {
             return
@@ -876,11 +901,13 @@ export class SessionRecording {
             }
         }
 
+        const eventToSend = this.instance.config.session_recording.compress_events
+            ? compressEvent(event, this.instance)
+            : event
+        const size = estimateSize(eventToSend)
         const properties = {
             $snapshot_bytes: size,
-            $snapshot_data: this.instance.config.session_recording.compress_events
-                ? compressEvent(event, this.instance)
-                : event,
+            $snapshot_data: eventToSend,
             $session_id: this.sessionId,
             $window_id: this.windowId,
         }
