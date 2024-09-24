@@ -1,3 +1,8 @@
+## 1.164.2 - 2024-09-24
+
+- fix: get computed style error (#1433)
+- fix: changelog (#1431)
+
 ## 1.164.1 - 2024-09-23
 
 - chore: build when publishing (#1430)
