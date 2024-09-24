@@ -25,6 +25,7 @@ import { assignableWindow, document, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
 import { MutationRateLimiter } from './mutation-rate-limiter'
+import { gzipSync, strFromU8, strToU8 } from 'fflate'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -87,6 +88,64 @@ const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
 })
 
 const LOGGER_PREFIX = '[SessionRecording]'
+
+type compressedFullSnapshotEvent = {
+    type: EventType.FullSnapshot
+    data: string
+}
+
+type compressedIncrementalSnapshotEvent = {
+    type: EventType.IncrementalSnapshot
+    data: {
+        source: IncrementalSource
+        texts: string
+        attributes: string
+        removes: string
+        adds: string
+    }
+}
+
+export type compressedEvent = compressedFullSnapshotEvent | compressedIncrementalSnapshotEvent
+export type compressedEventWithTime = compressedEvent & {
+    timestamp: number
+    delay?: number
+}
+
+function gzipToString(data: unknown): string {
+    return strFromU8(gzipSync(strToU8(JSON.stringify(data))))
+}
+
+// rrweb's packer takes an event and returns a string or the reverse on unpact,
+// but we want to be able to inspect metadata during ingestion, and don't want to compress the entire event
+// so we have a custom packer that only compresses part of some events
+function compressEvent(event: eventWithTime, ph: PostHog): eventWithTime | compressedEventWithTime {
+    try {
+        if (event.type === EventType.FullSnapshot) {
+            return {
+                ...event,
+                data: gzipToString(event.data),
+            }
+        }
+        if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.Mutation) {
+            return {
+                ...event,
+                data: {
+                    ...event.data,
+                    texts: gzipToString(event.data.texts),
+                    attributes: gzipToString(event.data.attributes),
+                    removes: gzipToString(event.data.removes),
+                    adds: gzipToString(event.data.adds),
+                },
+            }
+        }
+    } catch (e: unknown) {
+        logger.error(LOGGER_PREFIX + ' could not compress event', e)
+        ph.captureException((e as Error) || 'e was not an error', {
+            attempted_event_type: event?.type || 'no event type',
+        })
+    }
+    return event
+}
 
 export class SessionRecording {
     private _endpoint: string
@@ -819,7 +878,9 @@ export class SessionRecording {
 
         const properties = {
             $snapshot_bytes: size,
-            $snapshot_data: event,
+            $snapshot_data: this.instance.config.session_recording.compress_events
+                ? compressEvent(event, this.instance)
+                : event,
             $session_id: this.sessionId,
             $window_id: this.windowId,
         }
