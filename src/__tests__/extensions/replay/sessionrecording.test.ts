@@ -89,11 +89,60 @@ const createIncrementalSnapshot = (event = {}): incrementalSnapshotEvent => ({
     ...event,
 })
 
-const createCustomSnapshot = (event = {}): customEvent => ({
+const createIncrementalMouseEvent = () => {
+    return createIncrementalSnapshot({
+        data: {
+            source: 2,
+            positions: [
+                {
+                    id: 1,
+                    x: 100,
+                    y: 200,
+                    timeOffset: 100,
+                },
+            ],
+        },
+    })
+}
+
+const createIncrementalMutationEvent = () => {
+    const mutationData = {
+        texts: [],
+        attributes: [],
+        removes: [],
+        adds: [],
+        isAttachIframe: true,
+    }
+    return createIncrementalSnapshot({
+        data: {
+            source: 0,
+            ...mutationData,
+        },
+    })
+}
+
+const createIncrementalStyleSheetEvent = () => {
+    return createIncrementalSnapshot({
+        data: {
+            // doesn't need to be a valid style sheet event
+            source: 8,
+            id: 1,
+            styleId: 1,
+            removes: [],
+            adds: [],
+            replace: 'something',
+            replaceSync: 'something',
+        },
+    })
+}
+
+const createCustomSnapshot = (event = {}, payload = {}): customEvent => ({
     type: EventType.Custom,
     data: {
         tag: 'custom',
-        payload: {},
+        payload: {
+            ...payload,
+        },
     },
     ...event,
 })
@@ -1935,6 +1984,166 @@ describe('SessionRecording', () => {
             _emit(createIncrementalSnapshot({ type: 3 }))
 
             expect((sessionRecording as any)['_tryAddCustomEvent']).not.toHaveBeenCalled()
+        })
+    })
+
+    describe('when compression is active', () => {
+        const captureOptions = {
+            _batchKey: 'recordings',
+            _noTruncate: true,
+            _url: 'https://test.com/s/',
+            skip_client_rate_limiting: true,
+        }
+
+        beforeEach(() => {
+            posthog.config.session_recording.compress_events = true
+            sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.startIfEnabledOrStop()
+        })
+
+        it('compresses full snapshot data', () => {
+            _emit(createFullSnapshot())
+            sessionRecording['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                {
+                    $snapshot_data: [
+                        {
+                            data: expect.any(String),
+                            cv: '2024-10',
+                            type: 2,
+                        },
+                    ],
+                    $session_id: sessionId,
+                    $snapshot_bytes: expect.any(Number),
+                    $window_id: 'windowId',
+                },
+                captureOptions
+            )
+        })
+
+        it('compresses incremental snapshot mutation data', () => {
+            _emit(createIncrementalMutationEvent())
+            sessionRecording['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                {
+                    $snapshot_data: [
+                        {
+                            cv: '2024-10',
+                            data: {
+                                adds: expect.any(String),
+                                texts: expect.any(String),
+                                removes: expect.any(String),
+                                attributes: expect.any(String),
+                                isAttachIframe: true,
+                                source: 0,
+                            },
+                            type: 3,
+                        },
+                    ],
+                    $session_id: sessionId,
+                    $snapshot_bytes: expect.any(Number),
+                    $window_id: 'windowId',
+                },
+                captureOptions
+            )
+        })
+
+        it('compresses incremental snapshot style data', () => {
+            _emit(createIncrementalStyleSheetEvent())
+            sessionRecording['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                {
+                    $snapshot_data: [
+                        {
+                            data: {
+                                adds: expect.any(String),
+                                id: 1,
+                                removes: expect.any(String),
+                                replace: 'something',
+                                replaceSync: 'something',
+                                source: 8,
+                                styleId: 1,
+                            },
+                            cv: '2024-10',
+                            type: 3,
+                        },
+                    ],
+                    $session_id: sessionId,
+                    $snapshot_bytes: expect.any(Number),
+                    $window_id: 'windowId',
+                },
+                captureOptions
+            )
+        })
+
+        it('does not compress incremental snapshot non full data', () => {
+            const mouseEvent = createIncrementalMouseEvent()
+            _emit(mouseEvent)
+            sessionRecording['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                {
+                    $snapshot_data: [mouseEvent],
+                    $session_id: sessionId,
+                    $snapshot_bytes: 86,
+                    $window_id: 'windowId',
+                },
+                captureOptions
+            )
+        })
+
+        it('does not compress custom events', () => {
+            _emit(createCustomSnapshot(undefined, { tag: 'wat' }))
+            sessionRecording['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                {
+                    $snapshot_data: [
+                        {
+                            data: {
+                                payload: { tag: 'wat' },
+                                tag: 'custom',
+                            },
+                            type: 5,
+                        },
+                    ],
+                    $session_id: sessionId,
+                    $snapshot_bytes: 58,
+                    $window_id: 'windowId',
+                },
+                captureOptions
+            )
+        })
+
+        it('does not compress meta events', () => {
+            _emit(createMetaSnapshot())
+            sessionRecording['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                {
+                    $snapshot_data: [
+                        {
+                            type: META_EVENT_TYPE,
+                            data: {
+                                href: 'https://has-to-be-present-or-invalid.com',
+                            },
+                        },
+                    ],
+                    $session_id: sessionId,
+                    $snapshot_bytes: 69,
+                    $window_id: 'windowId',
+                },
+                captureOptions
+            )
         })
     })
 })

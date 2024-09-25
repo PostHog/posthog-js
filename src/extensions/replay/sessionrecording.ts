@@ -25,6 +25,7 @@ import { assignableWindow, document, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
 import { MutationRateLimiter } from './mutation-rate-limiter'
+import { gzipSync, strFromU8, strToU8 } from 'fflate'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -87,6 +88,95 @@ const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
 })
 
 const LOGGER_PREFIX = '[SessionRecording]'
+
+type compressedFullSnapshotEvent = {
+    type: EventType.FullSnapshot
+    data: string
+}
+
+type compressedIncrementalSnapshotEvent = {
+    type: EventType.IncrementalSnapshot
+    data: {
+        source: IncrementalSource
+        texts: string
+        attributes: string
+        removes: string
+        adds: string
+    }
+}
+
+type compressedIncrementalStyleSnapshotEvent = {
+    type: EventType.IncrementalSnapshot
+    data: {
+        source: IncrementalSource.StyleSheetRule
+        id?: number
+        styleId?: number
+        replace?: string
+        replaceSync?: string
+        adds: string
+        removes: string
+    }
+}
+
+export type compressedEvent =
+    | compressedIncrementalStyleSnapshotEvent
+    | compressedFullSnapshotEvent
+    | compressedIncrementalSnapshotEvent
+export type compressedEventWithTime = compressedEvent & {
+    timestamp: number
+    delay?: number
+    // marker for compression version
+    cv: '2024-10'
+}
+
+function gzipToString(data: unknown): string {
+    return strFromU8(gzipSync(strToU8(JSON.stringify(data))), true)
+}
+
+// rrweb's packer takes an event and returns a string or the reverse on unpact,
+// but we want to be able to inspect metadata during ingestion, and don't want to compress the entire event
+// so we have a custom packer that only compresses part of some events
+function compressEvent(event: eventWithTime, ph: PostHog): eventWithTime | compressedEventWithTime {
+    try {
+        if (event.type === EventType.FullSnapshot) {
+            return {
+                ...event,
+                data: gzipToString(event.data),
+                cv: '2024-10',
+            }
+        }
+        if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.Mutation) {
+            return {
+                ...event,
+                cv: '2024-10',
+                data: {
+                    ...event.data,
+                    texts: gzipToString(event.data.texts),
+                    attributes: gzipToString(event.data.attributes),
+                    removes: gzipToString(event.data.removes),
+                    adds: gzipToString(event.data.adds),
+                },
+            }
+        }
+        if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.StyleSheetRule) {
+            return {
+                ...event,
+                cv: '2024-10',
+                data: {
+                    ...event.data,
+                    adds: gzipToString(event.data.adds),
+                    removes: gzipToString(event.data.removes),
+                },
+            }
+        }
+    } catch (e: unknown) {
+        logger.error(LOGGER_PREFIX + ' could not compress event', e)
+        ph.captureException((e as Error) || 'e was not an error', {
+            attempted_event_type: event?.type || 'no event type',
+        })
+    }
+    return event
+}
 
 export class SessionRecording {
     private _endpoint: string
@@ -795,11 +885,10 @@ export class SessionRecording {
 
         // TODO: Re-add ensureMaxMessageSize once we are confident in it
         const event = truncateLargeConsoleLogs(throttledEvent)
-        const size = estimateSize(event)
 
         this._updateWindowAndSessionIds(event)
 
-        // When in an idle state we keep recording, but don't capture the events
+        // When in an idle state we keep recording, but don't capture the events,
         // but we allow custom events even when idle
         if (this.isIdle && event.type !== EventType.Custom) {
             return
@@ -817,9 +906,13 @@ export class SessionRecording {
             }
         }
 
+        const eventToSend = this.instance.config.session_recording.compress_events
+            ? compressEvent(event, this.instance)
+            : event
+        const size = estimateSize(eventToSend)
         const properties = {
             $snapshot_bytes: size,
-            $snapshot_data: event,
+            $snapshot_data: eventToSend,
             $session_id: this.sessionId,
             $window_id: this.windowId,
         }
