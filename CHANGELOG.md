@@ -1,3 +1,7 @@
+## 1.165.0 - 2024-09-25
+
+- feat: compress replay data (#1436)
+
 ## 1.164.3 - 2024-09-24
 
 - fix: it's just rude to assign to date now (#1435)
