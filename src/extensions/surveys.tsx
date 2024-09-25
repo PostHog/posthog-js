@@ -35,7 +35,7 @@ import {
 import { logger } from '../utils/logger'
 import { Cancel } from './surveys/components/QuestionHeader'
 import { uuidv7 } from '../uuidv7'
-import {uuid} from "fast-check";
+import { uuid } from 'fast-check'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -531,7 +531,10 @@ export function Questions({
     const { isPreviewMode, previewPageIndex, handleCloseSurveyPopup, isPopup } = useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
-    const surveyResponseUUID = useMemo(() => uuidv7(), [survey])
+    const surveyResponseInsertID = useMemo(
+        () => Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10),
+        [survey]
+    )
 
     // Sync preview state
     useEffect(() => {
@@ -559,30 +562,36 @@ export function Questions({
         // Old SDK, no branching
         if (!posthog.getNextSurveyStep) {
             const isLastDisplayedQuestion = displayQuestionIndex === survey.questions.length - 1
-            logger.info(`POSTHOG SURVEYS: Sending survey response with id : ${surveyResponseUUID} `, questionsResponses)
+            logger.info(
+                `POSTHOG SURVEYS: Sending survey response with id : ${surveyResponseInsertID} `,
+                questionsResponses
+            )
             // eslint-disable-next-line no-console
-            console.log(`POSTHOG SURVEYS: Sending survey response with id : ${surveyResponseUUID} `, questionsResponses)
+            console.log(
+                `POSTHOG SURVEYS: Sending survey response with id : ${surveyResponseInsertID} `,
+                questionsResponses
+            )
             sendSurveyEvent(
                 { ...questionsResponses, [responseKey]: res },
                 survey,
                 posthog,
                 isLastDisplayedQuestion,
-                surveyResponseUUID
+                surveyResponseInsertID
             )
             setCurrentQuestionIndex(displayQuestionIndex + 1)
             return
         }
 
         const nextStep = posthog.getNextSurveyStep(survey, displayQuestionIndex, res)
-        logger.info(`POSTHOG SURVEYS: Sending survey response  with id : ${surveyResponseUUID}`, questionsResponses)
+        logger.info(`POSTHOG SURVEYS: Sending survey response  with id : ${surveyResponseInsertID}`, questionsResponses)
         // eslint-disable-next-line no-console
-        console.log(`POSTHOG SURVEYS: Sending survey response  with id : ${surveyResponseUUID}`, questionsResponses)
+        console.log(`POSTHOG SURVEYS: Sending survey response  with id : ${surveyResponseInsertID}`, questionsResponses)
         sendSurveyEvent(
             { ...questionsResponses, [responseKey]: res },
             survey,
             posthog,
             nextStep === SurveyQuestionBranchingType.End,
-            surveyResponseUUID
+            surveyResponseInsertID
         )
         if (nextStep !== SurveyQuestionBranchingType.End) {
             setCurrentQuestionIndex(nextStep)

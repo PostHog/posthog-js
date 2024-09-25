@@ -535,7 +535,7 @@ export const sendSurveyEvent = (
     survey: Survey,
     posthog?: PostHog,
     surveyCompleted?: boolean,
-    surveyResponseUUID?: string
+    surveyResponseInsertID?: string
 ) => {
     if (!posthog) return
 
@@ -562,7 +562,7 @@ export const sendSurveyEvent = (
             },
         },
         {
-            uuid: surveyResponseUUID,
+            insert_id: surveyResponseInsertID,
         }
     )
 
