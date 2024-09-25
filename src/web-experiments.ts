@@ -56,7 +56,7 @@ export class WebExperiments {
                 const selectedVariant = this.instance.getFeatureFlag(flag) as unknown as string
                 const webExperiment = this._flagToExperiments?.get(flag)
                 if (selectedVariant && webExperiment?.variants[selectedVariant]) {
-                    WebExperiments.applyTransforms(
+                    this.applyTransforms(
                         webExperiment.name,
                         selectedVariant,
                         webExperiment.variants[selectedVariant].transforms
@@ -102,7 +102,7 @@ export class WebExperiments {
 
                     const selectedVariant = this._featureFlags[webExperiment.feature_flag_key] as unknown as string
                     if (selectedVariant && webExperiment.variants[selectedVariant]) {
-                        WebExperiments.applyTransforms(
+                        this.applyTransforms(
                             webExperiment.name,
                             selectedVariant,
                             webExperiment.variants[selectedVariant].transforms
@@ -113,7 +113,7 @@ export class WebExperiments {
                         const testVariant = webExperiment.variants[variant]
                         const matchTest = WebExperiments.matchesTestVariant(testVariant)
                         if (matchTest) {
-                            WebExperiments.applyTransforms(webExperiment.name, variant, testVariant.transforms)
+                            this.applyTransforms(webExperiment.name, variant, testVariant.transforms)
                         }
                     }
                 }
@@ -211,7 +211,19 @@ export class WebExperiments {
         logger.info(`[WebExperiments] ${msg}`, args)
     }
 
-    private static applyTransforms(experiment: string, variant: string, transforms: WebExperimentTransform[]) {
+    private applyTransforms(experiment: string, variant: string, transforms: WebExperimentTransform[]) {
+        if (this.instance.capture) {
+            this.instance.capture('$web_experiment_applied', {
+                $experiment_name: experiment,
+                $experiment_variant: variant,
+            })
+        }
+
+        if (variant === 'control') {
+            WebExperiments.logInfo('control variant found, not applying any changes to the DOM')
+            return
+        }
+
         transforms.forEach((transform) => {
             if (transform.selector) {
                 WebExperiments.logInfo(
@@ -230,11 +242,11 @@ export class WebExperiments {
                                     break
 
                                 case 'html':
-                                    htmlElement.innerHTML = attribute.value
+                                    htmlElement.outerHTML = attribute.value
                                     break
 
-                                case 'cssClass':
-                                    htmlElement.className = attribute.value
+                                case 'css':
+                                    htmlElement.setAttribute('style', attribute.value)
                                     break
 
                                 default:
@@ -248,11 +260,11 @@ export class WebExperiments {
                     }
 
                     if (transform.html) {
-                        htmlElement.innerHTML = transform.html
+                        htmlElement.outerHTML = transform.html
                     }
 
-                    if (transform.className) {
-                        htmlElement.className = transform.className
+                    if (transform.css) {
+                        htmlElement.setAttribute('style', transform.css)
                     }
                 })
             }

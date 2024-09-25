@@ -8,7 +8,7 @@ export interface WebExperimentTransform {
     text?: string
     html?: string
     imgUrl?: string
-    className?: string
+    css?: string
 }
 
 export type WebExperimentUrlMatchType = 'regex' | 'not_regex' | 'exact' | 'is_not' | 'icontains' | 'not_icontains'
