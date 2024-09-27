@@ -1,23 +1,15 @@
-import { includes, registerEvent } from './utils'
-import RageClick from './extensions/rageclick'
-import { DecideResponse, Properties } from './types'
-import { PostHog } from './posthog-core'
-
-import { document, window } from './utils/globals'
-import { getEventTarget, getParentElement, isElementNode, isTag } from './autocapture-utils'
-import { HEATMAPS_ENABLED_SERVER_SIDE, TOOLBAR_ID } from './constants'
-import { isEmptyObject, isObject, isUndefined } from './utils/type-utils'
-import { logger } from './utils/logger'
+import { PostHog } from '../posthog-core'
+import RageClick from '../extensions/rageclick'
+import { HEATMAPS_ENABLED_SERVER_SIDE, TOOLBAR_ID } from '../constants'
+import { isEmptyObject, isObject, isUndefined } from '../utils/type-utils'
+import { logger } from '../utils/logger'
+import { assignableWindow, document, window } from '../utils/globals'
+import { DecideResponse, HeatmapEventBuffer, Properties } from '../types'
+import { includes, registerEvent } from '../utils'
+import { getEventTarget, getParentElement, isElementNode, isTag } from '../autocapture-utils'
+import { LazyExtension, LOGGER_PREFIX } from '../extensions/heatmaps'
 
 const DEFAULT_FLUSH_INTERVAL = 5000
-const HEATMAPS = 'heatmaps'
-const LOGGER_PREFIX = '[' + HEATMAPS + ']'
-
-type HeatmapEventBuffer =
-    | {
-          [key: string]: Properties[]
-      }
-    | undefined
 
 function elementOrParentPositionMatches(el: Element | null, matches: string[], breakOnElement?: Element): boolean {
     let curEl: Element | null | false = el
@@ -42,24 +34,19 @@ function elementInToolbar(el: Element): boolean {
     return el.id === TOOLBAR_ID || !!el.closest?.('#' + TOOLBAR_ID)
 }
 
-export class Heatmaps {
+export class HeatmapsAutocapture implements LazyExtension {
     instance: PostHog
     rageclicks = new RageClick()
     _enabledServerSide: boolean = false
     _initialized = false
     _mouseMoveTimeout: ReturnType<typeof setTimeout> | undefined
 
-    // TODO: Periodically flush this if no other event has taken care of it
     private buffer: HeatmapEventBuffer
     private _flushInterval: ReturnType<typeof setInterval> | null = null
 
     constructor(instance: PostHog) {
         this.instance = instance
         this._enabledServerSide = !!this.instance.persistence?.props[HEATMAPS_ENABLED_SERVER_SIDE]
-
-        window?.addEventListener('beforeunload', () => {
-            this.flush()
-        })
     }
 
     public get flushIntervalMilliseconds(): number {
@@ -83,7 +70,11 @@ export class Heatmaps {
         return this._enabledServerSide
     }
 
-    public startIfEnabled(): void {
+    private onUnload = () => {
+        this.flush()
+    }
+
+    startIfEnabled(): void {
         if (this.isEnabled) {
             // nested if here since we only want to run the else
             // if this.enabled === false
@@ -94,13 +85,15 @@ export class Heatmaps {
             logger.info(LOGGER_PREFIX + ' starting...')
             this._setupListeners()
             this._flushInterval = setInterval(this.flush.bind(this), this.flushIntervalMilliseconds)
+            window?.addEventListener('beforeunload', this.onUnload)
         } else {
             clearInterval(this._flushInterval ?? undefined)
             this.getAndClearBuffer()
+            window?.removeEventListener('beforeunload', this.onUnload)
         }
     }
 
-    public afterDecideResponse(response: DecideResponse) {
+    afterDecideResponse(response: DecideResponse) {
         const optIn = !!response['heatmaps']
 
         if (this.instance.persistence) {
@@ -205,3 +198,6 @@ export class Heatmaps {
         })
     }
 }
+
+assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
+assignableWindow.__PosthogExtensions__.HeatmapsAutocapture = (ph) => new HeatmapsAutocapture(ph)

@@ -584,3 +584,9 @@ export interface ErrorConversions {
     errorToProperties: (args: ErrorEventArgs) => ErrorProperties
     unhandledRejectionToProperties: (args: [ev: PromiseRejectionEvent]) => ErrorProperties
 }
+
+export type HeatmapEventBuffer =
+    | {
+          [key: string]: Properties[]
+      }
+    | undefined
