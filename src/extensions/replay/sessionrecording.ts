@@ -17,7 +17,14 @@ import {
 } from './sessionrecording-utils'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, FlagVariant, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
-import { EventType, type eventWithTime, IncrementalSource, type listenerHandler, RecordPlugin } from '@rrweb/types'
+import {
+    customEvent,
+    EventType,
+    type eventWithTime,
+    IncrementalSource,
+    type listenerHandler,
+    RecordPlugin,
+} from '@rrweb/types'
 
 import { isBoolean, isFunction, isNullish, isNumber, isObject, isString, isUndefined } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
@@ -169,13 +176,17 @@ function compressEvent(event: eventWithTime, ph: PostHog): eventWithTime | compr
                 },
             }
         }
-    } catch (e: unknown) {
+    } catch (e) {
         logger.error(LOGGER_PREFIX + ' could not compress event', e)
         ph.captureException((e as Error) || 'e was not an error', {
             attempted_event_type: event?.type || 'no event type',
         })
     }
     return event
+}
+
+function isSessionIdleEvent(e: eventWithTime): e is eventWithTime & customEvent {
+    return e.type === EventType.Custom && e.data.tag === 'sessionIdle'
 }
 
 export class SessionRecording {
@@ -643,7 +654,6 @@ export class SessionRecording {
         if (!isUserInteraction && !this.isIdle) {
             // We check if the lastActivityTimestamp is old enough to go idle
             if (event.timestamp - this._lastActivityTimestamp > RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) {
-                this.isIdle = true
                 // don't take full snapshots while idle
                 clearInterval(this._fullSnapshotTimer)
                 this._tryAddCustomEvent('sessionIdle', {
@@ -655,6 +665,7 @@ export class SessionRecording {
                 })
                 // proactively flush the buffer in case the session is idle for a long time
                 this._flushBuffer()
+                this.isIdle = true
             }
         }
 
@@ -890,11 +901,11 @@ export class SessionRecording {
 
         // When in an idle state we keep recording, but don't capture the events,
         // but we allow custom events even when idle
-        if (this.isIdle && event.type !== EventType.Custom) {
+        if (this.isIdle && !isSessionIdleEvent(event)) {
             return
         }
 
-        if (event.type === EventType.Custom && event.data.tag === 'sessionIdle') {
+        if (isSessionIdleEvent(event)) {
             // session idle events have a timestamp when rrweb sees them
             // which can artificially lengthen a session
             // we know when we detected it based on the payload and can correct the timestamp

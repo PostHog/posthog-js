@@ -136,10 +136,10 @@ const createIncrementalStyleSheetEvent = () => {
     })
 }
 
-const createCustomSnapshot = (event = {}, payload = {}): customEvent => ({
+const createCustomSnapshot = (event = {}, payload = {}, tag: string = 'custom'): customEvent => ({
     type: EventType.Custom,
     data: {
-        tag: 'custom',
+        tag: tag,
         payload: {
             ...payload,
         },
@@ -1371,7 +1371,7 @@ describe('SessionRecording', () => {
             })
         })
 
-        it('buffers custom events without capturing while idle', () => {
+        it('buffers sessionIdle but not other custom events without capturing while idle', () => {
             // force idle state
             sessionRecording['isIdle'] = true
             // buffer is empty
@@ -1381,21 +1381,28 @@ describe('SessionRecording', () => {
                 windowId: 'windowId',
             })
 
-            sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
+            sessionRecording.onRRwebEmit(
+                createCustomSnapshot({}, { lastActivityTimestamp: 100, threshold: 100 }, 'sessionIdle') as eventWithTime
+            )
+            sessionRecording.onRRwebEmit(createCustomSnapshot({}, {}, 'browserOffline') as eventWithTime)
 
             // custom event is buffered
             expect(sessionRecording['buffer']).toEqual({
                 data: [
                     {
                         data: {
-                            payload: {},
-                            tag: 'custom',
+                            payload: {
+                                lastActivityTimestamp: 100,
+                                threshold: 100,
+                            },
+                            tag: 'sessionIdle',
                         },
+                        timestamp: 200,
                         type: 5,
                     },
                 ],
                 sessionId: sessionId,
-                size: 47,
+                size: 111,
                 windowId: 'windowId',
             })
             emitInactiveEvent(startingTimestamp + 100, true)
