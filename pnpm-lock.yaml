@@ -87,9 +87,6 @@ devDependencies:
   '@types/sinon':
     specifier: ^17.0.1
     version: 17.0.1
-  '@types/uuid':
-    specifier: ^9.0.1
-    version: 9.0.1
   '@types/web':
     specifier: ^0.0.154
     version: 0.0.154
@@ -3056,10 +3053,6 @@ packages:
 
   /@types/ua-parser-js@0.7.39:
     resolution: {integrity: sha512-P/oDfpofrdtF5xw433SPALpdSchtJmY7nsJItf8h3KXqOslkbySh8zq4dSWXH2oTjRvJ5PczVEoCZPow6GicLg==}
-    dev: true
-
-  /@types/uuid@9.0.1:
-    resolution: {integrity: sha512-rFT3ak0/2trgvp4yYZo5iKFEPsET7vKydKF+VRCxlQ9bpheehyAJH89dAkaLEq/j/RZXJIqcgsmPJKUP1Z28HA==}
     dev: true
 
   /@types/web@0.0.154:
