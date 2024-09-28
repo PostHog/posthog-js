@@ -1,10 +1,10 @@
 import { PostHog } from '../posthog-core'
 import RageClick from '../extensions/rageclick'
-import { HEATMAPS_ENABLED_SERVER_SIDE, TOOLBAR_ID } from '../constants'
-import { isEmptyObject, isObject, isUndefined } from '../utils/type-utils'
+import { TOOLBAR_ID } from '../constants'
+import { isEmptyObject, isObject } from '../utils/type-utils'
 import { logger } from '../utils/logger'
 import { assignableWindow, document, window } from '../utils/globals'
-import { DecideResponse, HeatmapEventBuffer, Properties } from '../types'
+import { HeatmapEventBuffer, Properties } from '../types'
 import { includes, registerEvent } from '../utils'
 import { getEventTarget, getParentElement, isElementNode, isTag } from '../autocapture-utils'
 import { LazyExtension, LOGGER_PREFIX } from '../extensions/heatmaps'
@@ -37,7 +37,7 @@ function elementInToolbar(el: Element): boolean {
 export class HeatmapsAutocapture implements LazyExtension {
     instance: PostHog
     rageclicks = new RageClick()
-    _enabledServerSide: boolean = false
+
     _initialized = false
     _mouseMoveTimeout: ReturnType<typeof setTimeout> | undefined
 
@@ -46,7 +46,6 @@ export class HeatmapsAutocapture implements LazyExtension {
 
     constructor(instance: PostHog) {
         this.instance = instance
-        this._enabledServerSide = !!this.instance.persistence?.props[HEATMAPS_ENABLED_SERVER_SIDE]
     }
 
     public get flushIntervalMilliseconds(): number {
@@ -60,22 +59,12 @@ export class HeatmapsAutocapture implements LazyExtension {
         return flushInterval
     }
 
-    public get isEnabled(): boolean {
-        if (!isUndefined(this.instance.config.capture_heatmaps)) {
-            return this.instance.config.capture_heatmaps !== false
-        }
-        if (!isUndefined(this.instance.config.enable_heatmaps)) {
-            return this.instance.config.enable_heatmaps
-        }
-        return this._enabledServerSide
-    }
-
     private onUnload = () => {
         this.flush()
     }
 
     startIfEnabled(): void {
-        if (this.isEnabled) {
+        if (this.instance.heatmaps?.isEnabled) {
             // nested if here since we only want to run the else
             // if this.enabled === false
             // not if this method is called more than once
@@ -87,23 +76,18 @@ export class HeatmapsAutocapture implements LazyExtension {
             this._flushInterval = setInterval(this.flush.bind(this), this.flushIntervalMilliseconds)
             window?.addEventListener('beforeunload', this.onUnload)
         } else {
-            clearInterval(this._flushInterval ?? undefined)
-            this.getAndClearBuffer()
-            window?.removeEventListener('beforeunload', this.onUnload)
+            this.stop()
         }
     }
 
-    afterDecideResponse(response: DecideResponse) {
-        const optIn = !!response['heatmaps']
+    stop(): void {
+        clearInterval(this._flushInterval ?? undefined)
+        this.getAndClearBuffer()
+        window?.removeEventListener('beforeunload', this.onUnload)
+    }
 
-        if (this.instance.persistence) {
-            this.instance.persistence.register({
-                [HEATMAPS_ENABLED_SERVER_SIDE]: optIn,
-            })
-        }
-        // store this in-memory in case persistence is disabled
-        this._enabledServerSide = optIn
-        this.startIfEnabled()
+    afterDecideResponse() {
+        // no-op
     }
 
     public getAndClearBuffer(): HeatmapEventBuffer {

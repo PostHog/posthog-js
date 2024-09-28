@@ -16,12 +16,10 @@ export const LOGGER_PREFIX = '[' + HEATMAPS + ']'
 
 export class Heatmaps implements LazyExtension {
     instance: PostHog
-    private _enabledServerSide: boolean
     private _heatmapsAutocapture?: LazyExtension
 
     constructor(instance: PostHog) {
         this.instance = instance
-        this._enabledServerSide = !!this.instance.persistence?.props[HEATMAPS_ENABLED_SERVER_SIDE]
     }
 
     public get isEnabled(): boolean {
@@ -31,25 +29,29 @@ export class Heatmaps implements LazyExtension {
         if (!isUndefined(this.instance.config.enable_heatmaps)) {
             return this.instance.config.enable_heatmaps
         }
-        return this._enabledServerSide
+        return !!this.instance.persistence?.props[HEATMAPS_ENABLED_SERVER_SIDE]
     }
 
     public startIfEnabled(): void {
-        if (this.isEnabled) {
-            if (!this._heatmapsAutocapture) {
-                assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'heatmaps', (err) => {
-                    if (err) {
-                        return logger.error(LOGGER_PREFIX + ` could not load recorder`, err)
-                    }
+        if (!this.isEnabled) {
+            // no need to load the script if heatmaps are disabled
+            return
+        }
 
-                    this._onScriptLoaded()
-                })
-            } else {
+        if (!this._heatmapsAutocapture) {
+            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'heatmaps', (err) => {
+                if (err) {
+                    return logger.error(LOGGER_PREFIX + ` could not load recorder`, err)
+                }
+
                 this._onScriptLoaded()
-            }
+            })
+        } else {
+            this._onScriptLoaded()
         }
     }
 
+    // TODO reverse this dependency so it works if decide comes before the extension is loaded
     public afterDecideResponse(response: DecideResponse) {
         const optIn = !!response['heatmaps']
 
@@ -58,8 +60,7 @@ export class Heatmaps implements LazyExtension {
                 [HEATMAPS_ENABLED_SERVER_SIDE]: optIn,
             })
         }
-        // store this in-memory in case persistence is disabled
-        this._enabledServerSide = optIn
+
         this.startIfEnabled()
     }
 
