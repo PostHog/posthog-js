@@ -203,6 +203,8 @@ describe('SessionRecording', () => {
     }
 
     beforeEach(() => {
+        jest.useFakeTimers()
+
         sessionId = 'sessionId' + uuidv7()
 
         config = {
@@ -1689,8 +1691,6 @@ describe('SessionRecording', () => {
         })
 
         it('enters idle state even if there is no rrweb emit activity', () => {
-            jest.useFakeTimers('legacy')
-
             sessionRecording['_lastActivityTimestamp'] = startingTimestamp
             sessionRecording['isIdle'] = false // force active state
 
