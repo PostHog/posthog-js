@@ -710,10 +710,13 @@ export class SessionRecording {
     private onMaybeIdle(timestamp: number) {
         // We check if the lastActivityTimestamp is old enough to go idle
         if (timestamp - this._lastActivityTimestamp >= RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) {
+            // clear the idle timer in case rrweb activity triggered this
             clearTimeout(this._idleTimer)
 
             // don't take full snapshots while idle
             clearInterval(this._fullSnapshotTimer)
+
+            // record the idle event as a debug signal
             this._tryAddCustomEvent('sessionIdle', {
                 eventTimestamp: timestamp,
                 lastActivityTimestamp: this._lastActivityTimestamp,
@@ -721,6 +724,7 @@ export class SessionRecording {
                 bufferLength: this.buffer.data.length,
                 bufferSize: this.buffer.size,
             })
+
             // proactively flush the buffer in case the session is idle for a long time
             this._flushBuffer()
             this.isIdle = true
