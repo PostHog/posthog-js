@@ -24,8 +24,8 @@ export class SessionIdManager {
     private _sessionStartTimestamp: number | null
 
     private _sessionActivityTimestamp: number | null
-    private readonly _sessionTimeoutMs: number
     private _sessionIdChangedHandlers: SessionIdChangedCallback[] = []
+    private readonly _sessionTimeoutMs: number
 
     constructor(
         config: Partial<PostHogConfig>,

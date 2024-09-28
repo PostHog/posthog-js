@@ -191,7 +191,6 @@ function isSessionIdleEvent(e: eventWithTime): e is eventWithTime & customEvent 
 
 export class SessionRecording {
     private _endpoint: string
-    private flushBufferTimer?: any
 
     // we have a buffer - that contains PostHog snapshot events ready to be sent to the server
     private buffer: SnapshotBuffer
@@ -210,7 +209,10 @@ export class SessionRecording {
     private sessionId: string
     private _linkedFlag: string | FlagVariant | null = null
 
-    private _fullSnapshotTimer?: ReturnType<typeof setInterval>
+    private _fullSnapshotTimer?: number | undefined
+    // timer to check for whether user has gone idle, even if no rrweb activity to prompt the check
+    private _idleTimer?: number | undefined
+    private flushBufferTimer?: number | undefined
 
     private _removePageViewCaptureHook: (() => void) | undefined = undefined
     private _onSessionIdListener: (() => void) | undefined = undefined
@@ -419,6 +421,8 @@ export class SessionRecording {
                 })
             }
 
+            this.resetIdleTimeout()
+
             logger.info(LOGGER_PREFIX + ' started')
         } else {
             this.stopRecording()
@@ -438,6 +442,7 @@ export class SessionRecording {
 
             this.clearBuffer()
             clearInterval(this._fullSnapshotTimer)
+            clearTimeout(this._idleTimer)
 
             this._removePageViewCaptureHook?.()
             this._removePageViewCaptureHook = undefined
@@ -652,22 +657,9 @@ export class SessionRecording {
         const isUserInteraction = this.isInteractiveEvent(event)
 
         if (!isUserInteraction && !this.isIdle) {
-            // We check if the lastActivityTimestamp is old enough to go idle
-            if (event.timestamp - this._lastActivityTimestamp > RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) {
-                // don't take full snapshots while idle
-                clearInterval(this._fullSnapshotTimer)
-                this._tryAddCustomEvent('sessionIdle', {
-                    eventTimestamp: event.timestamp,
-                    lastActivityTimestamp: this._lastActivityTimestamp,
-                    threshold: RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
-                    bufferLength: this.buffer.data.length,
-                    bufferSize: this.buffer.size,
-                })
-                // proactively flush the buffer in case the session is idle for a long time
-                this._flushBuffer()
-                this.isIdle = true
-            }
+            this.onMaybeIdle(event.timestamp)
         }
+        this.resetIdleTimeout()
 
         let returningFromIdle = false
         if (isUserInteraction) {
@@ -704,6 +696,32 @@ export class SessionRecording {
             this.startIfEnabledOrStop()
         } else if (returningFromIdle) {
             this._scheduleFullSnapshot()
+        }
+    }
+
+    private resetIdleTimeout() {
+        clearTimeout(this._idleTimer)
+
+        this._idleTimer = window?.setTimeout(() => {
+            this.onMaybeIdle(Date.now())
+        }, RECORDING_IDLE_ACTIVITY_TIMEOUT_MS)
+    }
+
+    private onMaybeIdle(timestamp: number) {
+        // We check if the lastActivityTimestamp is old enough to go idle
+        if (timestamp - this._lastActivityTimestamp >= RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) {
+            // don't take full snapshots while idle
+            clearInterval(this._fullSnapshotTimer)
+            this._tryAddCustomEvent('sessionIdle', {
+                eventTimestamp: timestamp,
+                lastActivityTimestamp: this._lastActivityTimestamp,
+                threshold: RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
+                bufferLength: this.buffer.data.length,
+                bufferSize: this.buffer.size,
+            })
+            // proactively flush the buffer in case the session is idle for a long time
+            this._flushBuffer()
+            this.isIdle = true
         }
     }
 
@@ -834,7 +852,7 @@ export class SessionRecording {
             return
         }
 
-        this._fullSnapshotTimer = setInterval(() => {
+        this._fullSnapshotTimer = window?.setInterval(() => {
             this._tryTakeFullSnapshot()
         }, interval)
     }
@@ -1011,7 +1029,7 @@ export class SessionRecording {
             isNumber(minimumDuration) && isPositiveSessionDuration && sessionDuration < minimumDuration
 
         if (this.status === 'buffering' || isBelowMinimumDuration) {
-            this.flushBufferTimer = setTimeout(() => {
+            this.flushBufferTimer = window?.setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)
             return this.buffer
@@ -1047,7 +1065,7 @@ export class SessionRecording {
         this.buffer.data.push(properties.$snapshot_data)
 
         if (!this.flushBufferTimer && !this.isIdle) {
-            this.flushBufferTimer = setTimeout(() => {
+            this.flushBufferTimer = window?.setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)
         }
