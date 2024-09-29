@@ -1,6 +1,6 @@
 import { PostHog } from './posthog-core'
 import { DecideResponse } from './types'
-import { window } from './utils/globals'
+import { location, navigator, window } from './utils/globals'
 import {
     WebExperiment,
     WebExperimentsCallback,
@@ -13,6 +13,7 @@ import { isNullish } from './utils/type-utils'
 import { isUrlMatchingRegex } from './utils/request-utils'
 import { logger } from './utils/logger'
 import { Info } from './utils/event-utils'
+import { isLikelyBot } from './utils/blocked-uas'
 
 export const webExperimentUrlValidationMap: Record<
     WebExperimentUrlMatchType,
@@ -46,17 +47,17 @@ export class WebExperiments {
     }
 
     applyFeatureFlagChanges(flags: string[]) {
-        WebExperiments.logInfo('applying feature flags', flags)
         if (isNullish(this._flagToExperiments) || this.instance.config.disable_web_experiments) {
             return
         }
 
+        WebExperiments.logInfo('applying feature flags', flags)
         flags.forEach((flag) => {
             if (this._flagToExperiments && this._flagToExperiments?.has(flag)) {
                 const selectedVariant = this.instance.getFeatureFlag(flag) as unknown as string
                 const webExperiment = this._flagToExperiments?.get(flag)
                 if (selectedVariant && webExperiment?.variants[selectedVariant]) {
-                    WebExperiments.applyTransforms(
+                    this.applyTransforms(
                         webExperiment.name,
                         selectedVariant,
                         webExperiment.variants[selectedVariant].transforms
@@ -67,9 +68,31 @@ export class WebExperiments {
     }
 
     afterDecideResponse(response: DecideResponse) {
-        this._featureFlags = response.featureFlags
+        if (this._is_bot()) {
+            WebExperiments.logInfo('Refusing to render web experiment since the viewer is a likely bot')
+            return
+        }
 
+        this._featureFlags = response.featureFlags
         this.loadIfEnabled()
+        this.previewWebExperiment()
+    }
+
+    previewWebExperiment() {
+        // eslint-disable-next-line compat/compat
+        const params = new URLSearchParams(location?.search)
+        const experimentID = params.get('__experiment_id')
+        const variant = params.get('__experiment_variant')
+        WebExperiments.logInfo(`previewing web experiments ${experimentID} && ${variant}`)
+        if (experimentID && variant) {
+            this.getWebExperiments(
+                (webExperiments) => {
+                    this.showPreviewWebExperiment(parseInt(experimentID), variant, webExperiments)
+                },
+                false,
+                true
+            )
+        }
     }
 
     loadIfEnabled() {
@@ -84,6 +107,7 @@ export class WebExperiments {
         this.getWebExperiments((webExperiments) => {
             WebExperiments.logInfo(`retrieved web experiments from the server`)
             this._flagToExperiments = new Map<string, WebExperiment>()
+
             webExperiments.forEach((webExperiment) => {
                 if (
                     webExperiment.feature_flag_key &&
@@ -102,7 +126,7 @@ export class WebExperiments {
 
                     const selectedVariant = this._featureFlags[webExperiment.feature_flag_key] as unknown as string
                     if (selectedVariant && webExperiment.variants[selectedVariant]) {
-                        WebExperiments.applyTransforms(
+                        this.applyTransforms(
                             webExperiment.name,
                             selectedVariant,
                             webExperiment.variants[selectedVariant].transforms
@@ -113,7 +137,7 @@ export class WebExperiments {
                         const testVariant = webExperiment.variants[variant]
                         const matchTest = WebExperiments.matchesTestVariant(testVariant)
                         if (matchTest) {
-                            WebExperiments.applyTransforms(webExperiment.name, variant, testVariant.transforms)
+                            this.applyTransforms(webExperiment.name, variant, testVariant.transforms)
                         }
                     }
                 }
@@ -121,8 +145,8 @@ export class WebExperiments {
         }, forceReload)
     }
 
-    public getWebExperiments(callback: WebExperimentsCallback, forceReload: boolean) {
-        if (this.instance.config.disable_web_experiments) {
+    public getWebExperiments(callback: WebExperimentsCallback, forceReload: boolean, previewing?: boolean) {
+        if (this.instance.config.disable_web_experiments && !previewing) {
             return callback([])
         }
 
@@ -148,6 +172,19 @@ export class WebExperiments {
         })
     }
 
+    private showPreviewWebExperiment(experimentID: number, variant: string, webExperiments: WebExperiment[]) {
+        const previewExperiments = webExperiments.filter((exp) => exp.id === experimentID)
+        if (previewExperiments && previewExperiments.length > 0) {
+            WebExperiments.logInfo(
+                `Previewing web experiment [${previewExperiments[0].name}] with variant [${variant}]`
+            )
+            this.applyTransforms(
+                previewExperiments[0].name,
+                variant,
+                previewExperiments[0].variants[variant].transforms
+            )
+        }
+    }
     private static matchesTestVariant(testVariant: WebExperimentVariant) {
         if (isNullish(testVariant.conditions)) {
             return false
@@ -211,17 +248,25 @@ export class WebExperiments {
         logger.info(`[WebExperiments] ${msg}`, args)
     }
 
-    private static applyTransforms(experiment: string, variant: string, transforms: WebExperimentTransform[]) {
+    private applyTransforms(experiment: string, variant: string, transforms: WebExperimentTransform[]) {
+        if (this._is_bot()) {
+            WebExperiments.logInfo('Refusing to render web experiment since the viewer is a likely bot')
+            return
+        }
+
         transforms.forEach((transform) => {
             if (transform.selector) {
                 WebExperiments.logInfo(
                     `applying transform of variant ${variant} for experiment ${experiment} `,
                     transform
                 )
+
+                let elementsModified = 0
                 // eslint-disable-next-line no-restricted-globals
                 const elements = document?.querySelectorAll(transform.selector)
                 elements?.forEach((element) => {
                     const htmlElement = element as HTMLElement
+                    elementsModified += 1
                     if (transform.attributes) {
                         transform.attributes.forEach((attribute) => {
                             switch (attribute.name) {
@@ -248,14 +293,35 @@ export class WebExperiments {
                     }
 
                     if (transform.html) {
-                        htmlElement.innerHTML = transform.html
+                        if (htmlElement.parentElement) {
+                            htmlElement.parentElement.innerHTML = transform.html
+                        } else {
+                            htmlElement.innerHTML = transform.html
+                        }
                     }
 
-                    if (transform.className) {
-                        htmlElement.className = transform.className
+                    if (transform.css) {
+                        htmlElement.setAttribute('style', transform.css)
                     }
                 })
+
+                if (this.instance && this.instance.capture) {
+                    this.instance.capture('$web_experiment_applied', {
+                        $web_experiment_name: experiment,
+                        $web_experiment_variant: variant,
+                        $web_experiment_document_url: WebExperiments.getWindowLocation()?.href,
+                        $web_experiment_elements_modified: elementsModified,
+                    })
+                }
             }
         })
+    }
+
+    _is_bot(): boolean | undefined {
+        if (navigator && this.instance) {
+            return isLikelyBot(navigator, this.instance.config.custom_blocked_useragents)
+        } else {
+            return undefined
+        }
     }
 }

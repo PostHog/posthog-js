@@ -38,7 +38,7 @@ describe('Web Experimentation', () => {
                 transforms: [
                     {
                         selector: '#set-user-properties',
-                        className: 'primary',
+                        css: 'font-size:40px',
                     },
                 ],
             },
@@ -114,6 +114,7 @@ describe('Web Experimentation', () => {
             } as unknown as PostHogConfig,
             persistence: persistence,
             get_property: jest.fn(),
+            capture: jest.fn(),
             _send_request: jest
                 .fn()
                 .mockImplementation(({ callback }) => callback({ statusCode: 200, json: experimentsResponse })),
@@ -130,8 +131,8 @@ describe('Web Experimentation', () => {
         elTarget.id = 'primary_button'
         // eslint-disable-next-line no-restricted-globals
         const elParent = document.createElement('span')
-        elParent.innerText = 'unassigned'
-        elParent.className = 'unassigned'
+        elParent.innerText = 'original'
+        elParent.className = 'original'
         elParent.appendChild(elTarget)
         // eslint-disable-next-line no-restricted-globals
         document.querySelectorAll = function () {
@@ -167,8 +168,8 @@ describe('Web Experimentation', () => {
         } as unknown as DecideResponse)
 
         switch (expectedProperty) {
-            case 'className':
-                expect(elParent.className).toEqual(value)
+            case 'css':
+                expect(elParent.getAttribute('style')).toEqual(value)
                 break
 
             case 'innerText':
@@ -180,6 +181,24 @@ describe('Web Experimentation', () => {
                 break
         }
     }
+
+    describe('bot detection', () => {
+        it('does not apply web experiment if viewer is a bot', () => {
+            experimentsResponse = {
+                experiments: [buttonWebExperimentWithUrlConditions],
+            }
+            const webExperiment = new WebExperiments(posthog)
+            webExperiment._is_bot = () => true
+            const elParent = createTestDocument()
+
+            webExperiment.afterDecideResponse({
+                featureFlags: {
+                    'signup-button-test': 'Sign me up',
+                },
+            } as unknown as DecideResponse)
+            expect(elParent.innerText).toEqual('original')
+        })
+    })
 
     describe('url match conditions', () => {
         it('exact location match', () => {
@@ -211,7 +230,7 @@ describe('Web Experimentation', () => {
                 },
             }
             const testLocation = 'https://example.com/landing-page?utm_campaign=marketing&utm_medium=mobile'
-            const expectedText = 'unassigned'
+            const expectedText = 'original'
             testUrlMatch(testLocation, expectedText)
         })
     })
@@ -238,7 +257,7 @@ describe('Web Experimentation', () => {
 
             posthog.requestRouter = new RequestRouter(disabledPostHog)
             webExperiment = new WebExperiments(disabledPostHog)
-            assertElementChanged('control', 'innerText', 'unassigned')
+            assertElementChanged('control', 'innerText', 'original')
         })
 
         it('can set text of Span Element', async () => {
@@ -247,17 +266,24 @@ describe('Web Experimentation', () => {
             }
 
             assertElementChanged('control', 'innerText', 'Sign up')
+            expect(posthog.capture).toHaveBeenCalledWith('$web_experiment_applied', {
+                $web_experiment_document_url:
+                    'https://example.com/landing-page?utm_campaign=marketing&utm_medium=mobile',
+                $web_experiment_elements_modified: 1,
+                $web_experiment_name: 'Signup button test',
+                $web_experiment_variant: 'control',
+            })
         })
 
-        it('can set className of Span Element', async () => {
+        it('can set css of Span Element', async () => {
             experimentsResponse = {
                 experiments: [signupButtonWebExperimentWithFeatureFlag],
             }
 
-            assertElementChanged('css-transform', 'className', 'primary')
+            assertElementChanged('css-transform', 'css', 'font-size:40px')
         })
 
-        it('can set innerHtml of Span Element', async () => {
+        it('can set innerHTML of Span Element', async () => {
             experimentsResponse = {
                 experiments: [signupButtonWebExperimentWithFeatureFlag],
             }
