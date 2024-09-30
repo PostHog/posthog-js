@@ -105,9 +105,9 @@ const createIncrementalMouseEvent = () => {
     })
 }
 
-const createIncrementalMutationEvent = () => {
+const createIncrementalMutationEvent = (mutations?: { texts: any[] }) => {
     const mutationData = {
-        texts: [],
+        texts: mutations?.texts || [],
         attributes: [],
         removes: [],
         adds: [],
@@ -121,7 +121,7 @@ const createIncrementalMutationEvent = () => {
     })
 }
 
-const createIncrementalStyleSheetEvent = () => {
+const createIncrementalStyleSheetEvent = (mutations?: { adds: any[] }) => {
     return createIncrementalSnapshot({
         data: {
             // doesn't need to be a valid style sheet event
@@ -129,7 +129,7 @@ const createIncrementalStyleSheetEvent = () => {
             id: 1,
             styleId: 1,
             removes: [],
-            adds: [],
+            adds: mutations.adds || [],
             replace: 'something',
             replaceSync: 'something',
         },
@@ -476,9 +476,9 @@ describe('SessionRecording', () => {
             const fullSnapshot = createFullSnapshot()
             _emit(fullSnapshot)
             expect(sessionRecording['buffer']).toEqual({
-                data: [{ ...fullSnapshot, cv: '2024-10', data: expect.any(String) }],
+                data: [fullSnapshot],
                 sessionId: sessionId,
-                size: 121,
+                size: 20,
                 windowId: 'windowId',
             })
         })
@@ -1493,22 +1493,9 @@ describe('SessionRecording', () => {
 
             // the second snapshot remains buffered in memory
             expect(sessionRecording['buffer']).toEqual({
-                data: [
-                    firstSnapshotEvent,
-                    {
-                        ...secondSnapshot,
-                        cv: '2024-10',
-                        data: {
-                            ...secondSnapshot.data,
-                            adds: expect.any(String),
-                            texts: expect.any(String),
-                            attributes: expect.any(String),
-                            removes: expect.any(String),
-                        },
-                    },
-                ],
+                data: [firstSnapshotEvent, secondSnapshot],
                 sessionId: firstSessionId,
-                size: 549,
+                size: 186,
                 windowId: expect.any(String),
             })
 
@@ -1530,22 +1517,9 @@ describe('SessionRecording', () => {
             expect(posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 {
-                    $snapshot_data: [
-                        firstSnapshotEvent,
-                        {
-                            ...secondSnapshot,
-                            cv: '2024-10',
-                            data: {
-                                ...secondSnapshot.data,
-                                adds: expect.any(String),
-                                texts: expect.any(String),
-                                attributes: expect.any(String),
-                                removes: expect.any(String),
-                            },
-                        },
-                    ],
+                    $snapshot_data: [firstSnapshotEvent, secondSnapshot],
                     $session_id: firstSessionId,
-                    $snapshot_bytes: 549,
+                    $snapshot_bytes: 186,
                     $window_id: expect.any(String),
                 },
                 {
@@ -1605,22 +1579,9 @@ describe('SessionRecording', () => {
 
             // the second snapshot remains buffered in memory
             expect(sessionRecording['buffer']).toEqual({
-                data: [
-                    firstSnapshotEvent,
-                    {
-                        ...secondSnapshot,
-                        cv: '2024-10',
-                        data: {
-                            ...secondSnapshot.data,
-                            adds: expect.any(String),
-                            texts: expect.any(String),
-                            attributes: expect.any(String),
-                            removes: expect.any(String),
-                        },
-                    },
-                ],
+                data: [firstSnapshotEvent, secondSnapshot],
                 sessionId: firstSessionId,
-                size: 549,
+                size: 186,
                 windowId: expect.any(String),
             })
 
@@ -1646,22 +1607,9 @@ describe('SessionRecording', () => {
             expect(posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 {
-                    $snapshot_data: [
-                        firstSnapshotEvent,
-                        {
-                            ...secondSnapshot,
-                            cv: '2024-10',
-                            data: {
-                                ...secondSnapshot.data,
-                                adds: expect.any(String),
-                                texts: expect.any(String),
-                                attributes: expect.any(String),
-                                removes: expect.any(String),
-                            },
-                        },
-                    ],
+                    $snapshot_data: [firstSnapshotEvent, secondSnapshot],
                     $session_id: firstSessionId,
-                    $snapshot_bytes: 549,
+                    $snapshot_bytes: 186,
                     $window_id: expect.any(String),
                 },
                 {
@@ -1685,22 +1633,9 @@ describe('SessionRecording', () => {
             expect(posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 {
-                    $snapshot_data: [
-                        firstSnapshotEvent,
-                        {
-                            ...secondSnapshot,
-                            cv: '2024-10',
-                            data: {
-                                ...secondSnapshot.data,
-                                adds: expect.any(String),
-                                texts: expect.any(String),
-                                attributes: expect.any(String),
-                                removes: expect.any(String),
-                            },
-                        },
-                    ],
+                    $snapshot_data: [firstSnapshotEvent, secondSnapshot],
                     $session_id: firstSessionId,
-                    $snapshot_bytes: 549,
+                    $snapshot_bytes: 186,
                     $window_id: expect.any(String),
                 },
                 {
@@ -2039,7 +1974,13 @@ describe('SessionRecording', () => {
         })
 
         it('compresses full snapshot data', () => {
-            _emit(createFullSnapshot())
+            _emit(
+                createFullSnapshot({
+                    data: {
+                        content: Array(30).fill(uuidv7()).join(''),
+                    },
+                })
+            )
             sessionRecording['_flushBuffer']()
 
             expect(posthog.capture).toHaveBeenCalledWith(
@@ -2060,8 +2001,29 @@ describe('SessionRecording', () => {
             )
         })
 
+        it('does not compress small full snapshot data', () => {
+            _emit(createFullSnapshot({ data: { content: 'small' } }))
+            sessionRecording['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                {
+                    $snapshot_data: [
+                        {
+                            data: { content: 'small' },
+                            type: 2,
+                        },
+                    ],
+                    $session_id: sessionId,
+                    $snapshot_bytes: expect.any(Number),
+                    $window_id: 'windowId',
+                },
+                captureOptions
+            )
+        })
+
         it('compresses incremental snapshot mutation data', () => {
-            _emit(createIncrementalMutationEvent())
+            _emit(createIncrementalMutationEvent({ texts: [Array(30).fill(uuidv7()).join('')] }))
             sessionRecording['_flushBuffer']()
 
             expect(posthog.capture).toHaveBeenCalledWith(
@@ -2090,7 +2052,7 @@ describe('SessionRecording', () => {
         })
 
         it('compresses incremental snapshot style data', () => {
-            _emit(createIncrementalStyleSheetEvent())
+            _emit(createIncrementalStyleSheetEvent({ adds: [Array(30).fill(uuidv7()).join('')] }))
             sessionRecording['_flushBuffer']()
 
             expect(posthog.capture).toHaveBeenCalledWith(
@@ -2118,6 +2080,8 @@ describe('SessionRecording', () => {
                 captureOptions
             )
         })
+
+        it('does not compress small incremental snapshot data', () => {})
 
         it('does not compress incremental snapshot non full data', () => {
             const mouseEvent = createIncrementalMouseEvent()
