@@ -24,8 +24,8 @@ export class SessionIdManager {
     private _sessionStartTimestamp: number | null
 
     private _sessionActivityTimestamp: number | null
-    private readonly _sessionTimeoutMs: number
     private _sessionIdChangedHandlers: SessionIdChangedCallback[] = []
+    private readonly _sessionTimeoutMs: number
 
     constructor(
         config: Partial<PostHogConfig>,
@@ -86,6 +86,10 @@ export class SessionIdManager {
         }
 
         this._listenToReloadWindow()
+    }
+
+    get sessionTimeoutMs(): number {
+        return this._sessionTimeoutMs
     }
 
     onSessionId(callback: SessionIdChangedCallback): () => void {
@@ -219,7 +223,7 @@ export class SessionIdManager {
 
         let valuesChanged = false
         const noSessionId = !sessionId
-        const activityTimeout = !readOnly && Math.abs(timestamp - lastTimestamp) > this._sessionTimeoutMs
+        const activityTimeout = !readOnly && Math.abs(timestamp - lastTimestamp) > this.sessionTimeoutMs
         if (noSessionId || activityTimeout || sessionPastMaximumLength) {
             sessionId = this._sessionIdGenerator()
             windowId = this._windowIdGenerator()

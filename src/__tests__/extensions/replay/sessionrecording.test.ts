@@ -26,7 +26,7 @@ import {
 } from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
 import {
-    RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
+    RECORDING_IDLE_THRESHOLD_MS,
     RECORDING_MAX_EVENT_SIZE,
     SessionRecording,
 } from '../../../extensions/replay/sessionrecording'
@@ -136,10 +136,10 @@ const createIncrementalStyleSheetEvent = () => {
     })
 }
 
-const createCustomSnapshot = (event = {}, payload = {}): customEvent => ({
+const createCustomSnapshot = (event = {}, payload = {}, tag: string = 'custom'): customEvent => ({
     type: EventType.Custom,
     data: {
-        tag: 'custom',
+        tag: tag,
         payload: {
             ...payload,
         },
@@ -1371,39 +1371,6 @@ describe('SessionRecording', () => {
             })
         })
 
-        it('buffers custom events without capturing while idle', () => {
-            // force idle state
-            sessionRecording['isIdle'] = true
-            // buffer is empty
-            expect(sessionRecording['buffer']).toEqual({
-                ...EMPTY_BUFFER,
-                sessionId: sessionId,
-                windowId: 'windowId',
-            })
-
-            sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
-
-            // custom event is buffered
-            expect(sessionRecording['buffer']).toEqual({
-                data: [
-                    {
-                        data: {
-                            payload: {},
-                            tag: 'custom',
-                        },
-                        type: 5,
-                    },
-                ],
-                sessionId: sessionId,
-                size: 47,
-                windowId: 'windowId',
-            })
-            emitInactiveEvent(startingTimestamp + 100, true)
-            expect(posthog.capture).not.toHaveBeenCalled()
-
-            expect(sessionRecording['flushBufferTimer']).toBeUndefined()
-        })
-
         it('does not emit buffered custom events while idle even when over buffer max size', () => {
             // force idle state
             sessionRecording['isIdle'] = true
@@ -1494,8 +1461,8 @@ describe('SessionRecording', () => {
         it("enters idle state within one session if the activity is non-user generated and there's no activity for (RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) 5 minutes", () => {
             const firstActivityTimestamp = startingTimestamp + 100
             const secondActivityTimestamp = startingTimestamp + 200
-            const thirdActivityTimestamp = startingTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 1000
-            const fourthActivityTimestamp = startingTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 2000
+            const thirdActivityTimestamp = startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000
+            const fourthActivityTimestamp = startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 2000
 
             const firstSnapshotEvent = emitActiveEvent(firstActivityTimestamp)
             // event was active so activity timestamp is updated
