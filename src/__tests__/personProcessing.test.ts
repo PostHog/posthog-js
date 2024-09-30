@@ -529,4 +529,22 @@ describe('person processing', () => {
             expect(jest.mocked(logger).error).toBeCalledTimes(0)
         })
     })
+
+    describe('reset', () => {
+        it('should revert a back to anonymous state in identified_only', async () => {
+            // arrange
+            const { posthog, onCapture } = await setup('identified_only')
+            posthog.identify(distinctId)
+            posthog.capture('custom event before reset')
+
+            // act
+            posthog.reset()
+            posthog.capture('custom event after reset')
+
+            // assert
+            expect(posthog._isIdentified()).toBe(false)
+            expect(onCapture.mock.calls.length).toEqual(3)
+            expect(onCapture.mock.calls[2][1].properties.$process_person_profile).toEqual(false)
+        })
+    })
 })
