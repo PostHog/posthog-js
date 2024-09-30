@@ -304,7 +304,7 @@ describe('Web Experimentation', () => {
             }
             const webExperiment = new WebExperiments(posthog)
             const elParent = createTestDocument()
-
+            const original = WebExperiments.getWindowLocation
             WebExperiments.getWindowLocation = () => {
                 // eslint-disable-next-line compat/compat
                 return new URL(
@@ -313,6 +313,8 @@ describe('Web Experimentation', () => {
             }
 
             webExperiment.previewWebExperiment()
+
+            WebExperiments.getWindowLocation = original
             expect(elParent.innerText).toEqual('Sign me up')
             expect(posthog.capture).toHaveBeenCalledWith('$web_experiment_applied', {
                 $web_experiment_document_url:
