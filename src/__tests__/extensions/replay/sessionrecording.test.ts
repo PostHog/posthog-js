@@ -476,9 +476,9 @@ describe('SessionRecording', () => {
             const fullSnapshot = createFullSnapshot()
             _emit(fullSnapshot)
             expect(sessionRecording['buffer']).toEqual({
-                data: [fullSnapshot],
+                data: [{ ...fullSnapshot, cv: '2024-10', data: expect.any(String) }],
                 sessionId: sessionId,
-                size: 20,
+                size: 121,
                 windowId: 'windowId',
             })
         })
@@ -1009,6 +1009,7 @@ describe('SessionRecording', () => {
         })
 
         it('can emit when there are circular references', () => {
+            posthog.config.session_recording.compress_events = false
             sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
             sessionRecording.startIfEnabledOrStop()
 
@@ -1271,6 +1272,10 @@ describe('SessionRecording', () => {
                 type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
                 data: {
                     source: 0,
+                    adds: [],
+                    attributes: [],
+                    removes: [],
+                    texts: [],
                 },
                 timestamp: activityTimestamp,
             }
@@ -1488,9 +1493,22 @@ describe('SessionRecording', () => {
 
             // the second snapshot remains buffered in memory
             expect(sessionRecording['buffer']).toEqual({
-                data: [firstSnapshotEvent, secondSnapshot],
+                data: [
+                    firstSnapshotEvent,
+                    {
+                        ...secondSnapshot,
+                        cv: '2024-10',
+                        data: {
+                            ...secondSnapshot.data,
+                            adds: expect.any(String),
+                            texts: expect.any(String),
+                            attributes: expect.any(String),
+                            removes: expect.any(String),
+                        },
+                    },
+                ],
                 sessionId: firstSessionId,
-                size: 136,
+                size: 549,
                 windowId: expect.any(String),
             })
 
@@ -1512,9 +1530,22 @@ describe('SessionRecording', () => {
             expect(posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 {
-                    $snapshot_data: [firstSnapshotEvent, secondSnapshot],
+                    $snapshot_data: [
+                        firstSnapshotEvent,
+                        {
+                            ...secondSnapshot,
+                            cv: '2024-10',
+                            data: {
+                                ...secondSnapshot.data,
+                                adds: expect.any(String),
+                                texts: expect.any(String),
+                                attributes: expect.any(String),
+                                removes: expect.any(String),
+                            },
+                        },
+                    ],
                     $session_id: firstSessionId,
-                    $snapshot_bytes: 136,
+                    $snapshot_bytes: 549,
                     $window_id: expect.any(String),
                 },
                 {
@@ -1574,9 +1605,22 @@ describe('SessionRecording', () => {
 
             // the second snapshot remains buffered in memory
             expect(sessionRecording['buffer']).toEqual({
-                data: [firstSnapshotEvent, secondSnapshot],
+                data: [
+                    firstSnapshotEvent,
+                    {
+                        ...secondSnapshot,
+                        cv: '2024-10',
+                        data: {
+                            ...secondSnapshot.data,
+                            adds: expect.any(String),
+                            texts: expect.any(String),
+                            attributes: expect.any(String),
+                            removes: expect.any(String),
+                        },
+                    },
+                ],
                 sessionId: firstSessionId,
-                size: 136,
+                size: 549,
                 windowId: expect.any(String),
             })
 
@@ -1602,9 +1646,22 @@ describe('SessionRecording', () => {
             expect(posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 {
-                    $snapshot_data: [firstSnapshotEvent, secondSnapshot],
+                    $snapshot_data: [
+                        firstSnapshotEvent,
+                        {
+                            ...secondSnapshot,
+                            cv: '2024-10',
+                            data: {
+                                ...secondSnapshot.data,
+                                adds: expect.any(String),
+                                texts: expect.any(String),
+                                attributes: expect.any(String),
+                                removes: expect.any(String),
+                            },
+                        },
+                    ],
                     $session_id: firstSessionId,
-                    $snapshot_bytes: 136,
+                    $snapshot_bytes: 549,
                     $window_id: expect.any(String),
                 },
                 {
@@ -1628,9 +1685,22 @@ describe('SessionRecording', () => {
             expect(posthog.capture).toHaveBeenCalledWith(
                 '$snapshot',
                 {
-                    $snapshot_data: [firstSnapshotEvent, secondSnapshot],
+                    $snapshot_data: [
+                        firstSnapshotEvent,
+                        {
+                            ...secondSnapshot,
+                            cv: '2024-10',
+                            data: {
+                                ...secondSnapshot.data,
+                                adds: expect.any(String),
+                                texts: expect.any(String),
+                                attributes: expect.any(String),
+                                removes: expect.any(String),
+                            },
+                        },
+                    ],
                     $session_id: firstSessionId,
-                    $snapshot_bytes: 136,
+                    $snapshot_bytes: 549,
                     $window_id: expect.any(String),
                 },
                 {
