@@ -1,6 +1,6 @@
 import { PostHog } from './posthog-core'
 import { DecideResponse } from './types'
-import { location, navigator, window } from './utils/globals'
+import { navigator, window } from './utils/globals'
 import {
     WebExperiment,
     WebExperimentsCallback,
@@ -10,7 +10,7 @@ import {
 } from './web-experiments-types'
 import { WEB_EXPERIMENTS } from './constants'
 import { isNullish } from './utils/type-utils'
-import { isUrlMatchingRegex } from './utils/request-utils'
+import { getQueryParam, isUrlMatchingRegex } from './utils/request-utils'
 import { logger } from './utils/logger'
 import { Info } from './utils/event-utils'
 import { isLikelyBot } from './utils/blocked-uas'
@@ -79,19 +79,20 @@ export class WebExperiments {
     }
 
     previewWebExperiment() {
-        // eslint-disable-next-line compat/compat
-        const params = new URLSearchParams(location?.search)
-        const experimentID = params.get('__experiment_id')
-        const variant = params.get('__experiment_variant')
-        WebExperiments.logInfo(`previewing web experiments ${experimentID} && ${variant}`)
-        if (experimentID && variant) {
-            this.getWebExperiments(
-                (webExperiments) => {
-                    this.showPreviewWebExperiment(parseInt(experimentID), variant, webExperiments)
-                },
-                false,
-                true
-            )
+        const location = WebExperiments.getWindowLocation()
+        if (location?.search) {
+            const experimentID = getQueryParam(location?.search, '__experiment_id')
+            const variant = getQueryParam(location?.search, '__experiment_variant')
+            WebExperiments.logInfo(`previewing web experiments ${experimentID} && ${variant}`)
+            if (experimentID && variant) {
+                this.getWebExperiments(
+                    (webExperiments) => {
+                        this.showPreviewWebExperiment(parseInt(experimentID), variant, webExperiments)
+                    },
+                    false,
+                    true
+                )
+            }
         }
     }
 
@@ -181,7 +182,8 @@ export class WebExperiments {
             this.applyTransforms(
                 previewExperiments[0].name,
                 variant,
-                previewExperiments[0].variants[variant].transforms
+                previewExperiments[0].variants[variant].transforms,
+                true
             )
         }
     }
@@ -248,7 +250,12 @@ export class WebExperiments {
         logger.info(`[WebExperiments] ${msg}`, args)
     }
 
-    private applyTransforms(experiment: string, variant: string, transforms: WebExperimentTransform[]) {
+    private applyTransforms(
+        experiment: string,
+        variant: string,
+        transforms: WebExperimentTransform[],
+        isPreview?: boolean
+    ) {
         if (this._is_bot()) {
             WebExperiments.logInfo('Refusing to render web experiment since the viewer is a likely bot')
             return
@@ -259,6 +266,7 @@ export class WebExperiments {
             if (this.instance && this.instance.capture) {
                 this.instance.capture('$web_experiment_applied', {
                     $web_experiment_name: experiment,
+                    $web_experiment_preview: isPreview,
                     $web_experiment_variant: variant,
                     $web_experiment_document_url: WebExperiments.getWindowLocation()?.href,
                     $web_experiment_elements_modified: 0,
@@ -323,6 +331,7 @@ export class WebExperiments {
                     this.instance.capture('$web_experiment_applied', {
                         $web_experiment_name: experiment,
                         $web_experiment_variant: variant,
+                        $web_experiment_preview: isPreview,
                         $web_experiment_document_url: WebExperiments.getWindowLocation()?.href,
                         $web_experiment_elements_modified: elementsModified,
                     })

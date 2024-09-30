@@ -298,6 +298,32 @@ describe('Web Experimentation', () => {
             })
         })
 
+        it('can render previews based on URL params', () => {
+            experimentsResponse = {
+                experiments: [buttonWebExperimentWithUrlConditions],
+            }
+            const webExperiment = new WebExperiments(posthog)
+            const elParent = createTestDocument()
+
+            WebExperiments.getWindowLocation = () => {
+                // eslint-disable-next-line compat/compat
+                return new URL(
+                    'https://example.com/landing-page?__experiment_id=3&__experiment_variant=Signup'
+                ) as unknown as Location
+            }
+
+            webExperiment.previewWebExperiment()
+            expect(elParent.innerText).toEqual('Sign me up')
+            expect(posthog.capture).toHaveBeenCalledWith('$web_experiment_applied', {
+                $web_experiment_document_url:
+                    'https://example.com/landing-page?__experiment_id=3&__experiment_variant=Signup',
+                $web_experiment_elements_modified: 1,
+                $web_experiment_name: 'Signup button test',
+                $web_experiment_variant: 'Signup',
+                $web_experiment_preview: true,
+            })
+        })
+
         it('can set css of Span Element', async () => {
             experimentsResponse = {
                 experiments: [signupButtonWebExperimentWithFeatureFlag],
