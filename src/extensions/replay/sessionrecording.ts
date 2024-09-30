@@ -937,9 +937,8 @@ export class SessionRecording {
             }
         }
 
-        const eventToSend = this.instance.config.session_recording.compress_events
-            ? compressEvent(event, this.instance)
-            : event
+        const eventToSend =
+            this.instance.config.session_recording.compress_events ?? true ? compressEvent(event, this.instance) : event
         const size = estimateSize(eventToSend)
         const properties = {
             $snapshot_bytes: size,
