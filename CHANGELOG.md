@@ -1,3 +1,8 @@
+## 1.165.1 - 2024-09-30
+
+- fix: no custom events when idle (#1438)
+- chore: downgrade jest types (#1442)
+
 ## 1.165.0 - 2024-09-25
 
 - feat: compress replay data (#1436)
