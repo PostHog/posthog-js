@@ -88,6 +88,10 @@ export class SessionIdManager {
         this._listenToReloadWindow()
     }
 
+    get sessionTimeoutMs(): number {
+        return this._sessionTimeoutMs
+    }
+
     onSessionId(callback: SessionIdChangedCallback): () => void {
         // KLUDGE: when running in tests the handlers array was always undefined
         // it's yucky but safe to set it here so that it's always definitely available
@@ -219,7 +223,7 @@ export class SessionIdManager {
 
         let valuesChanged = false
         const noSessionId = !sessionId
-        const activityTimeout = !readOnly && Math.abs(timestamp - lastTimestamp) > this._sessionTimeoutMs
+        const activityTimeout = !readOnly && Math.abs(timestamp - lastTimestamp) > this.sessionTimeoutMs
         if (noSessionId || activityTimeout || sessionPastMaximumLength) {
             sessionId = this._sessionIdGenerator()
             windowId = this._windowIdGenerator()

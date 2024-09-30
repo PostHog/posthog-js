@@ -279,6 +279,12 @@ export interface SessionRecordingOptions {
     full_snapshot_interval_millis?: number
     // PREVIEW: whether to compress part of the events before sending them to the server, this is a preview feature and may change without notice
     compress_events?: boolean
+    /*
+     ADVANCED: alters the threshold before a recording considers a user has become idle.
+     Normally only altered alongside changes to session_idle_timeout_ms.
+     Default is 5 minutes.
+    */
+    session_idle_threshold_ms?: number
 }
 
 export type SessionIdChangedCallback = (

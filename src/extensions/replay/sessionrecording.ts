@@ -38,7 +38,7 @@ const BASE_ENDPOINT = '/s/'
 
 const FIVE_MINUTES = 1000 * 60 * 5
 const TWO_SECONDS = 2000
-export const RECORDING_IDLE_ACTIVITY_TIMEOUT_MS = FIVE_MINUTES
+export const RECORDING_IDLE_THRESHOLD_MS = FIVE_MINUTES
 export const RECORDING_MAX_EVENT_SIZE = 1024 * 1024 * 0.9 // ~1mb (with some wiggle room)
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
@@ -191,6 +191,7 @@ function isSessionIdleEvent(e: eventWithTime): e is eventWithTime & customEvent 
 
 export class SessionRecording {
     private _endpoint: string
+    private flushBufferTimer?: any
 
     // we have a buffer - that contains PostHog snapshot events ready to be sent to the server
     private buffer: SnapshotBuffer
@@ -210,9 +211,6 @@ export class SessionRecording {
     private _linkedFlag: string | FlagVariant | null = null
 
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
-    // timer to check for whether user has gone idle, even if no rrweb activity to prompt the check
-    private _idleTimer?: ReturnType<typeof setTimeout>
-    private flushBufferTimer?: ReturnType<typeof setTimeout>
 
     private _removePageViewCaptureHook: (() => void) | undefined = undefined
     private _onSessionIdListener: (() => void) | undefined = undefined
@@ -225,6 +223,10 @@ export class SessionRecording {
 
     // Util to help developers working on this feature manually override
     _forceAllowLocalhostNetworkCapture = false
+
+    private get sessionIdleThresholdMilliseconds(): number {
+        return this.instance.config.session_recording.session_idle_threshold_ms || RECORDING_IDLE_THRESHOLD_MS
+    }
 
     private get rrwebRecord(): rrwebRecord | undefined {
         return assignableWindow?.__PosthogExtensions__?.rrweb?.record
@@ -358,6 +360,13 @@ export class SessionRecording {
         this.windowId = windowId
 
         this.buffer = this.clearBuffer()
+
+        if (this.sessionIdleThresholdMilliseconds >= this.sessionManager.sessionTimeoutMs) {
+            logger.warn(
+                LOGGER_PREFIX +
+                    ` session_idle_threshold_ms (${this.sessionIdleThresholdMilliseconds}) is greater than the session timeout (${this.sessionManager.sessionTimeoutMs}). Session will never be detected as idle`
+            )
+        }
     }
 
     private _onBeforeUnload = (): void => {
@@ -420,10 +429,6 @@ export class SessionRecording {
                     }
                 })
             }
-
-            this.resetIdleTimeout()
-
-            logger.info(LOGGER_PREFIX + ' started')
         } else {
             this.stopRecording()
         }
@@ -442,7 +447,6 @@ export class SessionRecording {
 
             this.clearBuffer()
             clearInterval(this._fullSnapshotTimer)
-            clearTimeout(this._idleTimer)
 
             this._removePageViewCaptureHook?.()
             this._removePageViewCaptureHook = undefined
@@ -657,9 +661,29 @@ export class SessionRecording {
         const isUserInteraction = this.isInteractiveEvent(event)
 
         if (!isUserInteraction && !this.isIdle) {
-            this.onMaybeIdle(event.timestamp)
+            // We check if the lastActivityTimestamp is old enough to go idle
+            const timeSinceLastActivity = event.timestamp - this._lastActivityTimestamp
+            if (timeSinceLastActivity > this.sessionIdleThresholdMilliseconds) {
+                // we mark as idle right away,
+                // or else we get multiple idle events
+                // if there are lots of non-user activity events being emitted
+                this.isIdle = true
+
+                // don't take full snapshots while idle
+                clearInterval(this._fullSnapshotTimer)
+
+                this._tryAddCustomEvent('sessionIdle', {
+                    eventTimestamp: event.timestamp,
+                    lastActivityTimestamp: this._lastActivityTimestamp,
+                    threshold: this.sessionIdleThresholdMilliseconds,
+                    bufferLength: this.buffer.data.length,
+                    bufferSize: this.buffer.size,
+                })
+
+                // proactively flush the buffer in case the session is idle for a long time
+                this._flushBuffer()
+            }
         }
-        this.resetIdleTimeout()
 
         let returningFromIdle = false
         if (isUserInteraction) {
@@ -696,38 +720,6 @@ export class SessionRecording {
             this.startIfEnabledOrStop()
         } else if (returningFromIdle) {
             this._scheduleFullSnapshot()
-        }
-    }
-
-    private resetIdleTimeout() {
-        clearTimeout(this._idleTimer)
-
-        this._idleTimer = setTimeout(() => {
-            this.onMaybeIdle(Date.now())
-        }, RECORDING_IDLE_ACTIVITY_TIMEOUT_MS)
-    }
-
-    private onMaybeIdle(timestamp: number) {
-        // We check if the lastActivityTimestamp is old enough to go idle
-        if (timestamp - this._lastActivityTimestamp >= RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) {
-            // clear the idle timer in case rrweb activity triggered this
-            clearTimeout(this._idleTimer)
-
-            // don't take full snapshots while idle
-            clearInterval(this._fullSnapshotTimer)
-
-            // record the idle event as a debug signal
-            this._tryAddCustomEvent('sessionIdle', {
-                eventTimestamp: timestamp,
-                lastActivityTimestamp: this._lastActivityTimestamp,
-                threshold: RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
-                bufferLength: this.buffer.data.length,
-                bufferSize: this.buffer.size,
-            })
-
-            // proactively flush the buffer in case the session is idle for a long time
-            this._flushBuffer()
-            this.isIdle = true
         }
     }
 
@@ -842,6 +834,11 @@ export class SessionRecording {
         this._tryAddCustomEvent('$posthog_config', {
             config: this.instance.config,
         })
+
+        logger.info(LOGGER_PREFIX + ' started', {
+            idleThreshold: this.sessionIdleThresholdMilliseconds,
+            maxIdleTime: this.sessionManager.sessionTimeoutMs,
+        })
     }
 
     private _scheduleFullSnapshot(): void {
@@ -924,7 +921,6 @@ export class SessionRecording {
         this._updateWindowAndSessionIds(event)
 
         // When in an idle state we keep recording, but don't capture the events,
-        // but we allow custom events even when idle
         if (this.isIdle && !isSessionIdleEvent(event)) {
             return
         }
