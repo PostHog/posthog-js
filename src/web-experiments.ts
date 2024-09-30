@@ -83,8 +83,8 @@ export class WebExperiments {
         if (location?.search) {
             const experimentID = getQueryParam(location?.search, '__experiment_id')
             const variant = getQueryParam(location?.search, '__experiment_variant')
-            WebExperiments.logInfo(`previewing web experiments ${experimentID} && ${variant}`)
             if (experimentID && variant) {
+                WebExperiments.logInfo(`previewing web experiments ${experimentID} && ${variant}`)
                 this.getWebExperiments(
                     (webExperiments) => {
                         this.showPreviewWebExperiment(parseInt(experimentID), variant, webExperiments)
