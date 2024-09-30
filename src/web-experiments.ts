@@ -254,6 +254,20 @@ export class WebExperiments {
             return
         }
 
+        if (variant === 'control') {
+            WebExperiments.logInfo('Control variants leave the page unmodified.')
+            if (this.instance && this.instance.capture) {
+                this.instance.capture('$web_experiment_applied', {
+                    $web_experiment_name: experiment,
+                    $web_experiment_variant: variant,
+                    $web_experiment_document_url: WebExperiments.getWindowLocation()?.href,
+                    $web_experiment_elements_modified: 0,
+                })
+            }
+
+            return
+        }
+
         transforms.forEach((transform) => {
             if (transform.selector) {
                 WebExperiments.logInfo(

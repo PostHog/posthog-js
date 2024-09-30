@@ -89,8 +89,17 @@ describe('Web Experimentation', () => {
                     },
                 ],
             },
-            control: {
+            icontains: {
                 conditions: { url: 'checkout', urlMatchType: 'icontains' },
+                transforms: [
+                    {
+                        selector: '#set-user-properties',
+                        text: 'Sign up',
+                        html: 'Sign up',
+                    },
+                ],
+            },
+            control: {
                 transforms: [
                     {
                         selector: '#set-user-properties',
@@ -265,11 +274,25 @@ describe('Web Experimentation', () => {
                 experiments: [signupButtonWebExperimentWithFeatureFlag],
             }
 
-            assertElementChanged('control', 'innerText', 'Sign up')
+            assertElementChanged('Signup', 'innerText', 'Sign me up')
             expect(posthog.capture).toHaveBeenCalledWith('$web_experiment_applied', {
                 $web_experiment_document_url:
                     'https://example.com/landing-page?utm_campaign=marketing&utm_medium=mobile',
                 $web_experiment_elements_modified: 1,
+                $web_experiment_name: 'Signup button test',
+                $web_experiment_variant: 'Signup',
+            })
+        })
+
+        it('makes no modifications if control variant', () => {
+            experimentsResponse = {
+                experiments: [signupButtonWebExperimentWithFeatureFlag],
+            }
+            assertElementChanged('control', 'innerText', 'original')
+            expect(posthog.capture).toHaveBeenCalledWith('$web_experiment_applied', {
+                $web_experiment_document_url:
+                    'https://example.com/landing-page?utm_campaign=marketing&utm_medium=mobile',
+                $web_experiment_elements_modified: 0,
                 $web_experiment_name: 'Signup button test',
                 $web_experiment_variant: 'control',
             })
