@@ -203,8 +203,6 @@ describe('SessionRecording', () => {
     }
 
     beforeEach(() => {
-        jest.useFakeTimers()
-
         sessionId = 'sessionId' + uuidv7()
 
         config = {
