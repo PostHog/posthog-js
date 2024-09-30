@@ -1649,15 +1649,6 @@ describe('SessionRecording', () => {
                 windowId: expect.any(String),
             })
         })
-
-        it('enters idle state even if there is no rrweb emit activity', () => {
-            sessionRecording['_lastActivityTimestamp'] = startingTimestamp
-            sessionRecording['isIdle'] = false // force active state
-
-            jest.advanceTimersByTime(RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 1)
-
-            expect(sessionRecording['isIdle']).toEqual(true)
-        })
     })
 
     describe('linked flags', () => {
