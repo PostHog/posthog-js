@@ -105,9 +105,9 @@ const createIncrementalMouseEvent = () => {
     })
 }
 
-const createIncrementalMutationEvent = () => {
+const createIncrementalMutationEvent = (mutations?: { texts: any[] }) => {
     const mutationData = {
-        texts: [],
+        texts: mutations?.texts || [],
         attributes: [],
         removes: [],
         adds: [],
@@ -121,7 +121,7 @@ const createIncrementalMutationEvent = () => {
     })
 }
 
-const createIncrementalStyleSheetEvent = () => {
+const createIncrementalStyleSheetEvent = (mutations?: { adds: any[] }) => {
     return createIncrementalSnapshot({
         data: {
             // doesn't need to be a valid style sheet event
@@ -129,7 +129,7 @@ const createIncrementalStyleSheetEvent = () => {
             id: 1,
             styleId: 1,
             removes: [],
-            adds: [],
+            adds: mutations.adds || [],
             replace: 'something',
             replaceSync: 'something',
         },
@@ -1009,6 +1009,7 @@ describe('SessionRecording', () => {
         })
 
         it('can emit when there are circular references', () => {
+            posthog.config.session_recording.compress_events = false
             sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
             sessionRecording.startIfEnabledOrStop()
 
@@ -1271,6 +1272,10 @@ describe('SessionRecording', () => {
                 type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
                 data: {
                     source: 0,
+                    adds: [],
+                    attributes: [],
+                    removes: [],
+                    texts: [],
                 },
                 timestamp: activityTimestamp,
             }
@@ -1490,7 +1495,7 @@ describe('SessionRecording', () => {
             expect(sessionRecording['buffer']).toEqual({
                 data: [firstSnapshotEvent, secondSnapshot],
                 sessionId: firstSessionId,
-                size: 136,
+                size: 186,
                 windowId: expect.any(String),
             })
 
@@ -1514,7 +1519,7 @@ describe('SessionRecording', () => {
                 {
                     $snapshot_data: [firstSnapshotEvent, secondSnapshot],
                     $session_id: firstSessionId,
-                    $snapshot_bytes: 136,
+                    $snapshot_bytes: 186,
                     $window_id: expect.any(String),
                 },
                 {
@@ -1576,7 +1581,7 @@ describe('SessionRecording', () => {
             expect(sessionRecording['buffer']).toEqual({
                 data: [firstSnapshotEvent, secondSnapshot],
                 sessionId: firstSessionId,
-                size: 136,
+                size: 186,
                 windowId: expect.any(String),
             })
 
@@ -1604,7 +1609,7 @@ describe('SessionRecording', () => {
                 {
                     $snapshot_data: [firstSnapshotEvent, secondSnapshot],
                     $session_id: firstSessionId,
-                    $snapshot_bytes: 136,
+                    $snapshot_bytes: 186,
                     $window_id: expect.any(String),
                 },
                 {
@@ -1630,7 +1635,7 @@ describe('SessionRecording', () => {
                 {
                     $snapshot_data: [firstSnapshotEvent, secondSnapshot],
                     $session_id: firstSessionId,
-                    $snapshot_bytes: 136,
+                    $snapshot_bytes: 186,
                     $window_id: expect.any(String),
                 },
                 {
@@ -1969,7 +1974,13 @@ describe('SessionRecording', () => {
         })
 
         it('compresses full snapshot data', () => {
-            _emit(createFullSnapshot())
+            _emit(
+                createFullSnapshot({
+                    data: {
+                        content: Array(30).fill(uuidv7()).join(''),
+                    },
+                })
+            )
             sessionRecording['_flushBuffer']()
 
             expect(posthog.capture).toHaveBeenCalledWith(
@@ -1990,8 +2001,29 @@ describe('SessionRecording', () => {
             )
         })
 
+        it('does not compress small full snapshot data', () => {
+            _emit(createFullSnapshot({ data: { content: 'small' } }))
+            sessionRecording['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                {
+                    $snapshot_data: [
+                        {
+                            data: { content: 'small' },
+                            type: 2,
+                        },
+                    ],
+                    $session_id: sessionId,
+                    $snapshot_bytes: expect.any(Number),
+                    $window_id: 'windowId',
+                },
+                captureOptions
+            )
+        })
+
         it('compresses incremental snapshot mutation data', () => {
-            _emit(createIncrementalMutationEvent())
+            _emit(createIncrementalMutationEvent({ texts: [Array(30).fill(uuidv7()).join('')] }))
             sessionRecording['_flushBuffer']()
 
             expect(posthog.capture).toHaveBeenCalledWith(
@@ -2020,7 +2052,7 @@ describe('SessionRecording', () => {
         })
 
         it('compresses incremental snapshot style data', () => {
-            _emit(createIncrementalStyleSheetEvent())
+            _emit(createIncrementalStyleSheetEvent({ adds: [Array(30).fill(uuidv7()).join('')] }))
             sessionRecording['_flushBuffer']()
 
             expect(posthog.capture).toHaveBeenCalledWith(
@@ -2048,6 +2080,8 @@ describe('SessionRecording', () => {
                 captureOptions
             )
         })
+
+        it('does not compress small incremental snapshot data', () => {})
 
         it('does not compress incremental snapshot non full data', () => {
             const mouseEvent = createIncrementalMouseEvent()

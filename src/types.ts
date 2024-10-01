@@ -277,7 +277,11 @@ export interface SessionRecordingOptions {
     recordBody?: boolean
     // ADVANCED: while a user is active we take a full snapshot of the browser every interval. For very few sites playback performance might be better with different interval. Set to 0 to disable
     full_snapshot_interval_millis?: number
-    // PREVIEW: whether to compress part of the events before sending them to the server, this is a preview feature and may change without notice
+    /*
+     ADVANCED: whether to partially compress rrweb events before sending them to the server,
+     defaults to true, can be set to false to disable partial compression
+     NB requests are still compressed when sent to the server regardless of this setting
+    */
     compress_events?: boolean
     /*
      ADVANCED: alters the threshold before a recording considers a user has become idle.

@@ -39,7 +39,9 @@ const BASE_ENDPOINT = '/s/'
 const FIVE_MINUTES = 1000 * 60 * 5
 const TWO_SECONDS = 2000
 export const RECORDING_IDLE_THRESHOLD_MS = FIVE_MINUTES
-export const RECORDING_MAX_EVENT_SIZE = 1024 * 1024 * 0.9 // ~1mb (with some wiggle room)
+const ONE_KB = 1024
+const PARTIAL_COMPRESSION_THRESHOLD = ONE_KB
+export const RECORDING_MAX_EVENT_SIZE = ONE_KB * ONE_KB * 0.9 // ~1mb (with some wiggle room)
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
 
@@ -144,6 +146,11 @@ function gzipToString(data: unknown): string {
 // but we want to be able to inspect metadata during ingestion, and don't want to compress the entire event
 // so we have a custom packer that only compresses part of some events
 function compressEvent(event: eventWithTime, ph: PostHog): eventWithTime | compressedEventWithTime {
+    const originalSize = estimateSize(event)
+    if (originalSize < PARTIAL_COMPRESSION_THRESHOLD) {
+        return event
+    }
+
     try {
         if (event.type === EventType.FullSnapshot) {
             return {
@@ -937,10 +944,10 @@ export class SessionRecording {
             }
         }
 
-        const eventToSend = this.instance.config.session_recording.compress_events
-            ? compressEvent(event, this.instance)
-            : event
+        const eventToSend =
+            this.instance.config.session_recording.compress_events ?? true ? compressEvent(event, this.instance) : event
         const size = estimateSize(eventToSend)
+
         const properties = {
             $snapshot_bytes: size,
             $snapshot_data: eventToSend,
