@@ -1,3 +1,7 @@
+## 1.166.1 - 2024-10-01
+
+- fix: skip addition of `src` attribute for HLS videos (#1446)
+
 ## 1.166.0 - 2024-10-01
 
 - feat: default replay partial compression on (#1445)
