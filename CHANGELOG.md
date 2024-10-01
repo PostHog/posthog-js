@@ -1,3 +1,8 @@
+## 1.166.0 - 2024-10-01
+
+- feat: default replay partial compression on (#1445)
+- chore: Add test for reset() and anonymous users (#1444)
+
 ## 1.165.1 - 2024-09-30
 
 - fix: no custom events when idle (#1438)
