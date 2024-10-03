@@ -495,6 +495,10 @@ export class SessionRecording {
         if (makeDecision) {
             const randomNumber = Math.random()
             shouldSample = randomNumber < currentSampleRate
+            this._reportStarted('sampling', {
+                sampleRate: currentSampleRate,
+                randomNumber,
+            })
         } else {
             shouldSample = storedIsSampled
         }
@@ -539,6 +543,7 @@ export class SessionRecording {
                     const tag = 'linked flag matched'
                     logger.info(LOGGER_PREFIX + ' ' + tag, payload)
                     this._tryAddCustomEvent(tag, payload)
+                    this._reportStarted('linked_flag_match', payload)
                 }
                 this._linkedFlagSeen = linkedFlagMatches
             })
@@ -711,7 +716,7 @@ export class SessionRecording {
         }
 
         // We only want to extend the session if it is an interactive event.
-        const { windowId, sessionId } = this.sessionManager.checkAndGetSessionAndWindowId(
+        const { windowId, sessionId, changeReason } = this.sessionManager.checkAndGetSessionAndWindowId(
             !isUserInteraction,
             event.timestamp
         )
@@ -725,6 +730,7 @@ export class SessionRecording {
         if (sessionIdChanged || windowIdChanged) {
             this.stopRecording()
             this.startIfEnabledOrStop()
+            this._reportStarted('session_id_change', { changeReason })
         } else if (returningFromIdle) {
             this._scheduleFullSnapshot()
         }
@@ -1099,5 +1105,12 @@ export class SessionRecording {
      * */
     public overrideLinkedFlag() {
         this._linkedFlagSeen = true
+        this._reportStarted('linked flag override')
+    }
+
+    private _reportStarted(reason: string, properties?: Properties) {
+        if (this.instance.config.session_recording.report_recording_started) {
+            this.instance.capture('$session_recording_started', { ...(properties || {}), reason })
+        }
     }
 }

@@ -289,6 +289,12 @@ export interface SessionRecordingOptions {
      Default is 5 minutes.
     */
     session_idle_threshold_ms?: number
+    /*
+        Sends an event whenever a recording starts, with the reason the recording started.
+        Useful, for example, when using ingestion controls
+        to have a signal in batch exports to know which sessions have recordings
+     */
+    report_recording_started?: boolean
 }
 
 export type SessionIdChangedCallback = (
