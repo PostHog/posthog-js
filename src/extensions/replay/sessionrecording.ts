@@ -6,6 +6,7 @@ import {
     SESSION_RECORDING_MINIMUM_DURATION,
     SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE,
     SESSION_RECORDING_SAMPLE_RATE,
+    SESSION_RECORDING_URL_TRIGGER_ACTIVATED,
 } from '../../constants'
 import {
     estimateSize,
@@ -229,7 +230,6 @@ export class SessionRecording {
     private _lastHref?: string
 
     private _urlTriggerPatterns: string[] = []
-    private _urlTriggerActivated: boolean = false
 
     // Util to help developers working on this feature manually override
     _forceAllowLocalhostNetworkCapture = false
@@ -346,7 +346,7 @@ export class SessionRecording {
             return 'buffering'
         }
 
-        if (this._urlTriggerPatterns.length > 0 && !this._urlTriggerActivated) {
+        if (this._urlTriggerPatterns.length > 0 && !this.isUrlTriggerActivated) {
             return 'buffering'
         }
 
@@ -355,6 +355,11 @@ export class SessionRecording {
         } else {
             return 'active'
         }
+    }
+
+    private get isUrlTriggerActivated(): boolean | null {
+        const currentValue = this.instance?.get_property(SESSION_RECORDING_URL_TRIGGER_ACTIVATED)
+        return isBoolean(currentValue) ? currentValue : null
     }
 
     constructor(private readonly instance: PostHog) {
@@ -1117,8 +1122,10 @@ export class SessionRecording {
     }
 
     private _activateUrlTrigger() {
-        if (!this._urlTriggerActivated) {
-            this._urlTriggerActivated = true
+        if (!this.isUrlTriggerActivated) {
+            this.instance.persistence?.register({
+                [SESSION_RECORDING_URL_TRIGGER_ACTIVATED]: true,
+            })
             this._flushBuffer()
             logger.info(LOGGER_PREFIX + ' recording triggered by URL pattern match')
         }
