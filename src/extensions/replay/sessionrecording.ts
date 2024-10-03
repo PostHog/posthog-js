@@ -228,6 +228,9 @@ export class SessionRecording {
     // then we can manually track href changes
     private _lastHref?: string
 
+    private _urlTriggerPatterns: string[] = []
+    private _urlTriggerActivated: boolean = false
+
     // Util to help developers working on this feature manually override
     _forceAllowLocalhostNetworkCapture = false
 
@@ -340,6 +343,10 @@ export class SessionRecording {
         }
 
         if (!isNullish(this._linkedFlag) && !this._linkedFlagSeen) {
+            return 'buffering'
+        }
+
+        if (this._urlTriggerPatterns.length > 0 && !this._urlTriggerActivated) {
             return 'buffering'
         }
 
@@ -542,6 +549,10 @@ export class SessionRecording {
                 }
                 this._linkedFlagSeen = linkedFlagMatches
             })
+        }
+
+        if (response.sessionRecording?.urlTriggerPatterns) {
+            this._urlTriggerPatterns = response.sessionRecording.urlTriggerPatterns
         }
 
         this.receivedDecide = true
@@ -909,6 +920,9 @@ export class SessionRecording {
             this._pageViewFallBack()
         }
 
+        // Check if the URL matches any trigger patterns
+        this._checkUrlTrigger()
+
         // we're processing a full snapshot, so we should reset the timer
         if (rawEvent.type === EventType.FullSnapshot) {
             this._scheduleFullSnapshot()
@@ -1088,6 +1102,26 @@ export class SessionRecording {
             _batchKey: SESSION_RECORDING_BATCH_KEY,
             skip_client_rate_limiting: true,
         })
+    }
+
+    private _checkUrlTrigger() {
+        if (typeof window === 'undefined' || !window.location.href) {
+            return
+        }
+
+        const url = window.location.href
+
+        if (this._urlTriggerPatterns.some((pattern) => new RegExp(pattern).test(url))) {
+            this._activateUrlTrigger()
+        }
+    }
+
+    private _activateUrlTrigger() {
+        if (!this._urlTriggerActivated) {
+            this._urlTriggerActivated = true
+            this._flushBuffer()
+            logger.info(LOGGER_PREFIX + ' recording triggered by URL pattern match')
+        }
     }
 
     /**

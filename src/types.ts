@@ -390,6 +390,7 @@ export interface DecideResponse {
         canvasQuality?: string | null
         linkedFlag?: string | FlagVariant | null
         networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
+        urlTriggerPatterns?: string[]
     }
     surveys?: boolean
     toolbarParams: ToolbarParams
