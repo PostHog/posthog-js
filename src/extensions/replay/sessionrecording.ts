@@ -1147,6 +1147,7 @@ export class SessionRecording {
     private _activateUrlTrigger() {
         if (this.urlTriggerStatus === 'pending') {
             this.urlTriggerStatus = 'activated'
+            this._tryAddCustomEvent('url trigger activated', {})
             this._flushBuffer()
             logger.info(LOGGER_PREFIX + ' recording triggered by URL pattern match')
         }
