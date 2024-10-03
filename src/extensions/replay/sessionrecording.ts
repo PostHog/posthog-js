@@ -61,6 +61,9 @@ const ACTIVE_SOURCES = [
     IncrementalSource.Drag,
 ]
 
+const TRIGGER_STATUSES = ['activated', 'pending', 'disabled'] as const
+type TriggerStatus = typeof TRIGGER_STATUSES[number]
+
 /**
  * Session recording starts in buffering mode while waiting for decide response
  * Once the response is received it might be disabled, active or sampled
@@ -346,7 +349,7 @@ export class SessionRecording {
             return 'buffering'
         }
 
-        if (this._urlTriggerPatterns.length > 0 && !this.isUrlTriggerActivated) {
+        if (this.urlTriggerStatus === 'pending') {
             return 'buffering'
         }
 
@@ -357,9 +360,24 @@ export class SessionRecording {
         }
     }
 
-    private get isUrlTriggerActivated(): boolean | null {
+    private get urlTriggerStatus(): 'activated' | 'pending' | 'disabled' {
+        if (this.receivedDecide && this._urlTriggerPatterns.length === 0) {
+            return 'disabled'
+        }
+
         const currentValue = this.instance?.get_property(SESSION_RECORDING_URL_TRIGGER_ACTIVATED)
-        return isBoolean(currentValue) ? currentValue : null
+
+        if (TRIGGER_STATUSES.includes(currentValue)) {
+            return currentValue as TriggerStatus
+        }
+
+        return 'pending'
+    }
+
+    private set urlTriggerStatus(status: TriggerStatus) {
+        this.instance?.persistence?.register({
+            [SESSION_RECORDING_URL_TRIGGER_ACTIVATED]: status,
+        })
     }
 
     constructor(private readonly instance: PostHog) {
@@ -1122,10 +1140,8 @@ export class SessionRecording {
     }
 
     private _activateUrlTrigger() {
-        if (!this.isUrlTriggerActivated) {
-            this.instance.persistence?.register({
-                [SESSION_RECORDING_URL_TRIGGER_ACTIVATED]: true,
-            })
+        if (this.urlTriggerStatus === 'pending') {
+            this.urlTriggerStatus = 'activated'
             this._flushBuffer()
             logger.info(LOGGER_PREFIX + ' recording triggered by URL pattern match')
         }
