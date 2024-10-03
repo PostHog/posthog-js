@@ -37,6 +37,7 @@ import { gzipSync, strFromU8, strToU8 } from 'fflate'
 
 const BASE_ENDPOINT = '/s/'
 
+const ONE_MINUTE = 1000 * 60
 const FIVE_MINUTES = 1000 * 60 * 5
 const TWO_SECONDS = 2000
 export const RECORDING_IDLE_THRESHOLD_MS = FIVE_MINUTES
@@ -259,7 +260,11 @@ export class SessionRecording {
     }
 
     private get fullSnapshotIntervalMillis(): number {
-        return this.instance.config.session_recording?.full_snapshot_interval_millis || FIVE_MINUTES
+        if (this.urlTriggerStatus === 'pending') {
+            return ONE_MINUTE
+        }
+
+        return this.instance.config.session_recording?.full_snapshot_interval_millis ?? FIVE_MINUTES
     }
 
     private get isSampled(): boolean | null {
