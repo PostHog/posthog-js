@@ -956,6 +956,11 @@ export class SessionRecording {
             this._scheduleFullSnapshot()
         }
 
+        // Clear the buffer if waiting for a trigger, and only keep data from after the current full snapshot
+        if (rawEvent.type === EventType.FullSnapshot && this.urlTriggerStatus === 'pending') {
+            this.clearBuffer()
+        }
+
         const throttledEvent = this.mutationRateLimiter
             ? this.mutationRateLimiter.throttleMutations(rawEvent)
             : rawEvent
