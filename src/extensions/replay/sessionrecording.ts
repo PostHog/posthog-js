@@ -90,6 +90,11 @@ interface SessionIdlePayload {
     bufferSize: number
 }
 
+interface StartReportingOptions {
+    reason: string
+    properties?: Properties
+}
+
 const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
     rrwebMethod,
     enqueuedAt: Date.now(),
@@ -395,9 +400,9 @@ export class SessionRecording {
         }
     }
 
-    startIfEnabledOrStop() {
+    startIfEnabledOrStop(reportingOptions?: StartReportingOptions) {
         if (this.isRecordingEnabled) {
-            this._startCapture()
+            this._startCapture(reportingOptions)
 
             // calling addEventListener multiple times is safe and will not add duplicates
             window?.addEventListener('beforeunload', this._onBeforeUnload)
@@ -495,23 +500,30 @@ export class SessionRecording {
         if (makeDecision) {
             const randomNumber = Math.random()
             shouldSample = randomNumber < currentSampleRate
-            this._reportStarted('sampling', {
-                sampleRate: currentSampleRate,
-                randomNumber,
-            })
         } else {
             shouldSample = storedIsSampled
         }
 
-        if (!shouldSample && makeDecision) {
-            logger.warn(
-                LOGGER_PREFIX +
-                    ` Sample rate (${currentSampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
-            )
+        if (makeDecision) {
+            if (shouldSample) {
+                this._reportStarted({
+                    reason: 'sampling',
+                    properties: {
+                        sampleRate: currentSampleRate,
+                    },
+                })
+            } else {
+                logger.warn(
+                    LOGGER_PREFIX +
+                        ` Sample rate (${currentSampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
+                )
+            }
+
+            this._tryAddCustomEvent('samplingDecisionMade', {
+                sampleRate: currentSampleRate,
+                isSampled: shouldSample,
+            })
         }
-        this._tryAddCustomEvent('samplingDecisionMade', {
-            sampleRate: currentSampleRate,
-        })
 
         this.instance.persistence?.register({
             [SESSION_RECORDING_IS_SAMPLED]: shouldSample,
@@ -543,7 +555,7 @@ export class SessionRecording {
                     const tag = 'linked flag matched'
                     logger.info(LOGGER_PREFIX + ' ' + tag, payload)
                     this._tryAddCustomEvent(tag, payload)
-                    this._reportStarted('linked_flag_match', payload)
+                    this._reportStarted({ reason: 'linked_flag_match', properties: payload })
                 }
                 this._linkedFlagSeen = linkedFlagMatches
             })
@@ -617,7 +629,7 @@ export class SessionRecording {
         })
     }
 
-    private _startCapture() {
+    private _startCapture(reportingOptions?: StartReportingOptions) {
         if (isUndefined(Object.assign)) {
             // According to the rrweb docs, rrweb is not supported on IE11 and below:
             // "rrweb does not support IE11 and below because it uses the MutationObserver API which was supported by these browsers."
@@ -655,6 +667,18 @@ export class SessionRecording {
             })
         } else {
             this._onScriptLoaded()
+        }
+
+        logger.info(LOGGER_PREFIX + ' starting')
+        if (this.status === 'active') {
+            this._reportStarted({
+                reason: reportingOptions?.reason || 'recording_initialized',
+                properties: {
+                    idleThreshold: this.sessionIdleThresholdMilliseconds,
+                    maxIdleTime: this.sessionManager.sessionTimeoutMs,
+                    ...(reportingOptions?.properties || {}),
+                },
+            })
         }
     }
 
@@ -729,8 +753,7 @@ export class SessionRecording {
 
         if (sessionIdChanged || windowIdChanged) {
             this.stopRecording()
-            this.startIfEnabledOrStop()
-            this._reportStarted('session_id_change', { changeReason })
+            this.startIfEnabledOrStop({ reason: 'session_id_changed', properties: { changeReason } })
         } else if (returningFromIdle) {
             this._scheduleFullSnapshot()
         }
@@ -846,12 +869,6 @@ export class SessionRecording {
 
         this._tryAddCustomEvent('$posthog_config', {
             config: this.instance.config,
-        })
-
-        logger.info(LOGGER_PREFIX + ' started')
-        this._reportStarted('recording_initialized', {
-            idleThreshold: this.sessionIdleThresholdMilliseconds,
-            maxIdleTime: this.sessionManager.sessionTimeoutMs,
         })
     }
 
@@ -1106,14 +1123,29 @@ export class SessionRecording {
      * */
     public overrideLinkedFlag() {
         this._linkedFlagSeen = true
-        this._reportStarted('linked_flag_override')
+        this._reportStarted({ reason: 'linked_flag_override' })
     }
 
-    private _reportStarted(reason: string, properties?: Properties) {
+    /**
+     * this ignores the sampling config and causes capture to start
+     * (if recording would have started had the flag been received i.e. it does not override other config).
+     *
+     * It is not usual to call this directly,
+     * instead call `posthog.startSessionRecording({sampling: true})`
+     * */
+    public overrideSampling() {
+        this.instance.persistence?.register({
+            // short-circuits the `makeSamplingDecision` function in the session recording module
+            [SESSION_RECORDING_IS_SAMPLED]: true,
+        })
+        this._reportStarted({ reason: 'sampling_override' })
+    }
+
+    private _reportStarted(report: StartReportingOptions) {
         if (this.instance.config.session_recording.report_recording_started) {
             this.instance.capture('$session_recording_started', {
-                ...(properties || {}),
-                $session_recording_started_reason: reason,
+                ...(report.properties || {}),
+                $session_recording_started_reason: report.reason,
             })
         }
     }

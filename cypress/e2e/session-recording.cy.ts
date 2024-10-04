@@ -60,23 +60,25 @@ function ensureActivitySendsSnapshots(initial = true) {
         .wait('@session-recording')
         .then(() => {
             cy.phCaptures({ full: true }).then((captures) => {
-                expect(captures.map((c) => c.event)).to.deep.equal(['$snapshot'])
-                expect(captures[0]['properties']['$snapshot_data']).to.have.length.above(14).and.below(40)
+                const capturedSnapshot = captures.find((e) => e.event === '$snapshot')
+                expect(capturedSnapshot).not.to.be.undefined
+
+                expect(capturedSnapshot['properties']['$snapshot_data']).to.have.length.above(14).and.below(40)
                 // a meta and then a full snapshot
-                expect(captures[0]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
-                expect(captures[0]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
+                expect(capturedSnapshot['properties']['$snapshot_data'][0].type).to.equal(4) // meta
+                expect(capturedSnapshot['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
 
                 if (initial) {
-                    expectSessionOptionsCustomEvent(captures[0]['properties']['$snapshot_data'][2])
-                    expectPostHogConfigCustomEvent(captures[0]['properties']['$snapshot_data'][3])
+                    expectSessionOptionsCustomEvent(capturedSnapshot['properties']['$snapshot_data'][2])
+                    expectPostHogConfigCustomEvent(capturedSnapshot['properties']['$snapshot_data'][3])
                 } else {
-                    expectSessionOptionsCustomEvent(captures[0]['properties']['$snapshot_data'][2])
-                    expectPostHogConfigCustomEvent(captures[0]['properties']['$snapshot_data'][3])
-                    expectSessionIdChangedCustomEvent(captures[0]['properties']['$snapshot_data'][4])
+                    expectSessionOptionsCustomEvent(capturedSnapshot['properties']['$snapshot_data'][2])
+                    expectPostHogConfigCustomEvent(capturedSnapshot['properties']['$snapshot_data'][3])
+                    expectSessionIdChangedCustomEvent(capturedSnapshot['properties']['$snapshot_data'][4])
                 }
 
                 // Making a set from the rest should all be 3 - incremental snapshots
-                const remainder = captures[0]['properties']['$snapshot_data'].slice(initial ? 4 : 5)
+                const remainder = capturedSnapshot['properties']['$snapshot_data'].slice(initial ? 4 : 5)
                 expect(Array.from(new Set(remainder.map((s) => s.type)))).to.deep.equal([3])
             })
         })
@@ -112,6 +114,11 @@ describe('Session recording', () => {
     describe('array.full.js', () => {
         it('captures session events', () => {
             start({
+                options: {
+                    session_recording: {
+                        report_recording_started: true,
+                    },
+                },
                 decideResponseOverrides: {
                     isAuthenticated: false,
                     sessionRecording: {
@@ -129,17 +136,24 @@ describe('Session recording', () => {
                 .wait('@session-recording')
                 .then(() => {
                     cy.phCaptures({ full: true }).then((captures) => {
-                        // should be a pageview and a $snapshot
-                        expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$snapshot'])
+                        expect(captures.map((c) => c.event)).to.deep.equal([
+                            '$pageview',
+                            '$session_recording_started',
+                            '$snapshot',
+                        ])
 
-                        expect(captures[1]['properties']['$snapshot_data']).to.have.length.above(33).and.below(40)
+                        expect(captures[1]['properties']['$session_recording_started_reason']).to.equal(
+                            'recording_initialized'
+                        )
+
+                        expect(captures[2]['properties']['$snapshot_data']).to.have.length.above(33).and.below(40)
                         // a meta and then a full snapshot
-                        expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
-                        expect(captures[1]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
-                        expect(captures[1]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
-                        expect(captures[1]['properties']['$snapshot_data'][3].type).to.equal(5) // custom event with posthog config
+                        expect(captures[2]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
+                        expect(captures[2]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
+                        expect(captures[2]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
+                        expect(captures[2]['properties']['$snapshot_data'][3].type).to.equal(5) // custom event with posthog config
                         // Making a set from the rest should all be 3 - incremental snapshots
-                        const incrementalSnapshots = captures[1]['properties']['$snapshot_data'].slice(4)
+                        const incrementalSnapshots = captures[2]['properties']['$snapshot_data'].slice(4)
                         expect(Array.from(new Set(incrementalSnapshots.map((s) => s.type)))).to.deep.eq([3])
                     })
                 })
@@ -179,6 +193,10 @@ describe('Session recording', () => {
                     options: {
                         loaded: (ph) => {
                             ph.sessionRecording._forceAllowLocalhostNetworkCapture = true
+                        },
+
+                        session_recording: {
+                            report_recording_started: true,
                         },
                     },
                 })
@@ -271,6 +289,11 @@ describe('Session recording', () => {
     describe('array.js', () => {
         beforeEach(() => {
             start({
+                options: {
+                    session_recording: {
+                        report_recording_started: true,
+                    },
+                },
                 decideResponseOverrides: {
                     isAuthenticated: false,
                     sessionRecording: {
@@ -287,7 +310,7 @@ describe('Session recording', () => {
         it('captures session events', () => {
             cy.phCaptures({ full: true }).then((captures) => {
                 // should be a pageview at the beginning
-                expect(captures.map((c) => c.event)).to.deep.equal(['$pageview'])
+                expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$session_recording_started'])
             })
             cy.resetPhCaptures()
 
@@ -386,10 +409,18 @@ describe('Session recording', () => {
         it('continues capturing to the same session when the page reloads', () => {
             let sessionId: string | null = null
 
-            // cypress time handling can confuse when to run full snapshot, let's force that to happen...
             cy.get('[data-cy-input]').type('hello world! ')
             cy.wait('@session-recording').then(() => {
                 cy.phCaptures({ full: true }).then((captures) => {
+                    expect(captures.map((c) => c.event)).to.deep.equal([
+                        '$pageview',
+                        '$session_recording_started',
+                        '$snapshot',
+                    ])
+                    expect(captures[1]['properties']['$session_recording_started_reason']).to.equal(
+                        'recording_initialized'
+                    )
+
                     captures.forEach((c) => {
                         if (isNull(sessionId)) {
                             sessionId = c.properties['$session_id']
@@ -404,7 +435,11 @@ describe('Session recording', () => {
             cy.resetPhCaptures()
             // and refresh the page
             cy.reload()
-            cy.posthogInit({})
+            cy.posthogInit({
+                session_recording: {
+                    report_recording_started: true,
+                },
+            })
             cy.wait('@decide')
             cy.wait('@recorder')
 
@@ -418,10 +453,13 @@ describe('Session recording', () => {
                 cy.phCaptures({ full: true }).then((captures) => {
                     // should be a $snapshot for the current session
                     expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$snapshot'])
-                    expect(captures[0].properties['$session_id']).to.equal(sessionId)
-                    expect(captures[1].properties['$session_id']).to.equal(sessionId)
 
-                    expect(captures[1]['properties']['$snapshot_data']).to.have.length.above(0)
+                    expect(captures[0].properties['$session_id']).to.equal(sessionId)
+
+                    const capturedSnapshot = captures[1]
+                    expect(capturedSnapshot.properties['$session_id']).to.equal(sessionId)
+
+                    expect(capturedSnapshot['properties']['$snapshot_data']).to.have.length.above(0)
 
                     /**
                      * the snapshots will look a little like:
@@ -433,28 +471,28 @@ describe('Session recording', () => {
 
                     // page reloaded so we will start with a full snapshot
                     // a meta and then a full snapshot
-                    expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
-                    expect(captures[1]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
+                    expect(capturedSnapshot['properties']['$snapshot_data'][0].type).to.equal(4) // meta
+                    expect(capturedSnapshot['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
 
                     // these custom events should always be in the same order, but computers
                     // we don't care if they are present and in a changing order
                     const customEvents = sortByTag([
-                        captures[1]['properties']['$snapshot_data'][2],
-                        captures[1]['properties']['$snapshot_data'][3],
-                        captures[1]['properties']['$snapshot_data'][4],
+                        capturedSnapshot['properties']['$snapshot_data'][2],
+                        capturedSnapshot['properties']['$snapshot_data'][3],
+                        capturedSnapshot['properties']['$snapshot_data'][4],
                     ])
                     expectPageViewCustomEvent(customEvents[0])
                     expectPostHogConfigCustomEvent(customEvents[1])
                     expectSessionOptionsCustomEvent(customEvents[2])
 
                     const xPositions = []
-                    for (let i = 5; i < captures[1]['properties']['$snapshot_data'].length; i++) {
-                        expect(captures[1]['properties']['$snapshot_data'][i].type).to.equal(3)
-                        expect(captures[1]['properties']['$snapshot_data'][i].data.source).to.equal(
+                    for (let i = 5; i < capturedSnapshot['properties']['$snapshot_data'].length; i++) {
+                        expect(capturedSnapshot['properties']['$snapshot_data'][i].type).to.equal(3)
+                        expect(capturedSnapshot['properties']['$snapshot_data'][i].data.source).to.equal(
                             6,
-                            JSON.stringify(captures[1]['properties']['$snapshot_data'][i])
+                            JSON.stringify(capturedSnapshot['properties']['$snapshot_data'][i])
                         )
-                        xPositions.push(captures[1]['properties']['$snapshot_data'][i].data.positions[0].x)
+                        xPositions.push(capturedSnapshot['properties']['$snapshot_data'][i].data.positions[0].x)
                     }
 
                     // even though we trigger 4 events, only 2 snapshots should be captured
@@ -480,8 +518,15 @@ describe('Session recording', () => {
                 .then(() => {
                     cy.phCaptures({ full: true }).then((captures) => {
                         // should be a pageview and a $snapshot
-                        expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$snapshot'])
-                        expect(captures[1]['properties']['$session_id']).to.be.a('string')
+                        expect(captures.map((c) => c.event)).to.deep.equal([
+                            '$pageview',
+                            '$session_recording_started',
+                            '$snapshot',
+                        ])
+                        expect(captures[1]['properties']['$session_recording_started_reason']).to.equal(
+                            'recording_initialized'
+                        )
+                        expect(captures[2]['properties']['$session_id']).to.be.a('string')
                         firstSessionId = captures[1]['properties']['$session_id']
                     })
                 })
@@ -506,15 +551,26 @@ describe('Session recording', () => {
                 .wait('@session-recording', { timeout: 10000 })
                 .then(() => {
                     cy.phCaptures({ full: true }).then((captures) => {
-                        // should be a pageview and a $snapshot
-                        expect(captures[0].event).to.equal('$snapshot')
+                        const capturedSessionStartedReport = captures[0]
+                        expect(capturedSessionStartedReport.event).to.equal('$session_recording_started')
+                        expect(capturedSessionStartedReport.properties['$session_recording_started_reason']).to.equal(
+                            'session_id_changed'
+                        )
+                        expect(capturedSessionStartedReport.properties['$session_id']).not.to.eq(firstSessionId)
 
-                        expect(captures[0]['properties']['$session_id']).to.be.a('string')
-                        expect(captures[0]['properties']['$session_id']).not.to.eq(firstSessionId)
+                        const capturedSnapshot = captures[1]
+                        expect(capturedSnapshot.event).to.equal('$snapshot')
 
-                        expect(captures[0]['properties']['$snapshot_data']).to.have.length.above(0)
-                        expect(captures[0]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
-                        expect(captures[0]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
+                        expect(capturedSnapshot['properties']['$session_id']).to.be.a('string')
+                        expect(capturedSnapshot['properties']['$session_id']).not.to.eq(firstSessionId)
+
+                        expect(capturedSnapshot['properties']['$session_id']).to.eq(
+                            capturedSessionStartedReport.properties['$session_id']
+                        )
+
+                        expect(capturedSnapshot['properties']['$snapshot_data']).to.have.length.above(0)
+                        expect(capturedSnapshot['properties']['$snapshot_data'][0].type).to.equal(4) // meta
+                        expect(capturedSnapshot['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
                     })
                 })
         })
@@ -522,7 +578,7 @@ describe('Session recording', () => {
         it('starts a new recording after calling reset', () => {
             cy.phCaptures({ full: true }).then((captures) => {
                 // should be a pageview at the beginning
-                expect(captures.map((c) => c.event)).to.deep.equal(['$pageview'])
+                expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$session_recording_started'])
             })
             cy.resetPhCaptures()
 
@@ -553,6 +609,11 @@ describe('Session recording', () => {
     describe('with sampling', () => {
         beforeEach(() => {
             start({
+                options: {
+                    session_recording: {
+                        report_recording_started: true,
+                    },
+                },
                 decideResponseOverrides: {
                     isAuthenticated: false,
                     sessionRecording: {
@@ -575,7 +636,6 @@ describe('Session recording', () => {
                 .wait(200) // can't wait on call to session recording, it's not going to happen
                 .then(() => {
                     cy.phCaptures({ full: true }).then((captures) => {
-                        // should be a pageview and a $snapshot
                         expect(captures.map((c) => c.event)).to.deep.equal(['$pageview'])
                     })
                 })
@@ -609,6 +669,11 @@ describe('Session recording', () => {
                 '@recorder': true,
                 '@decide': true,
                 // no call to session-recording yet
+            })
+
+            cy.phCaptures({ full: true }).then((captures) => {
+                expect((captures || []).map((c) => c.event)).to.deep.equal(['$pageview', '$session_recording_started'])
+                expect(captures[1]['properties']['$session_recording_started_reason']).to.equal('sampling_override')
             })
 
             cy.resetPhCaptures()
