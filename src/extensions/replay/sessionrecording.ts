@@ -848,7 +848,8 @@ export class SessionRecording {
             config: this.instance.config,
         })
 
-        logger.info(LOGGER_PREFIX + ' started', {
+        logger.info(LOGGER_PREFIX + ' started')
+        this._reportStarted('recording_initialized', {
             idleThreshold: this.sessionIdleThresholdMilliseconds,
             maxIdleTime: this.sessionManager.sessionTimeoutMs,
         })
