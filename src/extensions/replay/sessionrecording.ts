@@ -1111,7 +1111,10 @@ export class SessionRecording {
 
     private _reportStarted(reason: string, properties?: Properties) {
         if (this.instance.config.session_recording.report_recording_started) {
-            this.instance.capture('$session_recording_started', { ...(properties || {}), reason })
+            this.instance.capture('$session_recording_started', {
+                ...(properties || {}),
+                $session_recording_started_reason: reason,
+            })
         }
     }
 }
