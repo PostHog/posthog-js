@@ -1,4 +1,4 @@
-import { SurveyContext, defaultSurveyAppearance, renderChildrenAsTextOrHtml } from '../surveys-utils'
+import { SurveyContext, renderChildrenAsTextOrHtml } from '../surveys-utils'
 import { cancelSVG } from '../icons'
 import { useContext } from 'preact/hooks'
 import { SurveyQuestionDescriptionContentType } from '../../../posthog-surveys-types'
@@ -19,7 +19,7 @@ export function QuestionHeader({
 }) {
     const { isPopup } = useContext(SurveyContext)
     return (
-        <div style={isPopup ? { backgroundColor: backgroundColor || defaultSurveyAppearance.backgroundColor } : {}}>
+        <div style={isPopup ? { backgroundColor: backgroundColor } : {}}>
             <div className="survey-question">{question}</div>
             {description &&
                 renderChildrenAsTextOrHtml({

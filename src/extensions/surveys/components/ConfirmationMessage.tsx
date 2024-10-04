@@ -1,7 +1,7 @@
 import { BottomSection } from './BottomSection'
 import { Cancel } from './QuestionHeader'
 import { SurveyAppearance, SurveyQuestionDescriptionContentType } from '../../../posthog-surveys-types'
-import { defaultSurveyAppearance, getContrastingTextColor, renderChildrenAsTextOrHtml } from '../surveys-utils'
+import { getContrastingTextColor, renderChildrenAsTextOrHtml } from '../surveys-utils'
 import { h } from 'preact'
 
 import { useContext } from 'preact/hooks'
@@ -24,7 +24,7 @@ export function ConfirmationMessage({
     onClose: () => void
     styleOverrides?: React.CSSProperties
 }) {
-    const textColor = getContrastingTextColor(appearance.backgroundColor || defaultSurveyAppearance.backgroundColor)
+    const textColor = getContrastingTextColor(appearance.backgroundColor)
 
     const { isPopup } = useContext(SurveyContext)
 
