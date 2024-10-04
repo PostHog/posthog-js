@@ -1105,7 +1105,7 @@ export class SessionRecording {
      * */
     public overrideLinkedFlag() {
         this._linkedFlagSeen = true
-        this._reportStarted('linked flag override')
+        this._reportStarted('linked_flag_override')
     }
 
     private _reportStarted(reason: string, properties?: Properties) {
