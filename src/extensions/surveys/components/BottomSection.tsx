@@ -1,6 +1,6 @@
 import { window } from '../../../utils/globals'
 
-import { SurveyAppearance } from '../../../posthog-surveys-types'
+import { OrgSurveySettings, SurveyAppearance } from '../../../posthog-surveys-types'
 
 import { PostHogLogo } from './PostHogLogo'
 import { useContext } from 'preact/hooks'
@@ -12,12 +12,14 @@ export function BottomSection({
     appearance,
     onSubmit,
     link,
+    orgSurveySettings,
 }: {
     text: string
     submitDisabled: boolean
     appearance: SurveyAppearance
     onSubmit: () => void
     link?: string | null
+    orgSurveySettings?: OrgSurveySettings
 }) {
     const { isPreviewMode, isPopup } = useContext(SurveyContext)
     const textColor =
@@ -42,7 +44,7 @@ export function BottomSection({
                     {text}
                 </button>
             </div>
-            {!appearance.whiteLabel && <PostHogLogo />}
+            {(!appearance.whiteLabel || orgSurveySettings?.appearance?.whiteLabel) && <PostHogLogo />}
         </div>
     )
 }
