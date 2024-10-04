@@ -17,7 +17,14 @@ import {
     truncateLargeConsoleLogs,
 } from './sessionrecording-utils'
 import { PostHog } from '../../posthog-core'
-import { DecideResponse, FlagVariant, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
+import {
+    DecideResponse,
+    FlagVariant,
+    NetworkRecordOptions,
+    NetworkRequest,
+    Properties,
+    SessionRecordingUrlTrigger,
+} from '../../types'
 import {
     customEvent,
     EventType,
@@ -233,7 +240,7 @@ export class SessionRecording {
     // then we can manually track href changes
     private _lastHref?: string
 
-    private _urlTriggerPatterns: string[] = []
+    private _urlTriggers: SessionRecordingUrlTrigger[] = []
 
     // Util to help developers working on this feature manually override
     _forceAllowLocalhostNetworkCapture = false
@@ -366,7 +373,7 @@ export class SessionRecording {
     }
 
     private get urlTriggerStatus(): 'activated' | 'pending' | 'disabled' {
-        if (this.receivedDecide && this._urlTriggerPatterns.length === 0) {
+        if (this.receivedDecide && this._urlTriggers.length === 0) {
             return 'disabled'
         }
 
@@ -579,8 +586,8 @@ export class SessionRecording {
             })
         }
 
-        if (response.sessionRecording?.urlTriggerPatterns) {
-            this._urlTriggerPatterns = response.sessionRecording.urlTriggerPatterns
+        if (response.sessionRecording?.urlTriggers) {
+            this._urlTriggers = response.sessionRecording.urlTriggers
         }
 
         this.receivedDecide = true
@@ -1144,7 +1151,16 @@ export class SessionRecording {
 
         const url = window.location.href
 
-        if (this._urlTriggerPatterns.some((pattern) => new RegExp(pattern).test(url))) {
+        if (
+            this._urlTriggers.some((trigger) => {
+                switch (trigger.matching) {
+                    case 'regex':
+                        return new RegExp(trigger.url).test(url)
+                    default:
+                        return false
+                }
+            })
+        ) {
             this._activateUrlTrigger()
         }
     }

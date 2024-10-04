@@ -390,7 +390,7 @@ export interface DecideResponse {
         canvasQuality?: string | null
         linkedFlag?: string | FlagVariant | null
         networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
-        urlTriggerPatterns?: string[]
+        urlTriggers?: SessionRecordingUrlTrigger[]
     }
     surveys?: boolean
     toolbarParams: ToolbarParams
@@ -594,4 +594,9 @@ export interface ErrorProperties {
 export interface ErrorConversions {
     errorToProperties: (args: ErrorEventArgs) => ErrorProperties
     unhandledRejectionToProperties: (args: [ev: PromiseRejectionEvent]) => ErrorProperties
+}
+
+export interface SessionRecordingUrlTrigger {
+    url: string
+    matching: 'regex'
 }
