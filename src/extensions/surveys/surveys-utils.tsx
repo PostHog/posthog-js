@@ -6,7 +6,24 @@ import { VNode, cloneElement, createContext } from 'preact'
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 
-export const style = (appearance: SurveyAppearance | null) => {
+// const getStyleProperty = (
+//     callback: (app: SurveyAppearance | null) => string | undefined,
+//     appearance: SurveyAppearance | null,
+//     orgSurveyAppearance: SurveyAppearance | null
+// ): string => {
+//     return callback(appearance) || callback(orgSurveyAppearance) || callback(defaultSurveyAppearance)
+// }
+
+export const style = (appearance: SurveyAppearance | null, orgSurveyAppearance?: SurveyAppearance) => {
+    const backgroundColor =
+        appearance?.backgroundColor || orgSurveyAppearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
+    const borderColor = appearance?.borderColor || orgSurveyAppearance?.borderColor || '#c9c6c6'
+    const surveyPosition = appearance?.position || orgSurveyAppearance?.position || 'right'
+    const maxWidth = parseInt(appearance?.maxWidth || orgSurveyAppearance?.maxWidth || '300')
+    const zIndex = parseInt(appearance?.zIndex || orgSurveyAppearance?.zIndex || '99999')
+    const submitButtonColor = appearance?.submitButtonColor || orgSurveyAppearance?.submitButtonColor || 'black'
+    const ratingButtonActiveColor =
+        appearance?.ratingButtonActiveColor || orgSurveyAppearance?.ratingButtonActiveColor || 'black'
     const positions = {
         left: 'left: 30px;',
         right: 'right: 30px;',
@@ -15,6 +32,7 @@ export const style = (appearance: SurveyAppearance | null) => {
             transform: translateX(-50%);
           `,
     }
+
     return `
           .survey-form, .thank-you-message {
               position: fixed;
@@ -24,14 +42,14 @@ export const style = (appearance: SurveyAppearance | null) => {
               font-weight: normal;
               font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
               text-align: left;
-              max-width: ${parseInt(appearance?.maxWidth || '300')}px;
+              max-width: ${maxWidth}px;
               width: 100%;
-              z-index: ${parseInt(appearance?.zIndex || '99999')};
-              border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
+              z-index: ${zIndex};
+              border: 1.5px solid ${borderColor};
               border-bottom: 0px;
-              ${positions[appearance?.position || 'right'] || 'right: 30px;'}
+              ${positions[surveyPosition] || 'right: 30px;'}
               flex-direction: column;
-              background: ${appearance?.backgroundColor || '#eeeded'};
+              background: ${backgroundColor};
               border-top-left-radius: 10px;
               border-top-right-radius: 10px;
               box-shadow: -6px 0 16px -8px rgb(0 0 0 / 8%), -9px 0 28px 0 rgb(0 0 0 / 5%), -12px 0 48px 16px rgb(0 0 0 / 3%);
@@ -64,7 +82,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               padding-right: 10px;
               padding-top: 10px;
               border-radius: 6px;
-              border-color: ${appearance?.borderColor || '#c9c6c6'};
+              border-color: ${borderColor};
               margin-top: 14px;
               width: 100%;
               box-sizing: border-box;
@@ -91,7 +109,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               font-size: 14px;
               border-radius: 6px;
               outline: 0;
-              background: ${appearance?.submitButtonColor || 'black'} !important;
+              background: ${submitButtonColor} !important;
               text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.12);
               box-shadow: 0 2px 0 rgba(0, 0, 0, 0.045);
               width: 100%;
@@ -112,7 +130,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               right: 0;
               transform: translate(50%, -50%);
               background: white;
-              border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
+              border: 1.5px solid ${borderColor};
               display: flex;
               justify-content: center;
               align-items: center;
@@ -131,15 +149,15 @@ export const style = (appearance: SurveyAppearance | null) => {
               gap: 4px;
               align-items: center;
               font-weight: 500;
-              background: ${appearance?.backgroundColor || '#eeeded'};
+              background: ${backgroundColor};
               text-decoration: none;
-              backgroundColor: ${appearance?.backgroundColor || '#eeeded'};
-              color: ${getContrastingTextColor(appearance?.backgroundColor || '#eeeded')};
+              backgroundColor: ${backgroundColor};
+              color: ${getContrastingTextColor(backgroundColor)};
           }
           .survey-question {
               font-weight: 500;
               font-size: 14px;
-              background: ${appearance?.backgroundColor || '#eeeded'};
+              background: ${backgroundColor};
           }
           .question-textarea-wrapper {
               display: flex;
@@ -148,7 +166,7 @@ export const style = (appearance: SurveyAppearance | null) => {
           .survey-question-description {
               font-size: 13px;
               padding-top: 5px;
-              background: ${appearance?.backgroundColor || '#eeeded'};
+              background: ${backgroundColor};
           }
           .ratings-number {
               font-size: 16px;
@@ -166,16 +184,16 @@ export const style = (appearance: SurveyAppearance | null) => {
               display: grid;
               border-radius: 6px;
               overflow: hidden;
-              border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
+              border: 1.5px solid ${borderColor};
           }
           .rating-options-number > .ratings-number {
-              border-right: 1px solid ${appearance?.borderColor || '#c9c6c6'};
+              border-right: 1px solid ${borderColor};
           }
           .rating-options-number > .ratings-number:last-of-type {
               border-right: 0px;
           }
           .rating-options-number .rating-active {
-              background: ${appearance?.ratingButtonActiveColor || 'black'};
+              background: ${ratingButtonActiveColor};
           }
           .rating-options-emoji {
               display: flex;
@@ -191,7 +209,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               cursor: pointer;
           }
           .ratings-emoji.rating-active svg {
-              fill: ${appearance?.ratingButtonActiveColor || 'black'};
+              fill: ${ratingButtonActiveColor};
           }
           .emoji-svg {
               fill: '#939393';
@@ -202,7 +220,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               font-size: 11px;
               justify-content: space-between;
               margin-top: 6px;
-              background: ${appearance?.backgroundColor || '#eeeded'};
+              background: ${backgroundColor};
               opacity: .60;
           }
           .multiple-choice-options {
@@ -283,11 +301,11 @@ export const style = (appearance: SurveyAppearance | null) => {
           .thank-you-message-body {
               margin-top: 6px;
               font-size: 14px;
-              background: ${appearance?.backgroundColor || '#eeeded'};
+              background: ${backgroundColor};
           }
           .thank-you-message-header {
               margin: 10px 0px 0px;
-              background: ${appearance?.backgroundColor || '#eeeded'};
+              background: ${backgroundColor};
           }
           .thank-you-message-container .form-submit {
               margin-top: 20px;

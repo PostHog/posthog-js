@@ -39,6 +39,10 @@ export interface SurveyAppearance {
     zIndex?: string
 }
 
+export interface OrgSurveySettings {
+    appearance?: SurveyAppearance
+}
+
 export enum SurveyType {
     Popover = 'popover',
     API = 'api',
@@ -120,7 +124,7 @@ export interface SurveyResponse {
     surveys: Survey[]
 }
 
-export type SurveyCallback = (surveys: Survey[]) => void
+export type SurveyCallback = (surveys: Survey[], orgSurveySettings?: OrgSurveySettings) => void
 
 export type SurveyUrlMatchType = 'regex' | 'not_regex' | 'exact' | 'is_not' | 'icontains' | 'not_icontains'
 

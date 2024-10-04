@@ -1,5 +1,6 @@
 import { PostHog } from '../posthog-core'
 import {
+    OrgSurveySettings,
     Survey,
     SurveyAppearance,
     SurveyQuestion,
@@ -138,11 +139,15 @@ export class SurveyManager {
      * Sorts surveys by their appearance delay in ascending order. If a survey does not have an appearance delay,
      * it is considered to have a delay of 0.
      * @param surveys
+     * @param orgSurveySettings
      * @returns The surveys sorted by their appearance delay
      */
-    private sortSurveysByAppearanceDelay(surveys: Survey[]): Survey[] {
+    private sortSurveysByAppearanceDelay(surveys: Survey[], orgSurveySettings?: OrgSurveySettings): Survey[] {
+        const popupDelaySeconds = orgSurveySettings?.appearance?.surveyPopupDelaySeconds || 0
         return surveys.sort(
-            (a, b) => (a.appearance?.surveyPopupDelaySeconds || 0) - (b.appearance?.surveyPopupDelaySeconds || 0)
+            (a, b) =>
+                (a.appearance?.surveyPopupDelaySeconds || popupDelaySeconds || 0) -
+                (b.appearance?.surveyPopupDelaySeconds || popupDelaySeconds)
         )
     }
 
@@ -211,14 +216,15 @@ export class SurveyManager {
     }
 
     public callSurveysAndEvaluateDisplayLogic = (forceReload: boolean = false): void => {
-        this.posthog?.getActiveMatchingSurveys((surveys) => {
-            const nonAPISurveys = surveys.filter((survey) => survey.type !== 'api')
+        this.posthog?.getActiveMatchingSurveys((surveys, orgSurveySettings) => {
+            const interactiveSurveyTypes = [SurveyType.Widget, SurveyType.Popover]
+            const interactiveSurveys = surveys.filter((survey) => interactiveSurveyTypes.includes(survey.type))
 
             // Create a queue of surveys sorted by their appearance delay.  We will evaluate the display logic
             // for each survey in the queue in order, and only display one survey at a time.
-            const nonAPISurveyQueue = this.sortSurveysByAppearanceDelay(nonAPISurveys)
+            const interactiveSurveyQueue = this.sortSurveysByAppearanceDelay(interactiveSurveys, orgSurveySettings)
 
-            nonAPISurveyQueue.forEach((survey) => {
+            interactiveSurveyQueue.forEach((survey) => {
                 // We only evaluate the display logic for one survey at a time
                 if (!isNull(this.surveyInFocus)) {
                     return

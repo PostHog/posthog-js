@@ -1,5 +1,5 @@
 import { PostHog } from './posthog-core'
-import { SURVEYS } from './constants'
+import { ORG_SURVEY_SETTINGS, SURVEYS } from './constants'
 import {
     Survey,
     SurveyCallback,
@@ -103,6 +103,7 @@ export class PostHogSurveys {
         }
 
         const existingSurveys = this.instance.get_property(SURVEYS)
+        const existingSurveySettings = this.instance.get_property(ORG_SURVEY_SETTINGS)
 
         if (!existingSurveys || forceReload) {
             this.instance._send_request({
@@ -116,6 +117,7 @@ export class PostHogSurveys {
                     if (response.statusCode !== 200 || !response.json) {
                         return callback([])
                     }
+                    const orgSurveySettings = response.json.org_settings
                     const surveys = response.json.surveys || []
 
                     const eventOrActionBasedSurveys = surveys.filter(
@@ -133,16 +135,16 @@ export class PostHogSurveys {
                     }
 
                     this.instance.persistence?.register({ [SURVEYS]: surveys })
-                    return callback(surveys)
+                    return callback(surveys, orgSurveySettings)
                 },
             })
         } else {
-            return callback(existingSurveys)
+            return callback(existingSurveys, existingSurveySettings)
         }
     }
 
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false) {
-        this.getSurveys((surveys) => {
+        this.getSurveys((surveys, orgSurveySettings) => {
             const activeSurveys = surveys.filter((survey) => {
                 return !!(survey.start_date && !survey.end_date)
             })
@@ -198,7 +200,7 @@ export class PostHogSurveys {
                 )
             })
 
-            return callback(targetingMatchedSurveys)
+            return callback(targetingMatchedSurveys, orgSurveySettings)
         }, forceReload)
     }
 
