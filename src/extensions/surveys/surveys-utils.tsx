@@ -1,5 +1,11 @@
 import { PostHog } from '../../posthog-core'
-import { Survey, SurveyAppearance, MultipleSurveyQuestion, SurveyQuestion } from '../../posthog-surveys-types'
+import {
+    Survey,
+    SurveyAppearance,
+    MultipleSurveyQuestion,
+    SurveyQuestion,
+    OrgSurveySettings,
+} from '../../posthog-surveys-types'
 import { window as _window, document as _document } from '../../utils/globals'
 import { VNode, cloneElement, createContext } from 'preact'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
@@ -628,13 +634,13 @@ export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string
     return shuffledOptions
 }
 
-export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
+export const getDisplayOrderQuestions = (survey: Survey, orgSurveySettings?: OrgSurveySettings): SurveyQuestion[] => {
     // retain the original questionIndex so we can correlate values in the webapp
     survey.questions.forEach((question, idx) => {
         question.originalQuestionIndex = idx
     })
 
-    if (!survey.appearance || !survey.appearance.shuffleQuestions) {
+    if (!survey.appearance?.shuffleQuestions && !orgSurveySettings?.appearance?.shuffleQuestions) {
         return survey.questions
     }
 
