@@ -30,7 +30,7 @@ import {
     isUndefined,
 } from '../utils/type-utils'
 import { logger } from '../utils/logger'
-import { window } from '../utils/globals'
+import { assignableWindow } from '../utils/globals'
 import { defaultNetworkOptions } from '../extensions/replay/config'
 import { formDataToQuery } from '../utils/request-utils'
 import { patch } from '../extensions/replay/rrweb-plugins/patch'
@@ -322,6 +322,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                                 start,
                                 end,
                                 url: url.toString(),
+                                initiatorType: 'xmlhttprequest',
                             })
                             cb({ requests })
                         })
@@ -355,6 +356,7 @@ function prepareRequest({
     start,
     end,
     url,
+    initiatorType,
 }: {
     entry: PerformanceResourceTiming | null
     method: string | undefined
@@ -363,8 +365,10 @@ function prepareRequest({
     isInitial?: boolean
     start?: number
     end?: number
-    // if there is no entry, we still need to know the url
+    // if there is no performance observer entry, we still need to know the url
     url?: string
+    // if there is no performance observer entry, we can provide the initiatorType
+    initiatorType?: string
 }): CapturedNetworkRequest[] {
     start = entry ? entry.startTime : start
     end = entry ? entry.responseEnd : end
@@ -389,7 +393,7 @@ function prepareRequest({
             timeOrigin,
             timestamp,
             method: method,
-            initiatorType: entry ? (entry.initiatorType as InitiatorType) : undefined,
+            initiatorType: entry ? (entry.initiatorType as InitiatorType) : initiatorType,
             status,
             requestHeaders: networkRequest.requestHeaders,
             requestBody: networkRequest.requestBody,
@@ -583,6 +587,7 @@ function initFetchObserver(
                             start,
                             end,
                             url: req.url,
+                            initiatorType: 'fetch',
                         })
                         cb({ requests })
                     })
@@ -669,10 +674,17 @@ export const getRecordNetworkPlugin: (options?: NetworkRecordOptions) => RecordP
 
 // rrweb/networ@1 ends
 
-if (window) {
-    ;(window as any).rrweb = { record: rrwebRecord, version: 'v2', rrwebVersion: version }
-    ;(window as any).rrwebConsoleRecord = { getRecordConsolePlugin }
-    ;(window as any).getRecordNetworkPlugin = getRecordNetworkPlugin
-}
+assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
+assignableWindow.__PosthogExtensions__.rrwebPlugins = { getRecordConsolePlugin, getRecordNetworkPlugin }
+assignableWindow.__PosthogExtensions__.rrweb = { record: rrwebRecord, version: 'v2', rrwebVersion: version }
+
+// we used to put all of these items directly on window, and now we put it on __PosthogExtensions__
+// but that means that old clients which lazily load this extension are looking in the wrong place
+// yuck,
+// so we also put them directly on the window
+// when 1.161.1 is the oldest version seen in production we can remove this
+assignableWindow.rrweb = { record: rrwebRecord, version: 'v2', rrwebVersion: version }
+assignableWindow.rrwebConsoleRecord = { getRecordConsolePlugin }
+assignableWindow.getRecordNetworkPlugin = getRecordNetworkPlugin
 
 export default rrwebRecord

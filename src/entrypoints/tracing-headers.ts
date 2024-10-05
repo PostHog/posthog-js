@@ -56,9 +56,18 @@ const patchXHR = (sessionManager: SessionIdManager): (() => void) => {
     )
 }
 
-if (assignableWindow) {
-    assignableWindow.postHogTracingHeadersPatchFns = {
-        _patchFetch: patchFetch,
-        _patchXHR: patchXHR,
-    }
+assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
+const patchFns = {
+    _patchFetch: patchFetch,
+    _patchXHR: patchXHR,
 }
+assignableWindow.__PosthogExtensions__.tracingHeadersPatchFns = patchFns
+
+// we used to put tracingHeadersPatchFns on window, and now we put it on __PosthogExtensions__
+// but that means that old clients which lazily load this extension are looking in the wrong place
+// yuck,
+// so we also put it directly on the window
+// when 1.161.1 is the oldest version seen in production we can remove this
+assignableWindow.postHogTracingHeadersPatchFns = patchFns
+
+export default patchFns

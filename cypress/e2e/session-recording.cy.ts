@@ -4,6 +4,11 @@ import { isNull } from '../../src/utils/type-utils'
 import { start } from '../support/setup'
 import { assertWhetherPostHogRequestsWereCalled, pollPhCaptures } from '../support/assertions'
 
+interface RRWebCustomEvent {
+    type: number
+    data: { payload: Record<string, any>; tag: string }
+}
+
 function ensureRecordingIsStopped() {
     cy.resetPhCaptures()
 
@@ -16,6 +21,35 @@ function ensureRecordingIsStopped() {
                 expect(captures.map((c) => c.event)).to.deep.equal([])
             })
         })
+}
+
+function expectPageViewCustomEvent(snapshot: RRWebCustomEvent) {
+    expect(snapshot.type).to.equal(5)
+    expect(snapshot.data.tag).to.equal('$pageview')
+}
+
+function expectSessionIdChangedCustomEvent(snapshot: RRWebCustomEvent) {
+    expect(snapshot.type).to.equal(5)
+    expect(snapshot.data.tag).to.equal('$session_id_change')
+    expect(snapshot.data.payload.changeReason).to.deep.equal({
+        noSessionId: true,
+        activityTimeout: true,
+        sessionPastMaximumLength: false,
+    })
+}
+
+function expectPostHogConfigCustomEvent(snapshot: RRWebCustomEvent) {
+    expect(snapshot.type).to.equal(5)
+    expect(snapshot.data.tag).to.equal('$posthog_config')
+}
+
+function expectSessionOptionsCustomEvent(snapshot: RRWebCustomEvent) {
+    expect(snapshot.type).to.equal(5)
+    expect(snapshot.data.tag).to.equal('$session_options')
+}
+
+function sortByTag(snapshots: RRWebCustomEvent[]) {
+    return snapshots.sort((a, b) => a.data.tag?.localeCompare(b.data.tag))
 }
 
 function ensureActivitySendsSnapshots(initial = true) {
@@ -31,15 +65,19 @@ function ensureActivitySendsSnapshots(initial = true) {
                 // a meta and then a full snapshot
                 expect(captures[0]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
                 expect(captures[0]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
-                // Not sent if recording is not stopped but session_id changes (e.g. reset called)
+
                 if (initial) {
-                    expect(captures[0]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
-                    expect(captures[0]['properties']['$snapshot_data'][3].type).to.equal(5) // custom event with posthog config
+                    expectSessionOptionsCustomEvent(captures[0]['properties']['$snapshot_data'][2])
+                    expectPostHogConfigCustomEvent(captures[0]['properties']['$snapshot_data'][3])
+                } else {
+                    expectSessionOptionsCustomEvent(captures[0]['properties']['$snapshot_data'][2])
+                    expectPostHogConfigCustomEvent(captures[0]['properties']['$snapshot_data'][3])
+                    expectSessionIdChangedCustomEvent(captures[0]['properties']['$snapshot_data'][4])
                 }
+
                 // Making a set from the rest should all be 3 - incremental snapshots
-                expect(
-                    new Set(captures[0]['properties']['$snapshot_data'].slice(initial ? 4 : 2).map((s) => s.type))
-                ).to.deep.equal(new Set([3]))
+                const remainder = captures[0]['properties']['$snapshot_data'].slice(initial ? 4 : 5)
+                expect(Array.from(new Set(remainder.map((s) => s.type)))).to.deep.equal([3])
             })
         })
 }
@@ -102,7 +140,7 @@ describe('Session recording', () => {
                         expect(captures[1]['properties']['$snapshot_data'][3].type).to.equal(5) // custom event with posthog config
                         // Making a set from the rest should all be 3 - incremental snapshots
                         const incrementalSnapshots = captures[1]['properties']['$snapshot_data'].slice(4)
-                        expect(new Set(incrementalSnapshots.map((s) => s.type))).to.deep.equal(new Set([3]))
+                        expect(Array.from(new Set(incrementalSnapshots.map((s) => s.type)))).to.deep.eq([3])
                     })
                 })
         })
@@ -398,14 +436,16 @@ describe('Session recording', () => {
                     expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
                     expect(captures[1]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
 
-                    expect(captures[1]['properties']['$snapshot_data'][2].type).to.equal(5)
-                    expect(captures[1]['properties']['$snapshot_data'][2].data.tag).to.equal('$pageview')
-
-                    expect(captures[1]['properties']['$snapshot_data'][3].type).to.equal(5) // custom event with options
-                    expect(captures[1]['properties']['$snapshot_data'][3].data.tag).to.equal('$session_options')
-
-                    expect(captures[1]['properties']['$snapshot_data'][4].type).to.equal(5) // custom event with posthog config
-                    expect(captures[1]['properties']['$snapshot_data'][4].data.tag).to.equal('$posthog_config') // custom event with posthog config
+                    // these custom events should always be in the same order, but computers
+                    // we don't care if they are present and in a changing order
+                    const customEvents = sortByTag([
+                        captures[1]['properties']['$snapshot_data'][2],
+                        captures[1]['properties']['$snapshot_data'][3],
+                        captures[1]['properties']['$snapshot_data'][4],
+                    ])
+                    expectPageViewCustomEvent(customEvents[0])
+                    expectPostHogConfigCustomEvent(customEvents[1])
+                    expectSessionOptionsCustomEvent(customEvents[2])
 
                     const xPositions = []
                     for (let i = 5; i < captures[1]['properties']['$snapshot_data'].length; i++) {
@@ -494,6 +534,7 @@ describe('Session recording', () => {
             ensureActivitySendsSnapshots()
 
             cy.posthog().then((ph) => {
+                cy.log('resetting posthog')
                 ph.reset()
             })
 

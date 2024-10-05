@@ -1,3 +1,62 @@
+## 1.166.1 - 2024-10-01
+
+- fix: skip addition of `src` attribute for HLS videos (#1446)
+
+## 1.166.0 - 2024-10-01
+
+- feat: default replay partial compression on (#1445)
+- chore: Add test for reset() and anonymous users (#1444)
+
+## 1.165.1 - 2024-09-30
+
+- fix: no custom events when idle (#1438)
+- chore: downgrade jest types (#1442)
+
+## 1.165.0 - 2024-09-25
+
+- feat: compress replay data (#1436)
+
+## 1.164.3 - 2024-09-24
+
+- fix: it's just rude to assign to date now (#1435)
+
+## 1.164.2 - 2024-09-24
+
+- fix: get computed style error (#1433)
+- fix: changelog (#1431)
+
+## 1.164.1 - 2024-09-23
+
+- chore: build when publishing (#1430)
+- feat: Bundle option without any external scripts (#1413)
+
+## 1.163.1 - 2024-09-23
+
+- fix: session idle timestamp correction (#1428)
+
+## 1.163.0 - 2024-09-20
+
+- feat: type safe posthog extensions (#1407)
+
+## 1.162.0 - 2024-09-19
+
+- fix(surveys): 7-point likert scale didn't work with branching logic (#1424)
+
+## 1.161.6 - 2024-09-18
+
+- fix: when capturing without performance entry we can capture manual initiator type (#1422)
+- chore: auto publish alpha versions (#1414)
+- chore: move test file into __tests__ (#1418)
+
+## 1.161.5 - 2024-09-16
+
+- fix: teardown and restart recording on session id change (#1411)
+
+## 1.161.4 - 2024-09-16
+
+- fix: no keep alive for large payloads (#1416)
+- feat(experiments): Apply no-code experiments to the webpage. (#1409)
+
 ## 1.161.3 - 2024-09-10
 
 - fix: manage capture pageview hook lifecycle (#1408)

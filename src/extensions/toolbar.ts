@@ -158,13 +158,7 @@ export class Toolbar {
             // only load the toolbar once, even if there are multiple instances of PostHogLib
             this.setToolbarState(ToolbarState.LOADING)
 
-            // toolbar.js is served from the PostHog CDN, this has a TTL of 24 hours.
-            // the toolbar asset includes a rotating "token" that is valid for 5 minutes.
-            const fiveMinutesInMillis = 5 * 60 * 1000
-            // this ensures that we bust the cache periodically
-            const timestampToNearestFiveMinutes = Math.floor(Date.now() / fiveMinutesInMillis) * fiveMinutesInMillis
-
-            this.instance.requestRouter.loadScript(`/static/toolbar.js?t=${timestampToNearestFiveMinutes}`, (err) => {
+            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'toolbar', (err) => {
                 if (err) {
                     logger.error('Failed to load toolbar', err)
                     this.setToolbarState(ToolbarState.UNINITIALIZED)

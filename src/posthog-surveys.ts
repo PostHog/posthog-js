@@ -40,6 +40,12 @@ function getRatingBucketForResponseValue(responseValue: number, scale: number) {
         }
 
         return responseValue <= 2 ? 'negative' : responseValue === 3 ? 'neutral' : 'positive'
+    } else if (scale === 7) {
+        if (responseValue < 1 || responseValue > 7) {
+            throw new Error('The response must be in range 1-7')
+        }
+
+        return responseValue <= 3 ? 'negative' : responseValue === 4 ? 'neutral' : 'positive'
     } else if (scale === 10) {
         if (responseValue < 0 || responseValue > 10) {
             throw new Error('The response must be in range 0-10')
@@ -48,7 +54,7 @@ function getRatingBucketForResponseValue(responseValue: number, scale: number) {
         return responseValue <= 6 ? 'detractors' : responseValue <= 8 ? 'passives' : 'promoters'
     }
 
-    throw new Error('The scale must be one of: 3, 5, 10')
+    throw new Error('The scale must be one of: 3, 5, 7, 10')
 }
 
 export class PostHogSurveys {
@@ -68,18 +74,19 @@ export class PostHogSurveys {
     }
 
     loadIfEnabled() {
-        const surveysGenerator = assignableWindow?.extendPostHogWithSurveys
+        const surveysGenerator = assignableWindow?.__PosthogExtensions__?.generateSurveys
 
         if (!this.instance.config.disable_surveys && this._decideServerResponse && !surveysGenerator) {
             if (this._surveyEventReceiver == null) {
                 this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
             }
-            this.instance.requestRouter.loadScript('/static/surveys.js', (err) => {
+
+            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'surveys', (err) => {
                 if (err) {
                     return logger.error(LOGGER_PREFIX, 'Could not load surveys script', err)
                 }
 
-                this._surveyManager = assignableWindow.extendPostHogWithSurveys(this.instance)
+                this._surveyManager = assignableWindow.__PosthogExtensions__?.generateSurveys?.(this.instance)
             })
         }
     }
@@ -96,6 +103,7 @@ export class PostHogSurveys {
         }
 
         const existingSurveys = this.instance.get_property(SURVEYS)
+
         if (!existingSurveys || forceReload) {
             this.instance._send_request({
                 url: this.instance.requestRouter.endpointFor(

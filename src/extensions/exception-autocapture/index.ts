@@ -1,10 +1,9 @@
-import { window } from '../../utils/globals'
+import { assignableWindow, window } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, Properties } from '../../types'
 
 import { logger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
-import Config from '../../config'
 
 const LOGGER_PREFIX = '[Exception Autocapture]'
 
@@ -47,12 +46,16 @@ export class ExceptionObserver {
             cb()
         }
 
-        this.instance.requestRouter.loadScript(`/static/exception-autocapture.js?v=${Config.LIB_VERSION}`, (err) => {
-            if (err) {
-                return logger.error(LOGGER_PREFIX + ' failed to load script', err)
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
+            this.instance,
+            'exception-autocapture',
+            (err) => {
+                if (err) {
+                    return logger.error(LOGGER_PREFIX + ' failed to load script', err)
+                }
+                cb()
             }
-            cb()
-        })
+        )
     }
 
     private startCapturing = () => {
@@ -60,8 +63,9 @@ export class ExceptionObserver {
             return
         }
 
-        const wrapOnError = (window as any).posthogErrorWrappingFunctions.wrapOnError
-        const wrapUnhandledRejection = (window as any).posthogErrorWrappingFunctions.wrapUnhandledRejection
+        const wrapOnError = assignableWindow.__PosthogExtensions__?.errorWrappingFunctions?.wrapOnError
+        const wrapUnhandledRejection =
+            assignableWindow.__PosthogExtensions__?.errorWrappingFunctions?.wrapUnhandledRejection
 
         if (!wrapOnError || !wrapUnhandledRejection) {
             logger.error(LOGGER_PREFIX + ' failed to load error wrapping functions - cannot start')

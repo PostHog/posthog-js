@@ -4,6 +4,7 @@ import { RequestRouter } from '../utils/request-router'
 import { expectScriptToExist, expectScriptToNotExist } from './helpers/script-utils'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, PostHogConfig, Properties } from '../types'
+import '../entrypoints/external-scripts-loader'
 
 const expectDecodedSendRequest = (
     send_request: PostHog['_send_request'],
