@@ -670,16 +670,17 @@ export class SessionRecording {
         }
 
         logger.info(LOGGER_PREFIX + ' starting')
-        if (this.status === 'active') {
-            this._reportStarted({
+        this._reportStarted(
+            {
                 reason: reportingOptions?.reason || 'recording_initialized',
                 properties: {
                     idleThreshold: this.sessionIdleThresholdMilliseconds,
                     maxIdleTime: this.sessionManager.sessionTimeoutMs,
                     ...(reportingOptions?.properties || {}),
                 },
-            })
-        }
+            },
+            () => this.status === 'active'
+        )
     }
 
     private isInteractiveEvent(event: eventWithTime) {
@@ -1141,8 +1142,8 @@ export class SessionRecording {
         this._reportStarted({ reason: 'sampling_override' })
     }
 
-    private _reportStarted(report: StartReportingOptions) {
-        if (this.instance.config.session_recording.report_recording_started) {
+    private _reportStarted(report: StartReportingOptions, shouldReport: () => boolean = () => true) {
+        if (this.instance.config.session_recording.report_recording_started && shouldReport()) {
             this.instance.capture('$session_recording_started', {
                 ...(report.properties || {}),
                 $session_recording_started_reason: report.reason,
