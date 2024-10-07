@@ -1,4 +1,11 @@
-import { each, extend, includes, registerEvent } from './utils'
+import { PostHog } from '../posthog-core'
+import RageClick from '../extensions/rageclick'
+import { AutocaptureConfig, Properties } from '../types'
+import { isBoolean, isFunction, isNull, isObject } from '../utils/type-utils'
+import { logger } from '../utils/logger'
+import { assignableWindow, document, window } from '../utils/globals'
+import { each, extend, includes, registerEvent } from '../utils'
+import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 import {
     autocaptureCompatibleElements,
     getClassNames,
@@ -17,16 +24,9 @@ import {
     shouldCaptureElement,
     shouldCaptureValue,
     splitClassString,
-} from './autocapture-utils'
-import RageClick from './extensions/rageclick'
-import { AutocaptureConfig, DecideResponse, Properties } from './types'
-import { PostHog } from './posthog-core'
-import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
-
-import { isBoolean, isFunction, isNull, isObject } from './utils/type-utils'
-import { logger } from './utils/logger'
-import { document, window } from './utils/globals'
-import { convertToURL } from './utils/request-utils'
+} from '../autocapture-utils'
+import { convertToURL } from '../utils/request-utils'
+import { DOMAutocapture } from '../extensions/autocapture'
 
 const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
 
@@ -37,7 +37,7 @@ function limitText(length: number, text: string): string {
     return text
 }
 
-export class Autocapture {
+class LazilyLoadedDOMAutocapture implements DOMAutocapture {
     instance: PostHog
     _initialized: boolean = false
     _isDisabledServerSide: boolean | null = null
@@ -48,6 +48,10 @@ export class Autocapture {
     constructor(instance: PostHog) {
         this.instance = instance
         this._elementSelectors = null
+    }
+
+    setElementsChainAsString(elementsChainAsString: boolean): void {
+        this._elementsChainAsString = elementsChainAsString
     }
 
     private get config(): AutocaptureConfig {
@@ -98,18 +102,7 @@ export class Autocapture {
         }
     }
 
-    public afterDecideResponse(response: DecideResponse) {
-        if (response.elementsChainAsString) {
-            this._elementsChainAsString = response.elementsChainAsString
-        }
-
-        if (this.instance.persistence) {
-            this.instance.persistence.register({
-                [AUTOCAPTURE_DISABLED_SERVER_SIDE]: !!response['autocapture_opt_out'],
-            })
-        }
-        // store this in-memory in case persistence is disabled
-        this._isDisabledServerSide = !!response['autocapture_opt_out']
+    public afterDecideResponse() {
         this.startIfEnabled()
     }
 
@@ -389,3 +382,6 @@ export class Autocapture {
         return isFunction(document?.querySelectorAll)
     }
 }
+
+assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
+assignableWindow.__PosthogExtensions__.DOMAutocapture = (ph) => new LazilyLoadedDOMAutocapture(ph)

@@ -2,6 +2,7 @@ import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
 import { ErrorEventArgs, ErrorProperties, Properties } from '../types'
 import { LazyExtension } from '../extensions/heatmaps'
+import { DOMAutocapture } from '../extensions/autocapture'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
@@ -29,6 +30,7 @@ export type PostHogExtensionKind =
     | 'tracing-headers'
     | 'surveys'
     | 'heatmaps'
+    | 'dom-autocapture'
 
 interface PostHogExtensions {
     loadExternalDependency?: (
@@ -59,6 +61,7 @@ interface PostHogExtensions {
         _patchXHR: (sessionManager: any) => () => void
     }
     HeatmapsAutocapture?: (posthogInstance: PostHog) => LazyExtension
+    DOMAutocapture?: (posthogInstance: PostHog) => DOMAutocapture
 }
 
 const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win

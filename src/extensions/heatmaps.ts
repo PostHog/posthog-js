@@ -41,7 +41,7 @@ export class Heatmaps implements LazyExtension {
         if (!this._heatmapsAutocapture) {
             assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'heatmaps', (err) => {
                 if (err) {
-                    return logger.error(LOGGER_PREFIX + ` could not load recorder`, err)
+                    return logger.error(LOGGER_PREFIX + ` could not load lazy js`, err)
                 }
 
                 this._onScriptLoaded()
