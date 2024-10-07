@@ -38,11 +38,11 @@ You can use the create react app setup in `playground/nextjs` to test posthog-js
 
 1. Run `posthog` locally on port 8000 (`DEBUG=1 TEST=1 ./bin/start`).
 1. Run `python manage.py setup_dev --no-data` on posthog repo, which sets up a demo account.
-1. Copy Project API key found in `http://localhost:8000/project/settings` and save it for the last step
-1. `cd playground/nextjs`
-1. Run `pnpm i` to install dependencies
-1. Run `pnpm run build-posthog-js` to build `posthog-js` locally
-1. Run `NEXT_PUBLIC_POSTHOG_KEY='<your-local-api-key>' NEXT_PUBLIC_POSTHOG_HOST='http://localhost:8000' pnpm dev` to start the application
+1. Copy Project API key found in `http://localhost:8000/project/settings` and save it for the last step.
+1. Run `cd playground/nextjs`.
+1. Run `pnpm i` to install dependencies.
+1. Run `pnpm run build-posthog-js` to build `posthog-js` locally.
+1. Run `NEXT_PUBLIC_POSTHOG_KEY='<your-local-api-key>' NEXT_PUBLIC_POSTHOG_HOST='http://localhost:8000' pnpm dev` to start the application.
 
 ### Tiers of testing
 
