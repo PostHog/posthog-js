@@ -1,3 +1,7 @@
+## 1.166.2 - 2024-10-07
+
+- fix: Remove posthog error capture from replay (#1454)
+
 ## 1.166.1 - 2024-10-01
 
 - fix: skip addition of `src` attribute for HLS videos (#1446)
