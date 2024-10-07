@@ -36,7 +36,7 @@ export function circularReferenceReplacer() {
 }
 
 export function estimateSize(sizeable: unknown): number {
-    return JSON.stringify(sizeable, circularReferenceReplacer()).length
+    return JSON.stringify(sizeable, circularReferenceReplacer())?.length || 0
 }
 
 export const replacementImageURI =

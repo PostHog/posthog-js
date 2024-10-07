@@ -145,7 +145,7 @@ function gzipToString(data: unknown): string {
 // rrweb's packer takes an event and returns a string or the reverse on unpact,
 // but we want to be able to inspect metadata during ingestion, and don't want to compress the entire event
 // so we have a custom packer that only compresses part of some events
-function compressEvent(event: eventWithTime, ph: PostHog): eventWithTime | compressedEventWithTime {
+function compressEvent(event: eventWithTime): eventWithTime | compressedEventWithTime {
     const originalSize = estimateSize(event)
     if (originalSize < PARTIAL_COMPRESSION_THRESHOLD) {
         return event
@@ -184,10 +184,7 @@ function compressEvent(event: eventWithTime, ph: PostHog): eventWithTime | compr
             }
         }
     } catch (e) {
-        logger.error(LOGGER_PREFIX + ' could not compress event', e)
-        ph.captureException((e as Error) || 'e was not an error', {
-            attempted_event_type: event?.type || 'no event type',
-        })
+        logger.error(LOGGER_PREFIX + ' could not compress event - will use uncompressed event', e)
     }
     return event
 }
@@ -945,7 +942,7 @@ export class SessionRecording {
         }
 
         const eventToSend =
-            this.instance.config.session_recording.compress_events ?? true ? compressEvent(event, this.instance) : event
+            this.instance.config.session_recording.compress_events ?? true ? compressEvent(event) : event
         const size = estimateSize(eventToSend)
 
         const properties = {
