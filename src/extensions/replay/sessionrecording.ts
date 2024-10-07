@@ -17,7 +17,14 @@ import {
 } from './sessionrecording-utils'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, FlagVariant, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
-import { EventType, type eventWithTime, IncrementalSource, type listenerHandler, RecordPlugin } from '@rrweb/types'
+import {
+    customEvent,
+    EventType,
+    type eventWithTime,
+    IncrementalSource,
+    type listenerHandler,
+    RecordPlugin,
+} from '@rrweb/types'
 
 import { isBoolean, isFunction, isNullish, isNumber, isObject, isString, isUndefined } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
@@ -31,8 +38,10 @@ const BASE_ENDPOINT = '/s/'
 
 const FIVE_MINUTES = 1000 * 60 * 5
 const TWO_SECONDS = 2000
-export const RECORDING_IDLE_ACTIVITY_TIMEOUT_MS = FIVE_MINUTES
-export const RECORDING_MAX_EVENT_SIZE = 1024 * 1024 * 0.9 // ~1mb (with some wiggle room)
+export const RECORDING_IDLE_THRESHOLD_MS = FIVE_MINUTES
+const ONE_KB = 1024
+const PARTIAL_COMPRESSION_THRESHOLD = ONE_KB
+export const RECORDING_MAX_EVENT_SIZE = ONE_KB * ONE_KB * 0.9 // ~1mb (with some wiggle room)
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
 
@@ -137,6 +146,11 @@ function gzipToString(data: unknown): string {
 // but we want to be able to inspect metadata during ingestion, and don't want to compress the entire event
 // so we have a custom packer that only compresses part of some events
 function compressEvent(event: eventWithTime, ph: PostHog): eventWithTime | compressedEventWithTime {
+    const originalSize = estimateSize(event)
+    if (originalSize < PARTIAL_COMPRESSION_THRESHOLD) {
+        return event
+    }
+
     try {
         if (event.type === EventType.FullSnapshot) {
             return {
@@ -169,13 +183,17 @@ function compressEvent(event: eventWithTime, ph: PostHog): eventWithTime | compr
                 },
             }
         }
-    } catch (e: unknown) {
+    } catch (e) {
         logger.error(LOGGER_PREFIX + ' could not compress event', e)
         ph.captureException((e as Error) || 'e was not an error', {
             attempted_event_type: event?.type || 'no event type',
         })
     }
     return event
+}
+
+function isSessionIdleEvent(e: eventWithTime): e is eventWithTime & customEvent {
+    return e.type === EventType.Custom && e.data.tag === 'sessionIdle'
 }
 
 export class SessionRecording {
@@ -212,6 +230,10 @@ export class SessionRecording {
 
     // Util to help developers working on this feature manually override
     _forceAllowLocalhostNetworkCapture = false
+
+    private get sessionIdleThresholdMilliseconds(): number {
+        return this.instance.config.session_recording.session_idle_threshold_ms || RECORDING_IDLE_THRESHOLD_MS
+    }
 
     private get rrwebRecord(): rrwebRecord | undefined {
         return assignableWindow?.__PosthogExtensions__?.rrweb?.record
@@ -345,6 +367,13 @@ export class SessionRecording {
         this.windowId = windowId
 
         this.buffer = this.clearBuffer()
+
+        if (this.sessionIdleThresholdMilliseconds >= this.sessionManager.sessionTimeoutMs) {
+            logger.warn(
+                LOGGER_PREFIX +
+                    ` session_idle_threshold_ms (${this.sessionIdleThresholdMilliseconds}) is greater than the session timeout (${this.sessionManager.sessionTimeoutMs}). Session will never be detected as idle`
+            )
+        }
     }
 
     private _onBeforeUnload = (): void => {
@@ -407,8 +436,6 @@ export class SessionRecording {
                     }
                 })
             }
-
-            logger.info(LOGGER_PREFIX + ' started')
         } else {
             this.stopRecording()
         }
@@ -642,17 +669,24 @@ export class SessionRecording {
 
         if (!isUserInteraction && !this.isIdle) {
             // We check if the lastActivityTimestamp is old enough to go idle
-            if (event.timestamp - this._lastActivityTimestamp > RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) {
+            const timeSinceLastActivity = event.timestamp - this._lastActivityTimestamp
+            if (timeSinceLastActivity > this.sessionIdleThresholdMilliseconds) {
+                // we mark as idle right away,
+                // or else we get multiple idle events
+                // if there are lots of non-user activity events being emitted
                 this.isIdle = true
+
                 // don't take full snapshots while idle
                 clearInterval(this._fullSnapshotTimer)
+
                 this._tryAddCustomEvent('sessionIdle', {
                     eventTimestamp: event.timestamp,
                     lastActivityTimestamp: this._lastActivityTimestamp,
-                    threshold: RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
+                    threshold: this.sessionIdleThresholdMilliseconds,
                     bufferLength: this.buffer.data.length,
                     bufferSize: this.buffer.size,
                 })
+
                 // proactively flush the buffer in case the session is idle for a long time
                 this._flushBuffer()
             }
@@ -807,6 +841,11 @@ export class SessionRecording {
         this._tryAddCustomEvent('$posthog_config', {
             config: this.instance.config,
         })
+
+        logger.info(LOGGER_PREFIX + ' started', {
+            idleThreshold: this.sessionIdleThresholdMilliseconds,
+            maxIdleTime: this.sessionManager.sessionTimeoutMs,
+        })
     }
 
     private _scheduleFullSnapshot(): void {
@@ -889,12 +928,11 @@ export class SessionRecording {
         this._updateWindowAndSessionIds(event)
 
         // When in an idle state we keep recording, but don't capture the events,
-        // but we allow custom events even when idle
-        if (this.isIdle && event.type !== EventType.Custom) {
+        if (this.isIdle && !isSessionIdleEvent(event)) {
             return
         }
 
-        if (event.type === EventType.Custom && event.data.tag === 'sessionIdle') {
+        if (isSessionIdleEvent(event)) {
             // session idle events have a timestamp when rrweb sees them
             // which can artificially lengthen a session
             // we know when we detected it based on the payload and can correct the timestamp
@@ -906,10 +944,10 @@ export class SessionRecording {
             }
         }
 
-        const eventToSend = this.instance.config.session_recording.compress_events
-            ? compressEvent(event, this.instance)
-            : event
+        const eventToSend =
+            this.instance.config.session_recording.compress_events ?? true ? compressEvent(event, this.instance) : event
         const size = estimateSize(eventToSend)
+
         const properties = {
             $snapshot_bytes: size,
             $snapshot_data: eventToSend,

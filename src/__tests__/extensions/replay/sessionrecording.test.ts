@@ -26,7 +26,7 @@ import {
 } from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
 import {
-    RECORDING_IDLE_ACTIVITY_TIMEOUT_MS,
+    RECORDING_IDLE_THRESHOLD_MS,
     RECORDING_MAX_EVENT_SIZE,
     SessionRecording,
 } from '../../../extensions/replay/sessionrecording'
@@ -105,9 +105,9 @@ const createIncrementalMouseEvent = () => {
     })
 }
 
-const createIncrementalMutationEvent = () => {
+const createIncrementalMutationEvent = (mutations?: { texts: any[] }) => {
     const mutationData = {
-        texts: [],
+        texts: mutations?.texts || [],
         attributes: [],
         removes: [],
         adds: [],
@@ -121,7 +121,7 @@ const createIncrementalMutationEvent = () => {
     })
 }
 
-const createIncrementalStyleSheetEvent = () => {
+const createIncrementalStyleSheetEvent = (mutations?: { adds: any[] }) => {
     return createIncrementalSnapshot({
         data: {
             // doesn't need to be a valid style sheet event
@@ -129,17 +129,17 @@ const createIncrementalStyleSheetEvent = () => {
             id: 1,
             styleId: 1,
             removes: [],
-            adds: [],
+            adds: mutations.adds || [],
             replace: 'something',
             replaceSync: 'something',
         },
     })
 }
 
-const createCustomSnapshot = (event = {}, payload = {}): customEvent => ({
+const createCustomSnapshot = (event = {}, payload = {}, tag: string = 'custom'): customEvent => ({
     type: EventType.Custom,
     data: {
-        tag: 'custom',
+        tag: tag,
         payload: {
             ...payload,
         },
@@ -1009,6 +1009,7 @@ describe('SessionRecording', () => {
         })
 
         it('can emit when there are circular references', () => {
+            posthog.config.session_recording.compress_events = false
             sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
             sessionRecording.startIfEnabledOrStop()
 
@@ -1271,6 +1272,10 @@ describe('SessionRecording', () => {
                 type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
                 data: {
                     source: 0,
+                    adds: [],
+                    attributes: [],
+                    removes: [],
+                    texts: [],
                 },
                 timestamp: activityTimestamp,
             }
@@ -1371,39 +1376,6 @@ describe('SessionRecording', () => {
             })
         })
 
-        it('buffers custom events without capturing while idle', () => {
-            // force idle state
-            sessionRecording['isIdle'] = true
-            // buffer is empty
-            expect(sessionRecording['buffer']).toEqual({
-                ...EMPTY_BUFFER,
-                sessionId: sessionId,
-                windowId: 'windowId',
-            })
-
-            sessionRecording.onRRwebEmit(createCustomSnapshot({}) as eventWithTime)
-
-            // custom event is buffered
-            expect(sessionRecording['buffer']).toEqual({
-                data: [
-                    {
-                        data: {
-                            payload: {},
-                            tag: 'custom',
-                        },
-                        type: 5,
-                    },
-                ],
-                sessionId: sessionId,
-                size: 47,
-                windowId: 'windowId',
-            })
-            emitInactiveEvent(startingTimestamp + 100, true)
-            expect(posthog.capture).not.toHaveBeenCalled()
-
-            expect(sessionRecording['flushBufferTimer']).toBeUndefined()
-        })
-
         it('does not emit buffered custom events while idle even when over buffer max size', () => {
             // force idle state
             sessionRecording['isIdle'] = true
@@ -1494,8 +1466,8 @@ describe('SessionRecording', () => {
         it("enters idle state within one session if the activity is non-user generated and there's no activity for (RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) 5 minutes", () => {
             const firstActivityTimestamp = startingTimestamp + 100
             const secondActivityTimestamp = startingTimestamp + 200
-            const thirdActivityTimestamp = startingTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 1000
-            const fourthActivityTimestamp = startingTimestamp + RECORDING_IDLE_ACTIVITY_TIMEOUT_MS + 2000
+            const thirdActivityTimestamp = startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 1000
+            const fourthActivityTimestamp = startingTimestamp + RECORDING_IDLE_THRESHOLD_MS + 2000
 
             const firstSnapshotEvent = emitActiveEvent(firstActivityTimestamp)
             // event was active so activity timestamp is updated
@@ -1523,7 +1495,7 @@ describe('SessionRecording', () => {
             expect(sessionRecording['buffer']).toEqual({
                 data: [firstSnapshotEvent, secondSnapshot],
                 sessionId: firstSessionId,
-                size: 136,
+                size: 186,
                 windowId: expect.any(String),
             })
 
@@ -1547,7 +1519,7 @@ describe('SessionRecording', () => {
                 {
                     $snapshot_data: [firstSnapshotEvent, secondSnapshot],
                     $session_id: firstSessionId,
-                    $snapshot_bytes: 136,
+                    $snapshot_bytes: 186,
                     $window_id: expect.any(String),
                 },
                 {
@@ -1609,7 +1581,7 @@ describe('SessionRecording', () => {
             expect(sessionRecording['buffer']).toEqual({
                 data: [firstSnapshotEvent, secondSnapshot],
                 sessionId: firstSessionId,
-                size: 136,
+                size: 186,
                 windowId: expect.any(String),
             })
 
@@ -1637,7 +1609,7 @@ describe('SessionRecording', () => {
                 {
                     $snapshot_data: [firstSnapshotEvent, secondSnapshot],
                     $session_id: firstSessionId,
-                    $snapshot_bytes: 136,
+                    $snapshot_bytes: 186,
                     $window_id: expect.any(String),
                 },
                 {
@@ -1663,7 +1635,7 @@ describe('SessionRecording', () => {
                 {
                     $snapshot_data: [firstSnapshotEvent, secondSnapshot],
                     $session_id: firstSessionId,
-                    $snapshot_bytes: 136,
+                    $snapshot_bytes: 186,
                     $window_id: expect.any(String),
                 },
                 {
@@ -2002,7 +1974,13 @@ describe('SessionRecording', () => {
         })
 
         it('compresses full snapshot data', () => {
-            _emit(createFullSnapshot())
+            _emit(
+                createFullSnapshot({
+                    data: {
+                        content: Array(30).fill(uuidv7()).join(''),
+                    },
+                })
+            )
             sessionRecording['_flushBuffer']()
 
             expect(posthog.capture).toHaveBeenCalledWith(
@@ -2023,8 +2001,29 @@ describe('SessionRecording', () => {
             )
         })
 
+        it('does not compress small full snapshot data', () => {
+            _emit(createFullSnapshot({ data: { content: 'small' } }))
+            sessionRecording['_flushBuffer']()
+
+            expect(posthog.capture).toHaveBeenCalledWith(
+                '$snapshot',
+                {
+                    $snapshot_data: [
+                        {
+                            data: { content: 'small' },
+                            type: 2,
+                        },
+                    ],
+                    $session_id: sessionId,
+                    $snapshot_bytes: expect.any(Number),
+                    $window_id: 'windowId',
+                },
+                captureOptions
+            )
+        })
+
         it('compresses incremental snapshot mutation data', () => {
-            _emit(createIncrementalMutationEvent())
+            _emit(createIncrementalMutationEvent({ texts: [Array(30).fill(uuidv7()).join('')] }))
             sessionRecording['_flushBuffer']()
 
             expect(posthog.capture).toHaveBeenCalledWith(
@@ -2053,7 +2052,7 @@ describe('SessionRecording', () => {
         })
 
         it('compresses incremental snapshot style data', () => {
-            _emit(createIncrementalStyleSheetEvent())
+            _emit(createIncrementalStyleSheetEvent({ adds: [Array(30).fill(uuidv7()).join('')] }))
             sessionRecording['_flushBuffer']()
 
             expect(posthog.capture).toHaveBeenCalledWith(
@@ -2081,6 +2080,8 @@ describe('SessionRecording', () => {
                 captureOptions
             )
         })
+
+        it('does not compress small incremental snapshot data', () => {})
 
         it('does not compress incremental snapshot non full data', () => {
             const mouseEvent = createIncrementalMouseEvent()
