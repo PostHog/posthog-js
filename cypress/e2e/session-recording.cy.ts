@@ -183,7 +183,7 @@ describe('Session recording', () => {
                     },
                 })
 
-                cy.wait('@recorder')
+                cy.wait('@recorder-script')
 
                 cy.intercept({ url: 'https://example.com', times: 1 }, (req) => {
                     req.reply({
@@ -281,7 +281,7 @@ describe('Session recording', () => {
                 },
                 url: './playground/cypress',
             })
-            cy.wait('@recorder')
+            cy.wait('@recorder-script')
         })
 
         it('captures session events', () => {
@@ -406,7 +406,7 @@ describe('Session recording', () => {
             cy.reload()
             cy.posthogInit({})
             cy.wait('@decide')
-            cy.wait('@recorder')
+            cy.wait('@recorder-script')
 
             cy.get('body')
                 .trigger('mousemove', { clientX: 200, clientY: 300 })
@@ -564,7 +564,7 @@ describe('Session recording', () => {
                 },
                 url: './playground/cypress',
             })
-            cy.wait('@recorder')
+            cy.wait('@recorder-script')
         })
 
         it('does not capture when sampling is set to 0', () => {
@@ -594,7 +594,7 @@ describe('Session recording', () => {
             }).as('decide')
 
             assertWhetherPostHogRequestsWereCalled({
-                '@recorder': true,
+                '@recorder-script': true,
                 '@decide': true,
                 '@session-recording': false,
             })
@@ -606,7 +606,7 @@ describe('Session recording', () => {
             cy.posthog().invoke('startSessionRecording', { sampling: true })
 
             assertWhetherPostHogRequestsWereCalled({
-                '@recorder': true,
+                '@recorder-script': true,
                 '@decide': true,
                 // no call to session-recording yet
             })
@@ -637,7 +637,7 @@ describe('Session recording', () => {
                     },
                     url: './playground/cypress',
                 })
-                cy.wait('@recorder')
+                cy.wait('@recorder-script')
 
                 cy.get('[data-cy-input]').type('hello posthog!')
 
