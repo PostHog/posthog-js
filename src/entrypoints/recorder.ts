@@ -435,13 +435,20 @@ function _checkForCannotReadResponseBody({
     options: NetworkRecordOptions
     url: string | URL | RequestInfo
 }): string | null {
-    if (r.headers.get('Transfer-Encoding') === 'chunked') {
+    const headers = r.headers
+    // while the response type should always have headers, we've seen in the wild that it doesn't always
+    // so to be safe...
+    if (!headers) {
+        return null
+    }
+
+    if (headers.get('Transfer-Encoding') === 'chunked') {
         return 'Chunked Transfer-Encoding is not supported'
     }
 
     // `get` and `has` are case-insensitive
     // but return the header value with the casing that was supplied
-    const contentType = r.headers.get('Content-Type')?.toLowerCase()
+    const contentType = headers.get('Content-Type')?.toLowerCase()
     const contentTypeIsDenied = contentTypePrefixDenyList.some((prefix) => contentType?.startsWith(prefix))
     if (contentType && contentTypeIsDenied) {
         return `Content-Type ${contentType} is not supported`
@@ -536,7 +543,10 @@ function initFetchObserver(
 
             try {
                 const requestHeaders: Headers = {}
-                req.headers.forEach((value, header) => {
+                // while the request type should always have headers,
+                // we've seen in the wild that it doesn't always
+                // so to be safe...
+                ;(req.headers || new Headers()).forEach((value, header) => {
                     requestHeaders[header] = value
                 })
                 if (recordRequestHeaders) {
@@ -558,7 +568,7 @@ function initFetchObserver(
                 end = win.performance.now()
 
                 const responseHeaders: Headers = {}
-                res.headers.forEach((value, header) => {
+                ;(res.headers || new Headers()).forEach((value, header) => {
                     responseHeaders[header] = value
                 })
                 if (recordResponseHeaders) {
