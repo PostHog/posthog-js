@@ -1,4 +1,4 @@
-import { useActiveFeatureFlags, usePostHog } from 'posthog-js/react'
+import { useActiveFeatureFlags, usePostHog, useFeatureFlagEnabled } from 'posthog-js/react'
 import React, { useEffect, useState } from 'react'
 import { PERSON_PROCESSING_MODE, cookieConsentGiven } from '@/src/posthog'
 
@@ -6,6 +6,7 @@ export default function Home() {
     const posthog = usePostHog()
     const [isClient, setIsClient] = useState(false)
     const flags = useActiveFeatureFlags()
+    const latestCityFlag = useFeatureFlagEnabled('latest-city')
 
     const [time, setTime] = useState('')
     const consentGiven = cookieConsentGiven()
@@ -26,6 +27,13 @@ export default function Home() {
     return (
         <>
             <p className="italic my-2 text-gray-500">The current time is {time}</p>
+
+            {latestCityFlag && (
+                <div className="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 mb-4" role="alert">
+                    <p className="font-bold">New Feature</p>
+                    <p>Check out our latest city updates!</p>
+                </div>
+            )}
 
             <h2>Trigger posthog events</h2>
             <div className="flex items-center gap-2 flex-wrap">
