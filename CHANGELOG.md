@@ -1,3 +1,7 @@
+## 1.167.0 - 2024-10-08
+
+- feat(web experiments): Emit web_experiment_applied event and do not render experiments for bots (#1443)
+
 ## 1.166.2 - 2024-10-07
 
 - fix: Remove posthog error capture from replay (#1454)
