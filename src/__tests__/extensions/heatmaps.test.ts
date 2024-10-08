@@ -7,6 +7,7 @@ import { beforeEach, expect } from '@jest/globals'
 import { HEATMAPS_ENABLED_SERVER_SIDE } from '../../constants'
 import { HeatmapsAutocapture } from '../../entrypoints/heatmaps'
 import { assignableWindow } from '../../utils/globals'
+import { Heatmaps } from '../../extensions/heatmaps'
 
 jest.mock('../../utils/logger')
 jest.useFakeTimers()
@@ -26,6 +27,12 @@ describe('heatmaps', () => {
 
     beforeEach(async () => {
         onCapture = onCapture.mockClear()
+
+        assignableWindow.__PosthogExtensions__.loadExternalDependency = jest
+            .fn()
+            .mockImplementation((_ph, _path, callback) => {
+                callback()
+            })
 
         posthog = await createPosthogInstance(uuidv7(), {
             _onCapture: onCapture,
@@ -188,7 +195,7 @@ describe('heatmaps', () => {
                 posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: stored })
                 posthog.config.enable_heatmaps = undefined
                 posthog.config.capture_heatmaps = undefined
-                const heatmaps = new HeatmapsAutocapture(posthog)
+                const heatmaps = new Heatmaps(posthog)
                 expect(heatmaps.isEnabled).toBe(expected)
             })
 
@@ -200,7 +207,7 @@ describe('heatmaps', () => {
                 posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: undefined })
                 posthog.config.enable_heatmaps = deprecatedConfig
                 posthog.config.capture_heatmaps = undefined
-                const heatmaps = new HeatmapsAutocapture(posthog)
+                const heatmaps = new Heatmaps(posthog)
                 expect(heatmaps.isEnabled).toBe(expected)
             })
 
@@ -212,7 +219,7 @@ describe('heatmaps', () => {
                 posthog.persistence!.register({ [HEATMAPS_ENABLED_SERVER_SIDE]: undefined })
                 posthog.config.enable_heatmaps = localConfig
                 posthog.config.capture_heatmaps = undefined
-                const heatmaps = new HeatmapsAutocapture(posthog)
+                const heatmaps = new Heatmaps(posthog)
                 expect(heatmaps.isEnabled).toBe(expected)
             })
 
@@ -241,10 +248,11 @@ describe('heatmaps', () => {
                 (deprecatedclientSideOptIn, clientSideOptIn, serverSideOptIn, expected) => {
                     posthog.config.enable_heatmaps = deprecatedclientSideOptIn
                     posthog.config.capture_heatmaps = clientSideOptIn
-                    heatmapsAutocapture!.afterDecideResponse({
+                    const heatmaps = new Heatmaps(posthog)
+                    heatmaps.afterDecideResponse({
                         heatmaps: serverSideOptIn,
                     } as DecideResponse)
-                    expect(heatmapsAutocapture!.isEnabled).toBe(expected)
+                    expect(heatmaps!.isEnabled).toBe(expected)
                 }
             )
         })

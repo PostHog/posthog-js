@@ -37,7 +37,7 @@ function limitText(length: number, text: string): string {
     return text
 }
 
-class LazilyLoadedDOMAutocapture implements DOMAutocapture {
+export class LazilyLoadedDOMAutocapture implements DOMAutocapture {
     instance: PostHog
     _initialized: boolean = false
     _isDisabledServerSide: boolean | null = null
