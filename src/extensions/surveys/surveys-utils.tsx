@@ -4,7 +4,7 @@ import {
     SurveyAppearance,
     MultipleSurveyQuestion,
     SurveyQuestion,
-    OrgSurveySettings,
+    TeamSurveyConfig,
 } from '../../posthog-surveys-types'
 import { window as _window, document as _document } from '../../utils/globals'
 import { VNode, cloneElement, createContext } from 'preact'
@@ -651,13 +651,13 @@ export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string
     return shuffledOptions
 }
 
-export const getDisplayOrderQuestions = (survey: Survey, orgSurveySettings?: OrgSurveySettings): SurveyQuestion[] => {
+export const getDisplayOrderQuestions = (survey: Survey, teamSurveyConfig?: TeamSurveyConfig): SurveyQuestion[] => {
     // retain the original questionIndex so we can correlate values in the webapp
     survey.questions.forEach((question, idx) => {
         question.originalQuestionIndex = idx
     })
 
-    if (!survey.appearance?.shuffleQuestions && !orgSurveySettings?.appearance?.shuffleQuestions) {
+    if (!survey.appearance?.shuffleQuestions && !teamSurveyConfig?.appearance?.shuffleQuestions) {
         return survey.questions
     }
 

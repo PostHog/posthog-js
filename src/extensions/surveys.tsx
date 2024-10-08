@@ -1,6 +1,6 @@
 import { PostHog } from '../posthog-core'
 import {
-    OrgSurveySettings,
+    TeamSurveyConfig,
     Survey,
     SurveyAppearance,
     SurveyQuestion,
@@ -64,7 +64,7 @@ export class SurveyManager {
         return true
     }
 
-    private handlePopoverSurvey = (survey: Survey, orgSurveySettings?: OrgSurveySettings): void => {
+    private handlePopoverSurvey = (survey: Survey, teamSurveyConfig?: TeamSurveyConfig): void => {
         const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
         const lastSeenSurveyDate = localStorage.getItem(`lastSeenSurveyDate`)
         if (surveyWaitPeriodInDays && lastSeenSurveyDate) {
@@ -85,7 +85,7 @@ export class SurveyManager {
                     key={'popover-survey'}
                     posthog={this.posthog}
                     survey={survey}
-                    orgSurveySettings={orgSurveySettings}
+                    teamSurveyConfig={teamSurveyConfig}
                     removeSurveyFromFocus={this.removeSurveyFromFocus}
                     isPopup={true}
                 />,
@@ -94,9 +94,9 @@ export class SurveyManager {
         }
     }
 
-    private handleWidget = (survey: Survey, orgSurveySettings?: OrgSurveySettings): void => {
+    private handleWidget = (survey: Survey, teamSurveyConfig?: TeamSurveyConfig): void => {
         const shadow = createWidgetShadow(survey)
-        const surveyStyleSheet = style(survey.appearance, orgSurveySettings?.appearance)
+        const surveyStyleSheet = style(survey.appearance, teamSurveyConfig?.appearance)
         shadow.appendChild(Object.assign(document.createElement('style'), { innerText: surveyStyleSheet }))
         Preact.render(
             <FeedbackWidget
@@ -140,11 +140,11 @@ export class SurveyManager {
      * Sorts surveys by their appearance delay in ascending order. If a survey does not have an appearance delay,
      * it is considered to have a delay of 0.
      * @param surveys
-     * @param orgSurveySettings
+     * @param teamSurveyConfig
      * @returns The surveys sorted by their appearance delay
      */
-    private sortSurveysByAppearanceDelay(surveys: Survey[], orgSurveySettings?: OrgSurveySettings): Survey[] {
-        const popupDelaySeconds = orgSurveySettings?.appearance?.surveyPopupDelaySeconds || 0
+    private sortSurveysByAppearanceDelay(surveys: Survey[], teamSurveyConfig?: TeamSurveyConfig): Survey[] {
+        const popupDelaySeconds = teamSurveyConfig?.appearance?.surveyPopupDelaySeconds || 0
         return surveys.sort(
             (a, b) =>
                 (a.appearance?.surveyPopupDelaySeconds || popupDelaySeconds || 0) -
@@ -217,13 +217,13 @@ export class SurveyManager {
     }
 
     public callSurveysAndEvaluateDisplayLogic = (forceReload: boolean = false): void => {
-        this.posthog?.getActiveMatchingSurveys((surveys, orgSurveySettings) => {
+        this.posthog?.getActiveMatchingSurveys((surveys, teamSurveyConfig) => {
             const interactiveSurveyTypes = [SurveyType.Widget, SurveyType.Popover]
             const interactiveSurveys = surveys.filter((survey) => interactiveSurveyTypes.includes(survey.type))
 
             // Create a queue of surveys sorted by their appearance delay.  We will evaluate the display logic
             // for each survey in the queue in order, and only display one survey at a time.
-            const interactiveSurveyQueue = this.sortSurveysByAppearanceDelay(interactiveSurveys, orgSurveySettings)
+            const interactiveSurveyQueue = this.sortSurveysByAppearanceDelay(interactiveSurveys, teamSurveyConfig)
 
             interactiveSurveyQueue.forEach((survey) => {
                 // We only evaluate the display logic for one survey at a time
@@ -243,7 +243,7 @@ export class SurveyManager {
                 }
 
                 if (survey.type === SurveyType.Popover && this.canShowNextEventBasedSurvey()) {
-                    this.handlePopoverSurvey(survey, orgSurveySettings)
+                    this.handlePopoverSurvey(survey, teamSurveyConfig)
                 }
             })
         }, forceReload)
@@ -290,7 +290,7 @@ export const renderSurveysPreview = ({
     previewPageIndex: number
     surveyAppearance: SurveyAppearance
     forceDisableHtml?: boolean
-    orgSurveySettings?: OrgSurveySettings
+    teamSurveyConfig?: TeamSurveyConfig
 }) => {
     const surveyStyleSheet = style(surveyAppearance)
     const styleElement = Object.assign(document.createElement('style'), { innerText: surveyStyleSheet })
@@ -455,7 +455,7 @@ export function SurveyPopup({
     previewPageIndex,
     removeSurveyFromFocus,
     isPopup,
-    orgSurveySettings,
+    teamSurveyConfig,
 }: {
     survey: Survey
     forceDisableHtml?: boolean
@@ -464,7 +464,7 @@ export function SurveyPopup({
     previewPageIndex?: number | undefined
     removeSurveyFromFocus: (id: string) => void
     isPopup?: boolean
-    orgSurveySettings?: OrgSurveySettings
+    teamSurveyConfig?: TeamSurveyConfig
 }) {
     const isPreviewMode = Number.isInteger(previewPageIndex)
     // NB: The client-side code passes the millisecondDelay in seconds, but setTimeout expects milliseconds, so we multiply by 1000
@@ -480,7 +480,7 @@ export function SurveyPopup({
     )
     const shouldShowConfirmation = isSurveySent || previewPageIndex === survey.questions.length
     const confirmationBoxLeftStyle = style?.left && isNumber(style?.left) ? { left: style.left - 40 } : {}
-    const surveyAppearance = getSurveyAppearance(survey.appearance, orgSurveySettings?.appearance)
+    const surveyAppearance = getSurveyAppearance(survey.appearance, teamSurveyConfig?.appearance)
 
     if (isPreviewMode) {
         style = style || {}

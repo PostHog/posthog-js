@@ -39,7 +39,7 @@ export interface SurveyAppearance {
     zIndex?: string
 }
 
-export interface OrgSurveySettings {
+export interface TeamSurveyConfig {
     appearance?: SurveyAppearance
 }
 
@@ -124,7 +124,7 @@ export interface SurveyResponse {
     surveys: Survey[]
 }
 
-export type SurveyCallback = (surveys: Survey[], orgSurveySettings?: OrgSurveySettings) => void
+export type SurveyCallback = (surveys: Survey[], teamSurveyConfig?: TeamSurveyConfig) => void
 
 export type SurveyUrlMatchType = 'regex' | 'not_regex' | 'exact' | 'is_not' | 'icontains' | 'not_icontains'
 

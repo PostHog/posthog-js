@@ -117,7 +117,7 @@ export class PostHogSurveys {
                     if (response.statusCode !== 200 || !response.json) {
                         return callback([])
                     }
-                    const orgSurveySettings = response.json.org_settings
+                    const teamSurveyConfig = response.json.team_survey_settings
                     const surveys = response.json.surveys || []
 
                     const eventOrActionBasedSurveys = surveys.filter(
@@ -135,7 +135,7 @@ export class PostHogSurveys {
                     }
 
                     this.instance.persistence?.register({ [SURVEYS]: surveys })
-                    return callback(surveys, orgSurveySettings)
+                    return callback(surveys, teamSurveyConfig)
                 },
             })
         } else {
@@ -144,7 +144,7 @@ export class PostHogSurveys {
     }
 
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false) {
-        this.getSurveys((surveys, orgSurveySettings) => {
+        this.getSurveys((surveys, teamSurveyConfig) => {
             const activeSurveys = surveys.filter((survey) => {
                 return !!(survey.start_date && !survey.end_date)
             })
@@ -200,7 +200,7 @@ export class PostHogSurveys {
                 )
             })
 
-            return callback(targetingMatchedSurveys, orgSurveySettings)
+            return callback(targetingMatchedSurveys, teamSurveyConfig)
         }, forceReload)
     }
 
