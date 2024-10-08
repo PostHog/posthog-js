@@ -14,45 +14,20 @@ beforeEach(() => {
     cy.intercept('POST', '/e/*', { status: 1 }).as('capture')
     cy.intercept('POST', '/ses/*', { status: 1 }).as('session-recording')
     cy.intercept('GET', '/surveys/*').as('surveys')
-
-    cy.readFile('dist/array.full.js').then((body) => {
-        cy.intercept('/static/array.full.js', { body })
-    })
-
-    cy.readFile('dist/array.js').then((body) => {
-        cy.intercept('/static/array.js', { body })
-    })
-
-    cy.readFile('dist/array.full.js.map').then((body) => {
-        cy.intercept('/static/array.full.js.map', { body })
-    })
-
-    cy.readFile('dist/array.js.map').then((body) => {
-        cy.intercept('/static/array.js.map', { body })
-    })
-
-    cy.readFile('dist/recorder.js').then((body) => {
-        cy.intercept('/static/recorder.js*', { body }).as('recorder')
-        cy.intercept('/static/recorder-v2.js*', { body }).as('recorderv2')
-    })
-
-    cy.readFile('dist/recorder.js.map').then((body) => {
-        cy.intercept('/static/recorder.js.map', { body })
-    })
-
-    cy.readFile('dist/surveys.js').then((body) => {
-        cy.intercept('/static/surveys.js*', { body })
-    })
-
-    cy.readFile('dist/surveys.js.map').then((body) => {
-        cy.intercept('/static/surveys.js.map', { body })
-    })
-
-    cy.readFile('dist/exception-autocapture.js').then((body) => {
-        cy.intercept('/static/exception-autocapture.js*', { body }).as('exception-autocapture-script')
-    })
-
-    cy.readFile('dist/exception-autocapture.js.map').then((body) => {
-        cy.intercept('/static/exception-autocapture.js.map', { body })
+    ;[
+        'array.full.js',
+        'array.js',
+        'recorder.js',
+        'surveys.js',
+        'exception-autocapture.js',
+        'heatmaps.js',
+        'dom-autocapture.js',
+    ].forEach((file) => {
+        cy.readFile(`dist/${file}`).then((body) => {
+            cy.intercept(`/static/${file}*`, { body }).as(`${file.replace('.js', '')}-script`)
+        })
+        cy.readFile(`dist/${file}.map`).then((body) => {
+            cy.intercept(`/static/${file}.map`, { body })
+        })
     })
 })
