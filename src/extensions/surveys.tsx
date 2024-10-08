@@ -508,8 +508,8 @@ export function SurveyPopup({
                 />
             ) : (
                 <ConfirmationMessage
-                    header={survey.appearance?.thankYouMessageHeader || 'Thank you!'}
-                    description={survey.appearance?.thankYouMessageDescription || ''}
+                    header={surveyAppearance?.thankYouMessageHeader || 'Thank you!'}
+                    description={surveyAppearance?.thankYouMessageDescription || ''}
                     forceDisableHtml={!!forceDisableHtml}
                     contentType={surveyAppearance.thankYouMessageDescriptionContentType}
                     appearance={surveyAppearance}
