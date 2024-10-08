@@ -8,34 +8,29 @@ import { each, extend, includes, registerEvent } from '../utils'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 import {
     autocaptureCompatibleElements,
+    getEventTarget,
+    isElementNode,
+    isTag,
+    shouldCaptureValue,
+} from '../autocapture-utils'
+import { convertToURL } from '../utils/request-utils'
+import { DOMAutocapture } from '../extensions/dom-autocapture/autocapture'
+import {
+    COPY_AUTOCAPTURE_EVENT,
     getClassNames,
     getDirectAndNestedSpanText,
     getElementsChainString,
-    getEventTarget,
     getSafeText,
     isAngularStyleAttr,
     isDocumentFragment,
-    isElementNode,
     isSensitiveElement,
-    isTag,
     isTextNode,
+    limitText,
     makeSafeText,
     shouldCaptureDomEvent,
     shouldCaptureElement,
-    shouldCaptureValue,
     splitClassString,
-} from '../autocapture-utils'
-import { convertToURL } from '../utils/request-utils'
-import { DOMAutocapture } from '../extensions/autocapture'
-
-const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
-
-function limitText(length: number, text: string): string {
-    if (text.length > length) {
-        return text.slice(0, length) + '...'
-    }
-    return text
-}
+} from '../extensions/dom-autocapture/utils'
 
 export class LazilyLoadedDOMAutocapture implements DOMAutocapture {
     instance: PostHog

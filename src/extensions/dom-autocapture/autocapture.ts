@@ -1,11 +1,11 @@
-import { DecideResponse } from '../types'
-import { PostHog } from '../posthog-core'
-import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
+import { DecideResponse } from '../../types'
+import { PostHog } from '../../posthog-core'
+import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../../constants'
 
-import { isBoolean, isFunction, isNull } from '../utils/type-utils'
-import { logger } from '../utils/logger'
-import { assignableWindow, document } from '../utils/globals'
-import { LazyExtension, LOGGER_PREFIX } from './heatmaps'
+import { isBoolean, isFunction, isNull } from '../../utils/type-utils'
+import { logger } from '../../utils/logger'
+import { assignableWindow, document } from '../../utils/globals'
+import { LazyExtension, LOGGER_PREFIX } from '../heatmaps'
 
 export interface DOMAutocapture extends LazyExtension {
     setElementsChainAsString: (elementsChainAsString: boolean) => void

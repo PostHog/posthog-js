@@ -1,8 +1,7 @@
 /// <reference lib="dom" />
 /* eslint-disable compat/compat */
 
-import { Autocapture } from '../../../extensions/autocapture'
-import { shouldCaptureDomEvent } from '../../../autocapture-utils'
+import { Autocapture } from '../../../extensions/dom-autocapture/autocapture'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../../../constants'
 import { AutocaptureConfig, DecideResponse } from '../../../types'
 import { PostHog } from '../../../posthog-core'
@@ -13,6 +12,7 @@ import { isUndefined } from '../../../utils/type-utils'
 import { assignableWindow } from '../../../utils/globals'
 import { LazilyLoadedDOMAutocapture } from '../../../entrypoints/dom-autocapture'
 import * as utils from '../../../utils'
+import { shouldCaptureDomEvent } from '../../../extensions/dom-autocapture/utils'
 
 // JS DOM doesn't have ClipboardEvent, so we need to mock it
 // see https://github.com/jsdom/jsdom/issues/1568

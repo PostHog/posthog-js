@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 /* eslint-disable compat/compat */
 
-import { Autocapture } from '../extensions/autocapture'
+import { Autocapture } from '../extensions/dom-autocapture/autocapture'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 import { DecideResponse } from '../types'
 import { PostHog } from '../posthog-core'

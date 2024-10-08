@@ -2,7 +2,7 @@ import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
 import { ErrorEventArgs, ErrorProperties, Properties } from '../types'
 import { LazyExtension } from '../extensions/heatmaps'
-import { DOMAutocapture } from '../extensions/autocapture'
+import { DOMAutocapture } from '../extensions/dom-autocapture/autocapture'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets

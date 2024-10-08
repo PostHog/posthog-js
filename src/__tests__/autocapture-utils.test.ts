@@ -2,21 +2,21 @@
 
 import sinon from 'sinon'
 
-import {
-    getSafeText,
-    shouldCaptureDomEvent,
-    shouldCaptureElement,
-    isSensitiveElement,
-    shouldCaptureValue,
-    isAngularStyleAttr,
-    getNestedSpanText,
-    getDirectAndNestedSpanText,
-    getElementsChainString,
-    getClassNames,
-} from '../autocapture-utils'
+import { shouldCaptureValue } from '../autocapture-utils'
 import { document } from '../utils/globals'
 import { makeMouseEvent } from './autocapture.test'
 import { AutocaptureConfig } from '../types'
+import {
+    getClassNames,
+    getDirectAndNestedSpanText,
+    getElementsChainString,
+    getNestedSpanText,
+    getSafeText,
+    isAngularStyleAttr,
+    isSensitiveElement,
+    shouldCaptureDomEvent,
+    shouldCaptureElement,
+} from '../extensions/dom-autocapture/utils'
 
 describe(`Autocapture utility functions`, () => {
     afterEach(() => {
