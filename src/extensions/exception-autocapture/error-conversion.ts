@@ -11,7 +11,42 @@ import {
 import { defaultStackParser, StackFrame } from './stack-trace'
 
 import { isEmptyString, isNumber, isString, isUndefined } from '../../utils/type-utils'
-import { ErrorEventArgs, ErrorProperties, SeverityLevel, severityLevels } from '../../types'
+import { ErrorEventArgs, SeverityLevel, severityLevels } from '../../types'
+
+export interface ErrorProperties {
+    $exception_type: string
+    $exception_message: string
+    $exception_level: SeverityLevel
+    $exception_list?: Exception[]
+    // $exception_source?: string
+    // $exception_lineno?: number
+    // $exception_colno?: number
+    $exception_DOMException_code?: string
+    $exception_is_synthetic?: boolean
+    // $exception_stack_trace_raw?: string
+    $exception_handled?: boolean
+    $exception_personURL?: string
+    $exception_language?: string
+}
+
+export interface Exception {
+    type?: string
+    value?: string
+    mechanism?: {
+        handled?: boolean
+        type?: string
+    }
+    module?: string
+    thread_id?: number
+    stacktrace?: {
+        frames?: StackFrame[]
+    }
+}
+
+export interface ErrorConversions {
+    errorToProperties: (args: ErrorEventArgs) => ErrorProperties
+    unhandledRejectionToProperties: (args: [ev: PromiseRejectionEvent]) => ErrorProperties
+}
 
 /**
  * based on the very wonderful MIT licensed Sentry SDK
@@ -59,7 +94,15 @@ function errorPropertiesFromError(error: Error): ErrorProperties {
     return {
         $exception_type: error.name,
         $exception_message: error.message,
-        $exception_stack_trace_raw: JSON.stringify(frames),
+        $exception_list: [
+            {
+                type: error.name,
+                value: error.message,
+                stacktrace: {
+                    frames,
+                },
+            },
+        ],
         $exception_level: 'error',
     }
 }
@@ -111,7 +154,8 @@ function errorPropertiesFromObject(candidate: Record<string, unknown>): ErrorPro
     }
 }
 
-export function errorToProperties([event, source, lineno, colno, error]: ErrorEventArgs): ErrorProperties {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function errorToProperties([event, _, __, ___, error]: ErrorEventArgs): ErrorProperties {
     // some properties are not optional but, it's useful to start off without them enforced
     let errorProperties: Omit<ErrorProperties, '$exception_type' | '$exception_message' | '$exception_level'> & {
         $exception_type?: string
@@ -177,13 +221,7 @@ export function errorToProperties([event, source, lineno, colno, error]: ErrorEv
         $exception_level: isSeverityLevel(errorProperties.$exception_level)
             ? errorProperties.$exception_level
             : 'error',
-        ...(source
-            ? {
-                  $exception_source: source, // TODO get this from URL if not present
-              }
-            : {}),
-        ...(lineno ? { $exception_lineno: lineno } : {}),
-        ...(colno ? { $exception_colno: colno } : {}),
+        $exception_language: 'javascript',
     }
 }
 
