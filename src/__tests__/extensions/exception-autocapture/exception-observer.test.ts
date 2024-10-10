@@ -140,7 +140,7 @@ describe('Exception Observer', () => {
                     $exception_message: 'test error',
                     $exception_type: 'Error',
                     $exception_personURL: expect.any(String),
-                    $exception_stack_trace_raw: expect.any(String),
+                    $exception_list: expect.any(Array),
                 },
             })
             expect(request.batchKey).toBe('exceptionEvent')
