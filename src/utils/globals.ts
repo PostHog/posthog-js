@@ -1,6 +1,7 @@
+import { ErrorProperties } from '../extensions/exception-autocapture/error-conversion'
 import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
-import { ErrorEventArgs, ErrorProperties, Properties } from '../types'
+import { ErrorEventArgs, Properties } from '../types'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
