@@ -117,7 +117,7 @@ export class PostHogSurveys {
                     if (response.statusCode !== 200 || !response.json) {
                         return callback([])
                     }
-                    const teamSurveyConfig = response.json.team_survey_settings
+                    const teamSurveyConfig = response.json.survey_config
                     const surveys = response.json.surveys || []
 
                     const eventOrActionBasedSurveys = surveys.filter(

@@ -6,38 +6,15 @@ import { VNode, cloneElement, createContext } from 'preact'
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 
-// const getStyleProperty = (
-//     callback: (app: SurveyAppearance | null) => string | undefined,
-//     appearance: SurveyAppearance | null,
-//     orgSurveyAppearance: SurveyAppearance | null
-// ): string => {
-//     return callback(appearance) || callback(orgSurveyAppearance) || callback(defaultSurveyAppearance)
-// }
-
 export const getSurveyAppearance = (
     appearance: SurveyAppearance | null,
-    orgSurveyAppearance?: SurveyAppearance
+    teamSurveyAppearance?: SurveyAppearance
 ): SurveyAppearance => {
-    const styleProperty = (callback: (app: SurveyAppearance | null | undefined) => string | undefined): string => {
-        return callback(appearance) || callback(orgSurveyAppearance) || callback(defaultSurveyAppearance)!
-    }
     return {
-        backgroundColor: styleProperty((ap) => ap?.backgroundColor),
-        borderColor: styleProperty((ap) => ap?.borderColor),
-        surveyPosition: styleProperty((ap) => ap?.position),
-        maxWidth: parseInt(styleProperty((ap) => ap?.maxWidth)),
-        zIndex: parseInt(styleProperty((ap) => ap?.zIndex)),
-        submitButtonColor: styleProperty((ap) => ap?.submitButtonColor),
-        ratingButtonActiveColor: styleProperty((ap) => ap?.ratingButtonActiveColor),
-        placeholder: styleProperty((ap) => ap?.placeholder),
-        whiteLabel: appearance?.whiteLabel || orgSurveyAppearance?.whiteLabel || defaultSurveyAppearance.whiteLabel,
-        displayThankYouMessage:
-            appearance?.displayThankYouMessage ||
-            orgSurveyAppearance?.displayThankYouMessage ||
-            defaultSurveyAppearance.displayThankYouMessage,
-        thankYouMessageHeader: styleProperty((ap) => ap?.thankYouMessageHeader),
-        position: styleProperty((ap) => ap?.position),
-    } as unknown as SurveyAppearance
+        ...defaultSurveyAppearance,
+        ...appearance,
+        ...teamSurveyAppearance,
+    }
 }
 export const style = (appearance: SurveyAppearance | null, orgSurveyAppearance?: SurveyAppearance) => {
     const surveyAppearance = getSurveyAppearance(appearance, orgSurveyAppearance)
