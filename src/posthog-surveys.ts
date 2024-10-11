@@ -6,6 +6,7 @@ import {
     SurveyQuestionBranchingType,
     SurveyQuestionType,
     SurveyUrlMatchType,
+    TeamSurveyConfig,
 } from './posthog-surveys-types'
 import { isUrlMatchingRegex } from './utils/request-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
@@ -13,6 +14,7 @@ import { assignableWindow, document, window } from './utils/globals'
 import { DecideResponse } from './types'
 import { logger } from './utils/logger'
 import { isNullish } from './utils/type-utils'
+import { applyTeamAppearanceConfig } from './extensions/surveys/surveys-utils'
 
 const LOGGER_PREFIX = '[Surveys]'
 
@@ -117,7 +119,7 @@ export class PostHogSurveys {
                     if (response.statusCode !== 200 || !response.json) {
                         return callback([])
                     }
-                    const teamSurveyConfig = response.json.survey_config
+                    const teamSurveyConfig: TeamSurveyConfig = response.json.survey_config
                     const surveys = response.json.surveys || []
 
                     const eventOrActionBasedSurveys = surveys.filter(
@@ -132,6 +134,12 @@ export class PostHogSurveys {
 
                     if (eventOrActionBasedSurveys.length > 0) {
                         this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
+                    }
+
+                    if (teamSurveyConfig) {
+                        surveys.forEach((survey: Survey) => {
+                            applyTeamAppearanceConfig(survey, teamSurveyConfig)
+                        })
                     }
 
                     this.instance.persistence?.register({ [SURVEYS]: surveys })

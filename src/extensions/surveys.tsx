@@ -144,11 +144,11 @@ export class SurveyManager {
      * @returns The surveys sorted by their appearance delay
      */
     private sortSurveysByAppearanceDelay(surveys: Survey[], teamSurveyConfig?: TeamSurveyConfig): Survey[] {
-        const popupDelaySeconds = teamSurveyConfig?.appearance?.surveyPopupDelaySeconds || 0
+        const defaultPopupDelaySeconds = teamSurveyConfig?.appearance?.surveyPopupDelaySeconds || 0
         return surveys.sort(
             (a, b) =>
-                (a.appearance?.surveyPopupDelaySeconds || popupDelaySeconds || 0) -
-                (b.appearance?.surveyPopupDelaySeconds || popupDelaySeconds)
+                (a.appearance?.surveyPopupDelaySeconds || defaultPopupDelaySeconds) -
+                (b.appearance?.surveyPopupDelaySeconds || defaultPopupDelaySeconds)
         )
     }
 
@@ -218,8 +218,8 @@ export class SurveyManager {
 
     public callSurveysAndEvaluateDisplayLogic = (forceReload: boolean = false): void => {
         this.posthog?.getActiveMatchingSurveys((surveys, teamSurveyConfig) => {
-            const interactiveSurveyTypes = [SurveyType.Widget, SurveyType.Popover]
-            const interactiveSurveys = surveys.filter((survey) => interactiveSurveyTypes.includes(survey.type))
+            const webSurveyTypes = [SurveyType.Widget, SurveyType.Popover]
+            const interactiveSurveys = surveys.filter((survey) => webSurveyTypes.includes(survey.type))
 
             // Create a queue of surveys sorted by their appearance delay.  We will evaluate the display logic
             // for each survey in the queue in order, and only display one survey at a time.

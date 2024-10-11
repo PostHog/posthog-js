@@ -1,5 +1,11 @@
 import { PostHog } from '../../posthog-core'
-import { Survey, SurveyAppearance, MultipleSurveyQuestion, SurveyQuestion } from '../../posthog-surveys-types'
+import {
+    Survey,
+    SurveyAppearance,
+    MultipleSurveyQuestion,
+    SurveyQuestion,
+    TeamSurveyConfig,
+} from '../../posthog-surveys-types'
 import { window as _window, document as _document } from '../../utils/globals'
 import { VNode, cloneElement, createContext } from 'preact'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
@@ -509,6 +515,14 @@ export function getTextColor(el: HTMLElement) {
     const b = parseInt(colorMatch[3])
     const hsp = Math.sqrt(0.299 * (r * r) + 0.587 * (g * g) + 0.114 * (b * b))
     return hsp > 127.5 ? 'black' : 'white'
+}
+
+export const applyTeamAppearanceConfig = (survey: Survey, teamSurveyConfig?: TeamSurveyConfig) => {
+    survey.appearance = {
+        ...defaultSurveyAppearance,
+        ...survey.appearance,
+        ...teamSurveyConfig?.appearance,
+    }
 }
 
 const defaultSurveyAppearance: SurveyAppearance = {
