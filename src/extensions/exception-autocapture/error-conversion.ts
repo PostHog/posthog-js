@@ -35,9 +35,12 @@ export interface Exception {
     mechanism?: {
         handled?: boolean
         type?: string
+        source?: string
+        synthetic?: boolean
     }
     module?: string
     thread_id?: number
+    language?: string
     stacktrace?: {
         frames?: StackFrame[]
     }
