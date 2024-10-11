@@ -1,5 +1,5 @@
 import { PostHog } from './posthog-core'
-import { ORG_SURVEY_SETTINGS, SURVEYS } from './constants'
+import { TEAM_SURVEY_CONFIG, SURVEYS } from './constants'
 import {
     Survey,
     SurveyCallback,
@@ -103,7 +103,7 @@ export class PostHogSurveys {
         }
 
         const existingSurveys = this.instance.get_property(SURVEYS)
-        const existingSurveySettings = this.instance.get_property(ORG_SURVEY_SETTINGS)
+        const existingSurveySettings = this.instance.get_property(TEAM_SURVEY_CONFIG)
 
         if (!existingSurveys || forceReload) {
             this.instance._send_request({

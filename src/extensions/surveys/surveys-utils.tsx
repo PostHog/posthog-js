@@ -16,8 +16,8 @@ export const getSurveyAppearance = (
         ...teamSurveyAppearance,
     }
 }
-export const style = (appearance: SurveyAppearance | null, orgSurveyAppearance?: SurveyAppearance) => {
-    const surveyAppearance = getSurveyAppearance(appearance, orgSurveyAppearance)
+export const style = (surveyAppearance: SurveyAppearance | null, teamSurveyAppearance?: SurveyAppearance) => {
+    const appearance = getSurveyAppearance(surveyAppearance, teamSurveyAppearance)
     const positions = {
         left: 'left: 30px;',
         right: 'right: 30px;',
@@ -36,14 +36,14 @@ export const style = (appearance: SurveyAppearance | null, orgSurveyAppearance?:
               font-weight: normal;
               font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
               text-align: left;
-              max-width: ${surveyAppearance.maxWidth}px;
+              max-width: ${appearance.maxWidth}px;
               width: 100%;
-              z-index: ${surveyAppearance.zIndex};
-              border: 1.5px solid ${surveyAppearance.borderColor};
+              z-index: ${appearance.zIndex};
+              border: 1.5px solid ${appearance.borderColor};
               border-bottom: 0px;
-              ${positions[surveyAppearance.position || 'right'] || 'right: 30px;'}
+              ${positions[appearance.position || 'right'] || 'right: 30px;'}
               flex-direction: column;
-              background: ${surveyAppearance.backgroundColor};
+              background: ${appearance.backgroundColor};
               border-top-left-radius: 10px;
               border-top-right-radius: 10px;
               box-shadow: -6px 0 16px -8px rgb(0 0 0 / 8%), -9px 0 28px 0 rgb(0 0 0 / 5%), -12px 0 48px 16px rgb(0 0 0 / 3%);
@@ -76,7 +76,7 @@ export const style = (appearance: SurveyAppearance | null, orgSurveyAppearance?:
               padding-right: 10px;
               padding-top: 10px;
               border-radius: 6px;
-              border-color: ${surveyAppearance.borderColor};
+              border-color: ${appearance.borderColor};
               margin-top: 14px;
               width: 100%;
               box-sizing: border-box;
@@ -103,7 +103,7 @@ export const style = (appearance: SurveyAppearance | null, orgSurveyAppearance?:
               font-size: 14px;
               border-radius: 6px;
               outline: 0;
-              background: ${surveyAppearance.submitButtonColor} !important;
+              background: ${appearance.submitButtonColor} !important;
               text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.12);
               box-shadow: 0 2px 0 rgba(0, 0, 0, 0.045);
               width: 100%;
@@ -124,7 +124,7 @@ export const style = (appearance: SurveyAppearance | null, orgSurveyAppearance?:
               right: 0;
               transform: translate(50%, -50%);
               background: white;
-              border: 1.5px solid ${surveyAppearance.borderColor};
+              border: 1.5px solid ${appearance.borderColor};
               display: flex;
               justify-content: center;
               align-items: center;
@@ -143,15 +143,15 @@ export const style = (appearance: SurveyAppearance | null, orgSurveyAppearance?:
               gap: 4px;
               align-items: center;
               font-weight: 500;
-              background: ${surveyAppearance.backgroundColor};
+              background: ${appearance.backgroundColor};
               text-decoration: none;
-              backgroundColor: ${surveyAppearance.backgroundColor};
+              backgroundColor: ${appearance.backgroundColor};
               color: ${getContrastingTextColor(surveyAppearance.backgroundColor)};
           }
           .survey-question {
               font-weight: 500;
               font-size: 14px;
-              background: ${surveyAppearance.backgroundColor};
+              background: ${appearance.backgroundColor};
           }
           .question-textarea-wrapper {
               display: flex;
@@ -160,7 +160,7 @@ export const style = (appearance: SurveyAppearance | null, orgSurveyAppearance?:
           .survey-question-description {
               font-size: 13px;
               padding-top: 5px;
-              background: ${surveyAppearance.backgroundColor};
+              background: ${appearance.backgroundColor};
           }
           .ratings-number {
               font-size: 16px;
@@ -178,16 +178,16 @@ export const style = (appearance: SurveyAppearance | null, orgSurveyAppearance?:
               display: grid;
               border-radius: 6px;
               overflow: hidden;
-              border: 1.5px solid ${surveyAppearance.borderColor};
+              border: 1.5px solid ${appearance.borderColor};
           }
           .rating-options-number > .ratings-number {
-              border-right: 1px solid ${surveyAppearance.borderColor};
+              border-right: 1px solid ${appearance.borderColor};
           }
           .rating-options-number > .ratings-number:last-of-type {
               border-right: 0px;
           }
           .rating-options-number .rating-active {
-              background: ${surveyAppearance.ratingButtonActiveColor};
+              background: ${appearance.ratingButtonActiveColor};
           }
           .rating-options-emoji {
               display: flex;
@@ -203,7 +203,7 @@ export const style = (appearance: SurveyAppearance | null, orgSurveyAppearance?:
               cursor: pointer;
           }
           .ratings-emoji.rating-active svg {
-              fill: ${surveyAppearance.ratingButtonActiveColor};
+              fill: ${appearance.ratingButtonActiveColor};
           }
           .emoji-svg {
               fill: '#939393';
@@ -214,7 +214,7 @@ export const style = (appearance: SurveyAppearance | null, orgSurveyAppearance?:
               font-size: 11px;
               justify-content: space-between;
               margin-top: 6px;
-              background: ${surveyAppearance.backgroundColor};
+              background: ${appearance.backgroundColor};
               opacity: .60;
           }
           .multiple-choice-options {
@@ -295,11 +295,11 @@ export const style = (appearance: SurveyAppearance | null, orgSurveyAppearance?:
           .thank-you-message-body {
               margin-top: 6px;
               font-size: 14px;
-              background: ${surveyAppearance.backgroundColor};
+              background: ${appearance.backgroundColor};
           }
           .thank-you-message-header {
               margin: 10px 0px 0px;
-              background: ${surveyAppearance.backgroundColor};
+              background: ${appearance.backgroundColor};
           }
           .thank-you-message-container .form-submit {
               margin-top: 20px;
