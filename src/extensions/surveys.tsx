@@ -63,7 +63,7 @@ export class SurveyManager {
         return true
     }
 
-    private handlePopoverSurvey = (survey: Survey): void => {
+    private handlePopoverSurvey = (survey: Survey, teamSurveyAppearance?: SurveyAppearance): void => {
         const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
         const lastSeenSurveyDate = localStorage.getItem(`lastSeenSurveyDate`)
         if (surveyWaitPeriodInDays && lastSeenSurveyDate) {
@@ -78,7 +78,7 @@ export class SurveyManager {
         const surveySeen = getSurveySeen(survey)
         if (!surveySeen) {
             this.addSurveyToFocus(survey.id)
-            const shadow = createShadow(style(survey?.appearance), survey.id)
+            const shadow = createShadow(style(survey?.appearance, teamSurveyAppearance), survey.id)
             Preact.render(
                 <SurveyPopup
                     key={'popover-survey'}
@@ -92,9 +92,9 @@ export class SurveyManager {
         }
     }
 
-    private handleWidget = (survey: Survey): void => {
+    private handleWidget = (survey: Survey, teamSurveyAppearance?: SurveyAppearance): void => {
         const shadow = createWidgetShadow(survey)
-        const surveyStyleSheet = style(survey.appearance)
+        const surveyStyleSheet = style(survey.appearance, teamSurveyAppearance)
         shadow.appendChild(Object.assign(document.createElement('style'), { innerText: surveyStyleSheet }))
         Preact.render(
             <FeedbackWidget
@@ -107,12 +107,12 @@ export class SurveyManager {
         )
     }
 
-    private handleWidgetSelector = (survey: Survey): void => {
+    private handleWidgetSelector = (survey: Survey, teamSurveyAppearance?: SurveyAppearance): void => {
         const selectorOnPage =
             survey.appearance?.widgetSelector && document.querySelector(survey.appearance.widgetSelector)
         if (selectorOnPage) {
             if (document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 0) {
-                this.handleWidget(survey)
+                this.handleWidget(survey, teamSurveyAppearance)
             } else if (document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 1) {
                 // we have to check if user selector already has a survey listener attached to it because we always have to check if it's on the page or not
                 if (!selectorOnPage.getAttribute('PHWidgetSurveyClickListener')) {
@@ -211,7 +211,7 @@ export class SurveyManager {
     }
 
     public callSurveysAndEvaluateDisplayLogic = (forceReload: boolean = false): void => {
-        this.posthog?.getActiveMatchingSurveys((surveys) => {
+        this.posthog?.getActiveMatchingSurveys((surveys, teamSurveyConfig) => {
             const webSurveyTypes = [SurveyType.Widget, SurveyType.Popover]
             const webSurveys = surveys.filter((survey) => webSurveyTypes.includes(survey.type))
 
@@ -229,15 +229,15 @@ export class SurveyManager {
                         survey.appearance?.widgetType === 'tab' &&
                         document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 0
                     ) {
-                        this.handleWidget(survey)
+                        this.handleWidget(survey, teamSurveyConfig?.appearance)
                     }
                     if (survey.appearance?.widgetType === 'selector' && survey.appearance?.widgetSelector) {
-                        this.handleWidgetSelector(survey)
+                        this.handleWidgetSelector(survey, teamSurveyConfig?.appearance)
                     }
                 }
 
                 if (survey.type === SurveyType.Popover && this.canShowNextEventBasedSurvey()) {
-                    this.handlePopoverSurvey(survey)
+                    this.handlePopoverSurvey(survey, teamSurveyConfig?.appearance)
                 }
             })
         }, forceReload)
@@ -277,13 +277,15 @@ export const renderSurveysPreview = ({
     parentElement,
     previewPageIndex,
     forceDisableHtml,
+    teamSurveyAppearance,
 }: {
     survey: Survey
     parentElement: HTMLElement
     previewPageIndex: number
     forceDisableHtml?: boolean
+    teamSurveyAppearance?: SurveyAppearance
 }) => {
-    const surveyStyleSheet = style(survey.appearance)
+    const surveyStyleSheet = style(survey.appearance, teamSurveyAppearance)
     const styleElement = Object.assign(document.createElement('style'), { innerText: surveyStyleSheet })
 
     // Remove previously attached <style>

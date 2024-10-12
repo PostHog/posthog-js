@@ -6,18 +6,19 @@ import { VNode, cloneElement, createContext } from 'preact'
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 
-export const getSurveyAppearance = (
-    appearance: SurveyAppearance | null,
-    teamSurveyAppearance?: SurveyAppearance
-): SurveyAppearance => {
-    return {
-        ...defaultSurveyAppearance,
-        ...appearance,
-        ...teamSurveyAppearance,
-    }
-}
 export const style = (surveyAppearance: SurveyAppearance | null, teamSurveyAppearance?: SurveyAppearance) => {
-    const appearance = getSurveyAppearance(surveyAppearance, teamSurveyAppearance)
+    // this flattening happens in reverse order of declaration
+    // a = {key:'a'}, b = {key:'b'}, c = {key:'c'}
+    // { ..a, ..b, ..c } gives us {key: 'c'}
+    // we use this block to override any properties in defaultSurveyAppearance
+    // by properties set on the teamSurveyConfig, which in turn
+    // are overriden by properties set on the survey itself.
+    const appearance = {
+        ...defaultSurveyAppearance,
+        ...teamSurveyAppearance,
+        ...surveyAppearance,
+    }
+
     const positions = {
         left: 'left: 30px;',
         right: 'right: 30px;',

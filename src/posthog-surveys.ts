@@ -138,10 +138,16 @@ export class PostHogSurveys {
 
                     if (teamSurveyConfig) {
                         surveys.forEach((survey: Survey) => {
+                            // this flattening happens in reverse order of declaration
+                            // a = {key:'a'}, b = {key:'b'}, c = {key:'c'}
+                            // { ..a, ..b, ..c } gives us {key: 'c'}
+                            // we use this block to override any properties in defaultSurveyAppearance
+                            // by properties set on the teamSurveyConfig, which in turn
+                            // are overriden by properties set on the survey itself.
                             survey.appearance = {
                                 ...defaultSurveyAppearance,
-                                ...survey.appearance,
                                 ...teamSurveyConfig?.appearance,
+                                ...survey.appearance,
                             }
                         })
                     }
