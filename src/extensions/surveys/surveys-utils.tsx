@@ -12,7 +12,7 @@ export const style = (surveyAppearance: SurveyAppearance | null, teamSurveyAppea
     // { ..a, ..b, ..c } gives us {key: 'c'}
     // we use this block to override any properties in defaultSurveyAppearance
     // by properties set on the teamSurveyConfig, which in turn
-    // are overriden by properties set on the survey itself.
+    // are overridden by properties set on the survey itself.
     const appearance = {
         ...defaultSurveyAppearance,
         ...teamSurveyAppearance,

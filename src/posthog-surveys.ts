@@ -136,21 +136,19 @@ export class PostHogSurveys {
                         this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
                     }
 
-                    if (teamSurveyConfig) {
-                        surveys.forEach((survey: Survey) => {
-                            // this flattening happens in reverse order of declaration
-                            // a = {key:'a'}, b = {key:'b'}, c = {key:'c'}
-                            // { ..a, ..b, ..c } gives us {key: 'c'}
-                            // we use this block to override any properties in defaultSurveyAppearance
-                            // by properties set on the teamSurveyConfig, which in turn
-                            // are overriden by properties set on the survey itself.
-                            survey.appearance = {
-                                ...defaultSurveyAppearance,
-                                ...teamSurveyConfig?.appearance,
-                                ...survey.appearance,
-                            }
-                        })
-                    }
+                    surveys.forEach((survey: Survey) => {
+                        // this flattening happens in reverse order of declaration
+                        // a = {key:'a'}, b = {key:'b'}, c = {key:'c'}
+                        // { ..a, ..b, ..c } gives us {key: 'c'}
+                        // we use this block to override any properties in defaultSurveyAppearance
+                        // by properties set on the teamSurveyConfig, which in turn
+                        // are overridden by properties set on the survey itself.
+                        survey.appearance = {
+                            ...defaultSurveyAppearance,
+                            ...teamSurveyConfig?.appearance,
+                            ...survey.appearance,
+                        }
+                    })
 
                     this.instance.persistence?.register({ [SURVEYS]: surveys })
                     return callback(surveys, teamSurveyConfig)
