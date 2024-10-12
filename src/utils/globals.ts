@@ -27,6 +27,12 @@ export type PostHogExtensionKind =
     | 'recorder'
     | 'tracing-headers'
     | 'surveys'
+    | 'dead-clicks-autocapture'
+
+export interface LazyLoadedDeadClicksAutocapture {
+    start: (observerTarget: Node) => void
+    stop: () => void
+}
 
 interface PostHogExtensions {
     loadExternalDependency?: (
@@ -56,6 +62,7 @@ interface PostHogExtensions {
         _patchFetch: (sessionManager: SessionIdManager) => () => void
         _patchXHR: (sessionManager: any) => () => void
     }
+    initDeadClicksAutocapture?: (ph: PostHog) => LazyLoadedDeadClicksAutocapture
 }
 
 const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win

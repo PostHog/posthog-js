@@ -79,6 +79,7 @@ import { ExceptionObserver } from './extensions/exception-autocapture'
 import { WebVitalsAutocapture } from './extensions/web-vitals'
 import { WebExperiments } from './web-experiments'
 import { PostHogExceptions } from './posthog-exceptions'
+import { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -259,6 +260,7 @@ export class PostHog {
     heatmaps?: Heatmaps
     webVitalsAutocapture?: WebVitalsAutocapture
     exceptionObserver?: ExceptionObserver
+    deadClicksAutocapture?: DeadClicksAutocapture
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -438,6 +440,9 @@ export class PostHog {
 
         this.exceptionObserver = new ExceptionObserver(this)
         this.exceptionObserver.startIfEnabled()
+
+        this.deadClicksAutocapture = new DeadClicksAutocapture(this)
+        this.deadClicksAutocapture.startIfEnabled()
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true

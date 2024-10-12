@@ -44,8 +44,8 @@ export const updatePostHogConsent = (consentGiven: boolean) => {
 }
 
 if (typeof window !== 'undefined') {
-    posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY || '', {
-        api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com',
+    posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY || 'phc_dZlzUmXvG2McUaGYwdeBiy9RNSuASabNBG2Y29oku4K', {
+        api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'http://localhost:8000',
         session_recording: {
             recordCrossOriginIframes: true,
         },
@@ -56,6 +56,7 @@ if (typeof window !== 'undefined') {
         person_profiles: PERSON_PROCESSING_MODE === 'never' ? 'identified_only' : PERSON_PROCESSING_MODE,
         persistence_name: `${process.env.NEXT_PUBLIC_POSTHOG_KEY}_nextjs`,
         ...configForConsent(),
+        capture_dead_clicks: true,
     })
 
     // Help with debugging(window as any).posthog = posthog
