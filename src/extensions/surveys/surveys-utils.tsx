@@ -1,11 +1,5 @@
 import { PostHog } from '../../posthog-core'
-import {
-    Survey,
-    SurveyAppearance,
-    MultipleSurveyQuestion,
-    SurveyQuestion,
-    TeamSurveyConfig,
-} from '../../posthog-surveys-types'
+import { Survey, SurveyAppearance, MultipleSurveyQuestion, SurveyQuestion } from '../../posthog-surveys-types'
 import { window as _window, document as _document } from '../../utils/globals'
 import { VNode, cloneElement, createContext } from 'preact'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
@@ -152,7 +146,7 @@ export const style = (surveyAppearance: SurveyAppearance | null, teamSurveyAppea
               background: ${appearance.backgroundColor};
               text-decoration: none;
               backgroundColor: ${appearance.backgroundColor};
-              color: ${getContrastingTextColor(surveyAppearance.backgroundColor)};
+              color: ${getContrastingTextColor(appearance.backgroundColor)};
           }
           .survey-question {
               font-weight: 500;
@@ -517,15 +511,7 @@ export function getTextColor(el: HTMLElement) {
     return hsp > 127.5 ? 'black' : 'white'
 }
 
-export const applyTeamAppearanceConfig = (survey: Survey, teamSurveyConfig?: TeamSurveyConfig) => {
-    survey.appearance = {
-        ...defaultSurveyAppearance,
-        ...survey.appearance,
-        ...teamSurveyConfig?.appearance,
-    }
-}
-
-const defaultSurveyAppearance: SurveyAppearance = {
+export const defaultSurveyAppearance: SurveyAppearance = {
     backgroundColor: '#eeeded',
     submitButtonColor: 'black',
     submitButtonTextColor: 'white',
@@ -537,6 +523,8 @@ const defaultSurveyAppearance: SurveyAppearance = {
     displayThankYouMessage: true,
     thankYouMessageHeader: 'Thank you for your feedback!',
     position: 'right',
+    maxWidth: '300',
+    zIndex: '99999',
 }
 
 export const defaultBackgroundColor = '#eeeded'
@@ -636,13 +624,13 @@ export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string
     return shuffledOptions
 }
 
-export const getDisplayOrderQuestions = (survey: Survey, surveyAppearance?: SurveyAppearance): SurveyQuestion[] => {
+export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
     // retain the original questionIndex so we can correlate values in the webapp
     survey.questions.forEach((question, idx) => {
         question.originalQuestionIndex = idx
     })
 
-    if (!surveyAppearance?.shuffleQuestions) {
+    if (!survey.appearance?.shuffleQuestions) {
         return survey.questions
     }
 

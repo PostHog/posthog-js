@@ -14,7 +14,7 @@ import { assignableWindow, document, window } from './utils/globals'
 import { DecideResponse } from './types'
 import { logger } from './utils/logger'
 import { isNullish } from './utils/type-utils'
-import { applyTeamAppearanceConfig } from './extensions/surveys/surveys-utils'
+import { defaultSurveyAppearance } from './extensions/surveys/surveys-utils'
 
 const LOGGER_PREFIX = '[Surveys]'
 
@@ -138,7 +138,11 @@ export class PostHogSurveys {
 
                     if (teamSurveyConfig) {
                         surveys.forEach((survey: Survey) => {
-                            applyTeamAppearanceConfig(survey, teamSurveyConfig)
+                            survey.appearance = {
+                                ...defaultSurveyAppearance,
+                                ...survey.appearance,
+                                ...teamSurveyConfig?.appearance,
+                            }
                         })
                     }
 

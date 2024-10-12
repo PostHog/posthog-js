@@ -1,6 +1,5 @@
 import { PostHog } from '../posthog-core'
 import {
-    TeamSurveyConfig,
     Survey,
     SurveyAppearance,
     SurveyQuestion,
@@ -20,7 +19,7 @@ import {
     SurveyContext,
     getDisplayOrderQuestions,
     getSurveySeen,
-    getSurveyAppearance,
+    defaultSurveyAppearance,
 } from './surveys/surveys-utils'
 import * as Preact from 'preact'
 import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
@@ -64,7 +63,7 @@ export class SurveyManager {
         return true
     }
 
-    private handlePopoverSurvey = (survey: Survey, teamSurveyConfig?: TeamSurveyConfig): void => {
+    private handlePopoverSurvey = (survey: Survey): void => {
         const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
         const lastSeenSurveyDate = localStorage.getItem(`lastSeenSurveyDate`)
         if (surveyWaitPeriodInDays && lastSeenSurveyDate) {
@@ -85,7 +84,6 @@ export class SurveyManager {
                     key={'popover-survey'}
                     posthog={this.posthog}
                     survey={survey}
-                    teamSurveyConfig={teamSurveyConfig}
                     removeSurveyFromFocus={this.removeSurveyFromFocus}
                     isPopup={true}
                 />,
@@ -94,9 +92,9 @@ export class SurveyManager {
         }
     }
 
-    private handleWidget = (survey: Survey, teamSurveyConfig?: TeamSurveyConfig): void => {
+    private handleWidget = (survey: Survey): void => {
         const shadow = createWidgetShadow(survey)
-        const surveyStyleSheet = style(survey.appearance, teamSurveyConfig?.appearance)
+        const surveyStyleSheet = style(survey.appearance)
         shadow.appendChild(Object.assign(document.createElement('style'), { innerText: surveyStyleSheet }))
         Preact.render(
             <FeedbackWidget
@@ -140,15 +138,11 @@ export class SurveyManager {
      * Sorts surveys by their appearance delay in ascending order. If a survey does not have an appearance delay,
      * it is considered to have a delay of 0.
      * @param surveys
-     * @param teamSurveyConfig
      * @returns The surveys sorted by their appearance delay
      */
-    private sortSurveysByAppearanceDelay(surveys: Survey[], teamSurveyConfig?: TeamSurveyConfig): Survey[] {
-        const defaultPopupDelaySeconds = teamSurveyConfig?.appearance?.surveyPopupDelaySeconds || 0
+    private sortSurveysByAppearanceDelay(surveys: Survey[]): Survey[] {
         return surveys.sort(
-            (a, b) =>
-                (a.appearance?.surveyPopupDelaySeconds || defaultPopupDelaySeconds) -
-                (b.appearance?.surveyPopupDelaySeconds || defaultPopupDelaySeconds)
+            (a, b) => (a.appearance?.surveyPopupDelaySeconds || 0) - (b.appearance?.surveyPopupDelaySeconds || 0)
         )
     }
 
@@ -217,15 +211,15 @@ export class SurveyManager {
     }
 
     public callSurveysAndEvaluateDisplayLogic = (forceReload: boolean = false): void => {
-        this.posthog?.getActiveMatchingSurveys((surveys, teamSurveyConfig) => {
+        this.posthog?.getActiveMatchingSurveys((surveys) => {
             const webSurveyTypes = [SurveyType.Widget, SurveyType.Popover]
-            const interactiveSurveys = surveys.filter((survey) => webSurveyTypes.includes(survey.type))
+            const webSurveys = surveys.filter((survey) => webSurveyTypes.includes(survey.type))
 
             // Create a queue of surveys sorted by their appearance delay.  We will evaluate the display logic
             // for each survey in the queue in order, and only display one survey at a time.
-            const interactiveSurveyQueue = this.sortSurveysByAppearanceDelay(interactiveSurveys, teamSurveyConfig)
+            const webSurveyQueue = this.sortSurveysByAppearanceDelay(webSurveys)
 
-            interactiveSurveyQueue.forEach((survey) => {
+            webSurveyQueue.forEach((survey) => {
                 // We only evaluate the display logic for one survey at a time
                 if (!isNull(this.surveyInFocus)) {
                     return
@@ -243,7 +237,7 @@ export class SurveyManager {
                 }
 
                 if (survey.type === SurveyType.Popover && this.canShowNextEventBasedSurvey()) {
-                    this.handlePopoverSurvey(survey, teamSurveyConfig)
+                    this.handlePopoverSurvey(survey)
                 }
             })
         }, forceReload)
@@ -282,17 +276,14 @@ export const renderSurveysPreview = ({
     survey,
     parentElement,
     previewPageIndex,
-    surveyAppearance,
     forceDisableHtml,
 }: {
     survey: Survey
     parentElement: HTMLElement
     previewPageIndex: number
-    surveyAppearance: SurveyAppearance
     forceDisableHtml?: boolean
-    teamSurveyConfig?: TeamSurveyConfig
 }) => {
-    const surveyStyleSheet = style(surveyAppearance)
+    const surveyStyleSheet = style(survey.appearance)
     const styleElement = Object.assign(document.createElement('style'), { innerText: surveyStyleSheet })
 
     // Remove previously attached <style>
@@ -303,7 +294,9 @@ export const renderSurveysPreview = ({
     })
 
     parentElement.appendChild(styleElement)
-    const textColor = getContrastingTextColor(surveyAppearance.backgroundColor)
+    const textColor = getContrastingTextColor(
+        survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor || 'white'
+    )
 
     Preact.render(
         <SurveyPopup
@@ -455,7 +448,6 @@ export function SurveyPopup({
     previewPageIndex,
     removeSurveyFromFocus,
     isPopup,
-    teamSurveyConfig,
 }: {
     survey: Survey
     forceDisableHtml?: boolean
@@ -464,7 +456,6 @@ export function SurveyPopup({
     previewPageIndex?: number | undefined
     removeSurveyFromFocus: (id: string) => void
     isPopup?: boolean
-    teamSurveyConfig?: TeamSurveyConfig
 }) {
     const isPreviewMode = Number.isInteger(previewPageIndex)
     // NB: The client-side code passes the millisecondDelay in seconds, but setTimeout expects milliseconds, so we multiply by 1000
@@ -480,7 +471,6 @@ export function SurveyPopup({
     )
     const shouldShowConfirmation = isSurveySent || previewPageIndex === survey.questions.length
     const confirmationBoxLeftStyle = style?.left && isNumber(style?.left) ? { left: style.left - 40 } : {}
-    const surveyAppearance = getSurveyAppearance(survey.appearance, teamSurveyConfig?.appearance)
 
     if (isPreviewMode) {
         style = style || {}
@@ -504,15 +494,14 @@ export function SurveyPopup({
                     forceDisableHtml={!!forceDisableHtml}
                     posthog={posthog}
                     styleOverrides={style}
-                    surveyAppearance={surveyAppearance}
                 />
             ) : (
                 <ConfirmationMessage
-                    header={surveyAppearance?.thankYouMessageHeader || 'Thank you!'}
-                    description={surveyAppearance?.thankYouMessageDescription || ''}
+                    header={survey.appearance?.thankYouMessageHeader || 'Thank you!'}
+                    description={survey.appearance?.thankYouMessageDescription || ''}
                     forceDisableHtml={!!forceDisableHtml}
-                    contentType={surveyAppearance.thankYouMessageDescriptionContentType}
-                    appearance={surveyAppearance}
+                    contentType={survey.appearance?.thankYouMessageDescriptionContentType}
+                    appearance={survey.appearance || defaultSurveyAppearance}
                     styleOverrides={{ ...style, ...confirmationBoxLeftStyle }}
                     onClose={() => setIsPopupVisible(false)}
                 />
@@ -526,17 +515,17 @@ export function SurveyPopup({
 export function Questions({
     survey,
     forceDisableHtml,
-    surveyAppearance,
     posthog,
     styleOverrides,
 }: {
     survey: Survey
     forceDisableHtml: boolean
-    surveyAppearance: SurveyAppearance
     posthog?: PostHog
     styleOverrides?: React.CSSProperties
 }) {
-    const textColor = getContrastingTextColor(surveyAppearance.backgroundColor)
+    const textColor = getContrastingTextColor(
+        survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
+    )
     const [questionsResponses, setQuestionsResponses] = useState({})
     const { isPreviewMode, previewPageIndex, handleCloseSurveyPopup, isPopup } = useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
@@ -610,7 +599,9 @@ export function Questions({
                             style={
                                 isPopup
                                     ? {
-                                          backgroundColor: surveyAppearance.backgroundColor,
+                                          backgroundColor:
+                                              survey.appearance?.backgroundColor ||
+                                              defaultSurveyAppearance.backgroundColor,
                                       }
                                     : {}
                             }
@@ -620,7 +611,7 @@ export function Questions({
                                 question,
                                 forceDisableHtml,
                                 displayQuestionIndex,
-                                appearance: surveyAppearance,
+                                appearance: survey.appearance || defaultSurveyAppearance,
                                 onSubmit: (res) =>
                                     onNextButtonClick({
                                         res,
