@@ -58,9 +58,19 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
         it('stores clicks', () => {
             lazyLoadedDeadClicksAutocapture.start(document)
+
             triggerMouseEvent(document.body, 'click')
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(1)
+        })
+
+        it('does not store clicks after stop', () => {
+            lazyLoadedDeadClicksAutocapture.start(document)
+            lazyLoadedDeadClicksAutocapture.stop()
+
+            triggerMouseEvent(document.body, 'click')
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(0)
         })
 
         it('sets timer when detecting clicks', () => {

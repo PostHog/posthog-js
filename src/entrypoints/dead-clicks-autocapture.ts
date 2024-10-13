@@ -76,7 +76,7 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
         assignableWindow.addEventListener('click', this._onClick)
     }
 
-    private _onClick(event: Event): void {
+    private _onClick = (event: Event): void => {
         const click = asClick(event)
         if (!isNull(click) && !this._ignoreClick(click)) {
             this._clicks.push(click)
@@ -96,7 +96,7 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
         assignableWindow.addEventListener('scroll', this._onScroll, true)
     }
 
-    private _onScroll(): void {
+    private _onScroll = (): void => {
         const candidateNow = Date.now()
         // very naive throttle
         if (candidateNow % 50 === 0) {
