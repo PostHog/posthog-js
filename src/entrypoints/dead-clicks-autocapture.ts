@@ -5,8 +5,8 @@ import { getEventTarget, isElementNode, isTag } from '../autocapture-utils'
 import { Properties } from '../types'
 import { getPropertiesFromElement } from '../autocapture'
 
-// by default if a click is followed by a sroll within 200ms it is not a dead click
-const SCROLL_THRESHOLD_MS = 200
+// by default if a click is followed by a sroll within 100ms it is not a dead click
+const SCROLL_THRESHOLD_MS = 100
 // by default if a click is followed by a mutation within 2500ms it is not a dead click
 const MUTATION_THRESHOLD_MS = 2500
 
@@ -41,7 +41,7 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
 
     start(observerTarget: Node) {
         this._startClickObserver(observerTarget)
-        this._startScrollObserver(observerTarget)
+        this._startScrollObserver()
         this._startMutationObserver(observerTarget)
     }
 
@@ -87,12 +87,19 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
         }
     }
 
-    private _startScrollObserver(observerTarget: Node) {
-        observerTarget.addEventListener('scroll', (event) => this._onScroll(event))
+    private _startScrollObserver() {
+        // setting the third argument to `true` means that we will receive scroll events for other scrollable elements
+        // on the page, not just the window
+        // see https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener#usecapture
+        assignableWindow.addEventListener('scroll', () => this._onScroll(), true)
     }
 
-    private _onScroll(event: Event): void {
-        this._lastScroll = event.timeStamp
+    private _onScroll(): void {
+        const candidateNow = Date.now()
+        // very naive throttle
+        if (candidateNow % 50 === 0) {
+            this._lastScroll = candidateNow
+        }
     }
 
     private _ignoreClick(click: Click | null): boolean {

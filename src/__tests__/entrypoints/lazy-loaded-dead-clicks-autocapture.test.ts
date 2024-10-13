@@ -151,7 +151,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
         it('click followed by scroll, not a dead click', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({ node: document.body, timestamp: 900 })
-            lazyLoadedDeadClicksAutocapture['_lastScroll'] = 1000
+            lazyLoadedDeadClicksAutocapture['_lastScroll'] = 999
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
