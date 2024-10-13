@@ -40,7 +40,7 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
     constructor(readonly instance: PostHog) {}
 
     start(observerTarget: Node) {
-        this._startClickObserver(observerTarget)
+        this._startClickObserver()
         this._startScrollObserver()
         this._startMutationObserver(observerTarget)
     }
@@ -62,6 +62,8 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
     stop() {
         this._mutationObserver?.disconnect()
         this._mutationObserver = undefined
+        assignableWindow.removeEventListener('click', this._onClick)
+        assignableWindow.removeEventListener('scroll', this._onScroll, true)
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -70,8 +72,8 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
         this._lastMutation = Date.now()
     }
 
-    private _startClickObserver(clickTarget: Node) {
-        clickTarget.addEventListener('click', (e) => this._onClick(e))
+    private _startClickObserver() {
+        assignableWindow.addEventListener('click', this._onClick)
     }
 
     private _onClick(event: Event): void {
@@ -91,7 +93,7 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
         // setting the third argument to `true` means that we will receive scroll events for other scrollable elements
         // on the page, not just the window
         // see https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener#usecapture
-        assignableWindow.addEventListener('scroll', () => this._onScroll(), true)
+        assignableWindow.addEventListener('scroll', this._onScroll, true)
     }
 
     private _onScroll(): void {
