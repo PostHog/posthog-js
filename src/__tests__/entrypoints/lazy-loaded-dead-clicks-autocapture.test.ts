@@ -83,19 +83,15 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
     })
 
     it('tracks last scroll', () => {
-        expect(lazyLoadedDeadClicksAutocapture['_lastScroll']).not.toBeDefined()
+        jest.setSystemTime(1000)
+        triggerMouseEvent(document.body, 'click')
 
+        expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].scrollDelayMs).not.toBeDefined()
+
+        jest.setSystemTime(1050)
         triggerMouseEvent(document.body, 'scroll')
 
-        expect(lazyLoadedDeadClicksAutocapture['_lastScroll']).toBeDefined()
-    })
-
-    it('does not track last scroll after stop', () => {
-        lazyLoadedDeadClicksAutocapture.stop()
-
-        triggerMouseEvent(document.body, 'scroll')
-
-        expect(lazyLoadedDeadClicksAutocapture['_lastScroll']).not.toBeDefined()
+        expect(lazyLoadedDeadClicksAutocapture['_clicks'][0].scrollDelayMs).toBe(50)
     })
 
     // i think there's some kind of jsdom fangling happening where the mutation observer
@@ -168,8 +164,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         })
 
         it('click followed by scroll, not a dead click', () => {
-            lazyLoadedDeadClicksAutocapture['_clicks'].push({ node: document.body, timestamp: 900 })
-            lazyLoadedDeadClicksAutocapture['_lastScroll'] = 999
+            lazyLoadedDeadClicksAutocapture['_clicks'].push({ node: document.body, timestamp: 900, scrollDelayMs: 99 })
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
@@ -180,7 +175,6 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
         it('click followed by mutation, not a dead click', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({ node: document.body, timestamp: 900 })
-            lazyLoadedDeadClicksAutocapture['_lastScroll'] = undefined
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = 1000
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
@@ -191,7 +185,6 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
         it('click followed by a mutation after threshold, dead click', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({ node: document.body, timestamp: 900 })
-            lazyLoadedDeadClicksAutocapture['_lastScroll'] = undefined
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = 900 + 2501
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
@@ -216,8 +209,11 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         })
 
         it('click followed by a scroll after threshold, dead click', () => {
-            lazyLoadedDeadClicksAutocapture['_clicks'].push({ node: document.body, timestamp: 900 })
-            lazyLoadedDeadClicksAutocapture['_lastScroll'] = 900 + 2051
+            lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                node: document.body,
+                timestamp: 900,
+                scrollDelayMs: 2501,
+            })
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
 
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
@@ -229,10 +225,9 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                 $dead_click_absolute_timeout: false,
                 $dead_click_event_timestamp: 900,
                 $dead_click_last_mutation_timestamp: undefined,
-                $dead_click_last_scroll_timestamp: 2951,
                 $dead_click_mutation_delay_ms: undefined,
                 $dead_click_mutation_timeout: false,
-                $dead_click_scroll_delay_ms: 2051,
+                $dead_click_scroll_delay_ms: 2501,
                 $dead_click_scroll_timeout: true,
                 nth_child: 2,
                 nth_of_type: 1,
@@ -243,7 +238,6 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
         it('click followed by nothing for too long, dead click', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({ node: document.body, timestamp: 900 })
-            lazyLoadedDeadClicksAutocapture['_lastScroll'] = undefined
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
 
             jest.setSystemTime(2501 + 900)
@@ -269,7 +263,6 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
         it('click not followed by anything within threshold, rescheduled for next check', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({ node: document.body, timestamp: 900 })
-            lazyLoadedDeadClicksAutocapture['_lastScroll'] = undefined
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
 
             jest.setSystemTime(25 + 900)

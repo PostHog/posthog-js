@@ -33,7 +33,6 @@ function asClick(event: Event): Click | null {
 class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture {
     private _mutationObserver: MutationObserver | undefined
     private _lastMutation: number | undefined
-    private _lastScroll: number | undefined
     private _clicks: Click[] = []
     private _checkClickTimer: number | undefined
 
@@ -100,7 +99,14 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
         const candidateNow = Date.now()
         // very naive throttle
         if (candidateNow % 50 === 0) {
-            this._lastScroll = candidateNow
+            // we can see many scrolls between scheduled checks,
+            // so we update scroll delay as we see them
+            // to avoid false positives
+            this._clicks.forEach((click) => {
+                if (isUndefined(click.scrollDelayMs)) {
+                    click.scrollDelayMs = candidateNow - click.timestamp
+                }
+            })
         }
     }
 
@@ -145,9 +151,6 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
         this._clicks = []
 
         for (const click of clicksToCheck) {
-            // is click timestamp less than CLICK_THRESHOLD ms before last scroll
-            click.scrollDelayMs =
-                this._lastScroll && click.timestamp <= this._lastScroll ? this._lastScroll - click.timestamp : undefined
             click.mutationDelayMs =
                 this._lastMutation && click.timestamp <= this._lastMutation
                     ? this._lastMutation - click.timestamp
@@ -162,7 +165,6 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
 
             if (isDeadClick) {
                 this._captureDeadClick(click, {
-                    $dead_click_last_scroll_timestamp: this._lastScroll,
                     $dead_click_last_mutation_timestamp: this._lastMutation,
                     $dead_click_event_timestamp: click.timestamp,
                     $dead_click_scroll_timeout: scrollTimeout,
