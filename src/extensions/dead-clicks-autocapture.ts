@@ -1,13 +1,16 @@
 import { PostHog } from '../posthog-core'
 import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../constants'
 import { isBoolean } from '../utils/type-utils'
-import { assignableWindow, LazyLoadedDeadClicksAutocapture } from '../utils/globals'
+import { assignableWindow, document, LazyLoadedDeadClicksAutocapture } from '../utils/globals'
 import { logger } from '../utils/logger'
-import { document } from '../utils/globals'
 
 const LOGGER_PREFIX = '[Dead Clicks]'
 
 export class DeadClicksAutocapture {
+    get lazyLoadedDeadClicksAutocapture(): LazyLoadedDeadClicksAutocapture | undefined {
+        return this._lazyLoadedDeadClicksAutocapture
+    }
+
     private _enabledServerSide: boolean
     private _lazyLoadedDeadClicksAutocapture: LazyLoadedDeadClicksAutocapture | undefined
 
@@ -63,7 +66,7 @@ export class DeadClicksAutocapture {
         }
     }
 
-    private stop() {
+    stop() {
         if (this._lazyLoadedDeadClicksAutocapture) {
             this._lazyLoadedDeadClicksAutocapture.stop()
             logger.info(`${LOGGER_PREFIX} stopping...`)
