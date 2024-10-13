@@ -514,7 +514,7 @@ export class PostHog {
 
         this.toolbar.maybeLoadToolbar()
 
-        // We wan't to avoid promises for IE11 compatibility, so we use callbacks here
+        // We want to avoid promises for IE11 compatibility, so we use callbacks here
         if (config.segment) {
             setupSegmentIntegration(this, () => this._loaded())
         } else {
@@ -555,8 +555,7 @@ export class PostHog {
 
     _loaded(): void {
         // Pause `reloadFeatureFlags` calls in config.loaded callback.
-        // These feature flags are loaded in the decide call made right
-        // afterwards
+        // These feature flags are loaded in the decide call made right after
         const disableDecide = this.config.advanced_disable_decide
         if (!disableDecide) {
             this.featureFlags.setReloadingPaused(true)

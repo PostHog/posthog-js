@@ -100,9 +100,10 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
             return true
         }
 
-        const alreadyClickedInLastSecond = this._clicks.some(
-            (c) => c.node === click.node && Math.abs(c.timestamp - click.timestamp) < 1000
-        )
+        const alreadyClickedInLastSecond = this._clicks.some((c) => {
+            return c.node === click.node && Math.abs(c.timestamp - click.timestamp) < 1000
+        })
+
         if (alreadyClickedInLastSecond) {
             return true
         }
