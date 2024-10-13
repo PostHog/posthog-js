@@ -37,7 +37,7 @@ function limitText(length: number, text: string): string {
     return text
 }
 
-function getAugmentPropertiesFromElement(elem: Element): Properties {
+export function getAugmentPropertiesFromElement(elem: Element): Properties {
     const shouldCaptureEl = shouldCaptureElement(elem)
     if (!shouldCaptureEl) {
         return {}
@@ -58,7 +58,7 @@ function getAugmentPropertiesFromElement(elem: Element): Properties {
     return props
 }
 
-function previousElementSibling(el: Element): Element | null {
+export function previousElementSibling(el: Element): Element | null {
     if (el.previousElementSibling) {
         return el.previousElementSibling
     }
@@ -69,7 +69,7 @@ function previousElementSibling(el: Element): Element | null {
     return _el
 }
 
-function getDefaultProperties(eventType: string): Properties {
+export function getDefaultProperties(eventType: string): Properties {
     return {
         $event_type: eventType,
         $ce_version: 1,
