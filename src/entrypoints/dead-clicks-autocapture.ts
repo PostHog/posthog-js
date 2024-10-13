@@ -137,14 +137,19 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
 
         for (const click of clicksToCheck) {
             // is click timestamp less than CLICK_THRESHOLD ms before last scroll
-            click.scrollDelayMs = this._lastScroll ? click.timestamp - this._lastScroll : undefined
-            click.mutationDelayMs = this._lastMutation ? click.timestamp - this._lastMutation : undefined
+            click.scrollDelayMs =
+                this._lastScroll && click.timestamp <= this._lastScroll ? this._lastScroll - click.timestamp : undefined
+            click.mutationDelayMs =
+                this._lastMutation && click.timestamp <= this._lastMutation
+                    ? this._lastMutation - click.timestamp
+                    : undefined
             click.absoluteDelayMs = Date.now() - click.timestamp
             const scrollTimeout = isNumber(click.scrollDelayMs) && click.scrollDelayMs >= SCROLL_THRESHOLD_MS
             const mutationTimeout = isNumber(click.mutationDelayMs) && click.mutationDelayMs >= MUTATION_THRESHOLD_MS
-            const absoluteDelay = Math.abs(click.timestamp - Date.now())
-            const absoluteTimeout = absoluteDelay > MUTATION_THRESHOLD_MS * 2
+            const absoluteTimeout = click.absoluteDelayMs > MUTATION_THRESHOLD_MS
             const isDeadClick = scrollTimeout || mutationTimeout || absoluteTimeout
+            const hadScroll = isNumber(click.scrollDelayMs) && click.scrollDelayMs < SCROLL_THRESHOLD_MS
+            const hadMutation = isNumber(click.mutationDelayMs) && click.mutationDelayMs < MUTATION_THRESHOLD_MS
 
             if (isDeadClick) {
                 this._captureDeadClick(click, {
@@ -154,9 +159,8 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
                     $dead_click_scroll_timeout: scrollTimeout,
                     $dead_click_mutation_timeout: mutationTimeout,
                     $dead_click_absolute_timeout: absoluteTimeout,
-                    $dead_click_absolute_delay: absoluteDelay,
                 })
-            } else if (absoluteDelay < MUTATION_THRESHOLD_MS) {
+            } else if (click.absoluteDelayMs < MUTATION_THRESHOLD_MS && !hadScroll && !hadMutation) {
                 // keep waiting until next check
                 this._clicks.push(click)
             }
