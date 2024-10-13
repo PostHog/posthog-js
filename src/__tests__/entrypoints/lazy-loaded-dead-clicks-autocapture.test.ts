@@ -90,6 +90,14 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         expect(lazyLoadedDeadClicksAutocapture['_lastScroll']).toBeDefined()
     })
 
+    it('does not track last scroll after stop', () => {
+        lazyLoadedDeadClicksAutocapture.stop()
+
+        triggerMouseEvent(document.body, 'scroll')
+
+        expect(lazyLoadedDeadClicksAutocapture['_lastScroll']).not.toBeDefined()
+    })
+
     // i think there's some kind of jsdom fangling happening where the mutation observer
     // started by the detector isn't passed details of mutations made in the tests
     // js-dom supports mutation observer since v13.x but 🤷
