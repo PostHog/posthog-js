@@ -159,11 +159,15 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
             const scrollTimeout = isNumber(click.scrollDelayMs) && click.scrollDelayMs >= SCROLL_THRESHOLD_MS
             const mutationTimeout = isNumber(click.mutationDelayMs) && click.mutationDelayMs >= MUTATION_THRESHOLD_MS
             const absoluteTimeout = click.absoluteDelayMs > MUTATION_THRESHOLD_MS
-            const isDeadClick = scrollTimeout || mutationTimeout || absoluteTimeout
             const hadScroll = isNumber(click.scrollDelayMs) && click.scrollDelayMs < SCROLL_THRESHOLD_MS
             const hadMutation = isNumber(click.mutationDelayMs) && click.mutationDelayMs < MUTATION_THRESHOLD_MS
 
-            if (isDeadClick) {
+            if (hadScroll || hadMutation) {
+                // ignore clicks that had a scroll or mutation
+                continue
+            }
+
+            if (scrollTimeout || mutationTimeout || absoluteTimeout) {
                 this._captureDeadClick(click, {
                     $dead_click_last_mutation_timestamp: this._lastMutation,
                     $dead_click_event_timestamp: click.timestamp,
@@ -171,7 +175,7 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
                     $dead_click_mutation_timeout: mutationTimeout,
                     $dead_click_absolute_timeout: absoluteTimeout,
                 })
-            } else if (click.absoluteDelayMs < MUTATION_THRESHOLD_MS && !hadScroll && !hadMutation) {
+            } else if (click.absoluteDelayMs < MUTATION_THRESHOLD_MS) {
                 // keep waiting until next check
                 this._clicks.push(click)
             }
