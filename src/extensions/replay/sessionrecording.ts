@@ -7,6 +7,8 @@ import {
     SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE,
     SESSION_RECORDING_SAMPLE_RATE,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED,
+    SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
+    SESSION_RECORDING_URL_TRIGGER_STATUS,
 } from '../../constants'
 import {
     estimateSize,
@@ -377,10 +379,17 @@ export class SessionRecording {
             return 'trigger_disabled'
         }
 
-        const currentValue = this.instance?.get_property(SESSION_RECORDING_URL_TRIGGER_ACTIVATED)
+        const currentStatus = this.instance?.get_property(SESSION_RECORDING_URL_TRIGGER_STATUS)
+        const currentTriggerSession = this.instance?.get_property(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
 
-        if (TRIGGER_STATUSES.includes(currentValue)) {
-            return currentValue as TriggerStatus
+        if (currentTriggerSession !== this.sessionId) {
+            this.instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
+            this.instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_STATUS)
+            return 'trigger_pending'
+        }
+
+        if (TRIGGER_STATUSES.includes(currentStatus)) {
+            return currentStatus as TriggerStatus
         }
 
         return 'trigger_pending'
@@ -388,7 +397,8 @@ export class SessionRecording {
 
     private set urlTriggerStatus(status: TriggerStatus) {
         this.instance?.persistence?.register({
-            [SESSION_RECORDING_URL_TRIGGER_ACTIVATED]: status,
+            [SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION]: this.sessionId,
+            [SESSION_RECORDING_URL_TRIGGER_STATUS]: status,
         })
     }
 
@@ -475,6 +485,9 @@ export class SessionRecording {
                 this._onSessionIdListener = this.sessionManager.onSessionId((sessionId, windowId, changeReason) => {
                     if (changeReason) {
                         this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
+
+                        this.instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
+                        this.instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_STATUS)
                     }
                 })
             }
