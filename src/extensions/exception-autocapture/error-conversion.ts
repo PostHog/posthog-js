@@ -10,7 +10,7 @@ import {
 } from './type-checking'
 import { defaultStackParser, StackFrame } from './stack-trace'
 
-import { isEmptyString, isNumber, isString, isUndefined } from '../../utils/type-utils'
+import { isEmptyString, isString, isUndefined } from '../../utils/type-utils'
 import { ErrorEventArgs, ErrorProperties, SeverityLevel, severityLevels } from '../../types'
 
 /**
@@ -20,32 +20,16 @@ import { ErrorEventArgs, ErrorProperties, SeverityLevel, severityLevels } from '
 const ERROR_TYPES_PATTERN =
     /^(?:[Uu]ncaught (?:exception: )?)?(?:((?:Eval|Internal|Range|Reference|Syntax|Type|URI|)Error): )?(.*)$/i
 
-const reactMinifiedRegexp = /Minified React error #\d+;/i
-
-function getPopSize(ex: Error & { framesToPop?: number }): number {
-    if (ex) {
-        if (isNumber(ex.framesToPop)) {
-            return ex.framesToPop
-        }
-
-        if (reactMinifiedRegexp.test(ex.message)) {
-            return 1
-        }
-    }
-
-    return 0
-}
-
 export function parseStackFrames(ex: Error & { framesToPop?: number; stacktrace?: string }): StackFrame[] {
     // Access and store the stacktrace property before doing ANYTHING
     // else to it because Opera is not very good at providing it
     // reliably in other circumstances.
     const stacktrace = ex.stacktrace || ex.stack || ''
 
-    const popSize = getPopSize(ex)
+    const skipLines = getSkipFirstStackStringLines(ex)
 
     try {
-        return defaultStackParser(stacktrace, popSize)
+        return defaultStackParser(stacktrace, skipLines)
     } catch {
         // no-empty
     }
@@ -53,15 +37,45 @@ export function parseStackFrames(ex: Error & { framesToPop?: number; stacktrace?
     return []
 }
 
+const reactMinifiedRegexp = /Minified React error #\d+;/i
+
+/**
+ * Certain known React errors contain links that would be falsely
+ * parsed as frames. This function check for these errors and
+ * returns number of the stack string lines to skip.
+ */
+function getSkipFirstStackStringLines(ex: Error): number {
+    if (ex && reactMinifiedRegexp.test(ex.message)) {
+        return 1
+    }
+
+    return 0
+}
+
 function errorPropertiesFromError(error: Error): ErrorProperties {
     const frames = parseStackFrames(error)
 
     return {
         $exception_type: error.name,
-        $exception_message: error.message,
+        $exception_message: extractMessage(error),
         $exception_stack_trace_raw: JSON.stringify(frames),
         $exception_level: 'error',
     }
+}
+
+/**
+ * There are cases where stacktrace.message is an Event object
+ * https://github.com/getsentry/sentry-javascript/issues/1949
+ * In this specific case we try to extract stacktrace.message.error.message
+ */
+export function extractMessage(err: Error & { message: { error?: Error } }): string {
+    const message = err.message
+
+    if (message.error && typeof message.error.message === 'string') {
+        return message.error.message
+    }
+
+    return message
 }
 
 function errorPropertiesFromString(candidate: string): ErrorProperties {
@@ -146,6 +160,7 @@ export function errorToProperties([event, source, lineno, colno, error]: ErrorEv
         } else {
             const name = domException.name || (isDOMError(domException) ? 'DOMError' : 'DOMException')
             const message = domException.message ? `${name}: ${domException.message}` : name
+            // TODO: revisit this branch
             errorProperties = errorPropertiesFromString(message)
             errorProperties.$exception_type = isDOMError(domException) ? 'DOMError' : 'DOMException'
             errorProperties.$exception_message = errorProperties.$exception_message || message
