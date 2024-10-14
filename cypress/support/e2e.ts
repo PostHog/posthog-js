@@ -15,7 +15,7 @@ beforeEach(() => {
     cy.intercept('POST', '/ses/*', { status: 1 }).as('session-recording')
     cy.intercept('GET', '/surveys/*').as('surveys')
 
-    const lasyLoadedJSFiles = [
+    const lazyLoadedJSFiles = [
         'array',
         'array.full',
         'recorder',
@@ -25,7 +25,7 @@ beforeEach(() => {
         'heatmaps',
         'web-vitals',
     ]
-    lasyLoadedJSFiles.forEach((key: string) => {
+    lazyLoadedJSFiles.forEach((key: string) => {
         cy.readFile(`dist/${key}.js`).then((body) => {
             cy.intercept(`/static/${key}.js`, { body }).as(`${key}-script`)
         })
