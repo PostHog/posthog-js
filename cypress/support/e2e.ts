@@ -26,7 +26,7 @@ beforeEach(() => {
     ]
     lasyLoadedJSFiles.forEach((key: string) => {
         cy.readFile(`dist/${key}.js`).then((body) => {
-            cy.intercept(`/static/${key}.js`, { body }).as(`${key}-script`)
+            cy.intercept(`/static/${key}.js*`, { body }).as(`${key}-script`)
         })
 
         cy.readFile(`dist/${key}.js.map`).then((body) => {
