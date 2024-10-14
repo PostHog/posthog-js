@@ -18,15 +18,8 @@ export interface ErrorProperties {
     $exception_message: string
     $exception_level: SeverityLevel
     $exception_list?: Exception[]
-    // $exception_source?: string
-    // $exception_lineno?: number
-    // $exception_colno?: number
     $exception_DOMException_code?: string
-    $exception_is_synthetic?: boolean
-    // $exception_stack_trace_raw?: string
-    $exception_handled?: boolean
     $exception_personURL?: string
-    $exception_language?: string
 }
 
 export interface Exception {
@@ -101,6 +94,7 @@ function errorPropertiesFromError(error: Error): ErrorProperties {
                 stacktrace: {
                     frames,
                 },
+                language: 'javascript',
             },
         ],
         $exception_level: 'error',
@@ -221,7 +215,6 @@ export function errorToProperties([event, _, __, ___, error]: ErrorEventArgs): E
         $exception_level: isSeverityLevel(errorProperties.$exception_level)
             ? errorProperties.$exception_level
             : 'error',
-        $exception_language: 'javascript',
     }
 }
 
