@@ -1,12 +1,22 @@
-/* eslint-disable compat/compat */
-import { v4 } from 'uuid'
 import { createPosthogInstance } from '../src/__tests__/helpers/posthog-instance'
 import { waitFor } from '@testing-library/dom'
 import { getRequests, resetRequests } from './mock-server'
+import { uuidv7 } from '../src/uuidv7'
+
+async function shortWait() {
+    // no need to worry about ie11 compat in tests
+    // eslint-disable-next-line compat/compat
+    await new Promise<void>((resolve: () => void) => setTimeout(resolve, 500))
+}
 
 describe('FunctionalTests / Feature Flags', () => {
+    let token: string
+
+    beforeEach(() => {
+        token = uuidv7()
+    })
+
     test('person properties set in identify() with new distinct_id are sent to decide', async () => {
-        const token = v4()
         const posthog = await createPosthogInstance(token, { advanced_disable_decide: false })
 
         const anonymousId = posthog.get_distinct_id()
@@ -25,14 +35,14 @@ describe('FunctionalTests / Feature Flags', () => {
         resetRequests(token)
 
         // wait for decide callback
-        await new Promise<void>((resolve: () => void) => setTimeout(resolve, 500))
+        await shortWait()
 
         // Person properties set here should also be sent to the decide endpoint.
         posthog.identify('test-id', {
             email: 'test@email.com',
         })
 
-        await new Promise((resolve: () => void) => setTimeout(resolve, 500))
+        await shortWait()
 
         await waitFor(() => {
             expect(getRequests(token)['/decide/']).toEqual([
@@ -52,7 +62,6 @@ describe('FunctionalTests / Feature Flags', () => {
     })
 
     test('person properties set in identify() with the same distinct_id are sent to decide', async () => {
-        const token = v4()
         const posthog = await createPosthogInstance(token, { advanced_disable_decide: false })
 
         const anonymousId = posthog.get_distinct_id()
@@ -71,8 +80,7 @@ describe('FunctionalTests / Feature Flags', () => {
         resetRequests(token)
 
         // wait for decide callback
-        // eslint-disable-next-line compat/compat
-        await new Promise((resolve: () => void) => setTimeout(resolve, 500))
+        await shortWait()
 
         // First we identify with a new distinct_id but with no properties set
         posthog.identify('test-id')
@@ -111,7 +119,6 @@ describe('FunctionalTests / Feature Flags', () => {
     })
 
     test('identify() triggers new request in queue after first request', async () => {
-        const token = v4()
         const posthog = await createPosthogInstance(token, { advanced_disable_decide: false })
 
         const anonymousId = posthog.get_distinct_id()
@@ -139,8 +146,7 @@ describe('FunctionalTests / Feature Flags', () => {
         })
 
         // wait for decide callback
-        // eslint-disable-next-line compat/compat
-        await new Promise((resolve: () => void) => setTimeout(resolve, 500))
+        await shortWait()
 
         // now second call should've fired
         await waitFor(() => {
@@ -157,7 +163,6 @@ describe('FunctionalTests / Feature Flags', () => {
     })
 
     test('identify() does not trigger new request in queue after first request for loaded callback', async () => {
-        const token = v4()
         await createPosthogInstance(token, {
             advanced_disable_decide: false,
             bootstrap: { distinctID: 'anon-id' },

@@ -400,8 +400,6 @@ describe('Autocapture system', () => {
             it('should capture copy', () => {
                 const fakeEvent = makeCopyEvent({
                     target: elTarget,
-                    clientX: 5,
-                    clientY: 5,
                 })
 
                 setWindowTextSelection('copy this test')
@@ -417,8 +415,6 @@ describe('Autocapture system', () => {
             it('should capture cut', () => {
                 const fakeEvent = makeCutEvent({
                     target: elTarget,
-                    clientX: 5,
-                    clientY: 5,
                 })
 
                 setWindowTextSelection('cut this test')
@@ -435,8 +431,6 @@ describe('Autocapture system', () => {
             it('ignores empty selection', () => {
                 const fakeEvent = makeCopyEvent({
                     target: elTarget,
-                    clientX: 5,
-                    clientY: 5,
                 })
 
                 setWindowTextSelection('')
@@ -450,8 +444,6 @@ describe('Autocapture system', () => {
             it('runs selection through the safe text before capture', () => {
                 const fakeEvent = makeCopyEvent({
                     target: elTarget,
-                    clientX: 5,
-                    clientY: 5,
                 })
 
                 // oh no, a social security number!

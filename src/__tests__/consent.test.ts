@@ -109,11 +109,74 @@ describe('consentManager', () => {
             )
         })
 
-        it('should not send opt in event if null or false', () => {
-            posthog.opt_in_capturing({ captureEventName: null })
-            expect(onCapture).not.toHaveBeenCalled()
+        it('should not send opt in event if false', () => {
             posthog.opt_in_capturing({ captureEventName: false })
-            expect(onCapture).not.toHaveBeenCalled()
+            expect(onCapture).toHaveBeenCalledTimes(1)
+            expect(onCapture).not.toHaveBeenCalledWith('$opt_in')
+            expect(onCapture).lastCalledWith('$pageview', expect.anything())
+        })
+
+        it('should not send opt in event if false', () => {
+            posthog.opt_in_capturing({ captureEventName: false })
+            expect(onCapture).toHaveBeenCalledTimes(1)
+            expect(onCapture).not.toHaveBeenCalledWith('$opt_in')
+            expect(onCapture).lastCalledWith('$pageview', expect.anything())
+        })
+
+        it('should not send $pageview on opt in if capturing is disabled', () => {
+            posthog = createPostHog({
+                opt_out_capturing_by_default: true,
+                _onCapture: onCapture,
+                capture_pageview: false,
+            })
+            posthog.opt_in_capturing({ captureEventName: false })
+            expect(onCapture).toHaveBeenCalledTimes(0)
+        })
+
+        it('should not send $pageview on opt in if is has already been captured', async () => {
+            posthog = createPostHog({
+                _onCapture: onCapture,
+            })
+            // Wait for the initial $pageview to be captured
+            // eslint-disable-next-line compat/compat
+            await new Promise((r) => setTimeout(r, 10))
+            expect(onCapture).toHaveBeenCalledTimes(1)
+            expect(onCapture).lastCalledWith('$pageview', expect.anything())
+            posthog.opt_in_capturing()
+            expect(onCapture).toHaveBeenCalledTimes(2)
+            expect(onCapture).toHaveBeenCalledWith('$opt_in', expect.anything())
+        })
+
+        it('should send $pageview on opt in if is has not been captured', async () => {
+            // Some other tests might call setTimeout after they've passed, so creating a new instance here.
+            const onCapture = jest.fn()
+            const posthog = createPostHog({ _onCapture: onCapture })
+
+            posthog.opt_in_capturing()
+            expect(onCapture).toHaveBeenCalledTimes(2)
+            expect(onCapture).toHaveBeenCalledWith('$opt_in', expect.anything())
+            expect(onCapture).lastCalledWith('$pageview', expect.anything())
+            // Wait for the $pageview timeout to be called
+            // eslint-disable-next-line compat/compat
+            await new Promise((r) => setTimeout(r, 10))
+            expect(onCapture).toHaveBeenCalledTimes(2)
+        })
+
+        it('should not send $pageview on subsequent opt in', async () => {
+            // Some other tests might call setTimeout after they've passed, so creating a new instance here.
+            const onCapture = jest.fn()
+            const posthog = createPostHog({ _onCapture: onCapture })
+
+            posthog.opt_in_capturing()
+            expect(onCapture).toHaveBeenCalledTimes(2)
+            expect(onCapture).toHaveBeenCalledWith('$opt_in', expect.anything())
+            expect(onCapture).lastCalledWith('$pageview', expect.anything())
+            // Wait for the $pageview timeout to be called
+            // eslint-disable-next-line compat/compat
+            await new Promise((r) => setTimeout(r, 10))
+            posthog.opt_in_capturing()
+            expect(onCapture).toHaveBeenCalledTimes(3)
+            expect(onCapture).not.lastCalledWith('$pageview', expect.anything())
         })
     })
 

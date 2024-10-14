@@ -4,6 +4,7 @@ import { ResponseComposition, rest } from 'msw'
 import { setupServer } from 'msw/lib/node'
 import { RestContext } from 'msw'
 import { RestRequest } from 'msw'
+import { decompressSync, strFromU8 } from 'fflate'
 
 // the request bodies in a store that we can inspect within tests.
 const capturedRequests: { '/e/': any[]; '/engage/': any[]; '/decide/': any[] } = {
@@ -18,8 +19,14 @@ const handleRequest = (group: string) => (req: RestRequest, res: ResponseComposi
     if (typeof body === 'string') {
         try {
             const b64Encoded = req.url.href.includes('compression=base64')
+            const gzipCompressed = req.url.href.includes('compression=gzip-js')
             if (b64Encoded) {
                 body = JSON.parse(Buffer.from(decodeURIComponent(body.split('=')[1]), 'base64').toString())
+            } else if (gzipCompressed) {
+                const data = new Uint8Array(req._body)
+                const decoded = strFromU8(decompressSync(data))
+                console.log(decoded)
+                body = JSON.parse(decoded)
             } else {
                 body = JSON.parse(decodeURIComponent(body.split('=')[1]))
             }

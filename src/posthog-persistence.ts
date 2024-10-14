@@ -61,7 +61,7 @@ export class PostHogPersistence {
         this.storage = this.buildStorage(config)
         this.load()
         if (config.debug) {
-            logger.info('Persistence loaded', this.props)
+            logger.info('Persistence loaded', config['persistence'], { ...this.props })
         }
         this.update_config(config, config)
         this.save()

@@ -3,10 +3,10 @@ import json from '@rollup/plugin-json'
 import resolve from '@rollup/plugin-node-resolve'
 import typescript from '@rollup/plugin-typescript'
 import { dts } from 'rollup-plugin-dts'
-import pkg from './package.json'
 import terser from '@rollup/plugin-terser'
 import { visualizer } from 'rollup-plugin-visualizer'
 import fs from 'fs'
+import path from 'path'
 
 const plugins = [
     json(),
@@ -20,9 +20,9 @@ const plugins = [
     terser({ toplevel: true }),
 ]
 
-/** @type {import('rollup').RollupOptions[]} */
+const entrypoints = fs.readdirSync('./src/entrypoints')
 
-const entrypoints = fs.readdirSync('./src/entrypoints').map((file) => {
+const entrypointTargets = entrypoints.map((file) => {
     const fileParts = file.split('.')
     // pop the extension
     fileParts.pop()
@@ -40,6 +40,8 @@ const entrypoints = fs.readdirSync('./src/entrypoints').map((file) => {
     // we're allowed to console log in this file :)
     // eslint-disable-next-line no-console
     console.log(`Building ${fileName} in ${format} format`)
+
+    /** @type {import('rollup').RollupOptions} */
     return {
         input: `src/entrypoints/${file}`,
         output: [
@@ -62,15 +64,26 @@ const entrypoints = fs.readdirSync('./src/entrypoints').map((file) => {
     }
 })
 
-export default [
-    ...entrypoints,
-    {
-        input: './lib/src/entrypoints/module.es.d.ts',
-        output: [{ file: pkg.types, format: 'es' }],
-        plugins: [
-            dts({
-                respectExternal: true,
-            }),
-        ],
-    },
-]
+const typeTargets = entrypoints
+    .filter((file) => file.endsWith('.es.ts'))
+    .map((file) => {
+        const source = `./lib/src/entrypoints/${file.replace('.ts', '.d.ts')}`
+        /** @type {import('rollup').RollupOptions} */
+        return {
+            input: source,
+            output: [
+                {
+                    dir: path.resolve('./dist'),
+                    entryFileNames: file.replace('.es.ts', '.d.ts'),
+                },
+            ],
+            plugins: [
+                json(),
+                dts({
+                    exclude: [],
+                }),
+            ],
+        }
+    })
+
+export default [...entrypointTargets, ...typeTargets]

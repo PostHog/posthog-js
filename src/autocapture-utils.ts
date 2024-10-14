@@ -29,7 +29,9 @@ export function getClassNames(el: Element): string[] {
         // TODO: when is this ever used?
         case 'object': // handle cases where className might be SVGAnimatedString or some other type
             className =
-                ('baseVal' in el.className ? (el.className as any).baseVal : null) || el.getAttribute('class') || ''
+                (el.className && 'baseVal' in el.className ? (el.className as any).baseVal : null) ||
+                el.getAttribute('class') ||
+                ''
             break
         default:
             className = ''
@@ -78,6 +80,18 @@ export function getSafeText(el: Element): string {
     }
 
     return trim(elText)
+}
+
+export function getEventTarget(e: Event): Element | null {
+    // https://developer.mozilla.org/en-US/docs/Web/API/Event/target#Compatibility_notes
+    if (isUndefined(e.target)) {
+        return (e.srcElement as Element) || null
+    } else {
+        if ((e.target as HTMLElement)?.shadowRoot) {
+            return (e.composedPath()[0] as Element) || null
+        }
+        return (e.target as Element) || null
+    }
 }
 
 /*

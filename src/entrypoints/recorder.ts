@@ -12,9 +12,19 @@ import { getRecordConsolePlugin } from '@rrweb/rrweb-plugin-console-record'
 // copying here so that we can use it before rrweb adopt it
 import type { IWindow, listenerHandler, RecordPlugin } from '@rrweb/types'
 import { CapturedNetworkRequest, Headers, InitiatorType, NetworkRecordOptions } from '../types'
-import { isArray, isBoolean, isDocument, isFormData, isNull, isNullish, isObject, isString } from '../utils/type-utils'
+import {
+    isArray,
+    isBoolean,
+    isDocument,
+    isFormData,
+    isNull,
+    isNullish,
+    isObject,
+    isString,
+    isUndefined,
+} from '../utils/type-utils'
 import { logger } from '../utils/logger'
-import { window } from '../utils/globals'
+import { assignableWindow } from '../utils/globals'
 import { defaultNetworkOptions } from '../extensions/replay/config'
 import { formDataToQuery } from '../utils/request-utils'
 import { patch } from '../extensions/replay/rrweb-plugins/patch'
@@ -62,7 +72,7 @@ function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Req
             )
         cb({
             requests: initialPerformanceEntries.flatMap((entry) =>
-                prepareRequest(entry, undefined, undefined, {}, true)
+                prepareRequest({ entry, method: undefined, status: undefined, networkRequest: {}, isInitial: true })
             ),
             isInitial: true,
         })
@@ -86,7 +96,9 @@ function initPerformanceObserver(cb: networkCallback, win: IWindow, options: Req
         )
 
         cb({
-            requests: performanceEntries.flatMap((entry) => prepareRequest(entry, undefined, undefined, {})),
+            requests: performanceEntries.flatMap((entry) =>
+                prepareRequest({ entry, method: undefined, status: undefined, networkRequest: {} })
+            ),
         })
     })
     // compat checked earlier
@@ -133,8 +145,8 @@ async function getRequestPerformanceEntry(
     win: IWindow,
     initiatorType: string,
     url: string,
-    after?: number,
-    before?: number,
+    start?: number,
+    end?: number,
     attempt = 0
 ): Promise<PerformanceResourceTiming | null> {
     if (attempt > 10) {
@@ -147,12 +159,12 @@ async function getRequestPerformanceEntry(
         (entry) =>
             isResourceTiming(entry) &&
             entry.initiatorType === initiatorType &&
-            (!after || entry.startTime >= after) &&
-            (!before || entry.startTime <= before)
+            (isUndefined(start) || entry.startTime >= start) &&
+            (isUndefined(end) || entry.startTime <= end)
     )
     if (!performanceEntry) {
         await new Promise((resolve) => setTimeout(resolve, 50 * attempt))
-        return getRequestPerformanceEntry(win, initiatorType, url, after, before, attempt + 1)
+        return getRequestPerformanceEntry(win, initiatorType, url, start, end, attempt + 1)
     }
     return performanceEntry
 }
@@ -197,7 +209,7 @@ function _tryReadXHRBody({
     if (isObject(body)) {
         try {
             return JSON.stringify(body)
-        } catch (e) {
+        } catch {
             return '[SessionReplay] Failed to stringify response object'
         }
     }
@@ -236,8 +248,8 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                 // eslint-disable-next-line compat/compat
                 const req = new Request(url)
                 const networkRequest: Partial<CapturedNetworkRequest> = {}
-                let after: number | undefined
-                let before: number | undefined
+                let start: number | undefined
+                let end: number | undefined
 
                 const requestHeaders: Headers = {}
                 const originalSetRequestHeader = xhr.setRequestHeader.bind(xhr)
@@ -261,7 +273,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                     ) {
                         networkRequest.requestBody = _tryReadXHRBody({ body, options, url })
                     }
-                    after = win.performance.now()
+                    start = win.performance.now()
                     return originalSend(body)
                 }
 
@@ -269,7 +281,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                     if (xhr.readyState !== xhr.DONE) {
                         return
                     }
-                    before = win.performance.now()
+                    end = win.performance.now()
                     const responseHeaders: Headers = {}
                     const rawHeaders = xhr.getAllResponseHeaders()
                     const headers = rawHeaders.trim().split(/[\r\n]+/)
@@ -294,12 +306,18 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                     ) {
                         networkRequest.responseBody = _tryReadXHRBody({ body: xhr.response, options, url })
                     }
-                    getRequestPerformanceEntry(win, 'xmlhttprequest', req.url, after, before)
+                    getRequestPerformanceEntry(win, 'xmlhttprequest', req.url, start, end)
                         .then((entry) => {
-                            if (isNull(entry)) {
-                                return
-                            }
-                            const requests = prepareRequest(entry, req.method, xhr?.status, networkRequest)
+                            const requests = prepareRequest({
+                                entry,
+                                method: req.method,
+                                status: xhr?.status,
+                                networkRequest,
+                                start,
+                                end,
+                                url: url.toString(),
+                                initiatorType: 'xmlhttprequest',
+                            })
                             cb({ requests })
                         })
                         .catch(() => {
@@ -320,16 +338,35 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
  *  NB PerformanceNavigationTiming extends PerformanceResourceTiming
  *  Here we don't care which interface it implements as both expose `serverTimings`
  */
-const exposesServerTiming = (event: PerformanceEntry): event is PerformanceResourceTiming =>
-    event.entryType === 'navigation' || event.entryType === 'resource'
+const exposesServerTiming = (event: PerformanceEntry | null): event is PerformanceResourceTiming =>
+    !isNull(event) && (event.entryType === 'navigation' || event.entryType === 'resource')
 
-function prepareRequest(
-    entry: PerformanceResourceTiming,
-    method: string | undefined,
-    status: number | undefined,
-    networkRequest: Partial<CapturedNetworkRequest>,
+function prepareRequest({
+    entry,
+    method,
+    status,
+    networkRequest,
+    isInitial,
+    start,
+    end,
+    url,
+    initiatorType,
+}: {
+    entry: PerformanceResourceTiming | null
+    method: string | undefined
+    status: number | undefined
+    networkRequest: Partial<CapturedNetworkRequest>
     isInitial?: boolean
-): CapturedNetworkRequest[] {
+    start?: number
+    end?: number
+    // if there is no performance observer entry, we still need to know the url
+    url?: string
+    // if there is no performance observer entry, we can provide the initiatorType
+    initiatorType?: string
+}): CapturedNetworkRequest[] {
+    start = entry ? entry.startTime : start
+    end = entry ? entry.responseEnd : end
+
     // kudos to sentry javascript sdk for excellent background on why to use Date.now() here
     // https://github.com/getsentry/sentry-javascript/blob/e856e40b6e71a73252e788cd42b5260f81c9c88e/packages/utils/src/time.ts#L70
     // can't start observer if performance.now() is not available
@@ -337,17 +374,20 @@ function prepareRequest(
     const timeOrigin = Math.floor(Date.now() - performance.now())
     // clickhouse can't ingest timestamps that are floats
     // (in this case representing fractions of a millisecond we don't care about anyway)
-    const timestamp = Math.floor(timeOrigin + entry.startTime)
+    // use timeOrigin if we really can't gather a start time
+    const timestamp = Math.floor(timeOrigin + (start || 0))
+
+    const entryJSON = entry ? entry.toJSON() : { name: url }
 
     const requests: CapturedNetworkRequest[] = [
         {
-            ...entry.toJSON(),
-            startTime: Math.round(entry.startTime),
-            endTime: Math.round(entry.responseEnd),
+            ...entryJSON,
+            startTime: isUndefined(start) ? undefined : Math.round(start),
+            endTime: isUndefined(end) ? undefined : Math.round(end),
             timeOrigin,
             timestamp,
             method: method,
-            initiatorType: entry.initiatorType as InitiatorType,
+            initiatorType: entry ? (entry.initiatorType as InitiatorType) : initiatorType,
             status,
             requestHeaders: networkRequest.requestHeaders,
             requestBody: networkRequest.requestBody,
@@ -414,13 +454,18 @@ function _tryReadBody(r: Request | Response): Promise<string> {
     // eslint-disable-next-line compat/compat
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => resolve('[SessionReplay] Timeout while trying to read body'), 500)
-        r.clone()
-            .text()
-            .then(
-                (txt) => resolve(txt),
-                (reason) => reject(reason)
-            )
-            .finally(() => clearTimeout(timeout))
+        try {
+            r.clone()
+                .text()
+                .then(
+                    (txt) => resolve(txt),
+                    (reason) => reject(reason)
+                )
+                .finally(() => clearTimeout(timeout))
+        } catch {
+            clearTimeout(timeout)
+            resolve('[SessionReplay] Failed to read body')
+        }
     })
 }
 
@@ -470,6 +515,7 @@ function initFetchObserver(
     }
     const recordRequestHeaders = shouldRecordHeaders('request', options.recordHeaders)
     const recordResponseHeaders = shouldRecordHeaders('response', options.recordHeaders)
+
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     const restorePatch = patch(win, 'fetch', (originalFetch: typeof fetch) => {
@@ -479,8 +525,9 @@ function initFetchObserver(
             const req = new Request(url, init)
             let res: Response | undefined
             const networkRequest: Partial<CapturedNetworkRequest> = {}
-            let after: number | undefined
-            let before: number | undefined
+            let start: number | undefined
+            let end: number | undefined
+
             try {
                 const requestHeaders: Headers = {}
                 req.headers.forEach((value, header) => {
@@ -500,9 +547,9 @@ function initFetchObserver(
                     networkRequest.requestBody = await _tryReadRequestBody({ r: req, options, url })
                 }
 
-                after = win.performance.now()
+                start = win.performance.now()
                 res = await originalFetch(req)
-                before = win.performance.now()
+                end = win.performance.now()
 
                 const responseHeaders: Headers = {}
                 res.headers.forEach((value, header) => {
@@ -524,12 +571,18 @@ function initFetchObserver(
 
                 return res
             } finally {
-                getRequestPerformanceEntry(win, 'fetch', req.url, after, before)
+                getRequestPerformanceEntry(win, 'fetch', req.url, start, end)
                     .then((entry) => {
-                        if (isNull(entry)) {
-                            return
-                        }
-                        const requests = prepareRequest(entry, req.method, res?.status, networkRequest)
+                        const requests = prepareRequest({
+                            entry,
+                            method: req.method,
+                            status: res?.status,
+                            networkRequest,
+                            start,
+                            end,
+                            url: req.url,
+                            initiatorType: 'fetch',
+                        })
                         cb({ requests })
                     })
                     .catch(() => {
@@ -615,10 +668,17 @@ export const getRecordNetworkPlugin: (options?: NetworkRecordOptions) => RecordP
 
 // rrweb/networ@1 ends
 
-if (window) {
-    ;(window as any).rrweb = { record: rrwebRecord, version: 'v2', rrwebVersion: version }
-    ;(window as any).rrwebConsoleRecord = { getRecordConsolePlugin }
-    ;(window as any).getRecordNetworkPlugin = getRecordNetworkPlugin
-}
+assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
+assignableWindow.__PosthogExtensions__.rrwebPlugins = { getRecordConsolePlugin, getRecordNetworkPlugin }
+assignableWindow.__PosthogExtensions__.rrweb = { record: rrwebRecord, version: 'v2', rrwebVersion: version }
+
+// we used to put all of these items directly on window, and now we put it on __PosthogExtensions__
+// but that means that old clients which lazily load this extension are looking in the wrong place
+// yuck,
+// so we also put them directly on the window
+// when 1.161.1 is the oldest version seen in production we can remove this
+assignableWindow.rrweb = { record: rrwebRecord, version: 'v2', rrwebVersion: version }
+assignableWindow.rrwebConsoleRecord = { getRecordConsolePlugin }
+assignableWindow.getRecordNetworkPlugin = getRecordNetworkPlugin
 
 export default rrwebRecord

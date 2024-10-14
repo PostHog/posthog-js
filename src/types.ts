@@ -93,10 +93,12 @@ export interface BootstrapConfig {
     sessionID?: string
 }
 
+export type SupportedWebVitalsMetrics = 'LCP' | 'CLS' | 'FCP' | 'INP'
+
 export interface PerformanceCaptureConfig {
     /** works with session replay to use the browser's native performance observer to capture performance metrics */
     network_timing?: boolean
-    /** works as a passenger event to use chrome's web vitals library to wrap fetch and capture web vitals */
+    /** use chrome's web vitals library to wrap fetch and capture web vitals */
     web_vitals?: boolean
     /**
      * We observe very large values reported by the Chrome web vitals library
@@ -105,6 +107,13 @@ export interface PerformanceCaptureConfig {
      * if not set this defaults to 15 minutes
      */
     __web_vitals_max_value?: number
+    /**
+     * By default all 4 metrics are captured
+     * You can set this config to restrict which metrics are captured
+     * e.g. ['CLS', 'FCP'] to only capture those two metrics
+     * NB setting this does not override whether the capture is enabled
+     */
+    web_vitals_allowed_metrics?: SupportedWebVitalsMetrics[]
 }
 
 export interface HeatmapConfig {
@@ -148,6 +157,7 @@ export interface PostHogConfig {
     /** @deprecated - use `disable_persistence` instead  */
     disable_cookie?: boolean
     disable_surveys: boolean
+    disable_web_experiments: boolean
     /** If set, posthog-js will never load external scripts such as those needed for Session Replay or Surveys. */
     disable_external_dependency_loading?: boolean
     enable_recording_console_log?: boolean
@@ -267,9 +277,25 @@ export interface SessionRecordingOptions {
     recordBody?: boolean
     // ADVANCED: while a user is active we take a full snapshot of the browser every interval. For very few sites playback performance might be better with different interval. Set to 0 to disable
     full_snapshot_interval_millis?: number
+    /*
+     ADVANCED: whether to partially compress rrweb events before sending them to the server,
+     defaults to true, can be set to false to disable partial compression
+     NB requests are still compressed when sent to the server regardless of this setting
+    */
+    compress_events?: boolean
+    /*
+     ADVANCED: alters the threshold before a recording considers a user has become idle.
+     Normally only altered alongside changes to session_idle_timeout_ms.
+     Default is 5 minutes.
+    */
+    session_idle_threshold_ms?: number
 }
 
-export type SessionIdChangedCallback = (sessionId: string, windowId: string | null | undefined) => void
+export type SessionIdChangedCallback = (
+    sessionId: string,
+    windowId: string | null | undefined,
+    changeReason?: { noSessionId: boolean; activityTimeout: boolean; sessionPastMaximumLength: boolean }
+) => void
 
 export enum Compression {
     GZipJS = 'gzip-js',
@@ -398,7 +424,7 @@ export interface PersistentStore {
     remove: (name: string, cross_subdomain?: boolean) => void
 }
 
-// eslint-disable-next-line @typescript-eslint/ban-types
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export type Breaker = {}
 export type EventHandler = (event: Event) => boolean | void
 
@@ -423,7 +449,8 @@ export interface ToolbarParams {
 
 export type SnippetArrayItem = [method: string, ...args: any[]]
 
-export type JsonType = string | number | boolean | null | { [key: string]: JsonType } | Array<JsonType>
+export type JsonRecord = { [key: string]: JsonType }
+export type JsonType = string | number | boolean | null | JsonRecord | Array<JsonType>
 
 /** A feature that isn't publicly available yet.*/
 export interface EarlyAccessFeature {

@@ -35,6 +35,10 @@ describe('posthog core', () => {
         console.error = jest.fn()
     })
 
+    it('exposes the version', () => {
+        expect(defaultPostHog().version).toMatch(/\d+\.\d+\.\d+/)
+    })
+
     describe('capture()', () => {
         const eventName = 'custom_event'
         const eventProperties = {
@@ -55,7 +59,7 @@ describe('posthog core', () => {
             })
 
             // act
-            const actual = posthog._calculate_event_properties(eventName, eventProperties)
+            const actual = posthog._calculate_event_properties(eventName, eventProperties, new Date())
 
             // assert
             expect(actual['event']).toBe('prop')

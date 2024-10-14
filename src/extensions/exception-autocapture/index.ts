@@ -1,18 +1,13 @@
-import { window } from '../../utils/globals'
+import { assignableWindow, window } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, Properties } from '../../types'
 
-import { isObject } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
-import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE, EXCEPTION_CAPTURE_ENDPOINT } from '../../constants'
-import Config from '../../config'
+import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
 
-// TODO: move this to /x/ as default
-export const BASE_ERROR_ENDPOINT = '/e/'
-const LOGGER_PREFIX = '[Exception Capture]'
+const LOGGER_PREFIX = '[Exception Autocapture]'
 
 export class ExceptionObserver {
-    private _endpoint: string
     instance: PostHog
     remoteEnabled: boolean | undefined
     private originalOnUnhandledRejectionHandler: Window['onunhandledrejection'] | null | undefined = undefined
@@ -23,14 +18,7 @@ export class ExceptionObserver {
         this.instance = instance
         this.remoteEnabled = !!this.instance.persistence?.props[EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]
 
-        // TODO: once BASE_ERROR_ENDPOINT is no longer /e/ this can be removed
-        this._endpoint = this.instance.persistence?.props[EXCEPTION_CAPTURE_ENDPOINT] || BASE_ERROR_ENDPOINT
-
         this.startIfEnabled()
-    }
-
-    get endpoint() {
-        return this._endpoint
     }
 
     get isEnabled() {
@@ -58,11 +46,9 @@ export class ExceptionObserver {
             cb()
         }
 
-        this.instance.requestRouter.loadScript(
-            this.instance.requestRouter.endpointFor(
-                'assets',
-                `/static/exception-autocapture.js?v=${Config.LIB_VERSION}`
-            ),
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
+            this.instance,
+            'exception-autocapture',
             (err) => {
                 if (err) {
                     return logger.error(LOGGER_PREFIX + ' failed to load script', err)
@@ -73,12 +59,13 @@ export class ExceptionObserver {
     }
 
     private startCapturing = () => {
-        if (!window || !this.isEnabled || this.hasHandlers || (window.onerror as any)?.__POSTHOG_INSTRUMENTED__) {
+        if (!window || !this.isEnabled || this.hasHandlers || this.isCapturing) {
             return
         }
 
-        const wrapOnError = (window as any).posthogErrorWrappingFunctions.wrapOnError
-        const wrapUnhandledRejection = (window as any).posthogErrorWrappingFunctions.wrapUnhandledRejection
+        const wrapOnError = assignableWindow.__PosthogExtensions__?.errorWrappingFunctions?.wrapOnError
+        const wrapUnhandledRejection =
+            assignableWindow.__PosthogExtensions__?.errorWrappingFunctions?.wrapUnhandledRejection
 
         if (!wrapOnError || !wrapUnhandledRejection) {
             logger.error(LOGGER_PREFIX + ' failed to load error wrapping functions - cannot start')
@@ -104,19 +91,10 @@ export class ExceptionObserver {
 
         // store this in-memory in case persistence is disabled
         this.remoteEnabled = !!autocaptureExceptionsResponse || false
-        this._endpoint = isObject(autocaptureExceptionsResponse)
-            ? autocaptureExceptionsResponse.endpoint || BASE_ERROR_ENDPOINT
-            : BASE_ERROR_ENDPOINT
 
         if (this.instance.persistence) {
             this.instance.persistence.register({
                 [EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]: this.remoteEnabled,
-            })
-            // when we come to moving the endpoint to not /e/
-            // we'll want that to persist between startup and decide response
-            // TODO: once BASE_ENDPOINT is no longer /e/ this can be removed
-            this.instance.persistence.register({
-                [EXCEPTION_CAPTURE_ENDPOINT]: this._endpoint,
             })
         }
 
@@ -130,17 +108,6 @@ export class ExceptionObserver {
             this.instance.config.token
         }/person/${this.instance.get_distinct_id()}`
 
-        this.sendExceptionEvent(errorProperties)
-    }
-
-    /**
-     * :TRICKY: Make sure we batch these requests
-     */
-    sendExceptionEvent(properties: { [key: string]: any }) {
-        this.instance.capture('$exception', properties, {
-            _noTruncate: true,
-            _batchKey: 'exceptionEvent',
-            _url: this.endpoint,
-        })
+        this.instance.exceptions.sendExceptionEvent(errorProperties)
     }
 }

@@ -27,16 +27,32 @@ export default function Home() {
         <>
             <p className="italic my-2 text-gray-500">The current time is {time}</p>
 
-            <h2>Trigger posthog events</h2>
+            <h2>
+                Trigger posthog <span>events </span>
+            </h2>
             <div className="flex items-center gap-2 flex-wrap">
                 <button onClick={() => posthog.capture('Clicked button')}>Capture event</button>
-                <button onClick={() => posthog.capture('user_subscribed')}>Subscribe to newsletter</button>
+                <button id="subscribe-user-to-newsletter" onClick={() => posthog.capture('user_subscribed')}>
+                    Subscribe to newsletter
+                </button>
                 <button onClick={() => posthog.capture('user_unsubscribed')}>Unsubscribe from newsletter</button>
                 <button data-attr="autocapture-button">Autocapture buttons</button>
                 <a className="Button" data-attr="autocapture-button" href="#">
                     <span>Autocapture a &gt; span</span>
                 </a>
                 <a href={'https://www.google.com'}>External link</a>
+                {isClient && typeof window !== 'undefined' && process.env.NEXT_PUBLIC_CROSSDOMAIN && (
+                    <a
+                        className="Button"
+                        href={
+                            window.location.host === 'www.posthog.dev:3000'
+                                ? 'https://app.posthog.dev:3000'
+                                : 'https://www.posthog.dev:3000'
+                        }
+                    >
+                        Change subdomain
+                    </a>
+                )}
 
                 <button className="ph-no-capture">Ignore certain elements</button>
 
@@ -50,7 +66,9 @@ export default function Home() {
                     Set user properties
                 </button>
 
-                <button onClick={() => posthog?.reset()}>Reset</button>
+                <button onClick={() => posthog?.reset()} id="set-user-properties">
+                    Reset
+                </button>
             </div>
 
             {isClient && (

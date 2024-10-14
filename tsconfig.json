@@ -5,9 +5,6 @@
         "lib": ["dom", "dom.iterable", "esnext"],
         "allowJs": true,
         "checkJs": true,
-        // set to true because of a bug in rrweb
-        // https://rrweb.slack.com/archives/C01BYDC5C93/p1720013675174369?thread_ts=1720008343.495629&cid=C01BYDC5C93
-        // hopefully can be returned to false when we upgrade rrweb next
         "skipLibCheck": true,
         "esModuleInterop": true,
         "allowSyntheticDefaultImports": true,
@@ -27,6 +24,6 @@
         "jsxFactory": "h",
         "jsxFragmentFactory": "Fragment"
     },
-    "include": ["src/**/*.ts*"],
-    "exclude": ["src/__tests__/**/*.ts*"]
+    "include": ["./src/**/*.ts*"],
+    "exclude": ["./src/__tests__/**/*.ts*"]
 }

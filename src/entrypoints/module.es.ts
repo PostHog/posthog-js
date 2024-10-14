@@ -1,6 +1,4 @@
-import { init_as_module } from '../posthog-core'
-export { PostHog } from '../posthog-core'
-export * from '../types'
-export * from '../posthog-surveys-types'
-export const posthog = init_as_module()
+import './external-scripts-loader'
+import posthog from './module.no-external.es'
+export * from './module.no-external.es'
 export default posthog

@@ -2,7 +2,7 @@ const checkScriptsForSrcExists = (src: string): boolean => {
     const scripts = document.querySelectorAll('body > script')
     let foundScript = false
     for (let i = 0; i < scripts.length; i++) {
-        if (scripts[i].src === src) {
+        if ((scripts[i] as any).src === src) {
             foundScript = true
             break
         }

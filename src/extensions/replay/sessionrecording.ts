@@ -9,9 +9,7 @@ import {
 } from '../../constants'
 import {
     estimateSize,
-    FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-    META_EVENT_TYPE,
     recordOptions,
     rrwebRecord,
     splitBuffer,
@@ -19,32 +17,31 @@ import {
 } from './sessionrecording-utils'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse, FlagVariant, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
-import { EventType, type eventWithTime, IncrementalSource, type listenerHandler, RecordPlugin } from '@rrweb/types'
-import Config from '../../config'
-import { timestamp } from '../../utils'
-
 import {
-    isBoolean,
-    isFunction,
-    isNull,
-    isNullish,
-    isNumber,
-    isObject,
-    isString,
-    isUndefined,
-} from '../../utils/type-utils'
+    customEvent,
+    EventType,
+    type eventWithTime,
+    IncrementalSource,
+    type listenerHandler,
+    RecordPlugin,
+} from '@rrweb/types'
+
+import { isBoolean, isFunction, isNullish, isNumber, isObject, isString, isUndefined } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
 import { assignableWindow, document, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
 import { MutationRateLimiter } from './mutation-rate-limiter'
+import { gzipSync, strFromU8, strToU8 } from 'fflate'
 
 const BASE_ENDPOINT = '/s/'
 
 const FIVE_MINUTES = 1000 * 60 * 5
 const TWO_SECONDS = 2000
-export const RECORDING_IDLE_ACTIVITY_TIMEOUT_MS = FIVE_MINUTES
-export const RECORDING_MAX_EVENT_SIZE = 1024 * 1024 * 0.9 // ~1mb (with some wiggle room)
+export const RECORDING_IDLE_THRESHOLD_MS = FIVE_MINUTES
+const ONE_KB = 1024
+const PARTIAL_COMPRESSION_THRESHOLD = ONE_KB
+export const RECORDING_MAX_EVENT_SIZE = ONE_KB * ONE_KB * 0.9 // ~1mb (with some wiggle room)
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
 
@@ -85,6 +82,14 @@ interface QueuedRRWebEvent {
     enqueuedAt: number
 }
 
+interface SessionIdlePayload {
+    eventTimestamp: number
+    lastActivityTimestamp: number
+    threshold: number
+    bufferLength: number
+    bufferSize: number
+}
+
 const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
     rrwebMethod,
     enqueuedAt: Date.now(),
@@ -92,6 +97,101 @@ const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
 })
 
 const LOGGER_PREFIX = '[SessionRecording]'
+
+type compressedFullSnapshotEvent = {
+    type: EventType.FullSnapshot
+    data: string
+}
+
+type compressedIncrementalSnapshotEvent = {
+    type: EventType.IncrementalSnapshot
+    data: {
+        source: IncrementalSource
+        texts: string
+        attributes: string
+        removes: string
+        adds: string
+    }
+}
+
+type compressedIncrementalStyleSnapshotEvent = {
+    type: EventType.IncrementalSnapshot
+    data: {
+        source: IncrementalSource.StyleSheetRule
+        id?: number
+        styleId?: number
+        replace?: string
+        replaceSync?: string
+        adds: string
+        removes: string
+    }
+}
+
+export type compressedEvent =
+    | compressedIncrementalStyleSnapshotEvent
+    | compressedFullSnapshotEvent
+    | compressedIncrementalSnapshotEvent
+export type compressedEventWithTime = compressedEvent & {
+    timestamp: number
+    delay?: number
+    // marker for compression version
+    cv: '2024-10'
+}
+
+function gzipToString(data: unknown): string {
+    return strFromU8(gzipSync(strToU8(JSON.stringify(data))), true)
+}
+
+// rrweb's packer takes an event and returns a string or the reverse on unpact,
+// but we want to be able to inspect metadata during ingestion, and don't want to compress the entire event
+// so we have a custom packer that only compresses part of some events
+function compressEvent(event: eventWithTime): eventWithTime | compressedEventWithTime {
+    const originalSize = estimateSize(event)
+    if (originalSize < PARTIAL_COMPRESSION_THRESHOLD) {
+        return event
+    }
+
+    try {
+        if (event.type === EventType.FullSnapshot) {
+            return {
+                ...event,
+                data: gzipToString(event.data),
+                cv: '2024-10',
+            }
+        }
+        if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.Mutation) {
+            return {
+                ...event,
+                cv: '2024-10',
+                data: {
+                    ...event.data,
+                    texts: gzipToString(event.data.texts),
+                    attributes: gzipToString(event.data.attributes),
+                    removes: gzipToString(event.data.removes),
+                    adds: gzipToString(event.data.adds),
+                },
+            }
+        }
+        if (event.type === EventType.IncrementalSnapshot && event.data.source === IncrementalSource.StyleSheetRule) {
+            return {
+                ...event,
+                cv: '2024-10',
+                data: {
+                    ...event.data,
+                    adds: gzipToString(event.data.adds),
+                    removes: gzipToString(event.data.removes),
+                },
+            }
+        }
+    } catch (e) {
+        logger.error(LOGGER_PREFIX + ' could not compress event - will use uncompressed event', e)
+    }
+    return event
+}
+
+function isSessionIdleEvent(e: eventWithTime): e is eventWithTime & customEvent {
+    return e.type === EventType.Custom && e.data.tag === 'sessionIdle'
+}
 
 export class SessionRecording {
     private _endpoint: string
@@ -116,6 +216,11 @@ export class SessionRecording {
 
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
 
+    private _removePageViewCaptureHook: (() => void) | undefined = undefined
+    private _onSessionIdListener: (() => void) | undefined = undefined
+    private _persistDecideOnSessionListener: (() => void) | undefined = undefined
+    private _samplingSessionListener: (() => void) | undefined = undefined
+
     // if pageview capture is disabled
     // then we can manually track href changes
     private _lastHref?: string
@@ -123,8 +228,12 @@ export class SessionRecording {
     // Util to help developers working on this feature manually override
     _forceAllowLocalhostNetworkCapture = false
 
+    private get sessionIdleThresholdMilliseconds(): number {
+        return this.instance.config.session_recording.session_idle_threshold_ms || RECORDING_IDLE_THRESHOLD_MS
+    }
+
     private get rrwebRecord(): rrwebRecord | undefined {
-        return assignableWindow?.rrweb?.record
+        return assignableWindow?.__PosthogExtensions__?.rrweb?.record
     }
 
     public get started(): boolean {
@@ -244,25 +353,6 @@ export class SessionRecording {
         this.stopRrweb = undefined
         this.receivedDecide = false
 
-        window?.addEventListener('beforeunload', () => {
-            this._flushBuffer()
-        })
-
-        window?.addEventListener('offline', () => {
-            this._tryAddCustomEvent('browser offline', {})
-        })
-
-        window?.addEventListener('online', () => {
-            this._tryAddCustomEvent('browser online', {})
-        })
-
-        window?.addEventListener('visibilitychange', () => {
-            if (document?.visibilityState) {
-                const label = 'window ' + document.visibilityState
-                this._tryAddCustomEvent(label, {})
-            }
-        })
-
         if (!this.instance.sessionManager) {
             logger.error(LOGGER_PREFIX + ' started without valid sessionManager')
             throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
@@ -275,18 +365,76 @@ export class SessionRecording {
 
         this.buffer = this.clearBuffer()
 
-        // on reload there might be an already sampled session that should be continued before decide response,
-        // so we call this here _and_ in the decide response
-        this._setupSampling()
+        if (this.sessionIdleThresholdMilliseconds >= this.sessionManager.sessionTimeoutMs) {
+            logger.warn(
+                LOGGER_PREFIX +
+                    ` session_idle_threshold_ms (${this.sessionIdleThresholdMilliseconds}) is greater than the session timeout (${this.sessionManager.sessionTimeoutMs}). Session will never be detected as idle`
+            )
+        }
+    }
+
+    private _onBeforeUnload = (): void => {
+        this._flushBuffer()
+    }
+
+    private _onOffline = (): void => {
+        this._tryAddCustomEvent('browser offline', {})
+    }
+
+    private _onOnline = (): void => {
+        this._tryAddCustomEvent('browser online', {})
+    }
+
+    private _onVisibilityChange = (): void => {
+        if (document?.visibilityState) {
+            const label = 'window ' + document.visibilityState
+            this._tryAddCustomEvent(label, {})
+        }
     }
 
     startIfEnabledOrStop() {
         if (this.isRecordingEnabled) {
             this._startCapture()
-            logger.info(LOGGER_PREFIX + ' started')
+
+            // calling addEventListener multiple times is safe and will not add duplicates
+            window?.addEventListener('beforeunload', this._onBeforeUnload)
+            window?.addEventListener('offline', this._onOffline)
+            window?.addEventListener('online', this._onOnline)
+            window?.addEventListener('visibilitychange', this._onVisibilityChange)
+
+            // on reload there might be an already sampled session that should be continued before decide response,
+            // so we call this here _and_ in the decide response
+            this._setupSampling()
+
+            if (isNullish(this._removePageViewCaptureHook)) {
+                // :TRICKY: rrweb does not capture navigation within SPA-s, so hook into our $pageview events to get access to all events.
+                //   Dropping the initial event is fine (it's always captured by rrweb).
+                this._removePageViewCaptureHook = this.instance._addCaptureHook((eventName) => {
+                    // If anything could go wrong here it has the potential to block the main loop,
+                    // so we catch all errors.
+                    try {
+                        if (eventName === '$pageview') {
+                            const href = window ? this._maskUrl(window.location.href) : ''
+                            if (!href) {
+                                return
+                            }
+                            this._tryAddCustomEvent('$pageview', { href })
+                        }
+                    } catch (e) {
+                        logger.error('Could not add $pageview to rrweb session', e)
+                    }
+                })
+            }
+
+            if (!this._onSessionIdListener) {
+                this._onSessionIdListener = this.sessionManager.onSessionId((sessionId, windowId, changeReason) => {
+                    if (changeReason) {
+                        this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
+                    }
+                })
+            }
         } else {
             this.stopRecording()
-            this.clearBuffer()
         }
     }
 
@@ -295,6 +443,22 @@ export class SessionRecording {
             this.stopRrweb()
             this.stopRrweb = undefined
             this._captureStarted = false
+
+            window?.removeEventListener('beforeunload', this._onBeforeUnload)
+            window?.removeEventListener('offline', this._onOffline)
+            window?.removeEventListener('online', this._onOnline)
+            window?.removeEventListener('visibilitychange', this._onVisibilityChange)
+
+            this.clearBuffer()
+            clearInterval(this._fullSnapshotTimer)
+
+            this._removePageViewCaptureHook?.()
+            this._removePageViewCaptureHook = undefined
+            this._onSessionIdListener?.()
+            this._onSessionIdListener = undefined
+            this._samplingSessionListener?.()
+            this._samplingSessionListener = undefined
+
             logger.info(LOGGER_PREFIX + ' stopped')
         }
     }
@@ -358,7 +522,7 @@ export class SessionRecording {
 
         this._setupSampling()
 
-        if (!isNullish(this._linkedFlag)) {
+        if (!isNullish(this._linkedFlag) && !this._linkedFlagSeen) {
             const linkedFlag = isString(this._linkedFlag) ? this._linkedFlag : this._linkedFlag.flag
             const linkedVariant = isString(this._linkedFlag) ? null : this._linkedFlag.variant
             this.instance.onFeatureFlags((_flags, variants) => {
@@ -381,13 +545,11 @@ export class SessionRecording {
         this.startIfEnabledOrStop()
     }
 
-    private _samplingSessionListener: (() => void) | null = null
-
     /**
      * This might be called more than once so needs to be idempotent
      */
     private _setupSampling() {
-        if (isNumber(this.sampleRate) && isNull(this._samplingSessionListener)) {
+        if (isNumber(this.sampleRate) && isNullish(this._samplingSessionListener)) {
             this._samplingSessionListener = this.sessionManager.onSessionId((sessionId) => {
                 this.makeSamplingDecision(sessionId)
             })
@@ -424,7 +586,10 @@ export class SessionRecording {
             }
 
             persistResponse()
-            this.sessionManager.onSessionId(persistResponse)
+
+            // in case we see multiple decide responses, we should only listen with the response from the most recent one
+            this._persistDecideOnSessionListener?.()
+            this._persistDecideOnSessionListener = this.sessionManager.onSessionId(persistResponse)
         }
     }
 
@@ -440,7 +605,7 @@ export class SessionRecording {
                     payload: [JSON.stringify(message)],
                 },
             },
-            timestamp: timestamp(),
+            timestamp: Date.now(),
         })
     }
 
@@ -473,9 +638,9 @@ export class SessionRecording {
         // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
         // imported), don't load script. Otherwise, remotely import recorder.js from cdn since it hasn't been loaded.
         if (!this.rrwebRecord) {
-            this.instance.requestRouter.loadScript(`/static/recorder.js?v=${Config.LIB_VERSION}`, (err) => {
+            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'recorder', (err) => {
                 if (err) {
-                    return logger.error(LOGGER_PREFIX + ` could not load recorder.js`, err)
+                    return logger.error(LOGGER_PREFIX + ` could not load recorder`, err)
                 }
 
                 this._onScriptLoaded()
@@ -501,10 +666,24 @@ export class SessionRecording {
 
         if (!isUserInteraction && !this.isIdle) {
             // We check if the lastActivityTimestamp is old enough to go idle
-            if (event.timestamp - this._lastActivityTimestamp > RECORDING_IDLE_ACTIVITY_TIMEOUT_MS) {
+            const timeSinceLastActivity = event.timestamp - this._lastActivityTimestamp
+            if (timeSinceLastActivity > this.sessionIdleThresholdMilliseconds) {
+                // we mark as idle right away,
+                // or else we get multiple idle events
+                // if there are lots of non-user activity events being emitted
                 this.isIdle = true
+
                 // don't take full snapshots while idle
-                clearTimeout(this._fullSnapshotTimer)
+                clearInterval(this._fullSnapshotTimer)
+
+                this._tryAddCustomEvent('sessionIdle', {
+                    eventTimestamp: event.timestamp,
+                    lastActivityTimestamp: this._lastActivityTimestamp,
+                    threshold: this.sessionIdleThresholdMilliseconds,
+                    bufferLength: this.buffer.data.length,
+                    bufferSize: this.buffer.size,
+                })
+
                 // proactively flush the buffer in case the session is idle for a long time
                 this._flushBuffer()
             }
@@ -540,12 +719,11 @@ export class SessionRecording {
         this.windowId = windowId
         this.sessionId = sessionId
 
-        if (
-            returningFromIdle ||
-            ([FULL_SNAPSHOT_EVENT_TYPE, META_EVENT_TYPE].indexOf(event.type) === -1 &&
-                (windowIdChanged || sessionIdChanged || isUndefined(this._fullSnapshotTimer)))
-        ) {
-            this._tryTakeFullSnapshot()
+        if (sessionIdChanged || windowIdChanged) {
+            this.stopRecording()
+            this.startIfEnabledOrStop()
+        } else if (returningFromIdle) {
+            this._scheduleFullSnapshot()
         }
     }
 
@@ -589,7 +767,7 @@ export class SessionRecording {
             maskTextSelector: undefined,
             maskTextFn: undefined,
             maskAllInputs: true,
-            maskInputOptions: {},
+            maskInputOptions: { password: true },
             maskInputFn: undefined,
             slimDOMOptions: {},
             collectFonts: false,
@@ -601,9 +779,14 @@ export class SessionRecording {
         const userSessionRecordingOptions = this.instance.config.session_recording
         for (const [key, value] of Object.entries(userSessionRecordingOptions || {})) {
             if (key in sessionRecordingOptions) {
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
-                sessionRecordingOptions[key] = value
+                if (key === 'maskInputOptions') {
+                    // ensure password is set if not included
+                    sessionRecordingOptions.maskInputOptions = { password: true, ...value }
+                } else {
+                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                    // @ts-ignore
+                    sessionRecordingOptions[key] = value
+                }
             }
         }
 
@@ -643,24 +826,6 @@ export class SessionRecording {
             ...sessionRecordingOptions,
         })
 
-        // :TRICKY: rrweb does not capture navigation within SPA-s, so hook into our $pageview events to get access to all events.
-        //   Dropping the initial event is fine (it's always captured by rrweb).
-        this.instance._addCaptureHook((eventName) => {
-            // If anything could go wrong here it has the potential to block the main loop,
-            // so we catch all errors.
-            try {
-                if (eventName === '$pageview') {
-                    const href = window ? this._maskUrl(window.location.href) : ''
-                    if (!href) {
-                        return
-                    }
-                    this._tryAddCustomEvent('$pageview', { href })
-                }
-            } catch (e) {
-                logger.error('Could not add $pageview to rrweb session', e)
-            }
-        })
-
         // We reset the last activity timestamp, resetting the idle timer
         this._lastActivityTimestamp = Date.now()
         this.isIdle = false
@@ -672,6 +837,11 @@ export class SessionRecording {
 
         this._tryAddCustomEvent('$posthog_config', {
             config: this.instance.config,
+        })
+
+        logger.info(LOGGER_PREFIX + ' started', {
+            idleThreshold: this.sessionIdleThresholdMilliseconds,
+            maxIdleTime: this.sessionManager.sessionTimeoutMs,
         })
     }
 
@@ -697,18 +867,18 @@ export class SessionRecording {
     private _gatherRRWebPlugins() {
         const plugins: RecordPlugin<unknown>[] = []
 
-        if (assignableWindow.rrwebConsoleRecord && this.isConsoleLogCaptureEnabled) {
-            plugins.push(assignableWindow.rrwebConsoleRecord.getRecordConsolePlugin())
+        const recordConsolePlugin = assignableWindow.__PosthogExtensions__?.rrwebPlugins?.getRecordConsolePlugin
+        if (recordConsolePlugin && this.isConsoleLogCaptureEnabled) {
+            plugins.push(recordConsolePlugin())
         }
 
-        if (this.networkPayloadCapture && isFunction(assignableWindow.getRecordNetworkPlugin)) {
+        const networkPlugin = assignableWindow.__PosthogExtensions__?.rrwebPlugins?.getRecordNetworkPlugin
+        if (this.networkPayloadCapture && isFunction(networkPlugin)) {
             const canRecordNetwork = !isLocalhost() || this._forceAllowLocalhostNetworkCapture
 
             if (canRecordNetwork) {
                 plugins.push(
-                    assignableWindow.getRecordNetworkPlugin(
-                        buildNetworkRequestOptions(this.instance.config, this.networkPayloadCapture)
-                    )
+                    networkPlugin(buildNetworkRequestOptions(this.instance.config, this.networkPayloadCapture))
                 )
             } else {
                 logger.info(LOGGER_PREFIX + ' NetworkCapture not started because we are on localhost.')
@@ -751,19 +921,33 @@ export class SessionRecording {
 
         // TODO: Re-add ensureMaxMessageSize once we are confident in it
         const event = truncateLargeConsoleLogs(throttledEvent)
-        const size = estimateSize(event)
 
         this._updateWindowAndSessionIds(event)
 
-        // When in an idle state we keep recording, but don't capture the events
-        // but we allow custom events even when idle
-        if (this.isIdle && event.type !== EventType.Custom) {
+        // When in an idle state we keep recording, but don't capture the events,
+        if (this.isIdle && !isSessionIdleEvent(event)) {
             return
         }
 
+        if (isSessionIdleEvent(event)) {
+            // session idle events have a timestamp when rrweb sees them
+            // which can artificially lengthen a session
+            // we know when we detected it based on the payload and can correct the timestamp
+            const payload = event.data.payload as SessionIdlePayload
+            if (payload) {
+                const lastActivity = payload.lastActivityTimestamp
+                const threshold = payload.threshold
+                event.timestamp = lastActivity + threshold
+            }
+        }
+
+        const eventToSend =
+            this.instance.config.session_recording.compress_events ?? true ? compressEvent(event) : event
+        const size = estimateSize(eventToSend)
+
         const properties = {
             $snapshot_bytes: size,
-            $snapshot_data: event,
+            $snapshot_data: eventToSend,
             $session_id: this.sessionId,
             $window_id: this.windowId,
         }
@@ -876,8 +1060,9 @@ export class SessionRecording {
     private _captureSnapshotBuffered(properties: Properties) {
         const additionalBytes = 2 + (this.buffer?.data.length || 0) // 2 bytes for the array brackets and 1 byte for each comma
         if (
-            this.buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE ||
-            this.buffer.sessionId !== this.sessionId
+            !this.isIdle && // we never want to flush when idle
+            (this.buffer.size + properties.$snapshot_bytes + additionalBytes > RECORDING_MAX_EVENT_SIZE ||
+                this.buffer.sessionId !== this.sessionId)
         ) {
             this.buffer = this._flushBuffer()
         }
@@ -885,7 +1070,7 @@ export class SessionRecording {
         this.buffer.size += properties.$snapshot_bytes
         this.buffer.data.push(properties.$snapshot_data)
 
-        if (!this.flushBufferTimer) {
+        if (!this.flushBufferTimer && !this.isIdle) {
             this.flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)
@@ -898,6 +1083,18 @@ export class SessionRecording {
             _url: this.instance.requestRouter.endpointFor('api', this._endpoint),
             _noTruncate: true,
             _batchKey: SESSION_RECORDING_BATCH_KEY,
+            skip_client_rate_limiting: true,
         })
+    }
+
+    /**
+     * this ignores the linked flag config and causes capture to start
+     * (if recording would have started had the flag been received i.e. it does not override other config).
+     *
+     * It is not usual to call this directly,
+     * instead call `posthog.startSessionRecording({linked_flag: true})`
+     * */
+    public overrideLinkedFlag() {
+        this._linkedFlagSeen = true
     }
 }

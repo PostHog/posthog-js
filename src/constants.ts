@@ -13,8 +13,9 @@ export const EVENT_TIMERS_KEY = '__timers'
 export const AUTOCAPTURE_DISABLED_SERVER_SIDE = '$autocapture_disabled_server_side'
 export const HEATMAPS_ENABLED_SERVER_SIDE = '$heatmaps_enabled_server_side'
 export const EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE = '$exception_capture_enabled_server_side'
-export const EXCEPTION_CAPTURE_ENDPOINT = '$exception_capture_endpoint'
+export const EXCEPTION_CAPTURE_ENDPOINT_SUFFIX = '$exception_capture_endpoint_suffix'
 export const WEB_VITALS_ENABLED_SERVER_SIDE = '$web_vitals_enabled_server_side'
+export const WEB_VITALS_ALLOWED_METRICS = '$web_vitals_allowed_metrics'
 export const SESSION_RECORDING_ENABLED_SERVER_SIDE = '$session_recording_enabled_server_side'
 export const CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE = '$console_log_recording_enabled_server_side'
 export const SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE = '$session_recording_network_payload_capture'
@@ -41,6 +42,8 @@ export const INITIAL_REFERRER_INFO = '$initial_referrer_info'
 export const INITIAL_PERSON_INFO = '$initial_person_info'
 export const ENABLE_PERSON_PROCESSING = '$epp'
 export const TOOLBAR_ID = '__POSTHOG_TOOLBAR__'
+
+export const WEB_EXPERIMENTS = '$web_experiments'
 
 // These are properties that are reserved and will not be automatically included in events
 export const PERSISTENCE_RESERVED_PROPERTIES = [
