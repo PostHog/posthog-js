@@ -1,29 +1,29 @@
 diff --git a/dist/rrweb.js b/dist/rrweb.js
-index 1db2d08b2fe9a73521001c3aa88b1a64d1b3e71a..71be9fddf7ae925099cccba73057fffaa110e11b 100644
+index 1db2d08b2fe9a73521001c3aa88b1a64d1b3e71a..53b91e6338ba49e8d461b7da5ffd82cbce41e71e 100644
 --- a/dist/rrweb.js
 +++ b/dist/rrweb.js
-@@ -661,9 +661,17 @@ function serializeElementNode(n2, options) {
+@@ -661,9 +661,18 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "link" && inlineStylesheet) {
 -    const stylesheet = Array.from(doc.styleSheets).find((s2) => {
 -      return s2.href === n2.href;
--    });
-+    function findStylesheet(href) {
-+      return Array.from(doc.styleSheets).find((s2) => {
-+        return s2.href === href;
-+      });
-+    }
-+    let stylesheet = findStylesheet(n2.href);
++    const href = n.href
++    let stylesheet = Array.from(doc.styleSheets).find((s) => {
++      return s.href === href;
+     });
 +    if (!stylesheet && href.includes('.css')) {
-+      const stylesheetPath = href.replace(window.location.href, '');
-+      const potentialStylesheetHref = window.location.origin + '/' + stylesheetPath;
-+      stylesheet = findStylesheet(potentialStylesheetHref);
++      const rootDomain = window.location.origin
++      const stylesheetPath = href.replace(window.location.href, '')
++      const potentialStylesheetHref = rootDomain + '/' + stylesheetPath
++      stylesheet = Array.from(doc.styleSheets).find((s) => {
++        return s.href === potentialStylesheetHref;
++      });
 +    }
      let cssText = null;
      if (stylesheet) {
        cssText = stringifyStylesheet(stylesheet);
-@@ -5016,11 +5024,19 @@ class CanvasManager {
+@@ -5016,11 +5025,19 @@ class CanvasManager {
      let rafId;
      const getCanvas = () => {
        const matchedCanvas = [];
@@ -48,7 +48,7 @@ index 1db2d08b2fe9a73521001c3aa88b1a64d1b3e71a..71be9fddf7ae925099cccba73057fffa
        return matchedCanvas;
      };
      const takeCanvasSnapshots = (timestamp) => {
-@@ -5041,13 +5057,20 @@ class CanvasManager {
+@@ -5041,13 +5058,20 @@ class CanvasManager {
              context.clear(context.COLOR_BUFFER_BIT);
            }
          }
@@ -72,7 +72,7 @@ index 1db2d08b2fe9a73521001c3aa88b1a64d1b3e71a..71be9fddf7ae925099cccba73057fffa
              dataURLOptions: options.dataURLOptions
            },
            [bitmap]
-@@ -9805,6 +9828,7 @@ class Replayer {
+@@ -9805,6 +9829,7 @@ class Replayer {
  }
  const { addCustomEvent } = record;
  const { freezePage } = record;
@@ -80,7 +80,7 @@ index 1db2d08b2fe9a73521001c3aa88b1a64d1b3e71a..71be9fddf7ae925099cccba73057fffa
  export {
    EventType,
    IncrementalSource,
-@@ -9816,6 +9840,7 @@ export {
+@@ -9816,6 +9841,7 @@ export {
    freezePage,
    _mirror as mirror,
    record,
