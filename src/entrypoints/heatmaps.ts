@@ -1,23 +1,15 @@
-import { includes, registerEvent } from './utils'
-import RageClick from './extensions/rageclick'
-import { DecideResponse, Properties } from './types'
-import { PostHog } from './posthog-core'
-
-import { document, window } from './utils/globals'
-import { getEventTarget, getParentElement, isElementNode, isTag } from './autocapture-utils'
-import { HEATMAPS_ENABLED_SERVER_SIDE, TOOLBAR_ID } from './constants'
-import { isEmptyObject, isObject, isUndefined } from './utils/type-utils'
-import { logger } from './utils/logger'
+import { PostHog } from '../posthog-core'
+import RageClick from '../extensions/rageclick'
+import { TOOLBAR_ID } from '../constants'
+import { isEmptyObject, isObject } from '../utils/type-utils'
+import { logger } from '../utils/logger'
+import { assignableWindow, document, window } from '../utils/globals'
+import { HeatmapEventBuffer, Properties } from '../types'
+import { includes, registerEvent } from '../utils'
+import { getEventTarget, getParentElement, isElementNode, isTag } from '../autocapture-utils'
+import { LazyExtension, LOGGER_PREFIX } from '../extensions/heatmaps'
 
 const DEFAULT_FLUSH_INTERVAL = 5000
-const HEATMAPS = 'heatmaps'
-const LOGGER_PREFIX = '[' + HEATMAPS + ']'
-
-type HeatmapEventBuffer =
-    | {
-          [key: string]: Properties[]
-      }
-    | undefined
 
 function elementOrParentPositionMatches(el: Element | null, matches: string[], breakOnElement?: Element): boolean {
     let curEl: Element | null | false = el
@@ -42,24 +34,18 @@ function elementInToolbar(el: Element): boolean {
     return el.id === TOOLBAR_ID || !!el.closest?.('#' + TOOLBAR_ID)
 }
 
-export class Heatmaps {
+export class HeatmapsAutocapture implements LazyExtension {
     instance: PostHog
     rageclicks = new RageClick()
-    _enabledServerSide: boolean = false
+
     _initialized = false
     _mouseMoveTimeout: ReturnType<typeof setTimeout> | undefined
 
-    // TODO: Periodically flush this if no other event has taken care of it
     private buffer: HeatmapEventBuffer
     private _flushInterval: ReturnType<typeof setInterval> | null = null
 
     constructor(instance: PostHog) {
         this.instance = instance
-        this._enabledServerSide = !!this.instance.persistence?.props[HEATMAPS_ENABLED_SERVER_SIDE]
-
-        window?.addEventListener('beforeunload', () => {
-            this.flush()
-        })
     }
 
     public get flushIntervalMilliseconds(): number {
@@ -73,18 +59,12 @@ export class Heatmaps {
         return flushInterval
     }
 
-    public get isEnabled(): boolean {
-        if (!isUndefined(this.instance.config.capture_heatmaps)) {
-            return this.instance.config.capture_heatmaps !== false
-        }
-        if (!isUndefined(this.instance.config.enable_heatmaps)) {
-            return this.instance.config.enable_heatmaps
-        }
-        return this._enabledServerSide
+    private onUnload = () => {
+        this.flush()
     }
 
-    public startIfEnabled(): void {
-        if (this.isEnabled) {
+    startIfEnabled(): void {
+        if (this.instance.heatmaps?.isEnabled) {
             // nested if here since we only want to run the else
             // if this.enabled === false
             // not if this method is called more than once
@@ -94,23 +74,20 @@ export class Heatmaps {
             logger.info(LOGGER_PREFIX + ' starting...')
             this._setupListeners()
             this._flushInterval = setInterval(this.flush.bind(this), this.flushIntervalMilliseconds)
+            window?.addEventListener('beforeunload', this.onUnload)
         } else {
-            clearInterval(this._flushInterval ?? undefined)
-            this.getAndClearBuffer()
+            this.stop()
         }
     }
 
-    public afterDecideResponse(response: DecideResponse) {
-        const optIn = !!response['heatmaps']
+    stop(): void {
+        clearInterval(this._flushInterval ?? undefined)
+        this.getAndClearBuffer()
+        window?.removeEventListener('beforeunload', this.onUnload)
+    }
 
-        if (this.instance.persistence) {
-            this.instance.persistence.register({
-                [HEATMAPS_ENABLED_SERVER_SIDE]: optIn,
-            })
-        }
-        // store this in-memory in case persistence is disabled
-        this._enabledServerSide = optIn
-        this.startIfEnabled()
+    afterDecideResponse() {
+        // no-op
     }
 
     public getAndClearBuffer(): HeatmapEventBuffer {
@@ -205,3 +182,6 @@ export class Heatmaps {
         })
     }
 }
+
+assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
+assignableWindow.__PosthogExtensions__.HeatmapsAutocapture = (ph) => new HeatmapsAutocapture(ph)

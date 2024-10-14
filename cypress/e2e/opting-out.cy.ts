@@ -33,7 +33,7 @@ describe('opting out', () => {
             cy.get('[data-cy-input]').type('hello world! ')
 
             assertWhetherPostHogRequestsWereCalled({
-                '@recorder': false,
+                '@recorder-script': false,
                 '@decide': false,
                 '@session-recording': false,
             })
@@ -51,7 +51,7 @@ describe('opting out', () => {
             cy.posthogInit({ opt_out_capturing_by_default: true })
 
             assertWhetherPostHogRequestsWereCalled({
-                '@recorder': false,
+                '@recorder-script': false,
                 '@decide': true,
                 '@session-recording': false,
             })
@@ -69,7 +69,7 @@ describe('opting out', () => {
             cy.posthogInit({ disable_session_recording: true })
 
             assertWhetherPostHogRequestsWereCalled({
-                '@recorder': false,
+                '@recorder-script': false,
                 '@decide': true,
                 '@session-recording': false,
             })
@@ -87,7 +87,7 @@ describe('opting out', () => {
             cy.posthogInit({ opt_out_capturing_by_default: true })
 
             assertWhetherPostHogRequestsWereCalled({
-                '@recorder': false,
+                '@recorder-script': false,
                 '@decide': true,
                 '@session-recording': false,
             })
@@ -101,7 +101,7 @@ describe('opting out', () => {
             })
 
             assertWhetherPostHogRequestsWereCalled({
-                '@recorder': true,
+                '@recorder-script': true,
                 '@decide': true,
                 // no call to session-recording yet
             })
@@ -117,7 +117,7 @@ describe('opting out', () => {
             cy.posthogInit({ disable_session_recording: true })
 
             assertWhetherPostHogRequestsWereCalled({
-                '@recorder': false,
+                '@recorder-script': false,
                 '@decide': true,
                 '@session-recording': false,
             })
@@ -134,7 +134,7 @@ describe('opting out', () => {
             cy.posthog().invoke('startSessionRecording')
 
             assertWhetherPostHogRequestsWereCalled({
-                '@recorder': true,
+                '@recorder-script': true,
                 '@decide': true,
                 // no call to session-recording yet
             })
@@ -163,7 +163,7 @@ describe('opting out', () => {
             })
 
             assertWhetherPostHogRequestsWereCalled({
-                '@recorder': false,
+                '@recorder-script': false,
                 '@decide': true,
                 '@session-recording': false,
             })
@@ -177,7 +177,7 @@ describe('opting out', () => {
             })
 
             assertWhetherPostHogRequestsWereCalled({
-                '@recorder': true,
+                '@recorder-script': true,
                 '@decide': true,
                 // no call to session-recording yet
             })
@@ -206,7 +206,7 @@ describe('opting out', () => {
             })
 
             assertWhetherPostHogRequestsWereCalled({
-                '@recorder': false,
+                '@recorder-script': false,
                 '@decide': true,
                 '@session-recording': false,
             })
@@ -220,7 +220,7 @@ describe('opting out', () => {
             })
 
             assertWhetherPostHogRequestsWereCalled({
-                '@recorder': true,
+                '@recorder-script': true,
                 '@decide': true,
                 // no call to session-recording yet
             })
@@ -262,7 +262,7 @@ describe('opting out', () => {
             })
 
             assertWhetherPostHogRequestsWereCalled({
-                '@recorder': false,
+                '@recorder-script': false,
                 '@decide': true,
                 '@session-recording': false,
             })
@@ -276,7 +276,7 @@ describe('opting out', () => {
             })
 
             assertWhetherPostHogRequestsWereCalled({
-                '@recorder': true,
+                '@recorder-script': true,
                 '@decide': true,
                 // no call to session-recording yet
             })
@@ -323,7 +323,7 @@ describe('opting out', () => {
             })
 
             assertWhetherPostHogRequestsWereCalled({
-                '@recorder': false,
+                '@recorder-script': false,
                 '@decide': true,
                 '@session-recording': false,
             })
@@ -337,7 +337,7 @@ describe('opting out', () => {
             })
 
             assertWhetherPostHogRequestsWereCalled({
-                '@recorder': true,
+                '@recorder-script': true,
                 '@decide': true,
                 // no call to session-recording yet
             })
