@@ -47,7 +47,7 @@ import { gzipSync, strFromU8, strToU8 } from 'fflate'
 const BASE_ENDPOINT = '/s/'
 
 const ONE_MINUTE = 1000 * 60
-const FIVE_MINUTES = 1000 * 60 * 5
+const FIVE_MINUTES = ONE_MINUTE * 5
 const TWO_SECONDS = 2000
 export const RECORDING_IDLE_THRESHOLD_MS = FIVE_MINUTES
 const ONE_KB = 1024
