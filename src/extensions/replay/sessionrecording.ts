@@ -69,7 +69,7 @@ const ACTIVE_SOURCES = [
     IncrementalSource.Drag,
 ]
 
-const TRIGGER_STATUSES = ['activated', 'pending', 'disabled'] as const
+const TRIGGER_STATUSES = ['trigger_activated', 'trigger_pending', 'trigger_disabled'] as const
 type TriggerStatus = typeof TRIGGER_STATUSES[number]
 
 /**
@@ -361,7 +361,7 @@ export class SessionRecording {
             return 'buffering'
         }
 
-        if (this.urlTriggerStatus === 'pending') {
+        if (this.urlTriggerStatus === 'trigger_pending') {
             return 'buffering'
         }
 
@@ -372,9 +372,9 @@ export class SessionRecording {
         }
     }
 
-    private get urlTriggerStatus(): 'activated' | 'pending' | 'disabled' {
+    private get urlTriggerStatus(): TriggerStatus {
         if (this.receivedDecide && this._urlTriggers.length === 0) {
-            return 'disabled'
+            return 'trigger_disabled'
         }
 
         const currentValue = this.instance?.get_property(SESSION_RECORDING_URL_TRIGGER_ACTIVATED)
@@ -383,7 +383,7 @@ export class SessionRecording {
             return currentValue as TriggerStatus
         }
 
-        return 'pending'
+        return 'trigger_pending'
     }
 
     private set urlTriggerStatus(status: TriggerStatus) {
