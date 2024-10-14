@@ -15,44 +15,22 @@ beforeEach(() => {
     cy.intercept('POST', '/ses/*', { status: 1 }).as('session-recording')
     cy.intercept('GET', '/surveys/*').as('surveys')
 
-    cy.readFile('dist/array.full.js').then((body) => {
-        cy.intercept('/static/array.full.js', { body })
-    })
+    const lazyLoadedJSFiles = [
+        'array',
+        'array.full',
+        'recorder',
+        'surveys',
+        'exception-autocapture',
+        'tracing-headers',
+        'web-vitals',
+    ]
+    lazyLoadedJSFiles.forEach((key: string) => {
+        cy.readFile(`dist/${key}.js`).then((body) => {
+            cy.intercept(`/static/${key}.js*`, { body }).as(`${key}-script`)
+        })
 
-    cy.readFile('dist/array.js').then((body) => {
-        cy.intercept('/static/array.js', { body })
-    })
-
-    cy.readFile('dist/array.full.js.map').then((body) => {
-        cy.intercept('/static/array.full.js.map', { body })
-    })
-
-    cy.readFile('dist/array.js.map').then((body) => {
-        cy.intercept('/static/array.js.map', { body })
-    })
-
-    cy.readFile('dist/recorder.js').then((body) => {
-        cy.intercept('/static/recorder.js*', { body }).as('recorder')
-        cy.intercept('/static/recorder-v2.js*', { body }).as('recorderv2')
-    })
-
-    cy.readFile('dist/recorder.js.map').then((body) => {
-        cy.intercept('/static/recorder.js.map', { body })
-    })
-
-    cy.readFile('dist/surveys.js').then((body) => {
-        cy.intercept('/static/surveys.js*', { body })
-    })
-
-    cy.readFile('dist/surveys.js.map').then((body) => {
-        cy.intercept('/static/surveys.js.map', { body })
-    })
-
-    cy.readFile('dist/exception-autocapture.js').then((body) => {
-        cy.intercept('/static/exception-autocapture.js*', { body }).as('exception-autocapture-script')
-    })
-
-    cy.readFile('dist/exception-autocapture.js.map').then((body) => {
-        cy.intercept('/static/exception-autocapture.js.map', { body })
+        cy.readFile(`dist/${key}.js.map`).then((body) => {
+            cy.intercept(`/static/${key}.js.map`, { body })
+        })
     })
 })
