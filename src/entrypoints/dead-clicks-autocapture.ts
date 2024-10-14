@@ -7,8 +7,6 @@ import { getPropertiesFromElement } from '../autocapture'
 
 const DEFAULT_CONFIG: Required<DeadClicksAutoCaptureConfig> = {
     element_attribute_ignorelist: [],
-    mask_all_element_attributes: false,
-    mask_all_text: false,
     scroll_threshold_ms: 100,
     selection_change_threshold_ms: 100,
     mutation_threshold_ms: 2500,
@@ -58,9 +56,6 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
             selection_change_threshold_ms:
                 providedConfig?.selection_change_threshold_ms ?? DEFAULT_CONFIG.selection_change_threshold_ms,
             mutation_threshold_ms: providedConfig?.mutation_threshold_ms ?? DEFAULT_CONFIG.mutation_threshold_ms,
-            mask_all_element_attributes:
-                providedConfig?.mask_all_element_attributes ?? DEFAULT_CONFIG.mask_all_element_attributes,
-            mask_all_text: providedConfig?.mask_all_text ?? DEFAULT_CONFIG.mask_all_text,
         }
     }
 
@@ -249,7 +244,12 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
         // TODO autocaputure config
         this.instance.capture('$dead_click', {
             ...properties,
-            ...getPropertiesFromElement(click.node, false, false, this._config.element_attribute_ignorelist),
+            ...getPropertiesFromElement(
+                click.node,
+                this.instance.config.mask_all_element_attributes,
+                this.instance.config.mask_all_text,
+                this._config.element_attribute_ignorelist
+            ),
             $dead_click_scroll_delay_ms: click.scrollDelayMs,
             $dead_click_mutation_delay_ms: click.mutationDelayMs,
             $dead_click_absolute_delay_ms: click.absoluteDelayMs,

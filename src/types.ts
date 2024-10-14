@@ -123,8 +123,7 @@ export type DeadClicksAutoCaptureConfig = {
     selection_change_threshold_ms?: number
     // by default if a click is followed by a mutation within 2500ms it is not a dead click
     mutation_threshold_ms?: number
-} & Pick<AutocaptureConfig, 'element_attribute_ignorelist'> &
-    Pick<PostHogConfig, 'mask_all_element_attributes' | 'mask_all_text'>
+} & Pick<AutocaptureConfig, 'element_attribute_ignorelist'>
 
 export interface HeatmapConfig {
     /*
