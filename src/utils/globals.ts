@@ -40,7 +40,7 @@ interface PostHogExtensions {
 
     parseErrorAsProperties?: (
         [event, source, lineno, colno, error]: ErrorEventArgs,
-        metadata: ErrorMetadata
+        metadata?: ErrorMetadata
     ) => ErrorProperties
     errorWrappingFunctions?: {
         wrapOnError: (captureFn: (props: Properties) => void) => () => void
