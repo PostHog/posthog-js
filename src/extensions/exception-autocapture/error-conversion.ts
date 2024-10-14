@@ -160,7 +160,6 @@ export function errorToProperties([event, source, lineno, colno, error]: ErrorEv
         } else {
             const name = domException.name || (isDOMError(domException) ? 'DOMError' : 'DOMException')
             const message = domException.message ? `${name}: ${domException.message}` : name
-            // TODO: revisit this branch
             errorProperties = errorPropertiesFromString(message)
             errorProperties.$exception_type = isDOMError(domException) ? 'DOMError' : 'DOMException'
             errorProperties.$exception_message = errorProperties.$exception_message || message
@@ -203,25 +202,7 @@ export function errorToProperties([event, source, lineno, colno, error]: ErrorEv
 }
 
 export function unhandledRejectionToProperties([ev]: [ev: PromiseRejectionEvent]): ErrorProperties {
-    // dig the object of the rejection out of known event types
-    let error: unknown = ev
-    try {
-        // PromiseRejectionEvents store the object of the rejection under 'reason'
-        // see https://developer.mozilla.org/en-US/docs/Web/API/PromiseRejectionEvent
-        if ('reason' in ev) {
-            error = ev.reason
-        }
-        // something, somewhere, (likely a browser extension) effectively casts PromiseRejectionEvents
-        // to CustomEvents, moving the `promise` and `reason` attributes of the PRE into
-        // the CustomEvent's `detail` attribute, since they're not part of CustomEvent's spec
-        // see https://developer.mozilla.org/en-US/docs/Web/API/CustomEvent and
-        // https://github.com/getsentry/sentry-javascript/issues/2380
-        else if ('detail' in ev && 'reason' in (ev as any).detail) {
-            error = (ev as any).detail.reason
-        }
-    } catch {
-        // no-empty
-    }
+    const error = getUnhandledRejectionError(ev)
 
     // some properties are not optional but, it's useful to start off without them enforced
     let errorProperties: Omit<ErrorProperties, '$exception_type' | '$exception_message' | '$exception_level'> & {
@@ -229,6 +210,7 @@ export function unhandledRejectionToProperties([ev]: [ev: PromiseRejectionEvent]
         $exception_message?: string
         $exception_level?: string
     } = {}
+
     if (isPrimitive(error)) {
         errorProperties = {
             $exception_message: `Non-Error promise rejection captured with value: ${String(error)}`,
@@ -236,16 +218,46 @@ export function unhandledRejectionToProperties([ev]: [ev: PromiseRejectionEvent]
     } else {
         errorProperties = errorToProperties([error as string | Event])
     }
+
     errorProperties.$exception_handled = false
 
     return {
         ...errorProperties,
         // now we make sure the mandatory fields that were made optional are present
-        $exception_type: (errorProperties.$exception_type = 'UnhandledRejection'),
-        $exception_message: (errorProperties.$exception_message =
-            errorProperties.$exception_message || (ev as any).reason || String(error)),
+        $exception_type: errorProperties.$exception_type || 'UnhandledRejection',
+        $exception_message: errorProperties.$exception_message || String(error),
         $exception_level: isSeverityLevel(errorProperties.$exception_level)
             ? errorProperties.$exception_level
             : 'error',
     }
+}
+
+function getUnhandledRejectionError(error: unknown): unknown {
+    if (isPrimitive(error)) {
+        return error
+    }
+
+    // dig the object of the rejection out of known event types
+    try {
+        type ErrorWithReason = { reason: unknown }
+        // PromiseRejectionEvents store the object of the rejection under 'reason'
+        // see https://developer.mozilla.org/en-US/docs/Web/API/PromiseRejectionEvent
+        if ('reason' in (error as ErrorWithReason)) {
+            return (error as ErrorWithReason).reason
+        }
+
+        type CustomEventWithDetail = { detail: { reason: unknown } }
+        // something, somewhere, (likely a browser extension) effectively casts PromiseRejectionEvents
+        // to CustomEvents, moving the `promise` and `reason` attributes of the PRE into
+        // the CustomEvent's `detail` attribute, since they're not part of CustomEvent's spec
+        // see https://developer.mozilla.org/en-US/docs/Web/API/CustomEvent and
+        // https://github.com/getsentry/sentry-javascript/issues/2380
+        if ('detail' in (error as CustomEventWithDetail) && 'reason' in (error as CustomEventWithDetail).detail) {
+            return (error as CustomEventWithDetail).detail.reason
+        }
+    } catch {
+        // no-empty
+    }
+
+    return error
 }
