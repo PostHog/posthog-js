@@ -61,7 +61,12 @@ export class DeadClicksAutocapture {
             this._lazyLoadedDeadClicksAutocapture = assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture(
                 this.instance,
                 isObject(this.instance.config.capture_dead_clicks)
-                    ? this.instance.config.capture_dead_clicks
+                    ? {
+                          ...this.instance.config.capture_dead_clicks,
+                          // moves these config options onto one object so that the extension doesn't have to care about reading multiple places
+                          mask_all_text: this.instance.config.mask_all_text,
+                          mask_all_element_attributes: this.instance.config.mask_all_element_attributes,
+                      }
                     : undefined
             )
             this._lazyLoadedDeadClicksAutocapture.start(document)

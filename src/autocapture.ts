@@ -78,7 +78,7 @@ export function getDefaultProperties(eventType: string): Properties {
 
 export function getPropertiesFromElement(
     elem: Element,
-    maskInputs: boolean,
+    maskAllAttributes: boolean,
     maskText: boolean,
     elementAttributeIgnorelist: string[] | undefined
 ): Properties {
@@ -107,7 +107,7 @@ export function getPropertiesFromElement(
 
         if (elementAttributeIgnorelist?.includes(attr.name)) return
 
-        if (!maskInputs && shouldCaptureValue(attr.value) && !isAngularStyleAttr(attr.name)) {
+        if (!maskAllAttributes && shouldCaptureValue(attr.value) && !isAngularStyleAttr(attr.name)) {
             let value = attr.value
             if (attr.name === 'class') {
                 // html attributes can _technically_ contain linebreaks,

@@ -6,6 +6,9 @@ import { DeadClicksAutoCaptureConfig, Properties } from '../types'
 import { getPropertiesFromElement } from '../autocapture'
 
 const DEFAULT_CONFIG: Required<DeadClicksAutoCaptureConfig> = {
+    element_attribute_ignorelist: [],
+    mask_all_element_attributes: false,
+    mask_all_text: false,
     scroll_threshold_ms: 100,
     selection_change_threshold_ms: 100,
     mutation_threshold_ms: 2500,
@@ -47,15 +50,18 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
     private _checkClickTimer: number | undefined
     private _config: Required<DeadClicksAutoCaptureConfig>
 
-    private asRequiredConfig(config?: DeadClicksAutoCaptureConfig): Required<DeadClicksAutoCaptureConfig> {
-        const result = { ...DEFAULT_CONFIG }
-
-        for (const key in config) {
-            const k = key as keyof DeadClicksAutoCaptureConfig
-            result[k] = config?.[k] ?? DEFAULT_CONFIG[k]
+    private asRequiredConfig(providedConfig?: DeadClicksAutoCaptureConfig): Required<DeadClicksAutoCaptureConfig> {
+        return {
+            element_attribute_ignorelist:
+                providedConfig?.element_attribute_ignorelist ?? DEFAULT_CONFIG.element_attribute_ignorelist,
+            scroll_threshold_ms: providedConfig?.scroll_threshold_ms ?? DEFAULT_CONFIG.scroll_threshold_ms,
+            selection_change_threshold_ms:
+                providedConfig?.selection_change_threshold_ms ?? DEFAULT_CONFIG.selection_change_threshold_ms,
+            mutation_threshold_ms: providedConfig?.mutation_threshold_ms ?? DEFAULT_CONFIG.mutation_threshold_ms,
+            mask_all_element_attributes:
+                providedConfig?.mask_all_element_attributes ?? DEFAULT_CONFIG.mask_all_element_attributes,
+            mask_all_text: providedConfig?.mask_all_text ?? DEFAULT_CONFIG.mask_all_text,
         }
-
-        return result
     }
 
     constructor(readonly instance: PostHog, config?: DeadClicksAutoCaptureConfig) {
@@ -241,10 +247,9 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
     private _captureDeadClick(click: Click, properties: Properties) {
         // TODO need to check safe and captur-able as with autocapture
         // TODO autocaputure config
-        const autocaptureProperties = getPropertiesFromElement(click.node, false, false, [])
         this.instance.capture('$dead_click', {
             ...properties,
-            ...autocaptureProperties,
+            ...getPropertiesFromElement(click.node, false, false, this._config.element_attribute_ignorelist),
             $dead_click_scroll_delay_ms: click.scrollDelayMs,
             $dead_click_mutation_delay_ms: click.mutationDelayMs,
             $dead_click_absolute_delay_ms: click.absoluteDelayMs,
