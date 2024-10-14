@@ -570,6 +570,15 @@ export type ErrorEventArgs = [
     error?: Error | undefined
 ]
 
+export type ErrorMetadata = {
+    handled?: boolean
+    synthetic?: boolean
+    overrideExceptionType?: string
+    overrideExceptionMessage?: string
+    defaultExceptionType?: string
+    defaultExceptionMessage?: string
+}
+
 // levels originally copied from Sentry to work with the sentry integration
 // and to avoid relying on a frequently changing @sentry/types dependency
 // but provided as an array of literal types, so we can constrain the level below

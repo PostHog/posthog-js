@@ -11,12 +11,10 @@ import {
 import { defaultStackParser, StackFrame } from './stack-trace'
 
 import { isEmptyString, isNumber, isString, isUndefined } from '../../utils/type-utils'
-import { ErrorEventArgs, SeverityLevel, severityLevels } from '../../types'
+import { ErrorEventArgs, ErrorMetadata, SeverityLevel, severityLevels } from '../../types'
 
 export interface ErrorProperties {
-    $exception_type: string
-    $exception_message: string
-    $exception_level: SeverityLevel
+    $exception_level?: SeverityLevel
     $exception_list?: Exception[]
     $exception_DOMException_code?: string
     $exception_personURL?: string
@@ -26,21 +24,29 @@ export interface Exception {
     type?: string
     value?: string
     mechanism?: {
+        /**
+         * In theory, whether or not the exception has been handled by the user. In practice, whether or not we see it before
+         * it hits the global error/rejection handlers, whether through explicit handling by the user or auto instrumentation.
+         */
         handled?: boolean
         type?: string
         source?: string
+        /**
+         * True when `captureException` is called with anything other than an instance of `Error` (or, in the case of browser,
+         * an instance of `ErrorEvent`, `DOMError`, or `DOMException`). causing us to create a synthetic error in an attempt
+         * to recreate the stacktrace.
+         */
         synthetic?: boolean
     }
     module?: string
     thread_id?: number
-    language?: string
     stacktrace?: {
         frames?: StackFrame[]
     }
 }
 
 export interface ErrorConversions {
-    errorToProperties: (args: ErrorEventArgs) => ErrorProperties
+    errorToProperties: (args: ErrorEventArgs, metadata?: ErrorMetadata) => ErrorProperties
     unhandledRejectionToProperties: (args: [ev: PromiseRejectionEvent]) => ErrorProperties
 }
 
@@ -84,30 +90,58 @@ export function parseStackFrames(ex: Error & { framesToPop?: number; stacktrace?
     return []
 }
 
-function errorPropertiesFromError(error: Error): ErrorProperties {
+function errorPropertiesFromError(error: Error, metadata?: ErrorMetadata): ErrorProperties {
     const frames = parseStackFrames(error)
 
+    const handled = metadata?.handled ?? true
+    const synthetic = metadata?.synthetic ?? false
+
+    const exceptionType = metadata?.overrideExceptionType ? metadata.overrideExceptionType : error.name
+    const exceptionMessage = metadata?.overrideExceptionMessage ? metadata.overrideExceptionMessage : error.message
+
     return {
-        $exception_type: error.name,
-        $exception_message: error.message,
         $exception_list: [
             {
-                type: error.name,
-                value: error.message,
+                type: exceptionType,
+                value: exceptionMessage,
                 stacktrace: {
                     frames,
                 },
-                language: 'javascript',
+                mechanism: {
+                    handled,
+                    synthetic,
+                },
             },
         ],
         $exception_level: 'error',
     }
 }
 
-function errorPropertiesFromString(candidate: string): ErrorProperties {
+function errorPropertiesFromString(candidate: string, metadata?: ErrorMetadata): ErrorProperties {
+    // Defaults for metadata are based on what the error candidate is.
+    const handled = metadata?.handled ?? true
+    const synthetic = metadata?.synthetic ?? true
+
+    const exceptionType = metadata?.overrideExceptionType
+        ? metadata.overrideExceptionType
+        : metadata?.defaultExceptionType ?? 'Error'
+    const exceptionMessage = metadata?.overrideExceptionMessage
+        ? metadata.overrideExceptionMessage
+        : candidate
+        ? candidate
+        : metadata?.defaultExceptionMessage
+
     return {
-        $exception_type: 'Error',
-        $exception_message: candidate,
+        $exception_list: [
+            {
+                type: exceptionType,
+                value: exceptionMessage,
+                mechanism: {
+                    handled,
+                    synthetic,
+                },
+            },
+        ],
         $exception_level: 'error',
     }
 }
@@ -143,36 +177,41 @@ function isSeverityLevel(x: unknown): x is SeverityLevel {
     return isString(x) && !isEmptyString(x) && severityLevels.indexOf(x as SeverityLevel) >= 0
 }
 
-function errorPropertiesFromObject(candidate: Record<string, unknown>): ErrorProperties {
+function errorPropertiesFromObject(candidate: Record<string, unknown>, metadata?: ErrorMetadata): ErrorProperties {
+    // Defaults for metadata are based on what the error candidate is.
+    const handled = metadata?.handled ?? true
+    const synthetic = metadata?.synthetic ?? true
+
+    const exceptionType = metadata?.overrideExceptionType
+        ? metadata.overrideExceptionType
+        : isEvent(candidate)
+        ? candidate.constructor.name
+        : 'Error'
+    const exceptionMessage = metadata?.overrideExceptionMessage
+        ? metadata.overrideExceptionMessage
+        : `Non-Error ${'exception'} captured with keys: ${extractExceptionKeysForMessage(candidate)}`
+
     return {
-        $exception_type: isEvent(candidate) ? candidate.constructor.name : 'Error',
-        $exception_message: `Non-Error ${'exception'} captured with keys: ${extractExceptionKeysForMessage(candidate)}`,
+        $exception_list: [
+            {
+                type: exceptionType,
+                value: exceptionMessage,
+                mechanism: {
+                    handled,
+                    synthetic,
+                },
+            },
+        ],
         $exception_level: isSeverityLevel(candidate.level) ? candidate.level : 'error',
     }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function errorToProperties([event, _, __, ___, error]: ErrorEventArgs): ErrorProperties {
-    // some properties are not optional but, it's useful to start off without them enforced
-    let errorProperties: Omit<ErrorProperties, '$exception_type' | '$exception_message' | '$exception_level'> & {
-        $exception_type?: string
-        $exception_message?: string
-        $exception_level?: string
-    } = {}
-
-    if (isUndefined(error) && isString(event)) {
-        let name = 'Error'
-        let message = event
-        const groups = event.match(ERROR_TYPES_PATTERN)
-        if (groups) {
-            name = groups[1]
-            message = groups[2]
-        }
-        errorProperties = {
-            $exception_type: name,
-            $exception_message: message,
-        }
-    }
+export function errorToProperties(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    [event, _, __, ___, error]: ErrorEventArgs,
+    metadata?: ErrorMetadata
+): ErrorProperties {
+    let errorProperties: ErrorProperties = {}
 
     const candidate = error || event
 
@@ -183,41 +222,45 @@ export function errorToProperties([event, _, __, ___, error]: ErrorEventArgs): E
         const domException = candidate as unknown as DOMException
 
         if (isErrorWithStack(candidate)) {
-            errorProperties = errorPropertiesFromError(candidate as Error)
+            errorProperties = errorPropertiesFromError(candidate as Error, metadata)
         } else {
             const name = domException.name || (isDOMError(domException) ? 'DOMError' : 'DOMException')
             const message = domException.message ? `${name}: ${domException.message}` : name
-            errorProperties = errorPropertiesFromString(message)
-            errorProperties.$exception_type = isDOMError(domException) ? 'DOMError' : 'DOMException'
-            errorProperties.$exception_message = errorProperties.$exception_message || message
+            const exceptionType = isDOMError(domException) ? 'DOMError' : 'DOMException'
+            errorProperties = errorPropertiesFromString(message, {
+                ...metadata,
+                overrideExceptionType: exceptionType,
+                defaultExceptionMessage: message,
+            })
         }
         if ('code' in domException) {
             errorProperties['$exception_DOMException_code'] = `${domException.code}`
         }
+        return errorProperties
     } else if (isErrorEvent(candidate as ErrorEvent) && (candidate as ErrorEvent).error) {
-        errorProperties = errorPropertiesFromError((candidate as ErrorEvent).error as Error)
+        return errorPropertiesFromError((candidate as ErrorEvent).error as Error, metadata)
     } else if (isError(candidate)) {
-        errorProperties = errorPropertiesFromError(candidate)
+        return errorPropertiesFromError(candidate, metadata)
     } else if (isPlainObject(candidate) || isEvent(candidate)) {
         // group these by using the keys available on the object
         const objectException = candidate as Record<string, unknown>
-        errorProperties = errorPropertiesFromObject(objectException)
-        errorProperties.$exception_is_synthetic = true
-    } else {
-        // If none of previous checks were valid, then it must be a string
-        errorProperties.$exception_type = errorProperties.$exception_type || 'Error'
-        errorProperties.$exception_message = errorProperties.$exception_message || candidate
-        errorProperties.$exception_is_synthetic = true
-    }
+        return errorPropertiesFromObject(objectException)
+    } else if (isUndefined(error) && isString(event)) {
+        let name = 'Error'
+        let message = event
+        const groups = event.match(ERROR_TYPES_PATTERN)
+        if (groups) {
+            name = groups[1]
+            message = groups[2]
+        }
 
-    return {
-        ...errorProperties,
-        // now we make sure the mandatory fields that were made optional are present
-        $exception_type: errorProperties.$exception_type || 'UnknownErrorType',
-        $exception_message: errorProperties.$exception_message || '',
-        $exception_level: isSeverityLevel(errorProperties.$exception_level)
-            ? errorProperties.$exception_level
-            : 'error',
+        return errorPropertiesFromString(message, {
+            ...metadata,
+            overrideExceptionType: name,
+            defaultExceptionMessage: message,
+        })
+    } else {
+        return errorPropertiesFromString(candidate as string, metadata)
     }
 }
 
@@ -242,29 +285,17 @@ export function unhandledRejectionToProperties([ev]: [ev: PromiseRejectionEvent]
         // no-empty
     }
 
-    // some properties are not optional but, it's useful to start off without them enforced
-    let errorProperties: Omit<ErrorProperties, '$exception_type' | '$exception_message' | '$exception_level'> & {
-        $exception_type?: string
-        $exception_message?: string
-        $exception_level?: string
-    } = {}
     if (isPrimitive(error)) {
-        errorProperties = {
-            $exception_message: `Non-Error promise rejection captured with value: ${String(error)}`,
-        }
+        return errorPropertiesFromString(`Non-Error promise rejection captured with value: ${String(error)}`, {
+            handled: false,
+            synthetic: false,
+            overrideExceptionType: 'UnhandledRejection',
+        })
     } else {
-        errorProperties = errorToProperties([error as string | Event])
-    }
-    errorProperties.$exception_handled = false
-
-    return {
-        ...errorProperties,
-        // now we make sure the mandatory fields that were made optional are present
-        $exception_type: (errorProperties.$exception_type = 'UnhandledRejection'),
-        $exception_message: (errorProperties.$exception_message =
-            errorProperties.$exception_message || (ev as any).reason || String(error)),
-        $exception_level: isSeverityLevel(errorProperties.$exception_level)
-            ? errorProperties.$exception_level
-            : 'error',
+        return errorToProperties([error as string | Event], {
+            handled: false,
+            overrideExceptionType: 'UnhandledRejection',
+            defaultExceptionMessage: (ev as any).reason || String(error),
+        })
     }
 }
