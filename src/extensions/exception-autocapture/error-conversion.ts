@@ -14,8 +14,8 @@ import { isEmptyString, isNumber, isString, isUndefined } from '../../utils/type
 import { ErrorEventArgs, ErrorMetadata, SeverityLevel, severityLevels } from '../../types'
 
 export interface ErrorProperties {
+    $exception_list: Exception[]
     $exception_level?: SeverityLevel
-    $exception_list?: Exception[]
     $exception_DOMException_code?: string
     $exception_personURL?: string
 }
@@ -211,7 +211,7 @@ export function errorToProperties(
     [event, _, __, ___, error]: ErrorEventArgs,
     metadata?: ErrorMetadata
 ): ErrorProperties {
-    let errorProperties: ErrorProperties = {}
+    let errorProperties: ErrorProperties = { $exception_list: [] }
 
     const candidate = error || event
 
