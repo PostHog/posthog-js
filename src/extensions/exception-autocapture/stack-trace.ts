@@ -201,16 +201,12 @@ export const defaultStackLineParsers = [chromeStackLineParser, geckoStackLinePar
 
 export const defaultStackParser = createStackParser(...defaultStackLineParsers)
 
-export function stripPostHogFramesAndReverse(stack: ReadonlyArray<StackFrame>): StackFrame[] {
+export function reverseAndStripFrames(stack: ReadonlyArray<StackFrame>): StackFrame[] {
     if (!stack.length) {
         return []
     }
 
     const localStack = Array.from(stack)
-
-    if (/postHogWrapped/.test(getLastStackFrame(localStack).function || '')) {
-        localStack.pop()
-    }
 
     localStack.reverse()
 
@@ -274,7 +270,7 @@ export function createStackParser(...parsers: StackLineParser[]): StackParser {
             }
         }
 
-        return stripPostHogFramesAndReverse(frames)
+        return reverseAndStripFrames(frames)
     }
 }
 
