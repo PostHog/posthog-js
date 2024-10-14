@@ -265,7 +265,7 @@ export class SessionRecording {
     }
 
     private get fullSnapshotIntervalMillis(): number {
-        if (this.urlTriggerStatus === 'pending') {
+        if (this.urlTriggerStatus === 'trigger_pending') {
             return ONE_MINUTE
         }
 
@@ -973,7 +973,7 @@ export class SessionRecording {
         }
 
         // Clear the buffer if waiting for a trigger, and only keep data from after the current full snapshot
-        if (rawEvent.type === EventType.FullSnapshot && this.urlTriggerStatus === 'pending') {
+        if (rawEvent.type === EventType.FullSnapshot && this.urlTriggerStatus === 'trigger_pending') {
             this.clearBuffer()
         }
 
@@ -1175,8 +1175,8 @@ export class SessionRecording {
     }
 
     private _activateUrlTrigger() {
-        if (this.urlTriggerStatus === 'pending') {
-            this.urlTriggerStatus = 'activated'
+        if (this.urlTriggerStatus === 'trigger_pending') {
+            this.urlTriggerStatus = 'trigger_activated'
             this._tryAddCustomEvent('url trigger activated', {})
             this._flushBuffer()
             logger.info(LOGGER_PREFIX + ' recording triggered by URL pattern match')
