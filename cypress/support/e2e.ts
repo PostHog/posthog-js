@@ -21,7 +21,7 @@ beforeEach(() => {
         'recorder',
         'surveys',
         'exception-autocapture',
-        'heatmaps',
+        'tracing-headers',
         'web-vitals',
     ]
     lazyLoadedJSFiles.forEach((key: string) => {
