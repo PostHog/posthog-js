@@ -224,7 +224,7 @@ export function unhandledRejectionToProperties([ev]: [ev: PromiseRejectionEvent]
     return {
         ...errorProperties,
         // now we make sure the mandatory fields that were made optional are present
-        $exception_type: errorProperties.$exception_type || 'UnhandledRejection',
+        $exception_type: (errorProperties.$exception_type = 'UnhandledRejection'),
         $exception_message: errorProperties.$exception_message || String(error),
         $exception_level: isSeverityLevel(errorProperties.$exception_level)
             ? errorProperties.$exception_level
