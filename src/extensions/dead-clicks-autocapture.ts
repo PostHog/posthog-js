@@ -1,6 +1,6 @@
 import { PostHog } from '../posthog-core'
 import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../constants'
-import { isBoolean } from '../utils/type-utils'
+import { isBoolean, isObject } from '../utils/type-utils'
 import { assignableWindow, document, LazyLoadedDeadClicksAutocapture } from '../utils/globals'
 import { logger } from '../utils/logger'
 
@@ -20,7 +20,7 @@ export class DeadClicksAutocapture {
     }
 
     public get isEnabled(): boolean {
-        const clientConfig = this.instance.config.capture_dead_clicks
+        const clientConfig = !!this.instance.config.capture_dead_clicks
         return isBoolean(clientConfig) ? clientConfig : this._enabledServerSide
     }
 
@@ -59,7 +59,10 @@ export class DeadClicksAutocapture {
             assignableWindow.__PosthogExtensions__?.initDeadClicksAutocapture
         ) {
             this._lazyLoadedDeadClicksAutocapture = assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture(
-                this.instance
+                this.instance,
+                isObject(this.instance.config.capture_dead_clicks)
+                    ? this.instance.config.capture_dead_clicks
+                    : undefined
             )
             this._lazyLoadedDeadClicksAutocapture.start(document)
             logger.info(`${LOGGER_PREFIX} starting...`)

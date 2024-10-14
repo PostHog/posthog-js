@@ -2,13 +2,14 @@ import { assignableWindow, LazyLoadedDeadClicksAutocapture } from '../utils/glob
 import { PostHog } from '../posthog-core'
 import { isNull, isNumber, isUndefined } from '../utils/type-utils'
 import { getEventTarget, isElementNode, isTag } from '../autocapture-utils'
-import { Properties } from '../types'
+import { DeadClicksAutoCaptureConfig, Properties } from '../types'
 import { getPropertiesFromElement } from '../autocapture'
 
-// by default if a click is followed by a sroll within 100ms it is not a dead click
-const SCROLL_THRESHOLD_MS = 100
-// by default if a click is followed by a mutation within 2500ms it is not a dead click
-const MUTATION_THRESHOLD_MS = 2500
+const DEFAULT_CONFIG: Required<DeadClicksAutoCaptureConfig> = {
+    scroll_threshold_ms: 100,
+    selection_change_threshold_ms: 100,
+    mutation_threshold_ms: 2500,
+}
 
 interface Click {
     node: Element
@@ -34,14 +35,32 @@ function asClick(event: Event): Click | null {
     return null
 }
 
+function checkTimeout(value: number | undefined, thresholdMs: number) {
+    return isNumber(value) && value >= thresholdMs
+}
+
 class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture {
     private _mutationObserver: MutationObserver | undefined
     private _lastMutation: number | undefined
     private _lastSelectionChanged: number | undefined
     private _clicks: Click[] = []
     private _checkClickTimer: number | undefined
+    private _config: Required<DeadClicksAutoCaptureConfig>
 
-    constructor(readonly instance: PostHog) {}
+    private asRequiredConfig(config?: DeadClicksAutoCaptureConfig): Required<DeadClicksAutoCaptureConfig> {
+        const result = { ...DEFAULT_CONFIG }
+
+        for (const key in config) {
+            const k = key as keyof DeadClicksAutoCaptureConfig
+            result[k] = config?.[k] ?? DEFAULT_CONFIG[k]
+        }
+
+        return result
+    }
+
+    constructor(readonly instance: PostHog, config?: DeadClicksAutoCaptureConfig) {
+        this._config = this.asRequiredConfig(config)
+    }
 
     start(observerTarget: Node) {
         this._startClickObserver()
@@ -167,25 +186,30 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
 
         for (const click of clicksToCheck) {
             click.mutationDelayMs =
-                this._lastMutation && click.timestamp <= this._lastMutation
+                click.mutationDelayMs ??
+                (this._lastMutation && click.timestamp <= this._lastMutation
                     ? this._lastMutation - click.timestamp
-                    : undefined
+                    : undefined)
             click.absoluteDelayMs = Date.now() - click.timestamp
             click.selectionChangedDelayMs =
                 this._lastSelectionChanged && click.timestamp <= this._lastSelectionChanged
                     ? this._lastSelectionChanged - click.timestamp
                     : undefined
 
-            const scrollTimeout = isNumber(click.scrollDelayMs) && click.scrollDelayMs >= SCROLL_THRESHOLD_MS
-            const selectionChangedTimeout =
-                isNumber(click.selectionChangedDelayMs) && click.selectionChangedDelayMs >= SCROLL_THRESHOLD_MS
-            const mutationTimeout = isNumber(click.mutationDelayMs) && click.mutationDelayMs >= MUTATION_THRESHOLD_MS
-            const absoluteTimeout = click.absoluteDelayMs > MUTATION_THRESHOLD_MS
+            const scrollTimeout = checkTimeout(click.scrollDelayMs, this._config.scroll_threshold_ms)
+            const selectionChangedTimeout = checkTimeout(
+                click.selectionChangedDelayMs,
+                this._config.selection_change_threshold_ms
+            )
+            const mutationTimeout = checkTimeout(click.mutationDelayMs, this._config.mutation_threshold_ms)
+            const absoluteTimeout = checkTimeout(click.absoluteDelayMs, this._config.mutation_threshold_ms)
 
-            const hadScroll = isNumber(click.scrollDelayMs) && click.scrollDelayMs < SCROLL_THRESHOLD_MS
-            const hadMutation = isNumber(click.mutationDelayMs) && click.mutationDelayMs < MUTATION_THRESHOLD_MS
+            const hadScroll = isNumber(click.scrollDelayMs) && click.scrollDelayMs < this._config.scroll_threshold_ms
+            const hadMutation =
+                isNumber(click.mutationDelayMs) && click.mutationDelayMs < this._config.mutation_threshold_ms
             const hadSelectionChange =
-                isNumber(click.selectionChangedDelayMs) && click.selectionChangedDelayMs < SCROLL_THRESHOLD_MS
+                isNumber(click.selectionChangedDelayMs) &&
+                click.selectionChangedDelayMs < this._config.selection_change_threshold_ms
 
             if (hadScroll || hadMutation || hadSelectionChange) {
                 // ignore clicks that had a scroll or mutation
@@ -201,7 +225,7 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
                     $dead_click_absolute_timeout: absoluteTimeout,
                     $dead_click_selection_changed_timeout: selectionChangedTimeout,
                 })
-            } else if (click.absoluteDelayMs < MUTATION_THRESHOLD_MS) {
+            } else if (click.absoluteDelayMs < this._config.mutation_threshold_ms) {
                 // keep waiting until next check
                 this._clicks.push(click)
             }
