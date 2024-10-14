@@ -500,6 +500,24 @@ describe('posthog core', () => {
             })
         })
 
+        it('calls sanitize_properties for $set_once', () => {
+            posthog = posthogWith(
+                {
+                    api_host: 'https://custom.posthog.com',
+                    sanitize_properties: (props, event_name) => ({ token: props.token, event_name, ...props }),
+                },
+                overrides
+            )
+
+            posthog.persistence.get_initial_props = () => ({ initial: 'prop' })
+            expect(posthog._calculate_set_once_properties({ key: 'prop' })).toEqual({
+                event_name: '$set_once',
+                token: undefined,
+                initial: 'prop',
+                key: 'prop',
+            })
+        })
+
         it('saves $snapshot data and token for $snapshot events', () => {
             posthog = posthogWith({}, overrides)
 
