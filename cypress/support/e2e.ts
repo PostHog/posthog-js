@@ -21,13 +21,13 @@ beforeEach(() => {
         'recorder',
         'surveys',
         'exception-autocapture',
-        'dead-clicks-autocapture',
-        'heatmaps',
+        'tracing-headers',
         'web-vitals',
+        'dead-clicks-autocapture',
     ]
     lazyLoadedJSFiles.forEach((key: string) => {
         cy.readFile(`dist/${key}.js`).then((body) => {
-            cy.intercept(`/static/${key}.js`, { body }).as(`${key}-script`)
+            cy.intercept(`/static/${key}.js*`, { body }).as(`${key}-script`)
         })
 
         cy.readFile(`dist/${key}.js.map`).then((body) => {
