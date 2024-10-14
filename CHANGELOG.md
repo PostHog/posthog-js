@@ -1,3 +1,7 @@
+## 1.167.1 - 2024-10-14
+
+- fix: sanitize set_once properties (#1462)
+
 ## 1.167.0 - 2024-10-08
 
 - feat(web experiments): Emit web_experiment_applied event and do not render experiments for bots (#1443)
