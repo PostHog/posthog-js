@@ -27,10 +27,14 @@ export default function Home() {
         <>
             <p className="italic my-2 text-gray-500">The current time is {time}</p>
 
-            <h2>Trigger posthog events</h2>
+            <h2>
+                Trigger posthog <span>events </span>
+            </h2>
             <div className="flex items-center gap-2 flex-wrap">
                 <button onClick={() => posthog.capture('Clicked button')}>Capture event</button>
-                <button onClick={() => posthog.capture('user_subscribed')}>Subscribe to newsletter</button>
+                <button id="subscribe-user-to-newsletter" onClick={() => posthog.capture('user_subscribed')}>
+                    Subscribe to newsletter
+                </button>
                 <button onClick={() => posthog.capture('user_unsubscribed')}>Unsubscribe from newsletter</button>
                 <button data-attr="autocapture-button">Autocapture buttons</button>
                 <a className="Button" data-attr="autocapture-button" href="#">
