@@ -402,4 +402,31 @@ describe('Event capture', () => {
             })
         })
     })
+
+    it('does not capture dead click for selected text', () => {
+        start({
+            options: {
+                capture_dead_clicks: true,
+            },
+        })
+
+        cy.get('[data-cy-dead-click-text]').then(($el) => {
+            const text = $el.text()
+            const wordToSelect = text.split(' ')[0]
+            const position = text.indexOf(wordToSelect)
+
+            // click the text to make a selection
+            cy.get('[data-cy-dead-click-text]')
+                .trigger('mousedown', position, 0)
+                .trigger('mousemove', position + wordToSelect.length, 0)
+                .trigger('mouseup')
+                .trigger('dblclick', position, 0)
+        })
+
+        cy.wait(1000)
+        cy.phCaptures({ full: true }).then((captures) => {
+            const deadClicks = captures.filter((capture) => capture.event === '$dead_click')
+            expect(deadClicks.length).to.eq(0)
+        })
+    })
 })

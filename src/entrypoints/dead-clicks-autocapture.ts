@@ -13,8 +13,12 @@ const MUTATION_THRESHOLD_MS = 2500
 interface Click {
     node: Element
     timestamp: number
+    // time between click and the most recent scroll
     scrollDelayMs?: number
+    // time between click and the most recent mutation
     mutationDelayMs?: number
+    // time between click and the most recent selection changed event
+    selectionChangedDelayMs?: number
     // if neither scroll nor mutation seen before threshold passed
     absoluteDelayMs?: number
 }
@@ -33,6 +37,7 @@ function asClick(event: Event): Click | null {
 class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture {
     private _mutationObserver: MutationObserver | undefined
     private _lastMutation: number | undefined
+    private _lastSelectionChanged: number | undefined
     private _clicks: Click[] = []
     private _checkClickTimer: number | undefined
 
@@ -41,6 +46,7 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
     start(observerTarget: Node) {
         this._startClickObserver()
         this._startScrollObserver()
+        this._startSelectionChangedObserver()
         this._startMutationObserver(observerTarget)
     }
 
@@ -63,6 +69,7 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
         this._mutationObserver = undefined
         assignableWindow.removeEventListener('click', this._onClick)
         assignableWindow.removeEventListener('scroll', this._onScroll, true)
+        assignableWindow.removeEventListener('selectionchange', this._onSelectionChange)
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -108,6 +115,14 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
                 }
             })
         }
+    }
+
+    private _startSelectionChangedObserver() {
+        assignableWindow.addEventListener('selectionchange', this._onSelectionChange)
+    }
+
+    private _onSelectionChange = (): void => {
+        this._lastSelectionChanged = Date.now()
     }
 
     private _ignoreClick(click: Click | null): boolean {
@@ -156,24 +171,35 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
                     ? this._lastMutation - click.timestamp
                     : undefined
             click.absoluteDelayMs = Date.now() - click.timestamp
+            click.selectionChangedDelayMs =
+                this._lastSelectionChanged && click.timestamp <= this._lastSelectionChanged
+                    ? this._lastSelectionChanged - click.timestamp
+                    : undefined
+
             const scrollTimeout = isNumber(click.scrollDelayMs) && click.scrollDelayMs >= SCROLL_THRESHOLD_MS
+            const selectionChangedTimeout =
+                isNumber(click.selectionChangedDelayMs) && click.selectionChangedDelayMs >= SCROLL_THRESHOLD_MS
             const mutationTimeout = isNumber(click.mutationDelayMs) && click.mutationDelayMs >= MUTATION_THRESHOLD_MS
             const absoluteTimeout = click.absoluteDelayMs > MUTATION_THRESHOLD_MS
+
             const hadScroll = isNumber(click.scrollDelayMs) && click.scrollDelayMs < SCROLL_THRESHOLD_MS
             const hadMutation = isNumber(click.mutationDelayMs) && click.mutationDelayMs < MUTATION_THRESHOLD_MS
+            const hadSelectionChange =
+                isNumber(click.selectionChangedDelayMs) && click.selectionChangedDelayMs < SCROLL_THRESHOLD_MS
 
-            if (hadScroll || hadMutation) {
+            if (hadScroll || hadMutation || hadSelectionChange) {
                 // ignore clicks that had a scroll or mutation
                 continue
             }
 
-            if (scrollTimeout || mutationTimeout || absoluteTimeout) {
+            if (scrollTimeout || mutationTimeout || absoluteTimeout || selectionChangedTimeout) {
                 this._captureDeadClick(click, {
                     $dead_click_last_mutation_timestamp: this._lastMutation,
                     $dead_click_event_timestamp: click.timestamp,
                     $dead_click_scroll_timeout: scrollTimeout,
                     $dead_click_mutation_timeout: mutationTimeout,
                     $dead_click_absolute_timeout: absoluteTimeout,
+                    $dead_click_selection_changed_timeout: selectionChangedTimeout,
                 })
             } else if (click.absoluteDelayMs < MUTATION_THRESHOLD_MS) {
                 // keep waiting until next check
@@ -198,6 +224,7 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
             $dead_click_scroll_delay_ms: click.scrollDelayMs,
             $dead_click_mutation_delay_ms: click.mutationDelayMs,
             $dead_click_absolute_delay_ms: click.absoluteDelayMs,
+            $dead_click_selection_changed_delay_ms: click.selectionChangedDelayMs,
             timestamp: click.timestamp,
         })
     }
