@@ -4,6 +4,7 @@ import { version } from '../../package.json'
 
 import { getBase64EncodedPayload, getGzipEncodedPayload, getPayload } from '../support/compression'
 import { start } from '../support/setup'
+import { pollPhCaptures } from '../support/assertions'
 
 const urlWithVersion = new RegExp(`&ver=${version}`)
 
@@ -286,7 +287,9 @@ describe('Event capture', () => {
         it('does not autocapture anything when /decide is disabled', () => {
             start({ options: { autocapture: false, advanced_disable_decide: true }, waitForDecide: false })
 
-            cy.get('body').click(100, 100).click(98, 102).click(101, 103)
+            cy.get('body').click(100, 100)
+            cy.get('body').click(98, 102)
+            cy.get('body').click(101, 103)
             cy.get('[data-cy-custom-event-button]').click()
 
             // No autocapture events, still captures custom events
@@ -372,6 +375,30 @@ describe('Event capture', () => {
 
             cy.get('@decide.all').then((calls) => {
                 expect(calls.length).to.equal(2)
+            })
+        })
+    })
+
+    it('capture dead clicks when configured to', () => {
+        start({
+            options: {
+                capture_dead_clicks: true,
+            },
+        })
+
+        cy.get('[data-cy-not-an-order-button]').click()
+
+        pollPhCaptures('$dead_click').then(() => {
+            cy.phCaptures({ full: true }).then((captures) => {
+                const deadClicks = captures.filter((capture) => capture.event === '$dead_click')
+                expect(deadClicks.length).to.eq(1)
+                const deadClick = deadClicks[0]
+                expect(deadClick.properties.$dead_click_last_mutation_timestamp).to.be.a('number')
+                expect(deadClick.properties.$dead_click_event_timestamp).to.be.a('number')
+                expect(deadClick.properties.$dead_click_absolute_delay_ms).to.be.greaterThan(2500)
+                expect(deadClick.properties.$dead_click_scroll_timeout).to.eq(false)
+                expect(deadClick.properties.$dead_click_mutation_timeout).to.eq(false)
+                expect(deadClick.properties.$dead_click_absolute_timeout).to.eq(true)
             })
         })
     })
