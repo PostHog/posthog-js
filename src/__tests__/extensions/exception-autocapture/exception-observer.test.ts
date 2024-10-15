@@ -97,9 +97,15 @@ describe('Exception Observer', () => {
             expect(singleCall[0]).toBe('$exception')
             expect(singleCall[1]).toMatchObject({
                 properties: {
-                    $exception_message: 'test error',
-                    $exception_type: 'Error',
                     $exception_personURL: expect.any(String),
+                    $exception_list: [
+                        {
+                            type: 'Error',
+                            value: 'test error',
+                            stacktrace: { frames: expect.any(Array) },
+                            mechanism: { synthetic: false, handled: true },
+                        },
+                    ],
                 },
             })
         })
@@ -120,9 +126,15 @@ describe('Exception Observer', () => {
             expect(singleCall[0]).toBe('$exception')
             expect(singleCall[1]).toMatchObject({
                 properties: {
-                    $exception_message: 'test error',
-                    $exception_type: 'UnhandledRejection',
                     $exception_personURL: expect.any(String),
+                    $exception_list: [
+                        {
+                            type: 'UnhandledRejection',
+                            value: 'test error',
+                            stacktrace: { frames: expect.any(Array) },
+                            mechanism: { synthetic: false, handled: false },
+                        },
+                    ],
                 },
             })
         })
@@ -137,10 +149,15 @@ describe('Exception Observer', () => {
             expect(request.data).toMatchObject({
                 event: '$exception',
                 properties: {
-                    $exception_message: 'test error',
-                    $exception_type: 'Error',
                     $exception_personURL: expect.any(String),
-                    $exception_stack_trace_raw: expect.any(String),
+                    $exception_list: [
+                        {
+                            type: 'Error',
+                            value: 'test error',
+                            stacktrace: { frames: expect.any(Array) },
+                            mechanism: { synthetic: false, handled: true },
+                        },
+                    ],
                 },
             })
             expect(request.batchKey).toBe('exceptionEvent')
