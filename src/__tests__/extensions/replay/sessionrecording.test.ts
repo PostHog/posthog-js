@@ -44,6 +44,7 @@ import {
     pluginEvent,
 } from '@rrweb/types'
 import Mock = jest.Mock
+import { ConsentManager } from '../../../consent'
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -243,14 +244,22 @@ describe('SessionRecording', () => {
             config: config,
             capture: jest.fn(),
             persistence: postHogPersistence,
-            onFeatureFlags: (cb: (flags: string[]) => void) => {
+            onFeatureFlags: (
+                cb: (flags: string[], variants: Record<string, string | boolean>) => void
+            ): (() => void) => {
                 onFeatureFlagsCallback = cb
+                return () => {}
             },
             sessionManager: sessionManager,
             requestRouter: new RequestRouter({ config } as any),
             _addCaptureHook: addCaptureHookMock,
-            consent: { isOptedOut: () => false },
-        } as unknown as PostHog
+            consent: {
+                isOptedOut(): boolean {
+                    return false
+                },
+            } as unknown as ConsentManager,
+            register_for_session() {},
+        } as Partial<PostHog> as PostHog
 
         loadScriptMock.mockImplementation((_ph, _path, callback) => {
             addRRwebToWindow()
