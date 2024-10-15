@@ -1,3 +1,8 @@
+## 1.168.0 - 2024-10-15
+
+- fix(errors): Better define schema, align with python (#1460)
+- chore: refactor some cypress setup (#1467)
+
 ## 1.167.1 - 2024-10-14
 
 - fix: sanitize set_once properties (#1462)
