@@ -179,7 +179,7 @@ export const defaultConfig = (): PostHogConfig => ({
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
-    person_profiles: 'always',
+    person_profiles: 'identified_only',
     __add_tracing_headers: false,
 })
 

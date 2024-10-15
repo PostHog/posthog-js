@@ -387,6 +387,7 @@ describe('posthog core', () => {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop', $is_identified: false }),
                 remove_event_timer: jest.fn(),
                 get_property: () => 'anonymous',
+                props: { $groups: {} },
             } as unknown as PostHogPersistence,
             sessionPersistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
@@ -425,7 +426,7 @@ describe('posthog core', () => {
                 $window_id: 'windowId',
                 $session_id: 'sessionId',
                 $is_identified: false,
-                $process_person_profile: true,
+                $process_person_profile: false,
             })
         })
 
@@ -447,7 +448,7 @@ describe('posthog core', () => {
                 $session_id: 'sessionId',
                 $lib_custom_api_host: 'https://custom.posthog.com',
                 $is_identified: false,
-                $process_person_profile: true,
+                $process_person_profile: false,
             })
         })
 
@@ -465,7 +466,7 @@ describe('posthog core', () => {
                 posthog._calculate_event_properties('custom_event', { event: 'prop' }, new Date())[
                     '$process_person_profile'
                 ]
-            ).toEqual(true)
+            ).toEqual(false)
         })
 
         it('only adds token and distinct_id if event_name is $snapshot', () => {
@@ -496,7 +497,7 @@ describe('posthog core', () => {
             expect(posthog._calculate_event_properties('custom_event', { event: 'prop' }, new Date())).toEqual({
                 event_name: 'custom_event',
                 token: 'testtoken',
-                $process_person_profile: true,
+                $process_person_profile: false,
             })
         })
 

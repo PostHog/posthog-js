@@ -55,7 +55,7 @@ describe('person processing', () => {
     }
 
     describe('init', () => {
-        it("should default to 'always' person_profiles", async () => {
+        it("should default to 'identified_only' person_profiles", async () => {
             // arrange
             const token = uuidv7()
 
@@ -65,7 +65,7 @@ describe('person processing', () => {
             })
 
             // assert
-            expect(posthog.config.person_profiles).toEqual('always')
+            expect(posthog.config.person_profiles).toEqual('identified_only')
         })
         it('should read person_profiles from init config', async () => {
             // arrange
