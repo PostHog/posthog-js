@@ -10,7 +10,7 @@ import {
 } from './type-checking'
 import { defaultStackParser, StackFrame } from './stack-trace'
 
-import { isEmptyString, isNumber, isString, isUndefined } from '../../utils/type-utils'
+import { isEmptyString, isString, isUndefined } from '../../utils/type-utils'
 import { ErrorEventArgs, ErrorMetadata, SeverityLevel, severityLevels } from '../../types'
 
 export interface ErrorProperties {
@@ -49,7 +49,6 @@ export interface ErrorConversions {
     errorToProperties: (args: ErrorEventArgs, metadata?: ErrorMetadata) => ErrorProperties
     unhandledRejectionToProperties: (args: [ev: PromiseRejectionEvent]) => ErrorProperties
 }
-
 /**
  * based on the very wonderful MIT licensed Sentry SDK
  */
@@ -57,37 +56,36 @@ export interface ErrorConversions {
 const ERROR_TYPES_PATTERN =
     /^(?:[Uu]ncaught (?:exception: )?)?(?:((?:Eval|Internal|Range|Reference|Syntax|Type|URI|)Error): )?(.*)$/i
 
-const reactMinifiedRegexp = /Minified React error #\d+;/i
-
-function getPopSize(ex: Error & { framesToPop?: number }): number {
-    if (ex) {
-        if (isNumber(ex.framesToPop)) {
-            return ex.framesToPop
-        }
-
-        if (reactMinifiedRegexp.test(ex.message)) {
-            return 1
-        }
-    }
-
-    return 0
-}
-
 export function parseStackFrames(ex: Error & { framesToPop?: number; stacktrace?: string }): StackFrame[] {
     // Access and store the stacktrace property before doing ANYTHING
     // else to it because Opera is not very good at providing it
     // reliably in other circumstances.
     const stacktrace = ex.stacktrace || ex.stack || ''
 
-    const popSize = getPopSize(ex)
+    const skipLines = getSkipFirstStackStringLines(ex)
 
     try {
-        return defaultStackParser(stacktrace, popSize)
+        return defaultStackParser(stacktrace, skipLines)
     } catch {
         // no-empty
     }
 
     return []
+}
+
+const reactMinifiedRegexp = /Minified React error #\d+;/i
+
+/**
+ * Certain known React errors contain links that would be falsely
+ * parsed as frames. This function check for these errors and
+ * returns number of the stack string lines to skip.
+ */
+function getSkipFirstStackStringLines(ex: Error): number {
+    if (ex && reactMinifiedRegexp.test(ex.message)) {
+        return 1
+    }
+
+    return 0
 }
 
 function errorPropertiesFromError(error: Error, metadata?: ErrorMetadata): ErrorProperties {
@@ -97,7 +95,9 @@ function errorPropertiesFromError(error: Error, metadata?: ErrorMetadata): Error
     const synthetic = metadata?.synthetic ?? false
 
     const exceptionType = metadata?.overrideExceptionType ? metadata.overrideExceptionType : error.name
-    const exceptionMessage = metadata?.overrideExceptionMessage ? metadata.overrideExceptionMessage : error.message
+    const exceptionMessage = metadata?.overrideExceptionMessage
+        ? metadata.overrideExceptionMessage
+        : extractMessage(error)
 
     return {
         $exception_list: [
@@ -115,6 +115,21 @@ function errorPropertiesFromError(error: Error, metadata?: ErrorMetadata): Error
         ],
         $exception_level: 'error',
     }
+}
+
+/**
+ * There are cases where stacktrace.message is an Event object
+ * https://github.com/getsentry/sentry-javascript/issues/1949
+ * In this specific case we try to extract stacktrace.message.error.message
+ */
+export function extractMessage(err: Error & { message: { error?: Error } }): string {
+    const message = err.message
+
+    if (message.error && typeof message.error.message === 'string') {
+        return message.error.message
+    }
+
+    return message
 }
 
 function errorPropertiesFromString(candidate: string, metadata?: ErrorMetadata): ErrorProperties {
@@ -265,25 +280,7 @@ export function errorToProperties(
 }
 
 export function unhandledRejectionToProperties([ev]: [ev: PromiseRejectionEvent]): ErrorProperties {
-    // dig the object of the rejection out of known event types
-    let error: unknown = ev
-    try {
-        // PromiseRejectionEvents store the object of the rejection under 'reason'
-        // see https://developer.mozilla.org/en-US/docs/Web/API/PromiseRejectionEvent
-        if ('reason' in ev) {
-            error = ev.reason
-        }
-        // something, somewhere, (likely a browser extension) effectively casts PromiseRejectionEvents
-        // to CustomEvents, moving the `promise` and `reason` attributes of the PRE into
-        // the CustomEvent's `detail` attribute, since they're not part of CustomEvent's spec
-        // see https://developer.mozilla.org/en-US/docs/Web/API/CustomEvent and
-        // https://github.com/getsentry/sentry-javascript/issues/2380
-        else if ('detail' in ev && 'reason' in (ev as any).detail) {
-            error = (ev as any).detail.reason
-        }
-    } catch {
-        // no-empty
-    }
+    const error = getUnhandledRejectionError(ev)
 
     if (isPrimitive(error)) {
         return errorPropertiesFromString(`Non-Error promise rejection captured with value: ${String(error)}`, {
@@ -291,11 +288,41 @@ export function unhandledRejectionToProperties([ev]: [ev: PromiseRejectionEvent]
             synthetic: false,
             overrideExceptionType: 'UnhandledRejection',
         })
-    } else {
-        return errorToProperties([error as string | Event], {
-            handled: false,
-            overrideExceptionType: 'UnhandledRejection',
-            defaultExceptionMessage: (ev as any).reason || String(error),
-        })
     }
+
+    return errorToProperties([error as string | Event], {
+        handled: false,
+        overrideExceptionType: 'UnhandledRejection',
+        defaultExceptionMessage: String(error),
+    })
+}
+
+function getUnhandledRejectionError(error: unknown): unknown {
+    if (isPrimitive(error)) {
+        return error
+    }
+
+    // dig the object of the rejection out of known event types
+    try {
+        type ErrorWithReason = { reason: unknown }
+        // PromiseRejectionEvents store the object of the rejection under 'reason'
+        // see https://developer.mozilla.org/en-US/docs/Web/API/PromiseRejectionEvent
+        if ('reason' in (error as ErrorWithReason)) {
+            return (error as ErrorWithReason).reason
+        }
+
+        type CustomEventWithDetail = { detail: { reason: unknown } }
+        // something, somewhere, (likely a browser extension) effectively casts PromiseRejectionEvents
+        // to CustomEvents, moving the `promise` and `reason` attributes of the PRE into
+        // the CustomEvent's `detail` attribute, since they're not part of CustomEvent's spec
+        // see https://developer.mozilla.org/en-US/docs/Web/API/CustomEvent and
+        // https://github.com/getsentry/sentry-javascript/issues/2380
+        if ('detail' in (error as CustomEventWithDetail) && 'reason' in (error as CustomEventWithDetail).detail) {
+            return (error as CustomEventWithDetail).detail.reason
+        }
+    } catch {
+        // no-empty
+    }
+
+    return error
 }
