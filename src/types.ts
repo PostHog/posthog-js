@@ -570,27 +570,17 @@ export type ErrorEventArgs = [
     error?: Error | undefined
 ]
 
+export type ErrorMetadata = {
+    handled?: boolean
+    synthetic?: boolean
+    overrideExceptionType?: string
+    overrideExceptionMessage?: string
+    defaultExceptionType?: string
+    defaultExceptionMessage?: string
+}
+
 // levels originally copied from Sentry to work with the sentry integration
 // and to avoid relying on a frequently changing @sentry/types dependency
 // but provided as an array of literal types, so we can constrain the level below
 export const severityLevels = ['fatal', 'error', 'warning', 'log', 'info', 'debug'] as const
 export declare type SeverityLevel = typeof severityLevels[number]
-
-export interface ErrorProperties {
-    $exception_type: string
-    $exception_message: string
-    $exception_level: SeverityLevel
-    $exception_source?: string
-    $exception_lineno?: number
-    $exception_colno?: number
-    $exception_DOMException_code?: string
-    $exception_is_synthetic?: boolean
-    $exception_stack_trace_raw?: string
-    $exception_handled?: boolean
-    $exception_personURL?: string
-}
-
-export interface ErrorConversions {
-    errorToProperties: (args: ErrorEventArgs) => ErrorProperties
-    unhandledRejectionToProperties: (args: [ev: PromiseRejectionEvent]) => ErrorProperties
-}

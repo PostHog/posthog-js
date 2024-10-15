@@ -97,6 +97,7 @@ export function createEventProcessor(
             // added manually to avoid any dependency on the lazily loaded content
             $exception_message: any
             $exception_type: any
+            $exception_list: any
             $exception_personURL: string
             $exception_level: SeverityLevel
             $level: SeverityLevel
@@ -106,6 +107,7 @@ export function createEventProcessor(
             $exception_type: exceptions[0]?.type,
             $exception_personURL: personUrl,
             $exception_level: event.level,
+            $exception_list: exceptions,
             // Sentry Exception Properties
             $sentry_event_id: event.event_id,
             $sentry_exception: event.exception,

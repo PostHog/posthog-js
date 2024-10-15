@@ -987,7 +987,11 @@ export class PostHog {
             return dataSetOnce
         }
         // if we're an identified person, send initial params with every event
-        const setOnceProperties = extend({}, this.persistence.get_initial_props(), dataSetOnce || {})
+        let setOnceProperties = extend({}, this.persistence.get_initial_props(), dataSetOnce || {})
+        const sanitize_properties = this.config.sanitize_properties
+        if (sanitize_properties) {
+            setOnceProperties = sanitize_properties(setOnceProperties, '$set_once')
+        }
         if (isEmptyObject(setOnceProperties)) {
             return undefined
         }
@@ -1829,9 +1833,17 @@ export class PostHog {
                   error,
               ])
             : {
-                  $exception_type: error.name,
-                  $exception_message: error.message,
                   $exception_level: 'error',
+                  $exception_list: [
+                      {
+                          type: error.name,
+                          value: error.message,
+                          mechanism: {
+                              handled: true,
+                              synthetic: false,
+                          },
+                      },
+                  ],
                   ...additionalProperties,
               }
 

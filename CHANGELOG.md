@@ -1,3 +1,20 @@
+## 1.168.0 - 2024-10-15
+
+- fix(errors): Better define schema, align with python (#1460)
+- chore: refactor some cypress setup (#1467)
+
+## 1.167.1 - 2024-10-14
+
+- fix: sanitize set_once properties (#1462)
+
+## 1.167.0 - 2024-10-08
+
+- feat(web experiments): Emit web_experiment_applied event and do not render experiments for bots (#1443)
+
+## 1.166.2 - 2024-10-07
+
+- fix: Remove posthog error capture from replay (#1454)
+
 ## 1.166.1 - 2024-10-01
 
 - fix: skip addition of `src` attribute for HLS videos (#1446)
