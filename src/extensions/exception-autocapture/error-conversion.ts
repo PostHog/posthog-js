@@ -11,8 +11,44 @@ import {
 import { defaultStackParser, StackFrame } from './stack-trace'
 
 import { isEmptyString, isString, isUndefined } from '../../utils/type-utils'
-import { ErrorEventArgs, ErrorMetadata, ErrorProperties, SeverityLevel, severityLevels } from '../../types'
+import { ErrorEventArgs, ErrorMetadata, SeverityLevel, severityLevels } from '../../types'
 
+export interface ErrorProperties {
+    $exception_list: Exception[]
+    $exception_level?: SeverityLevel
+    $exception_DOMException_code?: string
+    $exception_personURL?: string
+}
+
+export interface Exception {
+    type?: string
+    value?: string
+    mechanism?: {
+        /**
+         * In theory, whether or not the exception has been handled by the user. In practice, whether or not we see it before
+         * it hits the global error/rejection handlers, whether through explicit handling by the user or auto instrumentation.
+         */
+        handled?: boolean
+        type?: string
+        source?: string
+        /**
+         * True when `captureException` is called with anything other than an instance of `Error` (or, in the case of browser,
+         * an instance of `ErrorEvent`, `DOMError`, or `DOMException`). causing us to create a synthetic error in an attempt
+         * to recreate the stacktrace.
+         */
+        synthetic?: boolean
+    }
+    module?: string
+    thread_id?: number
+    stacktrace?: {
+        frames?: StackFrame[]
+    }
+}
+
+export interface ErrorConversions {
+    errorToProperties: (args: ErrorEventArgs, metadata?: ErrorMetadata) => ErrorProperties
+    unhandledRejectionToProperties: (args: [ev: PromiseRejectionEvent]) => ErrorProperties
+}
 /**
  * based on the very wonderful MIT licensed Sentry SDK
  */

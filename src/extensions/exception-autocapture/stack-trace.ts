@@ -2,7 +2,7 @@
 // 💖open source
 
 // This was originally forked from https://github.com/csnover/TraceKit, and was largely
-// re - written as part of raven - js.
+// re-written as part of raven - js.
 //
 // This code was later copied to the JavaScript mono - repo and further modified and
 // refactored over the years.
@@ -69,11 +69,11 @@ function createFrame(filename: string, func: string, lineno?: number, colno?: nu
         in_app: true, // All browser frames are considered in_app
     }
 
-    if (isUndefined(lineno)) {
+    if (!isUndefined(lineno)) {
         frame.lineno = lineno
     }
 
-    if (isUndefined(colno)) {
+    if (!isUndefined(colno)) {
         frame.colno = colno
     }
 
