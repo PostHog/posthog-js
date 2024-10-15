@@ -17,12 +17,11 @@ describe('Exception capture', () => {
         cy.phCaptures({ full: true }).then((captures) => {
             expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$autocapture', '$exception'])
             expect(captures[2].event).to.be.eql('$exception')
-            expect(captures[2].properties.$exception_message).to.be.eql('wat even am I')
-            expect(captures[2].properties.$exception_type).to.be.eql('Error')
             expect(captures[2].properties.extra_prop).to.be.eql(2)
             expect(captures[2].properties.$exception_source).to.eql(undefined)
             expect(captures[2].properties.$exception_personURL).to.eql(undefined)
-            expect(captures[2].properties.$exception_stack_trace_raw).not.to.exist
+            expect(captures[2].properties.$exception_list[0].value).to.be.eql('wat even am I')
+            expect(captures[2].properties.$exception_list[0].type).to.be.eql('Error')
         })
     })
 
@@ -51,11 +50,9 @@ describe('Exception capture', () => {
             cy.phCaptures({ full: true }).then((captures) => {
                 expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$autocapture', '$exception'])
                 expect(captures[2].event).to.be.eql('$exception')
-                expect(captures[2].properties.$exception_message).to.be.eql('This is an error')
-                expect(captures[2].properties.$exception_type).to.be.eql('Error')
-                expect(captures[2].properties.$exception_source).to.match(
-                    /http:\/\/localhost:\d+\/playground\/cypress\//
-                )
+                expect(captures[2].properties.$exception_list[0].value).to.be.eql('This is an error')
+                expect(captures[2].properties.$exception_list[0].type).to.be.eql('Error')
+
                 expect(captures[2].properties.$exception_personURL).to.match(
                     /http:\/\/localhost:\d+\/project\/test_token\/person\/[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}/
                 )
@@ -69,8 +66,8 @@ describe('Exception capture', () => {
             cy.wait(1500)
 
             cy.phCaptures({ full: true }).then((captures) => {
-                expect(captures[2].properties.$exception_message).to.be.eql('wat even am I')
-                expect(captures[2].properties.$exception_stack_trace_raw).to.exist
+                expect(captures[2].properties.$exception_list).to.exist
+                expect(captures[2].properties.$exception_list[0].value).to.be.eql('wat even am I')
             })
         })
     })

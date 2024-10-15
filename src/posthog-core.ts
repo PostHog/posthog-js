@@ -1835,9 +1835,17 @@ export class PostHog {
                   error,
               ])
             : {
-                  $exception_type: error.name,
-                  $exception_message: error.message,
                   $exception_level: 'error',
+                  $exception_list: [
+                      {
+                          type: error.name,
+                          value: error.message,
+                          mechanism: {
+                              handled: true,
+                              synthetic: false,
+                          },
+                      },
+                  ],
                   ...additionalProperties,
               }
 
