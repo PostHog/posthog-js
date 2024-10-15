@@ -1831,7 +1831,8 @@ export class PostHog {
             ? assignableWindow.__PosthogExtensions__.parseErrorAsProperties(
                   [error.message, undefined, undefined, undefined, error],
                   // create synthetic error to get stack in cases where user input does not contain one
-                  // creating the exception at this level makes it easy to strip the 'captureException' frame
+                  // creating the exceptionas soon into our code as possible means we should only have to
+                  // remove a single frame (this 'captureException' method) from the resultant stack
                   { syntheticException }
               )
             : {
