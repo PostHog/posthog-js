@@ -668,7 +668,9 @@ export class SessionRecording {
         }
 
         logger.info(LOGGER_PREFIX + ' starting')
-        this._reportStarted(startReason || 'recording_initialized', () => this.status === 'active')
+        if (this.status === 'active') {
+            this._reportStarted(startReason || 'recording_initialized')
+        }
     }
 
     private isInteractiveEvent(event: eventWithTime) {
@@ -1131,7 +1133,7 @@ export class SessionRecording {
     }
 
     private _reportStarted(startReason: SessionStartReason, shouldReport: () => boolean = () => true) {
-        if (this.instance.config.session_recording.report_recording_started && shouldReport()) {
+        if (shouldReport()) {
             this.instance.register_for_session({
                 $session_recording_start_reason: startReason,
             })

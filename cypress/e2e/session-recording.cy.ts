@@ -115,9 +115,7 @@ describe('Session recording', () => {
         it('captures session events', () => {
             start({
                 options: {
-                    session_recording: {
-                        report_recording_started: true,
-                    },
+                    session_recording: {},
                 },
                 decideResponseOverrides: {
                     isAuthenticated: false,
@@ -196,9 +194,7 @@ describe('Session recording', () => {
                             ph.sessionRecording._forceAllowLocalhostNetworkCapture = true
                         },
 
-                        session_recording: {
-                            report_recording_started: true,
-                        },
+                        session_recording: {},
                     },
                 })
 
@@ -291,9 +287,7 @@ describe('Session recording', () => {
         beforeEach(() => {
             start({
                 options: {
-                    session_recording: {
-                        report_recording_started: true,
-                    },
+                    session_recording: {},
                 },
                 decideResponseOverrides: {
                     isAuthenticated: false,
@@ -430,9 +424,7 @@ describe('Session recording', () => {
             // and refresh the page
             cy.reload()
             cy.posthogInit({
-                session_recording: {
-                    report_recording_started: true,
-                },
+                session_recording: {},
             })
             cy.wait('@decide')
             cy.wait('@recorder')
@@ -600,9 +592,7 @@ describe('Session recording', () => {
         beforeEach(() => {
             start({
                 options: {
-                    session_recording: {
-                        report_recording_started: true,
-                    },
+                    session_recording: {},
                 },
                 decideResponseOverrides: {
                     isAuthenticated: false,
