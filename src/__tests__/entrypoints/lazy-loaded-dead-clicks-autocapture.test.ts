@@ -1,6 +1,7 @@
 import { PostHog } from '../../posthog-core'
 import _LazyLoadedDeadClicksAutocapture from '../../entrypoints/dead-clicks-autocapture'
 import { assignableWindow, document } from '../../utils/globals'
+import { autocaptureCompatibleElements } from '../../autocapture-utils'
 
 // need to fake the timer before jsdom inits
 jest.useFakeTimers()
@@ -119,25 +120,6 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(2)
         })
 
-        it('ignores clicks on links which might open a new window', () => {
-            const link = document.createElement('a')
-            link.setAttribute('target', '_blank')
-
-            triggerMouseEvent(link, 'click')
-
-            expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(0)
-        })
-
-        it('does not ignores clicks on links which open in self', () => {
-            const link = document.createElement('a')
-            link.setAttribute('target', '_self')
-            document.body.append(link)
-
-            triggerMouseEvent(link, 'click')
-
-            expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(1)
-        })
-
         it('ignores clicks on html node', () => {
             const fakeHTML = document.createElement('html')
             document.body.append(fakeHTML)
@@ -155,6 +137,18 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             triggerMouseEvent(nonElementNode, 'click')
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(0)
+        })
+
+        it.each(autocaptureCompatibleElements)('click on %s node is never a deadclick', (element) => {
+            const el = document.createElement(element)
+            document.body.append(el)
+            triggerMouseEvent(el, 'click')
+            jest.setSystemTime(4000)
+
+            lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+            expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+            expect(fakeInstance.capture).not.toHaveBeenCalled()
         })
     })
 

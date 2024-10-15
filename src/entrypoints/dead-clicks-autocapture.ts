@@ -1,7 +1,7 @@
 import { assignableWindow, LazyLoadedDeadClicksAutocapture } from '../utils/globals'
 import { PostHog } from '../posthog-core'
 import { isNull, isNumber, isUndefined } from '../utils/type-utils'
-import { getEventTarget, isElementNode, isTag } from '../autocapture-utils'
+import { autocaptureCompatibleElements, getEventTarget, isElementNode, isTag } from '../autocapture-utils'
 import { DeadClicksAutoCaptureConfig, Properties } from '../types'
 import { getPropertiesFromElement } from '../autocapture'
 
@@ -158,16 +158,11 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
             return true
         }
 
-        // ignore clicks that might open a new window
         if (
-            click.node.tagName === 'A' &&
-            click.node.hasAttribute('target') &&
-            click.node.getAttribute('target') !== '_self'
+            isTag(click.node, 'html') ||
+            !isElementNode(click.node) ||
+            autocaptureCompatibleElements.includes(click.node.tagName.toLowerCase())
         ) {
-            return true
-        }
-
-        if (isTag(click.node, 'html') || !isElementNode(click.node)) {
             return true
         }
 
