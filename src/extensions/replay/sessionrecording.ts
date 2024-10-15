@@ -34,6 +34,14 @@ import { isLocalhost } from '../../utils/request-utils'
 import { MutationRateLimiter } from './mutation-rate-limiter'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
 
+type SessionStartReason =
+    | 'sampling_override'
+    | 'recording_initialized'
+    | 'linked_flag_match'
+    | 'linked_flag_override'
+    | 'sampling'
+    | 'session_id_changed'
+
 const BASE_ENDPOINT = '/s/'
 
 const FIVE_MINUTES = 1000 * 60 * 5
@@ -392,9 +400,9 @@ export class SessionRecording {
         }
     }
 
-    startIfEnabledOrStop() {
+    startIfEnabledOrStop(startReason?: SessionStartReason) {
         if (this.isRecordingEnabled) {
-            this._startCapture()
+            this._startCapture(startReason)
 
             // calling addEventListener multiple times is safe and will not add duplicates
             window?.addEventListener('beforeunload', this._onBeforeUnload)
@@ -496,15 +504,21 @@ export class SessionRecording {
             shouldSample = storedIsSampled
         }
 
-        if (!shouldSample && makeDecision) {
-            logger.warn(
-                LOGGER_PREFIX +
-                    ` Sample rate (${currentSampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
-            )
+        if (makeDecision) {
+            if (shouldSample) {
+                this._reportStarted('sampling')
+            } else {
+                logger.warn(
+                    LOGGER_PREFIX +
+                        ` Sample rate (${currentSampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
+                )
+            }
+
+            this._tryAddCustomEvent('samplingDecisionMade', {
+                sampleRate: currentSampleRate,
+                isSampled: shouldSample,
+            })
         }
-        this._tryAddCustomEvent('samplingDecisionMade', {
-            sampleRate: currentSampleRate,
-        })
 
         this.instance.persistence?.register({
             [SESSION_RECORDING_IS_SAMPLED]: shouldSample,
@@ -536,6 +550,7 @@ export class SessionRecording {
                     const tag = 'linked flag matched'
                     logger.info(LOGGER_PREFIX + ' ' + tag, payload)
                     this._tryAddCustomEvent(tag, payload)
+                    this._reportStarted('linked_flag_match')
                 }
                 this._linkedFlagSeen = linkedFlagMatches
             })
@@ -609,7 +624,7 @@ export class SessionRecording {
         })
     }
 
-    private _startCapture() {
+    private _startCapture(startReason?: SessionStartReason) {
         if (isUndefined(Object.assign)) {
             // According to the rrweb docs, rrweb is not supported on IE11 and below:
             // "rrweb does not support IE11 and below because it uses the MutationObserver API which was supported by these browsers."
@@ -647,6 +662,11 @@ export class SessionRecording {
             })
         } else {
             this._onScriptLoaded()
+        }
+
+        logger.info(LOGGER_PREFIX + ' starting')
+        if (this.status === 'active') {
+            this._reportStarted(startReason || 'recording_initialized')
         }
     }
 
@@ -721,7 +741,7 @@ export class SessionRecording {
 
         if (sessionIdChanged || windowIdChanged) {
             this.stopRecording()
-            this.startIfEnabledOrStop()
+            this.startIfEnabledOrStop('session_id_changed')
         } else if (returningFromIdle) {
             this._scheduleFullSnapshot()
         }
@@ -837,11 +857,6 @@ export class SessionRecording {
 
         this._tryAddCustomEvent('$posthog_config', {
             config: this.instance.config,
-        })
-
-        logger.info(LOGGER_PREFIX + ' started', {
-            idleThreshold: this.sessionIdleThresholdMilliseconds,
-            maxIdleTime: this.sessionManager.sessionTimeoutMs,
         })
     }
 
@@ -1096,5 +1111,29 @@ export class SessionRecording {
      * */
     public overrideLinkedFlag() {
         this._linkedFlagSeen = true
+        this._reportStarted('linked_flag_override')
+    }
+
+    /**
+     * this ignores the sampling config and causes capture to start
+     * (if recording would have started had the flag been received i.e. it does not override other config).
+     *
+     * It is not usual to call this directly,
+     * instead call `posthog.startSessionRecording({sampling: true})`
+     * */
+    public overrideSampling() {
+        this.instance.persistence?.register({
+            // short-circuits the `makeSamplingDecision` function in the session recording module
+            [SESSION_RECORDING_IS_SAMPLED]: true,
+        })
+        this._reportStarted('sampling_override')
+    }
+
+    private _reportStarted(startReason: SessionStartReason, shouldReport: () => boolean = () => true) {
+        if (shouldReport()) {
+            this.instance.register_for_session({
+                $session_recording_start_reason: startReason,
+            })
+        }
     }
 }

@@ -1,3 +1,8 @@
+## 1.169.0 - 2024-10-15
+
+- feat: report reason for recording start (#1452)
+- chore: improve exception autocapture (#1466)
+
 ## 1.168.0 - 2024-10-15
 
 - fix(errors): Better define schema, align with python (#1460)
