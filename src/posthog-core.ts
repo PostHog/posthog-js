@@ -545,8 +545,12 @@ export class PostHog {
         if (response.analytics?.endpoint) {
             this.analyticsDefaultEndpoint = response.analytics.endpoint
         }
-        this.config.person_profiles =
-            response['defaultIdentifiedOnly'] && !this._initialPersonProfilesConfig ? 'identified_only' : 'always'
+
+        this.config.person_profiles = this._initialPersonProfilesConfig
+            ? this._initialPersonProfilesConfig
+            : response['defaultIdentifiedOnly']
+            ? 'identified_only'
+            : 'always'
 
         this.sessionRecording?.afterDecideResponse(response)
         this.autocapture?.afterDecideResponse(response)
