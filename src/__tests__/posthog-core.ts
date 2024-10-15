@@ -345,6 +345,20 @@ describe('posthog core', () => {
 
             expect(posthog.compression).toEqual('gzip-js')
         })
+        it('uses defaultIdentifiedOnly from decide response', () => {
+            const posthog = posthogWith({})
+
+            posthog._afterDecideResponse({ defaultIdentifiedOnly: true } as DecideResponse)
+            expect(posthog.config.person_profiles).toEqual('identified_only')
+
+            posthog._afterDecideResponse({ defaultIdentifiedOnly: false } as DecideResponse)
+            expect(posthog.config.person_profiles).toEqual('always')
+        })
+        it('defaultIdentifiedOnly does not override person_profiles if already set', () => {
+            const posthog = posthogWith({ person_profiles: 'always' })
+            posthog._afterDecideResponse({ defaultIdentifiedOnly: true } as DecideResponse)
+            expect(posthog.config.person_profiles).toEqual('always')
+        })
 
         it('enables compression from decide response when only one received', () => {
             const posthog = posthogWith({})

@@ -272,6 +272,7 @@ export class PostHog {
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
     version = Config.LIB_VERSION
+    _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
 
     SentryIntegration: typeof SentryIntegration
     sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
@@ -294,6 +295,7 @@ export class PostHog {
         this.__loaded = false
         this.analyticsDefaultEndpoint = '/e/'
         this._initialPageviewCaptured = false
+        this._initialPersonProfilesConfig = null
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
@@ -390,6 +392,10 @@ export class PostHog {
         this.config = {} as PostHogConfig // will be set right below
         this._triggered_notifs = []
 
+        if (config.person_profiles) {
+            this._initialPersonProfilesConfig = config.person_profiles
+        }
+
         this.set_config(
             extend({}, defaultConfig(), configRenames(config), {
                 name: name,
@@ -408,6 +414,8 @@ export class PostHog {
             this.config.persistence === 'sessionStorage'
                 ? this.persistence
                 : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
+
+        // should I store the initial person profiles config in persistence?
         const initialPersistenceProps = { ...this.persistence.props }
         const initialSessionProps = { ...this.sessionPersistence.props }
 
@@ -537,6 +545,8 @@ export class PostHog {
         if (response.analytics?.endpoint) {
             this.analyticsDefaultEndpoint = response.analytics.endpoint
         }
+        this.config.person_profiles =
+            response['defaultIdentifiedOnly'] && !this._initialPersonProfilesConfig ? 'identified_only' : 'always'
 
         this.sessionRecording?.afterDecideResponse(response)
         this.autocapture?.afterDecideResponse(response)
