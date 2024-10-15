@@ -401,7 +401,7 @@ describe('posthog core', () => {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop', $is_identified: false }),
                 remove_event_timer: jest.fn(),
                 get_property: () => 'anonymous',
-                props: { $groups: {} },
+                props: {},
                 register: jest.fn(),
             } as unknown as PostHogPersistence,
             sessionPersistence: {
