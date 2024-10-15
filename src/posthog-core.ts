@@ -992,7 +992,12 @@ export class PostHog {
         }
 
         // add person processing flag as very last step, so it cannot be overridden
-        properties['$process_person_profile'] = this._hasPersonProcessing()
+        const hasPersonProcessing = this._hasPersonProcessing()
+        properties['$process_person_profile'] = hasPersonProcessing
+        // if the event has person processing, ensure that all future events will too, even if the setting changes
+        if (hasPersonProcessing) {
+            this._requirePersonProcessing('_calculate_event_properties')
+        }
 
         return properties
     }

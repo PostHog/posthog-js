@@ -44,12 +44,17 @@ describe('person processing', () => {
         mockURLGetter.mockReturnValue('https://example.com?utm_source=foo')
     })
 
-    const setup = async (person_profiles: 'always' | 'identified_only' | 'never' | undefined, token?: string) => {
+    const setup = async (
+        person_profiles: 'always' | 'identified_only' | 'never' | undefined,
+        token?: string,
+        persistence_name?: string
+    ) => {
         token = token || uuidv7()
         const onCapture = jest.fn()
         const posthog = await createPosthogInstance(token, {
             _onCapture: onCapture,
             person_profiles,
+            persistence_name,
         })
         return { token, onCapture, posthog }
     }
@@ -545,6 +550,50 @@ describe('person processing', () => {
             expect(posthog._isIdentified()).toBe(false)
             expect(onCapture.mock.calls.length).toEqual(3)
             expect(onCapture.mock.calls[2][1].properties.$process_person_profile).toEqual(false)
+        })
+    })
+
+    describe('persistence', () => {
+        it('should remember that a user set the mode to always on a previous visit', async () => {
+            // arrange
+            const persistenceName = uuidv7()
+            const { posthog: posthog1, onCapture: onCapture1 } = await setup('always', undefined, persistenceName)
+            posthog1.capture('custom event 1')
+            const { posthog: posthog2, onCapture: onCapture2 } = await setup(
+                'identified_only',
+                undefined,
+                persistenceName
+            )
+
+            // act
+            posthog2.capture('custom event 2')
+
+            // assert
+            expect(onCapture1.mock.calls.length).toEqual(1)
+            expect(onCapture2.mock.calls.length).toEqual(1)
+            expect(onCapture1.mock.calls[0][1].properties.$process_person_profile).toEqual(true)
+            expect(onCapture2.mock.calls[0][1].properties.$process_person_profile).toEqual(true)
+        })
+
+        it('should work when always is set on a later visit', async () => {
+            // arrange
+            const persistenceName = uuidv7()
+            const { posthog: posthog1, onCapture: onCapture1 } = await setup(
+                'identified_only',
+                undefined,
+                persistenceName
+            )
+            posthog1.capture('custom event 1')
+            const { posthog: posthog2, onCapture: onCapture2 } = await setup('always', undefined, persistenceName)
+
+            // act
+            posthog2.capture('custom event 2')
+
+            // assert
+            expect(onCapture1.mock.calls.length).toEqual(1)
+            expect(onCapture2.mock.calls.length).toEqual(1)
+            expect(onCapture1.mock.calls[0][1].properties.$process_person_profile).toEqual(false)
+            expect(onCapture2.mock.calls[0][1].properties.$process_person_profile).toEqual(true)
         })
     })
 })
