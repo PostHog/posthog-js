@@ -628,5 +628,23 @@ describe('person processing', () => {
             expect(onCapture.mock.calls[0][1].properties.$process_person_profile).toEqual(false)
             expect(onCapture.mock.calls[1][1].properties.$process_person_profile).toEqual(false)
         })
+
+        it('should persist when the default person mode is overridden by decide', async () => {
+            // arrange
+            const persistenceName = uuidv7()
+            const { posthog: posthog1, onCapture: onCapture1 } = await setup(undefined, undefined, persistenceName)
+
+            // act
+            posthog1._afterDecideResponse({ defaultIdentifiedOnly: false } as DecideResponse)
+            posthog1.capture('custom event 1')
+            const { posthog: posthog2, onCapture: onCapture2 } = await setup(undefined, undefined, persistenceName)
+            posthog2.capture('custom event 2')
+
+            // assert
+            expect(onCapture1.mock.calls.length).toEqual(1)
+            expect(onCapture2.mock.calls.length).toEqual(1)
+            expect(onCapture1.mock.calls[0][1].properties.$process_person_profile).toEqual(true)
+            expect(onCapture2.mock.calls[0][1].properties.$process_person_profile).toEqual(true)
+        })
     })
 })
