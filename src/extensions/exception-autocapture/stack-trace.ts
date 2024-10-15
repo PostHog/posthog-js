@@ -51,7 +51,6 @@ export interface StackFrame {
 }
 
 const WEBPACK_ERROR_REGEXP = /\(error: (.*)\)/
-const STRIP_FRAME_REGEXP = /captureException/
 const STACKTRACE_FRAME_LIMIT = 50
 
 const UNKNOWN_FUNCTION = '?'
@@ -209,14 +208,6 @@ export function reverseAndStripFrames(stack: ReadonlyArray<StackFrame>): StackFr
     const localStack = Array.from(stack)
 
     localStack.reverse()
-
-    if (STRIP_FRAME_REGEXP.test(getLastStackFrame(localStack).function || '')) {
-        localStack.pop()
-
-        if (STRIP_FRAME_REGEXP.test(getLastStackFrame(localStack).function || '')) {
-            localStack.pop()
-        }
-    }
 
     return localStack.slice(0, STACKTRACE_FRAME_LIMIT).map((frame) => ({
         ...frame,

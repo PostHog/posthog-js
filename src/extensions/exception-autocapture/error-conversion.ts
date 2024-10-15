@@ -56,7 +56,7 @@ export interface ErrorConversions {
 const ERROR_TYPES_PATTERN =
     /^(?:[Uu]ncaught (?:exception: )?)?(?:((?:Eval|Internal|Range|Reference|Syntax|Type|URI|)Error): )?(.*)$/i
 
-export function parseStackFrames(ex: Error & { framesToPop?: number; stacktrace?: string }): StackFrame[] {
+export function parseStackFrames(ex: Error & { stacktrace?: string }, framesToPop: number = 0): StackFrame[] {
     // Access and store the stacktrace property before doing ANYTHING
     // else to it because Opera is not very good at providing it
     // reliably in other circumstances.
@@ -65,7 +65,9 @@ export function parseStackFrames(ex: Error & { framesToPop?: number; stacktrace?
     const skipLines = getSkipFirstStackStringLines(ex)
 
     try {
-        return defaultStackParser(stacktrace, skipLines)
+        const frames = defaultStackParser(stacktrace, skipLines)
+        // frames are reversed so we remove the from the back of the array
+        return frames.slice(0, -1 * framesToPop)
     } catch {
         // no-empty
     }
@@ -156,7 +158,9 @@ function errorPropertiesFromString(candidate: string, metadata?: ErrorMetadata):
     }
 
     if (metadata?.syntheticException) {
-        const frames = parseStackFrames(metadata.syntheticException)
+        // Kludge: strip the last frame from a synthetically created error
+        // so that it does not appear in a users stack trace
+        const frames = parseStackFrames(metadata.syntheticException, 1)
         if (frames.length) {
             exception.stacktrace = { frames }
         }
@@ -223,7 +227,9 @@ function errorPropertiesFromObject(candidate: Record<string, unknown>, metadata?
     }
 
     if (metadata?.syntheticException) {
-        const frames = parseStackFrames(metadata?.syntheticException)
+        // Kludge: strip the last frame from a synthetically created error
+        // so that it does not appear in a users stack trace
+        const frames = parseStackFrames(metadata?.syntheticException, 1)
         if (frames.length) {
             exception.stacktrace = { frames }
         }
