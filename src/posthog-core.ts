@@ -991,7 +991,7 @@ export class PostHog {
             properties = sanitize_properties(properties, event_name)
         }
 
-        // add person processing flag as very last step, so it cannot be overridden. process_person=true is default
+        // add person processing flag as very last step, so it cannot be overridden
         properties['$process_person_profile'] = this._hasPersonProcessing()
 
         return properties
