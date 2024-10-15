@@ -573,6 +573,7 @@ export type ErrorEventArgs = [
 export type ErrorMetadata = {
     handled?: boolean
     synthetic?: boolean
+    syntheticException?: Error
     overrideExceptionType?: string
     overrideExceptionMessage?: string
     defaultExceptionType?: string

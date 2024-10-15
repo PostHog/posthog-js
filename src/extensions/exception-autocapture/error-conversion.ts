@@ -146,17 +146,24 @@ function errorPropertiesFromString(candidate: string, metadata?: ErrorMetadata):
         ? candidate
         : metadata?.defaultExceptionMessage
 
+    const exception: Exception = {
+        type: exceptionType,
+        value: exceptionMessage,
+        mechanism: {
+            handled,
+            synthetic,
+        },
+    }
+
+    if (metadata?.syntheticException) {
+        const frames = parseStackFrames(metadata.syntheticException)
+        if (frames.length) {
+            exception.stacktrace = { frames }
+        }
+    }
+
     return {
-        $exception_list: [
-            {
-                type: exceptionType,
-                value: exceptionMessage,
-                mechanism: {
-                    handled,
-                    synthetic,
-                },
-            },
-        ],
+        $exception_list: [exception],
         $exception_level: 'error',
     }
 }
@@ -206,17 +213,24 @@ function errorPropertiesFromObject(candidate: Record<string, unknown>, metadata?
         ? metadata.overrideExceptionMessage
         : `Non-Error ${'exception'} captured with keys: ${extractExceptionKeysForMessage(candidate)}`
 
+    const exception: Exception = {
+        type: exceptionType,
+        value: exceptionMessage,
+        mechanism: {
+            handled,
+            synthetic,
+        },
+    }
+
+    if (metadata?.syntheticException) {
+        const frames = parseStackFrames(metadata?.syntheticException)
+        if (frames.length) {
+            exception.stacktrace = { frames }
+        }
+    }
+
     return {
-        $exception_list: [
-            {
-                type: exceptionType,
-                value: exceptionMessage,
-                mechanism: {
-                    handled,
-                    synthetic,
-                },
-            },
-        ],
+        $exception_list: [exception],
         $exception_level: isSeverityLevel(candidate.level) ? candidate.level : 'error',
     }
 }
@@ -259,7 +273,7 @@ export function errorToProperties(
     } else if (isPlainObject(candidate) || isEvent(candidate)) {
         // group these by using the keys available on the object
         const objectException = candidate as Record<string, unknown>
-        return errorPropertiesFromObject(objectException)
+        return errorPropertiesFromObject(objectException, metadata)
     } else if (isUndefined(error) && isString(event)) {
         let name = 'Error'
         let message = event

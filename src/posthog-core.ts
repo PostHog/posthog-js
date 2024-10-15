@@ -1827,13 +1827,12 @@ export class PostHog {
     /** Capture a caught exception manually */
     captureException(error: Error, additionalProperties?: Properties): void {
         const properties: Properties = isFunction(assignableWindow.__PosthogExtensions__?.parseErrorAsProperties)
-            ? assignableWindow.__PosthogExtensions__.parseErrorAsProperties([
-                  error.message,
-                  undefined,
-                  undefined,
-                  undefined,
-                  error,
-              ])
+            ? assignableWindow.__PosthogExtensions__.parseErrorAsProperties(
+                  [error.message, undefined, undefined, undefined, error],
+                  // create synthetic error to get stack in cases where user input does not contain one
+                  // creating the exception at this level makes it easy to strip the 'captureException' frame
+                  { syntheticException: new Error('PostHog syntheticException') }
+              )
             : {
                   $exception_level: 'error',
                   $exception_list: [
