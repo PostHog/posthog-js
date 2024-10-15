@@ -2,6 +2,7 @@ import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 import { logger } from '../utils/logger'
 import { INITIAL_CAMPAIGN_PARAMS, INITIAL_REFERRER_INFO } from '../constants'
+import { DecideResponse } from '../types'
 
 jest.mock('../utils/logger')
 
@@ -594,6 +595,38 @@ describe('person processing', () => {
             expect(onCapture2.mock.calls.length).toEqual(1)
             expect(onCapture1.mock.calls[0][1].properties.$process_person_profile).toEqual(false)
             expect(onCapture2.mock.calls[0][1].properties.$process_person_profile).toEqual(true)
+        })
+    })
+
+    describe('decide', () => {
+        it('should change the person mode from default when decide response is handled', async () => {
+            // arrange
+            const { posthog, onCapture } = await setup(undefined)
+            posthog.capture('startup page view')
+
+            // act
+            posthog._afterDecideResponse({ defaultIdentifiedOnly: false } as DecideResponse)
+            posthog.capture('custom event')
+
+            // assert
+            expect(onCapture.mock.calls.length).toEqual(2)
+            expect(onCapture.mock.calls[0][1].properties.$process_person_profile).toEqual(false)
+            expect(onCapture.mock.calls[1][1].properties.$process_person_profile).toEqual(true)
+        })
+
+        it('should NOT change the person mode from user-defined when decide response is handled', async () => {
+            // arrange
+            const { posthog, onCapture } = await setup('identified_only')
+            posthog.capture('startup page view')
+
+            // act
+            posthog._afterDecideResponse({ defaultIdentifiedOnly: false } as DecideResponse)
+            posthog.capture('custom event')
+
+            // assert
+            expect(onCapture.mock.calls.length).toEqual(2)
+            expect(onCapture.mock.calls[0][1].properties.$process_person_profile).toEqual(false)
+            expect(onCapture.mock.calls[1][1].properties.$process_person_profile).toEqual(false)
         })
     })
 })
