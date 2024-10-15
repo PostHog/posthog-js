@@ -4,7 +4,7 @@ import { Info } from '../utils/event-utils'
 import { document, window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
 import * as globals from '../utils/globals'
-import { USER_STATE } from '../constants'
+import { ENABLE_PERSON_PROCESSING, USER_STATE } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { logger } from '../utils/logger'
 import { DecideResponse, PostHogConfig } from '../types'
@@ -525,6 +525,7 @@ describe('posthog core', () => {
             )
 
             posthog.persistence.get_initial_props = () => ({ initial: 'prop' })
+            posthog.persistence.props[ENABLE_PERSON_PROCESSING] = true // person processing is needed for $set_once
             expect(posthog._calculate_set_once_properties({ key: 'prop' })).toEqual({
                 event_name: '$set_once',
                 token: undefined,
