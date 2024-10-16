@@ -15,12 +15,12 @@ if (!Array.from) {
 
             // Convert the length to a number and ensure it's finite and non-negative
             const len = Number(items.length)
-            if (!isFinite(len) || len < 0) {
-                throw new RangeError('Array length must be a finite positive integer')
-            }
 
             // Truncate the length to avoid any floating-point errors (i.e., avoid fractional lengths)
             const finalLen = Math.min(Math.max(Math.trunc(len), 0), Number.MAX_SAFE_INTEGER)
+            if (!isFinite(finalLen) || finalLen < 0) {
+                throw new RangeError('Array length must be a finite positive integer')
+            }
 
             const result: (T | U)[] = isFunction(C) ? Object(new (C as any)(finalLen)) : new Array(finalLen)
 
