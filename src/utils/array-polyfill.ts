@@ -4,9 +4,6 @@ import { isFunction } from './type-utils'
 
 if (!Array.from) {
     Array.from = (function () {
-        // Polyfill for TypeScript signature:
-        // from<T>(arrayLike: ArrayLike<T>): T[];
-        // from<T, U>(arrayLike: ArrayLike<T>, mapfn: (v: T, k: number) => U, thisArg?: any): U[];
         return function from<T, U>(arrayLike: ArrayLike<T>, mapfn?: (v: T, k: number) => U, thisArg?: any): (T | U)[] {
             // Use Array as the constructor without relying on `this`
             const C = Array
@@ -16,14 +13,14 @@ if (!Array.from) {
                 throw new TypeError('Array.from requires an array-like object - not null or undefined')
             }
 
-            const len = Number(items.length) // Get the length as a number
-
-            // Ensure length is a finite, positive integer, or set to 0
-            if (isNaN(len) || len < 0 || !isFinite(len)) {
+            // Convert the length to a number and ensure it's finite and non-negative
+            const len = Number(items.length)
+            if (!isFinite(len) || len < 0) {
                 throw new RangeError('Array length must be a finite positive integer')
             }
 
-            const finalLen = Math.min(Math.max(len, 0), Number.MAX_SAFE_INTEGER) // Ensure within bounds
+            // Truncate the length to avoid any floating-point errors (i.e., avoid fractional lengths)
+            const finalLen = Math.min(Math.max(Math.trunc(len), 0), Number.MAX_SAFE_INTEGER)
 
             const result: (T | U)[] = isFunction(C) ? Object(new (C as any)(finalLen)) : new Array(finalLen)
 
