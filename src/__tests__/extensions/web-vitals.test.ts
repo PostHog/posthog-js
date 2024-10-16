@@ -1,9 +1,9 @@
 import { createPosthogInstance } from '../helpers/posthog-instance'
 import { uuidv7 } from '../../uuidv7'
 import { PostHog } from '../../posthog-core'
-import { DecideResponse, SupportedWebVitalsMetrics } from '../../types'
+import { DecideResponse, PerformanceCaptureConfig, SupportedWebVitalsMetrics } from '../../types'
 import { assignableWindow } from '../../utils/globals'
-import { FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, FIFTEEN_MINUTES_IN_MILLIS } from '../../extensions/web-vitals'
+import { DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, FIFTEEN_MINUTES_IN_MILLIS } from '../../extensions/web-vitals'
 
 jest.mock('../../utils/logger')
 jest.useFakeTimers()
@@ -134,15 +134,35 @@ describe('web vitals', () => {
                 ])
             })
 
-            it('should emit after 8 seconds even when only 1 to 3 metrics captured', async () => {
+            it('should emit after 5 seconds even when only 1 to 3 metrics captured', async () => {
                 onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
 
                 expect(onCapture).toBeCalledTimes(0)
 
-                jest.advanceTimersByTime(FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+                jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
                 // for some reason advancing the timer emits a $pageview event as well 🤷
                 // expect(onCapture).toBeCalledTimes(2)
+                expect(onCapture.mock.lastCall).toMatchObject([
+                    '$web_vitals',
+                    {
+                        event: '$web_vitals',
+                        properties: {
+                            $web_vitals_CLS_event: expectedEmittedWebVitals('CLS'),
+                            $web_vitals_CLS_value: 123.45,
+                        },
+                    },
+                ])
+            })
+
+            it('should emit after configured timeout even when only 1 to 3 metrics captured', async () => {
+                ;(posthog.config.capture_performance as PerformanceCaptureConfig).web_vitals_delayed_flush_ms = 1000
+                onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
+
+                expect(onCapture).toBeCalledTimes(0)
+
+                jest.advanceTimersByTime(1000 + 1)
+
                 expect(onCapture.mock.lastCall).toMatchObject([
                     '$web_vitals',
                     {
@@ -160,7 +180,7 @@ describe('web vitals', () => {
 
                 expect(onCapture).toBeCalledTimes(0)
 
-                jest.advanceTimersByTime(FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+                jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
                 expect(onCapture.mock.calls).toEqual([])
             })
@@ -171,7 +191,7 @@ describe('web vitals', () => {
 
                 expect(onCapture).toBeCalledTimes(0)
 
-                jest.advanceTimersByTime(FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+                jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
                 expect(onCapture).toBeCalledTimes(1)
             })

@@ -114,6 +114,12 @@ export interface PerformanceCaptureConfig {
      * NB setting this does not override whether the capture is enabled
      */
     web_vitals_allowed_metrics?: SupportedWebVitalsMetrics[]
+    /**
+     * we delay flushing web vitals metrics to reduce the number of events we send
+     * this is the maximum time we will wait before sending the metrics
+     * if not set it defaults to 5 seconds
+     */
+    web_vitals_delayed_flush_ms?: number
 }
 
 export interface HeatmapConfig {
