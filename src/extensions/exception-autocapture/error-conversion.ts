@@ -67,7 +67,7 @@ export function parseStackFrames(ex: Error & { stacktrace?: string }, framesToPo
     try {
         const frames = defaultStackParser(stacktrace, skipLines)
         // frames are reversed so we remove the from the back of the array
-        return frames.slice(0, -1 * framesToPop)
+        return frames.slice(0, frames.length - framesToPop)
     } catch {
         // no-empty
     }
