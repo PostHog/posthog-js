@@ -16,25 +16,33 @@ if (!Array.from) {
                 throw new TypeError('Array.from requires an array-like object - not null or undefined')
             }
 
-            const len = Math.min(Math.max(Number(items.length) || 0, 0), Number.MAX_SAFE_INTEGER)
-            const result: (T | U)[] = isFunction(C) ? Object(new (C as any)(len)) : new Array(len)
+            const len = Number(items.length) // Get the length as a number
+
+            // Ensure length is a finite, positive integer, or set to 0
+            if (isNaN(len) || len < 0 || !isFinite(len)) {
+                throw new RangeError('Array length must be a finite positive integer')
+            }
+
+            const finalLen = Math.min(Math.max(len, 0), Number.MAX_SAFE_INTEGER) // Ensure within bounds
+
+            const result: (T | U)[] = isFunction(C) ? Object(new (C as any)(finalLen)) : new Array(finalLen)
 
             let k = 0
 
             if (isFunction(mapfn)) {
-                while (k < len) {
+                while (k < finalLen) {
                     const kValue = items[k]
                     result[k] = mapfn.call(thisArg, kValue, k)
                     k++
                 }
             } else {
-                while (k < len) {
+                while (k < finalLen) {
                     result[k] = items[k]
                     k++
                 }
             }
 
-            result.length = len
+            result.length = finalLen
             return result
         }
     })()
