@@ -41,7 +41,7 @@
         "core-js": "^3.38.1",
         "fflate": "^0.4.8",
         "preact": "^10.19.3",
-        "web-vitals": "^4.0.1"
+        "web-vitals": "^4.2.0"
     },
     "devDependencies": {
         "@babel/core": "7.18.9",
@@ -62,7 +62,7 @@
         "@testing-library/jest-dom": "^6.5.0",
         "@testing-library/preact": "^3.2.4",
         "@types/eslint": "^8.44.6",
-        "@types/jest": "^27.5.1",
+        "@types/jest": "^27.5.2",
         "@types/node": "^22.5.0",
         "@types/react-dom": "^18.0.10",
         "@types/sinon": "^17.0.1",
@@ -121,7 +121,7 @@
         ]
     },
     "browserslist": [
-        "> 0.5%, last 2 versions, Firefox ESR, not dead, IE 11"
+        ">0.5%, last 2 versions, Firefox ESR, not dead, IE 11"
     ],
     "pnpm": {
         "patchedDependencies": {

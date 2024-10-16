@@ -15,7 +15,17 @@ const plugins = [
     babel({
         extensions: ['.js', '.jsx', '.ts', '.tsx'],
         babelHelpers: 'bundled',
-        presets: ['@babel/preset-env'],
+        presets: [
+            [
+                '@babel/preset-env',
+                {
+                    debug: true,
+                    corejs: '3.38',
+                    include: ['es.array.from'],
+                    targets: '>0.5%, last 2 versions, Firefox ESR, not dead, IE 11',
+                },
+            ],
+        ],
     }),
     terser({ toplevel: true }),
 ]
