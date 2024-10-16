@@ -102,6 +102,9 @@ devDependencies:
   compare-versions:
     specifier: ^6.1.0
     version: 6.1.0
+  core-js:
+    specifier: ^3.38.1
+    version: 3.38.1
   cypress:
     specifier: 13.6.3
     version: 13.6.3
@@ -4410,6 +4413,11 @@ packages:
     dependencies:
       browserslist: 4.21.7
       semver: 7.0.0
+    dev: true
+
+  /core-js@3.38.1:
+    resolution: {integrity: sha512-OP35aUorbU3Zvlx7pjsFdu1rGNnD4pgw/CWoYzRY3t2EzoVT7shKHY1dlAy3f41cGIO7ZDPQimhGFTlEYkG/Hw==}
+    requiresBuild: true
     dev: true
 
   /core-util-is@1.0.2:
