@@ -40,7 +40,7 @@
     "dependencies": {
         "fflate": "^0.4.8",
         "preact": "^10.19.3",
-        "web-vitals": "^4.0.1"
+        "web-vitals": "^4.2.0"
     },
     "devDependencies": {
         "@babel/core": "7.18.9",
@@ -54,14 +54,14 @@
         "@rollup/plugin-json": "^6.1.0",
         "@rollup/plugin-node-resolve": "^15.3.0",
         "@rollup/plugin-terser": "^0.4.4",
-        "@rollup/plugin-typescript": "^12.1.1",
+        "@rollup/plugin-typescript": "^11.1.6",
         "@rrweb/types": "2.0.0-alpha.13",
         "@sentry/types": "8.7.0",
         "@testing-library/dom": "^9.3.0",
         "@testing-library/jest-dom": "^6.5.0",
         "@testing-library/preact": "^3.2.4",
         "@types/eslint": "^8.44.6",
-        "@types/jest": "^27.5.1",
+        "@types/jest": "^27.5.2",
         "@types/node": "^22.5.0",
         "@types/react-dom": "^18.0.10",
         "@types/sinon": "^17.0.1",
