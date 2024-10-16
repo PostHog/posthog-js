@@ -1,3 +1,7 @@
+## 1.170.0 - 2024-10-16
+
+- fix: web vitals delayed capture (#1474)
+
 ## 1.169.1 - 2024-10-16
 
 - chore: skip if Array.from is missing (#1475)
