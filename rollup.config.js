@@ -8,7 +8,7 @@ import { visualizer } from 'rollup-plugin-visualizer'
 import fs from 'fs'
 import path from 'path'
 
-const plugins = [
+const plugins = (babelTargets) => [
     json(),
     resolve({ browser: true }),
     typescript({ sourceMap: true, outDir: './dist' }),
@@ -19,7 +19,7 @@ const plugins = [
             [
                 '@babel/preset-env',
                 {
-                    targets: '>0.5%, last 2 versions, Firefox ESR, not dead, IE 11',
+                    targets: babelTargets,
                 },
             ],
         ],
@@ -44,6 +44,12 @@ const entrypointTargets = entrypoints.map((file) => {
 
     const fileName = fileParts.join('.')
 
+    let pluginsForThisFile = plugins('>0.5%, last 2 versions, Firefox ESR, not dead')
+    if (fileName.includes('ie11')) {
+        // eslint-disable-next-line no-console
+        pluginsForThisFile = plugins('>0.5%, last 2 versions, Firefox ESR, not dead, IE 11')
+    }
+
     // we're allowed to console log in this file :)
     // eslint-disable-next-line no-console
     console.log(`Building ${fileName} in ${format} format`)
@@ -67,7 +73,7 @@ const entrypointTargets = entrypoints.map((file) => {
                 ...(format === 'cjs' ? { exports: 'auto' } : {}),
             },
         ],
-        plugins: [...plugins, visualizer({ filename: `bundle-stats-${fileName}.html` })],
+        plugins: [...pluginsForThisFile, visualizer({ filename: `bundle-stats-${fileName}.html` })],
     }
 })
 
