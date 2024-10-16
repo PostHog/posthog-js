@@ -11,7 +11,7 @@ import path from 'path'
 const plugins = [
     json(),
     resolve({ browser: true }),
-    typescript({ sourceMap: true }),
+    typescript({ sourceMap: true, outDir: './dist' }),
     babel({
         extensions: ['.js', '.jsx', '.ts', '.tsx'],
         babelHelpers: 'bundled',

@@ -54,7 +54,7 @@
         "@rollup/plugin-json": "^6.1.0",
         "@rollup/plugin-node-resolve": "^15.3.0",
         "@rollup/plugin-terser": "^0.4.4",
-        "@rollup/plugin-typescript": "^11.1.6",
+        "@rollup/plugin-typescript": "^12.1.1",
         "@rrweb/types": "2.0.0-alpha.13",
         "@sentry/types": "8.7.0",
         "@testing-library/dom": "^9.3.0",
