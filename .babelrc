@@ -1,12 +1,26 @@
 {
-    "presets": ["@babel/env", ["@babel/typescript", { "jsxPragma": "h" }]],
-    "plugins": [
-        [
-            "@babel/transform-react-jsx",
-            {
-                "runtime": "automatic",
-                "importSource": "preact"
-            }
-        ]
+  "presets": [
+    [
+      "@babel/env",
+      {
+        "useBuiltIns": "usage",
+        "corejs": 3
+      }
+    ],
+    [
+      "@babel/typescript",
+      {
+        "jsxPragma": "h"
+      }
     ]
+  ],
+  "plugins": [
+    [
+      "@babel/transform-react-jsx",
+      {
+        "runtime": "automatic",
+        "importSource": "preact"
+      }
+    ]
+  ]
 }
