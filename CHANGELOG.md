@@ -1,3 +1,7 @@
+## 1.170.1 - 2024-10-16
+
+- feat: add stack to stacktraceless "exceptions" (#1472)
+
 ## 1.170.0 - 2024-10-16
 
 - fix: web vitals delayed capture (#1474)
