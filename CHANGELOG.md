@@ -1,3 +1,15 @@
+## 1.170.1 - 2024-10-16
+
+- feat: add stack to stacktraceless "exceptions" (#1472)
+
+## 1.170.0 - 2024-10-16
+
+- fix: web vitals delayed capture (#1474)
+
+## 1.169.1 - 2024-10-16
+
+- chore: skip if Array.from is missing (#1475)
+
 ## 1.169.0 - 2024-10-15
 
 - feat: report reason for recording start (#1452)

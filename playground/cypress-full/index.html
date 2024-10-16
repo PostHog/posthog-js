@@ -40,6 +40,10 @@
         Send an exception
     </button>
 
+    <button data-cy-exception-string-button onclick="posthog.captureException('I am a plain old string', { extra_prop: 2 })">
+        Capture as string
+    </button>
+
     <br />
 
     <script>

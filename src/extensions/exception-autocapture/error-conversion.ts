@@ -56,7 +56,7 @@ export interface ErrorConversions {
 const ERROR_TYPES_PATTERN =
     /^(?:[Uu]ncaught (?:exception: )?)?(?:((?:Eval|Internal|Range|Reference|Syntax|Type|URI|)Error): )?(.*)$/i
 
-export function parseStackFrames(ex: Error & { framesToPop?: number; stacktrace?: string }): StackFrame[] {
+export function parseStackFrames(ex: Error & { stacktrace?: string }, framesToPop: number = 0): StackFrame[] {
     // Access and store the stacktrace property before doing ANYTHING
     // else to it because Opera is not very good at providing it
     // reliably in other circumstances.
@@ -65,7 +65,9 @@ export function parseStackFrames(ex: Error & { framesToPop?: number; stacktrace?
     const skipLines = getSkipFirstStackStringLines(ex)
 
     try {
-        return defaultStackParser(stacktrace, skipLines)
+        const frames = defaultStackParser(stacktrace, skipLines)
+        // frames are reversed so we remove the from the back of the array
+        return frames.slice(0, frames.length - framesToPop)
     } catch {
         // no-empty
     }
@@ -146,17 +148,26 @@ function errorPropertiesFromString(candidate: string, metadata?: ErrorMetadata):
         ? candidate
         : metadata?.defaultExceptionMessage
 
+    const exception: Exception = {
+        type: exceptionType,
+        value: exceptionMessage,
+        mechanism: {
+            handled,
+            synthetic,
+        },
+    }
+
+    if (metadata?.syntheticException) {
+        // Kludge: strip the last frame from a synthetically created error
+        // so that it does not appear in a users stack trace
+        const frames = parseStackFrames(metadata.syntheticException, 1)
+        if (frames.length) {
+            exception.stacktrace = { frames }
+        }
+    }
+
     return {
-        $exception_list: [
-            {
-                type: exceptionType,
-                value: exceptionMessage,
-                mechanism: {
-                    handled,
-                    synthetic,
-                },
-            },
-        ],
+        $exception_list: [exception],
         $exception_level: 'error',
     }
 }
@@ -206,17 +217,26 @@ function errorPropertiesFromObject(candidate: Record<string, unknown>, metadata?
         ? metadata.overrideExceptionMessage
         : `Non-Error ${'exception'} captured with keys: ${extractExceptionKeysForMessage(candidate)}`
 
+    const exception: Exception = {
+        type: exceptionType,
+        value: exceptionMessage,
+        mechanism: {
+            handled,
+            synthetic,
+        },
+    }
+
+    if (metadata?.syntheticException) {
+        // Kludge: strip the last frame from a synthetically created error
+        // so that it does not appear in a users stack trace
+        const frames = parseStackFrames(metadata?.syntheticException, 1)
+        if (frames.length) {
+            exception.stacktrace = { frames }
+        }
+    }
+
     return {
-        $exception_list: [
-            {
-                type: exceptionType,
-                value: exceptionMessage,
-                mechanism: {
-                    handled,
-                    synthetic,
-                },
-            },
-        ],
+        $exception_list: [exception],
         $exception_level: isSeverityLevel(candidate.level) ? candidate.level : 'error',
     }
 }
@@ -259,7 +279,7 @@ export function errorToProperties(
     } else if (isPlainObject(candidate) || isEvent(candidate)) {
         // group these by using the keys available on the object
         const objectException = candidate as Record<string, unknown>
-        return errorPropertiesFromObject(objectException)
+        return errorPropertiesFromObject(objectException, metadata)
     } else if (isUndefined(error) && isString(event)) {
         let name = 'Error'
         let message = event
