@@ -52,6 +52,7 @@
         "@cypress/skip-test": "^2.6.1",
         "@jest/globals": "^27.5.1",
         "@rollup/plugin-babel": "^6.0.4",
+        "@rollup/plugin-commonjs": "^28.0.1",
         "@rollup/plugin-json": "^6.1.0",
         "@rollup/plugin-node-resolve": "^15.2.3",
         "@rollup/plugin-terser": "^0.4.4",

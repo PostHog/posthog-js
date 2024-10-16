@@ -7,10 +7,12 @@ import terser from '@rollup/plugin-terser'
 import { visualizer } from 'rollup-plugin-visualizer'
 import fs from 'fs'
 import path from 'path'
+import commonjs from '@rollup/plugin-commonjs'
 
 const plugins = [
     json(),
     resolve({ browser: true }),
+    commonjs(),
     typescript({ sourceMap: true }),
     babel({
         extensions: ['.js', '.jsx', '.ts', '.tsx'],
