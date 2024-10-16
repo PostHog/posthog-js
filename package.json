@@ -38,6 +38,7 @@
         "react/package.json"
     ],
     "dependencies": {
+        "core-js": "^3.38.1",
         "fflate": "^0.4.8",
         "preact": "^10.19.3",
         "web-vitals": "^4.0.1"
@@ -70,7 +71,6 @@
         "@typescript-eslint/parser": "^8.2.0",
         "babel-jest": "^26.6.3",
         "compare-versions": "^6.1.0",
-        "core-js": "^3.38.1",
         "cypress": "13.6.3",
         "cypress-localstorage-commands": "^2.2.6",
         "date-fns": "^3.6.0",
