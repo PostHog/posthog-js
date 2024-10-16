@@ -4,9 +4,7 @@
       "@babel/env",
       {
         "corejs": 3,
-        "include": [
-          "es.array.from"
-        ]
+        "targets": "> 0.5%, last 2 versions, Firefox ESR, not dead, IE 11"
       }
     ],
     [
