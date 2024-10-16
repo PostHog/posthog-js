@@ -625,13 +625,13 @@ export class SessionRecording {
     }
 
     private _startCapture(startReason?: SessionStartReason) {
-        if (isUndefined(Object.assign)) {
+        if (isUndefined(Object.assign) || isUndefined(Array.from)) {
             // According to the rrweb docs, rrweb is not supported on IE11 and below:
             // "rrweb does not support IE11 and below because it uses the MutationObserver API which was supported by these browsers."
             // https://github.com/rrweb-io/rrweb/blob/master/guide.md#compatibility-note
             //
             // However, MutationObserver does exist on IE11, it just doesn't work well and does not detect all changes.
-            // Instead, when we load "recorder.js", the first JS error is about "Object.assign" being undefined.
+            // Instead, when we load "recorder.js", the first JS error is about "Object.assign" and "Array.from" being undefined.
             // Thus instead of MutationObserver, we look for this function and block recording if it's undefined.
             return
         }
