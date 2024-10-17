@@ -5,26 +5,37 @@ import typescript from '@rollup/plugin-typescript'
 import { dts } from 'rollup-plugin-dts'
 import terser from '@rollup/plugin-terser'
 import { visualizer } from 'rollup-plugin-visualizer'
+import commonjs from '@rollup/plugin-commonjs'
 import fs from 'fs'
 import path from 'path'
 
-const plugins = [
+const plugins = (es5) => [
     json(),
     resolve({ browser: true }),
     typescript({ sourceMap: true, outDir: './dist' }),
+    commonjs(),
     babel({
         extensions: ['.js', '.jsx', '.ts', '.tsx'],
         babelHelpers: 'bundled',
+        plugins: ['@babel/plugin-transform-nullish-coalescing-operator'],
         presets: [
             [
                 '@babel/preset-env',
                 {
-                    targets: '>0.5%, last 2 versions, Firefox ESR, not dead, IE 11',
+                    targets: es5
+                        ? '>0.5%, last 2 versions, Firefox ESR, not dead, IE 11'
+                        : '>0.5%, last 2 versions, Firefox ESR, not dead',
                 },
             ],
         ],
     }),
-    terser({ toplevel: true }),
+    terser({
+        toplevel: true,
+        compress: {
+            // 5 is the default if unspecified
+            ecma: es5 ? 5 : 6,
+        },
+    }),
 ]
 
 const entrypoints = fs.readdirSync('./src/entrypoints')
@@ -43,6 +54,8 @@ const entrypointTargets = entrypoints.map((file) => {
     }
 
     const fileName = fileParts.join('.')
+
+    const pluginsForThisFile = plugins(fileName.includes('es5'))
 
     // we're allowed to console log in this file :)
     // eslint-disable-next-line no-console
@@ -67,7 +80,7 @@ const entrypointTargets = entrypoints.map((file) => {
                 ...(format === 'cjs' ? { exports: 'auto' } : {}),
             },
         ],
-        plugins: [...plugins, visualizer({ filename: `bundle-stats-${fileName}.html` })],
+        plugins: [...pluginsForThisFile, visualizer({ filename: `bundle-stats-${fileName}.html` })],
     }
 })
 
