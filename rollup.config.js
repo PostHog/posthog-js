@@ -25,8 +25,6 @@ const plugins = (supportIE11) => [
                     targets: supportIE11
                         ? '>0.5%, last 2 versions, Firefox ESR, not dead, IE 11'
                         : '>0.5%, last 2 versions, Firefox ESR, not dead',
-                    useBuiltIns: supportIE11 ? 'usage' : false,
-                    corejs: supportIE11 ? '3.38' : undefined,
                 },
             ],
         ],
