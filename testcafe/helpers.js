@@ -33,7 +33,12 @@ export const staticFilesMock = RequestMock()
     .onRequestTo(/array.full.js/)
     .respond((req, res) => {
         // eslint-disable-next-line no-undef
-        const arrayjs = fs.readFileSync(path.resolve(__dirname, '../dist/array.full.js'))
+        const ENV_BROWSER = process.env.BROWSER
+        // eslint-disable-next-line no-console
+        console.log('setting up staticFilesMock for browser: ', ENV_BROWSER)
+        const fileToRead = ENV_BROWSER === 'browserstack:ie' ? '../dist/array.full.ie11.js' : '../dist/array.full.js'
+        // eslint-disable-next-line no-undef
+        const arrayjs = fs.readFileSync(path.resolve(__dirname, fileToRead))
         res.setBody(arrayjs)
     })
     .onRequestTo(/playground/)

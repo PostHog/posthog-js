@@ -22,5 +22,8 @@ jobs:
       - name: Run es-check to check if our ie11 bundle is ES5 compatible
         run: npx es-check@7.2.1 es5 dist/array.full.ie11.js
 
-      - name: Run es-check to check if our bundle is ES5 compatible
-        run: npx es-check@7.2.1 es6 dist/{array,main}.js
+      - name: Run es-check to check if our array bundle is ES6 compatible
+        run: npx es-check@7.2.1 es6 dist/array.js
+
+      - name: Run es-check to check if our main bundle is ES6 compatible
+        run: npx es-check@7.2.1 es6 dist/main.js
