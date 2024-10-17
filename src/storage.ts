@@ -110,9 +110,7 @@ export const cookieStore: PersistentStore = {
                     return decodeURIComponent(c.substring(nameEQ.length, c.length))
                 }
             }
-        } catch {
-            // noop
-        }
+        } catch {}
         return null
     },
 
@@ -161,8 +159,9 @@ export const cookieStore: PersistentStore = {
             }
 
             document.cookie = new_cookie_val
+            return new_cookie_val
         } catch {
-            // no-op
+            return
         }
     },
 
@@ -170,7 +169,7 @@ export const cookieStore: PersistentStore = {
         try {
             cookieStore.set(name, '', -1, cross_subdomain)
         } catch {
-            // no-op
+            return
         }
     },
 }
@@ -259,9 +258,7 @@ export const localPlusCookieStore: PersistentStore = {
             try {
                 // See if there's a cookie stored with data.
                 cookieProperties = cookieStore.parse(name) || {}
-            } catch {
-                // noop
-            }
+            } catch {}
             const value = extend(cookieProperties, JSON.parse(localStore.get(name) || '{}'))
             localStore.set(name, value)
             return value
