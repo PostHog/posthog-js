@@ -15,6 +15,7 @@ const plugins = (supportIE11) => [
     babel({
         extensions: ['.js', '.jsx', '.ts', '.tsx'],
         babelHelpers: 'bundled',
+        plugins: ['@babel/plugin-transform-nullish-coalescing-operator'],
         presets: [
             [
                 '@babel/preset-env',
@@ -23,12 +24,18 @@ const plugins = (supportIE11) => [
                         ? '>0.5%, last 2 versions, Firefox ESR, not dead, IE 11'
                         : '>0.5%, last 2 versions, Firefox ESR, not dead',
                     useBuiltIns: supportIE11 ? 'usage' : false,
-                    corejs: '3.38',
+                    corejs: supportIE11 ? '3.38' : undefined,
                 },
             ],
         ],
     }),
-    terser({ toplevel: true }),
+    terser({
+        toplevel: true,
+        compress: {
+            // 5 is the default if unspecified
+            ecma: supportIE11 ? 5 : 6,
+        },
+    }),
 ]
 
 const entrypoints = fs.readdirSync('./src/entrypoints')
