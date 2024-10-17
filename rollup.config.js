@@ -9,7 +9,7 @@ import commonjs from '@rollup/plugin-commonjs'
 import fs from 'fs'
 import path from 'path'
 
-const plugins = (supportIE11) => [
+const plugins = (es5) => [
     json(),
     resolve({ browser: true }),
     typescript({ sourceMap: true, outDir: './dist' }),
@@ -22,7 +22,7 @@ const plugins = (supportIE11) => [
             [
                 '@babel/preset-env',
                 {
-                    targets: supportIE11
+                    targets: es5
                         ? '>0.5%, last 2 versions, Firefox ESR, not dead, IE 11'
                         : '>0.5%, last 2 versions, Firefox ESR, not dead',
                 },
@@ -33,7 +33,7 @@ const plugins = (supportIE11) => [
         toplevel: true,
         compress: {
             // 5 is the default if unspecified
-            ecma: supportIE11 ? 5 : 6,
+            ecma: es5 ? 5 : 6,
         },
     }),
 ]
@@ -55,7 +55,7 @@ const entrypointTargets = entrypoints.map((file) => {
 
     const fileName = fileParts.join('.')
 
-    const pluginsForThisFile = plugins(fileName.includes('ie11'))
+    const pluginsForThisFile = plugins(fileName.includes('es5'))
 
     // we're allowed to console log in this file :)
     // eslint-disable-next-line no-console
