@@ -178,7 +178,7 @@ export const defaultConfig = (): PostHogConfig => ({
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
-    person_profiles: 'always',
+    person_profiles: 'identified_only',
     __add_tracing_headers: false,
 })
 
@@ -271,6 +271,7 @@ export class PostHog {
     decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
     version = Config.LIB_VERSION
+    _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
 
     SentryIntegration: typeof SentryIntegration
     sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
@@ -293,6 +294,7 @@ export class PostHog {
         this.__loaded = false
         this.analyticsDefaultEndpoint = '/e/'
         this._initialPageviewCaptured = false
+        this._initialPersonProfilesConfig = null
 
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
@@ -389,6 +391,10 @@ export class PostHog {
         this.config = {} as PostHogConfig // will be set right below
         this._triggered_notifs = []
 
+        if (config.person_profiles) {
+            this._initialPersonProfilesConfig = config.person_profiles
+        }
+
         this.set_config(
             extend({}, defaultConfig(), configRenames(config), {
                 name: name,
@@ -407,6 +413,8 @@ export class PostHog {
             this.config.persistence === 'sessionStorage'
                 ? this.persistence
                 : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
+
+        // should I store the initial person profiles config in persistence?
         const initialPersistenceProps = { ...this.persistence.props }
         const initialSessionProps = { ...this.sessionPersistence.props }
 
@@ -536,6 +544,14 @@ export class PostHog {
         if (response.analytics?.endpoint) {
             this.analyticsDefaultEndpoint = response.analytics.endpoint
         }
+
+        this.set_config({
+            person_profiles: this._initialPersonProfilesConfig
+                ? this._initialPersonProfilesConfig
+                : response['defaultIdentifiedOnly']
+                ? 'identified_only'
+                : 'always',
+        })
 
         this.sessionRecording?.afterDecideResponse(response)
         this.autocapture?.afterDecideResponse(response)
@@ -976,8 +992,13 @@ export class PostHog {
             properties = sanitize_properties(properties, event_name)
         }
 
-        // add person processing flag as very last step, so it cannot be overridden. process_person=true is default
-        properties['$process_person_profile'] = this._hasPersonProcessing()
+        // add person processing flag as very last step, so it cannot be overridden
+        const hasPersonProcessing = this._hasPersonProcessing()
+        properties['$process_person_profile'] = hasPersonProcessing
+        // if the event has person processing, ensure that all future events will too, even if the setting changes
+        if (hasPersonProcessing) {
+            this._requirePersonProcessing('_calculate_event_properties')
+        }
 
         return properties
     }

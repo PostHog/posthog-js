@@ -405,6 +405,7 @@ export interface DecideResponse {
     isAuthenticated: boolean
     siteApps: { id: number; url: string }[]
     heatmaps?: boolean
+    defaultIdentifiedOnly?: boolean
 }
 
 export type FeatureFlagsCallback = (
