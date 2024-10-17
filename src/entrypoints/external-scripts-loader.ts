@@ -50,7 +50,7 @@ assignableWindow.__PosthogExtensions__.loadExternalDependency = (
         // this ensures that we bust the cache periodically
         const timestampToNearestFiveMinutes = Math.floor(Date.now() / fiveMinutesInMillis) * fiveMinutesInMillis
 
-        scriptUrlToLoad = `${scriptUrlToLoad}?&=${timestampToNearestFiveMinutes}`
+        scriptUrlToLoad = `${scriptUrlToLoad}&t=${timestampToNearestFiveMinutes}`
     }
     const url = posthog.requestRouter.endpointFor('assets', scriptUrlToLoad)
 
