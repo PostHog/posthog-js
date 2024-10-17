@@ -1,13 +1,26 @@
 {
-    "presets": ["@babel/env", ["@babel/typescript", { "jsxPragma": "h" }]],
-    "plugins": [
-        "@babel/plugin-transform-nullish-coalescing-operator",
-        [
-            "@babel/transform-react-jsx",
-            {
-                "runtime": "automatic",
-                "importSource": "preact"
-            }
-        ]
+  "presets": [
+    [
+      "@babel/env",
+      {
+        "targets": ">0.5%, last 2 versions, Firefox ESR, not dead"
+      }
+    ],
+    [
+      "@babel/typescript",
+      {
+        "jsxPragma": "h"
+      }
     ]
+  ],
+  "plugins": [
+    "@babel/plugin-transform-nullish-coalescing-operator",
+    [
+      "@babel/transform-react-jsx",
+      {
+        "runtime": "automatic",
+        "importSource": "preact"
+      }
+    ]
+  ]
 }

@@ -11,8 +11,9 @@ import type {
 } from '@rrweb/types'
 import type { DataURLOptions, MaskInputFn, MaskInputOptions, MaskTextFn, Mirror, SlimDOMOptions } from 'rrweb-snapshot'
 
-import { isObject } from '../../utils/type-utils'
+import { isNullish, isObject } from '../../utils/type-utils'
 import { SnapshotBuffer } from './sessionrecording'
+import { truncateString } from '../../utils/string-utils'
 
 // taken from https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Cyclic_object_value#circular_references
 export function circularReferenceReplacer() {
@@ -146,15 +147,15 @@ export function truncateLargeConsoleLogs(_event: eventWithTime) {
         }
         const updatedPayload = []
         for (let i = 0; i < event.data.payload.payload.length; i++) {
-            if (
-                event.data.payload.payload[i] && // Value can be null
-                event.data.payload.payload[i].length > MAX_STRING_SIZE
-            ) {
-                updatedPayload.push(event.data.payload.payload[i].slice(0, MAX_STRING_SIZE) + '...[truncated]')
-            } else {
+            if (isNullish(event.data.payload.payload[i])) {
+                // we expect nullish values to be logged unchanged,
+                // TODO test if this is still necessary https://github.com/PostHog/posthog-js/pull/385
                 updatedPayload.push(event.data.payload.payload[i])
+            } else {
+                updatedPayload.push(truncateString(event.data.payload.payload[i], MAX_STRING_SIZE, '...[truncated]'))
             }
         }
+
         event.data.payload.payload = updatedPayload
         // Return original type
         return _event

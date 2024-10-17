@@ -2,6 +2,7 @@ import { Breaker, EventHandler, Properties } from '../types'
 import { isArray, isFormData, isFunction, isNull, isNullish, isString, hasOwnProperty } from './type-utils'
 import { logger } from './logger'
 import { window, nativeForEach, nativeIndexOf } from './globals'
+import { truncateString } from './string-utils'
 
 const breaker: Breaker = {}
 
@@ -207,7 +208,7 @@ export function _copyAndTruncateStrings<T extends Record<string, any> = Record<s
 ): T {
     return deepCircularCopy(object, (value: any) => {
         if (isString(value) && !isNull(maxStringLength)) {
-            return (value as string).slice(0, maxStringLength)
+            return truncateString(value, maxStringLength)
         }
         return value
     }) as T
