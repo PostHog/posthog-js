@@ -5,6 +5,7 @@ import typescript from '@rollup/plugin-typescript'
 import { dts } from 'rollup-plugin-dts'
 import terser from '@rollup/plugin-terser'
 import { visualizer } from 'rollup-plugin-visualizer'
+import commonjs from '@rollup/plugin-commonjs'
 import fs from 'fs'
 import path from 'path'
 
@@ -12,6 +13,7 @@ const plugins = (supportIE11) => [
     json(),
     resolve({ browser: true }),
     typescript({ sourceMap: true, outDir: './dist' }),
+    commonjs(),
     babel({
         extensions: ['.js', '.jsx', '.ts', '.tsx'],
         babelHelpers: 'bundled',
