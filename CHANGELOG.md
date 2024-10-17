@@ -1,3 +1,7 @@
+## 1.173.0 - 2024-10-17
+
+- feat(web-analytics): Store nulls for unset campaign params (#1482)
+
 ## 1.172.1 - 2024-10-17
 
 - chore: add crossOrigin='anonymous' to snippet script (#1481)
