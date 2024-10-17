@@ -1,3 +1,7 @@
+## 1.172.0 - 2024-10-17
+
+- chore: build an es5 bundle and move main to es6 (#1480)
+
 ## 1.171.0 - 2024-10-17
 
 - feat: start session recording on url trigger (#1451)
