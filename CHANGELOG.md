@@ -1,3 +1,8 @@
+## 1.171.0 - 2024-10-17
+
+- feat: start session recording on url trigger (#1451)
+- chore: babel targets in rollup config (#1479)
+
 ## 1.170.1 - 2024-10-16
 
 - feat: add stack to stacktraceless "exceptions" (#1472)
