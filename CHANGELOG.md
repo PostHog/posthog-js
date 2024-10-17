@@ -1,3 +1,8 @@
+## 1.174.0 - 2024-10-17
+
+- Make entire cancel button area clickable (#1473)
+- feat: swap the default to identified_only (#1468)
+
 ## 1.173.0 - 2024-10-17
 
 - feat(web-analytics): Store nulls for unset campaign params (#1482)
