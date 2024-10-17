@@ -114,6 +114,12 @@ export interface PerformanceCaptureConfig {
      * NB setting this does not override whether the capture is enabled
      */
     web_vitals_allowed_metrics?: SupportedWebVitalsMetrics[]
+    /**
+     * we delay flushing web vitals metrics to reduce the number of events we send
+     * this is the maximum time we will wait before sending the metrics
+     * if not set it defaults to 5 seconds
+     */
+    web_vitals_delayed_flush_ms?: number
 }
 
 export interface HeatmapConfig {
@@ -570,6 +576,16 @@ export type ErrorEventArgs = [
     colno?: number | undefined,
     error?: Error | undefined
 ]
+
+export type ErrorMetadata = {
+    handled?: boolean
+    synthetic?: boolean
+    syntheticException?: Error
+    overrideExceptionType?: string
+    overrideExceptionMessage?: string
+    defaultExceptionType?: string
+    defaultExceptionMessage?: string
+}
 
 // levels originally copied from Sentry to work with the sentry integration
 // and to avoid relying on a frequently changing @sentry/types dependency

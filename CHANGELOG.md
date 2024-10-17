@@ -1,3 +1,29 @@
+## 1.170.1 - 2024-10-16
+
+- feat: add stack to stacktraceless "exceptions" (#1472)
+
+## 1.170.0 - 2024-10-16
+
+- fix: web vitals delayed capture (#1474)
+
+## 1.169.1 - 2024-10-16
+
+- chore: skip if Array.from is missing (#1475)
+
+## 1.169.0 - 2024-10-15
+
+- feat: report reason for recording start (#1452)
+- chore: improve exception autocapture (#1466)
+
+## 1.168.0 - 2024-10-15
+
+- fix(errors): Better define schema, align with python (#1460)
+- chore: refactor some cypress setup (#1467)
+
+## 1.167.1 - 2024-10-14
+
+- fix: sanitize set_once properties (#1462)
+
 ## 1.167.0 - 2024-10-08
 
 - feat(web experiments): Emit web_experiment_applied event and do not render experiments for bots (#1443)

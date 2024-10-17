@@ -17,7 +17,6 @@ import {
     ALIAS_ID_KEY,
     FLAG_CALL_REPORTED,
     PEOPLE_DISTINCT_ID_KEY,
-    SESSION_RECORDING_IS_SAMPLED,
     USER_STATE,
     ENABLE_PERSON_PROCESSING,
 } from './constants'
@@ -320,7 +319,7 @@ export class PostHog {
             },
         }
 
-        this.on('eventCaptured', (data) => logger.info('send', data))
+        this.on('eventCaptured', (data) => logger.info(`send "${data?.event}"`, data))
     }
 
     // Initialization methods
@@ -988,7 +987,11 @@ export class PostHog {
             return dataSetOnce
         }
         // if we're an identified person, send initial params with every event
-        const setOnceProperties = extend({}, this.persistence.get_initial_props(), dataSetOnce || {})
+        let setOnceProperties = extend({}, this.persistence.get_initial_props(), dataSetOnce || {})
+        const sanitize_properties = this.config.sanitize_properties
+        if (sanitize_properties) {
+            setOnceProperties = sanitize_properties(setOnceProperties, '$set_once')
+        }
         if (isEmptyObject(setOnceProperties)) {
             return undefined
         }
@@ -1788,18 +1791,17 @@ export class PostHog {
      */
     startSessionRecording(override?: { sampling?: boolean; linked_flag?: boolean } | true): void {
         const overrideAll = isBoolean(override) && override
-        if (overrideAll || override?.sampling) {
+        if (overrideAll || override?.sampling || override?.linked_flag) {
             // allow the session id check to rotate session id if necessary
             const ids = this.sessionManager?.checkAndGetSessionAndWindowId()
-            this.persistence?.register({
-                // short-circuits the `makeSamplingDecision` function in the session recording module
-                [SESSION_RECORDING_IS_SAMPLED]: true,
-            })
-            logger.info('Session recording started with sampling override for session: ', ids?.sessionId)
-        }
-        if (overrideAll || override?.linked_flag) {
-            this.sessionRecording?.overrideLinkedFlag()
-            logger.info('Session recording started with linked_flags override')
+            if (overrideAll || override?.sampling) {
+                this.sessionRecording?.overrideSampling()
+                logger.info('Session recording started with sampling override for session: ', ids?.sessionId)
+            }
+            if (overrideAll || override?.linked_flag) {
+                this.sessionRecording?.overrideLinkedFlag()
+                logger.info('Session recording started with linked_flags override')
+            }
         }
         this.set_config({ disable_session_recording: false })
     }
@@ -1822,18 +1824,27 @@ export class PostHog {
 
     /** Capture a caught exception manually */
     captureException(error: Error, additionalProperties?: Properties): void {
+        const syntheticException = new Error('PostHog syntheticException')
         const properties: Properties = isFunction(assignableWindow.__PosthogExtensions__?.parseErrorAsProperties)
-            ? assignableWindow.__PosthogExtensions__.parseErrorAsProperties([
-                  error.message,
-                  undefined,
-                  undefined,
-                  undefined,
-                  error,
-              ])
+            ? assignableWindow.__PosthogExtensions__.parseErrorAsProperties(
+                  [error.message, undefined, undefined, undefined, error],
+                  // create synthetic error to get stack in cases where user input does not contain one
+                  // creating the exceptionas soon into our code as possible means we should only have to
+                  // remove a single frame (this 'captureException' method) from the resultant stack
+                  { syntheticException }
+              )
             : {
-                  $exception_type: error.name,
-                  $exception_message: error.message,
                   $exception_level: 'error',
+                  $exception_list: [
+                      {
+                          type: error.name,
+                          value: error.message,
+                          mechanism: {
+                              handled: true,
+                              synthetic: false,
+                          },
+                      },
+                  ],
                   ...additionalProperties,
               }
 
