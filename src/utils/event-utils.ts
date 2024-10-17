@@ -45,9 +45,7 @@ export const Info = {
         const params: Record<string, any> = {}
         each(campaign_keywords, function (kwkey) {
             const kw = getQueryParam(url, kwkey)
-            if (kw) {
-                params[kwkey] = kw
-            }
+            params[kwkey] = kw ? kw : null
         })
 
         return params

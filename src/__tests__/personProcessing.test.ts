@@ -5,6 +5,33 @@ import { INITIAL_CAMPAIGN_PARAMS, INITIAL_REFERRER_INFO } from '../constants'
 
 jest.mock('../utils/logger')
 
+const INITIAL_CAMPAIGN_PARAMS_NULL = {
+    $initial_current_url: null,
+    $initial_dclid: null,
+    $initial_fbclid: null,
+    $initial_gad_source: null,
+    $initial_gbraid: null,
+    $initial_gclid: null,
+    $initial_gclsrc: null,
+    $initial_host: null,
+    $initial_igshid: null,
+    $initial_li_fat_id: null,
+    $initial_mc_cid: null,
+    $initial_msclkid: null,
+    $initial_pathname: null,
+    $initial_rdt_cid: null,
+    $initial_referrer: null,
+    $initial_referring_domain: null,
+    $initial_ttclid: null,
+    $initial_twclid: null,
+    $initial_utm_campaign: null,
+    $initial_utm_content: null,
+    $initial_utm_medium: null,
+    $initial_utm_source: null,
+    $initial_utm_term: null,
+    $initial_wbraid: null,
+}
+
 jest.mock('../utils/globals', () => {
     const orig = jest.requireActual('../utils/globals')
     const mockURLGetter = jest.fn()
@@ -171,6 +198,7 @@ describe('person processing', () => {
             const identifyCall = onCapture.mock.calls[0]
             expect(identifyCall[0]).toEqual('$identify')
             expect(identifyCall[1].$set_once).toEqual({
+                ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
                 $initial_pathname: '/',
@@ -213,6 +241,7 @@ describe('person processing', () => {
 
             expect(eventS2Identify[0]).toEqual('$identify')
             expect(eventS2Identify[1].$set_once).toEqual({
+                ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example1.com/pathname1?utm_source=foo1',
                 $initial_host: 'example1.com',
                 $initial_pathname: '/pathname1',
@@ -223,6 +252,7 @@ describe('person processing', () => {
 
             expect(eventS2After[0]).toEqual('event s2 after identify')
             expect(eventS2After[1].$set_once).toEqual({
+                ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example1.com/pathname1?utm_source=foo1',
                 $initial_host: 'example1.com',
                 $initial_pathname: '/pathname1',
@@ -243,6 +273,7 @@ describe('person processing', () => {
             const identifyCall = onCapture.mock.calls[0]
             expect(identifyCall[0]).toEqual('$identify')
             expect(identifyCall[1].$set_once).toEqual({
+                ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
                 $initial_pathname: '/',
@@ -264,6 +295,7 @@ describe('person processing', () => {
             const identifyCall = onCapture.mock.calls[0]
             expect(identifyCall[0]).toEqual('$identify')
             expect(identifyCall[1].$set_once).toEqual({
+                ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
                 $initial_pathname: '/',
@@ -315,6 +347,7 @@ describe('person processing', () => {
             expect(eventBeforeIdentify[1].$set_once).toBeUndefined()
             const eventAfterIdentify = onCapture.mock.calls[2]
             expect(eventAfterIdentify[1].$set_once).toEqual({
+                ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
                 $initial_pathname: '/',
@@ -336,6 +369,7 @@ describe('person processing', () => {
             // assert
             const eventBeforeIdentify = onCapture.mock.calls[0]
             expect(eventBeforeIdentify[1].$set_once).toEqual({
+                ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
                 $initial_pathname: '/',
@@ -345,6 +379,7 @@ describe('person processing', () => {
             })
             const eventAfterIdentify = onCapture.mock.calls[2]
             expect(eventAfterIdentify[1].$set_once).toEqual({
+                ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
                 $initial_pathname: '/',
