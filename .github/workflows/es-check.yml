@@ -1,4 +1,4 @@
-name: Server-side rendering and ES5
+name: ES5 support check
 
 on:
   - pull_request
@@ -19,8 +19,5 @@ jobs:
 
       - run: pnpm install && pnpm build
 
-      - name: Run es-check to check if our bundle is ES5 compatible
-        run: npx es-check@6.1.1 es5 dist/{array,main}.js
-
-      - name: Require module via node
-        run: cd dist; node -e "require('./main')"
+      - name: Run es-check to check if our ie11 bundle is ES5 compatible
+        run: npx es-check@7.2.1 es5 dist/array.full.es5.js

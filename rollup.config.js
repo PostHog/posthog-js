@@ -5,104 +5,37 @@ import typescript from '@rollup/plugin-typescript'
 import { dts } from 'rollup-plugin-dts'
 import terser from '@rollup/plugin-terser'
 import { visualizer } from 'rollup-plugin-visualizer'
+import commonjs from '@rollup/plugin-commonjs'
 import fs from 'fs'
 import path from 'path'
-import commonjs from '@rollup/plugin-commonjs'
 
-const plugins = [
+const plugins = (es5) => [
     json(),
     resolve({ browser: true }),
+    typescript({ sourceMap: true, outDir: './dist' }),
     commonjs(),
-    typescript({ sourceMap: true }),
     babel({
         extensions: ['.js', '.jsx', '.ts', '.tsx'],
         babelHelpers: 'bundled',
+        plugins: ['@babel/plugin-transform-nullish-coalescing-operator'],
         presets: [
             [
                 '@babel/preset-env',
                 {
-                    debug: true,
-                    corejs: '3.38',
-                    useBuiltIns: 'usage',
-                    include: ['es.array.from'],
-                    exclude: [
-                        'es.array.at',
-                        'es.array.concat',
-                        'es.array.find',
-                        'es.array.find-index',
-                        'es.array.fill',
-                        'es.array.filter',
-                        'es.array.flat-map',
-                        'es.array.includes',
-                        'es.array.iterator',
-                        'es.array.join',
-                        'es.array.map',
-                        'es.array.slice',
-                        'es.array.splice',
-                        'es.array.sort',
-                        'es.array.unscopables.flat-map',
-                        'es.array-buffer.constructor',
-                        'es.error.cause',
-                        'es.function.name',
-                        'es.global-this',
-                        'es.json.stringify',
-                        'es.math.trunc',
-                        'es.math.sign',
-                        'es.map',
-                        'es.number.constructor',
-                        'es.number.is-integer',
-                        'es.number.is-nan',
-                        'es.number.to-fixed',
-                        'es.object.assign',
-                        'es.object.entries',
-                        'es.object.get-own-property-descriptor',
-                        'es.object.get-own-property-names',
-                        'es.object.keys',
-                        'es.object.to-string',
-                        'es.object.values',
-                        'es.promise',
-                        'es.promise.finally',
-                        'es.reflect.get',
-                        'es.reflect.to-string-tag',
-                        'es.regexp.*',
-                        'es.set',
-                        'es.string.ends-with',
-                        'es.string.includes',
-                        'es.string.iterator',
-                        'es.string.link',
-                        'es.string.match',
-                        'es.string.match-all',
-                        'es.string.repeat',
-                        'es.string.replace',
-                        'es.string.search',
-                        'es.string.starts-with',
-                        'es.string.split',
-                        'es.string.sub',
-                        'es.string.trim',
-                        'es.symbol',
-                        'es.symbol.description',
-                        'es.typed-array.*',
-                        'es.weak-map',
-                        'es.weak-set',
-                        'esnext.global-this',
-                        'esnext.string.match-all',
-                        'esnext.typed-array.*',
-                        'web.atob',
-                        'web.dom-collections.for-each',
-                        'web.dom-collections.iterator',
-                        'web.dom-exception.constructor',
-                        'web.dom-exception.stack',
-                        'web.dom-exception.to-string-tag',
-                        'web.url',
-                        'web.url-search-params',
-                        'web.url.to-json',
-                    ],
-                    targets: '>0.5%, last 2 versions, Firefox ESR, not dead, IE 11',
+                    targets: es5
+                        ? '>0.5%, last 2 versions, Firefox ESR, not dead, IE 11'
+                        : '>0.5%, last 2 versions, Firefox ESR, not dead',
                 },
             ],
         ],
     }),
-    terser({ toplevel: true }),
+    terser({
+        toplevel: true,
+        compress: {
+            // 5 is the default if unspecified
+            ecma: es5 ? 5 : 6,
+        },
+    }),
 ]
 
 const entrypoints = fs.readdirSync('./src/entrypoints')
@@ -121,6 +54,8 @@ const entrypointTargets = entrypoints.map((file) => {
     }
 
     const fileName = fileParts.join('.')
+
+    const pluginsForThisFile = plugins(fileName.includes('es5'))
 
     // we're allowed to console log in this file :)
     // eslint-disable-next-line no-console
@@ -145,7 +80,7 @@ const entrypointTargets = entrypoints.map((file) => {
                 ...(format === 'cjs' ? { exports: 'auto' } : {}),
             },
         ],
-        plugins: [...plugins, visualizer({ filename: `bundle-stats-${fileName}.html` })],
+        plugins: [...pluginsForThisFile, visualizer({ filename: `bundle-stats-${fileName}.html` })],
     }
 })
 
