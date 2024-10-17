@@ -114,6 +114,12 @@ export interface PerformanceCaptureConfig {
      * NB setting this does not override whether the capture is enabled
      */
     web_vitals_allowed_metrics?: SupportedWebVitalsMetrics[]
+    /**
+     * we delay flushing web vitals metrics to reduce the number of events we send
+     * this is the maximum time we will wait before sending the metrics
+     * if not set it defaults to 5 seconds
+     */
+    web_vitals_delayed_flush_ms?: number
 }
 
 export type DeadClicksAutoCaptureConfig = {
@@ -400,6 +406,7 @@ export interface DecideResponse {
         canvasQuality?: string | null
         linkedFlag?: string | FlagVariant | null
         networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
+        urlTriggers?: SessionRecordingUrlTrigger[]
     }
     surveys?: boolean
     toolbarParams: ToolbarParams
@@ -408,6 +415,7 @@ export interface DecideResponse {
     isAuthenticated: boolean
     siteApps: { id: number; url: string }[]
     heatmaps?: boolean
+    defaultIdentifiedOnly?: boolean
 }
 
 export type FeatureFlagsCallback = (
@@ -583,6 +591,7 @@ export type ErrorEventArgs = [
 export type ErrorMetadata = {
     handled?: boolean
     synthetic?: boolean
+    syntheticException?: Error
     overrideExceptionType?: string
     overrideExceptionMessage?: string
     defaultExceptionType?: string
@@ -594,3 +603,27 @@ export type ErrorMetadata = {
 // but provided as an array of literal types, so we can constrain the level below
 export const severityLevels = ['fatal', 'error', 'warning', 'log', 'info', 'debug'] as const
 export declare type SeverityLevel = typeof severityLevels[number]
+
+export interface ErrorProperties {
+    $exception_type: string
+    $exception_message: string
+    $exception_level: SeverityLevel
+    $exception_source?: string
+    $exception_lineno?: number
+    $exception_colno?: number
+    $exception_DOMException_code?: string
+    $exception_is_synthetic?: boolean
+    $exception_stack_trace_raw?: string
+    $exception_handled?: boolean
+    $exception_personURL?: string
+}
+
+export interface ErrorConversions {
+    errorToProperties: (args: ErrorEventArgs) => ErrorProperties
+    unhandledRejectionToProperties: (args: [ev: PromiseRejectionEvent]) => ErrorProperties
+}
+
+export interface SessionRecordingUrlTrigger {
+    url: string
+    matching: 'regex'
+}

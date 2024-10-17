@@ -1,3 +1,37 @@
+## 1.174.0 - 2024-10-17
+
+- Make entire cancel button area clickable (#1473)
+- feat: swap the default to identified_only (#1468)
+
+## 1.173.0 - 2024-10-17
+
+- feat(web-analytics): Store nulls for unset campaign params (#1482)
+
+## 1.172.1 - 2024-10-17
+
+- chore: add crossOrigin='anonymous' to snippet script (#1481)
+
+## 1.172.0 - 2024-10-17
+
+- chore: build an es5 bundle and move main to es6 (#1480)
+
+## 1.171.0 - 2024-10-17
+
+- feat: start session recording on url trigger (#1451)
+- chore: babel targets in rollup config (#1479)
+
+## 1.170.1 - 2024-10-16
+
+- feat: add stack to stacktraceless "exceptions" (#1472)
+
+## 1.170.0 - 2024-10-16
+
+- fix: web vitals delayed capture (#1474)
+
+## 1.169.1 - 2024-10-16
+
+- chore: skip if Array.from is missing (#1475)
+
 ## 1.169.0 - 2024-10-15
 
 - feat: report reason for recording start (#1452)

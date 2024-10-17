@@ -2,8 +2,36 @@ import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 import { logger } from '../utils/logger'
 import { INITIAL_CAMPAIGN_PARAMS, INITIAL_REFERRER_INFO } from '../constants'
+import { DecideResponse } from '../types'
 
 jest.mock('../utils/logger')
+
+const INITIAL_CAMPAIGN_PARAMS_NULL = {
+    $initial_current_url: null,
+    $initial_dclid: null,
+    $initial_fbclid: null,
+    $initial_gad_source: null,
+    $initial_gbraid: null,
+    $initial_gclid: null,
+    $initial_gclsrc: null,
+    $initial_host: null,
+    $initial_igshid: null,
+    $initial_li_fat_id: null,
+    $initial_mc_cid: null,
+    $initial_msclkid: null,
+    $initial_pathname: null,
+    $initial_rdt_cid: null,
+    $initial_referrer: null,
+    $initial_referring_domain: null,
+    $initial_ttclid: null,
+    $initial_twclid: null,
+    $initial_utm_campaign: null,
+    $initial_utm_content: null,
+    $initial_utm_medium: null,
+    $initial_utm_source: null,
+    $initial_utm_term: null,
+    $initial_wbraid: null,
+}
 
 jest.mock('../utils/globals', () => {
     const orig = jest.requireActual('../utils/globals')
@@ -44,18 +72,23 @@ describe('person processing', () => {
         mockURLGetter.mockReturnValue('https://example.com?utm_source=foo')
     })
 
-    const setup = async (person_profiles: 'always' | 'identified_only' | 'never' | undefined, token?: string) => {
+    const setup = async (
+        person_profiles: 'always' | 'identified_only' | 'never' | undefined,
+        token?: string,
+        persistence_name?: string
+    ) => {
         token = token || uuidv7()
         const onCapture = jest.fn()
         const posthog = await createPosthogInstance(token, {
             _onCapture: onCapture,
             person_profiles,
+            persistence_name,
         })
         return { token, onCapture, posthog }
     }
 
     describe('init', () => {
-        it("should default to 'always' person_profiles", async () => {
+        it("should default to 'identified_only' person_profiles", async () => {
             // arrange
             const token = uuidv7()
 
@@ -65,7 +98,7 @@ describe('person processing', () => {
             })
 
             // assert
-            expect(posthog.config.person_profiles).toEqual('always')
+            expect(posthog.config.person_profiles).toEqual('identified_only')
         })
         it('should read person_profiles from init config', async () => {
             // arrange
@@ -171,6 +204,7 @@ describe('person processing', () => {
             const identifyCall = onCapture.mock.calls[0]
             expect(identifyCall[0]).toEqual('$identify')
             expect(identifyCall[1].$set_once).toEqual({
+                ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
                 $initial_pathname: '/',
@@ -213,6 +247,7 @@ describe('person processing', () => {
 
             expect(eventS2Identify[0]).toEqual('$identify')
             expect(eventS2Identify[1].$set_once).toEqual({
+                ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example1.com/pathname1?utm_source=foo1',
                 $initial_host: 'example1.com',
                 $initial_pathname: '/pathname1',
@@ -223,6 +258,7 @@ describe('person processing', () => {
 
             expect(eventS2After[0]).toEqual('event s2 after identify')
             expect(eventS2After[1].$set_once).toEqual({
+                ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example1.com/pathname1?utm_source=foo1',
                 $initial_host: 'example1.com',
                 $initial_pathname: '/pathname1',
@@ -243,6 +279,7 @@ describe('person processing', () => {
             const identifyCall = onCapture.mock.calls[0]
             expect(identifyCall[0]).toEqual('$identify')
             expect(identifyCall[1].$set_once).toEqual({
+                ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
                 $initial_pathname: '/',
@@ -264,6 +301,7 @@ describe('person processing', () => {
             const identifyCall = onCapture.mock.calls[0]
             expect(identifyCall[0]).toEqual('$identify')
             expect(identifyCall[1].$set_once).toEqual({
+                ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
                 $initial_pathname: '/',
@@ -315,6 +353,7 @@ describe('person processing', () => {
             expect(eventBeforeIdentify[1].$set_once).toBeUndefined()
             const eventAfterIdentify = onCapture.mock.calls[2]
             expect(eventAfterIdentify[1].$set_once).toEqual({
+                ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
                 $initial_pathname: '/',
@@ -336,6 +375,7 @@ describe('person processing', () => {
             // assert
             const eventBeforeIdentify = onCapture.mock.calls[0]
             expect(eventBeforeIdentify[1].$set_once).toEqual({
+                ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
                 $initial_pathname: '/',
@@ -345,6 +385,7 @@ describe('person processing', () => {
             })
             const eventAfterIdentify = onCapture.mock.calls[2]
             expect(eventAfterIdentify[1].$set_once).toEqual({
+                ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
                 $initial_pathname: '/',
@@ -545,6 +586,100 @@ describe('person processing', () => {
             expect(posthog._isIdentified()).toBe(false)
             expect(onCapture.mock.calls.length).toEqual(3)
             expect(onCapture.mock.calls[2][1].properties.$process_person_profile).toEqual(false)
+        })
+    })
+
+    describe('persistence', () => {
+        it('should remember that a user set the mode to always on a previous visit', async () => {
+            // arrange
+            const persistenceName = uuidv7()
+            const { posthog: posthog1, onCapture: onCapture1 } = await setup('always', undefined, persistenceName)
+            posthog1.capture('custom event 1')
+            const { posthog: posthog2, onCapture: onCapture2 } = await setup(
+                'identified_only',
+                undefined,
+                persistenceName
+            )
+
+            // act
+            posthog2.capture('custom event 2')
+
+            // assert
+            expect(onCapture1.mock.calls.length).toEqual(1)
+            expect(onCapture2.mock.calls.length).toEqual(1)
+            expect(onCapture1.mock.calls[0][1].properties.$process_person_profile).toEqual(true)
+            expect(onCapture2.mock.calls[0][1].properties.$process_person_profile).toEqual(true)
+        })
+
+        it('should work when always is set on a later visit', async () => {
+            // arrange
+            const persistenceName = uuidv7()
+            const { posthog: posthog1, onCapture: onCapture1 } = await setup(
+                'identified_only',
+                undefined,
+                persistenceName
+            )
+            posthog1.capture('custom event 1')
+            const { posthog: posthog2, onCapture: onCapture2 } = await setup('always', undefined, persistenceName)
+
+            // act
+            posthog2.capture('custom event 2')
+
+            // assert
+            expect(onCapture1.mock.calls.length).toEqual(1)
+            expect(onCapture2.mock.calls.length).toEqual(1)
+            expect(onCapture1.mock.calls[0][1].properties.$process_person_profile).toEqual(false)
+            expect(onCapture2.mock.calls[0][1].properties.$process_person_profile).toEqual(true)
+        })
+    })
+
+    describe('decide', () => {
+        it('should change the person mode from default when decide response is handled', async () => {
+            // arrange
+            const { posthog, onCapture } = await setup(undefined)
+            posthog.capture('startup page view')
+
+            // act
+            posthog._afterDecideResponse({ defaultIdentifiedOnly: false } as DecideResponse)
+            posthog.capture('custom event')
+
+            // assert
+            expect(onCapture.mock.calls.length).toEqual(2)
+            expect(onCapture.mock.calls[0][1].properties.$process_person_profile).toEqual(false)
+            expect(onCapture.mock.calls[1][1].properties.$process_person_profile).toEqual(true)
+        })
+
+        it('should NOT change the person mode from user-defined when decide response is handled', async () => {
+            // arrange
+            const { posthog, onCapture } = await setup('identified_only')
+            posthog.capture('startup page view')
+
+            // act
+            posthog._afterDecideResponse({ defaultIdentifiedOnly: false } as DecideResponse)
+            posthog.capture('custom event')
+
+            // assert
+            expect(onCapture.mock.calls.length).toEqual(2)
+            expect(onCapture.mock.calls[0][1].properties.$process_person_profile).toEqual(false)
+            expect(onCapture.mock.calls[1][1].properties.$process_person_profile).toEqual(false)
+        })
+
+        it('should persist when the default person mode is overridden by decide', async () => {
+            // arrange
+            const persistenceName = uuidv7()
+            const { posthog: posthog1, onCapture: onCapture1 } = await setup(undefined, undefined, persistenceName)
+
+            // act
+            posthog1._afterDecideResponse({ defaultIdentifiedOnly: false } as DecideResponse)
+            posthog1.capture('custom event 1')
+            const { posthog: posthog2, onCapture: onCapture2 } = await setup(undefined, undefined, persistenceName)
+            posthog2.capture('custom event 2')
+
+            // assert
+            expect(onCapture1.mock.calls.length).toEqual(1)
+            expect(onCapture2.mock.calls.length).toEqual(1)
+            expect(onCapture1.mock.calls[0][1].properties.$process_person_profile).toEqual(true)
+            expect(onCapture2.mock.calls[0][1].properties.$process_person_profile).toEqual(true)
         })
     })
 })
