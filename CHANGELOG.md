@@ -1,3 +1,7 @@
+## 1.172.1 - 2024-10-17
+
+- chore: add crossOrigin='anonymous' to snippet script (#1481)
+
 ## 1.172.0 - 2024-10-17
 
 - chore: build an es5 bundle and move main to es6 (#1480)
