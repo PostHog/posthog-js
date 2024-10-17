@@ -19,8 +19,8 @@ jobs:
 
       - run: pnpm install && pnpm build
 
-      - name: Run es-check to check if our bundle is ES5 compatible
-        run: npx es-check@7.2.1 es5 dist/array-ie11.js
+      - name: Run es-check to check if our ie11 bundle is ES5 compatible
+        run: npx es-check@7.2.1 es5 dist/array.full.ie11.js
 
       - name: Run es-check to check if our bundle is ES5 compatible
         run: npx es-check@7.2.1 es6 dist/{array,main}.js
