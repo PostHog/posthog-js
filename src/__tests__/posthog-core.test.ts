@@ -1,9 +1,9 @@
-import { defaultPostHog } from './helpers/posthog-instance'
+const mockReferrerGetter = jest.fn()
+const mockURLGetter = jest.fn()
+
 import type { PostHogConfig } from '../types'
 import { uuidv7 } from '../uuidv7'
 
-const mockReferrerGetter = jest.fn()
-const mockURLGetter = jest.fn()
 jest.mock('../utils/globals', () => {
     const orig = jest.requireActual('../utils/globals')
     return {
@@ -29,7 +29,13 @@ jest.mock('../utils/globals', () => {
 })
 
 describe('posthog core', () => {
-    beforeEach(() => {
+    let defaultPostHog: typeof import('./helpers/posthog-instance').defaultPostHog
+    beforeEach(async () => {
+        // delay the import to ensure the mocks are set up before being accessed
+        // @ts-expect-error -  allow dynamic imports
+        const posthogModule = await import('./helpers/posthog-instance')
+        defaultPostHog = posthogModule.defaultPostHog
+
         mockReferrerGetter.mockReturnValue('https://referrer.com')
         mockURLGetter.mockReturnValue('https://example.com')
         console.error = jest.fn()
