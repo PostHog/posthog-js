@@ -1,3 +1,7 @@
+## 1.174.1 - 2024-10-18
+
+- fix: do not capture entire elements in web vitals (#1483)
+
 ## 1.174.0 - 2024-10-17
 
 - Make entire cancel button area clickable (#1473)
