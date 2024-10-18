@@ -35,7 +35,7 @@ export function Cancel({ onClick }: { onClick: () => void }) {
     const { isPreviewMode } = useContext(SurveyContext)
 
     return (
-        <div className="cancel-btn-wrapper">
+        <div className="cancel-btn-wrapper" onClick={onClick} disabled={isPreviewMode}>
             <button className="form-cancel" onClick={onClick} disabled={isPreviewMode}>
                 {cancelSVG}
             </button>
