@@ -1,0 +1,91 @@
+diff --git a/dist/rrweb.js b/dist/rrweb.js
+index 1db2d08b2fe9a73521001c3aa88b1a64d1b3e71a..53b91e6338ba49e8d461b7da5ffd82cbce41e71e 100644
+--- a/dist/rrweb.js
++++ b/dist/rrweb.js
+@@ -661,9 +661,18 @@ function serializeElementNode(n2, options) {
+     }
+   }
+   if (tagName === "link" && inlineStylesheet) {
+-    const stylesheet = Array.from(doc.styleSheets).find((s2) => {
+-      return s2.href === n2.href;
++    const href = n.href
++    let stylesheet = Array.from(doc.styleSheets).find((s) => {
++      return s.href === href;
+     });
++    if (!stylesheet && href.includes('.css')) {
++      const rootDomain = window.location.origin
++      const stylesheetPath = href.replace(window.location.href, '')
++      const potentialStylesheetHref = rootDomain + '/' + stylesheetPath
++      stylesheet = Array.from(doc.styleSheets).find((s) => {
++        return s.href === potentialStylesheetHref;
++      });
++    }
+     let cssText = null;
+     if (stylesheet) {
+       cssText = stringifyStylesheet(stylesheet);
+@@ -5016,11 +5025,19 @@ class CanvasManager {
+     let rafId;
+     const getCanvas = () => {
+       const matchedCanvas = [];
+-      win.document.querySelectorAll("canvas").forEach((canvas) => {
+-        if (!isBlocked(canvas, blockClass, blockSelector, true)) {
+-          matchedCanvas.push(canvas);
+-        }
+-      });
++      const searchCanvas = (root) => {
++        root.querySelectorAll("canvas").forEach((canvas) => {
++          if (!isBlocked(canvas, blockClass, blockSelector, true)) {
++            matchedCanvas.push(canvas);
++          }
++        });
++        root.querySelectorAll("*").forEach((elem) => {
++          if (elem.shadowRoot) {
++            searchCanvas(elem.shadowRoot);
++          }
++        });
++      };
++      searchCanvas(win.document);
+       return matchedCanvas;
+     };
+     const takeCanvasSnapshots = (timestamp) => {
+@@ -5041,13 +5058,20 @@ class CanvasManager {
+             context.clear(context.COLOR_BUFFER_BIT);
+           }
+         }
+-        const bitmap = await createImageBitmap(canvas);
++        // createImageBitmap throws if resizing to 0
++        // Fallback to intrinsic size if canvas has not yet rendered
++        const width = canvas.clientWidth || canvas.width;
++        const height = canvas.clientHeight || canvas.height;
++        const bitmap = await createImageBitmap(canvas, {
++          resizeWidth: width,
++          resizeHeight: height
++        });
+         worker.postMessage(
+           {
+             id,
+             bitmap,
+-            width: canvas.width,
+-            height: canvas.height,
++            width: width,
++            height: height,
+             dataURLOptions: options.dataURLOptions
+           },
+           [bitmap]
+@@ -9805,6 +9829,7 @@ class Replayer {
+ }
+ const { addCustomEvent } = record;
+ const { freezePage } = record;
++const version = "2.0.0-alpha.16"
+ export {
+   EventType,
+   IncrementalSource,
+@@ -9816,6 +9841,7 @@ export {
+   freezePage,
+   _mirror as mirror,
+   record,
+-  utils
++  utils,
++  version,
+ };
+ //# sourceMappingURL=rrweb.js.map
