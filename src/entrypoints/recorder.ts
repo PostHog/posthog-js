@@ -1,12 +1,5 @@
 import { version } from 'rrweb/package.json'
-
-// Same as loader-globals.ts except includes rrweb2 scripts.
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-import rrwebRecord from 'rrweb/es/rrweb/packages/rrweb/src/record'
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-import { getRecordConsolePlugin } from 'rrweb/es/rrweb/packages/rrweb/src/plugins/console/record'
+import { getRecordConsolePlugin, record } from 'rrweb'
 
 // rrweb/network@1 code starts
 // most of what is below here will be removed when rrweb release their code for this
@@ -676,15 +669,15 @@ export const getRecordNetworkPlugin: (options?: NetworkRecordOptions) => RecordP
 
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
 assignableWindow.__PosthogExtensions__.rrwebPlugins = { getRecordConsolePlugin, getRecordNetworkPlugin }
-assignableWindow.__PosthogExtensions__.rrweb = { record: rrwebRecord, version: 'v2', rrwebVersion: version }
+assignableWindow.__PosthogExtensions__.rrweb = { record: record, version: 'v2', rrwebVersion: version }
 
 // we used to put all of these items directly on window, and now we put it on __PosthogExtensions__
 // but that means that old clients which lazily load this extension are looking in the wrong place
 // yuck,
 // so we also put them directly on the window
 // when 1.161.1 is the oldest version seen in production we can remove this
-assignableWindow.rrweb = { record: rrwebRecord, version: 'v2', rrwebVersion: version }
+assignableWindow.rrweb = { record: record, version: 'v2', rrwebVersion: version }
 assignableWindow.rrwebConsoleRecord = { getRecordConsolePlugin }
 assignableWindow.getRecordNetworkPlugin = getRecordNetworkPlugin
 
-export default rrwebRecord
+export default record
