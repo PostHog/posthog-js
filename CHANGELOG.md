@@ -1,3 +1,7 @@
+## 1.174.2 - 2024-10-18
+
+- fix: no need to swallow import errors (#1486)
+
 ## 1.174.1 - 2024-10-18
 
 - fix: do not capture entire elements in web vitals (#1483)
