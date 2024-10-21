@@ -115,6 +115,7 @@ describe('posthog core', () => {
                 const { posthog, onCapture } = setup({
                     token,
                     persistence_name: token,
+                    person_profiles: 'always',
                 })
 
                 // act
@@ -135,6 +136,7 @@ describe('posthog core', () => {
                 const { posthog: posthog1 } = setup({
                     token,
                     persistence_name: token,
+                    person_profiles: 'always',
                 })
                 posthog1.capture(eventName, eventProperties)
                 mockReferrerGetter.mockReturnValue('https://referrer2.example.com/some/path')
@@ -165,6 +167,7 @@ describe('posthog core', () => {
                 const { posthog: posthog1 } = setup({
                     token,
                     persistence_name: token,
+                    person_profiles: 'always',
                 })
                 posthog1.capture(eventName, eventProperties)
                 mockReferrerGetter.mockReturnValue('https://referrer2.example.com/some/path')
@@ -195,6 +198,7 @@ describe('posthog core', () => {
                 const { posthog, onCapture } = setup({
                     token,
                     persistence_name: token,
+                    person_profiles: 'always',
                 })
 
                 // act

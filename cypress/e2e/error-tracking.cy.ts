@@ -41,6 +41,22 @@ describe('Exception capture', () => {
             cy.wait('@exception-autocapture-script')
         })
 
+        it('adds stacktrace to captured strings', () => {
+            cy.get('[data-cy-exception-string-button]').click()
+
+            // ugh
+            cy.wait(1500)
+
+            cy.phCaptures({ full: true }).then((captures) => {
+                expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$autocapture', '$exception'])
+                expect(captures[2].event).to.be.eql('$exception')
+                expect(captures[2].properties.$exception_list[0].stacktrace.frames.length).to.be.eq(1)
+                expect(captures[2].properties.$exception_list[0].stacktrace.frames[0].function).to.be.eq(
+                    'HTMLButtonElement.onclick'
+                )
+            })
+        })
+
         it('autocaptures exceptions', () => {
             cy.get('[data-cy-button-throws-error]').click()
 
