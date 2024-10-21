@@ -1,3 +1,20 @@
+## 1.174.2 - 2024-10-18
+
+- fix: no need to swallow import errors (#1486)
+
+## 1.174.1 - 2024-10-18
+
+- fix: do not capture entire elements in web vitals (#1483)
+
+## 1.174.0 - 2024-10-17
+
+- Make entire cancel button area clickable (#1473)
+- feat: swap the default to identified_only (#1468)
+
+## 1.173.0 - 2024-10-17
+
+- feat(web-analytics): Store nulls for unset campaign params (#1482)
+
 ## 1.172.1 - 2024-10-17
 
 - chore: add crossOrigin='anonymous' to snippet script (#1481)

@@ -181,6 +181,14 @@ export class WebVitalsAutocapture {
             ? Date.now()
             : this.buffer.firstMetricTimestamp
 
+        if (metric.attribution && metric.attribution.interactionTargetElement) {
+            // we don't want to send the entire element
+            // they can be very large
+            // TODO we could run this through autocapture code so that we get elements chain info
+            //  and can display the element in the UI
+            metric.attribution.interactionTargetElement = undefined
+        }
+
         this.buffer.metrics.push({
             ...metric,
             $current_url: $currentUrl,
