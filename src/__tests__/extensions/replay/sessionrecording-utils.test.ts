@@ -193,7 +193,8 @@ describe(`SessionRecording utility functions`, () => {
                 data: {
                     plugin: CONSOLE_LOG_PLUGIN_NAME,
                     payload: {
-                        payload: ['a', largeString.slice(0, 2000) + '...[truncated]'],
+                        // 14 is the length of the '...[truncated]' string
+                        payload: ['a', largeString.slice(0, 2000 - 14) + '...[truncated]'],
                     },
                 },
             })
