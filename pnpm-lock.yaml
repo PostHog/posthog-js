@@ -5,9 +5,9 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  rrweb@2.0.0-alpha.13:
-    hash: es276qklpcauxli22h726xp7fe
-    path: patches/rrweb@2.0.0-alpha.13.patch
+  rrweb@2.0.0-alpha.16:
+    hash: x52pllmg6k5suqkcoa7bdybazq
+    path: patches/rrweb@2.0.0-alpha.16.patch
 
 dependencies:
   core-js:
@@ -66,9 +66,12 @@ devDependencies:
   '@rollup/plugin-typescript':
     specifier: ^12.1.1
     version: 12.1.1(rollup@4.24.0)(tslib@2.5.0)(typescript@5.5.4)
+  '@rrweb/rrweb-plugin-console-record':
+    specifier: 2.0.0-alpha.15
+    version: 2.0.0-alpha.15(rrweb@2.0.0-alpha.16)
   '@rrweb/types':
-    specifier: 2.0.0-alpha.13
-    version: 2.0.0-alpha.13
+    specifier: 2.0.0-alpha.16
+    version: 2.0.0-alpha.16
   '@sentry/types':
     specifier: 8.7.0
     version: 8.7.0
@@ -202,17 +205,17 @@ devDependencies:
     specifier: ^5.12.0
     version: 5.12.0(rollup@4.24.0)
   rrweb:
-    specifier: 2.0.0-alpha.13
-    version: 2.0.0-alpha.13(patch_hash=es276qklpcauxli22h726xp7fe)
+    specifier: 2.0.0-alpha.16
+    version: 2.0.0-alpha.16(patch_hash=x52pllmg6k5suqkcoa7bdybazq)
   rrweb-snapshot:
-    specifier: 2.0.0-alpha.13
-    version: 2.0.0-alpha.13
+    specifier: 2.0.0-alpha.16
+    version: 2.0.0-alpha.16
   sinon:
     specifier: 9.0.2
     version: 9.0.2
   testcafe:
     specifier: 1.19.0
-    version: 1.19.0(fp-ts@2.16.9)
+    version: 1.19.0(fp-ts@2.16.2)
   testcafe-browser-provider-browserstack:
     specifier: 1.14.0
     version: 1.14.0
@@ -2586,7 +2589,7 @@ packages:
       estree-walker: 2.0.2
       fdir: 6.4.2(picomatch@4.0.2)
       is-reference: 1.2.1
-      magic-string: 0.30.12
+      magic-string: 0.30.5
       picomatch: 4.0.2
       rollup: 4.24.0
     dev: true
@@ -2799,10 +2802,18 @@ packages:
     dev: true
     optional: true
 
-  /@rrweb/types@2.0.0-alpha.13:
-    resolution: {integrity: sha512-ytq+MeVm/vP2ybw+gTAN3Xvt7HN2yS+wlbfnwHpQMftxrwzq0kEZHdw+Jp5WUvvpONWzXriNAUU9dW0qLGkzNg==}
+  /@rrweb/rrweb-plugin-console-record@2.0.0-alpha.15(rrweb@2.0.0-alpha.16):
+    resolution: {integrity: sha512-66iOkD99AS8WqQNAnDtkJsQnSD8E+tZx3tWMJltpRDovXs4GoBE9eYxQeTWSigz6iaqbrxYPIqQIRck+zqnheg==}
+    peerDependencies:
+      rrweb: ^2.0.0-alpha.15
     dependencies:
-      rrweb-snapshot: 2.0.0-alpha.13
+      rrweb: 2.0.0-alpha.16(patch_hash=x52pllmg6k5suqkcoa7bdybazq)
+    dev: true
+
+  /@rrweb/types@2.0.0-alpha.16:
+    resolution: {integrity: sha512-E6cACNVsm+NUhn7dzocQoKyXI7BHrHRRm5Ab23yrAzEQ2caWocCEYJhqDlc4KRVJBkQfXZfyWm8+2d0uggFuZg==}
+    dependencies:
+      rrweb-snapshot: 2.0.0-alpha.16
     dev: true
 
   /@sentry/types@8.7.0:
@@ -3991,7 +4002,7 @@ packages:
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
     hasBin: true
     dependencies:
-      caniuse-lite: 1.0.30001669
+      caniuse-lite: 1.0.30001580
       electron-to-chromium: 1.4.418
       node-releases: 2.0.12
       update-browserslist-db: 1.0.11(browserslist@4.21.7)
@@ -4103,8 +4114,8 @@ packages:
     engines: {node: '>=10'}
     dev: true
 
-  /caniuse-lite@1.0.30001669:
-    resolution: {integrity: sha512-DlWzFDJqstqtIVx1zeSpIMLjunf5SmwOw0N2Ck/QSQdS8PLS4+9HrLaYei4w8BIAL7IB/UEDu889d8vhCTPA0w==}
+  /caniuse-lite@1.0.30001580:
+    resolution: {integrity: sha512-mtj5ur2FFPZcCEpXFy8ADXbDACuNFXg6mxVDqp7tqooX6l3zwm+d8EPoeOSIFRDvHs8qu7/SLFOGniULkcH2iA==}
     dev: true
 
   /capture-exit@2.0.0:
@@ -5073,7 +5084,7 @@ packages:
       '@tsconfig/node14': 1.0.3
       ast-metadata-inferer: 0.8.0
       browserslist: 4.21.7
-      caniuse-lite: 1.0.30001669
+      caniuse-lite: 1.0.30001580
       eslint: 8.57.0
       find-up: 5.0.0
       lodash.memoize: 4.1.2
@@ -5578,6 +5589,7 @@ packages:
 
   /fflate@0.4.8:
     resolution: {integrity: sha512-FJqqoDBR00Mdj9ppamLa/Y7vxm+PRmNWA67N846RvsoYVMKB4q3y/de5PA7gUmRMYK/8CMz2GDZQmCRN1wBcWA==}
+    dev: false
 
   /figures@3.2.0:
     resolution: {integrity: sha512-yaduQFRKLXYOGgEn6AZau90j3ggSOyiqXU0F9JZfeXYhNa+Jk4X+s45A2zg5jns87GAFa34BBm2kXw4XpNcbdg==}
@@ -5722,8 +5734,8 @@ packages:
     engines: {node: '>= 0.6'}
     dev: true
 
-  /fp-ts@2.16.9:
-    resolution: {integrity: sha512-+I2+FnVB+tVaxcYyQkHUq7ZdKScaBlX53A41mxQtpIccsfyv8PzdzP7fzp2AY832T4aoK6UZ5WRX/ebGd8uZuQ==}
+  /fp-ts@2.16.2:
+    resolution: {integrity: sha512-CkqAjnIKFqvo3sCyoBTqgJvF+bHrSik584S9nhTjtBESLx26cbtVMR/T9a6ApChOcSDAaM3JydDmWDUn4EEXng==}
     dev: true
 
   /fragment-cache@0.2.1:
@@ -6317,7 +6329,7 @@ packages:
       side-channel: 1.0.4
     dev: true
 
-  /io-ts-types@0.5.16(fp-ts@2.16.9)(io-ts@2.2.16)(monocle-ts@2.3.13)(newtype-ts@0.3.5):
+  /io-ts-types@0.5.16(fp-ts@2.16.2)(io-ts@2.2.16)(monocle-ts@2.3.13)(newtype-ts@0.3.5):
     resolution: {integrity: sha512-h9noYVfY9rlbmKI902SJdnV/06jgiT2chxG6lYDxaYNp88HscPi+SBCtmcU+m0E7WT5QSwt7sIMj93+qu0FEwQ==}
     peerDependencies:
       fp-ts: ^2.0.0
@@ -6325,18 +6337,18 @@ packages:
       monocle-ts: ^2.0.0
       newtype-ts: ^0.3.2
     dependencies:
-      fp-ts: 2.16.9
-      io-ts: 2.2.16(fp-ts@2.16.9)
-      monocle-ts: 2.3.13(fp-ts@2.16.9)
-      newtype-ts: 0.3.5(fp-ts@2.16.9)(monocle-ts@2.3.13)
+      fp-ts: 2.16.2
+      io-ts: 2.2.16(fp-ts@2.16.2)
+      monocle-ts: 2.3.13(fp-ts@2.16.2)
+      newtype-ts: 0.3.5(fp-ts@2.16.2)(monocle-ts@2.3.13)
     dev: true
 
-  /io-ts@2.2.16(fp-ts@2.16.9):
+  /io-ts@2.2.16(fp-ts@2.16.2):
     resolution: {integrity: sha512-y5TTSa6VP6le0hhmIyN0dqEXkrZeJLeC5KApJq6VLci3UEKF80lZ+KuoUs02RhBxNWlrqSNxzfI7otLX1Euv8Q==}
     peerDependencies:
       fp-ts: ^2.5.0
     dependencies:
-      fp-ts: 2.16.9
+      fp-ts: 2.16.2
     dev: true
 
   /ip@1.1.5:
@@ -6655,7 +6667,7 @@ packages:
   /is-reference@1.2.1:
     resolution: {integrity: sha512-U82MsXXiFIrjCK4otLT+o2NA2Cd2g5MLoOVXUZjIOhLurrRxpEXzI8O0KZHr3IjLvlAH1kTPYSuqer5T9ZVBKQ==}
     dependencies:
-      '@types/estree': 1.0.6
+      '@types/estree': 1.0.5
     dev: true
 
   /is-regex@1.1.4:
@@ -7947,6 +7959,13 @@ packages:
       '@jridgewell/sourcemap-codec': 1.5.0
     dev: true
 
+  /magic-string@0.30.5:
+    resolution: {integrity: sha512-7xlpfBaQaP/T6Vh8MO/EqXSW5En6INHEvEXQiuff7Gku0PWjU3uf6w/j9o7O+SpB5fOAkrI5HeoNgwjEO0pFsA==}
+    engines: {node: '>=12'}
+    dependencies:
+      '@jridgewell/sourcemap-codec': 1.4.15
+    dev: true
+
   /make-dir@3.1.0:
     resolution: {integrity: sha512-g3FeP20LNwhALb/6Cz6Dd4F2ngze0jz7tbzrD2wAV+o9FeNHe4rL+yK2md0J/fiSf1sa1ADhXqi5+oVwOM/eGw==}
     engines: {node: '>=8'}
@@ -8132,12 +8151,12 @@ packages:
     resolution: {integrity: sha512-5LC9SOxjSc2HF6vO2CyuTDNivEdoz2IvyJJGj6X8DJ0eFyfszE0QiEd+iXmBvUP3WHxSjFH/vIsA0EN00cgr8w==}
     dev: true
 
-  /monocle-ts@2.3.13(fp-ts@2.16.9):
+  /monocle-ts@2.3.13(fp-ts@2.16.2):
     resolution: {integrity: sha512-D5Ygd3oulEoAm3KuGO0eeJIrhFf1jlQIoEVV2DYsZUMz42j4tGxgct97Aq68+F8w4w4geEnwFa8HayTS/7lpKQ==}
     peerDependencies:
       fp-ts: ^2.5.0
     dependencies:
-      fp-ts: 2.16.9
+      fp-ts: 2.16.2
     dev: true
 
   /ms@2.0.0:
@@ -8204,6 +8223,12 @@ packages:
     hasBin: true
     dev: true
 
+  /nanoid@3.3.7:
+    resolution: {integrity: sha512-eSRppjcPIatRIMC1U6UngP8XFcz8MQWGQdt1MTBQ7NaAmvXDfvNxbvWV3x2y6CdEUciCSsDHDQZbhYaB8QEo2g==}
+    engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
+    hasBin: true
+    dev: true
+
   /nanomatch@1.2.13:
     resolution: {integrity: sha512-fpoe2T0RbHwBTBUOftAfBPaDEi06ufaUai0mE6Yn1kacc3SnTErfb/h+X94VXzI64rKFHYImXSvdwGGCmwOqCA==}
     engines: {node: '>=0.10.0'}
@@ -8232,14 +8257,14 @@ packages:
     engines: {node: '>= 0.6'}
     dev: true
 
-  /newtype-ts@0.3.5(fp-ts@2.16.9)(monocle-ts@2.3.13):
+  /newtype-ts@0.3.5(fp-ts@2.16.2)(monocle-ts@2.3.13):
     resolution: {integrity: sha512-v83UEQMlVR75yf1OUdoSFssjitxzjZlqBAjiGQ4WJaML8Jdc68LJ+BaSAXUmKY4bNzp7hygkKLYTsDi14PxI2g==}
     peerDependencies:
       fp-ts: ^2.0.0
       monocle-ts: ^2.0.0
     dependencies:
-      fp-ts: 2.16.9
-      monocle-ts: 2.3.13(fp-ts@2.16.9)
+      fp-ts: 2.16.2
+      monocle-ts: 2.3.13(fp-ts@2.16.2)
     dev: true
 
   /nice-try@1.0.5:
@@ -8700,15 +8725,9 @@ packages:
     resolution: {integrity: sha512-CzFr90qM24ju5f88quFC/6qohjC144rehe5n6DH900lgXmUe86+xCKc10ev56gRKC4/BkHUoG4uSiQgBiIXwDA==}
     dev: true
 
-  /picocolors@1.0.0:
-    resolution: {integrity: sha512-1fygroTLlHu66zi26VoTDv8yRgm0Fccecssto+MhsZ0D/DGW2sm8E8AjW7NU5VVTRt5GxbeZ5qBuJr+HyLYkjQ==}
-    dev: true
-
   /picocolors@1.1.0:
     resolution: {integrity: sha512-TQ92mBOW0l3LeMeyLV6mzy/kWr8lkd/hp3mTg7wYK7zJhuBStmGMBG0BdeDZS/dZx1IukaX6Bk11zcln25o1Aw==}
-    requiresBuild: true
     dev: true
-    optional: true
 
   /picomatch@2.3.1:
     resolution: {integrity: sha512-JU3teHTNjmE2VCGFzuY8EXzCDVwEqB2a8fsIvwaStHhAWJEeVd1o1QD80CU6+ZdEXXSLbSsuLwJjkCBWqRQUVA==}
@@ -8794,6 +8813,15 @@ packages:
   /posix-character-classes@0.1.1:
     resolution: {integrity: sha512-xTgYBc3fuo7Yt7JbiuFxSYGToMoz8fLoE6TC9Wx1P/u+LfeThMOAqmuyECnlBaaJb+u1m9hHiXUEtwW4OzfUJg==}
     engines: {node: '>=0.10.0'}
+    dev: true
+
+  /postcss@8.4.47:
+    resolution: {integrity: sha512-56rxCq7G/XfB4EkXq9Egn5GCqugWvDFjafDOThIdMBsI15iqPqR5r15TfSr1YPYeEI19YeaXMCbY6u88Y76GLQ==}
+    engines: {node: ^10 || ^12 || >=14}
+    dependencies:
+      nanoid: 3.3.7
+      picocolors: 1.1.0
+      source-map-js: 1.2.1
     dev: true
 
   /preact-render-to-string@6.3.1(preact@10.19.3):
@@ -9368,27 +9396,32 @@ packages:
       fsevents: 2.3.3
     dev: true
 
-  /rrdom@2.0.0-alpha.13:
-    resolution: {integrity: sha512-GJD3L2MPbIg3+VgCwwfujB4HRXyMfDdg8o3djPjSB9rMX2b52Hx2tBUmwmdnWfgWKtYGDJ2wVX9Dng3tZEBHVA==}
+  /rrdom@2.0.0-alpha.17:
+    resolution: {integrity: sha512-b6caDiNcFO96Opp7TGdcVd4OLGSXu5dJe+A0IDiAu8mk7OmhqZCSDlgQdTKmdO5wMf4zPsUTgb8H/aNvR3kDHA==}
     dependencies:
-      rrweb-snapshot: 2.0.0-alpha.13
+      rrweb-snapshot: 2.0.0-alpha.17
     dev: true
 
-  /rrweb-snapshot@2.0.0-alpha.13:
-    resolution: {integrity: sha512-slbhNBCYjxLGCeH95a67ECCy5a22nloXp1F5wF7DCzUNw80FN7tF9Lef1sRGLNo32g3mNqTc2sWLATlKejMxYw==}
+  /rrweb-snapshot@2.0.0-alpha.16:
+    resolution: {integrity: sha512-p81OrzUiCmUMZzJu4fGHeLB00PIbVIqsV/zhqzr2pitHTUXpMYcyOvDWt0vHdla0vnowEPaHq3Wsu6cUc732/w==}
     dev: true
 
-  /rrweb@2.0.0-alpha.13(patch_hash=es276qklpcauxli22h726xp7fe):
-    resolution: {integrity: sha512-a8GXOCnzWHNaVZPa7hsrLZtNZ3CGjiL+YrkpLo0TfmxGLhjNZbWY2r7pE06p+FcjFNlgUVTmFrSJbK3kO7yxvw==}
+  /rrweb-snapshot@2.0.0-alpha.17:
+    resolution: {integrity: sha512-GBg5pV8LHOTbeVmH2VHLEFR0mc2QpQMzAvcoxEGfPNWgWHc8UvKCyq7pqN1vA+fDZ+yXXbixeO0kB2pzVvFCBw==}
     dependencies:
-      '@rrweb/types': 2.0.0-alpha.13
+      postcss: 8.4.47
+    dev: true
+
+  /rrweb@2.0.0-alpha.16(patch_hash=x52pllmg6k5suqkcoa7bdybazq):
+    resolution: {integrity: sha512-Uxl7quZc8gm9RqrUR+10prZBoAfKWvM5lqlWDe7zd2wAkMiBQawDHUrmt8dByx96aiLonvm4oLsbBK14A0A0Tg==}
+    dependencies:
+      '@rrweb/types': 2.0.0-alpha.16
       '@types/css-font-loading-module': 0.0.7
       '@xstate/fsm': 1.5.2
       base64-arraybuffer: 1.0.2
-      fflate: 0.4.8
       mitt: 3.0.0
-      rrdom: 2.0.0-alpha.13
-      rrweb-snapshot: 2.0.0-alpha.13
+      rrdom: 2.0.0-alpha.17
+      rrweb-snapshot: 2.0.0-alpha.16
     dev: true
     patched: true
 
@@ -9687,6 +9720,11 @@ packages:
       use: 3.1.1
     transitivePeerDependencies:
       - supports-color
+    dev: true
+
+  /source-map-js@1.2.1:
+    resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
+    engines: {node: '>=0.10.0'}
     dev: true
 
   /source-map-resolve@0.5.3:
@@ -10104,16 +10142,16 @@ packages:
       - supports-color
     dev: true
 
-  /testcafe-reporter-dashboard@1.0.0-rc.1(fp-ts@2.16.9):
+  /testcafe-reporter-dashboard@1.0.0-rc.1(fp-ts@2.16.2):
     resolution: {integrity: sha512-VWFVo8kmG3OICD1RFdjvDCsEltGcHqTYN9X0aDyXg+0PqioYuAGUKQxqRA31dnG+2/RnaET4VJhhEvcbKzwhTw==}
     dependencies:
       es6-promise: 4.2.8
-      io-ts: 2.2.16(fp-ts@2.16.9)
-      io-ts-types: 0.5.16(fp-ts@2.16.9)(io-ts@2.2.16)(monocle-ts@2.3.13)(newtype-ts@0.3.5)
+      io-ts: 2.2.16(fp-ts@2.16.2)
+      io-ts-types: 0.5.16(fp-ts@2.16.2)(io-ts@2.2.16)(monocle-ts@2.3.13)(newtype-ts@0.3.5)
       isomorphic-fetch: 3.0.0
       jsonwebtoken: 8.5.1
-      monocle-ts: 2.3.13(fp-ts@2.16.9)
-      newtype-ts: 0.3.5(fp-ts@2.16.9)(monocle-ts@2.3.13)
+      monocle-ts: 2.3.13(fp-ts@2.16.2)
+      newtype-ts: 0.3.5(fp-ts@2.16.2)(monocle-ts@2.3.13)
       semver: 5.7.1
       uuid: 3.3.3
     transitivePeerDependencies:
@@ -10146,7 +10184,7 @@ packages:
     resolution: {integrity: sha512-6km7D26+KCQGeFlSQ9fVEU7tD8qdioSpqzxU8CCZkd2KzBS0jTFkqaJ54rPaLdd5+wdhgO3+as3LMm4F0EDeYA==}
     dev: true
 
-  /testcafe@1.19.0(fp-ts@2.16.9):
+  /testcafe@1.19.0(fp-ts@2.16.2):
     resolution: {integrity: sha512-HH6Z60N51SPw7WcNFhvbrcV1a6Dri1T0npFmE8BvxQEjsYog2whtdxj01yfaYrE87AZK/ep6lOwrqy0P6WmsfQ==}
     engines: {node: '>=14.0.0'}
     hasBin: true
@@ -10231,7 +10269,7 @@ packages:
       testcafe-browser-tools: 2.0.23
       testcafe-hammerhead: 24.5.19
       testcafe-legacy-api: 5.1.4
-      testcafe-reporter-dashboard: 1.0.0-rc.1(fp-ts@2.16.9)
+      testcafe-reporter-dashboard: 1.0.0-rc.1(fp-ts@2.16.2)
       testcafe-reporter-json: 2.2.0
       testcafe-reporter-list: 2.1.0
       testcafe-reporter-minimal: 2.1.0
@@ -10633,7 +10671,7 @@ packages:
     dependencies:
       browserslist: 4.21.7
       escalade: 3.1.1
-      picocolors: 1.0.0
+      picocolors: 1.1.0
     dev: true
 
   /uri-js@4.2.2:
