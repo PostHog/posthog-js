@@ -67,8 +67,8 @@ devDependencies:
     specifier: ^12.1.1
     version: 12.1.1(rollup@4.24.0)(tslib@2.5.0)(typescript@5.5.4)
   '@rrweb/rrweb-plugin-console-record':
-    specifier: 2.0.0-alpha.15
-    version: 2.0.0-alpha.15(rrweb@2.0.0-alpha.17)
+    specifier: 2.0.0-alpha.17
+    version: 2.0.0-alpha.17(rrweb@2.0.0-alpha.17)
   '@rrweb/types':
     specifier: 2.0.0-alpha.17
     version: 2.0.0-alpha.17
@@ -2802,10 +2802,10 @@ packages:
     dev: true
     optional: true
 
-  /@rrweb/rrweb-plugin-console-record@2.0.0-alpha.15(rrweb@2.0.0-alpha.17):
-    resolution: {integrity: sha512-66iOkD99AS8WqQNAnDtkJsQnSD8E+tZx3tWMJltpRDovXs4GoBE9eYxQeTWSigz6iaqbrxYPIqQIRck+zqnheg==}
+  /@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17(rrweb@2.0.0-alpha.17):
+    resolution: {integrity: sha512-tjNJ3wWUDMMf275xr4Rb5tVYF2UR+wXvSxnyS9tRKnRa574PQQvx7sGbqM/O9AytYjnbiTrAMqNR7OFysGCMwQ==}
     peerDependencies:
-      rrweb: ^2.0.0-alpha.15
+      rrweb: ^2.0.0-alpha.17
     dependencies:
       rrweb: 2.0.0-alpha.17(patch_hash=xlkuvshzdprjlpxe7nzsj3spyi)
     dev: true

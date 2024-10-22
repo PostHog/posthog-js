@@ -58,7 +58,7 @@
         "@rollup/plugin-node-resolve": "^15.3.0",
         "@rollup/plugin-terser": "^0.4.4",
         "@rollup/plugin-typescript": "^12.1.1",
-        "@rrweb/rrweb-plugin-console-record": "2.0.0-alpha.15",
+        "@rrweb/rrweb-plugin-console-record": "2.0.0-alpha.17",
         "@rrweb/types": "2.0.0-alpha.17",
         "@sentry/types": "8.7.0",
         "@testing-library/dom": "^9.3.0",
