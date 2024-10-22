@@ -1,5 +1,5 @@
 diff --git a/dist/rrweb.js b/dist/rrweb.js
-index 12f4ad3c7f897fe8a9ee2f4595dcf37f302d17c5..43f6bd95676c456e187b7bd68ba7af56e7b09f29 100644
+index 12f4ad3c7f897fe8a9ee2f4595dcf37f302d17c5..2fb78e052ab4daf9f8d2435d74035564b8f1ef13 100644
 --- a/dist/rrweb.js
 +++ b/dist/rrweb.js
 @@ -246,6 +246,9 @@ function isCSSImportRule(rule2) {
@@ -79,3 +79,20 @@ index 12f4ad3c7f897fe8a9ee2f4595dcf37f302d17c5..43f6bd95676c456e187b7bd68ba7af56
              dataURLOptions: options.dataURLOptions
            },
            [bitmap]
+@@ -16841,6 +16864,7 @@ class Replayer {
+ const { addCustomEvent } = record;
+ const { freezePage } = record;
+ const { takeFullSnapshot } = record;
++const version = "2.0.0-alpha.17";
+ export {
+   EventType,
+   IncrementalSource,
+@@ -16853,6 +16877,7 @@ export {
+   _mirror as mirror,
+   record,
+   takeFullSnapshot,
+-  utils
++  utils,
++  version
+ };
+ //# sourceMappingURL=rrweb.js.map

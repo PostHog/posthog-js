@@ -6,7 +6,7 @@ settings:
 
 patchedDependencies:
   rrweb@2.0.0-alpha.17:
-    hash: xlkuvshzdprjlpxe7nzsj3spyi
+    hash: ovqfbi26faqgvd4dbhm6fm7hwm
     path: patches/rrweb@2.0.0-alpha.17.patch
 
 dependencies:
@@ -206,7 +206,7 @@ devDependencies:
     version: 5.12.0(rollup@4.24.0)
   rrweb:
     specifier: 2.0.0-alpha.17
-    version: 2.0.0-alpha.17(patch_hash=xlkuvshzdprjlpxe7nzsj3spyi)
+    version: 2.0.0-alpha.17(patch_hash=ovqfbi26faqgvd4dbhm6fm7hwm)
   rrweb-snapshot:
     specifier: 2.0.0-alpha.17
     version: 2.0.0-alpha.17
@@ -2807,7 +2807,7 @@ packages:
     peerDependencies:
       rrweb: ^2.0.0-alpha.17
     dependencies:
-      rrweb: 2.0.0-alpha.17(patch_hash=xlkuvshzdprjlpxe7nzsj3spyi)
+      rrweb: 2.0.0-alpha.17(patch_hash=ovqfbi26faqgvd4dbhm6fm7hwm)
     dev: true
 
   /@rrweb/types@2.0.0-alpha.17:
@@ -9412,7 +9412,7 @@ packages:
       postcss: 8.4.47
     dev: true
 
-  /rrweb@2.0.0-alpha.17(patch_hash=xlkuvshzdprjlpxe7nzsj3spyi):
+  /rrweb@2.0.0-alpha.17(patch_hash=ovqfbi26faqgvd4dbhm6fm7hwm):
     resolution: {integrity: sha512-GQxBkCC4r9XL2bwSdv7iIS49M3cEA8OtObVq0rrQ4GUT4+h7omucGQ4x7m5YN5Vq1oalStBaBlYqF7yRnfG3JA==}
     dependencies:
       '@rrweb/types': 2.0.0-alpha.17
