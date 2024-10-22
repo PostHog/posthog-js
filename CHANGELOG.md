@@ -1,3 +1,8 @@
+## 1.174.3 - 2024-10-22
+
+- chore: upgrade rrweb to alpha.16 (#1276)
+- chore: test that autocapture allowlists are unioned (#1476)
+
 ## 1.174.2 - 2024-10-18
 
 - fix: no need to swallow import errors (#1486)
