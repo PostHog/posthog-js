@@ -19,6 +19,7 @@ import {
     PEOPLE_DISTINCT_ID_KEY,
     USER_STATE,
     ENABLE_PERSON_PROCESSING,
+    SENTINEL_COOKIELESS_SERVER_HASH,
 } from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { Decide } from './decide'
@@ -510,8 +511,10 @@ export class PostHog {
         if (!this.get_distinct_id()) {
             // There is no need to set the distinct id
             // or the device id if something was already stored
-            // in the persitence
-            const uuid = this.config.get_device_id(uuidv7())
+            // in the persistence
+            const uuid = this.config.__use_cookieless_server_hash
+                ? SENTINEL_COOKIELESS_SERVER_HASH
+                : this.config.get_device_id(uuidv7())
 
             this.register_once(
                 {

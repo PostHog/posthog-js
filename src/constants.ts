@@ -49,6 +49,12 @@ export const ENABLE_PERSON_PROCESSING = '$epp'
 export const TOOLBAR_ID = '__POSTHOG_TOOLBAR__'
 export const TOOLBAR_CONTAINER_CLASS = 'toolbar-global-fade-container'
 
+/**
+ * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+ * sentinel value for distinct id, signals that the server should replace it with a hash
+ * */
+export const SENTINEL_COOKIELESS_SERVER_HASH = '$sentinel_cookieless_server_hash'
+
 export const WEB_EXPERIMENTS = '$web_experiments'
 
 // These are properties that are reserved and will not be automatically included in events
