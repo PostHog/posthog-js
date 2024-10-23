@@ -46,7 +46,7 @@ interface PostHogExtensions {
         wrapOnError: (captureFn: (props: Properties) => void) => () => void
         wrapUnhandledRejection: (captureFn: (props: Properties) => void) => () => void
     }
-    rrweb?: { record: any; version: string; rrwebVersion: string }
+    rrweb?: { record: any; version: string }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
     canActivateRepeatedly?: (survey: any) => boolean
     generateSurveys?: (posthog: PostHog) => any | undefined

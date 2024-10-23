@@ -190,7 +190,6 @@ describe('SessionRecording', () => {
                 return () => {}
             }),
             version: 'fake',
-            rrwebVersion: 'fake',
         }
         assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = jest.fn(() => {
             // we pretend to be rrweb and call emit
