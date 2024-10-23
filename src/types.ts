@@ -1,4 +1,3 @@
-import type { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import { PostHog } from './posthog-core'
 import type { SegmentAnalytics } from './extensions/segment-integration'
 
@@ -268,9 +267,9 @@ export interface SessionRecordingOptions {
     maskTextSelector?: string | null
     maskTextFn?: ((text: string, element: HTMLElement | null) => string) | null
     maskAllInputs?: boolean
-    maskInputOptions?: MaskInputOptions
+    maskInputOptions?: any
     maskInputFn?: ((text: string, element?: HTMLElement) => string) | null
-    slimDOMOptions?: SlimDOMOptions | 'all' | true
+    slimDOMOptions?: any | 'all' | true
     collectFonts?: boolean
     inlineStylesheet?: boolean
     recordCrossOriginIframes?: boolean

@@ -63,10 +63,6 @@ export const RECORDING_MAX_EVENT_SIZE = ONE_KB * ONE_KB * 0.9 // ~1mb (with some
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
 
-// NOTE: Importing this type is problematic as we can't safely bundle it to a TS definition so, instead we redefine.
-// import type { record } from 'rrweb2/typings'
-// import type { recordOptions } from 'rrweb/typings/types'
-
 const ACTIVE_SOURCES = [
     IncrementalSource.MouseMove,
     IncrementalSource.MouseInteraction,
