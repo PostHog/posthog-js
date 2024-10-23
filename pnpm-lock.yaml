@@ -4,11 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-patchedDependencies:
-  rrweb@2.0.0-alpha.17:
-    hash: ovqfbi26faqgvd4dbhm6fm7hwm
-    path: patches/rrweb@2.0.0-alpha.17.patch
-
 dependencies:
   core-js:
     specifier: ^3.38.1
@@ -2803,7 +2798,7 @@ packages:
     resolution: {integrity: sha512-Je+lzjeWMF8/I0IDoXFzkGPKT8j7AkaBup5YcwUHlkp18VhLVze416MvI6915teE27uUA2ScXMXzG0Yiu5VTIw==}
     dependencies:
       '@rrweb/types': 2.0.0-alpha.17
-      rrweb: 2.0.0-alpha.17(patch_hash=ovqfbi26faqgvd4dbhm6fm7hwm)
+      rrweb: 2.0.0-alpha.17
     dev: true
 
   /@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17(rrweb@2.0.0-alpha.17):
@@ -2811,7 +2806,7 @@ packages:
     peerDependencies:
       rrweb: ^2.0.0-alpha.17
     dependencies:
-      rrweb: 2.0.0-alpha.17(patch_hash=ovqfbi26faqgvd4dbhm6fm7hwm)
+      rrweb: 2.0.0-alpha.17
     dev: true
 
   /@rrweb/types@2.0.0-alpha.17:
@@ -9416,7 +9411,7 @@ packages:
       postcss: 8.4.47
     dev: true
 
-  /rrweb@2.0.0-alpha.17(patch_hash=ovqfbi26faqgvd4dbhm6fm7hwm):
+  /rrweb@2.0.0-alpha.17:
     resolution: {integrity: sha512-GQxBkCC4r9XL2bwSdv7iIS49M3cEA8OtObVq0rrQ4GUT4+h7omucGQ4x7m5YN5Vq1oalStBaBlYqF7yRnfG3JA==}
     dependencies:
       '@rrweb/types': 2.0.0-alpha.17
@@ -9428,7 +9423,6 @@ packages:
       rrdom: 2.0.0-alpha.17
       rrweb-snapshot: 2.0.0-alpha.17
     dev: true
-    patched: true
 
   /rsvp@4.8.5:
     resolution: {integrity: sha512-nfMOlASu9OnRJo1mbEk2cz0D56a1MBNrJ7orjRZQG10XDyuvwksKbuXNp6qa+kbn839HwjwhBzhFmdsaEAfauA==}
