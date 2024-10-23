@@ -13,6 +13,7 @@ import { assignableWindow, document, window } from './utils/globals'
 import { DecideResponse } from './types'
 import { logger } from './utils/logger'
 import { isNullish } from './utils/type-utils'
+import { getSurveySeenStorageKeys } from './extensions/surveys/surveys-utils'
 
 const LOGGER_PREFIX = '[Surveys]'
 
@@ -75,13 +76,7 @@ export class PostHogSurveys {
 
     reset(): void {
         localStorage.removeItem('lastSeenSurveyDate')
-        const surveyKeys = []
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i)
-            if (key?.startsWith('seenSurvey_')) {
-                surveyKeys.push(key)
-            }
-        }
+        const surveyKeys = getSurveySeenStorageKeys()
         surveyKeys.forEach((key) => localStorage.removeItem(key))
     }
 
