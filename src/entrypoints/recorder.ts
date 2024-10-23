@@ -1,4 +1,4 @@
-import { record as rrwebRecord } from '@rrweb/record'
+import { record as rrwebRecord } from 'rrweb'
 import { getRecordConsolePlugin } from '@rrweb/rrweb-plugin-console-record'
 
 // rrweb/network@1 code starts
