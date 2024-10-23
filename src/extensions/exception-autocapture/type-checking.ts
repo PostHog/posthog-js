@@ -27,6 +27,7 @@ export function isError(candidate: unknown): candidate is Error {
         case '[object Error]':
         case '[object Exception]':
         case '[object DOMException]':
+        case '[object DOMError]':
             return true
         default:
             return isInstanceOf(candidate, Error)

@@ -1237,5 +1237,40 @@ describe('Autocapture system', () => {
             }
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
         })
+
+        it('If a user sets dom_event_allowlist and element_allowlist with css_selector_allowlist it us a union so only the dom events on the element allow list with the css selector', () => {
+            const elements = ['button', 'input', 'select']
+            const createdElements = []
+            elements.forEach((element, index) => {
+                const el = document.createElement(element)
+                el.className = index === 0 ? 'capturable' : 'something-else'
+                document.body.appendChild(el)
+                createdElements.push(el)
+            })
+
+            const autocapture_config: AutocaptureConfig = {
+                dom_event_allowlist: ['click'],
+                element_allowlist: ['button'],
+                css_selector_allowlist: ['.capturable'],
+            }
+
+            const events = ['click', 'touchstart']
+
+            // for an allowed and a disallowed event
+            events.forEach((event) => {
+                // for a range of elements where only one matches the allowlists
+                createdElements.forEach((element) => {
+                    const expectedCapturable =
+                        element.tagName === 'BUTTON' && element.className === 'capturable' && event === 'click'
+                    const fakeEvent = makeMouseEvent({
+                        target: element,
+                        type: event,
+                    })
+
+                    // check if we allow capture only as a union of allowlists
+                    expect(shouldCaptureDomEvent(element, fakeEvent, autocapture_config)).toBe(expectedCapturable)
+                })
+            })
+        })
     })
 })

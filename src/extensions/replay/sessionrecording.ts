@@ -6,6 +6,8 @@ import {
     SESSION_RECORDING_MINIMUM_DURATION,
     SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE,
     SESSION_RECORDING_SAMPLE_RATE,
+    SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
+    SESSION_RECORDING_URL_TRIGGER_STATUS,
 } from '../../constants'
 import {
     estimateSize,
@@ -16,7 +18,14 @@ import {
     truncateLargeConsoleLogs,
 } from './sessionrecording-utils'
 import { PostHog } from '../../posthog-core'
-import { DecideResponse, FlagVariant, NetworkRecordOptions, NetworkRequest, Properties } from '../../types'
+import {
+    DecideResponse,
+    FlagVariant,
+    NetworkRecordOptions,
+    NetworkRequest,
+    Properties,
+    SessionRecordingUrlTrigger,
+} from '../../types'
 import {
     customEvent,
     EventType,
@@ -34,9 +43,18 @@ import { isLocalhost } from '../../utils/request-utils'
 import { MutationRateLimiter } from './mutation-rate-limiter'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
 
+type SessionStartReason =
+    | 'sampling_override'
+    | 'recording_initialized'
+    | 'linked_flag_match'
+    | 'linked_flag_override'
+    | 'sampling'
+    | 'session_id_changed'
+
 const BASE_ENDPOINT = '/s/'
 
-const FIVE_MINUTES = 1000 * 60 * 5
+const ONE_MINUTE = 1000 * 60
+const FIVE_MINUTES = ONE_MINUTE * 5
 const TWO_SECONDS = 2000
 export const RECORDING_IDLE_THRESHOLD_MS = FIVE_MINUTES
 const ONE_KB = 1024
@@ -59,6 +77,9 @@ const ACTIVE_SOURCES = [
     IncrementalSource.MediaInteraction,
     IncrementalSource.Drag,
 ]
+
+const TRIGGER_STATUSES = ['trigger_activated', 'trigger_pending', 'trigger_disabled'] as const
+type TriggerStatus = typeof TRIGGER_STATUSES[number]
 
 /**
  * Session recording starts in buffering mode while waiting for decide response
@@ -225,6 +246,8 @@ export class SessionRecording {
     // then we can manually track href changes
     private _lastHref?: string
 
+    private _urlTriggers: SessionRecordingUrlTrigger[] = []
+
     // Util to help developers working on this feature manually override
     _forceAllowLocalhostNetworkCapture = false
 
@@ -250,7 +273,11 @@ export class SessionRecording {
     }
 
     private get fullSnapshotIntervalMillis(): number {
-        return this.instance.config.session_recording?.full_snapshot_interval_millis || FIVE_MINUTES
+        if (this.urlTriggerStatus === 'trigger_pending') {
+            return ONE_MINUTE
+        }
+
+        return this.instance.config.session_recording?.full_snapshot_interval_millis ?? FIVE_MINUTES
     }
 
     private get isSampled(): boolean | null {
@@ -340,11 +367,43 @@ export class SessionRecording {
             return 'buffering'
         }
 
+        if (this.urlTriggerStatus === 'trigger_pending') {
+            return 'buffering'
+        }
+
         if (isBoolean(this.isSampled)) {
             return this.isSampled ? 'sampled' : 'disabled'
         } else {
             return 'active'
         }
+    }
+
+    private get urlTriggerStatus(): TriggerStatus {
+        if (this.receivedDecide && this._urlTriggers.length === 0) {
+            return 'trigger_disabled'
+        }
+
+        const currentStatus = this.instance?.get_property(SESSION_RECORDING_URL_TRIGGER_STATUS)
+        const currentTriggerSession = this.instance?.get_property(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
+
+        if (currentTriggerSession !== this.sessionId) {
+            this.instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
+            this.instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_STATUS)
+            return 'trigger_pending'
+        }
+
+        if (TRIGGER_STATUSES.includes(currentStatus)) {
+            return currentStatus as TriggerStatus
+        }
+
+        return 'trigger_pending'
+    }
+
+    private set urlTriggerStatus(status: TriggerStatus) {
+        this.instance?.persistence?.register({
+            [SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION]: this.sessionId,
+            [SESSION_RECORDING_URL_TRIGGER_STATUS]: status,
+        })
     }
 
     constructor(private readonly instance: PostHog) {
@@ -392,9 +451,9 @@ export class SessionRecording {
         }
     }
 
-    startIfEnabledOrStop() {
+    startIfEnabledOrStop(startReason?: SessionStartReason) {
         if (this.isRecordingEnabled) {
-            this._startCapture()
+            this._startCapture(startReason)
 
             // calling addEventListener multiple times is safe and will not add duplicates
             window?.addEventListener('beforeunload', this._onBeforeUnload)
@@ -430,6 +489,9 @@ export class SessionRecording {
                 this._onSessionIdListener = this.sessionManager.onSessionId((sessionId, windowId, changeReason) => {
                     if (changeReason) {
                         this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
+
+                        this.instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
+                        this.instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_STATUS)
                     }
                 })
             }
@@ -496,15 +558,21 @@ export class SessionRecording {
             shouldSample = storedIsSampled
         }
 
-        if (!shouldSample && makeDecision) {
-            logger.warn(
-                LOGGER_PREFIX +
-                    ` Sample rate (${currentSampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
-            )
+        if (makeDecision) {
+            if (shouldSample) {
+                this._reportStarted('sampling')
+            } else {
+                logger.warn(
+                    LOGGER_PREFIX +
+                        ` Sample rate (${currentSampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
+                )
+            }
+
+            this._tryAddCustomEvent('samplingDecisionMade', {
+                sampleRate: currentSampleRate,
+                isSampled: shouldSample,
+            })
         }
-        this._tryAddCustomEvent('samplingDecisionMade', {
-            sampleRate: currentSampleRate,
-        })
 
         this.instance.persistence?.register({
             [SESSION_RECORDING_IS_SAMPLED]: shouldSample,
@@ -536,9 +604,14 @@ export class SessionRecording {
                     const tag = 'linked flag matched'
                     logger.info(LOGGER_PREFIX + ' ' + tag, payload)
                     this._tryAddCustomEvent(tag, payload)
+                    this._reportStarted('linked_flag_match')
                 }
                 this._linkedFlagSeen = linkedFlagMatches
             })
+        }
+
+        if (response.sessionRecording?.urlTriggers) {
+            this._urlTriggers = response.sessionRecording.urlTriggers
         }
 
         this.receivedDecide = true
@@ -609,14 +682,14 @@ export class SessionRecording {
         })
     }
 
-    private _startCapture() {
-        if (isUndefined(Object.assign)) {
+    private _startCapture(startReason?: SessionStartReason) {
+        if (isUndefined(Object.assign) || isUndefined(Array.from)) {
             // According to the rrweb docs, rrweb is not supported on IE11 and below:
             // "rrweb does not support IE11 and below because it uses the MutationObserver API which was supported by these browsers."
             // https://github.com/rrweb-io/rrweb/blob/master/guide.md#compatibility-note
             //
             // However, MutationObserver does exist on IE11, it just doesn't work well and does not detect all changes.
-            // Instead, when we load "recorder.js", the first JS error is about "Object.assign" being undefined.
+            // Instead, when we load "recorder.js", the first JS error is about "Object.assign" and "Array.from" being undefined.
             // Thus instead of MutationObserver, we look for this function and block recording if it's undefined.
             return
         }
@@ -647,6 +720,11 @@ export class SessionRecording {
             })
         } else {
             this._onScriptLoaded()
+        }
+
+        logger.info(LOGGER_PREFIX + ' starting')
+        if (this.status === 'active') {
+            this._reportStarted(startReason || 'recording_initialized')
         }
     }
 
@@ -721,7 +799,7 @@ export class SessionRecording {
 
         if (sessionIdChanged || windowIdChanged) {
             this.stopRecording()
-            this.startIfEnabledOrStop()
+            this.startIfEnabledOrStop('session_id_changed')
         } else if (returningFromIdle) {
             this._scheduleFullSnapshot()
         }
@@ -838,11 +916,6 @@ export class SessionRecording {
         this._tryAddCustomEvent('$posthog_config', {
             config: this.instance.config,
         })
-
-        logger.info(LOGGER_PREFIX + ' started', {
-            idleThreshold: this.sessionIdleThresholdMilliseconds,
-            maxIdleTime: this.sessionManager.sessionTimeoutMs,
-        })
     }
 
     private _scheduleFullSnapshot(): void {
@@ -906,9 +979,17 @@ export class SessionRecording {
             this._pageViewFallBack()
         }
 
+        // Check if the URL matches any trigger patterns
+        this._checkUrlTrigger()
+
         // we're processing a full snapshot, so we should reset the timer
         if (rawEvent.type === EventType.FullSnapshot) {
             this._scheduleFullSnapshot()
+        }
+
+        // Clear the buffer if waiting for a trigger, and only keep data from after the current full snapshot
+        if (rawEvent.type === EventType.FullSnapshot && this.urlTriggerStatus === 'trigger_pending') {
+            this.clearBuffer()
         }
 
         const throttledEvent = this.mutationRateLimiter
@@ -1087,6 +1168,36 @@ export class SessionRecording {
         })
     }
 
+    private _checkUrlTrigger() {
+        if (typeof window === 'undefined' || !window.location.href) {
+            return
+        }
+
+        const url = window.location.href
+
+        if (
+            this._urlTriggers.some((trigger) => {
+                switch (trigger.matching) {
+                    case 'regex':
+                        return new RegExp(trigger.url).test(url)
+                    default:
+                        return false
+                }
+            })
+        ) {
+            this._activateUrlTrigger()
+        }
+    }
+
+    private _activateUrlTrigger() {
+        if (this.urlTriggerStatus === 'trigger_pending') {
+            this.urlTriggerStatus = 'trigger_activated'
+            this._tryAddCustomEvent('url trigger activated', {})
+            this._flushBuffer()
+            logger.info(LOGGER_PREFIX + ' recording triggered by URL pattern match')
+        }
+    }
+
     /**
      * this ignores the linked flag config and causes capture to start
      * (if recording would have started had the flag been received i.e. it does not override other config).
@@ -1096,5 +1207,29 @@ export class SessionRecording {
      * */
     public overrideLinkedFlag() {
         this._linkedFlagSeen = true
+        this._reportStarted('linked_flag_override')
+    }
+
+    /**
+     * this ignores the sampling config and causes capture to start
+     * (if recording would have started had the flag been received i.e. it does not override other config).
+     *
+     * It is not usual to call this directly,
+     * instead call `posthog.startSessionRecording({sampling: true})`
+     * */
+    public overrideSampling() {
+        this.instance.persistence?.register({
+            // short-circuits the `makeSamplingDecision` function in the session recording module
+            [SESSION_RECORDING_IS_SAMPLED]: true,
+        })
+        this._reportStarted('sampling_override')
+    }
+
+    private _reportStarted(startReason: SessionStartReason, shouldReport: () => boolean = () => true) {
+        if (shouldReport()) {
+            this.instance.register_for_session({
+                $session_recording_start_reason: startReason,
+            })
+        }
     }
 }
