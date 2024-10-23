@@ -12,7 +12,7 @@ import {
     PERSISTENCE_RESERVED_PROPERTIES,
 } from './constants'
 
-import { isObject, isUndefined } from './utils/type-utils'
+import { isEmptyObject, isObject, isUndefined } from './utils/type-utils'
 import { Info } from './utils/event-utils'
 import { logger } from './utils/logger'
 
@@ -221,7 +221,11 @@ export class PostHogPersistence {
 
     update_campaign_params(): void {
         if (!this.campaign_params_saved) {
-            this.register(Info.campaignParams(this.config.custom_campaign_params))
+            const campaignParams = Info.campaignParams(this.config.custom_campaign_params)
+            // only save campaign params if there were any
+            if (!isEmptyObject(stripEmptyProperties(campaignParams))) {
+                this.register(Info.campaignParams(this.config.custom_campaign_params))
+            }
             this.campaign_params_saved = true
         }
     }
