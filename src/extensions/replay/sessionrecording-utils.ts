@@ -9,6 +9,7 @@ import type {
     RecordPlugin,
     SamplingStrategy,
 } from '@rrweb/types'
+import type { DataURLOptions, MaskInputFn, MaskInputOptions, MaskTextFn, Mirror, SlimDOMOptions } from 'rrweb-snapshot'
 
 import { isObject } from '../../utils/type-utils'
 import { SnapshotBuffer } from './sessionrecording'
@@ -53,7 +54,7 @@ export type rrwebRecord = {
     (options: recordOptions<eventWithTime>): listenerHandler
     addCustomEvent: (tag: string, payload: any) => void
     takeFullSnapshot: () => void
-    mirror: any
+    mirror: Mirror
 }
 
 export declare type recordOptions<T> = {
@@ -66,16 +67,16 @@ export declare type recordOptions<T> = {
     maskTextClass?: maskTextClass
     maskTextSelector?: string
     maskAllInputs?: boolean
-    maskInputOptions?: any
-    maskInputFn?: any
-    maskTextFn?: any
-    slimDOMOptions?: any | 'all' | true
+    maskInputOptions?: MaskInputOptions
+    maskInputFn?: MaskInputFn
+    maskTextFn?: MaskTextFn
+    slimDOMOptions?: SlimDOMOptions | 'all' | true
     ignoreCSSAttributes?: Set<string>
     inlineStylesheet?: boolean
     hooks?: hooksParam
     // packFn?: PackFn
     sampling?: SamplingStrategy
-    dataURLOptions?: any
+    dataURLOptions?: DataURLOptions
     recordCanvas?: boolean
     recordCrossOriginIframes?: boolean
     recordAfter?: 'DOMContentLoaded' | 'load'
