@@ -81,6 +81,9 @@ const entrypointTargets = entrypoints.map((file) => {
             },
         ],
         plugins: [...pluginsForThisFile, visualizer({ filename: `bundle-stats-${fileName}.html` })],
+        treeshake: {
+            moduleSideEffects: false,  // assume imported modules have no side effects, this might break things
+        },
     }
 })
 
