@@ -73,6 +73,18 @@ export class PostHogSurveys {
         this.loadIfEnabled()
     }
 
+    reset(): void {
+        localStorage.removeItem('lastSeenSurveyDate')
+        const surveyKeys = []
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i)
+            if (key?.startsWith('seenSurvey_')) {
+                surveyKeys.push(key)
+            }
+        }
+        surveyKeys.forEach((key) => localStorage.removeItem(key))
+    }
+
     loadIfEnabled() {
         const surveysGenerator = assignableWindow?.__PosthogExtensions__?.generateSurveys
 
@@ -287,7 +299,6 @@ export class PostHogSurveys {
         }
         this.getSurveys((surveys) => {
             const survey = surveys.filter((x) => x.id === surveyId)[0]
-
             this._surveyManager.canRenderSurvey(survey)
         })
     }
@@ -299,7 +310,6 @@ export class PostHogSurveys {
         }
         this.getSurveys((surveys) => {
             const survey = surveys.filter((x) => x.id === surveyId)[0]
-
             this._surveyManager.renderSurvey(survey, document?.querySelector(selector))
         })
     }
