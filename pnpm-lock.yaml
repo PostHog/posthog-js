@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@rrweb/record@2.0.0-alpha.17':
+    hash: or7biymn4kjyhnfwbz74vqezxa
+    path: patches/@rrweb__record@2.0.0-alpha.17.patch
+
 dependencies:
   core-js:
     specifier: ^3.38.1
@@ -63,7 +68,7 @@ devDependencies:
     version: 12.1.1(rollup@4.24.0)(tslib@2.5.0)(typescript@5.5.4)
   '@rrweb/record':
     specifier: 2.0.0-alpha.17
-    version: 2.0.0-alpha.17
+    version: 2.0.0-alpha.17(patch_hash=or7biymn4kjyhnfwbz74vqezxa)
   '@rrweb/rrweb-plugin-console-record':
     specifier: 2.0.0-alpha.17
     version: 2.0.0-alpha.17(rrweb@2.0.0-alpha.17)
@@ -2794,12 +2799,13 @@ packages:
     dev: true
     optional: true
 
-  /@rrweb/record@2.0.0-alpha.17:
+  /@rrweb/record@2.0.0-alpha.17(patch_hash=or7biymn4kjyhnfwbz74vqezxa):
     resolution: {integrity: sha512-Je+lzjeWMF8/I0IDoXFzkGPKT8j7AkaBup5YcwUHlkp18VhLVze416MvI6915teE27uUA2ScXMXzG0Yiu5VTIw==}
     dependencies:
       '@rrweb/types': 2.0.0-alpha.17
       rrweb: 2.0.0-alpha.17
     dev: true
+    patched: true
 
   /@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17(rrweb@2.0.0-alpha.17):
     resolution: {integrity: sha512-tjNJ3wWUDMMf275xr4Rb5tVYF2UR+wXvSxnyS9tRKnRa574PQQvx7sGbqM/O9AytYjnbiTrAMqNR7OFysGCMwQ==}
