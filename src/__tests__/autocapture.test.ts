@@ -1,7 +1,13 @@
 /// <reference lib="dom" />
 /* eslint-disable compat/compat */
 
-import { Autocapture } from '../autocapture'
+import {
+    Autocapture,
+    getAugmentPropertiesFromElement,
+    getDefaultProperties,
+    getPropertiesFromElement,
+    previousElementSibling,
+} from '../autocapture'
 import { shouldCaptureDomEvent } from '../autocapture-utils'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
 import { AutocaptureConfig, DecideResponse } from '../types'
@@ -138,42 +144,50 @@ describe('Autocapture system', () => {
         })
 
         it('should contain the proper tag name', () => {
-            const props = autocapture['_getPropertiesFromElement'](div, false, false)
+            const props = getPropertiesFromElement(div, false, false, undefined)
+
             expect(props['tag_name']).toBe('div')
         })
 
         it('should contain class list', () => {
-            const props = autocapture['_getPropertiesFromElement'](div, false, false)
+            const props = getPropertiesFromElement(div, false, false, undefined)
+
             expect(props['classes']).toEqual(['class1', 'class2', 'class3'])
         })
 
         it('should not collect input value', () => {
-            const props = autocapture['_getPropertiesFromElement'](input, false, false)
+            const props = getPropertiesFromElement(input, false, false, undefined)
+
             expect(props['value']).toBeUndefined()
         })
 
         it('should strip element value with class "ph-sensitive"', () => {
-            const props = autocapture['_getPropertiesFromElement'](sensitiveInput, false, false)
+            const props = getPropertiesFromElement(sensitiveInput, false, false, undefined)
+
             expect(props['value']).toBeUndefined()
         })
 
         it('should strip hidden element value', () => {
-            const props = autocapture['_getPropertiesFromElement'](hidden, false, false)
+            const props = getPropertiesFromElement(hidden, false, false, undefined)
+
             expect(props['value']).toBeUndefined()
         })
 
         it('should strip password element value', () => {
-            const props = autocapture['_getPropertiesFromElement'](password, false, false)
+            const props = getPropertiesFromElement(password, false, false, undefined)
+
             expect(props['value']).toBeUndefined()
         })
 
         it('should contain nth-of-type', () => {
-            const props = autocapture['_getPropertiesFromElement'](div, false, false)
+            const props = getPropertiesFromElement(div, false, false, undefined)
+
             expect(props['nth_of_type']).toBe(2)
         })
 
         it('should contain nth-child', () => {
-            const props = autocapture['_getPropertiesFromElement'](password, false, false)
+            const props = getPropertiesFromElement(password, false, false, undefined)
+
             expect(props['nth_child']).toBe(7)
         })
 
@@ -181,32 +195,32 @@ describe('Autocapture system', () => {
             const angularDiv = document.createElement('div')
             angularDiv.setAttribute('_ngcontent-dpm-c448', '')
             angularDiv.setAttribute('_nghost-dpm-c448', '')
-            const props = autocapture['_getPropertiesFromElement'](angularDiv, false, false)
+
+            const props = getPropertiesFromElement(angularDiv, false, false, undefined)
+
             expect(props['_ngcontent-dpm-c448']).toBeUndefined()
             expect(props['_nghost-dpm-c448']).toBeUndefined()
         })
 
         it('should filter element attributes based on the ignorelist', () => {
-            posthog.config.autocapture = {
-                element_attribute_ignorelist: ['data-attr', 'data-attr-2'],
-            }
             div.setAttribute('data-attr', 'value')
             div.setAttribute('data-attr-2', 'value')
             div.setAttribute('data-attr-3', 'value')
-            const props = autocapture['_getPropertiesFromElement'](div, false, false)
+
+            const props = getPropertiesFromElement(div, false, false, ['data-attr', 'data-attr-2'])
+
             expect(props['attr__data-attr']).toBeUndefined()
             expect(props['attr__data-attr-2']).toBeUndefined()
             expect(props['attr__data-attr-3']).toBe('value')
         })
 
         it('an empty ignorelist does nothing', () => {
-            posthog.config.autocapture = {
-                element_attribute_ignorelist: [],
-            }
             div.setAttribute('data-attr', 'value')
             div.setAttribute('data-attr-2', 'value')
             div.setAttribute('data-attr-3', 'value')
-            const props = autocapture['_getPropertiesFromElement'](div, false, false)
+
+            const props = getPropertiesFromElement(div, false, false, [])
+
             expect(props['attr__data-attr']).toBe('value')
             expect(props['attr__data-attr-2']).toBe('value')
             expect(props['attr__data-attr-3']).toBe('value')
@@ -264,7 +278,8 @@ describe('Autocapture system', () => {
         })
 
         it('should collect multiple augments from elements', () => {
-            const props = autocapture['_getAugmentPropertiesFromElement'](div)
+            const props = getAugmentPropertiesFromElement(div)
+
             expect(props['one-on-the-div']).toBe('one')
             expect(props['two-on-the-div']).toBe('two')
             expect(props['falsey-on-the-div']).toBe('0')
@@ -272,22 +287,26 @@ describe('Autocapture system', () => {
         })
 
         it('should collect augment from input value', () => {
-            const props = autocapture['_getAugmentPropertiesFromElement'](input)
+            const props = getAugmentPropertiesFromElement(input)
+
             expect(props['on-the-input']).toBe('is on the input')
         })
 
         it('should collect augment from input with class "ph-sensitive"', () => {
-            const props = autocapture['_getAugmentPropertiesFromElement'](sensitiveInput)
+            const props = getAugmentPropertiesFromElement(sensitiveInput)
+
             expect(props['on-the-sensitive-input']).toBeUndefined()
         })
 
         it('should not collect augment from the hidden element value', () => {
-            const props = autocapture['_getAugmentPropertiesFromElement'](hidden)
+            const props = getAugmentPropertiesFromElement(hidden)
+
             expect(props).toStrictEqual({})
         })
 
         it('should collect augment from the password element value', () => {
-            const props = autocapture['_getAugmentPropertiesFromElement'](password)
+            const props = getAugmentPropertiesFromElement(password)
+
             expect(props).toStrictEqual({})
         })
     })
@@ -323,7 +342,8 @@ describe('Autocapture system', () => {
             const child = document.createElement('div')
             div.appendChild(sibling)
             div.appendChild(child)
-            expect(autocapture['_previousElementSibling'](child)).toBe(sibling)
+
+            expect(previousElementSibling(child)).toBe(sibling)
         })
 
         it('should return the first child and not the immediately previous sibling (text)', () => {
@@ -333,7 +353,8 @@ describe('Autocapture system', () => {
             div.appendChild(sibling)
             div.appendChild(document.createTextNode('some text'))
             div.appendChild(child)
-            expect(autocapture['_previousElementSibling'](child)).toBe(sibling)
+
+            expect(previousElementSibling(child)).toBe(sibling)
         })
 
         it('should return null when the previous sibling is a text node', () => {
@@ -341,13 +362,14 @@ describe('Autocapture system', () => {
             const child = document.createElement('div')
             div.appendChild(document.createTextNode('some text'))
             div.appendChild(child)
-            expect(autocapture['_previousElementSibling'](child)).toBeNull()
+
+            expect(previousElementSibling(child)).toBeNull()
         })
     })
 
     describe('_getDefaultProperties', () => {
         it('should return the default properties', () => {
-            expect(autocapture['_getDefaultProperties']('test')).toEqual({
+            expect(getDefaultProperties('test')).toEqual({
                 $event_type: 'test',
                 $ce_version: 1,
             })
