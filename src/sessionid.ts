@@ -260,6 +260,7 @@ export class SessionIdManager {
             windowId,
             sessionStartTimestamp,
             changeReason: valuesChanged ? { noSessionId, activityTimeout, sessionPastMaximumLength } : undefined,
+            lastActivityTimestamp: lastTimestamp,
         }
     }
 }
