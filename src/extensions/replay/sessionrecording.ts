@@ -42,6 +42,7 @@ import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
 import { MutationRateLimiter } from './mutation-rate-limiter'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
+import { clampToRange } from '../../utils/number-utils'
 
 type SessionStartReason =
     | 'sampling_override'
@@ -313,8 +314,8 @@ export class SessionRecording {
 
         return {
             enabled,
-            fps,
-            quality,
+            fps: clampToRange(fps, 0, 12, 'canvas recording fps'),
+            quality: clampToRange(quality, 0, 1, 'canvas recording quality'),
         }
     }
 

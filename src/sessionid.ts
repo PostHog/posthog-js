@@ -8,6 +8,8 @@ import { window } from './utils/globals'
 import { isArray, isNumber, isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 
+import { clampToRange } from './utils/number-utils'
+
 const MAX_SESSION_IDLE_TIMEOUT = 30 * 60 // 30 minutes
 const MIN_SESSION_IDLE_TIMEOUT = 60 // 1 minute
 const SESSION_LENGTH_LIMIT = 24 * 3600 * 1000 // 24 hours
@@ -43,19 +45,16 @@ export class SessionIdManager {
         this._windowIdGenerator = windowIdGenerator || uuidv7
 
         const persistenceName = config['persistence_name'] || config['token']
-        let desiredTimeout = config['session_idle_timeout_seconds'] || MAX_SESSION_IDLE_TIMEOUT
 
-        if (!isNumber(desiredTimeout)) {
-            logger.warn('session_idle_timeout_seconds must be a number. Defaulting to 30 minutes.')
-            desiredTimeout = MAX_SESSION_IDLE_TIMEOUT
-        } else if (desiredTimeout > MAX_SESSION_IDLE_TIMEOUT) {
-            logger.warn('session_idle_timeout_seconds cannot be  greater than 30 minutes. Using 30 minutes instead.')
-        } else if (desiredTimeout < MIN_SESSION_IDLE_TIMEOUT) {
-            logger.warn('session_idle_timeout_seconds cannot be less than 60 seconds. Using 60 seconds instead.')
-        }
-
+        const desiredTimeout = config['session_idle_timeout_seconds'] || MAX_SESSION_IDLE_TIMEOUT
         this._sessionTimeoutMs =
-            Math.min(Math.max(desiredTimeout, MIN_SESSION_IDLE_TIMEOUT), MAX_SESSION_IDLE_TIMEOUT) * 1000
+            clampToRange(
+                desiredTimeout,
+                MIN_SESSION_IDLE_TIMEOUT,
+                MAX_SESSION_IDLE_TIMEOUT,
+                'session_idle_timeout_seconds'
+            ) * 1000
+
         this._window_id_storage_key = 'ph_' + persistenceName + '_window_id'
         this._primary_window_exists_storage_key = 'ph_' + persistenceName + '_primary_window_exists'
 
