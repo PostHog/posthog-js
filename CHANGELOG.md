@@ -1,3 +1,7 @@
+## 1.174.4 - 2024-10-24
+
+- fix: expose the last activity timestamp in session id check result (#1491)
+
 ## 1.174.3 - 2024-10-22
 
 - chore: upgrade rrweb to alpha.16 (#1276)
