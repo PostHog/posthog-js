@@ -241,6 +241,12 @@ export interface PostHogConfig {
      * whether to wrap fetch and add tracing headers to the request
      * */
     __add_tracing_headers?: boolean
+
+    /**
+     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+     * whether to send a sentinel distinct id value, which will be replaced on the server by a hash
+     * */
+    __use_cookieless_server_hash?: boolean
 }
 
 export interface OptInOutCapturingOptions {
