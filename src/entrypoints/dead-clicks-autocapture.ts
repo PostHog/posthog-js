@@ -3,7 +3,7 @@ import { PostHog } from '../posthog-core'
 import { isNull, isNumber, isUndefined } from '../utils/type-utils'
 import { autocaptureCompatibleElements, getEventTarget, isElementNode, isTag } from '../autocapture-utils'
 import { DeadClicksAutoCaptureConfig, Properties } from '../types'
-import { getPropertiesFromElement } from '../autocapture'
+import { autocapturePropertiesForElement } from '../autocapture'
 
 const DEFAULT_CONFIG: Required<DeadClicksAutoCaptureConfig> = {
     element_attribute_ignorelist: [],
@@ -14,6 +14,7 @@ const DEFAULT_CONFIG: Required<DeadClicksAutoCaptureConfig> = {
 
 interface Click {
     node: Element
+    originalEvent: Event
     timestamp: number
     // time between click and the most recent scroll
     scrollDelayMs?: number
@@ -30,6 +31,7 @@ function asClick(event: Event): Click | null {
     if (eventTarget) {
         return {
             node: eventTarget,
+            originalEvent: event,
             timestamp: Date.now(),
         }
     }
@@ -239,12 +241,14 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
         // TODO autocaputure config
         this.instance.capture('$dead_click', {
             ...properties,
-            ...getPropertiesFromElement(
-                click.node,
-                this.instance.config.mask_all_element_attributes,
-                this.instance.config.mask_all_text,
-                this._config.element_attribute_ignorelist
-            ),
+            ...autocapturePropertiesForElement(click.node, {
+                e: click.originalEvent,
+                maskAllElementAttributes: this.instance.config.mask_all_element_attributes,
+                maskAllText: this.instance.config.mask_all_text,
+                elementAttributeIgnoreList: this._config.element_attribute_ignorelist,
+                // TRICKY: it appears that we were moving to elementsChainAsString, but the UI still depends on elements, so :shrug:
+                elementsChainAsString: false,
+            }).props,
             $dead_click_scroll_delay_ms: click.scrollDelayMs,
             $dead_click_mutation_delay_ms: click.mutationDelayMs,
             $dead_click_absolute_delay_ms: click.absoluteDelayMs,

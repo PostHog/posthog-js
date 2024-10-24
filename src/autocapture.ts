@@ -135,7 +135,7 @@ export function getPropertiesFromElement(
     return props
 }
 
-function autocapturePropertiesForElement(
+export function autocapturePropertiesForElement(
     target: Element,
     {
         e,
