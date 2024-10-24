@@ -42,6 +42,7 @@ import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
 import { MutationRateLimiter } from './mutation-rate-limiter'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
+import { clampToRange } from '../../utils/number-utils'
 
 type SessionStartReason =
     | 'sampling_override'
@@ -303,15 +304,19 @@ export class SessionRecording {
         return enabled_client_side ?? enabled_server_side
     }
 
-    private get canvasRecording(): { enabled: boolean; fps: number; quality: number } | undefined {
+    private get canvasRecording(): { enabled: boolean; fps: number; quality: number } {
+        const canvasRecording_client_side = this.instance.config.session_recording.captureCanvas
         const canvasRecording_server_side = this.instance.get_property(SESSION_RECORDING_CANVAS_RECORDING)
-        return canvasRecording_server_side && canvasRecording_server_side.fps && canvasRecording_server_side.quality
-            ? {
-                  enabled: canvasRecording_server_side.enabled,
-                  fps: canvasRecording_server_side.fps,
-                  quality: canvasRecording_server_side.quality,
-              }
-            : undefined
+
+        const enabled = canvasRecording_client_side?.recordCanvas ?? canvasRecording_server_side?.enabled ?? false
+        const fps = canvasRecording_client_side?.canvasFps ?? canvasRecording_server_side?.fps ?? 0
+        const quality = canvasRecording_client_side?.canvasQuality ?? canvasRecording_server_side?.quality ?? 0
+
+        return {
+            enabled,
+            fps: clampToRange(fps, 0, 12, 'canvas recording fps'),
+            quality: clampToRange(quality, 0, 1, 'canvas recording quality'),
+        }
     }
 
     // network payload capture config has three parts
