@@ -1,3 +1,7 @@
+## 1.176.0 - 2024-10-24
+
+- fix(surveys): Reset Survey storage after posthog.reset is called (#1494)
+
 ## 1.175.1 - 2024-10-24
 
 - chore: set platform on stack frame (#1495)
