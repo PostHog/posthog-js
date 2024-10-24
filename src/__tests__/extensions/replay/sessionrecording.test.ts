@@ -320,6 +320,29 @@ describe('SessionRecording', () => {
         )
     })
 
+    describe('is canvas enabled', () => {
+        it.each([
+            ['enabled when both enabled', true, true, true],
+            ['uses client side setting when set to false', true, false, false],
+            ['uses client side setting when set to true', false, true, true],
+            ['disabled when both disabled', false, false, false],
+            ['uses client side setting (disabled) if server side setting is not set', undefined, false, false],
+            ['uses client side setting (enabled) if server side setting is not set', undefined, true, true],
+            ['is disabled when nothing is set', undefined, undefined, false],
+            ['uses server side setting (disabled) if client side setting is not set', undefined, false, false],
+            ['uses server side setting (enabled) if client side setting is not set', undefined, true, true],
+        ])(
+            '%s',
+            (_name: string, serverSide: boolean | undefined, clientSide: boolean | undefined, expected: boolean) => {
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_CANVAS_RECORDING]: { enabled: serverSide, fps: 4, quality: 0.1 },
+                })
+                posthog.config.session_recording.captureCanvas = { recordCanvas: clientSide }
+                expect(sessionRecording['canvasRecording']).toMatchObject({ enabled: expected })
+            }
+        )
+    })
+
     describe('network timing capture config', () => {
         it.each([
             ['enabled when both enabled', true, true, true],

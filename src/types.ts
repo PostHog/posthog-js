@@ -274,6 +274,10 @@ export interface SessionRecordingOptions {
     collectFonts?: boolean
     inlineStylesheet?: boolean
     recordCrossOriginIframes?: boolean
+    /**
+     * Allows local config to override remote canvas recording settings from the decide response
+     */
+    captureCanvas?: SessionRecordingCanvasOptions
     /** @deprecated - use maskCapturedNetworkRequestFn instead  */
     maskNetworkRequestFn?: ((data: NetworkRequest) => NetworkRequest | null | undefined) | null
     /** Modify the network request before it is captured. Returning null or undefined stops it being captured */
@@ -358,6 +362,13 @@ export interface CaptureOptions {
 
 export type FlagVariant = { flag: string; variant: string }
 
+export type SessionRecordingCanvasOptions = {
+    recordCanvas?: boolean | null
+    canvasFps?: number | null
+    // the API returns a decimal between 0 and 1 as a string
+    canvasQuality?: string | null
+}
+
 export interface DecideResponse {
     supportedCompression: Compression[]
     featureFlags: Record<string, string | boolean>
@@ -384,16 +395,12 @@ export interface DecideResponse {
         | {
               endpoint?: string
           }
-    sessionRecording?: {
+    sessionRecording?: SessionRecordingCanvasOptions & {
         endpoint?: string
         consoleLogRecordingEnabled?: boolean
         // the API returns a decimal between 0 and 1 as a string
         sampleRate?: string | null
         minimumDurationMilliseconds?: number
-        recordCanvas?: boolean | null
-        canvasFps?: number | null
-        // the API returns a decimal between 0 and 1 as a string
-        canvasQuality?: string | null
         linkedFlag?: string | FlagVariant | null
         networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
         urlTriggers?: SessionRecordingUrlTrigger[]

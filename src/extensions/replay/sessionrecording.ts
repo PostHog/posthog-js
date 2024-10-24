@@ -303,15 +303,19 @@ export class SessionRecording {
         return enabled_client_side ?? enabled_server_side
     }
 
-    private get canvasRecording(): { enabled: boolean; fps: number; quality: number } | undefined {
+    private get canvasRecording(): { enabled: boolean; fps: number; quality: number } {
+        const canvasRecording_client_side = this.instance.config.session_recording.captureCanvas
         const canvasRecording_server_side = this.instance.get_property(SESSION_RECORDING_CANVAS_RECORDING)
-        return canvasRecording_server_side && canvasRecording_server_side.fps && canvasRecording_server_side.quality
-            ? {
-                  enabled: canvasRecording_server_side.enabled,
-                  fps: canvasRecording_server_side.fps,
-                  quality: canvasRecording_server_side.quality,
-              }
-            : undefined
+
+        const enabled = canvasRecording_client_side?.recordCanvas ?? canvasRecording_server_side?.enabled ?? false
+        const fps = canvasRecording_client_side?.canvasFps ?? canvasRecording_server_side?.fps ?? 0
+        const quality = canvasRecording_client_side?.canvasQuality ?? canvasRecording_server_side?.quality ?? 0
+
+        return {
+            enabled,
+            fps,
+            quality,
+        }
     }
 
     // network payload capture config has three parts
