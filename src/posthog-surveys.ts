@@ -13,6 +13,7 @@ import { assignableWindow, document, window } from './utils/globals'
 import { DecideResponse } from './types'
 import { logger } from './utils/logger'
 import { isNullish } from './utils/type-utils'
+import { getSurveySeenStorageKeys } from './extensions/surveys/surveys-utils'
 
 const LOGGER_PREFIX = '[Surveys]'
 
@@ -71,6 +72,12 @@ export class PostHogSurveys {
     afterDecideResponse(response: DecideResponse) {
         this._decideServerResponse = !!response['surveys']
         this.loadIfEnabled()
+    }
+
+    reset(): void {
+        localStorage.removeItem('lastSeenSurveyDate')
+        const surveyKeys = getSurveySeenStorageKeys()
+        surveyKeys.forEach((key) => localStorage.removeItem(key))
     }
 
     loadIfEnabled() {
@@ -287,7 +294,6 @@ export class PostHogSurveys {
         }
         this.getSurveys((surveys) => {
             const survey = surveys.filter((x) => x.id === surveyId)[0]
-
             this._surveyManager.canRenderSurvey(survey)
         })
     }
@@ -299,7 +305,6 @@ export class PostHogSurveys {
         }
         this.getSurveys((surveys) => {
             const survey = surveys.filter((x) => x.id === surveyId)[0]
-
             this._surveyManager.renderSurvey(survey, document?.querySelector(selector))
         })
     }
