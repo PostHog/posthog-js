@@ -1,3 +1,7 @@
+## 1.175.0 - 2024-10-24
+
+- fix: allow canvas local config (#1496)
+
 ## 1.174.4 - 2024-10-24
 
 - fix: expose the last activity timestamp in session id check result (#1491)
