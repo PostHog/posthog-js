@@ -87,7 +87,7 @@ type TriggerStatus = typeof TRIGGER_STATUSES[number]
  * When sampled that means a sample rate is set and the last time the session id was rotated
  * the sample rate determined this session should be sent to the server.
  */
-type SessionRecordingStatus = 'disabled' | 'sampled' | 'active' | 'buffering'
+type SessionRecordingStatus = 'disabled' | 'sampled' | 'active' | 'buffering' | 'paused'
 
 export interface SnapshotBuffer {
     size: number
@@ -247,6 +247,7 @@ export class SessionRecording {
     private _lastHref?: string
 
     private _urlTriggers: SessionRecordingUrlTrigger[] = []
+    private _urlBlockList: SessionRecordingUrlTrigger[] = []
 
     // Util to help developers working on this feature manually override
     _forceAllowLocalhostNetworkCapture = false
@@ -612,6 +613,10 @@ export class SessionRecording {
 
         if (response.sessionRecording?.urlTriggers) {
             this._urlTriggers = response.sessionRecording.urlTriggers
+        }
+
+        if (response.sessionRecording?.urlBlockList) {
+            this._urlBlockList = response.sessionRecording.urlBlockList
         }
 
         this.receivedDecide = true

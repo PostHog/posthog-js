@@ -397,6 +397,7 @@ export interface DecideResponse {
         linkedFlag?: string | FlagVariant | null
         networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
         urlTriggers?: SessionRecordingUrlTrigger[]
+        urlBlockList?: SessionRecordingUrlTrigger[]
     }
     surveys?: boolean
     toolbarParams: ToolbarParams
@@ -614,6 +615,7 @@ export interface ErrorConversions {
 }
 
 export interface SessionRecordingUrlTrigger {
+    urlBlockList?: SessionRecordingUrlTrigger[]
     url: string
     matching: 'regex'
 }
