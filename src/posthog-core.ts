@@ -566,6 +566,7 @@ export class PostHog {
         this.webVitalsAutocapture?.afterDecideResponse(response)
         this.exceptions?.afterDecideResponse(response)
         this.exceptionObserver?.afterDecideResponse(response)
+        this.deadClicksAutocapture?.afterDecideResponse(response)
     }
 
     _loaded(): void {

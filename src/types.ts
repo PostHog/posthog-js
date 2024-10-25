@@ -423,6 +423,7 @@ export interface DecideResponse {
     siteApps: { id: number; url: string }[]
     heatmaps?: boolean
     defaultIdentifiedOnly?: boolean
+    captureDeadClicks?: boolean
 }
 
 export type FeatureFlagsCallback = (

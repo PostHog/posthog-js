@@ -3,6 +3,7 @@ import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../constants'
 import { isBoolean, isObject } from '../utils/type-utils'
 import { assignableWindow, document, LazyLoadedDeadClicksAutocapture } from '../utils/globals'
 import { logger } from '../utils/logger'
+import { DecideResponse } from '../types'
 
 const LOGGER_PREFIX = '[Dead Clicks]'
 
@@ -11,17 +12,28 @@ export class DeadClicksAutocapture {
         return this._lazyLoadedDeadClicksAutocapture
     }
 
-    private _enabledServerSide: boolean
     private _lazyLoadedDeadClicksAutocapture: LazyLoadedDeadClicksAutocapture | undefined
 
     constructor(readonly instance: PostHog) {
-        this._enabledServerSide = !!this.instance.persistence?.props[DEAD_CLICKS_ENABLED_SERVER_SIDE]
         this.startIfEnabled()
+    }
+
+    public get isRemoteEnabled(): boolean {
+        return !!this.instance.persistence?.props[DEAD_CLICKS_ENABLED_SERVER_SIDE]
     }
 
     public get isEnabled(): boolean {
         const clientConfig = !!this.instance.config.capture_dead_clicks
-        return isBoolean(clientConfig) ? clientConfig : this._enabledServerSide
+        return isBoolean(clientConfig) ? clientConfig : this.isRemoteEnabled
+    }
+
+    public afterDecideResponse(response: DecideResponse) {
+        if (this.instance.persistence) {
+            this.instance.persistence.register({
+                DEAD_CLICKS_ENABLED_SERVER_SIDE: response?.captureDeadClicks,
+            })
+        }
+        this.startIfEnabled()
     }
 
     public startIfEnabled() {
@@ -72,6 +84,7 @@ export class DeadClicksAutocapture {
     stop() {
         if (this._lazyLoadedDeadClicksAutocapture) {
             this._lazyLoadedDeadClicksAutocapture.stop()
+            this._lazyLoadedDeadClicksAutocapture = undefined
             logger.info(`${LOGGER_PREFIX} stopping...`)
         }
     }
