@@ -2,6 +2,11 @@ import { isNumber } from './type-utils'
 import { logger } from './logger'
 
 export function clampToRange(value: unknown, min: number, max: number, label?: string): number {
+    if (min > max) {
+        logger.warn('min cannot be greater than max.')
+        min = max
+    }
+
     if (!isNumber(value)) {
         label && logger.warn(label + ' must be a number. Defaulting to max value:' + max)
         return max
