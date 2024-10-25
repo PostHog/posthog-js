@@ -987,6 +987,11 @@ export class SessionRecording {
         // Check if the URL matches any trigger patterns
         this._checkTriggerConditions()
 
+        if (this.status === 'paused' || this.status === 'disabled') {
+            this.clearBuffer()
+            return
+        }
+
         // we're processing a full snapshot, so we should reset the timer
         if (rawEvent.type === EventType.FullSnapshot) {
             this._scheduleFullSnapshot()
@@ -1038,11 +1043,7 @@ export class SessionRecording {
             $window_id: this.windowId,
         }
 
-        if (this.status !== 'disabled') {
-            this._captureSnapshotBuffered(properties)
-        } else {
-            this.clearBuffer()
-        }
+        this._captureSnapshotBuffered(properties)
     }
 
     private _pageViewFallBack() {
