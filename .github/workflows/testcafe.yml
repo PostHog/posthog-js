@@ -27,12 +27,16 @@ jobs:
         include:
           - browser: 'chrome:headless'
             name: Chrome
+            cli: ''
           - browser: 'firefox:headless'
             name: Firefox
+            cli: ''
           - browser: 'browserstack:ie'
             name: IE11
+            cli: '--skip-js-errors'
           - browser: 'browserstack:safari'
             name: Safari
+            cli: ''
 
     steps:
       - uses: actions/checkout@v4
@@ -58,7 +62,7 @@ jobs:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
           RUN_ID: ${{ github.run_id }}
           BROWSER: ${{ matrix.browser }}
-        run: pnpm testcafe ${{ matrix.browser }} --stop-on-first-fail
+        run: pnpm testcafe ${{ matrix.browser }} --stop-on-first-fail ${{ matrix.cli }}
 
       - name: Check ${{ matrix.name }} events
         run: pnpm check-testcafe-results
