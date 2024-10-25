@@ -985,7 +985,7 @@ export class SessionRecording {
         }
 
         // Check if the URL matches any trigger patterns
-        this._checkUrlTrigger()
+        this._checkTriggerConditions()
 
         // we're processing a full snapshot, so we should reset the timer
         if (rawEvent.type === EventType.FullSnapshot) {
@@ -1173,7 +1173,7 @@ export class SessionRecording {
         })
     }
 
-    private _checkUrlTrigger() {
+    private _checkTriggerConditions() {
         if (typeof window === 'undefined' || !window.location.href) {
             return
         }
