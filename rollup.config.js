@@ -9,34 +9,37 @@ import commonjs from '@rollup/plugin-commonjs'
 import fs from 'fs'
 import path from 'path'
 
-const plugins = (es5) => [
-    json(),
-    resolve({ browser: true }),
-    typescript({ sourceMap: true, outDir: './dist' }),
-    commonjs(),
-    babel({
-        extensions: ['.js', '.jsx', '.ts', '.tsx'],
-        babelHelpers: 'bundled',
-        plugins: ['@babel/plugin-transform-nullish-coalescing-operator'],
-        presets: [
-            [
-                '@babel/preset-env',
-                {
-                    targets: es5
-                        ? '>0.5%, last 2 versions, Firefox ESR, not dead, IE 11'
-                        : '>0.5%, last 2 versions, Firefox ESR, not dead',
-                },
-            ],
-        ],
-    }),
-    terser({
-        toplevel: true,
-        compress: {
-            // 5 is the default if unspecified
-            ecma: es5 ? 5 : 6,
-        },
-    }),
-]
+const plugins = (es5) => {
+    const babelOptions = {
+        targets: es5
+            ? '>0.5%, last 2 versions, Firefox ESR, not dead, IE 11'
+            : '>0.5%, last 2 versions, Firefox ESR, not dead',
+    }
+    if (es5) {
+        babelOptions.useBuiltIns = 'usage'
+        babelOptions.corejs = 3
+    }
+
+    return [
+        json(),
+        resolve({ browser: true }),
+        typescript({ sourceMap: true, outDir: './dist' }),
+        commonjs(),
+        babel({
+            extensions: ['.js', '.jsx', '.ts', '.tsx'],
+            babelHelpers: 'bundled',
+            plugins: ['@babel/plugin-transform-nullish-coalescing-operator'],
+            presets: [['@babel/preset-env', babelOptions]],
+        }),
+        terser({
+            toplevel: true,
+            compress: {
+                // 5 is the default if unspecified
+                ecma: es5 ? 5 : 6,
+            },
+        }),
+    ]
+}
 
 const entrypoints = fs.readdirSync('./src/entrypoints')
 
