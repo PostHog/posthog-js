@@ -214,6 +214,17 @@ function isSessionIdleEvent(e: eventWithTime): e is eventWithTime & customEvent 
     return e.type === EventType.Custom && e.data.tag === 'sessionIdle'
 }
 
+function sessionRecordingUrlTriggerMatches(url: string, triggers: SessionRecordingUrlTrigger[]) {
+    return triggers.some((trigger) => {
+        switch (trigger.matching) {
+            case 'regex':
+                return new RegExp(trigger.url).test(url)
+            default:
+                return false
+        }
+    })
+}
+
 export class SessionRecording {
     private _endpoint: string
     private flushBufferTimer?: any
@@ -1181,16 +1192,7 @@ export class SessionRecording {
 
         const url = window.location.href
 
-        if (
-            this._urlTriggers.some((trigger) => {
-                switch (trigger.matching) {
-                    case 'regex':
-                        return new RegExp(trigger.url).test(url)
-                    default:
-                        return false
-                }
-            })
-        ) {
+        if (sessionRecordingUrlTriggerMatches(url, this._urlTriggers)) {
             this._activateUrlTrigger()
         }
     }
