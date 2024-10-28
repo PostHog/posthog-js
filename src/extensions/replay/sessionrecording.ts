@@ -260,6 +260,8 @@ export class SessionRecording {
     private _urlTriggers: SessionRecordingUrlTrigger[] = []
     private _urlBlockList: SessionRecordingUrlTrigger[] = []
 
+    private _urlBlocked: boolean = false
+
     // Util to help developers working on this feature manually override
     _forceAllowLocalhostNetworkCapture = false
 
@@ -381,6 +383,10 @@ export class SessionRecording {
 
         if (this.urlTriggerStatus === 'trigger_pending') {
             return 'buffering'
+        }
+
+        if (this._urlBlocked) {
+            return 'paused'
         }
 
         if (isBoolean(this.isSampled)) {
