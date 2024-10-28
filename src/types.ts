@@ -397,7 +397,7 @@ export interface DecideResponse {
         linkedFlag?: string | FlagVariant | null
         networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
         urlTriggers?: SessionRecordingUrlTrigger[]
-        urlBlockList?: SessionRecordingUrlTrigger[]
+        urlBlocklist?: SessionRecordingUrlTrigger[]
     }
     surveys?: boolean
     toolbarParams: ToolbarParams
