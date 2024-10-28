@@ -1004,8 +1004,7 @@ export class SessionRecording {
         // Check if the URL matches any trigger patterns
         this._checkTriggerConditions()
 
-        if (this.status === 'paused' || this.status === 'disabled') {
-            this.clearBuffer()
+        if (this.status === 'paused') {
             return
         }
 
@@ -1058,6 +1057,11 @@ export class SessionRecording {
             $snapshot_data: eventToSend,
             $session_id: this.sessionId,
             $window_id: this.windowId,
+        }
+
+        if (this.status === 'disabled') {
+            this.clearBuffer()
+            return
         }
 
         this._captureSnapshotBuffered(properties)
