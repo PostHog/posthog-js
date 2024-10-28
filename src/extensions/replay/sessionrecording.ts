@@ -1198,6 +1198,15 @@ export class SessionRecording {
 
         const url = window.location.href
 
+        const wasBlocked = this.status === 'paused'
+        const isNowBlocked = sessionRecordingUrlTriggerMatches(url, this._urlBlockList)
+
+        if (isNowBlocked && !wasBlocked) {
+            this._pauseRecording()
+        } else if (!isNowBlocked && wasBlocked) {
+            this._resumeRecording()
+        }
+
         if (sessionRecordingUrlTriggerMatches(url, this._urlTriggers)) {
             this._activateUrlTrigger()
         }
@@ -1210,6 +1219,23 @@ export class SessionRecording {
             this._flushBuffer()
             logger.info(LOGGER_PREFIX + ' recording triggered by URL pattern match')
         }
+    }
+
+    private _pauseRecording() {
+        this._urlBlocked = true
+
+        this._flushBuffer()
+        this.stopRecording()
+        this._tryAddCustomEvent('recording paused', { reason: 'url blocker' })
+        logger.info(LOGGER_PREFIX + ' recording paused due to URL blocker')
+    }
+
+    private _resumeRecording() {
+        this._urlBlocked = false
+
+        this.startIfEnabledOrStop()
+        this._tryAddCustomEvent('recording resumed', { reason: 'left blocked url' })
+        logger.info(LOGGER_PREFIX + ' recording resumed')
     }
 
     /**
