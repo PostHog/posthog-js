@@ -66,6 +66,9 @@ devDependencies:
   '@rollup/plugin-typescript':
     specifier: ^12.1.1
     version: 12.1.1(rollup@4.24.0)(tslib@2.5.0)(typescript@5.5.4)
+  '@rrweb/record':
+    specifier: 2.0.0-alpha.17
+    version: 2.0.0-alpha.17
   '@rrweb/rrweb-plugin-console-record':
     specifier: 2.0.0-alpha.17
     version: 2.0.0-alpha.17(rrweb@2.0.0-alpha.17)
@@ -204,9 +207,6 @@ devDependencies:
   rollup-plugin-visualizer:
     specifier: ^5.12.0
     version: 5.12.0(rollup@4.24.0)
-  rrweb:
-    specifier: 2.0.0-alpha.17
-    version: 2.0.0-alpha.17(patch_hash=xlkuvshzdprjlpxe7nzsj3spyi)
   rrweb-snapshot:
     specifier: 2.0.0-alpha.17
     version: 2.0.0-alpha.17
@@ -2801,6 +2801,13 @@ packages:
     requiresBuild: true
     dev: true
     optional: true
+
+  /@rrweb/record@2.0.0-alpha.17:
+    resolution: {integrity: sha512-Je+lzjeWMF8/I0IDoXFzkGPKT8j7AkaBup5YcwUHlkp18VhLVze416MvI6915teE27uUA2ScXMXzG0Yiu5VTIw==}
+    dependencies:
+      '@rrweb/types': 2.0.0-alpha.17
+      rrweb: 2.0.0-alpha.17(patch_hash=xlkuvshzdprjlpxe7nzsj3spyi)
+    dev: true
 
   /@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17(rrweb@2.0.0-alpha.17):
     resolution: {integrity: sha512-tjNJ3wWUDMMf275xr4Rb5tVYF2UR+wXvSxnyS9tRKnRa574PQQvx7sGbqM/O9AytYjnbiTrAMqNR7OFysGCMwQ==}
