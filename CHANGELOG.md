@@ -1,3 +1,7 @@
+## 1.177.0 - 2024-10-28
+
+- feat: Only set missing campaign params to null if there is at least one non-null (#1493)
+
 ## 1.176.1 - 2024-10-28
 
 - fix: reduce keep alive threshold (#1501)
