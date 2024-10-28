@@ -1224,16 +1224,19 @@ export class SessionRecording {
     private _pauseRecording() {
         this._urlBlocked = true
 
-        this._flushBuffer()
-        this.stopRecording()
+        this.clearBuffer()
+        clearInterval(this._fullSnapshotTimer)
         this._tryAddCustomEvent('recording paused', { reason: 'url blocker' })
+
         logger.info(LOGGER_PREFIX + ' recording paused due to URL blocker')
     }
 
     private _resumeRecording() {
         this._urlBlocked = false
 
-        this.startIfEnabledOrStop()
+        this._tryTakeFullSnapshot()
+
+        this._scheduleFullSnapshot()
         this._tryAddCustomEvent('recording resumed', { reason: 'left blocked url' })
         logger.info(LOGGER_PREFIX + ' recording resumed')
     }
