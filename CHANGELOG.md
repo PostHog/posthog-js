@@ -1,3 +1,9 @@
+## 1.176.1 - 2024-10-28
+
+- fix: reduce keep alive threshold (#1501)
+- fix: empty query param when calling external dependency toolbar.js (#1456)
+- fix: careful now (#1497)
+
 ## 1.176.0 - 2024-10-24
 
 - fix(surveys): Reset Survey storage after posthog.reset is called (#1494)
