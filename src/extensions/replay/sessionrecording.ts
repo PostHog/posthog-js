@@ -397,7 +397,7 @@ export class SessionRecording {
     }
 
     private get urlTriggerStatus(): TriggerStatus {
-        if (this.receivedDecide && this._urlTriggers.length === 0) {
+        if (this._urlTriggers.length === 0) {
             return 'trigger_disabled'
         }
 
