@@ -258,7 +258,7 @@ export class SessionRecording {
     private _lastHref?: string
 
     private _urlTriggers: SessionRecordingUrlTrigger[] = []
-    private _urlBlockList: SessionRecordingUrlTrigger[] = []
+    private _urlBlocklist: SessionRecordingUrlTrigger[] = []
 
     private _urlBlocked: boolean = false
 
@@ -632,8 +632,8 @@ export class SessionRecording {
             this._urlTriggers = response.sessionRecording.urlTriggers
         }
 
-        if (response.sessionRecording?.urlBlockList) {
-            this._urlBlockList = response.sessionRecording.urlBlockList
+        if (response.sessionRecording?.urlBlocklist) {
+            this._urlBlocklist = response.sessionRecording.urlBlocklist
         }
 
         this.receivedDecide = true
@@ -1199,7 +1199,7 @@ export class SessionRecording {
         const url = window.location.href
 
         const wasBlocked = this.status === 'paused'
-        const isNowBlocked = sessionRecordingUrlTriggerMatches(url, this._urlBlockList)
+        const isNowBlocked = sessionRecordingUrlTriggerMatches(url, this._urlBlocklist)
 
         if (isNowBlocked && !wasBlocked) {
             this._pauseRecording()
