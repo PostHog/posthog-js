@@ -13,7 +13,13 @@ export const SUPPORTS_REQUEST = !!XMLHttpRequest || !!fetch
 const CONTENT_TYPE_PLAIN = 'text/plain'
 const CONTENT_TYPE_JSON = 'application/json'
 const CONTENT_TYPE_FORM = 'application/x-www-form-urlencoded'
-
+const SIXTY_FOUR_KILOBYTES = 64 * 1024
+/*
+ fetch will fail if we request keepalive with a body greater than 64kb
+ sets the threshold lower than that so that
+ any overhead doesn't push over the threshold after checking here
+*/
+const KEEP_ALIVE_THRESHOLD = SIXTY_FOUR_KILOBYTES * 0.8
 type EncodedBody = {
     contentType: string
     body: string | BlobPart
@@ -147,7 +153,7 @@ const _fetch = (options: RequestOptions) => {
         // so let's get the best of both worlds and only set keepalive for POST requests
         // where the body is less than 64kb
         // NB this is fetch keepalive and not http keepalive
-        keepalive: options.method === 'POST' && (estimatedSize || 0) < 64 * 1024,
+        keepalive: options.method === 'POST' && (estimatedSize || 0) < KEEP_ALIVE_THRESHOLD,
         body,
         signal: aborter?.signal,
     })
