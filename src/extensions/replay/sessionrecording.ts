@@ -1226,6 +1226,10 @@ export class SessionRecording {
     }
 
     private _pauseRecording() {
+        if (this.status === 'paused') {
+            return
+        }
+
         this._urlBlocked = true
 
         this.clearBuffer()
@@ -1236,6 +1240,10 @@ export class SessionRecording {
     }
 
     private _resumeRecording() {
+        if (this.status !== 'paused') {
+            return
+        }
+
         this._urlBlocked = false
 
         this._tryTakeFullSnapshot()
