@@ -212,5 +212,41 @@ describe('posthog core', () => {
                 expect(properties['$referring_domain']).toBe('$direct')
             })
         })
+
+        describe('campaign params', () => {
+            it('should not send campaign params as null if there are no non-null ones', () => {
+                // arrange
+                const token = uuidv7()
+                mockURLGetter.mockReturnValue('https://www.example.com/some/path')
+                const { posthog, onCapture } = setup({
+                    token,
+                    persistence_name: token,
+                })
+
+                // act
+                posthog.capture('$pageview')
+
+                //assert
+                expect(onCapture.mock.calls[0][1].properties).not.toHaveProperty('utm_source')
+                expect(onCapture.mock.calls[0][1].properties).not.toHaveProperty('utm_medium')
+            })
+
+            it('should send present campaign params, and nulls for others', () => {
+                // arrange
+                const token = uuidv7()
+                mockURLGetter.mockReturnValue('https://www.example.com/some/path?utm_source=source')
+                const { posthog, onCapture } = setup({
+                    token,
+                    persistence_name: token,
+                })
+
+                // act
+                posthog.capture('$pageview')
+
+                //assert
+                expect(onCapture.mock.calls[0][1].properties.utm_source).toBe('source')
+                expect(onCapture.mock.calls[0][1].properties.utm_medium).toBe(null)
+            })
+        })
     })
 })
