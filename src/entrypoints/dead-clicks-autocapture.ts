@@ -4,6 +4,7 @@ import { isNull, isNumber, isUndefined } from '../utils/type-utils'
 import { autocaptureCompatibleElements, getEventTarget, isElementNode, isTag } from '../autocapture-utils'
 import { DeadClicksAutoCaptureConfig, Properties } from '../types'
 import { autocapturePropertiesForElement } from '../autocapture'
+import { isElementInToolbar } from '../utils/element-utils'
 
 const DEFAULT_CONFIG: Required<DeadClicksAutoCaptureConfig> = {
     element_attribute_ignorelist: [],
@@ -149,6 +150,10 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
 
     private _ignoreClick(click: Click | null): boolean {
         if (!click) {
+            return true
+        }
+
+        if (isElementInToolbar(click.node)) {
             return true
         }
 
