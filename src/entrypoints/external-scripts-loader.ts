@@ -14,6 +14,7 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
         }
         const scriptTag = document.createElement('script')
         scriptTag.type = 'text/javascript'
+        scriptTag.crossOrigin = 'anonymous'
         scriptTag.src = url
         scriptTag.onload = (event) => callback(undefined, event)
         scriptTag.onerror = (error) => callback(error)
@@ -49,7 +50,7 @@ assignableWindow.__PosthogExtensions__.loadExternalDependency = (
         // this ensures that we bust the cache periodically
         const timestampToNearestFiveMinutes = Math.floor(Date.now() / fiveMinutesInMillis) * fiveMinutesInMillis
 
-        scriptUrlToLoad = `${scriptUrlToLoad}?&=${timestampToNearestFiveMinutes}`
+        scriptUrlToLoad = `${scriptUrlToLoad}&t=${timestampToNearestFiveMinutes}`
     }
     const url = posthog.requestRouter.endpointFor('assets', scriptUrlToLoad)
 

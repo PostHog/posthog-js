@@ -114,6 +114,12 @@ export interface PerformanceCaptureConfig {
      * NB setting this does not override whether the capture is enabled
      */
     web_vitals_allowed_metrics?: SupportedWebVitalsMetrics[]
+    /**
+     * we delay flushing web vitals metrics to reduce the number of events we send
+     * this is the maximum time we will wait before sending the metrics
+     * if not set it defaults to 5 seconds
+     */
+    web_vitals_delayed_flush_ms?: number
 }
 
 export interface HeatmapConfig {
@@ -268,6 +274,10 @@ export interface SessionRecordingOptions {
     collectFonts?: boolean
     inlineStylesheet?: boolean
     recordCrossOriginIframes?: boolean
+    /**
+     * Allows local config to override remote canvas recording settings from the decide response
+     */
+    captureCanvas?: SessionRecordingCanvasOptions
     /** @deprecated - use maskCapturedNetworkRequestFn instead  */
     maskNetworkRequestFn?: ((data: NetworkRequest) => NetworkRequest | null | undefined) | null
     /** Modify the network request before it is captured. Returning null or undefined stops it being captured */
@@ -352,6 +362,13 @@ export interface CaptureOptions {
 
 export type FlagVariant = { flag: string; variant: string }
 
+export type SessionRecordingCanvasOptions = {
+    recordCanvas?: boolean | null
+    canvasFps?: number | null
+    // the API returns a decimal between 0 and 1 as a string
+    canvasQuality?: string | null
+}
+
 export interface DecideResponse {
     supportedCompression: Compression[]
     featureFlags: Record<string, string | boolean>
@@ -378,18 +395,15 @@ export interface DecideResponse {
         | {
               endpoint?: string
           }
-    sessionRecording?: {
+    sessionRecording?: SessionRecordingCanvasOptions & {
         endpoint?: string
         consoleLogRecordingEnabled?: boolean
         // the API returns a decimal between 0 and 1 as a string
         sampleRate?: string | null
         minimumDurationMilliseconds?: number
-        recordCanvas?: boolean | null
-        canvasFps?: number | null
-        // the API returns a decimal between 0 and 1 as a string
-        canvasQuality?: string | null
         linkedFlag?: string | FlagVariant | null
         networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
+        urlTriggers?: SessionRecordingUrlTrigger[]
     }
     surveys?: boolean
     toolbarParams: ToolbarParams
@@ -398,6 +412,7 @@ export interface DecideResponse {
     isAuthenticated: boolean
     siteApps: { id: number; url: string }[]
     heatmaps?: boolean
+    defaultIdentifiedOnly?: boolean
 }
 
 export type FeatureFlagsCallback = (
@@ -570,6 +585,16 @@ export type ErrorEventArgs = [
     error?: Error | undefined
 ]
 
+export type ErrorMetadata = {
+    handled?: boolean
+    synthetic?: boolean
+    syntheticException?: Error
+    overrideExceptionType?: string
+    overrideExceptionMessage?: string
+    defaultExceptionType?: string
+    defaultExceptionMessage?: string
+}
+
 // levels originally copied from Sentry to work with the sentry integration
 // and to avoid relying on a frequently changing @sentry/types dependency
 // but provided as an array of literal types, so we can constrain the level below
@@ -593,4 +618,9 @@ export interface ErrorProperties {
 export interface ErrorConversions {
     errorToProperties: (args: ErrorEventArgs) => ErrorProperties
     unhandledRejectionToProperties: (args: [ev: PromiseRejectionEvent]) => ErrorProperties
+}
+
+export interface SessionRecordingUrlTrigger {
+    url: string
+    matching: 'regex'
 }

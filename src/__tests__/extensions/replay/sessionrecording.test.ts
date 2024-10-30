@@ -44,6 +44,7 @@ import {
     pluginEvent,
 } from '@rrweb/types'
 import Mock = jest.Mock
+import { ConsentManager } from '../../../consent'
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -243,14 +244,22 @@ describe('SessionRecording', () => {
             config: config,
             capture: jest.fn(),
             persistence: postHogPersistence,
-            onFeatureFlags: (cb: (flags: string[]) => void) => {
+            onFeatureFlags: (
+                cb: (flags: string[], variants: Record<string, string | boolean>) => void
+            ): (() => void) => {
                 onFeatureFlagsCallback = cb
+                return () => {}
             },
             sessionManager: sessionManager,
             requestRouter: new RequestRouter({ config } as any),
             _addCaptureHook: addCaptureHookMock,
-            consent: { isOptedOut: () => false },
-        } as unknown as PostHog
+            consent: {
+                isOptedOut(): boolean {
+                    return false
+                },
+            } as unknown as ConsentManager,
+            register_for_session() {},
+        } as Partial<PostHog> as PostHog
 
         loadScriptMock.mockImplementation((_ph, _path, callback) => {
             addRRwebToWindow()
@@ -307,6 +316,29 @@ describe('SessionRecording', () => {
                 posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: serverSide })
                 posthog.config.enable_recording_console_log = clientSide
                 expect(sessionRecording['isConsoleLogCaptureEnabled']).toBe(expected)
+            }
+        )
+    })
+
+    describe('is canvas enabled', () => {
+        it.each([
+            ['enabled when both enabled', true, true, true],
+            ['uses client side setting when set to false', true, false, false],
+            ['uses client side setting when set to true', false, true, true],
+            ['disabled when both disabled', false, false, false],
+            ['uses client side setting (disabled) if server side setting is not set', undefined, false, false],
+            ['uses client side setting (enabled) if server side setting is not set', undefined, true, true],
+            ['is disabled when nothing is set', undefined, undefined, false],
+            ['uses server side setting (disabled) if client side setting is not set', undefined, false, false],
+            ['uses server side setting (enabled) if client side setting is not set', undefined, true, true],
+        ])(
+            '%s',
+            (_name: string, serverSide: boolean | undefined, clientSide: boolean | undefined, expected: boolean) => {
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_CANVAS_RECORDING]: { enabled: serverSide, fps: 4, quality: 0.1 },
+                })
+                posthog.config.session_recording.captureCanvas = { recordCanvas: clientSide }
+                expect(sessionRecording['canvasRecording']).toMatchObject({ enabled: expected })
             }
         )
     })

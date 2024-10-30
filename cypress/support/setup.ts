@@ -24,7 +24,7 @@ export const start = ({
     // sometimes we have too many listeners in this test environment
     // that breaks the event emitter listeners in error tracking tests
     // we don't see the error in production, so it's fine to increase the limit here
-    EventEmitter.prototype._maxListeners = 100
+    EventEmitter.prototype.setMaxListeners(100)
 
     const decideResponse = {
         editorParams: {},

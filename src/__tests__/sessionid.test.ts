@@ -93,6 +93,8 @@ describe('Session ID manager', () => {
                 windowId: 'oldWindowID',
                 sessionId: 'oldSessionID',
                 sessionStartTimestamp: timestampOfSessionStart,
+                lastActivityTimestamp: expect.any(Number),
+                changeReason: undefined,
             })
             expect(persistence.register).toHaveBeenCalledWith({
                 [SESSION_ID]: [timestamp, 'oldSessionID', timestampOfSessionStart],
@@ -110,6 +112,7 @@ describe('Session ID manager', () => {
                 windowId: 'oldWindowID',
                 sessionId: 'oldSessionID',
                 sessionStartTimestamp: sessionStart,
+                lastActivityTimestamp: oldTimestamp,
             })
             expect(persistence.register).toHaveBeenCalledWith({
                 [SESSION_ID]: [oldTimestamp, 'oldSessionID', sessionStart],
@@ -122,6 +125,7 @@ describe('Session ID manager', () => {
                 windowId: 'newUUID',
                 sessionId: 'oldSessionID',
                 sessionStartTimestamp: timestampOfSessionStart,
+                lastActivityTimestamp: expect.any(Number),
                 changeReason: {
                     activityTimeout: false,
                     noSessionId: false,
@@ -142,6 +146,7 @@ describe('Session ID manager', () => {
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
                 sessionStartTimestamp: timestamp,
+                lastActivityTimestamp: oldTimestamp,
                 changeReason: {
                     activityTimeout: true,
                     noSessionId: false,
@@ -164,6 +169,7 @@ describe('Session ID manager', () => {
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
                 sessionStartTimestamp: timestamp,
+                lastActivityTimestamp: oldTimestamp,
                 changeReason: {
                     activityTimeout: true,
                     noSessionId: false,
@@ -188,6 +194,7 @@ describe('Session ID manager', () => {
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
                 sessionStartTimestamp: timestamp,
+                lastActivityTimestamp: oldTimestamp,
                 changeReason: {
                     activityTimeout: false,
                     noSessionId: false,
@@ -210,6 +217,7 @@ describe('Session ID manager', () => {
                 windowId: 'newUUID',
                 sessionId: 'newUUID',
                 sessionStartTimestamp: now,
+                lastActivityTimestamp: oldTimestamp,
                 changeReason: {
                     activityTimeout: true,
                     noSessionId: false,
@@ -227,6 +235,7 @@ describe('Session ID manager', () => {
                 windowId: 'oldWindowID',
                 sessionId: 'oldSessionID',
                 sessionStartTimestamp: timestamp,
+                lastActivityTimestamp: timestamp,
             })
             expect(persistence.register).toHaveBeenCalledWith({
                 [SESSION_ID]: [timestamp, 'oldSessionID', timestamp],

@@ -50,6 +50,7 @@ if (typeof window !== 'undefined') {
             recordCrossOriginIframes: true,
         },
         debug: true,
+        disable_web_experiments: false,
         scroll_root_selector: ['#scroll_element', 'html'],
         persistence: cookieConsentGiven() ? 'localStorage+cookie' : 'memory',
         person_profiles: PERSON_PROCESSING_MODE === 'never' ? 'identified_only' : PERSON_PROCESSING_MODE,

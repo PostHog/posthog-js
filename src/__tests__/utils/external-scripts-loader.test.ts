@@ -59,9 +59,7 @@ describe('external-scripts-loader', () => {
             assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'toolbar', callback)
             const scripts = document!.getElementsByTagName('script')
             const new_script = scripts[0]
-            expect(new_script.src).toMatchInlineSnapshot(
-                `"https://us-assets.i.posthog.com/static/toolbar.js?v=1.0.0?&=1726067100000"`
-            )
+            expect(new_script.src).toBe('https://us-assets.i.posthog.com/static/toolbar.js?v=1.0.0&t=1726067100000')
         })
     })
 })

@@ -1,7 +1,7 @@
 import { Breaker, EventHandler, Properties } from '../types'
-import { isArray, isFormData, isFunction, isNull, isNullish, isString, hasOwnProperty } from './type-utils'
+import { hasOwnProperty, isArray, isFormData, isFunction, isNull, isNullish, isString } from './type-utils'
 import { logger } from './logger'
-import { window, nativeForEach, nativeIndexOf } from './globals'
+import { nativeForEach, nativeIndexOf, window } from './globals'
 
 const breaker: Breaker = {}
 
