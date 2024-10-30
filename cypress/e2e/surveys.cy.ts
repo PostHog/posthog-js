@@ -624,7 +624,7 @@ describe('Surveys', () => {
             onPageLoad()
             cy.get('.PostHogWidget123').shadow().find('.ph-survey-widget-tab').should('not.exist')
             cy.get('.test-surveys').click()
-
+            cy.wait(5000)
             cy.get('.PostHogWidget123').shadow().find('.survey-form').should('be.visible')
             cy.get('.PostHogWidget123').shadow().find('.survey-question').should('have.text', 'Feedback for us?')
             cy.get('.PostHogWidget123')
