@@ -5,9 +5,10 @@ import { PostHog } from './posthog-core'
 
 import { document, window } from './utils/globals'
 import { getEventTarget, getParentElement, isElementNode, isTag } from './autocapture-utils'
-import { HEATMAPS_ENABLED_SERVER_SIDE, TOOLBAR_ID } from './constants'
+import { HEATMAPS_ENABLED_SERVER_SIDE } from './constants'
 import { isEmptyObject, isObject, isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
+import { isElementInToolbar } from './utils/element-utils'
 
 const DEFAULT_FLUSH_INTERVAL = 5000
 const HEATMAPS = 'heatmaps'
@@ -35,11 +36,6 @@ function elementOrParentPositionMatches(el: Element | null, matches: string[], b
     }
 
     return false
-}
-
-function elementInToolbar(el: Element): boolean {
-    // NOTE: .closest is not supported in IE11 hence the operator check
-    return el.id === TOOLBAR_ID || !!el.closest?.('#' + TOOLBAR_ID)
 }
 
 export class Heatmaps {
@@ -150,7 +146,7 @@ export class Heatmaps {
     }
 
     private _onClick(e: MouseEvent): void {
-        if (elementInToolbar(e.target as Element)) {
+        if (isElementInToolbar(e.target as Element)) {
             return
         }
         const properties = this._getProperties(e, 'click')
@@ -162,13 +158,11 @@ export class Heatmaps {
             })
         }
 
-        // TODO: Detect deadclicks
-
         this._capture(properties)
     }
 
     private _onMouseMove(e: Event): void {
-        if (elementInToolbar(e.target as Element)) {
+        if (isElementInToolbar(e.target as Element)) {
             return
         }
         clearTimeout(this._mouseMoveTimeout)
