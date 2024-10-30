@@ -143,6 +143,8 @@ describe(`Segment integration`, () => {
                 },
             } as unknown as SegmentContext)
 
+            console.log(posthog.persistence)
+
             expect(posthog.get_distinct_id()).toEqual('distinguished user')
             expect(posthog.persistence?.get_property(USER_STATE)).toEqual('identified')
         }
