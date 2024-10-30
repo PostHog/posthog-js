@@ -182,6 +182,14 @@ export const Info = {
         return props
     },
 
+    timezone: function (): string | undefined {
+        try {
+            return Intl.DateTimeFormat().resolvedOptions().timeZone
+        } catch {
+            return undefined
+        }
+    },
+
     properties: function (): Properties {
         if (!userAgent) {
             return {}
@@ -194,6 +202,7 @@ export const Info = {
                 $browser: Info.browser(userAgent, navigator.vendor),
                 $device: Info.device(userAgent),
                 $device_type: Info.deviceType(userAgent),
+                $timezone: Info.timezone(),
             }),
             {
                 $current_url: location?.href,
