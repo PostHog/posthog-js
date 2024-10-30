@@ -3,6 +3,10 @@ import { getPayload } from '../support/compression'
 import 'cypress-localstorage-commands'
 
 function onPageLoad(options = {}) {
+    cy.posthog().then((ph) => {
+        ph.persistence?.properties().clear()
+    })
+
     cy.posthogInit(options)
     cy.wait('@decide')
     cy.wait('@surveys')
@@ -59,10 +63,6 @@ describe('Surveys', () => {
     }
 
     beforeEach(() => {
-        cy.posthog().then((ph) => {
-            ph.persistence?.properties().clear()
-        })
-
         cy.intercept('POST', '**/decide/*', {
             editorParams: {},
             surveys: true,
@@ -599,7 +599,7 @@ describe('Surveys', () => {
             cy.phCaptures().should('include', 'survey sent')
         })
 
-        it('wigetType is custom selector', () => {
+        it('widgetType is custom selector', () => {
             cy.intercept('GET', '**/surveys/*', {
                 surveys: [
                     {
