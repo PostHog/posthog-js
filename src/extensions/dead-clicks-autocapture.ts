@@ -1,18 +1,18 @@
 import { PostHog } from '../posthog-core'
 import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../constants'
 import { isBoolean, isObject } from '../utils/type-utils'
-import { assignableWindow, document, LazyLoadedDeadClicksAutocapture } from '../utils/globals'
+import { assignableWindow, document, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { logger } from '../utils/logger'
 import { DecideResponse } from '../types'
 
 const LOGGER_PREFIX = '[Dead Clicks]'
 
 export class DeadClicksAutocapture {
-    get lazyLoadedDeadClicksAutocapture(): LazyLoadedDeadClicksAutocapture | undefined {
+    get lazyLoadedDeadClicksAutocapture(): LazyLoadedDeadClicksAutocaptureInterface | undefined {
         return this._lazyLoadedDeadClicksAutocapture
     }
 
-    private _lazyLoadedDeadClicksAutocapture: LazyLoadedDeadClicksAutocapture | undefined
+    private _lazyLoadedDeadClicksAutocapture: LazyLoadedDeadClicksAutocaptureInterface | undefined
 
     constructor(readonly instance: PostHog) {
         this.startIfEnabled()

@@ -1,4 +1,4 @@
-import { assignableWindow, LazyLoadedDeadClicksAutocapture } from '../utils/globals'
+import { assignableWindow, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { PostHog } from '../posthog-core'
 import { isNull, isNumber, isUndefined } from '../utils/type-utils'
 import { autocaptureCompatibleElements, getEventTarget, isElementNode, isTag } from '../autocapture-utils'
@@ -43,7 +43,7 @@ function checkTimeout(value: number | undefined, thresholdMs: number) {
     return isNumber(value) && value >= thresholdMs
 }
 
-class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture {
+class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptureInterface {
     private _mutationObserver: MutationObserver | undefined
     private _lastMutation: number | undefined
     private _lastSelectionChanged: number | undefined
@@ -264,6 +264,6 @@ class _LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptur
 }
 
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
-assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture = (ph) => new _LazyLoadedDeadClicksAutocapture(ph)
+assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture = (ph) => new LazyLoadedDeadClicksAutocapture(ph)
 
-export default _LazyLoadedDeadClicksAutocapture
+export default LazyLoadedDeadClicksAutocapture

@@ -1,5 +1,5 @@
 import { PostHog } from '../../posthog-core'
-import _LazyLoadedDeadClicksAutocapture from '../../entrypoints/dead-clicks-autocapture'
+import LazyLoadedDeadClicksAutocapture from '../../entrypoints/dead-clicks-autocapture'
 import { assignableWindow, document } from '../../utils/globals'
 import { autocaptureCompatibleElements } from '../../autocapture-utils'
 
@@ -18,7 +18,7 @@ const triggerMouseEvent = function (node: Node, eventType: string) {
 
 describe('LazyLoadedDeadClicksAutocapture', () => {
     let fakeInstance: PostHog
-    let lazyLoadedDeadClicksAutocapture: _LazyLoadedDeadClicksAutocapture
+    let lazyLoadedDeadClicksAutocapture: LazyLoadedDeadClicksAutocapture
 
     beforeEach(async () => {
         jest.setSystemTime(1000)
@@ -40,7 +40,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             capture: jest.fn(),
         } as unknown as Partial<PostHog> as PostHog
 
-        lazyLoadedDeadClicksAutocapture = new _LazyLoadedDeadClicksAutocapture(fakeInstance)
+        lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance)
         lazyLoadedDeadClicksAutocapture.start(document)
     })
 
