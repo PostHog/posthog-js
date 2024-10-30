@@ -23,7 +23,7 @@ export class DeadClicksAutocapture {
     }
 
     public get isEnabled(): boolean {
-        const clientConfig = !!this.instance.config.capture_dead_clicks
+        const clientConfig = this.instance.config.capture_dead_clicks
         return isBoolean(clientConfig) ? clientConfig : this.isRemoteEnabled
     }
 
