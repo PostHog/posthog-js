@@ -1,3 +1,8 @@
+## 1.178.0 - 2024-10-30
+
+- feat: Add timezone to events (#1504)
+- chore: update README to include missing steps for running local nextjs playground (#1455)
+
 ## 1.177.0 - 2024-10-28
 
 - feat: Only set missing campaign params to null if there is at least one non-null (#1493)
