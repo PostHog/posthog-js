@@ -19,7 +19,7 @@ export class DeadClicksAutocapture {
     }
 
     public get isRemoteEnabled(): boolean {
-        return !!this.instance.persistence?.props[DEAD_CLICKS_ENABLED_SERVER_SIDE]
+        return !!this.instance.persistence?.get_property(DEAD_CLICKS_ENABLED_SERVER_SIDE)
     }
 
     public get isEnabled(): boolean {
@@ -30,7 +30,7 @@ export class DeadClicksAutocapture {
     public afterDecideResponse(response: DecideResponse) {
         if (this.instance.persistence) {
             this.instance.persistence.register({
-                DEAD_CLICKS_ENABLED_SERVER_SIDE: response?.captureDeadClicks,
+                [DEAD_CLICKS_ENABLED_SERVER_SIDE]: response?.captureDeadClicks,
             })
         }
         this.startIfEnabled()
