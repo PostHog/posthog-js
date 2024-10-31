@@ -309,6 +309,20 @@ export interface SessionRecordingOptions {
      Default is 5 minutes.
     */
     session_idle_threshold_ms?: number
+    /*
+     ADVANCED: alters the refill rate for the token bucket mutation throttling
+     Normally only altered alongside posthog support guidance.
+     Accepts values between 0 and 100
+     Default is 10.
+    */
+    __mutationRateLimiterRefillRate?: number
+    /*
+     ADVANCED: alters the bucket size for the token bucket mutation throttling
+     Normally only altered alongside posthog support guidance.
+     Accepts values between 0 and 100
+     Default is 100.
+    */
+    __mutationRateLimiterBucketSize?: number
 }
 
 export type SessionIdChangedCallback = (
