@@ -30,8 +30,7 @@ describe('DeadClicksAutocapture', () => {
             capture_dead_clicks: true,
         })
 
-        // TODO reverse this once tested
-        expect(mockStart).not.toHaveBeenCalled()
+        expect(mockStart).toHaveBeenCalled()
     })
 
     it('should not call initDeadClicksAutocapture if isEnabled is false', async () => {
@@ -57,21 +56,20 @@ describe('DeadClicksAutocapture', () => {
         expect(mockLoader).toHaveBeenCalledWith(instance, 'dead-clicks-autocapture', expect.any(Function))
     })
 
-    // TODO posthog is not initialising this yet, but should be
-    // it('should call lazy loaded stop when stopping', async () => {
-    //     const instance = await createPosthogInstance(uuidv7(), {
-    //         api_host: 'https://test.com',
-    //         token: 'testtoken',
-    //         autocapture: true,
-    //         capture_dead_clicks: true,
-    //     })
-    //
-    //     const mockLazyStop = instance.deadClicksAutocapture.lazyLoadedDeadClicksAutocapture?.stop
-    //     instance.deadClicksAutocapture.stop()
-    //
-    //     expect(mockLazyStop).toHaveBeenCalled()
-    //     expect(instance.deadClicksAutocapture.lazyLoadedDeadClicksAutocapture).toBeUndefined()
-    // })
+    it('should call lazy loaded stop when stopping', async () => {
+        const instance = await createPosthogInstance(uuidv7(), {
+            api_host: 'https://test.com',
+            token: 'testtoken',
+            autocapture: true,
+            capture_dead_clicks: true,
+        })
+
+        const mockLazyStop = instance.deadClicksAutocapture.lazyLoadedDeadClicksAutocapture?.stop
+        instance.deadClicksAutocapture.stop()
+
+        expect(mockLazyStop).toHaveBeenCalled()
+        expect(instance.deadClicksAutocapture.lazyLoadedDeadClicksAutocapture).toBeUndefined()
+    })
 
     describe('config', () => {
         let instance: PostHog
@@ -97,15 +95,12 @@ describe('DeadClicksAutocapture', () => {
             ['uses server side setting (enabled) if client side setting is not set', undefined, true, true],
         ])(
             '%s',
-            // TODO posthog is not initialising this yet, but should be
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            (_name: string, serverSide: boolean | undefined, clientSide: boolean | undefined, _expected: boolean) => {
+            (_name: string, serverSide: boolean | undefined, clientSide: boolean | undefined, expected: boolean) => {
                 instance.persistence?.register({
                     [DEAD_CLICKS_ENABLED_SERVER_SIDE]: serverSide,
                 })
                 instance.config.capture_dead_clicks = clientSide
-                // TODO posthog is not initialising this yet, but should be
-                //expect(instance.deadClicksAutocapture.isEnabled).toBe(expected)
+                expect(instance.deadClicksAutocapture.isEnabled).toBe(expected)
             }
         )
     })

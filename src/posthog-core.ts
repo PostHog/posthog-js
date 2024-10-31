@@ -78,6 +78,7 @@ import { ExceptionObserver } from './extensions/exception-autocapture'
 import { WebVitalsAutocapture } from './extensions/web-vitals'
 import { WebExperiments } from './web-experiments'
 import { PostHogExceptions } from './posthog-exceptions'
+import { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
 
 /*
 SIMPLE STYLE GUIDE:
