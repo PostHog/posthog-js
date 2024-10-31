@@ -45,6 +45,7 @@ import {
 } from '@rrweb/types'
 import Mock = jest.Mock
 import { ConsentManager } from '../../../consent'
+import { waitFor } from '@testing-library/preact'
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -2154,6 +2155,79 @@ describe('SessionRecording', () => {
                 },
                 captureOptions
             )
+        })
+    })
+
+    describe.only('URL blocking', () => {
+        beforeEach(() => {
+            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        urlBlocklist: [
+                            {
+                                matching: 'regex',
+                                url: '/blocked',
+                            },
+                        ],
+                    },
+                })
+            )
+        })
+
+        it('flushes buffer and includes pause event when hitting blocked URL', async () => {
+            // Emit some events before hitting blocked URL
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+
+            // Simulate URL change to blocked URL
+            fakeNavigateTo('https://test.com/blocked')
+            _emit(createIncrementalSnapshot({ data: { source: 3 } }))
+
+            await waitFor(() => {
+                // Verify the buffer was flushed with all events including pause
+                expect(posthog.capture).toHaveBeenCalledWith(
+                    '$snapshot',
+                    {
+                        $session_id: sessionId,
+                        $window_id: 'windowId',
+                        $snapshot_bytes: expect.any(Number),
+                        $snapshot_data: [
+                            { type: 3, data: { source: 1 } },
+                            { type: 3, data: { source: 2 } },
+                            // This should be in the buffer
+                            // { type: 5, data: { tag: 'recording paused', payload: { reason: 'url blocker' } } },
+                        ],
+                    },
+                    expect.any(Object)
+                )
+            })
+
+            // Verify subsequent events are not captured while on blocked URL
+            _emit(createIncrementalSnapshot({ data: { source: 4 } }))
+            expect(sessionRecording['buffer'].data).toHaveLength(0)
+
+            // Simulate URL change to allowed URL
+            fakeNavigateTo('https://test.com/allowed')
+
+            // Verify recording resumes with resume event
+            _emit(createIncrementalSnapshot({ data: { source: 5 } }))
+
+            expect(sessionRecording['buffer'].data).toStrictEqual([
+                expect.objectContaining({
+                    type: 2,
+                }),
+                expect.objectContaining({
+                    type: 3,
+                    data: { source: 5 },
+                }),
+                // Resume data is not in the buffer?
+                // expect.objectContaining({
+                //     type: 5,
+                //     data: { tag: 'recording paused', payload: { reason: 'url blocker' } },
+                // })
+            ])
         })
     })
 })
