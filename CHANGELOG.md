@@ -1,3 +1,8 @@
+## 1.179.0 - 2024-10-31
+
+- feat: dead click detection (#1463)
+- chore: refactor towards dead clicks autocapture (#1505)
+
 ## 1.178.0 - 2024-10-30
 
 - feat: Add timezone to events (#1504)
