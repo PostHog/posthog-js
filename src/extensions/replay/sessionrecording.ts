@@ -890,6 +890,8 @@ export class SessionRecording {
         this.mutationRateLimiter =
             this.mutationRateLimiter ??
             new MutationRateLimiter(this.rrwebRecord, {
+                refillRate: this.instance.config.session_recording.__mutationRateLimiterRefillRate,
+                bucketSize: this.instance.config.session_recording.__mutationRateLimiterBucketSize,
                 onBlockedNode: (id, node) => {
                     const message = `Too many mutations on node '${id}'. Rate limiting. This could be due to SVG animations or something similar`
                     logger.info(message, {
