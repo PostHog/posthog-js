@@ -78,6 +78,7 @@ import { ExceptionObserver } from './extensions/exception-autocapture'
 import { WebVitalsAutocapture } from './extensions/web-vitals'
 import { WebExperiments } from './web-experiments'
 import { PostHogExceptions } from './posthog-exceptions'
+import { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -258,6 +259,7 @@ export class PostHog {
     heatmaps?: Heatmaps
     webVitalsAutocapture?: WebVitalsAutocapture
     exceptionObserver?: ExceptionObserver
+    deadClicksAutocapture?: DeadClicksAutocapture
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -446,6 +448,9 @@ export class PostHog {
         this.exceptionObserver = new ExceptionObserver(this)
         this.exceptionObserver.startIfEnabled()
 
+        this.deadClicksAutocapture = new DeadClicksAutocapture(this)
+        this.deadClicksAutocapture.startIfEnabled()
+
         // if any instance on the page has debug = true, we set the
         // global debug to be true
         Config.DEBUG = Config.DEBUG || this.config.debug
@@ -516,7 +521,7 @@ export class PostHog {
 
         this.toolbar.maybeLoadToolbar()
 
-        // We wan't to avoid promises for IE11 compatibility, so we use callbacks here
+        // We want to avoid promises for IE11 compatibility, so we use callbacks here
         if (config.segment) {
             setupSegmentIntegration(this, () => this._loaded())
         } else {
@@ -561,12 +566,12 @@ export class PostHog {
         this.webVitalsAutocapture?.afterDecideResponse(response)
         this.exceptions?.afterDecideResponse(response)
         this.exceptionObserver?.afterDecideResponse(response)
+        this.deadClicksAutocapture?.afterDecideResponse(response)
     }
 
     _loaded(): void {
         // Pause `reloadFeatureFlags` calls in config.loaded callback.
-        // These feature flags are loaded in the decide call made right
-        // afterwards
+        // These feature flags are loaded in the decide call made right after
         const disableDecide = this.config.advanced_disable_decide
         if (!disableDecide) {
             this.featureFlags.setReloadingPaused(true)

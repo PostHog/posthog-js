@@ -23,6 +23,7 @@ beforeEach(() => {
         'exception-autocapture',
         'tracing-headers',
         'web-vitals',
+        'dead-clicks-autocapture',
     ]
     lazyLoadedJSFiles.forEach((key: string) => {
         cy.readFile(`dist/${key}.js`).then((body) => {
