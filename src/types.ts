@@ -302,14 +302,14 @@ export interface SessionRecordingOptions {
     /*
      ADVANCED: alters the refill rate for the token bucket mutation throttling
      Normally only altered alongside posthog support guidance.
-     Accepts values between 0 and 1000
+     Accepts values between 0 and 100
      Default is 10.
     */
     __mutationRateLimiterRefillRate?: number
     /*
      ADVANCED: alters the bucket size for the token bucket mutation throttling
      Normally only altered alongside posthog support guidance.
-     Accepts values between 0 and 1000
+     Accepts values between 0 and 100
      Default is 100.
     */
     __mutationRateLimiterBucketSize?: number
