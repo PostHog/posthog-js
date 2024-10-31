@@ -2158,7 +2158,7 @@ describe('SessionRecording', () => {
         })
     })
 
-    describe.only('URL blocking', () => {
+    describe('URL blocking', () => {
         beforeEach(() => {
             sessionRecording.startIfEnabledOrStop()
             sessionRecording.afterDecideResponse(
