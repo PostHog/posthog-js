@@ -122,6 +122,15 @@ export interface PerformanceCaptureConfig {
     web_vitals_delayed_flush_ms?: number
 }
 
+export type DeadClicksAutoCaptureConfig = {
+    // by default if a click is followed by a sroll within 100ms it is not a dead click
+    scroll_threshold_ms?: number
+    // by default if a click is followed by a selection change within 100ms it is not a dead click
+    selection_change_threshold_ms?: number
+    // by default if a click is followed by a mutation within 2500ms it is not a dead click
+    mutation_threshold_ms?: number
+} & Pick<AutocaptureConfig, 'element_attribute_ignorelist'>
+
 export interface HeatmapConfig {
     /*
      * how often to send batched data in $$heatmap_data events
@@ -215,6 +224,7 @@ export interface PostHogConfig {
     /* @deprecated - use `capture_heatmaps` instead */
     enable_heatmaps?: boolean
     capture_heatmaps?: boolean | HeatmapConfig
+    capture_dead_clicks?: boolean | DeadClicksAutoCaptureConfig
     disable_scroll_properties?: boolean
     // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
     scroll_root_selector?: string | string[]
@@ -413,6 +423,7 @@ export interface DecideResponse {
     siteApps: { id: number; url: string }[]
     heatmaps?: boolean
     defaultIdentifiedOnly?: boolean
+    captureDeadClicks?: boolean
 }
 
 export type FeatureFlagsCallback = (
