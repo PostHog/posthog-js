@@ -1,3 +1,7 @@
+## 1.180.0 - 2024-10-31
+
+- feat: allow mutation rate limiter configuration (#1506)
+
 ## 1.179.0 - 2024-10-31
 
 - feat: dead click detection (#1463)
