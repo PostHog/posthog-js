@@ -225,6 +225,13 @@ function sessionRecordingUrlTriggerMatches(url: string, triggers: SessionRecordi
     })
 }
 
+/** When we put the recording into a paused state, we add a custom event.
+ *  However in the paused state, events are dropped, and never make it to the buffer,
+ *  so we need to manually let this one through */
+function isRecordingPausedEvent(e: eventWithTime) {
+    return e.type === EventType.Custom && e.data.tag === 'recording paused'
+}
+
 export class SessionRecording {
     private _endpoint: string
     private flushBufferTimer?: any
@@ -1004,7 +1011,7 @@ export class SessionRecording {
         // Check if the URL matches any trigger patterns
         this._checkTriggerConditions()
 
-        if (this.status === 'paused') {
+        if (this.status === 'paused' && !isRecordingPausedEvent(rawEvent)) {
             return
         }
 
@@ -1229,14 +1236,19 @@ export class SessionRecording {
         if (this.status === 'paused') {
             return
         }
+        logger.info(LOGGER_PREFIX + ' recording paused due to URL blocker')
+
+        this._tryAddCustomEvent('recording paused', { reason: 'url blocker' })
 
         this._urlBlocked = true
 
-        this.clearBuffer()
+        // Clear the snapshot timer since we don't want new snapshots while paused
         clearInterval(this._fullSnapshotTimer)
-        this._tryAddCustomEvent('recording paused', { reason: 'url blocker' })
 
-        logger.info(LOGGER_PREFIX + ' recording paused due to URL blocker')
+        // Running this in a timeout to ensure we can
+        setTimeout(() => {
+            this._flushBuffer()
+        }, 100)
     }
 
     private _resumeRecording() {
