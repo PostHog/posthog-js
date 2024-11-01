@@ -7,11 +7,7 @@ import {
     getEventTarget,
     getSafeText,
     isAngularStyleAttr,
-    isDocumentFragment,
-    isElementNode,
     isSensitiveElement,
-    isTag,
-    isTextNode,
     makeSafeText,
     shouldCaptureDomEvent,
     shouldCaptureElement,
@@ -27,6 +23,7 @@ import { isBoolean, isFunction, isNull, isObject } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { document, window } from './utils/globals'
 import { convertToURL } from './utils/request-utils'
+import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
 
 const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
 
