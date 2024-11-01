@@ -1,3 +1,43 @@
+## 1.180.1 - 2024-11-01
+
+- fix: dead click fixes from watching in prod (#1508)
+
+## 1.180.0 - 2024-10-31
+
+- feat: allow mutation rate limiter configuration (#1506)
+
+## 1.179.0 - 2024-10-31
+
+- feat: dead click detection (#1463)
+- chore: refactor towards dead clicks autocapture (#1505)
+
+## 1.178.0 - 2024-10-30
+
+- feat: Add timezone to events (#1504)
+- chore: update README to include missing steps for running local nextjs playground (#1455)
+
+## 1.177.0 - 2024-10-28
+
+- feat: Only set missing campaign params to null if there is at least one non-null (#1493)
+
+## 1.176.1 - 2024-10-28
+
+- fix: reduce keep alive threshold (#1501)
+- fix: empty query param when calling external dependency toolbar.js (#1456)
+- fix: careful now (#1497)
+
+## 1.176.0 - 2024-10-24
+
+- fix(surveys): Reset Survey storage after posthog.reset is called (#1494)
+
+## 1.175.1 - 2024-10-24
+
+- chore: set platform on stack frame (#1495)
+
+## 1.175.0 - 2024-10-24
+
+- fix: allow canvas local config (#1496)
+
 ## 1.174.4 - 2024-10-24
 
 - fix: expose the last activity timestamp in session id check result (#1491)

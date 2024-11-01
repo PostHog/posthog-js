@@ -122,6 +122,15 @@ export interface PerformanceCaptureConfig {
     web_vitals_delayed_flush_ms?: number
 }
 
+export type DeadClicksAutoCaptureConfig = {
+    // by default if a click is followed by a sroll within 100ms it is not a dead click
+    scroll_threshold_ms?: number
+    // by default if a click is followed by a selection change within 100ms it is not a dead click
+    selection_change_threshold_ms?: number
+    // by default if a click is followed by a mutation within 2500ms it is not a dead click
+    mutation_threshold_ms?: number
+} & Pick<AutocaptureConfig, 'element_attribute_ignorelist'>
+
 export interface HeatmapConfig {
     /*
      * how often to send batched data in $$heatmap_data events
@@ -215,6 +224,7 @@ export interface PostHogConfig {
     /* @deprecated - use `capture_heatmaps` instead */
     enable_heatmaps?: boolean
     capture_heatmaps?: boolean | HeatmapConfig
+    capture_dead_clicks?: boolean | DeadClicksAutoCaptureConfig
     disable_scroll_properties?: boolean
     // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
     scroll_root_selector?: string | string[]
@@ -274,6 +284,10 @@ export interface SessionRecordingOptions {
     collectFonts?: boolean
     inlineStylesheet?: boolean
     recordCrossOriginIframes?: boolean
+    /**
+     * Allows local config to override remote canvas recording settings from the decide response
+     */
+    captureCanvas?: SessionRecordingCanvasOptions
     /** @deprecated - use maskCapturedNetworkRequestFn instead  */
     maskNetworkRequestFn?: ((data: NetworkRequest) => NetworkRequest | null | undefined) | null
     /** Modify the network request before it is captured. Returning null or undefined stops it being captured */
@@ -295,6 +309,20 @@ export interface SessionRecordingOptions {
      Default is 5 minutes.
     */
     session_idle_threshold_ms?: number
+    /*
+     ADVANCED: alters the refill rate for the token bucket mutation throttling
+     Normally only altered alongside posthog support guidance.
+     Accepts values between 0 and 100
+     Default is 10.
+    */
+    __mutationRateLimiterRefillRate?: number
+    /*
+     ADVANCED: alters the bucket size for the token bucket mutation throttling
+     Normally only altered alongside posthog support guidance.
+     Accepts values between 0 and 100
+     Default is 100.
+    */
+    __mutationRateLimiterBucketSize?: number
 }
 
 export type SessionIdChangedCallback = (
@@ -358,6 +386,13 @@ export interface CaptureOptions {
 
 export type FlagVariant = { flag: string; variant: string }
 
+export type SessionRecordingCanvasOptions = {
+    recordCanvas?: boolean | null
+    canvasFps?: number | null
+    // the API returns a decimal between 0 and 1 as a string
+    canvasQuality?: string | null
+}
+
 export interface DecideResponse {
     supportedCompression: Compression[]
     featureFlags: Record<string, string | boolean>
@@ -384,16 +419,12 @@ export interface DecideResponse {
         | {
               endpoint?: string
           }
-    sessionRecording?: {
+    sessionRecording?: SessionRecordingCanvasOptions & {
         endpoint?: string
         consoleLogRecordingEnabled?: boolean
         // the API returns a decimal between 0 and 1 as a string
         sampleRate?: string | null
         minimumDurationMilliseconds?: number
-        recordCanvas?: boolean | null
-        canvasFps?: number | null
-        // the API returns a decimal between 0 and 1 as a string
-        canvasQuality?: string | null
         linkedFlag?: string | FlagVariant | null
         networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
         urlTriggers?: SessionRecordingUrlTrigger[]
@@ -406,6 +437,7 @@ export interface DecideResponse {
     siteApps: { id: number; url: string }[]
     heatmaps?: boolean
     defaultIdentifiedOnly?: boolean
+    captureDeadClicks?: boolean
 }
 
 export type FeatureFlagsCallback = (
