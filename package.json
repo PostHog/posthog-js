@@ -105,7 +105,6 @@
         "rollup": "^4.24.0",
         "rollup-plugin-dts": "^6.1.1",
         "rollup-plugin-visualizer": "^5.12.0",
-        "rrweb-snapshot": "2.0.0-alpha.17",
         "sinon": "9.0.2",
         "testcafe": "1.19.0",
         "testcafe-browser-provider-browserstack": "1.14.0",
@@ -127,9 +126,7 @@
     ],
     "pnpm": {
         "patchedDependencies": {
-            "rrweb@2.0.0-alpha.17": "patches/rrweb@2.0.0-alpha.17.patch",
-            "@rrweb/record@2.0.0-alpha.17": "patches/@rrweb__record@2.0.0-alpha.17.patch",
-            "rrweb-snapshot@2.0.0-alpha.17": "patches/rrweb-snapshot@2.0.0-alpha.17.patch"
+            "@rrweb/record@2.0.0-alpha.17": "patches/@rrweb__record@2.0.0-alpha.17.patch"
         }
     }
 }

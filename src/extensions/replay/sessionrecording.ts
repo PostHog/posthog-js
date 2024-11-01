@@ -836,7 +836,7 @@ export class SessionRecording {
 
     private _onScriptLoaded() {
         // rrweb config info: https://github.com/rrweb-io/rrweb/blob/7d5d0033258d6c29599fb08412202d9a2c7b9413/src/record/index.ts#L28
-        const sessionRecordingOptions: recordOptions<eventWithTime> = {
+        const sessionRecordingOptions: recordOptions = {
             // select set of rrweb config options we expose to our users
             // see https://github.com/rrweb-io/rrweb/blob/master/guide.md
             blockClass: 'ph-no-capture',
