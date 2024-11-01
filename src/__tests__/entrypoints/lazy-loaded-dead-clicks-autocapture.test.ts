@@ -139,16 +139,6 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(0)
         })
 
-        it('ignores clicks on disabled nodes', () => {
-            const div = document.createElement('div')
-            div.setAttribute('disabled', 'true')
-            document.body.append(div)
-
-            triggerMouseEvent(div, 'click')
-
-            expect(lazyLoadedDeadClicksAutocapture['_clicks'].length).toBe(0)
-        })
-
         it.each(autocaptureCompatibleElements)('click on %s node is never a deadclick', (element) => {
             const el = document.createElement(element)
             document.body.append(el)

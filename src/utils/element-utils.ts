@@ -1,24 +1,8 @@
 import { TOOLBAR_ID } from '../constants'
-import { window } from './globals'
 
 export function isElementInToolbar(el: Element): boolean {
     // NOTE: .closest is not supported in IE11 hence the operator check
     return el.id === TOOLBAR_ID || !!el.closest?.('#' + TOOLBAR_ID)
-}
-
-/**
- * checks if the element or one of its ancestors is disabled
- * has the aria-disabled attribute set to true
- * is a fieldset with disabled set
- * or has pointer-events set to none
- */
-export function isDisabledElement(el: Element): boolean {
-    if (!isElementNode(el)) {
-        // if not an element, it can't be disabled
-        return false
-    }
-    const disabledByStyle = window?.getComputedStyle(el).pointerEvents === 'none'
-    return !!el.closest?.('[disabled],[aria-disabled="true"],fieldset[disabled]') || disabledByStyle
 }
 
 /*
