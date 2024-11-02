@@ -428,6 +428,7 @@ export interface DecideResponse {
         linkedFlag?: string | FlagVariant | null
         networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
         urlTriggers?: SessionRecordingUrlTrigger[]
+        scriptConfig?: { script?: string | undefined }
     }
     surveys?: boolean
     toolbarParams: ToolbarParams
