@@ -3,7 +3,7 @@ import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../constants'
 import { isBoolean, isObject } from '../utils/type-utils'
 import { assignableWindow, document, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { logger } from '../utils/logger'
-import { DecideResponse } from '../types'
+import { DeadClickCandidate, DecideResponse, Properties } from '../types'
 
 const LOGGER_PREFIX = '[Dead Clicks]'
 
@@ -36,9 +36,14 @@ export class DeadClicksAutocapture {
         this.startIfEnabled()
     }
 
-    public startIfEnabled() {
-        if (this.isEnabled) {
-            this.loadScript(this.start.bind(this))
+    public startIfEnabled({
+        force,
+        onCapture,
+    }: { force?: boolean; onCapture?: (click: DeadClickCandidate, properties: Properties) => void } = {}) {
+        if (this.isEnabled || force) {
+            this.loadScript(() => {
+                this.start(onCapture)
+            })
         }
     }
 
@@ -60,7 +65,7 @@ export class DeadClicksAutocapture {
         )
     }
 
-    private start() {
+    private start(onCapture?: (click: DeadClickCandidate, properties: Properties) => void) {
         if (!document) {
             logger.error(LOGGER_PREFIX + ' `document` not found. Cannot start.')
             return
@@ -76,6 +81,9 @@ export class DeadClicksAutocapture {
                     ? this.instance.config.capture_dead_clicks
                     : undefined
             )
+            if (onCapture) {
+                this._lazyLoadedDeadClicksAutocapture.onCapture = onCapture
+            }
             this._lazyLoadedDeadClicksAutocapture.start(document)
             logger.info(`${LOGGER_PREFIX} starting...`)
         }

@@ -2,7 +2,7 @@ import { assignableWindow, LazyLoadedDeadClicksAutocaptureInterface } from '../u
 import { PostHog } from '../posthog-core'
 import { isNull, isNumber, isUndefined } from '../utils/type-utils'
 import { autocaptureCompatibleElements, getEventTarget } from '../autocapture-utils'
-import { DeadClicksAutoCaptureConfig, Properties } from '../types'
+import { DeadClickCandidate, DeadClicksAutoCaptureConfig, Properties } from '../types'
 import { autocapturePropertiesForElement } from '../autocapture'
 import { isElementInToolbar, isElementNode, isTag } from '../utils/element-utils'
 
@@ -13,21 +13,7 @@ const DEFAULT_CONFIG: Required<DeadClicksAutoCaptureConfig> = {
     mutation_threshold_ms: 2500,
 }
 
-interface Click {
-    node: Element
-    originalEvent: Event
-    timestamp: number
-    // time between click and the most recent scroll
-    scrollDelayMs?: number
-    // time between click and the most recent mutation
-    mutationDelayMs?: number
-    // time between click and the most recent selection changed event
-    selectionChangedDelayMs?: number
-    // if neither scroll nor mutation seen before threshold passed
-    absoluteDelayMs?: number
-}
-
-function asClick(event: Event): Click | null {
+function asClick(event: MouseEvent): DeadClickCandidate | null {
     const eventTarget = getEventTarget(event)
     if (eventTarget) {
         return {
@@ -44,12 +30,17 @@ function checkTimeout(value: number | undefined, thresholdMs: number) {
 }
 
 class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptureInterface {
+    set onCapture(value: (click: DeadClickCandidate, properties: Properties) => void) {
+        this._onCapture = value
+    }
+
     private _mutationObserver: MutationObserver | undefined
     private _lastMutation: number | undefined
     private _lastSelectionChanged: number | undefined
-    private _clicks: Click[] = []
+    private _clicks: DeadClickCandidate[] = []
     private _checkClickTimer: number | undefined
     private _config: Required<DeadClicksAutoCaptureConfig>
+    private _onCapture: (click: DeadClickCandidate, properties: Properties) => void
 
     private asRequiredConfig(providedConfig?: DeadClicksAutoCaptureConfig): Required<DeadClicksAutoCaptureConfig> {
         return {
@@ -64,6 +55,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
 
     constructor(readonly instance: PostHog, config?: DeadClicksAutoCaptureConfig) {
         this._config = this.asRequiredConfig(config)
+        this._onCapture = this._captureDeadClick
     }
 
     start(observerTarget: Node) {
@@ -105,7 +97,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         assignableWindow.addEventListener('click', this._onClick)
     }
 
-    private _onClick = (event: Event): void => {
+    private _onClick = (event: MouseEvent): void => {
         const click = asClick(event)
         if (!isNull(click) && !this._ignoreClick(click)) {
             this._clicks.push(click)
@@ -148,7 +140,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         this._lastSelectionChanged = Date.now()
     }
 
-    private _ignoreClick(click: Click | null): boolean {
+    private _ignoreClick(click: DeadClickCandidate | null): boolean {
         if (!click) {
             return true
         }
@@ -222,7 +214,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             }
 
             if (scrollTimeout || mutationTimeout || absoluteTimeout || selectionChangedTimeout) {
-                this._captureDeadClick(click, {
+                this._onCapture(click, {
                     $dead_click_last_mutation_timestamp: this._lastMutation,
                     $dead_click_event_timestamp: click.timestamp,
                     $dead_click_scroll_timeout: scrollTimeout,
@@ -243,7 +235,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         }
     }
 
-    private _captureDeadClick(click: Click, properties: Properties) {
+    private _captureDeadClick(click: DeadClickCandidate, properties: Properties) {
         // TODO need to check safe and captur-able as with autocapture
         // TODO autocaputure config
         this.instance.capture(
