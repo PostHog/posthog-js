@@ -8,6 +8,9 @@ patchedDependencies:
   '@rrweb/record@2.0.0-alpha.17':
     hash: or7biymn4kjyhnfwbz74vqezxa
     path: patches/@rrweb__record@2.0.0-alpha.17.patch
+  '@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17':
+    hash: ytsspyi7p3hvqcq64vqb7wb6bu
+    path: patches/@rrweb__rrweb-plugin-console-record@2.0.0-alpha.17.patch
 
 dependencies:
   core-js:
@@ -71,7 +74,7 @@ devDependencies:
     version: 2.0.0-alpha.17(patch_hash=or7biymn4kjyhnfwbz74vqezxa)
   '@rrweb/rrweb-plugin-console-record':
     specifier: 2.0.0-alpha.17
-    version: 2.0.0-alpha.17(rrweb@2.0.0-alpha.17)
+    version: 2.0.0-alpha.17(patch_hash=ytsspyi7p3hvqcq64vqb7wb6bu)(rrweb@2.0.0-alpha.17)
   '@rrweb/types':
     specifier: 2.0.0-alpha.17
     version: 2.0.0-alpha.17
@@ -2807,13 +2810,14 @@ packages:
     dev: true
     patched: true
 
-  /@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17(rrweb@2.0.0-alpha.17):
+  /@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17(patch_hash=ytsspyi7p3hvqcq64vqb7wb6bu)(rrweb@2.0.0-alpha.17):
     resolution: {integrity: sha512-tjNJ3wWUDMMf275xr4Rb5tVYF2UR+wXvSxnyS9tRKnRa574PQQvx7sGbqM/O9AytYjnbiTrAMqNR7OFysGCMwQ==}
     peerDependencies:
       rrweb: ^2.0.0-alpha.17
     dependencies:
       rrweb: 2.0.0-alpha.17
     dev: true
+    patched: true
 
   /@rrweb/types@2.0.0-alpha.17:
     resolution: {integrity: sha512-AfDTVUuCyCaIG0lTSqYtrZqJX39ZEYzs4fYKnexhQ+id+kbZIpIJtaut5cto6dWZbB3SEe4fW0o90Po3LvTmfg==}
