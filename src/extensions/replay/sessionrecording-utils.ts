@@ -52,38 +52,6 @@ export type rrwebRecord = {
 
 export declare type recordOptions = Exclude<Parameters<typeof record<eventWithTime>>[0], undefined>
 
-// export declare type recordOptions<T> = {
-//     emit?: (e: T, isCheckout?: boolean) => void
-//     checkoutEveryNth?: number
-//     checkoutEveryNms?: number
-//     blockClass?: blockClass
-//     blockSelector?: string
-//     ignoreClass?: string
-//     maskTextClass?: maskTextClass
-//     maskTextSelector?: string
-//     maskAllInputs?: boolean
-//     maskInputOptions?: MaskInputOptions
-//     maskInputFn?: MaskInputFn
-//     maskTextFn?: MaskTextFn
-//     slimDOMOptions?: SlimDOMOptions | 'all' | true
-//     ignoreCSSAttributes?: Set<string>
-//     inlineStylesheet?: boolean
-//     hooks?: hooksParam
-//     // packFn?: PackFn
-//     sampling?: SamplingStrategy
-//     dataURLOptions?: DataURLOptions
-//     recordCanvas?: boolean
-//     recordCrossOriginIframes?: boolean
-//     recordAfter?: 'DOMContentLoaded' | 'load'
-//     userTriggeredOnInput?: boolean
-//     collectFonts?: boolean
-//     inlineImages?: boolean
-//     plugins?: RecordPlugin[]
-//     mousemoveWait?: number
-//     keepIframeSrcFn?: KeepIframeSrcFn
-//     // errorHandler?: ErrorHandler
-// }
-
 /*
  * Check whether a data payload is nearing 5mb. If it is, it checks the data for
  * data URIs (the likely culprit for large payloads). If it finds data URIs, it either replaces

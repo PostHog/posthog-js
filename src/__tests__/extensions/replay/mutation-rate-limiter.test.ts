@@ -71,6 +71,7 @@ describe('MutationRateLimiter', () => {
 
     test('returns event if _any_ adds are left', () => {
         const event = makeEvent({
+            // TODO: add serializedNodeWithId type once https://github.com/rrweb-io/rrweb/pull/1593 merges
             adds: [{ parentId: 0, nextId: 0, node: {} as unknown as any }],
             attributes: [{ id: 1, attributes: { a: 'ttribute' } }],
         })
@@ -81,6 +82,7 @@ describe('MutationRateLimiter', () => {
 
         expect(result).toStrictEqual(
             makeEvent({
+                // TODO: add serializedNodeWithId type once https://github.com/rrweb-io/rrweb/pull/1593 merges
                 adds: [{ parentId: 0, nextId: 0, node: {} as unknown as any }],
                 attributes: [],
             })

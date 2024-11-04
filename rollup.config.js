@@ -81,8 +81,6 @@ const entrypointTargets = entrypoints.map((file) => {
             },
         ],
         plugins: [...pluginsForThisFile, visualizer({ filename: `bundle-stats-${fileName}.html` })],
-        // we know that recorder doesn't use postcss, but the bundler can't determine that
-        external: ['postcss'],
     }
 })
 
