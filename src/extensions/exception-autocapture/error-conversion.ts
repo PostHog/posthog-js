@@ -162,7 +162,7 @@ function errorPropertiesFromString(candidate: string, metadata?: ErrorMetadata):
         // so that it does not appear in a users stack trace
         const frames = parseStackFrames(metadata.syntheticException, 1)
         if (frames.length) {
-            exception.stacktrace = { frames }
+            exception.stacktrace = { frames, type: 'raw' }
         }
     }
 
