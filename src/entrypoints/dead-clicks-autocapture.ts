@@ -55,7 +55,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
 
     constructor(readonly instance: PostHog, config?: DeadClicksAutoCaptureConfig) {
         this._config = this.asRequiredConfig(config)
-        this._onCapture = this._captureDeadClick
+        this._onCapture = this._captureDeadClick.bind(this)
     }
 
     start(observerTarget: Node) {
