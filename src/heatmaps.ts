@@ -4,11 +4,11 @@ import { DecideResponse, Properties } from './types'
 import { PostHog } from './posthog-core'
 
 import { document, window } from './utils/globals'
-import { getEventTarget, getParentElement, isElementNode, isTag } from './autocapture-utils'
+import { getEventTarget, getParentElement } from './autocapture-utils'
 import { HEATMAPS_ENABLED_SERVER_SIDE } from './constants'
 import { isEmptyObject, isObject, isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
-import { isElementInToolbar } from './utils/element-utils'
+import { isElementInToolbar, isElementNode, isTag } from './utils/element-utils'
 
 const DEFAULT_FLUSH_INTERVAL = 5000
 const HEATMAPS = 'heatmaps'

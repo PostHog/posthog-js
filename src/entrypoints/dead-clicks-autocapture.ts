@@ -1,10 +1,10 @@
 import { assignableWindow, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { PostHog } from '../posthog-core'
 import { isNull, isNumber, isUndefined } from '../utils/type-utils'
-import { autocaptureCompatibleElements, getEventTarget, isElementNode, isTag } from '../autocapture-utils'
+import { autocaptureCompatibleElements, getEventTarget } from '../autocapture-utils'
 import { DeadClicksAutoCaptureConfig, Properties } from '../types'
 import { autocapturePropertiesForElement } from '../autocapture'
-import { isElementInToolbar } from '../utils/element-utils'
+import { isElementInToolbar, isElementNode, isTag } from '../utils/element-utils'
 
 const DEFAULT_CONFIG: Required<DeadClicksAutoCaptureConfig> = {
     element_attribute_ignorelist: [],
@@ -205,7 +205,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                 this._config.selection_change_threshold_ms
             )
             const mutationTimeout = checkTimeout(click.mutationDelayMs, this._config.mutation_threshold_ms)
-            const absoluteTimeout = checkTimeout(click.absoluteDelayMs, this._config.mutation_threshold_ms)
+            // we want to timeout eventually even if nothing else catches it...
+            // we leave a little longer than the maximum threshold to give the other checks a chance to catch it
+            const absoluteTimeout = checkTimeout(click.absoluteDelayMs, this._config.mutation_threshold_ms * 1.1)
 
             const hadScroll = isNumber(click.scrollDelayMs) && click.scrollDelayMs < this._config.scroll_threshold_ms
             const hadMutation =
@@ -244,22 +246,27 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _captureDeadClick(click: Click, properties: Properties) {
         // TODO need to check safe and captur-able as with autocapture
         // TODO autocaputure config
-        this.instance.capture('$dead_click', {
-            ...properties,
-            ...autocapturePropertiesForElement(click.node, {
-                e: click.originalEvent,
-                maskAllElementAttributes: this.instance.config.mask_all_element_attributes,
-                maskAllText: this.instance.config.mask_all_text,
-                elementAttributeIgnoreList: this._config.element_attribute_ignorelist,
-                // TRICKY: it appears that we were moving to elementsChainAsString, but the UI still depends on elements, so :shrug:
-                elementsChainAsString: false,
-            }).props,
-            $dead_click_scroll_delay_ms: click.scrollDelayMs,
-            $dead_click_mutation_delay_ms: click.mutationDelayMs,
-            $dead_click_absolute_delay_ms: click.absoluteDelayMs,
-            $dead_click_selection_changed_delay_ms: click.selectionChangedDelayMs,
-            timestamp: click.timestamp,
-        })
+        this.instance.capture(
+            '$dead_click',
+            {
+                ...properties,
+                ...autocapturePropertiesForElement(click.node, {
+                    e: click.originalEvent,
+                    maskAllElementAttributes: this.instance.config.mask_all_element_attributes,
+                    maskAllText: this.instance.config.mask_all_text,
+                    elementAttributeIgnoreList: this._config.element_attribute_ignorelist,
+                    // TRICKY: it appears that we were moving to elementsChainAsString, but the UI still depends on elements, so :shrug:
+                    elementsChainAsString: false,
+                }).props,
+                $dead_click_scroll_delay_ms: click.scrollDelayMs,
+                $dead_click_mutation_delay_ms: click.mutationDelayMs,
+                $dead_click_absolute_delay_ms: click.absoluteDelayMs,
+                $dead_click_selection_changed_delay_ms: click.selectionChangedDelayMs,
+            },
+            {
+                timestamp: new Date(click.timestamp),
+            }
+        )
     }
 }
 

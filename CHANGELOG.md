@@ -1,3 +1,11 @@
+## 1.181.0 - 2024-11-05
+
+- chore: add stack type (#1511)
+
+## 1.180.1 - 2024-11-01
+
+- fix: dead click fixes from watching in prod (#1508)
+
 ## 1.180.0 - 2024-10-31
 
 - feat: allow mutation rate limiter configuration (#1506)

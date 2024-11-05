@@ -211,32 +211,35 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
-            expect(fakeInstance.capture).toHaveBeenCalledWith('$dead_click', {
-                // faked system timestamp isn't moving so this is negative
-                $dead_click_absolute_delay_ms: -900,
-                $dead_click_absolute_timeout: false,
-                $dead_click_event_timestamp: 900,
-                $dead_click_last_mutation_timestamp: undefined,
-                $dead_click_last_scroll_timestamp: undefined,
-                $dead_click_mutation_delay_ms: undefined,
-                $dead_click_mutation_timeout: false,
-                $dead_click_scroll_delay_ms: undefined,
-                $dead_click_scroll_timeout: false,
-                $dead_click_selection_changed_delay_ms: 100,
-                $dead_click_selection_changed_timeout: true,
-                timestamp: 900,
-                $ce_version: 1,
-                $el_text: 'text',
-                $elements: [
-                    {
-                        $el_text: 'text',
-                        nth_child: 2,
-                        nth_of_type: 1,
-                        tag_name: 'body',
-                    },
-                ],
-                $event_type: 'click',
-            })
+            expect(fakeInstance.capture).toHaveBeenCalledWith(
+                '$dead_click',
+                {
+                    // faked system timestamp isn't moving so this is negative
+                    $dead_click_absolute_delay_ms: -900,
+                    $dead_click_absolute_timeout: false,
+                    $dead_click_event_timestamp: 900,
+                    $dead_click_last_mutation_timestamp: undefined,
+                    $dead_click_last_scroll_timestamp: undefined,
+                    $dead_click_mutation_delay_ms: undefined,
+                    $dead_click_mutation_timeout: false,
+                    $dead_click_scroll_delay_ms: undefined,
+                    $dead_click_scroll_timeout: false,
+                    $dead_click_selection_changed_delay_ms: 100,
+                    $dead_click_selection_changed_timeout: true,
+                    $ce_version: 1,
+                    $el_text: 'text',
+                    $elements: [
+                        {
+                            $el_text: 'text',
+                            nth_child: 2,
+                            nth_of_type: 1,
+                            tag_name: 'body',
+                        },
+                    ],
+                    $event_type: 'click',
+                },
+                { timestamp: new Date(900) }
+            )
         })
 
         it('click followed by a mutation after threshold, dead click', () => {
@@ -250,32 +253,35 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
-            expect(fakeInstance.capture).toHaveBeenCalledWith('$dead_click', {
-                // faked system timestamp isn't moving so this is negative
-                $dead_click_absolute_delay_ms: -900,
-                $dead_click_absolute_timeout: false,
-                $dead_click_event_timestamp: 900,
-                $dead_click_last_mutation_timestamp: 3401,
-                $dead_click_last_scroll_timestamp: undefined,
-                $dead_click_mutation_delay_ms: 2501,
-                $dead_click_mutation_timeout: true,
-                $dead_click_scroll_delay_ms: undefined,
-                $dead_click_scroll_timeout: false,
-                $dead_click_selection_changed_delay_ms: undefined,
-                $dead_click_selection_changed_timeout: false,
-                timestamp: 900,
-                $ce_version: 1,
-                $el_text: 'text',
-                $elements: [
-                    {
-                        $el_text: 'text',
-                        nth_child: 2,
-                        nth_of_type: 1,
-                        tag_name: 'body',
-                    },
-                ],
-                $event_type: 'click',
-            })
+            expect(fakeInstance.capture).toHaveBeenCalledWith(
+                '$dead_click',
+                {
+                    // faked system timestamp isn't moving so this is negative
+                    $dead_click_absolute_delay_ms: -900,
+                    $dead_click_absolute_timeout: false,
+                    $dead_click_event_timestamp: 900,
+                    $dead_click_last_mutation_timestamp: 3401,
+                    $dead_click_last_scroll_timestamp: undefined,
+                    $dead_click_mutation_delay_ms: 2501,
+                    $dead_click_mutation_timeout: true,
+                    $dead_click_scroll_delay_ms: undefined,
+                    $dead_click_scroll_timeout: false,
+                    $dead_click_selection_changed_delay_ms: undefined,
+                    $dead_click_selection_changed_timeout: false,
+                    $ce_version: 1,
+                    $el_text: 'text',
+                    $elements: [
+                        {
+                            $el_text: 'text',
+                            nth_child: 2,
+                            nth_of_type: 1,
+                            tag_name: 'body',
+                        },
+                    ],
+                    $event_type: 'click',
+                },
+                { timestamp: new Date(900) }
+            )
         })
 
         it('click followed by a scroll after threshold, dead click', () => {
@@ -290,31 +296,34 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
-            expect(fakeInstance.capture).toHaveBeenCalledWith('$dead_click', {
-                // faked system timestamp isn't moving so this is negative
-                $dead_click_absolute_delay_ms: -900,
-                $dead_click_absolute_timeout: false,
-                $dead_click_event_timestamp: 900,
-                $dead_click_last_mutation_timestamp: undefined,
-                $dead_click_mutation_delay_ms: undefined,
-                $dead_click_mutation_timeout: false,
-                $dead_click_scroll_delay_ms: 2501,
-                $dead_click_scroll_timeout: true,
-                $dead_click_selection_changed_delay_ms: undefined,
-                $dead_click_selection_changed_timeout: false,
-                $ce_version: 1,
-                $el_text: 'text',
-                $elements: [
-                    {
-                        $el_text: 'text',
-                        nth_child: 2,
-                        nth_of_type: 1,
-                        tag_name: 'body',
-                    },
-                ],
-                $event_type: 'click',
-                timestamp: 900,
-            })
+            expect(fakeInstance.capture).toHaveBeenCalledWith(
+                '$dead_click',
+                {
+                    // faked system timestamp isn't moving so this is negative
+                    $dead_click_absolute_delay_ms: -900,
+                    $dead_click_absolute_timeout: false,
+                    $dead_click_event_timestamp: 900,
+                    $dead_click_last_mutation_timestamp: undefined,
+                    $dead_click_mutation_delay_ms: undefined,
+                    $dead_click_mutation_timeout: false,
+                    $dead_click_scroll_delay_ms: 2501,
+                    $dead_click_scroll_timeout: true,
+                    $dead_click_selection_changed_delay_ms: undefined,
+                    $dead_click_selection_changed_timeout: false,
+                    $ce_version: 1,
+                    $el_text: 'text',
+                    $elements: [
+                        {
+                            $el_text: 'text',
+                            nth_child: 2,
+                            nth_of_type: 1,
+                            tag_name: 'body',
+                        },
+                    ],
+                    $event_type: 'click',
+                },
+                { timestamp: new Date(900) }
+            )
         })
 
         it('click followed by nothing for too long, dead click', () => {
@@ -325,35 +334,38 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             })
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
 
-            jest.setSystemTime(2501 + 900)
+            jest.setSystemTime(3001 + 900)
             lazyLoadedDeadClicksAutocapture['_checkClicks']()
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
-            expect(fakeInstance.capture).toHaveBeenCalledWith('$dead_click', {
-                $dead_click_absolute_delay_ms: 2501,
-                $dead_click_absolute_timeout: true,
-                $dead_click_event_timestamp: 900,
-                $dead_click_last_mutation_timestamp: undefined,
-                $dead_click_last_scroll_timestamp: undefined,
-                $dead_click_mutation_delay_ms: undefined,
-                $dead_click_mutation_timeout: false,
-                $dead_click_scroll_delay_ms: undefined,
-                $dead_click_scroll_timeout: false,
-                $dead_click_selection_changed_delay_ms: undefined,
-                $dead_click_selection_changed_timeout: false,
-                $ce_version: 1,
-                $el_text: 'text',
-                $elements: [
-                    {
-                        $el_text: 'text',
-                        nth_child: 2,
-                        nth_of_type: 1,
-                        tag_name: 'body',
-                    },
-                ],
-                $event_type: 'click',
-                timestamp: 900,
-            })
+            expect(fakeInstance.capture).toHaveBeenCalledWith(
+                '$dead_click',
+                {
+                    $dead_click_absolute_delay_ms: 3001,
+                    $dead_click_absolute_timeout: true,
+                    $dead_click_event_timestamp: 900,
+                    $dead_click_last_mutation_timestamp: undefined,
+                    $dead_click_last_scroll_timestamp: undefined,
+                    $dead_click_mutation_delay_ms: undefined,
+                    $dead_click_mutation_timeout: false,
+                    $dead_click_scroll_delay_ms: undefined,
+                    $dead_click_scroll_timeout: false,
+                    $dead_click_selection_changed_delay_ms: undefined,
+                    $dead_click_selection_changed_timeout: false,
+                    $ce_version: 1,
+                    $el_text: 'text',
+                    $elements: [
+                        {
+                            $el_text: 'text',
+                            nth_child: 2,
+                            nth_of_type: 1,
+                            tag_name: 'body',
+                        },
+                    ],
+                    $event_type: 'click',
+                },
+                { timestamp: new Date(900) }
+            )
         })
 
         it('click not followed by anything within threshold, rescheduled for next check', () => {
