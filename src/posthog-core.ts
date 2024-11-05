@@ -478,7 +478,7 @@ export class PostHog {
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
         // eslint-disable-next-line posthog-js/no-direct-undefined-check
         if (config.bootstrap?.distinctID !== undefined) {
-            const uuid = this.config.get_device_id(uuidv7())
+            const uuid = this._create_device_id()
             const deviceID = config.bootstrap?.isIdentifiedID ? uuid : config.bootstrap.distinctID
             this.persistence.set_property(USER_STATE, config.bootstrap?.isIdentifiedID ? 'identified' : 'anonymous')
             this.register({
@@ -512,9 +512,7 @@ export class PostHog {
             // There is no need to set the distinct id
             // or the device id if something was already stored
             // in the persistence
-            const uuid = this.config.__use_cookieless_server_hash
-                ? SENTINEL_COOKIELESS_SERVER_HASH
-                : this.config.get_device_id(uuidv7())
+            const uuid = this._create_device_id()
 
             this.register_once(
                 {
@@ -1536,7 +1534,9 @@ export class PostHog {
         this.surveys?.reset()
         this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()
-        const uuid = this.config.get_device_id(uuidv7())
+        const uuid = this.config.__use_cookieless_server_hash
+            ? SENTINEL_COOKIELESS_SERVER_HASH
+            : this.config.get_device_id(uuidv7())
         this.register_once(
             {
                 distinct_id: uuid,
@@ -2051,6 +2051,13 @@ export class PostHog {
         if (this.sessionPersistence?.disabled !== persistenceDisabled) {
             this.sessionPersistence?.set_disabled(persistenceDisabled)
         }
+    }
+
+    private _create_device_id(): string {
+        if (this.config.__use_cookieless_server_hash) {
+            return SENTINEL_COOKIELESS_SERVER_HASH
+        }
+        return this.config.get_device_id(uuidv7())
     }
 
     /**
