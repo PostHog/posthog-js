@@ -65,7 +65,7 @@ describe('loaded() with flags', () => {
 
             // we should call _reloadFeatureFlagsRequest for `group` only after the initial load
             // because it ought to be paused until decide returns
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request).toHaveBeenCalledWith('wat')
             expect(instance.featureFlags._reloadFeatureFlagsRequest).toHaveBeenCalledTimes(0)
 
             jest.runOnlyPendingTimers()

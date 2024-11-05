@@ -252,7 +252,7 @@ export class SessionIdManager {
             clearTimeout(this._enforceIdleTimeout)
             this._enforceIdleTimeout = setTimeout(() => {
                 // enforce idle timeout a little after the session timeout to ensure the session is reset even without activity
-                this.resetSessionId()
+                // this.resetSessionId()
             }, this.sessionTimeoutMs * 1.1)
         }
 
