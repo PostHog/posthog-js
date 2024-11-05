@@ -1,7 +1,7 @@
 import { ErrorProperties } from '../extensions/exception-autocapture/error-conversion'
 import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
-import { DeadClickCandidate, DeadClicksAutoCaptureConfig, ErrorEventArgs, ErrorMetadata, Properties } from '../types'
+import { DeadClicksAutoCaptureConfig, ErrorEventArgs, ErrorMetadata, Properties } from '../types'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
@@ -33,7 +33,6 @@ export type PostHogExtensionKind =
 export interface LazyLoadedDeadClicksAutocaptureInterface {
     start: (observerTarget: Node) => void
     stop: () => void
-    set onCapture(value: (click: DeadClickCandidate, properties: Properties) => void)
 }
 
 interface PostHogExtensions {
