@@ -7,6 +7,15 @@ import { DeadClickCandidate, DecideResponse, Properties } from '../types'
 
 const LOGGER_PREFIX = '[Dead Clicks]'
 
+export const isDeadClicksEnabledForHeatmaps = () => {
+    return true
+}
+export const isDeadClicksEnabledForAutocapture = (instance: DeadClicksAutocapture) => {
+    const isRemoteEnabled = !!instance.instance.persistence?.get_property(DEAD_CLICKS_ENABLED_SERVER_SIDE)
+    const clientConfig = instance.instance.config.capture_dead_clicks
+    return isBoolean(clientConfig) ? clientConfig : isRemoteEnabled
+}
+
 export class DeadClicksAutocapture {
     get lazyLoadedDeadClicksAutocapture(): LazyLoadedDeadClicksAutocaptureInterface | undefined {
         return this._lazyLoadedDeadClicksAutocapture
@@ -14,17 +23,8 @@ export class DeadClicksAutocapture {
 
     private _lazyLoadedDeadClicksAutocapture: LazyLoadedDeadClicksAutocaptureInterface | undefined
 
-    constructor(readonly instance: PostHog) {
+    constructor(readonly instance: PostHog, readonly isEnabled: (dca: DeadClicksAutocapture) => boolean) {
         this.startIfEnabled()
-    }
-
-    public get isRemoteEnabled(): boolean {
-        return !!this.instance.persistence?.get_property(DEAD_CLICKS_ENABLED_SERVER_SIDE)
-    }
-
-    public get isEnabled(): boolean {
-        const clientConfig = this.instance.config.capture_dead_clicks
-        return isBoolean(clientConfig) ? clientConfig : this.isRemoteEnabled
     }
 
     public afterDecideResponse(response: DecideResponse) {
@@ -37,10 +37,9 @@ export class DeadClicksAutocapture {
     }
 
     public startIfEnabled({
-        force,
         onCapture,
     }: { force?: boolean; onCapture?: (click: DeadClickCandidate, properties: Properties) => void } = {}) {
-        if (this.isEnabled || force) {
+        if (this.isEnabled(this)) {
             this.loadScript(() => {
                 this.start(onCapture)
             })

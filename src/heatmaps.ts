@@ -9,7 +9,7 @@ import { HEATMAPS_ENABLED_SERVER_SIDE } from './constants'
 import { isEmptyObject, isObject, isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { isElementInToolbar, isElementNode, isTag } from './utils/element-utils'
-import { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
+import { DeadClicksAutocapture, isDeadClicksEnabledForHeatmaps } from './extensions/dead-clicks-autocapture'
 
 const DEFAULT_FLUSH_INTERVAL = 5000
 const HEATMAPS = 'heatmaps'
@@ -126,9 +126,8 @@ export class Heatmaps {
         registerEvent(document, 'click', (e) => this._onClick((e || window?.event) as MouseEvent), false, true)
         registerEvent(document, 'mousemove', (e) => this._onMouseMove((e || window?.event) as MouseEvent), false, true)
 
-        this.deadClicksCapture = new DeadClicksAutocapture(this.instance)
+        this.deadClicksCapture = new DeadClicksAutocapture(this.instance, isDeadClicksEnabledForHeatmaps)
         this.deadClicksCapture.startIfEnabled({
-            force: true,
             onCapture: (click) => {
                 this._onClick(click.originalEvent, 'deadclick')
             },
