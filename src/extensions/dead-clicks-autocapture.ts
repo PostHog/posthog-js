@@ -3,9 +3,23 @@ import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../constants'
 import { isBoolean, isObject } from '../utils/type-utils'
 import { assignableWindow, document, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { logger } from '../utils/logger'
-import { DeadClickCandidate, DecideResponse, Properties } from '../types'
+import { DecideResponse, Properties } from '../types'
 
 const LOGGER_PREFIX = '[Dead Clicks]'
+
+interface DeadClickCandidate {
+    node: Element
+    originalEvent: MouseEvent
+    timestamp: number
+    // time between click and the most recent scroll
+    scrollDelayMs?: number
+    // time between click and the most recent mutation
+    mutationDelayMs?: number
+    // time between click and the most recent selection changed event
+    selectionChangedDelayMs?: number
+    // if neither scroll nor mutation seen before threshold passed
+    absoluteDelayMs?: number
+}
 
 export const isDeadClicksEnabledForHeatmaps = () => {
     return true
