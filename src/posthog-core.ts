@@ -34,6 +34,7 @@ import {
     Compression,
     DecideResponse,
     EarlyAccessFeatureCallback,
+    EventName,
     IsFeatureEnabledOptions,
     JsonType,
     PostHogConfig,
@@ -787,7 +788,11 @@ export class PostHog {
      * @param {String} [config.transport] Transport method for network request ('XHR' or 'sendBeacon').
      * @param {Date} [config.timestamp] Timestamp is a Date object. If not set, it'll automatically be set to the current time.
      */
-    capture(event_name: string, properties?: Properties | null, options?: CaptureOptions): CaptureResult | undefined {
+    capture(
+        event_name: EventName,
+        properties?: Properties | null,
+        options?: CaptureOptions
+    ): CaptureResult | undefined {
         // While developing, a developer might purposefully _not_ call init(),
         // in this case, we would like capture to be a noop.
         if (!this.__loaded || !this.persistence || !this.sessionPersistence || !this._requestQueue) {
@@ -2040,7 +2045,7 @@ export class PostHog {
      * @param {Object} [config.capture_properties] Set of properties to be captured along with the opt-in action
      */
     opt_in_capturing(options?: {
-        captureEventName?: string | null | false /** event name to be used for capturing the opt-in action */
+        captureEventName?: EventName | null | false /** event name to be used for capturing the opt-in action */
         captureProperties?: Properties /** set of properties to be captured along with the opt-in action */
     }): void {
         this.consent.optInOut(true)

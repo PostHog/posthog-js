@@ -5,9 +5,38 @@ import type { SegmentAnalytics } from './extensions/segment-integration'
 export type Property = any
 export type Properties = Record<string, Property>
 
+export const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
+type KnownEventName =
+    | '$pageview'
+    | '$heatmaps_data'
+    | '$pageleave'
+    | '$identify'
+    | '$set'
+    | '$groupidentify'
+    | '$create_alias'
+    | '$opt_in'
+    | '$web_experiment_applied'
+    | '$$client_ingestion_warning'
+    | '$feature_enrollment_update'
+    | '$feature_flag_called'
+    | '$exception'
+    | '$$heatmap'
+    | '$web_vitals'
+    | 'survey dismissed'
+    | 'survey sent'
+    | 'survey shown'
+    | '$snapshot'
+    | '$dead_click'
+    | '$autocapture'
+    | typeof COPY_AUTOCAPTURE_EVENT
+    | '$rageclick'
+// TODO must be able to add a string as well,
+//  such that we get autocorrect when using posthog-js in typesscript but can also add custom events
+export type EventName = KnownEventName | string
+
 export interface CaptureResult {
     uuid: string
-    event: string
+    event: EventName
     properties: Properties
     $set?: Properties
     $set_once?: Properties
