@@ -6,13 +6,6 @@ import { DeadClickCandidate, DeadClicksAutoCaptureConfig, Properties } from '../
 import { autocapturePropertiesForElement } from '../autocapture'
 import { isElementInToolbar, isElementNode, isTag } from '../utils/element-utils'
 
-const DEFAULT_CONFIG: Required<DeadClicksAutoCaptureConfig> = {
-    element_attribute_ignorelist: [],
-    scroll_threshold_ms: 100,
-    selection_change_threshold_ms: 100,
-    mutation_threshold_ms: 2500,
-}
-
 function asClick(event: MouseEvent): DeadClickCandidate | null {
     const eventTarget = getEventTarget(event)
     if (eventTarget) {
@@ -30,10 +23,6 @@ function checkTimeout(value: number | undefined, thresholdMs: number) {
 }
 
 class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptureInterface {
-    set onCapture(value: (click: DeadClickCandidate, properties: Properties) => void) {
-        this._onCapture = value
-    }
-
     private _mutationObserver: MutationObserver | undefined
     private _lastMutation: number | undefined
     private _lastSelectionChanged: number | undefined
@@ -42,20 +31,30 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _config: Required<DeadClicksAutoCaptureConfig>
     private _onCapture: (click: DeadClickCandidate, properties: Properties) => void
 
+    private _defaultConfig = (defaultOnCapture: (click: DeadClickCandidate, properties: Properties) => void) => ({
+        element_attribute_ignorelist: [],
+        scroll_threshold_ms: 100,
+        selection_change_threshold_ms: 100,
+        mutation_threshold_ms: 2500,
+        __onCapture: defaultOnCapture,
+    })
+
     private asRequiredConfig(providedConfig?: DeadClicksAutoCaptureConfig): Required<DeadClicksAutoCaptureConfig> {
+        const defaultConfig = this._defaultConfig(providedConfig?.__onCapture || this._captureDeadClick.bind(this))
         return {
             element_attribute_ignorelist:
-                providedConfig?.element_attribute_ignorelist ?? DEFAULT_CONFIG.element_attribute_ignorelist,
-            scroll_threshold_ms: providedConfig?.scroll_threshold_ms ?? DEFAULT_CONFIG.scroll_threshold_ms,
+                providedConfig?.element_attribute_ignorelist ?? defaultConfig.element_attribute_ignorelist,
+            scroll_threshold_ms: providedConfig?.scroll_threshold_ms ?? defaultConfig.scroll_threshold_ms,
             selection_change_threshold_ms:
-                providedConfig?.selection_change_threshold_ms ?? DEFAULT_CONFIG.selection_change_threshold_ms,
-            mutation_threshold_ms: providedConfig?.mutation_threshold_ms ?? DEFAULT_CONFIG.mutation_threshold_ms,
+                providedConfig?.selection_change_threshold_ms ?? defaultConfig.selection_change_threshold_ms,
+            mutation_threshold_ms: providedConfig?.mutation_threshold_ms ?? defaultConfig.mutation_threshold_ms,
+            __onCapture: defaultConfig.__onCapture,
         }
     }
 
     constructor(readonly instance: PostHog, config?: DeadClicksAutoCaptureConfig) {
         this._config = this.asRequiredConfig(config)
-        this._onCapture = this._captureDeadClick.bind(this)
+        this._onCapture = this._config.__onCapture
     }
 
     start(observerTarget: Node) {

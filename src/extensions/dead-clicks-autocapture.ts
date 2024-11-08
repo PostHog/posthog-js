@@ -3,23 +3,9 @@ import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../constants'
 import { isBoolean, isObject } from '../utils/type-utils'
 import { assignableWindow, document, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { logger } from '../utils/logger'
-import { DecideResponse, Properties } from '../types'
+import { DecideResponse } from '../types'
 
 const LOGGER_PREFIX = '[Dead Clicks]'
-
-interface DeadClickCandidate {
-    node: Element
-    originalEvent: MouseEvent
-    timestamp: number
-    // time between click and the most recent scroll
-    scrollDelayMs?: number
-    // time between click and the most recent mutation
-    mutationDelayMs?: number
-    // time between click and the most recent selection changed event
-    selectionChangedDelayMs?: number
-    // if neither scroll nor mutation seen before threshold passed
-    absoluteDelayMs?: number
-}
 
 export const isDeadClicksEnabledForHeatmaps = () => {
     return true
@@ -50,12 +36,10 @@ export class DeadClicksAutocapture {
         this.startIfEnabled()
     }
 
-    public startIfEnabled({
-        onCapture,
-    }: { force?: boolean; onCapture?: (click: DeadClickCandidate, properties: Properties) => void } = {}) {
+    public startIfEnabled() {
         if (this.isEnabled(this)) {
             this.loadScript(() => {
-                this.start(onCapture)
+                this.start()
             })
         }
     }
@@ -78,7 +62,7 @@ export class DeadClicksAutocapture {
         )
     }
 
-    private start(onCapture?: (click: DeadClickCandidate, properties: Properties) => void) {
+    private start() {
         if (!document) {
             logger.error(LOGGER_PREFIX + ' `document` not found. Cannot start.')
             return
@@ -94,9 +78,6 @@ export class DeadClicksAutocapture {
                     ? this.instance.config.capture_dead_clicks
                     : undefined
             )
-            if (onCapture) {
-                this._lazyLoadedDeadClicksAutocapture.onCapture = onCapture
-            }
             this._lazyLoadedDeadClicksAutocapture.start(document)
             logger.info(`${LOGGER_PREFIX} starting...`)
         }

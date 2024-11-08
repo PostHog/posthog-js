@@ -386,14 +386,19 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
     it('can have alternative behaviour for onCapture', () => {
         jest.setSystemTime(0)
+        const replacementCapture = jest.fn()
+
+        lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance, {
+            __onCapture: replacementCapture,
+        })
+        lazyLoadedDeadClicksAutocapture.start(document)
+
         lazyLoadedDeadClicksAutocapture['_clicks'].push({
             node: document.body,
             originalEvent: { type: 'click' } as MouseEvent,
             timestamp: 900,
         })
         lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
-        const replacementCapture = jest.fn()
-        lazyLoadedDeadClicksAutocapture.onCapture = replacementCapture
 
         jest.setSystemTime(3001 + 900)
         lazyLoadedDeadClicksAutocapture['_checkClicks']()
