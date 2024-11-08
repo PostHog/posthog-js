@@ -229,6 +229,6 @@ describe('heatmaps', () => {
     it('starts dead clicks autocapture with the correct config', () => {
         const heatmapsDeadClicksInstance = posthog.heatmaps['deadClicksCapture']
         expect(heatmapsDeadClicksInstance.isEnabled(heatmapsDeadClicksInstance)).toBe(true)
-        expect(heatmapsDeadClicksInstance.onCapture).toBe(posthog.heatmaps['_onDeadClick'])
+        expect(heatmapsDeadClicksInstance.onCapture).toEqual(posthog.heatmaps['_onDeadClick'].bind(posthog.heatmaps))
     })
 })
