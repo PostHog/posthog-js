@@ -59,6 +59,9 @@ import {
     isEmptyObject,
     isEmptyString,
     isFunction,
+    isKnownUnEditableEvent,
+    isKnownUnsafeEditableEvent,
+    isNullish,
     isNumber,
     isObject,
     isString,
@@ -182,6 +185,8 @@ export const defaultConfig = (): PostHogConfig => ({
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
     person_profiles: 'identified_only',
     __add_tracing_headers: false,
+    // by default the before capture fn is the identity function
+    beforeCapture: (x) => x,
 })
 
 export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostHogConfig> => {
@@ -873,6 +878,18 @@ export class PostHog {
         const finalSet = { ...data.properties['$set'], ...data['$set'] }
         if (!isEmptyObject(finalSet)) {
             this.setPersonPropertiesForFlags(finalSet)
+        }
+
+        if (!isKnownUnEditableEvent(data.event)) {
+            const beforeCaptureResult = this.config.beforeCapture(data)
+            if (isNullish(beforeCaptureResult)) {
+                if (isKnownUnsafeEditableEvent(data.event)) {
+                    logger.info(`Event '${data.event}' was rejected. This can cause unexpected behavior.`)
+                }
+                return
+            } else {
+                data = beforeCaptureResult
+            }
         }
 
         this._internalEventEmitter.emit('eventCaptured', data)

@@ -6,33 +6,59 @@ export type Property = any
 export type Properties = Record<string, Property>
 
 export const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
+
+export const knownUnEditableEvent = [
+    '$web_experiment_applied',
+    '$$client_ingestion_warning',
+    '$feature_enrollment_update',
+    '$feature_flag_called',
+    'survey dismissed',
+    'survey sent',
+    'survey shown',
+    '$snapshot',
+] as const
+/**
+ * These events are not affected by the `beforeCapture` function
+ */
+export type KnownUnEditableEvent = typeof knownUnEditableEvent[number]
+
+export const knownUnsafeEditableEvent = [
+    '$pageview',
+    '$pageleave',
+    '$identify',
+    '$set',
+    '$groupidentify',
+    '$create_alias',
+] as const
+
+/**
+ * These events will be processed by the `beforeCapture` function
+ * but can cause unexpected confusion in data
+ * some features of PostHog rely on receiving 100% of these events
+ */
+export type KnownUnsafeEditableEvent = typeof knownUnsafeEditableEvent[number]
+
+/**
+ * These events will be processed by the `beforeCapture` function
+ */
 type KnownEventName =
-    | '$pageview'
     | '$heatmaps_data'
-    | '$pageleave'
-    | '$identify'
-    | '$set'
-    | '$groupidentify'
-    | '$create_alias'
     | '$opt_in'
-    | '$web_experiment_applied'
-    | '$$client_ingestion_warning'
-    | '$feature_enrollment_update'
-    | '$feature_flag_called'
     | '$exception'
     | '$$heatmap'
     | '$web_vitals'
-    | 'survey dismissed'
-    | 'survey sent'
-    | 'survey shown'
-    | '$snapshot'
     | '$dead_click'
     | '$autocapture'
     | typeof COPY_AUTOCAPTURE_EVENT
     | '$rageclick'
-// TODO must be able to add a string as well,
-//  such that we get autocorrect when using posthog-js in typesscript but can also add custom events
-export type EventName = KnownEventName | string
+
+export type EventName =
+    | KnownUnEditableEvent
+    | KnownUnsafeEditableEvent
+    | KnownEventName
+    // magic value so that the type of eventname is a set of known strings or any other strings
+    // means you get autocomplete for known strings
+    | (string & {})
 
 export interface CaptureResult {
     uuid: string
@@ -243,7 +269,11 @@ export interface PostHogConfig {
     feature_flag_request_timeout_ms: number
     get_device_id: (uuid: string) => string
     name: string
+    /**
+     * this is a read-only function that can be used to react to event capture
+     */
     _onCapture: (eventName: string, eventData: CaptureResult) => void
+    beforeCapture: (cr: CaptureResult) => CaptureResult | null
     capture_performance?: boolean | PerformanceCaptureConfig
     // Should only be used for testing. Could negatively impact performance.
     disable_compression: boolean

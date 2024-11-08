@@ -1,3 +1,10 @@
+import {
+    KnownUnEditableEvent,
+    knownUnEditableEvent,
+    KnownUnsafeEditableEvent,
+    knownUnsafeEditableEvent,
+} from '../types'
+
 // eslint-disable-next-line posthog-js/no-direct-array-check
 const nativeIsArray = Array.isArray
 const ObjProto = Object.prototype
@@ -87,4 +94,12 @@ export const isFormData = (x: unknown): x is FormData => {
 export const isFile = (x: unknown): x is File => {
     // eslint-disable-next-line posthog-js/no-direct-file-check
     return x instanceof File
+}
+
+export const isKnownUnsafeEditableEvent = (x: unknown): x is KnownUnsafeEditableEvent => {
+    return knownUnsafeEditableEvent.includes(x as any)
+}
+
+export const isKnownUnEditableEvent = (x: unknown): x is KnownUnEditableEvent => {
+    return knownUnEditableEvent.includes(x as any)
 }
