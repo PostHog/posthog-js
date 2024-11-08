@@ -1,6 +1,6 @@
 import { includes, registerEvent } from './utils'
 import RageClick from './extensions/rageclick'
-import { DecideResponse, Properties } from './types'
+import { DeadClickCandidate, DecideResponse, Properties } from './types'
 import { PostHog } from './posthog-core'
 
 import { document, window } from './utils/globals'
@@ -118,6 +118,10 @@ export class Heatmaps {
         return buffer
     }
 
+    private _onDeadClick(click: DeadClickCandidate): void {
+        this._onClick(click.originalEvent, 'deadclick')
+    }
+
     private _setupListeners(): void {
         if (!window || !document) {
             return
@@ -126,12 +130,12 @@ export class Heatmaps {
         registerEvent(document, 'click', (e) => this._onClick((e || window?.event) as MouseEvent), false, true)
         registerEvent(document, 'mousemove', (e) => this._onMouseMove((e || window?.event) as MouseEvent), false, true)
 
-        this.deadClicksCapture = new DeadClicksAutocapture(this.instance, isDeadClicksEnabledForHeatmaps)
-        this.deadClicksCapture.startIfEnabled({
-            onCapture: (click) => {
-                this._onClick(click.originalEvent, 'deadclick')
-            },
-        })
+        this.deadClicksCapture = new DeadClicksAutocapture(
+            this.instance,
+            isDeadClicksEnabledForHeatmaps,
+            this._onDeadClick.bind(this)
+        )
+        this.deadClicksCapture.startIfEnabled()
 
         this._initialized = true
     }

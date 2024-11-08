@@ -3,7 +3,7 @@ import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../constants'
 import { isBoolean, isObject } from '../utils/type-utils'
 import { assignableWindow, document, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { logger } from '../utils/logger'
-import { DecideResponse } from '../types'
+import { DeadClicksAutoCaptureConfig, DecideResponse } from '../types'
 
 const LOGGER_PREFIX = '[Dead Clicks]'
 
@@ -23,7 +23,11 @@ export class DeadClicksAutocapture {
 
     private _lazyLoadedDeadClicksAutocapture: LazyLoadedDeadClicksAutocaptureInterface | undefined
 
-    constructor(readonly instance: PostHog, readonly isEnabled: (dca: DeadClicksAutocapture) => boolean) {
+    constructor(
+        readonly instance: PostHog,
+        readonly isEnabled: (dca: DeadClicksAutocapture) => boolean,
+        readonly onCapture: DeadClicksAutoCaptureConfig['__onCapture']
+    ) {
         this.startIfEnabled()
     }
 
@@ -72,11 +76,14 @@ export class DeadClicksAutocapture {
             !this._lazyLoadedDeadClicksAutocapture &&
             assignableWindow.__PosthogExtensions__?.initDeadClicksAutocapture
         ) {
+            const config = isObject(this.instance.config.capture_dead_clicks)
+                ? this.instance.config.capture_dead_clicks
+                : {}
+            config.__onCapture = this.onCapture
+
             this._lazyLoadedDeadClicksAutocapture = assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture(
                 this.instance,
-                isObject(this.instance.config.capture_dead_clicks)
-                    ? this.instance.config.capture_dead_clicks
-                    : undefined
+                config
             )
             this._lazyLoadedDeadClicksAutocapture.start(document)
             logger.info(`${LOGGER_PREFIX} starting...`)
