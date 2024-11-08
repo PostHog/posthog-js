@@ -26,7 +26,7 @@ export class DeadClicksAutocapture {
     constructor(
         readonly instance: PostHog,
         readonly isEnabled: (dca: DeadClicksAutocapture) => boolean,
-        readonly onCapture: DeadClicksAutoCaptureConfig['__onCapture']
+        readonly onCapture?: DeadClicksAutoCaptureConfig['__onCapture']
     ) {
         this.startIfEnabled()
     }
