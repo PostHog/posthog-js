@@ -66,7 +66,7 @@ function VisibilityAndClickTracker({
     flag: string
     children: React.ReactNode
     onIntersect: (entry: IntersectionObserverEntry) => void
-    onClick?: () => void
+    onClick: () => void
     trackView: boolean
     options?: IntersectionObserverInit
 }): JSX.Element {
