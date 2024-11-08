@@ -17,8 +17,9 @@ export const knownUnEditableEvent = [
     'survey shown',
     '$snapshot',
 ] as const
+
 /**
- * These events are not affected by the `beforeCapture` function
+ * These events are not processed by the `beforeCapture` function
  */
 export type KnownUnEditableEvent = typeof knownUnEditableEvent[number]
 
@@ -32,14 +33,15 @@ export const knownUnsafeEditableEvent = [
 ] as const
 
 /**
- * These events will be processed by the `beforeCapture` function
- * but can cause unexpected confusion in data
- * some features of PostHog rely on receiving 100% of these events
+ * These events can be processed by the `beforeCapture` function
+ * but can cause unexpected confusion in data.
+ *
+ * Some features of PostHog rely on receiving 100% of these events
  */
 export type KnownUnsafeEditableEvent = typeof knownUnsafeEditableEvent[number]
 
 /**
- * These events will be processed by the `beforeCapture` function
+ * These known events can be processed by the `beforeCapture` function
  */
 type KnownEventName =
     | '$heatmaps_data'
@@ -56,8 +58,8 @@ export type EventName =
     | KnownUnEditableEvent
     | KnownUnsafeEditableEvent
     | KnownEventName
-    // magic value so that the type of eventname is a set of known strings or any other strings
-    // means you get autocomplete for known strings
+    // magic value so that the type of event name is a set of known strings or any other strings
+    // which means you get autocomplete for known strings
     | (string & {})
 
 export interface CaptureResult {
