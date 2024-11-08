@@ -34,18 +34,6 @@ describe('PostHogFeature component', () => {
                 </PostHogProvider>
             )
     )
-    given(
-        'renderMultipleChildren',
-        () => () =>
-            render(
-                <PostHogProvider client={given.posthog}>
-                    <PostHogFeature flag={given.featureFlag} match={given.matchValue}>
-                        <div data-testid="helloDiv">Hello</div>
-                        <div data-testid="worldDiv">World!</div>
-                    </PostHogFeature>
-                </PostHogProvider>
-            )
-    )
     given('posthog', () => ({
         isFeatureEnabled: (flag) => !!FEATURE_FLAG_STATUS[flag],
         getFeatureFlag: (flag) => FEATURE_FLAG_STATUS[flag],
@@ -102,7 +90,19 @@ describe('PostHogFeature component', () => {
     })
 
     it('should track an interaction with each child node of the feature component', () => {
-        given.renderMultipleChildren()
+        given(
+            'render',
+            () => () =>
+                render(
+                    <PostHogProvider client={given.posthog}>
+                        <PostHogFeature flag={given.featureFlag} match={given.matchValue}>
+                            <div data-testid="helloDiv">Hello</div>
+                            <div data-testid="worldDiv">World!</div>
+                        </PostHogFeature>
+                    </PostHogProvider>
+                )
+        )
+        given.render()
 
         fireEvent.click(screen.getByTestId('helloDiv'))
         fireEvent.click(screen.getByTestId('helloDiv'))
@@ -113,7 +113,7 @@ describe('PostHogFeature component', () => {
             feature_flag: 'test',
             $set: { '$feature_interaction/test': true },
         })
-        expect(given.posthog.capture).toHaveBeenCalledTimes(2)
+        expect(given.posthog.capture).toHaveBeenCalledTimes(1)
     })
 
     it('should not fire events when interaction is disabled', () => {
