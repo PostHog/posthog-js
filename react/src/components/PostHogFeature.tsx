@@ -61,6 +61,7 @@ function VisibilityAndClickTracker({
     onClick,
     trackView,
     options,
+    ...props
 }: {
     flag: string
     children: React.ReactNode
@@ -85,7 +86,7 @@ function VisibilityAndClickTracker({
     }, [flag, options, posthog, ref, trackView, onIntersect])
 
     return (
-        <div ref={ref} onClick={onClick}>
+        <div ref={ref} {...props} onClick={onClick}>
             {children}
         </div>
     )
@@ -97,6 +98,7 @@ function VisibilityAndClickTrackers({
     trackInteraction,
     trackView,
     options,
+    ...props
 }: {
     flag: string
     children: React.ReactNode
@@ -130,6 +132,7 @@ function VisibilityAndClickTrackers({
                 onIntersect={onIntersect}
                 trackView={trackView}
                 options={options}
+                {...props}
             >
                 {child}
             </VisibilityAndClickTracker>
