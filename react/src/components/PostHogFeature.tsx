@@ -1,5 +1,5 @@
 import { useFeatureFlagPayload, useFeatureFlagVariantKey, usePostHog } from '../hooks'
-import React, { ReactNode, Children, useCallback, useEffect, useRef } from 'react'
+import React, { Children, ReactNode, useCallback, useEffect, useRef } from 'react'
 import { PostHog } from '../context'
 import { isFunction, isNull, isUndefined } from '../utils/type-utils'
 
