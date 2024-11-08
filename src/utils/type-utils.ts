@@ -1,3 +1,4 @@
+import { includes } from '.'
 import {
     KnownUnEditableEvent,
     knownUnEditableEvent,
@@ -97,9 +98,9 @@ export const isFile = (x: unknown): x is File => {
 }
 
 export const isKnownUnsafeEditableEvent = (x: unknown): x is KnownUnsafeEditableEvent => {
-    return knownUnsafeEditableEvent.includes(x as any)
+    return includes(knownUnsafeEditableEvent as unknown as string[], x)
 }
 
 export const isKnownUnEditableEvent = (x: unknown): x is KnownUnEditableEvent => {
-    return knownUnEditableEvent.includes(x as any)
+    return includes(knownUnEditableEvent as unknown as string[], x as any)
 }
