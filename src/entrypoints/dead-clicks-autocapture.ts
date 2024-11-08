@@ -262,7 +262,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
 }
 
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
-assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture = (ph, config?: DeadClicksAutoCaptureConfig) =>
+assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture = (ph, config) =>
     new LazyLoadedDeadClicksAutocapture(ph, config)
 
 export default LazyLoadedDeadClicksAutocapture
