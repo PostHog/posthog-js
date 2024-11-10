@@ -48,9 +48,14 @@ describe('posthog core - before capture', () => {
             beforeCapture: rejectingEventFn,
         })
         ;(posthog._send_request as jest.Mock).mockClear()
+
         const capturedData = posthog.capture(eventName, {}, {})
+
         expect(capturedData).toBeUndefined()
         expect(posthog._send_request).not.toHaveBeenCalled()
+        expect(jest.mocked(logger).info).toHaveBeenCalledWith(
+            `Event '${eventName}' was rejected in beforeCapture function`
+        )
     })
 
     it('can edit an event', () => {
@@ -58,10 +63,11 @@ describe('posthog core - before capture', () => {
             beforeCapture: editingEventFn,
         })
         ;(posthog._send_request as jest.Mock).mockClear()
+
         const capturedData = posthog.capture(eventName, {}, {})
+
         expect(capturedData).toHaveProperty(['properties', 'edited'], true)
         expect(capturedData).toHaveProperty(['$set', 'edited'], true)
-
         expect(posthog._send_request).toHaveBeenCalledWith({
             batchKey: undefined,
             callback: expect.any(Function),
@@ -112,8 +118,8 @@ describe('posthog core - before capture', () => {
 
         posthog.capture(randomUnsafeEditableEvent, {}, {})
 
-        expect(jest.mocked(logger).info).toHaveBeenCalledWith(
-            `Event '${randomUnsafeEditableEvent}' was rejected. This can cause unexpected behavior.`
+        expect(jest.mocked(logger).warn).toHaveBeenCalledWith(
+            `Event '${randomUnsafeEditableEvent}' was rejected in beforeCapture function. This can cause unexpected behavior.`
         )
     })
 })

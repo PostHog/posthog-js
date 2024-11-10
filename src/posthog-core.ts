@@ -883,8 +883,11 @@ export class PostHog {
         if (!isKnownUnEditableEvent(data.event)) {
             const beforeCaptureResult = this.config.beforeCapture(data)
             if (isNullish(beforeCaptureResult)) {
+                const logMessage = `Event '${data.event}' was rejected in beforeCapture function`
                 if (isKnownUnsafeEditableEvent(data.event)) {
-                    logger.info(`Event '${data.event}' was rejected. This can cause unexpected behavior.`)
+                    logger.warn(`${logMessage}. This can cause unexpected behavior.`)
+                } else {
+                    logger.info(logMessage)
                 }
                 return
             } else {

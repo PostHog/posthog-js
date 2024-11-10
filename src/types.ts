@@ -41,9 +41,11 @@ export const knownUnsafeEditableEvent = [
 export type KnownUnsafeEditableEvent = typeof knownUnsafeEditableEvent[number]
 
 /**
- * These known events can be processed by the `beforeCapture` function
+ * These are known events PostHog events that can be processed by the `beforeCapture` function
+ * That means PostHog functionality does not rely on receiving 100% of these for calculations
+ * So, it is safe to sample them to reduce the volume of events sent to PostHog
  */
-type KnownEventName =
+export type KnownEventName =
     | '$heatmaps_data'
     | '$opt_in'
     | '$exception'
