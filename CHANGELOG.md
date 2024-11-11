@@ -1,3 +1,7 @@
+## 1.182.0 - 2024-11-11
+
+- chore: upgrade rrweb to alpha.17 (#1489)
+
 ## 1.181.0 - 2024-11-05
 
 - chore: add stack type (#1511)
