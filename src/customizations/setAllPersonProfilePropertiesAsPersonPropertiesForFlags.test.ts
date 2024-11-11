@@ -11,6 +11,10 @@ jest.mock('../utils/globals', () => {
         ...orig,
         mockURLGetter,
         mockReferrerGetter,
+        userAgent: 'Mozilla/5.0 (Android 4.4; Mobile; rv:41.0) Gecko/41.0 Firefox/41.0',
+        navigator: {
+            vendor: '',
+        },
         document: {
             ...orig.document,
             createElement: (...args: any[]) => orig.document.createElement(...args),
@@ -51,10 +55,12 @@ describe('setAllPersonPropertiesForFlags', () => {
         // assert
         expect(posthog.persistence?.props[STORED_PERSON_PROPERTIES_KEY]).toMatchInlineSnapshot(`
             Object {
-              "$browser": "Safari",
+              "$browser": "Mobile Safari",
               "$browser_version": null,
               "$current_url": "https://example.com?utm_source=foo",
-              "$device_type": "Desktop",
+              "$device_type": "Mobile",
+              "$os": "Android",
+              "$os_version": "4.4.0",
               "$referrer": "https://referrer.com",
               "$referring_domain": "referrer.com",
               "dclid": null,
