@@ -1241,6 +1241,7 @@ export class SessionRecording {
         this._tryAddCustomEvent('recording paused', { reason: 'url blocker' })
 
         this._urlBlocked = true
+        document?.body?.classList?.add('ph-no-capture')
 
         // Clear the snapshot timer since we don't want new snapshots while paused
         clearInterval(this._fullSnapshotTimer)
@@ -1257,6 +1258,7 @@ export class SessionRecording {
         }
 
         this._urlBlocked = false
+        document?.body?.classList?.remove('ph-no-capture')
 
         this._tryTakeFullSnapshot()
 
