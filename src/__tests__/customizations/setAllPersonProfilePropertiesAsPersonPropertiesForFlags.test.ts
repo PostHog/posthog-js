@@ -4,7 +4,7 @@ import { setAllPersonProfilePropertiesAsPersonPropertiesForFlags } from '../../c
 import { STORED_PERSON_PROPERTIES_KEY } from '../../constants'
 
 jest.mock('../../utils/globals', () => {
-    const orig = jest.requireActual('../utils/globals')
+    const orig = jest.requireActual('../../utils/globals')
     const mockURLGetter = jest.fn()
     const mockReferrerGetter = jest.fn()
     return {
