@@ -1,9 +1,9 @@
-import { uuidv7 } from '../uuidv7'
-import { createPosthogInstance } from '../__tests__/helpers/posthog-instance'
-import { setAllPersonProfilePropertiesAsPersonPropertiesForFlags } from './setAllPersonProfilePropertiesAsPersonPropertiesForFlags'
-import { STORED_PERSON_PROPERTIES_KEY } from '../constants'
+import { uuidv7 } from '../../uuidv7'
+import { createPosthogInstance } from '../helpers/posthog-instance'
+import { setAllPersonProfilePropertiesAsPersonPropertiesForFlags } from '../../customizations/setAllPersonProfilePropertiesAsPersonPropertiesForFlags'
+import { STORED_PERSON_PROPERTIES_KEY } from '../../constants'
 
-jest.mock('../utils/globals', () => {
+jest.mock('../../utils/globals', () => {
     const orig = jest.requireActual('../utils/globals')
     const mockURLGetter = jest.fn()
     const mockReferrerGetter = jest.fn()
@@ -36,7 +36,7 @@ jest.mock('../utils/globals', () => {
 })
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURLGetter, mockReferrerGetter } = require('../utils/globals')
+const { mockURLGetter, mockReferrerGetter } = require('../../utils/globals')
 
 describe('setAllPersonPropertiesForFlags', () => {
     beforeEach(() => {
