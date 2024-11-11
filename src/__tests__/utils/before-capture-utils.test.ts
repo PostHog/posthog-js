@@ -2,21 +2,28 @@ import { sampleByDistinctId, sampleByEvent, sampleBySessionId } from '../../util
 import { CaptureResult } from '../../types'
 import { isNull } from '../../utils/type-utils'
 
-function expectRoughlyFiftyPercent(emittedEvents: any[]) {
-    expect(emittedEvents.length).toBeGreaterThanOrEqual(40)
-    expect(emittedEvents.length).toBeLessThanOrEqual(60)
-}
+beforeAll(() => {
+    let fiftyFiftyRandom = true
+    Math.random = () => {
+        const val = fiftyFiftyRandom ? 0.48 : 0.51
+        fiftyFiftyRandom = !fiftyFiftyRandom
+        return val
+    }
+})
 
 describe('before capture utils', () => {
     it('can sample by event name', () => {
         const sampleFn = sampleByEvent(['$autocapture'], 50)
+
         const results = []
         Array.from({ length: 100 }).forEach(() => {
             const captureResult = { event: '$autocapture' } as unknown as CaptureResult
             results.push(sampleFn(captureResult))
         })
         const emittedEvents = results.filter((r) => !isNull(r))
-        expectRoughlyFiftyPercent(emittedEvents)
+
+        // random is mocked so that it alternates between 0.48 and 0.51
+        expect(emittedEvents.length).toBe(50)
     })
 
     it('can sample by distinct id', () => {
