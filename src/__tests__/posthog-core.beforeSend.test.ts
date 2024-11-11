@@ -114,7 +114,7 @@ describe('posthog core - before send', () => {
         })
     })
 
-    it('cannot make arbitrary event invalid', () => {
+    it('warned when making arbitrary event invalid', () => {
         const posthog = posthogWith({
             beforeSend: (cr) => {
                 cr.properties = undefined
@@ -125,7 +125,7 @@ describe('posthog core - before send', () => {
 
         const capturedData = posthog.capture(eventName, { value: 'provided' }, {})
 
-        expect(capturedData).toHaveProperty(['properties', 'value'], 'provided')
+        expect(capturedData).not.toHaveProperty(['properties', 'value'], 'provided')
         expect(posthog._send_request).toHaveBeenCalledWith({
             batchKey: undefined,
             callback: expect.any(Function),
@@ -134,6 +134,9 @@ describe('posthog core - before send', () => {
             method: 'POST',
             url: 'https://us.i.posthog.com/e/',
         })
+        expect(jest.mocked(logger).warn).toHaveBeenCalledWith(
+            `Event '${eventName}' has no properties after beforeSend function, this is likely an error.`
+        )
     })
 
     it('cannot edit an un-editable event', () => {

@@ -891,6 +891,11 @@ export class PostHog {
                 }
                 return
             } else {
+                if (!beforeSendResult.properties || isEmptyObject(beforeSendResult.properties)) {
+                    logger.warn(
+                        `Event '${data.event}' has no properties after beforeSend function, this is likely an error.`
+                    )
+                }
                 data = beforeSendResult
             }
         }
