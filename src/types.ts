@@ -274,7 +274,11 @@ export interface PostHogConfig {
      * this is a read-only function that can be used to react to event capture
      */
     _onCapture: (eventName: string, eventData: CaptureResult) => void
-    beforeCapture: (cr: CaptureResult) => CaptureResult | null
+    /**
+     * This function - if provided - is called immediately before sending data to the server.
+     * It allows you to edit data before it is sent, or choose not to send it all.
+     */
+    beforeSend: (cr: CaptureResult) => CaptureResult | null
     capture_performance?: boolean | PerformanceCaptureConfig
     // Should only be used for testing. Could negatively impact performance.
     disable_compression: boolean

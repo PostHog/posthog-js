@@ -186,7 +186,7 @@ export const defaultConfig = (): PostHogConfig => ({
     person_profiles: 'identified_only',
     __add_tracing_headers: false,
     // by default the before capture fn is the identity function
-    beforeCapture: (x) => x,
+    beforeSend: (x) => x,
 })
 
 export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostHogConfig> => {
@@ -881,9 +881,9 @@ export class PostHog {
         }
 
         if (!isKnownUnEditableEvent(data.event)) {
-            const beforeCaptureResult = this.config.beforeCapture(data)
-            if (isNullish(beforeCaptureResult)) {
-                const logMessage = `Event '${data.event}' was rejected in beforeCapture function`
+            const beforeSendResult = this.config.beforeSend(data)
+            if (isNullish(beforeSendResult)) {
+                const logMessage = `Event '${data.event}' was rejected in beforeSend function`
                 if (isKnownUnsafeEditableEvent(data.event)) {
                     logger.warn(`${logMessage}. This can cause unexpected behavior.`)
                 } else {
@@ -891,7 +891,7 @@ export class PostHog {
                 }
                 return
             } else {
-                data = beforeCaptureResult
+                data = beforeSendResult
             }
         }
 

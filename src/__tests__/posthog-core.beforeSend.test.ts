@@ -24,11 +24,11 @@ const editingEventFn = (captureResult: CaptureResult): CaptureResult => {
     }
 }
 
-describe('posthog core - before capture', () => {
+describe('posthog core - before send', () => {
     const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
     const eventName = '$event'
 
-    const posthogWith = (configOverride: Pick<Partial<PostHogConfig>, 'beforeCapture'>): PostHog => {
+    const posthogWith = (configOverride: Pick<Partial<PostHogConfig>, 'beforeSend'>): PostHog => {
         const posthog = defaultPostHog().init('testtoken', configOverride, uuidv7())
         return Object.assign(posthog, {
             _send_request: jest.fn(),
@@ -45,7 +45,7 @@ describe('posthog core - before capture', () => {
 
     it('can reject an event', () => {
         const posthog = posthogWith({
-            beforeCapture: rejectingEventFn,
+            beforeSend: rejectingEventFn,
         })
         ;(posthog._send_request as jest.Mock).mockClear()
 
@@ -54,13 +54,13 @@ describe('posthog core - before capture', () => {
         expect(capturedData).toBeUndefined()
         expect(posthog._send_request).not.toHaveBeenCalled()
         expect(jest.mocked(logger).info).toHaveBeenCalledWith(
-            `Event '${eventName}' was rejected in beforeCapture function`
+            `Event '${eventName}' was rejected in beforeSend function`
         )
     })
 
     it('can edit an event', () => {
         const posthog = posthogWith({
-            beforeCapture: editingEventFn,
+            beforeSend: editingEventFn,
         })
         ;(posthog._send_request as jest.Mock).mockClear()
 
@@ -80,7 +80,7 @@ describe('posthog core - before capture', () => {
 
     it('cannot reject an un-editable event', () => {
         const posthog = posthogWith({
-            beforeCapture: rejectingEventFn,
+            beforeSend: rejectingEventFn,
         })
         ;(posthog._send_request as jest.Mock).mockClear()
         // chooses a random string from knownUnEditableEvent
@@ -94,7 +94,7 @@ describe('posthog core - before capture', () => {
 
     it('cannot edit an un-editable event', () => {
         const posthog = posthogWith({
-            beforeCapture: editingEventFn,
+            beforeSend: editingEventFn,
         })
         ;(posthog._send_request as jest.Mock).mockClear()
         // chooses a random string from knownUnEditableEvent
@@ -109,7 +109,7 @@ describe('posthog core - before capture', () => {
 
     it('logs a warning when rejecting an unsafe to edit event', () => {
         const posthog = posthogWith({
-            beforeCapture: rejectingEventFn,
+            beforeSend: rejectingEventFn,
         })
         ;(posthog._send_request as jest.Mock).mockClear()
         // chooses a random string from knownUnEditableEvent
@@ -119,7 +119,7 @@ describe('posthog core - before capture', () => {
         posthog.capture(randomUnsafeEditableEvent, {}, {})
 
         expect(jest.mocked(logger).warn).toHaveBeenCalledWith(
-            `Event '${randomUnsafeEditableEvent}' was rejected in beforeCapture function. This can cause unexpected behavior.`
+            `Event '${randomUnsafeEditableEvent}' was rejected in beforeSend function. This can cause unexpected behavior.`
         )
     })
 })

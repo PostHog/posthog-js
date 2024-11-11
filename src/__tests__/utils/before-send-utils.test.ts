@@ -11,7 +11,7 @@ beforeAll(() => {
     }
 })
 
-describe('before capture utils', () => {
+describe('before send utils', () => {
     it('can sample by event name', () => {
         const sampleFn = sampleByEvent(['$autocapture'], 50)
 
