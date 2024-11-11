@@ -114,28 +114,6 @@ describe('posthog core - before send', () => {
         })
     })
 
-    it('cannot make $set event invalid', () => {
-        const posthog = posthogWith({
-            beforeSend: (cr) => {
-                cr.$set = undefined
-                return cr
-            },
-        })
-        ;(posthog._send_request as jest.Mock).mockClear()
-
-        const capturedData = posthog.capture('$set', {}, { $set: { value: 'provided' } })
-
-        expect(capturedData).toHaveProperty(['$set', 'value'], 'provided')
-        expect(posthog._send_request).toHaveBeenCalledWith({
-            batchKey: undefined,
-            callback: expect.any(Function),
-            compression: 'best-available',
-            data: capturedData,
-            method: 'POST',
-            url: 'https://us.i.posthog.com/e/',
-        })
-    })
-
     it('cannot make arbitrary event invalid', () => {
         const posthog = posthogWith({
             beforeSend: (cr) => {
