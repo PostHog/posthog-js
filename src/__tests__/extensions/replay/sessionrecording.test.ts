@@ -2199,8 +2199,6 @@ describe('SessionRecording', () => {
                         $snapshot_data: [
                             { type: 3, data: { source: 1 } },
                             { type: 3, data: { source: 2 } },
-                            // This should be in the buffer
-                            // { type: 5, data: { tag: 'recording paused', payload: { reason: 'url blocker' } } },
                         ],
                     },
                     expect.any(Object)
@@ -2227,11 +2225,6 @@ describe('SessionRecording', () => {
                     type: 3,
                     data: { source: 5 },
                 }),
-                // Resume data is not in the buffer?
-                // expect.objectContaining({
-                //     type: 5,
-                //     data: { tag: 'recording paused', payload: { reason: 'url blocker' } },
-                // })
             ])
         })
     })
