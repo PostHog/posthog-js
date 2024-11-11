@@ -58,7 +58,9 @@
         "@rollup/plugin-node-resolve": "^15.3.0",
         "@rollup/plugin-terser": "^0.4.4",
         "@rollup/plugin-typescript": "^12.1.1",
-        "@rrweb/types": "2.0.0-alpha.16",
+        "@rrweb/record": "2.0.0-alpha.17",
+        "@rrweb/rrweb-plugin-console-record": "2.0.0-alpha.17",
+        "@rrweb/types": "2.0.0-alpha.17",
         "@sentry/types": "8.7.0",
         "@testing-library/dom": "^9.3.0",
         "@testing-library/jest-dom": "^6.5.0",
@@ -103,9 +105,6 @@
         "rollup": "^4.24.0",
         "rollup-plugin-dts": "^6.1.1",
         "rollup-plugin-visualizer": "^5.12.0",
-        "rrweb": "2.0.0-alpha.16",
-        "@rrweb/rrweb-plugin-console-record": "2.0.0-alpha.15",
-        "rrweb-snapshot": "2.0.0-alpha.16",
         "sinon": "9.0.2",
         "testcafe": "1.19.0",
         "testcafe-browser-provider-browserstack": "1.14.0",
@@ -127,7 +126,8 @@
     ],
     "pnpm": {
         "patchedDependencies": {
-            "rrweb@2.0.0-alpha.16": "patches/rrweb@2.0.0-alpha.16.patch"
+            "@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17": "patches/@rrweb__rrweb-plugin-console-record@2.0.0-alpha.17.patch",
+            "@rrweb/record@2.0.0-alpha.17": "patches/@rrweb__record@2.0.0-alpha.17.patch"
         }
     }
 }

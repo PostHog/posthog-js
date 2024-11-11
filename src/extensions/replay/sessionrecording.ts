@@ -64,10 +64,6 @@ export const RECORDING_MAX_EVENT_SIZE = ONE_KB * ONE_KB * 0.9 // ~1mb (with some
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
 
-// NOTE: Importing this type is problematic as we can't safely bundle it to a TS definition so, instead we redefine.
-// import type { record } from 'rrweb2/typings'
-// import type { recordOptions } from 'rrweb/typings/types'
-
 const ACTIVE_SOURCES = [
     IncrementalSource.MouseMove,
     IncrementalSource.MouseInteraction,
@@ -840,7 +836,7 @@ export class SessionRecording {
 
     private _onScriptLoaded() {
         // rrweb config info: https://github.com/rrweb-io/rrweb/blob/7d5d0033258d6c29599fb08412202d9a2c7b9413/src/record/index.ts#L28
-        const sessionRecordingOptions: recordOptions<eventWithTime> = {
+        const sessionRecordingOptions: recordOptions = {
             // select set of rrweb config options we expose to our users
             // see https://github.com/rrweb-io/rrweb/blob/master/guide.md
             blockClass: 'ph-no-capture',
