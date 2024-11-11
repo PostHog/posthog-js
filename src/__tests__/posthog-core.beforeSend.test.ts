@@ -92,6 +92,72 @@ describe('posthog core - before send', () => {
         expect(posthog._send_request).toHaveBeenCalled()
     })
 
+    it('can sanitize $set event', () => {
+        const posthog = posthogWith({
+            beforeSend: (cr) => {
+                cr.$set = { value: 'edited' }
+                return cr
+            },
+        })
+        ;(posthog._send_request as jest.Mock).mockClear()
+
+        const capturedData = posthog.capture('$set', {}, { $set: { value: 'provided' } })
+
+        expect(capturedData).toHaveProperty(['$set', 'value'], 'edited')
+        expect(posthog._send_request).toHaveBeenCalledWith({
+            batchKey: undefined,
+            callback: expect.any(Function),
+            compression: 'best-available',
+            data: capturedData,
+            method: 'POST',
+            url: 'https://us.i.posthog.com/e/',
+        })
+    })
+
+    it('cannot make $set event invalid', () => {
+        const posthog = posthogWith({
+            beforeSend: (cr) => {
+                cr.$set = undefined
+                return cr
+            },
+        })
+        ;(posthog._send_request as jest.Mock).mockClear()
+
+        const capturedData = posthog.capture('$set', {}, { $set: { value: 'provided' } })
+
+        expect(capturedData).toHaveProperty(['$set', 'value'], 'provided')
+        expect(posthog._send_request).toHaveBeenCalledWith({
+            batchKey: undefined,
+            callback: expect.any(Function),
+            compression: 'best-available',
+            data: capturedData,
+            method: 'POST',
+            url: 'https://us.i.posthog.com/e/',
+        })
+    })
+
+    it('cannot make arbitrary event invalid', () => {
+        const posthog = posthogWith({
+            beforeSend: (cr) => {
+                cr.properties = undefined
+                return cr
+            },
+        })
+        ;(posthog._send_request as jest.Mock).mockClear()
+
+        const capturedData = posthog.capture(eventName, { value: 'provided' }, {})
+
+        expect(capturedData).toHaveProperty(['properties', 'value'], 'provided')
+        expect(posthog._send_request).toHaveBeenCalledWith({
+            batchKey: undefined,
+            callback: expect.any(Function),
+            compression: 'best-available',
+            data: capturedData,
+            method: 'POST',
+            url: 'https://us.i.posthog.com/e/',
+        })
+    })
+
     it('cannot edit an un-editable event', () => {
         const posthog = posthogWith({
             beforeSend: editingEventFn,

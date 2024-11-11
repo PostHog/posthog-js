@@ -17,7 +17,6 @@ export const knownUnEditableEvent = [
     'survey shown',
     '$snapshot',
     '$identify',
-    '$set',
     '$groupidentify',
     '$create_alias',
 ] as const
@@ -27,7 +26,7 @@ export const knownUnEditableEvent = [
  */
 export type KnownUnEditableEvent = typeof knownUnEditableEvent[number]
 
-export const knownUnsafeEditableEvent = ['$pageview', '$pageleave'] as const
+export const knownUnsafeEditableEvent = ['$pageview', '$pageleave', '$set'] as const
 
 /**
  * These events can be processed by the `beforeCapture` function
