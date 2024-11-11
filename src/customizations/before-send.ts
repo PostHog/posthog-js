@@ -1,6 +1,6 @@
-import { clampToRange } from './number-utils'
+import { clampToRange } from '../utils/number-utils'
 import { CaptureResult, KnownEventName } from '../types'
-import { includes } from './index'
+import { includes } from '../utils'
 
 function simpleHash(str: string) {
     let hash = 0

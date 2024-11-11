@@ -1,6 +1,6 @@
-import { sampleByDistinctId, sampleByEvent, sampleBySessionId } from '../../utils/before-capture.utils'
 import { CaptureResult } from '../../types'
 import { isNull } from '../../utils/type-utils'
+import { sampleByDistinctId, sampleByEvent, sampleBySessionId } from '../../customizations/before-send'
 
 beforeAll(() => {
     let fiftyFiftyRandom = true
