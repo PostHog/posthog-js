@@ -1,5 +1,7 @@
 /// <reference lib="dom" />
 
+import '@testing-library/jest-dom'
+
 import { PostHogPersistence } from '../../../posthog-persistence'
 import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
@@ -2184,6 +2186,7 @@ describe('SessionRecording', () => {
             // Simulate URL change to blocked URL
             fakeNavigateTo('https://test.com/blocked')
             _emit(createIncrementalSnapshot({ data: { source: 3 } }))
+            expect(document.body).toHaveClass('ph-no-capture')
 
             await waitFor(() => {
                 // Verify the buffer was flushed with all events including pause
@@ -2213,6 +2216,8 @@ describe('SessionRecording', () => {
 
             // Verify recording resumes with resume event
             _emit(createIncrementalSnapshot({ data: { source: 5 } }))
+
+            expect(document.body).not.toHaveClass('ph-no-capture')
 
             expect(sessionRecording['buffer'].data).toStrictEqual([
                 expect.objectContaining({
