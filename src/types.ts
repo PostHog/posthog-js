@@ -9,16 +9,9 @@ export const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
 
 export const knownUnEditableEvent = [
     '$web_experiment_applied',
-    '$$client_ingestion_warning',
     '$feature_enrollment_update',
     '$feature_flag_called',
-    'survey dismissed',
-    'survey sent',
-    'survey shown',
     '$snapshot',
-    '$identify',
-    '$groupidentify',
-    '$create_alias',
 ] as const
 
 /**
@@ -26,7 +19,18 @@ export const knownUnEditableEvent = [
  */
 export type KnownUnEditableEvent = typeof knownUnEditableEvent[number]
 
-export const knownUnsafeEditableEvent = ['$pageview', '$pageleave', '$set'] as const
+export const knownUnsafeEditableEvent = [
+    '$pageview',
+    '$pageleave',
+    '$set',
+    'survey dismissed',
+    'survey sent',
+    'survey shown',
+    '$identify',
+    '$groupidentify',
+    '$create_alias',
+    '$$client_ingestion_warning',
+] as const
 
 /**
  * These events can be processed by the `beforeCapture` function
@@ -277,7 +281,7 @@ export interface PostHogConfig {
      * This function - if provided - is called immediately before sending data to the server.
      * It allows you to edit data before it is sent, or choose not to send it all.
      */
-    beforeSend: (cr: CaptureResult) => CaptureResult | null
+    before_send: (cr: CaptureResult) => CaptureResult | null
     capture_performance?: boolean | PerformanceCaptureConfig
     // Should only be used for testing. Could negatively impact performance.
     disable_compression: boolean
