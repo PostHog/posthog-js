@@ -160,7 +160,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         it('click followed by scroll, not a dead click', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,
-                originalEvent: { type: 'click' } as Event,
+                originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
                 scrollDelayMs: 99,
             })
@@ -175,7 +175,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         it('click followed by mutation, not a dead click', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,
-                originalEvent: { type: 'click' } as Event,
+                originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
             })
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = 1000
@@ -189,7 +189,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         it('click followed by a selection change, not a dead click', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,
-                originalEvent: { type: 'click' } as Event,
+                originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
             })
             lazyLoadedDeadClicksAutocapture['_lastSelectionChanged'] = 999
@@ -203,7 +203,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         it('click followed by a selection change outside of threshold, dead click', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,
-                originalEvent: { type: 'click' } as Event,
+                originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
             })
             lazyLoadedDeadClicksAutocapture['_lastSelectionChanged'] = 1000
@@ -245,7 +245,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         it('click followed by a mutation after threshold, dead click', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,
-                originalEvent: { type: 'click' } as Event,
+                originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
             })
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = 900 + 2501
@@ -287,7 +287,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         it('click followed by a scroll after threshold, dead click', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,
-                originalEvent: { type: 'click' } as Event,
+                originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
                 scrollDelayMs: 2501,
             })
@@ -329,7 +329,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         it('click followed by nothing for too long, dead click', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,
-                originalEvent: { type: 'click' } as Event,
+                originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
             })
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
@@ -371,7 +371,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         it('click not followed by anything within threshold, rescheduled for next check', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
                 node: document.body,
-                originalEvent: { type: 'click' } as Event,
+                originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
             })
             lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
@@ -382,5 +382,29 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(1)
             expect(fakeInstance.capture).not.toHaveBeenCalled()
         })
+    })
+
+    it('can have alternative behaviour for onCapture', () => {
+        jest.setSystemTime(0)
+        const replacementCapture = jest.fn()
+
+        lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance, {
+            __onCapture: replacementCapture,
+        })
+        lazyLoadedDeadClicksAutocapture.start(document)
+
+        lazyLoadedDeadClicksAutocapture['_clicks'].push({
+            node: document.body,
+            originalEvent: { type: 'click' } as MouseEvent,
+            timestamp: 900,
+        })
+        lazyLoadedDeadClicksAutocapture['_lastMutation'] = undefined
+
+        jest.setSystemTime(3001 + 900)
+        lazyLoadedDeadClicksAutocapture['_checkClicks']()
+
+        expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
+        expect(fakeInstance.capture).not.toHaveBeenCalled()
+        expect(replacementCapture).toHaveBeenCalled()
     })
 })

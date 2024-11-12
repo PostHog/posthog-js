@@ -68,7 +68,7 @@ interface PostHogExtensions {
     }
     initDeadClicksAutocapture?: (
         ph: PostHog,
-        config?: DeadClicksAutoCaptureConfig
+        config: DeadClicksAutoCaptureConfig
     ) => LazyLoadedDeadClicksAutocaptureInterface
 }
 

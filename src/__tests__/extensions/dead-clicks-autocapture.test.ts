@@ -51,7 +51,7 @@ describe('DeadClicksAutocapture', () => {
         mockLoader.mockClear()
 
         const instance = await createPosthogInstance(uuidv7(), { capture_dead_clicks: true })
-        new DeadClicksAutocapture(instance).startIfEnabled()
+        new DeadClicksAutocapture(instance, () => true).startIfEnabled()
 
         expect(mockLoader).toHaveBeenCalledWith(instance, 'dead-clicks-autocapture', expect.any(Function))
     })
@@ -100,7 +100,7 @@ describe('DeadClicksAutocapture', () => {
                     [DEAD_CLICKS_ENABLED_SERVER_SIDE]: serverSide,
                 })
                 instance.config.capture_dead_clicks = clientSide
-                expect(instance.deadClicksAutocapture.isEnabled).toBe(expected)
+                expect(instance.deadClicksAutocapture.isEnabled(instance.deadClicksAutocapture)).toBe(expected)
             }
         )
     })

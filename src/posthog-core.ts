@@ -78,7 +78,7 @@ import { ExceptionObserver } from './extensions/exception-autocapture'
 import { WebVitalsAutocapture } from './extensions/web-vitals'
 import { WebExperiments } from './web-experiments'
 import { PostHogExceptions } from './posthog-exceptions'
-import { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
+import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -448,7 +448,7 @@ export class PostHog {
         this.exceptionObserver = new ExceptionObserver(this)
         this.exceptionObserver.startIfEnabled()
 
-        this.deadClicksAutocapture = new DeadClicksAutocapture(this)
+        this.deadClicksAutocapture = new DeadClicksAutocapture(this, isDeadClicksEnabledForAutocapture)
         this.deadClicksAutocapture.startIfEnabled()
 
         // if any instance on the page has debug = true, we set the

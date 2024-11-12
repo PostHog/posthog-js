@@ -1,6 +1,6 @@
 import { includes, registerEvent } from './utils'
 import RageClick from './extensions/rageclick'
-import { DecideResponse, Properties } from './types'
+import { DeadClickCandidate, DecideResponse, Properties } from './types'
 import { PostHog } from './posthog-core'
 
 import { document, window } from './utils/globals'
@@ -9,6 +9,7 @@ import { HEATMAPS_ENABLED_SERVER_SIDE } from './constants'
 import { isEmptyObject, isObject, isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { isElementInToolbar, isElementNode, isTag } from './utils/element-utils'
+import { DeadClicksAutocapture, isDeadClicksEnabledForHeatmaps } from './extensions/dead-clicks-autocapture'
 
 const DEFAULT_FLUSH_INTERVAL = 5000
 const HEATMAPS = 'heatmaps'
@@ -48,6 +49,7 @@ export class Heatmaps {
     // TODO: Periodically flush this if no other event has taken care of it
     private buffer: HeatmapEventBuffer
     private _flushInterval: ReturnType<typeof setInterval> | null = null
+    private deadClicksCapture: DeadClicksAutocapture | undefined
 
     constructor(instance: PostHog) {
         this.instance = instance
@@ -92,6 +94,7 @@ export class Heatmaps {
             this._flushInterval = setInterval(this.flush.bind(this), this.flushIntervalMilliseconds)
         } else {
             clearInterval(this._flushInterval ?? undefined)
+            this.deadClicksCapture?.stop()
             this.getAndClearBuffer()
         }
     }
@@ -115,6 +118,10 @@ export class Heatmaps {
         return buffer
     }
 
+    private _onDeadClick(click: DeadClickCandidate): void {
+        this._onClick(click.originalEvent, 'deadclick')
+    }
+
     private _setupListeners(): void {
         if (!window || !document) {
             return
@@ -122,6 +129,13 @@ export class Heatmaps {
 
         registerEvent(document, 'click', (e) => this._onClick((e || window?.event) as MouseEvent), false, true)
         registerEvent(document, 'mousemove', (e) => this._onMouseMove((e || window?.event) as MouseEvent), false, true)
+
+        this.deadClicksCapture = new DeadClicksAutocapture(
+            this.instance,
+            isDeadClicksEnabledForHeatmaps,
+            this._onDeadClick.bind(this)
+        )
+        this.deadClicksCapture.startIfEnabled()
 
         this._initialized = true
     }
@@ -145,11 +159,11 @@ export class Heatmaps {
         }
     }
 
-    private _onClick(e: MouseEvent): void {
+    private _onClick(e: MouseEvent, type: string = 'click'): void {
         if (isElementInToolbar(e.target as Element)) {
             return
         }
-        const properties = this._getProperties(e, 'click')
+        const properties = this._getProperties(e, type)
 
         if (this.rageclicks?.isRageClick(e.clientX, e.clientY, new Date().getTime())) {
             this._capture({

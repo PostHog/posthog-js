@@ -2,32 +2,11 @@ import { assignableWindow, LazyLoadedDeadClicksAutocaptureInterface } from '../u
 import { PostHog } from '../posthog-core'
 import { isNull, isNumber, isUndefined } from '../utils/type-utils'
 import { autocaptureCompatibleElements, getEventTarget } from '../autocapture-utils'
-import { DeadClicksAutoCaptureConfig, Properties } from '../types'
+import { DeadClickCandidate, DeadClicksAutoCaptureConfig, Properties } from '../types'
 import { autocapturePropertiesForElement } from '../autocapture'
 import { isElementInToolbar, isElementNode, isTag } from '../utils/element-utils'
 
-const DEFAULT_CONFIG: Required<DeadClicksAutoCaptureConfig> = {
-    element_attribute_ignorelist: [],
-    scroll_threshold_ms: 100,
-    selection_change_threshold_ms: 100,
-    mutation_threshold_ms: 2500,
-}
-
-interface Click {
-    node: Element
-    originalEvent: Event
-    timestamp: number
-    // time between click and the most recent scroll
-    scrollDelayMs?: number
-    // time between click and the most recent mutation
-    mutationDelayMs?: number
-    // time between click and the most recent selection changed event
-    selectionChangedDelayMs?: number
-    // if neither scroll nor mutation seen before threshold passed
-    absoluteDelayMs?: number
-}
-
-function asClick(event: Event): Click | null {
+function asClick(event: MouseEvent): DeadClickCandidate | null {
     const eventTarget = getEventTarget(event)
     if (eventTarget) {
         return {
@@ -47,23 +26,35 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _mutationObserver: MutationObserver | undefined
     private _lastMutation: number | undefined
     private _lastSelectionChanged: number | undefined
-    private _clicks: Click[] = []
+    private _clicks: DeadClickCandidate[] = []
     private _checkClickTimer: number | undefined
     private _config: Required<DeadClicksAutoCaptureConfig>
+    private _onCapture: (click: DeadClickCandidate, properties: Properties) => void
+
+    private _defaultConfig = (defaultOnCapture: (click: DeadClickCandidate, properties: Properties) => void) => ({
+        element_attribute_ignorelist: [],
+        scroll_threshold_ms: 100,
+        selection_change_threshold_ms: 100,
+        mutation_threshold_ms: 2500,
+        __onCapture: defaultOnCapture,
+    })
 
     private asRequiredConfig(providedConfig?: DeadClicksAutoCaptureConfig): Required<DeadClicksAutoCaptureConfig> {
+        const defaultConfig = this._defaultConfig(providedConfig?.__onCapture || this._captureDeadClick.bind(this))
         return {
             element_attribute_ignorelist:
-                providedConfig?.element_attribute_ignorelist ?? DEFAULT_CONFIG.element_attribute_ignorelist,
-            scroll_threshold_ms: providedConfig?.scroll_threshold_ms ?? DEFAULT_CONFIG.scroll_threshold_ms,
+                providedConfig?.element_attribute_ignorelist ?? defaultConfig.element_attribute_ignorelist,
+            scroll_threshold_ms: providedConfig?.scroll_threshold_ms ?? defaultConfig.scroll_threshold_ms,
             selection_change_threshold_ms:
-                providedConfig?.selection_change_threshold_ms ?? DEFAULT_CONFIG.selection_change_threshold_ms,
-            mutation_threshold_ms: providedConfig?.mutation_threshold_ms ?? DEFAULT_CONFIG.mutation_threshold_ms,
+                providedConfig?.selection_change_threshold_ms ?? defaultConfig.selection_change_threshold_ms,
+            mutation_threshold_ms: providedConfig?.mutation_threshold_ms ?? defaultConfig.mutation_threshold_ms,
+            __onCapture: defaultConfig.__onCapture,
         }
     }
 
     constructor(readonly instance: PostHog, config?: DeadClicksAutoCaptureConfig) {
         this._config = this.asRequiredConfig(config)
+        this._onCapture = this._config.__onCapture
     }
 
     start(observerTarget: Node) {
@@ -105,7 +96,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         assignableWindow.addEventListener('click', this._onClick)
     }
 
-    private _onClick = (event: Event): void => {
+    private _onClick = (event: MouseEvent): void => {
         const click = asClick(event)
         if (!isNull(click) && !this._ignoreClick(click)) {
             this._clicks.push(click)
@@ -148,7 +139,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         this._lastSelectionChanged = Date.now()
     }
 
-    private _ignoreClick(click: Click | null): boolean {
+    private _ignoreClick(click: DeadClickCandidate | null): boolean {
         if (!click) {
             return true
         }
@@ -222,7 +213,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             }
 
             if (scrollTimeout || mutationTimeout || absoluteTimeout || selectionChangedTimeout) {
-                this._captureDeadClick(click, {
+                this._onCapture(click, {
                     $dead_click_last_mutation_timestamp: this._lastMutation,
                     $dead_click_event_timestamp: click.timestamp,
                     $dead_click_scroll_timeout: scrollTimeout,
@@ -243,7 +234,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         }
     }
 
-    private _captureDeadClick(click: Click, properties: Properties) {
+    private _captureDeadClick(click: DeadClickCandidate, properties: Properties) {
         // TODO need to check safe and captur-able as with autocapture
         // TODO autocaputure config
         this.instance.capture(
@@ -271,6 +262,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
 }
 
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
-assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture = (ph) => new LazyLoadedDeadClicksAutocapture(ph)
+assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture = (ph, config) =>
+    new LazyLoadedDeadClicksAutocapture(ph, config)
 
 export default LazyLoadedDeadClicksAutocapture
