@@ -7,12 +7,7 @@ export type Properties = Record<string, Property>
 
 export const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
 
-export const knownUnEditableEvent = [
-    '$web_experiment_applied',
-    '$feature_enrollment_update',
-    '$feature_flag_called',
-    '$snapshot',
-] as const
+export const knownUnEditableEvent = ['$feature_enrollment_update', '$feature_flag_called', '$snapshot'] as const
 
 /**
  * These events are not processed by the `beforeCapture` function
@@ -30,6 +25,7 @@ export const knownUnsafeEditableEvent = [
     '$groupidentify',
     '$create_alias',
     '$$client_ingestion_warning',
+    '$web_experiment_applied',
 ] as const
 
 /**
