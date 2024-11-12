@@ -84,7 +84,7 @@ type TriggerStatus = typeof TRIGGER_STATUSES[number]
  * When sampled that means a sample rate is set and the last time the session id was rotated
  * the sample rate determined this session should be sent to the server.
  */
-type SessionRecordingStatus = 'disabled' | 'sampled' | 'active' | 'buffering'
+type SessionRecordingStatus = 'disabled' | 'sampled' | 'active' | 'buffering' | 'paused'
 
 export interface SnapshotBuffer {
     size: number
@@ -211,6 +211,24 @@ function isSessionIdleEvent(e: eventWithTime): e is eventWithTime & customEvent 
     return e.type === EventType.Custom && e.data.tag === 'sessionIdle'
 }
 
+function sessionRecordingUrlTriggerMatches(url: string, triggers: SessionRecordingUrlTrigger[]) {
+    return triggers.some((trigger) => {
+        switch (trigger.matching) {
+            case 'regex':
+                return new RegExp(trigger.url).test(url)
+            default:
+                return false
+        }
+    })
+}
+
+/** When we put the recording into a paused state, we add a custom event.
+ *  However in the paused state, events are dropped, and never make it to the buffer,
+ *  so we need to manually let this one through */
+function isRecordingPausedEvent(e: eventWithTime) {
+    return e.type === EventType.Custom && e.data.tag === 'recording paused'
+}
+
 export class SessionRecording {
     private _endpoint: string
     private flushBufferTimer?: any
@@ -244,6 +262,9 @@ export class SessionRecording {
     private _lastHref?: string
 
     private _urlTriggers: SessionRecordingUrlTrigger[] = []
+    private _urlBlocklist: SessionRecordingUrlTrigger[] = []
+
+    private _urlBlocked: boolean = false
 
     // Util to help developers working on this feature manually override
     _forceAllowLocalhostNetworkCapture = false
@@ -372,6 +393,10 @@ export class SessionRecording {
             return 'buffering'
         }
 
+        if (this._urlBlocked) {
+            return 'paused'
+        }
+
         if (isBoolean(this.isSampled)) {
             return this.isSampled ? 'sampled' : 'disabled'
         } else {
@@ -380,7 +405,7 @@ export class SessionRecording {
     }
 
     private get urlTriggerStatus(): TriggerStatus {
-        if (this.receivedDecide && this._urlTriggers.length === 0) {
+        if (this._urlTriggers.length === 0) {
             return 'trigger_disabled'
         }
 
@@ -613,6 +638,10 @@ export class SessionRecording {
 
         if (response.sessionRecording?.urlTriggers) {
             this._urlTriggers = response.sessionRecording.urlTriggers
+        }
+
+        if (response.sessionRecording?.urlBlocklist) {
+            this._urlBlocklist = response.sessionRecording.urlBlocklist
         }
 
         this.receivedDecide = true
@@ -983,7 +1012,11 @@ export class SessionRecording {
         }
 
         // Check if the URL matches any trigger patterns
-        this._checkUrlTrigger()
+        this._checkTriggerConditions()
+
+        if (this.status === 'paused' && !isRecordingPausedEvent(rawEvent)) {
+            return
+        }
 
         // we're processing a full snapshot, so we should reset the timer
         if (rawEvent.type === EventType.FullSnapshot) {
@@ -1036,11 +1069,12 @@ export class SessionRecording {
             $window_id: this.windowId,
         }
 
-        if (this.status !== 'disabled') {
-            this._captureSnapshotBuffered(properties)
-        } else {
+        if (this.status === 'disabled') {
             this.clearBuffer()
+            return
         }
+
+        this._captureSnapshotBuffered(properties)
     }
 
     private _pageViewFallBack() {
@@ -1171,23 +1205,23 @@ export class SessionRecording {
         })
     }
 
-    private _checkUrlTrigger() {
+    private _checkTriggerConditions() {
         if (typeof window === 'undefined' || !window.location.href) {
             return
         }
 
         const url = window.location.href
 
-        if (
-            this._urlTriggers.some((trigger) => {
-                switch (trigger.matching) {
-                    case 'regex':
-                        return new RegExp(trigger.url).test(url)
-                    default:
-                        return false
-                }
-            })
-        ) {
+        const wasBlocked = this.status === 'paused'
+        const isNowBlocked = sessionRecordingUrlTriggerMatches(url, this._urlBlocklist)
+
+        if (isNowBlocked && !wasBlocked) {
+            this._pauseRecording()
+        } else if (!isNowBlocked && wasBlocked) {
+            this._resumeRecording()
+        }
+
+        if (sessionRecordingUrlTriggerMatches(url, this._urlTriggers)) {
             this._activateUrlTrigger()
         }
     }
@@ -1199,6 +1233,41 @@ export class SessionRecording {
             this._flushBuffer()
             logger.info(LOGGER_PREFIX + ' recording triggered by URL pattern match')
         }
+    }
+
+    private _pauseRecording() {
+        if (this.status === 'paused') {
+            return
+        }
+        logger.info(LOGGER_PREFIX + ' recording paused due to URL blocker')
+
+        this._tryAddCustomEvent('recording paused', { reason: 'url blocker' })
+
+        this._urlBlocked = true
+        document?.body?.classList?.add('ph-no-capture')
+
+        // Clear the snapshot timer since we don't want new snapshots while paused
+        clearInterval(this._fullSnapshotTimer)
+
+        // Running this in a timeout to ensure we can
+        setTimeout(() => {
+            this._flushBuffer()
+        }, 100)
+    }
+
+    private _resumeRecording() {
+        if (this.status !== 'paused') {
+            return
+        }
+
+        this._urlBlocked = false
+        document?.body?.classList?.remove('ph-no-capture')
+
+        this._tryTakeFullSnapshot()
+
+        this._scheduleFullSnapshot()
+        this._tryAddCustomEvent('recording resumed', { reason: 'left blocked url' })
+        logger.info(LOGGER_PREFIX + ' recording resumed')
     }
 
     /**
