@@ -1,3 +1,7 @@
+## 1.184.1 - 2024-11-12
+
+- chore: add type to Sentry exception (#1520)
+
 ## 1.184.0 - 2024-11-12
 
 - feat: deadclicks in heatmaps (#1510)
