@@ -77,10 +77,16 @@ export interface AutocaptureConfig {
 
     capture_copied_text?: boolean
 }
+export type ClientAssignedFeatureFlag = {
+    key: string
+    variants: Record<string, number>
+    payload?: JsonType
+}
 
 export interface BootstrapConfig {
     distinctID?: string
     isIdentifiedID?: boolean
+    clientAssignedFeatureFlags?: ClientAssignedFeatureFlag[]
     featureFlags?: Record<string, boolean | string>
     featureFlagPayloads?: Record<string, JsonType>
     /**

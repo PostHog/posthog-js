@@ -810,6 +810,33 @@ describe('posthog core', () => {
         })
     })
 
+    describe('client assigned feature flags', () => {
+        it('onFeatureFlags should be called immediately if client assigned feature flags are defined', () => {
+            let called = false
+            const posthog = posthogWith({
+                bootstrap: {
+                    clientAssignedFeatureFlags: [{ key: 'test-flag', variants: { test: 0.5, control: 0.5 } }],
+                },
+            })
+
+            posthog.featureFlags.onFeatureFlags(() => (called = true))
+            expect(called).toEqual(true)
+        })
+
+        it('onFeatureFlags should not be called immediately if client assigned feature flags bootstrap is empty', () => {
+            let called = false
+
+            const posthog = posthogWith({
+                bootstrap: {
+                    clientAssignedFeatureFlags: [],
+                },
+            })
+
+            posthog.featureFlags.onFeatureFlags(() => (called = true))
+            expect(called).toEqual(false)
+        })
+    })
+
     describe('init()', () => {
         jest.spyOn(window, 'window', 'get')
 

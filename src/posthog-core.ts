@@ -478,6 +478,26 @@ export class PostHog {
             })
         }
 
+        if (this._hasClientAssignedFeatureFlags()) {
+            const clientAssignedFeatureFlags: Record<string, string | boolean> = {}
+            const clientAssignedFeatureFlagPayloads: Record<string, JsonType> = {}
+
+            for (const flag of this.config.bootstrap?.clientAssignedFeatureFlags || []) {
+                const variant = this.featureFlags._getMatchingVariant(flag)
+                if (variant) {
+                    clientAssignedFeatureFlags[flag.key] = variant
+                    if (flag.payload) {
+                        clientAssignedFeatureFlagPayloads[flag.key] = flag.payload
+                    }
+                }
+            }
+
+            this.featureFlags.receivedFeatureFlags({
+                featureFlags: clientAssignedFeatureFlags,
+                featureFlagPayloads: clientAssignedFeatureFlagPayloads,
+            })
+        }
+
         if (this._hasBootstrappedFeatureFlags()) {
             const activeFlags = Object.keys(config.bootstrap?.featureFlags || {})
                 .filter((flag) => !!config.bootstrap?.featureFlags?.[flag])
@@ -744,6 +764,14 @@ export class PostHog {
         execute(alias_calls, this)
         execute(other_calls, this)
         execute(capturing_calls, this)
+    }
+
+    _hasClientAssignedFeatureFlags(): boolean {
+        return (
+            (this.config.bootstrap?.clientAssignedFeatureFlags &&
+                Object.keys(this.config.bootstrap?.clientAssignedFeatureFlags).length > 0) ||
+            false
+        )
     }
 
     _hasBootstrappedFeatureFlags(): boolean {

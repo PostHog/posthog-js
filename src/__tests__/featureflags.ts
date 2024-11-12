@@ -993,6 +993,70 @@ describe('featureflags', () => {
             })
         })
     })
+    describe('clientAssignedFeatureFlags', () => {
+        it('should match the correct variant', () => {
+            const flag = { key: 'test-flag', variants: { 'variant-1': 50, 'variant-2': 30, 'variant-3': 20 } }
+            // Repeating the hash function should produce the same output
+            expect(featureFlags._getMatchingVariant(flag)).toBe('variant-1')
+            expect(featureFlags._getMatchingVariant(flag)).toBe('variant-1')
+            expect(featureFlags._getMatchingVariant(flag)).toBe('variant-1')
+            expect(featureFlags._getMatchingVariant(flag)).toBe('variant-1')
+        })
+
+        it('should compute the correct lookup tables', () => {
+            const variants1 = {
+                'variant-1': 50,
+                'variant-2': 30,
+                'variant-3': 20,
+            }
+            expect(featureFlags._variantLookupTable(variants1)).toEqual([
+                { value_min: 0, value_max: 50, key: 'variant-1' },
+                { value_min: 50, value_max: 80, key: 'variant-2' },
+                { value_min: 80, value_max: 100, key: 'variant-3' },
+            ])
+
+            const variants2 = {
+                'variant-1': 33,
+                'variant-2': 33,
+                'variant-3': 34,
+            }
+            expect(featureFlags._variantLookupTable(variants2)).toEqual([
+                { value_min: 0, value_max: 33, key: 'variant-1' },
+                { value_min: 33, value_max: 66, key: 'variant-2' },
+                { value_min: 66, value_max: 100, key: 'variant-3' },
+            ])
+        })
+
+        it('should compute the correct hash values', () => {
+            const testFlag = 'test-flag'
+
+            // Repeating the hash function should produce the same output
+            // Same as: import hashlib; hashlib.sha1("test-flag.distinct_id_1".encode("utf-8")).hexdigest()[:15]
+            expect(featureFlags._hash('test-flag.distinct_id_1')).toBe('59f5e7274a66f06')
+            expect(featureFlags._hash('test-flag.distinct_id_1')).toBe('59f5e7274a66f06')
+            // A different input should produce a different hash
+            // Same as: import hashlib; hashlib.sha1("test-flag.distinct_id_2".encode("utf-8")).hexdigest()[:15]
+            expect(featureFlags._hash('test-flag.distinct_id_2')).toBe('59589dd697c3745')
+
+            // Same identifier should get same hash
+            // distinct_id_1 + test-flag = 0.35140843114131903
+            expect(featureFlags._get_hash(testFlag, 'distinct_id_1')).toBeCloseTo(0.35140843114131903)
+            expect(featureFlags._get_hash(testFlag, 'distinct_id_1')).toBeCloseTo(0.35140843114131903)
+
+            // Different identifiers should get different hashes
+            // distinct_id_2 + test-flag = 0.34900843133051557
+            expect(featureFlags._get_hash(testFlag, 'distinct_id_2')).toBeCloseTo(0.34900843133051557)
+
+            // Different salt should produce different hash
+            // distinct_id_1 + test-flag + salt = 0.05659409091269017
+            expect(featureFlags._get_hash(testFlag, 'distinct_id_1', 'salt')).toBeCloseTo(0.05659409091269017)
+
+            // Different flag keys should produce different hashes
+            const differentFlag = 'different-flag'
+            // distinct_id_1 + different-flag = 0.5078604702829128
+            expect(featureFlags._get_hash(differentFlag, 'distinct_id_1')).toBeCloseTo(0.5078604702829128)
+        })
+    })
 })
 
 describe('parseFeatureFlagDecideResponse', () => {
