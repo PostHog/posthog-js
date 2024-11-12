@@ -1,3 +1,7 @@
+## 1.184.0 - 2024-11-12
+
+- feat: deadclicks in heatmaps (#1510)
+
 ## 1.183.0 - 2024-11-12
 
 - feat: add recording url blocklist (#1500)
