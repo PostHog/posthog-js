@@ -1,3 +1,7 @@
+## 1.183.0 - 2024-11-12
+
+- feat: add recording url blocklist (#1500)
+
 ## 1.182.0 - 2024-11-11
 
 - chore: upgrade rrweb to alpha.17 (#1489)
