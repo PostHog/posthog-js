@@ -1,3 +1,8 @@
+## 1.184.2 - 2024-11-13
+
+- fix(flags): support multiple children prop in PostHogFeature (#1516)
+- fix: Don't use session storage in memory mode (#1521)
+
 ## 1.184.1 - 2024-11-12
 
 - chore: add type to Sentry exception (#1520)
