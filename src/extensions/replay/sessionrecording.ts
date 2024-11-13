@@ -51,6 +51,8 @@ type SessionStartReason =
     | 'linked_flag_override'
     | 'sampling'
     | 'session_id_changed'
+    | 'url_trigger_match'
+    | 'event_trigger_match'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -1239,6 +1241,7 @@ export class SessionRecording {
         if (this.triggerStatus === 'trigger_pending') {
             this.triggerStatus = 'trigger_activated'
             this._tryAddCustomEvent(`${triggerType} trigger activated`, {})
+            this._reportStarted(triggerType === 'url' ? 'url_trigger_match' : 'event_trigger_match')
             this._flushBuffer()
             logger.info(LOGGER_PREFIX + ` recording triggered by ${triggerType}`)
         }
