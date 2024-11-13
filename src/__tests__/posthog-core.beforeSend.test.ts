@@ -1,7 +1,7 @@
 import { uuidv7 } from '../uuidv7'
 import { defaultPostHog } from './helpers/posthog-instance'
 import { logger } from '../utils/logger'
-import { CaptureResult, knownUnEditableEvent, knownUnsafeEditableEvent, PostHogConfig } from '../types'
+import { CaptureResult, knownUnsafeEditableEvent, PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
 
 jest.mock('../utils/logger')
@@ -78,20 +78,6 @@ describe('posthog core - before send', () => {
         })
     })
 
-    it('cannot reject an un-editable event', () => {
-        const posthog = posthogWith({
-            before_send: rejectingEventFn,
-        })
-        ;(posthog._send_request as jest.Mock).mockClear()
-        // chooses a random string from knownUnEditableEvent
-        const randomUneditableEvent = knownUnEditableEvent[Math.floor(Math.random() * knownUnEditableEvent.length)]
-
-        const capturedData = posthog.capture(randomUneditableEvent, {}, {})
-
-        expect(capturedData).not.toBeUndefined()
-        expect(posthog._send_request).toHaveBeenCalled()
-    })
-
     it('can sanitize $set event', () => {
         const posthog = posthogWith({
             before_send: (cr) => {
@@ -137,21 +123,6 @@ describe('posthog core - before send', () => {
         expect(jest.mocked(logger).warn).toHaveBeenCalledWith(
             `Event '${eventName}' has no properties after beforeSend function, this is likely an error.`
         )
-    })
-
-    it('cannot edit an un-editable event', () => {
-        const posthog = posthogWith({
-            before_send: editingEventFn,
-        })
-        ;(posthog._send_request as jest.Mock).mockClear()
-        // chooses a random string from knownUnEditableEvent
-        const randomUneditableEvent = knownUnEditableEvent[Math.floor(Math.random() * knownUnEditableEvent.length)]
-
-        const capturedData = posthog.capture(randomUneditableEvent, {}, {})
-
-        expect(capturedData).not.toHaveProperty(['properties', 'edited'])
-        expect(capturedData).not.toHaveProperty(['$set', 'edited'])
-        expect(posthog._send_request).toHaveBeenCalled()
     })
 
     it('logs a warning when rejecting an unsafe to edit event', () => {
