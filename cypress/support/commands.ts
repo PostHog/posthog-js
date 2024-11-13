@@ -12,6 +12,7 @@ Cypress.Commands.add('posthogInit', (options) => {
         before_send: (event) => {
             $captures.push(event.event)
             $fullCaptures.push(event)
+            return event
         },
         opt_out_useragent_filter: true,
         ...options,
