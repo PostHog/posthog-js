@@ -1348,7 +1348,9 @@ export class SessionRecording {
         this.instance.register_for_session({
             $session_recording_start_reason: startReason,
         })
-        this._tryAddCustomEvent(startReason, tagPayload)
         logger.info(LOGGER_PREFIX + ' ' + startReason.replace('_', ' '), tagPayload)
+        if (startReason !== 'recording_initialized') {
+            this._tryAddCustomEvent(startReason, tagPayload)
+        }
     }
 }
