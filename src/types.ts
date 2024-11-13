@@ -452,6 +452,7 @@ export interface DecideResponse {
         networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
         urlTriggers?: SessionRecordingUrlTrigger[]
         urlBlocklist?: SessionRecordingUrlTrigger[]
+        eventTriggers?: string[]
     }
     surveys?: boolean
     toolbarParams: ToolbarParams

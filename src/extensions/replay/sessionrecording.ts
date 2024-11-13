@@ -266,6 +266,9 @@ export class SessionRecording {
 
     private _urlBlocked: boolean = false
 
+    private _eventTriggers: string[] = []
+    private _removeEventTriggerCaptureHook: (() => void) | undefined = undefined
+
     // Util to help developers working on this feature manually override
     _forceAllowLocalhostNetworkCapture = false
 
@@ -491,6 +494,8 @@ export class SessionRecording {
             // so we call this here _and_ in the decide response
             this._setupSampling()
 
+            this._addEventTriggerListener()
+
             if (isNullish(this._removePageViewCaptureHook)) {
                 // :TRICKY: rrweb does not capture navigation within SPA-s, so hook into our $pageview events to get access to all events.
                 //   Dropping the initial event is fine (it's always captured by rrweb).
@@ -642,6 +647,10 @@ export class SessionRecording {
 
         if (response.sessionRecording?.urlBlocklist) {
             this._urlBlocklist = response.sessionRecording.urlBlocklist
+        }
+
+        if (response.sessionRecording?.eventTriggers) {
+            this._eventTriggers = response.sessionRecording.eventTriggers
         }
 
         this.receivedDecide = true
@@ -1268,6 +1277,24 @@ export class SessionRecording {
         this._scheduleFullSnapshot()
         this._tryAddCustomEvent('recording resumed', { reason: 'left blocked url' })
         logger.info(LOGGER_PREFIX + ' recording resumed')
+    }
+
+    private _addEventTriggerListener() {
+        if (this._eventTriggers.length === 0 || !isNullish(this._removeEventTriggerCaptureHook)) {
+            return
+        }
+
+        this._removeEventTriggerCaptureHook = this.instance._addCaptureHook((eventName) => {
+            // If anything could go wrong here it has the potential to block the main loop,
+            // so we catch all errors.
+            try {
+                if (this._eventTriggers.includes(eventName)) {
+                    this._activateTrigger('event')
+                }
+            } catch (e) {
+                logger.error('Could not activate event trigger', e)
+            }
+        })
     }
 
     /**
