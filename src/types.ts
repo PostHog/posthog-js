@@ -7,14 +7,8 @@ export type Properties = Record<string, Property>
 
 export const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
 
-export const knownUnEditableEvent = ['$snapshot'] as const
-
-/**
- * These events are not processed by the `beforeCapture` function
- */
-export type KnownUnEditableEvent = typeof knownUnEditableEvent[number]
-
 export const knownUnsafeEditableEvent = [
+    '$snapshot',
     '$pageview',
     '$pageleave',
     '$set',
@@ -55,11 +49,11 @@ export type KnownEventName =
     | '$rageclick'
 
 export type EventName =
-    | KnownUnEditableEvent
     | KnownUnsafeEditableEvent
     | KnownEventName
-    // magic value so that the type of event name is a set of known strings or any other strings
+    // magic value so that the type of EventName is a set of known strings or any other string
     // which means you get autocomplete for known strings
+    // but no type complaints when you add an arbitrary string
     | (string & {})
 
 export interface CaptureResult {

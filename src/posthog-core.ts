@@ -59,7 +59,6 @@ import {
     isEmptyObject,
     isEmptyString,
     isFunction,
-    isKnownUnEditableEvent,
     isKnownUnsafeEditableEvent,
     isNullish,
     isNumber,
@@ -880,24 +879,23 @@ export class PostHog {
             this.setPersonPropertiesForFlags(finalSet)
         }
 
-        if (!isKnownUnEditableEvent(data.event)) {
-            const beforeSendResult = this.config.before_send(data)
-            if (isNullish(beforeSendResult)) {
-                const logMessage = `Event '${data.event}' was rejected in beforeSend function`
-                if (isKnownUnsafeEditableEvent(data.event)) {
-                    logger.warn(`${logMessage}. This can cause unexpected behavior.`)
-                } else {
-                    logger.info(logMessage)
-                }
-                return
+        const beforeSendResult = this.config.before_send(data)
+        if (isNullish(beforeSendResult)) {
+            const logMessage = `Event '${data.event}' was rejected in beforeSend function`
+            if (isKnownUnsafeEditableEvent(data.event)) {
+                logger.warn(`${logMessage}. This can cause unexpected behavior.`)
             } else {
-                if (!beforeSendResult.properties || isEmptyObject(beforeSendResult.properties)) {
-                    logger.warn(
-                        `Event '${data.event}' has no properties after beforeSend function, this is likely an error.`
-                    )
-                }
-                data = beforeSendResult
+                logger.info(logMessage)
             }
+            // the event is now null so we don't send it
+            return
+        } else {
+            if (!beforeSendResult.properties || isEmptyObject(beforeSendResult.properties)) {
+                logger.warn(
+                    `Event '${data.event}' has no properties after beforeSend function, this is likely an error.`
+                )
+            }
+            data = beforeSendResult
         }
 
         this._internalEventEmitter.emit('eventCaptured', data)

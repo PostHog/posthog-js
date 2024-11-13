@@ -1,10 +1,5 @@
 import { includes } from '.'
-import {
-    KnownUnEditableEvent,
-    knownUnEditableEvent,
-    KnownUnsafeEditableEvent,
-    knownUnsafeEditableEvent,
-} from '../types'
+import { knownUnsafeEditableEvent, KnownUnsafeEditableEvent } from '../types'
 
 // eslint-disable-next-line posthog-js/no-direct-array-check
 const nativeIsArray = Array.isArray
@@ -99,8 +94,4 @@ export const isFile = (x: unknown): x is File => {
 
 export const isKnownUnsafeEditableEvent = (x: unknown): x is KnownUnsafeEditableEvent => {
     return includes(knownUnsafeEditableEvent as unknown as string[], x)
-}
-
-export const isKnownUnEditableEvent = (x: unknown): x is KnownUnEditableEvent => {
-    return includes(knownUnEditableEvent as unknown as string[], x as any)
 }
