@@ -2262,6 +2262,9 @@ describe('SessionRecording', () => {
     describe('Event triggering', () => {
         beforeEach(() => {
             sessionRecording.startIfEnabledOrStop()
+        })
+
+        it('flushes buffer and starts when sees event', async () => {
             sessionRecording.afterDecideResponse(
                 makeDecideResponse({
                     sessionRecording: {
@@ -2270,13 +2273,9 @@ describe('SessionRecording', () => {
                     },
                 })
             )
-        })
 
-        it('starts buffering', () => {
             expect(sessionRecording['status']).toBe('buffering')
-        })
 
-        it('flushes buffer and starts when sees event', async () => {
             // Emit some events before hitting blocked URL
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
             _emit(createIncrementalSnapshot({ data: { source: 2 } }))
@@ -2291,6 +2290,39 @@ describe('SessionRecording', () => {
 
             expect(sessionRecording['status']).toBe('active')
             expect(sessionRecording['buffer'].data).toHaveLength(0)
+        })
+
+        it('does not start if sees an event but waiting for a URL', async () => {
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['$exception'],
+                        urlTriggers: [{ url: 'start-on-me', matching: 'regex' }],
+                    },
+                })
+            )
+
+            expect(sessionRecording['status']).toBe('buffering')
+
+            // Emit some events before hitting blocked URL
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+
+            expect(sessionRecording['buffer'].data).toHaveLength(2)
+
+            simpleEventEmitter.emit('eventCaptured', { event: 'not-$exception' })
+
+            expect(sessionRecording['status']).toBe('buffering')
+
+            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+
+            // still waiting for URL to trigger
+            expect(sessionRecording['status']).toBe('buffering')
+
+            sessionRecording.overrideTrigger('url')
+
+            expect(sessionRecording['status']).toBe('active')
         })
     })
 })

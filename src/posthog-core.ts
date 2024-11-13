@@ -1814,21 +1814,43 @@ export class PostHog {
      * turns session recording on, and updates the config option `disable_session_recording` to false
      * @param override.sampling - optional boolean to override the default sampling behavior - ensures the next session recording to start will not be skipped by sampling config.
      * @param override.linked_flag - optional boolean to override the default linked_flag behavior - ensures the next session recording to start will not be skipped by linked_flag config.
+     * @param override.url_trigger - optional boolean to override the default url_trigger behavior - ensures the next session recording to start will not be skipped by url_trigger config.
+     * @param override.event_trigger - optional boolean to override the default event_trigger behavior - ensures the next session recording to start will not be skipped by event_trigger config.
      * @param override - optional boolean to override the default sampling behavior - ensures the next session recording to start will not be skipped by sampling or linked_flag config. `true` is shorthand for { sampling: true, linked_flag: true }
      */
-    startSessionRecording(override?: { sampling?: boolean; linked_flag?: boolean } | true): void {
+    startSessionRecording(
+        override?: { sampling?: boolean; linked_flag?: boolean; url_trigger?: true; event_trigger?: true } | true
+    ): void {
         const overrideAll = isBoolean(override) && override
-        if (overrideAll || override?.sampling || override?.linked_flag) {
+        if (
+            overrideAll ||
+            override?.sampling ||
+            override?.linked_flag ||
+            override?.url_trigger ||
+            override?.event_trigger
+        ) {
             // allow the session id check to rotate session id if necessary
             const ids = this.sessionManager?.checkAndGetSessionAndWindowId()
+            let msg = 'Session recording with id "' + ids?.sessionId + '" started'
+
             if (overrideAll || override?.sampling) {
                 this.sessionRecording?.overrideSampling()
-                logger.info('Session recording started with sampling override for session: ', ids?.sessionId)
+                msg += ' with sampling override'
             }
             if (overrideAll || override?.linked_flag) {
                 this.sessionRecording?.overrideLinkedFlag()
-                logger.info('Session recording started with linked_flags override')
+                msg += ' with linked_flag override'
             }
+            if (overrideAll || override?.url_trigger) {
+                this.sessionRecording?.overrideTrigger('url')
+                msg += ' with url_trigger override'
+            }
+            if (overrideAll || override?.event_trigger) {
+                this.sessionRecording?.overrideTrigger('event')
+                msg += ' with event_trigger override'
+            }
+
+            logger.info(msg)
         }
         this.set_config({ disable_session_recording: false })
     }

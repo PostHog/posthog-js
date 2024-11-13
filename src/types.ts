@@ -671,7 +671,6 @@ export interface ErrorConversions {
 }
 
 export interface SessionRecordingUrlTrigger {
-    urlBlockList?: SessionRecordingUrlTrigger[]
     url: string
     matching: 'regex'
 }

@@ -2,12 +2,14 @@ import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_CANVAS_RECORDING,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
-    SESSION_RECORDING_TRIGGER_ACTIVATED_SESSION,
-    SESSION_RECORDING_TRIGGER_STATUS,
+    SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
+    SESSION_RECORDING_EVENT_TRIGGER_STATUS,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_MINIMUM_DURATION,
     SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE,
     SESSION_RECORDING_SAMPLE_RATE,
+    SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
+    SESSION_RECORDING_URL_TRIGGER_STATUS,
 } from '../../constants'
 import {
     estimateSize,
@@ -52,8 +54,8 @@ type SessionStartReason =
     | 'linked_flag_override'
     | 'sampling'
     | 'session_id_changed'
-    | 'url_trigger_match'
-    | 'event_trigger_match'
+    | 'url_trigger_matched'
+    | 'event_trigger_matched'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -78,6 +80,7 @@ const ACTIVE_SOURCES = [
     IncrementalSource.Drag,
 ]
 
+export type TriggerType = 'url' | 'event'
 const TRIGGER_STATUSES = ['trigger_activated', 'trigger_pending', 'trigger_disabled'] as const
 type TriggerStatus = typeof TRIGGER_STATUSES[number]
 
@@ -297,7 +300,7 @@ export class SessionRecording {
     }
 
     private get fullSnapshotIntervalMillis(): number {
-        if (this.triggerStatus === 'trigger_pending') {
+        if (this.triggerStatus() === 'trigger_pending') {
             return ONE_MINUTE
         }
 
@@ -395,7 +398,7 @@ export class SessionRecording {
             return 'buffering'
         }
 
-        if (this.triggerStatus === 'trigger_pending') {
+        if (this.triggerStatus() === 'trigger_pending') {
             return 'buffering'
         }
 
@@ -410,17 +413,17 @@ export class SessionRecording {
         }
     }
 
-    private get triggerStatus(): TriggerStatus {
-        if (this._urlTriggers.length === 0 && this._eventTriggers.length === 0) {
+    private get urlTriggerStatus(): TriggerStatus {
+        if (this._urlTriggers.length === 0) {
             return 'trigger_disabled'
         }
 
-        const currentStatus = this.instance?.get_property(SESSION_RECORDING_TRIGGER_STATUS)
-        const currentTriggerSession = this.instance?.get_property(SESSION_RECORDING_TRIGGER_ACTIVATED_SESSION)
+        const currentStatus = this.instance?.get_property(SESSION_RECORDING_URL_TRIGGER_STATUS)
+        const currentTriggerSession = this.instance?.get_property(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
 
         if (currentTriggerSession !== this.sessionId) {
-            this.instance?.persistence?.unregister(SESSION_RECORDING_TRIGGER_ACTIVATED_SESSION)
-            this.instance?.persistence?.unregister(SESSION_RECORDING_TRIGGER_STATUS)
+            this.instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_STATUS)
+            this.instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
             return 'trigger_pending'
         }
 
@@ -431,11 +434,38 @@ export class SessionRecording {
         return 'trigger_pending'
     }
 
-    private set triggerStatus(status: TriggerStatus) {
-        this.instance?.persistence?.register({
-            [SESSION_RECORDING_TRIGGER_ACTIVATED_SESSION]: this.sessionId,
-            [SESSION_RECORDING_TRIGGER_STATUS]: status,
-        })
+    private get eventTriggerStatus(): TriggerStatus {
+        if (this._eventTriggers.length === 0) {
+            return 'trigger_disabled'
+        }
+
+        const currentStatus = this.instance?.get_property(SESSION_RECORDING_EVENT_TRIGGER_STATUS)
+        const currentTriggerSession = this.instance?.get_property(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
+
+        if (currentTriggerSession !== this.sessionId) {
+            this.instance?.persistence?.unregister(SESSION_RECORDING_EVENT_TRIGGER_STATUS)
+            this.instance?.persistence?.unregister(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
+            return 'trigger_pending'
+        }
+
+        if (TRIGGER_STATUSES.includes(currentStatus)) {
+            return currentStatus as TriggerStatus
+        }
+
+        return 'trigger_pending'
+    }
+
+    private triggerStatus(): TriggerStatus {
+        if (this.urlTriggerStatus === this.eventTriggerStatus) {
+            return this.urlTriggerStatus
+        } else if (this.urlTriggerStatus === 'trigger_disabled') {
+            return this.eventTriggerStatus
+        } else if (this.eventTriggerStatus === 'trigger_disabled') {
+            return this.urlTriggerStatus
+        } else {
+            // if they're not the same and neither is disabled, then one must be pending
+            return 'trigger_pending'
+        }
     }
 
     constructor(private readonly instance: PostHog) {
@@ -524,8 +554,10 @@ export class SessionRecording {
                     if (changeReason) {
                         this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
 
-                        this.instance?.persistence?.unregister(SESSION_RECORDING_TRIGGER_ACTIVATED_SESSION)
-                        this.instance?.persistence?.unregister(SESSION_RECORDING_TRIGGER_STATUS)
+                        this.instance?.persistence?.unregister(SESSION_RECORDING_EVENT_TRIGGER_STATUS)
+                        this.instance?.persistence?.unregister(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
+                        this.instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_STATUS)
+                        this.instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
                     }
                 })
             }
@@ -1038,7 +1070,7 @@ export class SessionRecording {
         }
 
         // Clear the buffer if waiting for a trigger, and only keep data from after the current full snapshot
-        if (rawEvent.type === EventType.FullSnapshot && this.triggerStatus === 'trigger_pending') {
+        if (rawEvent.type === EventType.FullSnapshot && this.triggerStatus() === 'trigger_pending') {
             this.clearBuffer()
         }
 
@@ -1240,14 +1272,25 @@ export class SessionRecording {
         }
     }
 
-    private _activateTrigger(triggerType: 'url' | 'event') {
-        if (this.triggerStatus === 'trigger_pending') {
-            this.triggerStatus = 'trigger_activated'
-            this._flushBuffer()
-            const msg = `${triggerType} trigger activated`
-            this._tryAddCustomEvent(msg, {})
-            this._reportStarted(triggerType === 'url' ? 'url_trigger_match' : 'event_trigger_match')
-            logger.info(LOGGER_PREFIX + ' ' + msg)
+    private _activateTrigger(triggerType: TriggerType) {
+        if (this.triggerStatus() === 'trigger_pending') {
+            // status is stored separately for URL and event triggers
+            this.instance?.persistence?.register({
+                [triggerType === 'url'
+                    ? SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION
+                    : SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION]: this.sessionId,
+                [triggerType === 'url' ? SESSION_RECORDING_URL_TRIGGER_STATUS : SESSION_RECORDING_EVENT_TRIGGER_STATUS]:
+                    'trigger_activated',
+            })
+
+            // it was pending but is now active and we can start
+            if (this.triggerStatus() === 'trigger_activated') {
+                this._flushBuffer()
+                const sessionStartReason = (triggerType + '_trigger_matched') as SessionStartReason
+                this._reportStarted(sessionStartReason)
+                this._tryAddCustomEvent(sessionStartReason.replace('_', ' '), {})
+                logger.info(LOGGER_PREFIX + ' ' + sessionStartReason.replace('_', ' '))
+            }
         }
     }
 
@@ -1255,9 +1298,6 @@ export class SessionRecording {
         if (this.status === 'paused') {
             return
         }
-
-        logger.info(LOGGER_PREFIX + ' recording paused due to URL blocker')
-        this._tryAddCustomEvent('recording paused', { reason: 'url blocker' })
 
         this._urlBlocked = true
         document?.body?.classList?.add('ph-no-capture')
@@ -1269,6 +1309,9 @@ export class SessionRecording {
         setTimeout(() => {
             this._flushBuffer()
         }, 100)
+
+        logger.info(LOGGER_PREFIX + ' recording paused due to URL blocker')
+        this._tryAddCustomEvent('recording paused', { reason: 'url blocker' })
     }
 
     private _resumeRecording() {
@@ -1305,8 +1348,7 @@ export class SessionRecording {
     }
 
     /**
-     * this ignores the linked flag config and causes capture to start
-     * (if recording would have started had the flag been received i.e. it does not override other config).
+     * this ignores the linked flag config and (if other conditions are met) causes capture to start
      *
      * It is not usual to call this directly,
      * instead call `posthog.startSessionRecording({linked_flag: true})`
@@ -1317,8 +1359,7 @@ export class SessionRecording {
     }
 
     /**
-     * this ignores the sampling config and causes capture to start
-     * (if recording would have started had the flag been received i.e. it does not override other config).
+     * this ignores the sampling config and (if other conditions are met) causes capture to start
      *
      * It is not usual to call this directly,
      * instead call `posthog.startSessionRecording({sampling: true})`
@@ -1329,6 +1370,16 @@ export class SessionRecording {
             [SESSION_RECORDING_IS_SAMPLED]: true,
         })
         this._reportStarted('sampling_override')
+    }
+
+    /**
+     * this ignores the URL/Event trigger config and (if other conditions are met) causes capture to start
+     *
+     * It is not usual to call this directly,
+     * instead call `posthog.startSessionRecording({trigger: 'url' | 'event'})`
+     * */
+    public overrideTrigger(triggerType: TriggerType) {
+        this._activateTrigger(triggerType)
     }
 
     private _reportStarted(startReason: SessionStartReason, shouldReport: () => boolean = () => true) {
