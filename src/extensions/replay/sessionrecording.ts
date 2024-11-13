@@ -3,13 +3,11 @@ import {
     SESSION_RECORDING_CANVAS_RECORDING,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
-    SESSION_RECORDING_EVENT_TRIGGER_STATUS,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_MINIMUM_DURATION,
     SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE,
     SESSION_RECORDING_SAMPLE_RATE,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
-    SESSION_RECORDING_URL_TRIGGER_STATUS,
 } from '../../constants'
 import {
     estimateSize,
@@ -48,11 +46,11 @@ import { gzipSync, strFromU8, strToU8 } from 'fflate'
 import { clampToRange } from '../../utils/number-utils'
 
 type SessionStartReason =
-    | 'sampling_override'
+    | 'sampling_overridden'
     | 'recording_initialized'
-    | 'linked_flag_match'
-    | 'linked_flag_override'
-    | 'sampling'
+    | 'linked_flag_matched'
+    | 'linked_flag_overridden'
+    | 'sampled'
     | 'session_id_changed'
     | 'url_trigger_matched'
     | 'event_trigger_matched'
@@ -81,8 +79,7 @@ const ACTIVE_SOURCES = [
 ]
 
 export type TriggerType = 'url' | 'event'
-const TRIGGER_STATUSES = ['trigger_activated', 'trigger_pending', 'trigger_disabled'] as const
-type TriggerStatus = typeof TRIGGER_STATUSES[number]
+type TriggerStatus = 'trigger_activated' | 'trigger_pending' | 'trigger_disabled'
 
 /**
  * Session recording starts in buffering mode while waiting for decide response
@@ -418,20 +415,8 @@ export class SessionRecording {
             return 'trigger_disabled'
         }
 
-        const currentStatus = this.instance?.get_property(SESSION_RECORDING_URL_TRIGGER_STATUS)
         const currentTriggerSession = this.instance?.get_property(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
-
-        if (currentTriggerSession !== this.sessionId) {
-            this.instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_STATUS)
-            this.instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
-            return 'trigger_pending'
-        }
-
-        if (TRIGGER_STATUSES.includes(currentStatus)) {
-            return currentStatus as TriggerStatus
-        }
-
-        return 'trigger_pending'
+        return currentTriggerSession === this.sessionId ? 'trigger_activated' : 'trigger_pending'
     }
 
     private get eventTriggerStatus(): TriggerStatus {
@@ -439,20 +424,8 @@ export class SessionRecording {
             return 'trigger_disabled'
         }
 
-        const currentStatus = this.instance?.get_property(SESSION_RECORDING_EVENT_TRIGGER_STATUS)
         const currentTriggerSession = this.instance?.get_property(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
-
-        if (currentTriggerSession !== this.sessionId) {
-            this.instance?.persistence?.unregister(SESSION_RECORDING_EVENT_TRIGGER_STATUS)
-            this.instance?.persistence?.unregister(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
-            return 'trigger_pending'
-        }
-
-        if (TRIGGER_STATUSES.includes(currentStatus)) {
-            return currentStatus as TriggerStatus
-        }
-
-        return 'trigger_pending'
+        return currentTriggerSession === this.sessionId ? 'trigger_activated' : 'trigger_pending'
     }
 
     private triggerStatus(): TriggerStatus {
@@ -554,9 +527,7 @@ export class SessionRecording {
                     if (changeReason) {
                         this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
 
-                        this.instance?.persistence?.unregister(SESSION_RECORDING_EVENT_TRIGGER_STATUS)
                         this.instance?.persistence?.unregister(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
-                        this.instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_STATUS)
                         this.instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
                     }
                 })
@@ -628,7 +599,7 @@ export class SessionRecording {
 
         if (makeDecision) {
             if (shouldSample) {
-                this._reportStarted('sampling')
+                this._reportStarted('sampled')
             } else {
                 logger.warn(
                     LOGGER_PREFIX +
@@ -665,14 +636,10 @@ export class SessionRecording {
                 const flagIsPresent = isObject(variants) && linkedFlag in variants
                 const linkedFlagMatches = linkedVariant ? variants[linkedFlag] === linkedVariant : flagIsPresent
                 if (linkedFlagMatches) {
-                    const payload = {
+                    this._reportStarted('linked_flag_matched', {
                         linkedFlag,
                         linkedVariant,
-                    }
-                    const tag = 'linked flag matched'
-                    logger.info(LOGGER_PREFIX + ' ' + tag, payload)
-                    this._tryAddCustomEvent(tag, payload)
-                    this._reportStarted('linked_flag_match')
+                    })
                 }
                 this._linkedFlagSeen = linkedFlagMatches
             })
@@ -1279,17 +1246,12 @@ export class SessionRecording {
                 [triggerType === 'url'
                     ? SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION
                     : SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION]: this.sessionId,
-                [triggerType === 'url' ? SESSION_RECORDING_URL_TRIGGER_STATUS : SESSION_RECORDING_EVENT_TRIGGER_STATUS]:
-                    'trigger_activated',
             })
 
             // it was pending but is now active and we can start
             if (this.triggerStatus() === 'trigger_activated') {
                 this._flushBuffer()
-                const sessionStartReason = (triggerType + '_trigger_matched') as SessionStartReason
-                this._reportStarted(sessionStartReason)
-                this._tryAddCustomEvent(sessionStartReason.replace('_', ' '), {})
-                logger.info(LOGGER_PREFIX + ' ' + sessionStartReason.replace('_', ' '))
+                this._reportStarted((triggerType + '_trigger_matched') as SessionStartReason)
             }
         }
     }
@@ -1355,7 +1317,7 @@ export class SessionRecording {
      * */
     public overrideLinkedFlag() {
         this._linkedFlagSeen = true
-        this._reportStarted('linked_flag_override')
+        this._reportStarted('linked_flag_overridden')
     }
 
     /**
@@ -1369,7 +1331,7 @@ export class SessionRecording {
             // short-circuits the `makeSamplingDecision` function in the session recording module
             [SESSION_RECORDING_IS_SAMPLED]: true,
         })
-        this._reportStarted('sampling_override')
+        this._reportStarted('sampling_overridden')
     }
 
     /**
@@ -1382,11 +1344,11 @@ export class SessionRecording {
         this._activateTrigger(triggerType)
     }
 
-    private _reportStarted(startReason: SessionStartReason, shouldReport: () => boolean = () => true) {
-        if (shouldReport()) {
-            this.instance.register_for_session({
-                $session_recording_start_reason: startReason,
-            })
-        }
+    private _reportStarted(startReason: SessionStartReason, tagPayload?: Record<string, any>) {
+        this.instance.register_for_session({
+            $session_recording_start_reason: startReason,
+        })
+        this._tryAddCustomEvent(startReason, tagPayload)
+        logger.info(LOGGER_PREFIX + ' ' + startReason.replace('_', ' '), tagPayload)
     }
 }
