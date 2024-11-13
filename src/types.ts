@@ -1,6 +1,6 @@
-import type { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import { PostHog } from './posthog-core'
 import type { SegmentAnalytics } from './extensions/segment-integration'
+import { recordOptions } from './extensions/replay/sessionrecording-utils'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -122,6 +122,20 @@ export interface PerformanceCaptureConfig {
     web_vitals_delayed_flush_ms?: number
 }
 
+export interface DeadClickCandidate {
+    node: Element
+    originalEvent: MouseEvent
+    timestamp: number
+    // time between click and the most recent scroll
+    scrollDelayMs?: number
+    // time between click and the most recent mutation
+    mutationDelayMs?: number
+    // time between click and the most recent selection changed event
+    selectionChangedDelayMs?: number
+    // if neither scroll nor mutation seen before threshold passed
+    absoluteDelayMs?: number
+}
+
 export type DeadClicksAutoCaptureConfig = {
     // by default if a click is followed by a sroll within 100ms it is not a dead click
     scroll_threshold_ms?: number
@@ -129,6 +143,15 @@ export type DeadClicksAutoCaptureConfig = {
     selection_change_threshold_ms?: number
     // by default if a click is followed by a mutation within 2500ms it is not a dead click
     mutation_threshold_ms?: number
+    /**
+     * Allows setting behavior for when a dead click is captured.
+     * For e.g. to support capture to heatmaps
+     *
+     * If not provided the default behavior is to auto-capture dead click events
+     *
+     * Only intended to be provided by the SDK
+     */
+    __onCapture?: ((click: DeadClickCandidate, properties: Properties) => void) | undefined
 } & Pick<AutocaptureConfig, 'element_attribute_ignorelist'>
 
 export interface HeatmapConfig {
@@ -278,9 +301,9 @@ export interface SessionRecordingOptions {
     maskTextSelector?: string | null
     maskTextFn?: ((text: string, element: HTMLElement | null) => string) | null
     maskAllInputs?: boolean
-    maskInputOptions?: MaskInputOptions
+    maskInputOptions?: recordOptions['maskInputOptions']
     maskInputFn?: ((text: string, element?: HTMLElement) => string) | null
-    slimDOMOptions?: SlimDOMOptions | 'all' | true
+    slimDOMOptions?: recordOptions['slimDOMOptions']
     collectFonts?: boolean
     inlineStylesheet?: boolean
     recordCrossOriginIframes?: boolean
@@ -428,6 +451,7 @@ export interface DecideResponse {
         linkedFlag?: string | FlagVariant | null
         networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
         urlTriggers?: SessionRecordingUrlTrigger[]
+        urlBlocklist?: SessionRecordingUrlTrigger[]
     }
     surveys?: boolean
     toolbarParams: ToolbarParams
@@ -646,6 +670,7 @@ export interface ErrorConversions {
 }
 
 export interface SessionRecordingUrlTrigger {
+    urlBlockList?: SessionRecordingUrlTrigger[]
     url: string
     matching: 'regex'
 }

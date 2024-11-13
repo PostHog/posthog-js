@@ -5,9 +5,12 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  rrweb@2.0.0-alpha.16:
-    hash: x52pllmg6k5suqkcoa7bdybazq
-    path: patches/rrweb@2.0.0-alpha.16.patch
+  '@rrweb/record@2.0.0-alpha.17':
+    hash: ds4wzvngpacxicd464fatv6v44
+    path: patches/@rrweb__record@2.0.0-alpha.17.patch
+  '@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17':
+    hash: ytsspyi7p3hvqcq64vqb7wb6bu
+    path: patches/@rrweb__rrweb-plugin-console-record@2.0.0-alpha.17.patch
 
 dependencies:
   core-js:
@@ -66,12 +69,15 @@ devDependencies:
   '@rollup/plugin-typescript':
     specifier: ^12.1.1
     version: 12.1.1(rollup@4.24.0)(tslib@2.5.0)(typescript@5.5.4)
+  '@rrweb/record':
+    specifier: 2.0.0-alpha.17
+    version: 2.0.0-alpha.17(patch_hash=ds4wzvngpacxicd464fatv6v44)
   '@rrweb/rrweb-plugin-console-record':
-    specifier: 2.0.0-alpha.15
-    version: 2.0.0-alpha.15(rrweb@2.0.0-alpha.16)
+    specifier: 2.0.0-alpha.17
+    version: 2.0.0-alpha.17(patch_hash=ytsspyi7p3hvqcq64vqb7wb6bu)(rrweb@2.0.0-alpha.17)
   '@rrweb/types':
-    specifier: 2.0.0-alpha.16
-    version: 2.0.0-alpha.16
+    specifier: 2.0.0-alpha.17
+    version: 2.0.0-alpha.17
   '@sentry/types':
     specifier: 8.7.0
     version: 8.7.0
@@ -204,12 +210,6 @@ devDependencies:
   rollup-plugin-visualizer:
     specifier: ^5.12.0
     version: 5.12.0(rollup@4.24.0)
-  rrweb:
-    specifier: 2.0.0-alpha.16
-    version: 2.0.0-alpha.16(patch_hash=x52pllmg6k5suqkcoa7bdybazq)
-  rrweb-snapshot:
-    specifier: 2.0.0-alpha.16
-    version: 2.0.0-alpha.16
   sinon:
     specifier: 9.0.2
     version: 9.0.2
@@ -2802,18 +2802,31 @@ packages:
     dev: true
     optional: true
 
-  /@rrweb/rrweb-plugin-console-record@2.0.0-alpha.15(rrweb@2.0.0-alpha.16):
-    resolution: {integrity: sha512-66iOkD99AS8WqQNAnDtkJsQnSD8E+tZx3tWMJltpRDovXs4GoBE9eYxQeTWSigz6iaqbrxYPIqQIRck+zqnheg==}
-    peerDependencies:
-      rrweb: ^2.0.0-alpha.15
+  /@rrweb/record@2.0.0-alpha.17(patch_hash=ds4wzvngpacxicd464fatv6v44):
+    resolution: {integrity: sha512-Je+lzjeWMF8/I0IDoXFzkGPKT8j7AkaBup5YcwUHlkp18VhLVze416MvI6915teE27uUA2ScXMXzG0Yiu5VTIw==}
     dependencies:
-      rrweb: 2.0.0-alpha.16(patch_hash=x52pllmg6k5suqkcoa7bdybazq)
+      '@rrweb/types': 2.0.0-alpha.17
+      rrweb: 2.0.0-alpha.17
+    dev: true
+    patched: true
+
+  /@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17(patch_hash=ytsspyi7p3hvqcq64vqb7wb6bu)(rrweb@2.0.0-alpha.17):
+    resolution: {integrity: sha512-tjNJ3wWUDMMf275xr4Rb5tVYF2UR+wXvSxnyS9tRKnRa574PQQvx7sGbqM/O9AytYjnbiTrAMqNR7OFysGCMwQ==}
+    peerDependencies:
+      rrweb: ^2.0.0-alpha.17
+    dependencies:
+      rrweb: 2.0.0-alpha.17
+    dev: true
+    patched: true
+
+  /@rrweb/types@2.0.0-alpha.17:
+    resolution: {integrity: sha512-AfDTVUuCyCaIG0lTSqYtrZqJX39ZEYzs4fYKnexhQ+id+kbZIpIJtaut5cto6dWZbB3SEe4fW0o90Po3LvTmfg==}
+    dependencies:
+      rrweb-snapshot: 2.0.0-alpha.17
     dev: true
 
-  /@rrweb/types@2.0.0-alpha.16:
-    resolution: {integrity: sha512-E6cACNVsm+NUhn7dzocQoKyXI7BHrHRRm5Ab23yrAzEQ2caWocCEYJhqDlc4KRVJBkQfXZfyWm8+2d0uggFuZg==}
-    dependencies:
-      rrweb-snapshot: 2.0.0-alpha.16
+  /@rrweb/utils@2.0.0-alpha.17:
+    resolution: {integrity: sha512-HCsasPERBwOS9/LQeOytO2ETKTCqRj1wORBuxiy3t41hKhmi225DdrUPiWnyDdTQm1GdVbOymMRknJVPnZaSXw==}
     dev: true
 
   /@sentry/types@8.7.0:
@@ -9402,28 +9415,24 @@ packages:
       rrweb-snapshot: 2.0.0-alpha.17
     dev: true
 
-  /rrweb-snapshot@2.0.0-alpha.16:
-    resolution: {integrity: sha512-p81OrzUiCmUMZzJu4fGHeLB00PIbVIqsV/zhqzr2pitHTUXpMYcyOvDWt0vHdla0vnowEPaHq3Wsu6cUc732/w==}
-    dev: true
-
   /rrweb-snapshot@2.0.0-alpha.17:
     resolution: {integrity: sha512-GBg5pV8LHOTbeVmH2VHLEFR0mc2QpQMzAvcoxEGfPNWgWHc8UvKCyq7pqN1vA+fDZ+yXXbixeO0kB2pzVvFCBw==}
     dependencies:
       postcss: 8.4.47
     dev: true
 
-  /rrweb@2.0.0-alpha.16(patch_hash=x52pllmg6k5suqkcoa7bdybazq):
-    resolution: {integrity: sha512-Uxl7quZc8gm9RqrUR+10prZBoAfKWvM5lqlWDe7zd2wAkMiBQawDHUrmt8dByx96aiLonvm4oLsbBK14A0A0Tg==}
+  /rrweb@2.0.0-alpha.17:
+    resolution: {integrity: sha512-GQxBkCC4r9XL2bwSdv7iIS49M3cEA8OtObVq0rrQ4GUT4+h7omucGQ4x7m5YN5Vq1oalStBaBlYqF7yRnfG3JA==}
     dependencies:
-      '@rrweb/types': 2.0.0-alpha.16
+      '@rrweb/types': 2.0.0-alpha.17
+      '@rrweb/utils': 2.0.0-alpha.17
       '@types/css-font-loading-module': 0.0.7
       '@xstate/fsm': 1.5.2
       base64-arraybuffer: 1.0.2
       mitt: 3.0.0
       rrdom: 2.0.0-alpha.17
-      rrweb-snapshot: 2.0.0-alpha.16
+      rrweb-snapshot: 2.0.0-alpha.17
     dev: true
-    patched: true
 
   /rsvp@4.8.5:
     resolution: {integrity: sha512-nfMOlASu9OnRJo1mbEk2cz0D56a1MBNrJ7orjRZQG10XDyuvwksKbuXNp6qa+kbn839HwjwhBzhFmdsaEAfauA==}

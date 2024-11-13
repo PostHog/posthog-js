@@ -1,3 +1,23 @@
+## 1.184.1 - 2024-11-12
+
+- chore: add type to Sentry exception (#1520)
+
+## 1.184.0 - 2024-11-12
+
+- feat: deadclicks in heatmaps (#1510)
+
+## 1.183.0 - 2024-11-12
+
+- feat: add recording url blocklist (#1500)
+
+## 1.182.0 - 2024-11-11
+
+- chore: upgrade rrweb to alpha.17 (#1489)
+
+## 1.181.0 - 2024-11-05
+
+- chore: add stack type (#1511)
+
 ## 1.180.1 - 2024-11-01
 
 - fix: dead click fixes from watching in prod (#1508)

@@ -45,6 +45,7 @@ export const INITIAL_REFERRER_INFO = '$initial_referrer_info'
 export const INITIAL_PERSON_INFO = '$initial_person_info'
 export const ENABLE_PERSON_PROCESSING = '$epp'
 export const TOOLBAR_ID = '__POSTHOG_TOOLBAR__'
+export const TOOLBAR_CONTAINER_CLASS = 'toolbar-global-fade-container'
 
 export const WEB_EXPERIMENTS = '$web_experiments'
 
