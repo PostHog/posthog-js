@@ -2,12 +2,12 @@ import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_CANVAS_RECORDING,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
+    SESSION_RECORDING_TRIGGER_ACTIVATED_SESSION,
+    SESSION_RECORDING_TRIGGER_STATUS,
     SESSION_RECORDING_IS_SAMPLED,
     SESSION_RECORDING_MINIMUM_DURATION,
     SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE,
     SESSION_RECORDING_SAMPLE_RATE,
-    SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
-    SESSION_RECORDING_URL_TRIGGER_STATUS,
 } from '../../constants'
 import {
     estimateSize,
@@ -291,7 +291,7 @@ export class SessionRecording {
     }
 
     private get fullSnapshotIntervalMillis(): number {
-        if (this.urlTriggerStatus === 'trigger_pending') {
+        if (this.triggerStatus === 'trigger_pending') {
             return ONE_MINUTE
         }
 
@@ -389,7 +389,7 @@ export class SessionRecording {
             return 'buffering'
         }
 
-        if (this.urlTriggerStatus === 'trigger_pending') {
+        if (this.triggerStatus === 'trigger_pending') {
             return 'buffering'
         }
 
@@ -404,17 +404,17 @@ export class SessionRecording {
         }
     }
 
-    private get urlTriggerStatus(): TriggerStatus {
-        if (this._urlTriggers.length === 0) {
+    private get triggerStatus(): TriggerStatus {
+        if (this._urlTriggers.length === 0 && this._eventTriggers.length === 0) {
             return 'trigger_disabled'
         }
 
-        const currentStatus = this.instance?.get_property(SESSION_RECORDING_URL_TRIGGER_STATUS)
-        const currentTriggerSession = this.instance?.get_property(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
+        const currentStatus = this.instance?.get_property(SESSION_RECORDING_TRIGGER_STATUS)
+        const currentTriggerSession = this.instance?.get_property(SESSION_RECORDING_TRIGGER_ACTIVATED_SESSION)
 
         if (currentTriggerSession !== this.sessionId) {
-            this.instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
-            this.instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_STATUS)
+            this.instance?.persistence?.unregister(SESSION_RECORDING_TRIGGER_ACTIVATED_SESSION)
+            this.instance?.persistence?.unregister(SESSION_RECORDING_TRIGGER_STATUS)
             return 'trigger_pending'
         }
 
@@ -425,10 +425,10 @@ export class SessionRecording {
         return 'trigger_pending'
     }
 
-    private set urlTriggerStatus(status: TriggerStatus) {
+    private set triggerStatus(status: TriggerStatus) {
         this.instance?.persistence?.register({
-            [SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION]: this.sessionId,
-            [SESSION_RECORDING_URL_TRIGGER_STATUS]: status,
+            [SESSION_RECORDING_TRIGGER_ACTIVATED_SESSION]: this.sessionId,
+            [SESSION_RECORDING_TRIGGER_STATUS]: status,
         })
     }
 
@@ -516,8 +516,8 @@ export class SessionRecording {
                     if (changeReason) {
                         this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
 
-                        this.instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
-                        this.instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_STATUS)
+                        this.instance?.persistence?.unregister(SESSION_RECORDING_TRIGGER_ACTIVATED_SESSION)
+                        this.instance?.persistence?.unregister(SESSION_RECORDING_TRIGGER_STATUS)
                     }
                 })
             }
@@ -1012,7 +1012,7 @@ export class SessionRecording {
         }
 
         // Check if the URL matches any trigger patterns
-        this._checkTriggerConditions()
+        this._checkUrlTriggerConditions()
 
         if (this.status === 'paused' && !isRecordingPausedEvent(rawEvent)) {
             return
@@ -1024,7 +1024,7 @@ export class SessionRecording {
         }
 
         // Clear the buffer if waiting for a trigger, and only keep data from after the current full snapshot
-        if (rawEvent.type === EventType.FullSnapshot && this.urlTriggerStatus === 'trigger_pending') {
+        if (rawEvent.type === EventType.FullSnapshot && this.triggerStatus === 'trigger_pending') {
             this.clearBuffer()
         }
 
@@ -1205,7 +1205,7 @@ export class SessionRecording {
         })
     }
 
-    private _checkTriggerConditions() {
+    private _checkUrlTriggerConditions() {
         if (typeof window === 'undefined' || !window.location.href) {
             return
         }
@@ -1222,16 +1222,16 @@ export class SessionRecording {
         }
 
         if (sessionRecordingUrlTriggerMatches(url, this._urlTriggers)) {
-            this._activateUrlTrigger()
+            this._activateTrigger('url')
         }
     }
 
-    private _activateUrlTrigger() {
-        if (this.urlTriggerStatus === 'trigger_pending') {
-            this.urlTriggerStatus = 'trigger_activated'
-            this._tryAddCustomEvent('url trigger activated', {})
+    private _activateTrigger(triggerType: 'url' | 'event') {
+        if (this.triggerStatus === 'trigger_pending') {
+            this.triggerStatus = 'trigger_activated'
+            this._tryAddCustomEvent(`${triggerType} trigger activated`, {})
             this._flushBuffer()
-            logger.info(LOGGER_PREFIX + ' recording triggered by URL pattern match')
+            logger.info(LOGGER_PREFIX + ` recording triggered by ${triggerType}`)
         }
     }
 
