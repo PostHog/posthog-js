@@ -3,6 +3,9 @@ import { PostHogPersistence } from '../posthog-persistence'
 import { SESSION_ID, USER_STATE } from '../constants'
 import { PostHogConfig } from '../types'
 import Mock = jest.Mock
+import { PostHog } from '../posthog-core'
+import { window } from '../utils/globals'
+import { uuidv7 } from '../uuidv7'
 
 let referrer = '' // No referrer by default
 Object.defineProperty(document, 'referrer', { get: () => referrer })
@@ -201,6 +204,47 @@ describe('persistence', () => {
             expect(document.cookie).toEqual('')
             expect(localStorage.getItem('ph__posthog')).toEqual(JSON.stringify(expectedProps()))
             expect(lib.properties()).toEqual(expectedProps())
+        })
+    })
+
+    describe('posthog', () => {
+        it('should not store anything in localstorage, or cookies when in sessionStorage mode', () => {
+            const token = uuidv7()
+            const persistenceKey = `ph_${token}_posthog`
+            const posthog = new PostHog().init(token, {
+                persistence: 'sessionStorage',
+            })
+            posthog.register({ distinct_id: 'test', test_prop: 'test_val' })
+            posthog.capture('test_event')
+            expect(window.localStorage.getItem(persistenceKey)).toEqual(null)
+            expect(document.cookie).toEqual('')
+            expect(window.sessionStorage.getItem(persistenceKey)).toBeTruthy()
+        })
+
+        it('should not store anything in localstorage, sessionstorage, or cookies when in memory mode', () => {
+            const token = uuidv7()
+            const persistenceKey = `ph_${token}_posthog`
+            const posthog = new PostHog().init(token, {
+                persistence: 'memory',
+            })
+            posthog.register({ distinct_id: 'test', test_prop: 'test_val' })
+            posthog.capture('test_event')
+            expect(window.localStorage.getItem(persistenceKey)).toEqual(null)
+            expect(window.sessionStorage.getItem(persistenceKey)).toEqual(null)
+            expect(document.cookie).toEqual('')
+        })
+
+        it('should not store anything in cookies when in localstorage mode', () => {
+            const token = uuidv7()
+            const persistenceKey = `ph_${token}_posthog`
+            const posthog = new PostHog().init(token, {
+                persistence: 'localStorage',
+            })
+            posthog.register({ distinct_id: 'test', test_prop: 'test_val' })
+            posthog.capture('test_event')
+            expect(window.localStorage.getItem(persistenceKey)).toBeTruthy()
+            expect(window.sessionStorage.getItem(persistenceKey)).toBeTruthy()
+            expect(document.cookie).toEqual('')
         })
     })
 })

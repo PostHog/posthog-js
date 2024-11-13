@@ -412,7 +412,7 @@ export class PostHog {
 
         this.persistence = new PostHogPersistence(this.config)
         this.sessionPersistence =
-            this.config.persistence === 'sessionStorage'
+            this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
                 ? this.persistence
                 : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
@@ -1786,7 +1786,7 @@ export class PostHog {
 
             this.persistence?.update_config(this.config, oldConfig)
             this.sessionPersistence =
-                this.config.persistence === 'sessionStorage'
+                this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
                     ? this.persistence
                     : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
