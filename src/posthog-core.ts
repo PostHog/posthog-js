@@ -533,7 +533,8 @@ export class PostHog {
             this._loaded()
         }
 
-        if (isFunction(this.config._onCapture)) {
+        if (isFunction(this.config._onCapture) && this.config._onCapture !== __NOOP) {
+            logger.warn('onCapture is deprecated. Please use `before_send` instead')
             this.on('eventCaptured', (data) => this.config._onCapture(data.event, data))
         }
 

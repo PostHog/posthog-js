@@ -35,7 +35,7 @@ describe('Exception Observer', () => {
     let exceptionObserver: ExceptionObserver
     let posthog: PostHog
     let sendRequestSpy: jest.SpyInstance
-    const mockCapture = jest.fn()
+    const beforeSendMock = jest.fn().mockImplementation((e) => e)
     const loadScriptMock = jest.fn()
 
     const addErrorWrappingFlagToWindow = () => {
@@ -51,7 +51,7 @@ describe('Exception Observer', () => {
             callback()
         })
 
-        posthog = await createPosthogInstance(uuidv7(), { _onCapture: mockCapture })
+        posthog = await createPosthogInstance(uuidv7(), { before_send: beforeSendMock })
         assignableWindow.__PosthogExtensions__ = {
             loadExternalDependency: loadScriptMock,
         }
@@ -91,11 +91,11 @@ describe('Exception Observer', () => {
             const error = new Error('test error')
             window!.onerror?.call(window, 'message', 'source', 0, 0, error)
 
-            const captureCalls = mockCapture.mock.calls
+            const captureCalls = beforeSendMock.mock.calls
             expect(captureCalls.length).toBe(1)
             const singleCall = captureCalls[0]
-            expect(singleCall[0]).toBe('$exception')
-            expect(singleCall[1]).toMatchObject({
+            expect(singleCall[0]).toMatchObject({
+                event: '$exception',
                 properties: {
                     $exception_personURL: expect.any(String),
                     $exception_list: [
@@ -120,11 +120,11 @@ describe('Exception Observer', () => {
             })
             window!.onunhandledrejection?.call(window!, promiseRejectionEvent)
 
-            const captureCalls = mockCapture.mock.calls
+            const captureCalls = beforeSendMock.mock.calls
             expect(captureCalls.length).toBe(1)
             const singleCall = captureCalls[0]
-            expect(singleCall[0]).toBe('$exception')
-            expect(singleCall[1]).toMatchObject({
+            expect(singleCall[0]).toMatchObject({
+                event: '$exception',
                 properties: {
                     $exception_personURL: expect.any(String),
                     $exception_list: [

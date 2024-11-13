@@ -267,6 +267,7 @@ export interface PostHogConfig {
     name: string
     /**
      * this is a read-only function that can be used to react to event capture
+     * @deprecated - use `before_send` instead - NB before_send is not read only
      */
     _onCapture: (eventName: string, eventData: CaptureResult) => void
     /**

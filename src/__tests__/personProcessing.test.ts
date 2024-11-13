@@ -78,13 +78,13 @@ describe('person processing', () => {
         persistence_name?: string
     ) => {
         token = token || uuidv7()
-        const onCapture = jest.fn()
+        const beforeSendMock = jest.fn().mockImplementation((e) => e)
         const posthog = await createPosthogInstance(token, {
-            _onCapture: onCapture,
+            before_send: beforeSendMock,
             person_profiles,
             persistence_name,
         })
-        return { token, onCapture, posthog }
+        return { token, beforeSendMock, posthog }
     }
 
     describe('init', () => {
@@ -142,7 +142,7 @@ describe('person processing', () => {
     describe('identify', () => {
         it('should fail if process_person is set to never', async () => {
             // arrange
-            const { posthog, onCapture } = await setup('never')
+            const { posthog, beforeSendMock } = await setup('never')
 
             // act
             posthog.identify(distinctId)
@@ -152,12 +152,12 @@ describe('person processing', () => {
             expect(jest.mocked(logger).error).toHaveBeenCalledWith(
                 'posthog.identify was called, but process_person is set to "never". This call will be ignored.'
             )
-            expect(onCapture).toBeCalledTimes(0)
+            expect(beforeSendMock).toBeCalledTimes(0)
         })
 
         it('should switch events to $person_process=true if process_person is identified_only', async () => {
             // arrange
-            const { posthog, onCapture } = await setup('identified_only')
+            const { posthog, beforeSendMock } = await setup('identified_only')
 
             // act
             posthog.capture('custom event before identify')
@@ -165,18 +165,18 @@ describe('person processing', () => {
             posthog.capture('custom event after identify')
             // assert
             expect(jest.mocked(logger).error).toBeCalledTimes(0)
-            const eventBeforeIdentify = onCapture.mock.calls[0]
-            expect(eventBeforeIdentify[1].properties.$process_person_profile).toEqual(false)
-            const identifyCall = onCapture.mock.calls[1]
-            expect(identifyCall[0]).toEqual('$identify')
-            expect(identifyCall[1].properties.$process_person_profile).toEqual(true)
-            const eventAfterIdentify = onCapture.mock.calls[2]
-            expect(eventAfterIdentify[1].properties.$process_person_profile).toEqual(true)
+            const eventBeforeIdentify = beforeSendMock.mock.calls[0]
+            expect(eventBeforeIdentify[0].properties.$process_person_profile).toEqual(false)
+            const identifyCall = beforeSendMock.mock.calls[1]
+            expect(identifyCall[0].event).toEqual('$identify')
+            expect(identifyCall[0].properties.$process_person_profile).toEqual(true)
+            const eventAfterIdentify = beforeSendMock.mock.calls[2]
+            expect(eventAfterIdentify[0].properties.$process_person_profile).toEqual(true)
         })
 
         it('should not change $person_process if process_person is always', async () => {
             // arrange
-            const { posthog, onCapture } = await setup('always')
+            const { posthog, beforeSendMock } = await setup('always')
 
             // act
             posthog.capture('custom event before identify')
@@ -184,26 +184,26 @@ describe('person processing', () => {
             posthog.capture('custom event after identify')
             // assert
             expect(jest.mocked(logger).error).toBeCalledTimes(0)
-            const eventBeforeIdentify = onCapture.mock.calls[0]
-            expect(eventBeforeIdentify[1].properties.$process_person_profile).toEqual(true)
-            const identifyCall = onCapture.mock.calls[1]
-            expect(identifyCall[0]).toEqual('$identify')
-            expect(identifyCall[1].properties.$process_person_profile).toEqual(true)
-            const eventAfterIdentify = onCapture.mock.calls[2]
-            expect(eventAfterIdentify[1].properties.$process_person_profile).toEqual(true)
+            const eventBeforeIdentify = beforeSendMock.mock.calls[0]
+            expect(eventBeforeIdentify[0].properties.$process_person_profile).toEqual(true)
+            const identifyCall = beforeSendMock.mock.calls[1]
+            expect(identifyCall[0].event).toEqual('$identify')
+            expect(identifyCall[0].properties.$process_person_profile).toEqual(true)
+            const eventAfterIdentify = beforeSendMock.mock.calls[2]
+            expect(eventAfterIdentify[0].properties.$process_person_profile).toEqual(true)
         })
 
         it('should include initial referrer info in identify event if identified_only', async () => {
             // arrange
-            const { posthog, onCapture } = await setup('identified_only')
+            const { posthog, beforeSendMock } = await setup('identified_only')
 
             // act
             posthog.identify(distinctId)
 
             // assert
-            const identifyCall = onCapture.mock.calls[0]
-            expect(identifyCall[0]).toEqual('$identify')
-            expect(identifyCall[1].$set_once).toEqual({
+            const identifyCall = beforeSendMock.mock.calls[0]
+            expect(identifyCall[0].event).toEqual('$identify')
+            expect(identifyCall[0].$set_once).toEqual({
                 ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
@@ -216,7 +216,7 @@ describe('person processing', () => {
 
         it('should preserve initial referrer info across a separate session', async () => {
             // arrange
-            const { posthog, onCapture } = await setup('identified_only')
+            const { posthog, beforeSendMock } = await setup('identified_only')
             mockReferrerGetter.mockReturnValue('https://referrer1.com')
             mockURLGetter.mockReturnValue('https://example1.com/pathname1?utm_source=foo1')
 
@@ -236,17 +236,17 @@ describe('person processing', () => {
             posthog.capture('event s2 after identify')
 
             // assert
-            const eventS1 = onCapture.mock.calls[0]
-            const eventS2Before = onCapture.mock.calls[1]
-            const eventS2Identify = onCapture.mock.calls[2]
-            const eventS2After = onCapture.mock.calls[3]
+            const eventS1 = beforeSendMock.mock.calls[0]
+            const eventS2Before = beforeSendMock.mock.calls[1]
+            const eventS2Identify = beforeSendMock.mock.calls[2]
+            const eventS2After = beforeSendMock.mock.calls[3]
 
-            expect(eventS1[1].$set_once).toEqual(undefined)
+            expect(eventS1[0].$set_once).toEqual(undefined)
 
-            expect(eventS2Before[1].$set_once).toEqual(undefined)
+            expect(eventS2Before[0].$set_once).toEqual(undefined)
 
-            expect(eventS2Identify[0]).toEqual('$identify')
-            expect(eventS2Identify[1].$set_once).toEqual({
+            expect(eventS2Identify[0].event).toEqual('$identify')
+            expect(eventS2Identify[0].$set_once).toEqual({
                 ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example1.com/pathname1?utm_source=foo1',
                 $initial_host: 'example1.com',
@@ -256,8 +256,8 @@ describe('person processing', () => {
                 $initial_utm_source: 'foo1',
             })
 
-            expect(eventS2After[0]).toEqual('event s2 after identify')
-            expect(eventS2After[1].$set_once).toEqual({
+            expect(eventS2After[0].event).toEqual('event s2 after identify')
+            expect(eventS2After[0].$set_once).toEqual({
                 ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example1.com/pathname1?utm_source=foo1',
                 $initial_host: 'example1.com',
@@ -270,15 +270,15 @@ describe('person processing', () => {
 
         it('should include initial referrer info in identify event if always', async () => {
             // arrange
-            const { posthog, onCapture } = await setup('always')
+            const { posthog, beforeSendMock } = await setup('always')
 
             // act
             posthog.identify(distinctId)
 
             // assert
-            const identifyCall = onCapture.mock.calls[0]
-            expect(identifyCall[0]).toEqual('$identify')
-            expect(identifyCall[1].$set_once).toEqual({
+            const identifyCall = beforeSendMock.mock.calls[0]
+            expect(identifyCall[0].event).toEqual('$identify')
+            expect(identifyCall[0].$set_once).toEqual({
                 ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
@@ -291,16 +291,16 @@ describe('person processing', () => {
 
         it('should include initial search params', async () => {
             // arrange
-            const { posthog, onCapture } = await setup('always')
+            const { posthog, beforeSendMock } = await setup('always')
             mockReferrerGetter.mockReturnValue('https://www.google.com?q=bar')
 
             // act
             posthog.identify(distinctId)
 
             // assert
-            const identifyCall = onCapture.mock.calls[0]
-            expect(identifyCall[0]).toEqual('$identify')
-            expect(identifyCall[1].$set_once).toEqual({
+            const identifyCall = beforeSendMock.mock.calls[0]
+            expect(identifyCall[0].event).toEqual('$identify')
+            expect(identifyCall[0].$set_once).toEqual({
                 ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
@@ -315,7 +315,7 @@ describe('person processing', () => {
 
         it('should be backwards compatible with deprecated INITIAL_REFERRER_INFO and INITIAL_CAMPAIGN_PARAMS way of saving initial person props', async () => {
             // arrange
-            const { posthog, onCapture } = await setup('always')
+            const { posthog, beforeSendMock } = await setup('always')
             posthog.persistence!.props[INITIAL_REFERRER_INFO] = {
                 referrer: 'https://deprecated-referrer.com',
                 referring_domain: 'deprecated-referrer.com',
@@ -328,9 +328,9 @@ describe('person processing', () => {
             posthog.identify(distinctId)
 
             // assert
-            const identifyCall = onCapture.mock.calls[0]
-            expect(identifyCall[0]).toEqual('$identify')
-            expect(identifyCall[1].$set_once).toEqual({
+            const identifyCall = beforeSendMock.mock.calls[0]
+            expect(identifyCall[0].event).toEqual('$identify')
+            expect(identifyCall[0].$set_once).toEqual({
                 $initial_referrer: 'https://deprecated-referrer.com',
                 $initial_referring_domain: 'deprecated-referrer.com',
                 $initial_utm_source: 'deprecated-source',
@@ -341,7 +341,7 @@ describe('person processing', () => {
     describe('capture', () => {
         it('should include initial referrer info iff the event has person processing when in identified_only mode', async () => {
             // arrange
-            const { posthog, onCapture } = await setup('identified_only')
+            const { posthog, beforeSendMock } = await setup('identified_only')
 
             // act
             posthog.capture('custom event before identify')
@@ -349,10 +349,10 @@ describe('person processing', () => {
             posthog.capture('custom event after identify')
 
             // assert
-            const eventBeforeIdentify = onCapture.mock.calls[0]
-            expect(eventBeforeIdentify[1].$set_once).toBeUndefined()
-            const eventAfterIdentify = onCapture.mock.calls[2]
-            expect(eventAfterIdentify[1].$set_once).toEqual({
+            const eventBeforeIdentify = beforeSendMock.mock.calls[0]
+            expect(eventBeforeIdentify[0].$set_once).toBeUndefined()
+            const eventAfterIdentify = beforeSendMock.mock.calls[2]
+            expect(eventAfterIdentify[0].$set_once).toEqual({
                 ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
@@ -365,7 +365,7 @@ describe('person processing', () => {
 
         it('should add initial referrer to set_once when in always mode', async () => {
             // arrange
-            const { posthog, onCapture } = await setup('always')
+            const { posthog, beforeSendMock } = await setup('always')
 
             // act
             posthog.capture('custom event before identify')
@@ -373,8 +373,8 @@ describe('person processing', () => {
             posthog.capture('custom event after identify')
 
             // assert
-            const eventBeforeIdentify = onCapture.mock.calls[0]
-            expect(eventBeforeIdentify[1].$set_once).toEqual({
+            const eventBeforeIdentify = beforeSendMock.mock.calls[0]
+            expect(eventBeforeIdentify[0].$set_once).toEqual({
                 ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
@@ -383,8 +383,8 @@ describe('person processing', () => {
                 $initial_referring_domain: 'referrer.com',
                 $initial_utm_source: 'foo',
             })
-            const eventAfterIdentify = onCapture.mock.calls[2]
-            expect(eventAfterIdentify[1].$set_once).toEqual({
+            const eventAfterIdentify = beforeSendMock.mock.calls[2]
+            expect(eventAfterIdentify[0].$set_once).toEqual({
                 ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
@@ -399,7 +399,7 @@ describe('person processing', () => {
     describe('group', () => {
         it('should start person processing for identified_only users', async () => {
             // arrange
-            const { posthog, onCapture } = await setup('identified_only')
+            const { posthog, beforeSendMock } = await setup('identified_only')
 
             // act
             posthog.capture('custom event before group')
@@ -407,18 +407,18 @@ describe('person processing', () => {
             posthog.capture('custom event after group')
 
             // assert
-            const eventBeforeGroup = onCapture.mock.calls[0]
-            expect(eventBeforeGroup[1].properties.$process_person_profile).toEqual(false)
-            const groupIdentify = onCapture.mock.calls[1]
-            expect(groupIdentify[0]).toEqual('$groupidentify')
-            expect(groupIdentify[1].properties.$process_person_profile).toEqual(true)
-            const eventAfterGroup = onCapture.mock.calls[2]
-            expect(eventAfterGroup[1].properties.$process_person_profile).toEqual(true)
+            const eventBeforeGroup = beforeSendMock.mock.calls[0]
+            expect(eventBeforeGroup[0].properties.$process_person_profile).toEqual(false)
+            const groupIdentify = beforeSendMock.mock.calls[1]
+            expect(groupIdentify[0].event).toEqual('$groupidentify')
+            expect(groupIdentify[0].properties.$process_person_profile).toEqual(true)
+            const eventAfterGroup = beforeSendMock.mock.calls[2]
+            expect(eventAfterGroup[0].properties.$process_person_profile).toEqual(true)
         })
 
         it('should not send the $groupidentify event if person_processing is set to never', async () => {
             // arrange
-            const { posthog, onCapture } = await setup('never')
+            const { posthog, beforeSendMock } = await setup('never')
 
             // act
             posthog.capture('custom event before group')
@@ -431,24 +431,24 @@ describe('person processing', () => {
                 'posthog.group was called, but process_person is set to "never". This call will be ignored.'
             )
 
-            expect(onCapture).toBeCalledTimes(2)
-            const eventBeforeGroup = onCapture.mock.calls[0]
-            expect(eventBeforeGroup[1].properties.$process_person_profile).toEqual(false)
-            const eventAfterGroup = onCapture.mock.calls[1]
-            expect(eventAfterGroup[1].properties.$process_person_profile).toEqual(false)
+            expect(beforeSendMock).toBeCalledTimes(2)
+            const eventBeforeGroup = beforeSendMock.mock.calls[0]
+            expect(eventBeforeGroup[0].properties.$process_person_profile).toEqual(false)
+            const eventAfterGroup = beforeSendMock.mock.calls[1]
+            expect(eventAfterGroup[0].properties.$process_person_profile).toEqual(false)
         })
     })
 
     describe('setPersonProperties', () => {
         it("should not send a $set event if process_person is set to 'never'", async () => {
             // arrange
-            const { posthog, onCapture } = await setup('never')
+            const { posthog, beforeSendMock } = await setup('never')
 
             // act
             posthog.setPersonProperties({ prop: 'value' })
 
             // assert
-            expect(onCapture).toBeCalledTimes(0)
+            expect(beforeSendMock).toBeCalledTimes(0)
             expect(jest.mocked(logger).error).toBeCalledTimes(1)
             expect(jest.mocked(logger).error).toHaveBeenCalledWith(
                 'posthog.setPersonProperties was called, but process_person is set to "never". This call will be ignored.'
@@ -457,19 +457,19 @@ describe('person processing', () => {
 
         it("should send a $set event if process_person is set to 'always'", async () => {
             // arrange
-            const { posthog, onCapture } = await setup('always')
+            const { posthog, beforeSendMock } = await setup('always')
 
             // act
             posthog.setPersonProperties({ prop: 'value' })
 
             // assert
-            expect(onCapture).toBeCalledTimes(1)
-            expect(onCapture.mock.calls[0][0]).toEqual('$set')
+            expect(beforeSendMock).toBeCalledTimes(1)
+            expect(beforeSendMock.mock.calls[0][0].event).toEqual('$set')
         })
 
         it('should start person processing for identified_only users', async () => {
             // arrange
-            const { posthog, onCapture } = await setup('identified_only')
+            const { posthog, beforeSendMock } = await setup('identified_only')
 
             // act
             posthog.capture('custom event before setPersonProperties')
@@ -477,20 +477,20 @@ describe('person processing', () => {
             posthog.capture('custom event after setPersonProperties')
 
             // assert
-            const eventBeforeGroup = onCapture.mock.calls[0]
-            expect(eventBeforeGroup[1].properties.$process_person_profile).toEqual(false)
-            const set = onCapture.mock.calls[1]
-            expect(set[0]).toEqual('$set')
-            expect(set[1].properties.$process_person_profile).toEqual(true)
-            const eventAfterGroup = onCapture.mock.calls[2]
-            expect(eventAfterGroup[1].properties.$process_person_profile).toEqual(true)
+            const eventBeforeGroup = beforeSendMock.mock.calls[0]
+            expect(eventBeforeGroup[0].properties.$process_person_profile).toEqual(false)
+            const set = beforeSendMock.mock.calls[1]
+            expect(set[0].event).toEqual('$set')
+            expect(set[0].properties.$process_person_profile).toEqual(true)
+            const eventAfterGroup = beforeSendMock.mock.calls[2]
+            expect(eventAfterGroup[0].properties.$process_person_profile).toEqual(true)
         })
     })
 
     describe('alias', () => {
         it('should start person processing for identified_only users', async () => {
             // arrange
-            const { posthog, onCapture } = await setup('identified_only')
+            const { posthog, beforeSendMock } = await setup('identified_only')
 
             // act
             posthog.capture('custom event before alias')
@@ -498,24 +498,24 @@ describe('person processing', () => {
             posthog.capture('custom event after alias')
 
             // assert
-            const eventBeforeGroup = onCapture.mock.calls[0]
-            expect(eventBeforeGroup[1].properties.$process_person_profile).toEqual(false)
-            const alias = onCapture.mock.calls[1]
-            expect(alias[0]).toEqual('$create_alias')
-            expect(alias[1].properties.$process_person_profile).toEqual(true)
-            const eventAfterGroup = onCapture.mock.calls[2]
-            expect(eventAfterGroup[1].properties.$process_person_profile).toEqual(true)
+            const eventBeforeGroup = beforeSendMock.mock.calls[0]
+            expect(eventBeforeGroup[0].properties.$process_person_profile).toEqual(false)
+            const alias = beforeSendMock.mock.calls[1]
+            expect(alias[0].event).toEqual('$create_alias')
+            expect(alias[0].properties.$process_person_profile).toEqual(true)
+            const eventAfterGroup = beforeSendMock.mock.calls[2]
+            expect(eventAfterGroup[0].properties.$process_person_profile).toEqual(true)
         })
 
         it('should not send a $create_alias event if person processing is set to "never"', async () => {
             // arrange
-            const { posthog, onCapture } = await setup('never')
+            const { posthog, beforeSendMock } = await setup('never')
 
             // act
             posthog.alias('alias')
 
             // assert
-            expect(onCapture).toBeCalledTimes(0)
+            expect(beforeSendMock).toBeCalledTimes(0)
             expect(jest.mocked(logger).error).toBeCalledTimes(1)
             expect(jest.mocked(logger).error).toHaveBeenCalledWith(
                 'posthog.alias was called, but process_person is set to "never". This call will be ignored.'
@@ -526,7 +526,7 @@ describe('person processing', () => {
     describe('createPersonProfile', () => {
         it('should start person processing for identified_only users', async () => {
             // arrange
-            const { posthog, onCapture } = await setup('identified_only')
+            const { posthog, beforeSendMock } = await setup('identified_only')
 
             // act
             posthog.capture('custom event before createPersonProfile')
@@ -534,19 +534,19 @@ describe('person processing', () => {
             posthog.capture('custom event after createPersonProfile')
 
             // assert
-            expect(onCapture.mock.calls.length).toEqual(3)
-            const eventBeforeGroup = onCapture.mock.calls[0]
-            expect(eventBeforeGroup[1].properties.$process_person_profile).toEqual(false)
-            const set = onCapture.mock.calls[1]
-            expect(set[0]).toEqual('$set')
-            expect(set[1].properties.$process_person_profile).toEqual(true)
-            const eventAfterGroup = onCapture.mock.calls[2]
-            expect(eventAfterGroup[1].properties.$process_person_profile).toEqual(true)
+            expect(beforeSendMock.mock.calls.length).toEqual(3)
+            const eventBeforeGroup = beforeSendMock.mock.calls[0]
+            expect(eventBeforeGroup[0].properties.$process_person_profile).toEqual(false)
+            const set = beforeSendMock.mock.calls[1]
+            expect(set[0].event).toEqual('$set')
+            expect(set[0].properties.$process_person_profile).toEqual(true)
+            const eventAfterGroup = beforeSendMock.mock.calls[2]
+            expect(eventAfterGroup[0].properties.$process_person_profile).toEqual(true)
         })
 
         it('should do nothing if already has person profiles', async () => {
             // arrange
-            const { posthog, onCapture } = await setup('identified_only')
+            const { posthog, beforeSendMock } = await setup('identified_only')
 
             // act
             posthog.capture('custom event before createPersonProfile')
@@ -555,18 +555,18 @@ describe('person processing', () => {
             posthog.createPersonProfile()
 
             // assert
-            expect(onCapture.mock.calls.length).toEqual(3)
+            expect(beforeSendMock.mock.calls.length).toEqual(3)
         })
 
         it("should not send an event if process_person is to set to 'always'", async () => {
             // arrange
-            const { posthog, onCapture } = await setup('always')
+            const { posthog, beforeSendMock } = await setup('always')
 
             // act
             posthog.createPersonProfile()
 
             // assert
-            expect(onCapture).toBeCalledTimes(0)
+            expect(beforeSendMock).toBeCalledTimes(0)
             expect(jest.mocked(logger).error).toBeCalledTimes(0)
         })
     })
@@ -574,7 +574,7 @@ describe('person processing', () => {
     describe('reset', () => {
         it('should revert a back to anonymous state in identified_only', async () => {
             // arrange
-            const { posthog, onCapture } = await setup('identified_only')
+            const { posthog, beforeSendMock } = await setup('identified_only')
             posthog.identify(distinctId)
             posthog.capture('custom event before reset')
 
@@ -584,8 +584,8 @@ describe('person processing', () => {
 
             // assert
             expect(posthog._isIdentified()).toBe(false)
-            expect(onCapture.mock.calls.length).toEqual(3)
-            expect(onCapture.mock.calls[2][1].properties.$process_person_profile).toEqual(false)
+            expect(beforeSendMock.mock.calls.length).toEqual(3)
+            expect(beforeSendMock.mock.calls[2][0].properties.$process_person_profile).toEqual(false)
         })
     })
 
@@ -593,9 +593,13 @@ describe('person processing', () => {
         it('should remember that a user set the mode to always on a previous visit', async () => {
             // arrange
             const persistenceName = uuidv7()
-            const { posthog: posthog1, onCapture: onCapture1 } = await setup('always', undefined, persistenceName)
+            const { posthog: posthog1, beforeSendMock: beforeSendMock1 } = await setup(
+                'always',
+                undefined,
+                persistenceName
+            )
             posthog1.capture('custom event 1')
-            const { posthog: posthog2, onCapture: onCapture2 } = await setup(
+            const { posthog: posthog2, beforeSendMock: beforeSendMock2 } = await setup(
                 'identified_only',
                 undefined,
                 persistenceName
@@ -605,38 +609,42 @@ describe('person processing', () => {
             posthog2.capture('custom event 2')
 
             // assert
-            expect(onCapture1.mock.calls.length).toEqual(1)
-            expect(onCapture2.mock.calls.length).toEqual(1)
-            expect(onCapture1.mock.calls[0][1].properties.$process_person_profile).toEqual(true)
-            expect(onCapture2.mock.calls[0][1].properties.$process_person_profile).toEqual(true)
+            expect(beforeSendMock1.mock.calls.length).toEqual(1)
+            expect(beforeSendMock2.mock.calls.length).toEqual(1)
+            expect(beforeSendMock1.mock.calls[0][0].properties.$process_person_profile).toEqual(true)
+            expect(beforeSendMock2.mock.calls[0][0].properties.$process_person_profile).toEqual(true)
         })
 
         it('should work when always is set on a later visit', async () => {
             // arrange
             const persistenceName = uuidv7()
-            const { posthog: posthog1, onCapture: onCapture1 } = await setup(
+            const { posthog: posthog1, beforeSendMock: beforeSendMock1 } = await setup(
                 'identified_only',
                 undefined,
                 persistenceName
             )
             posthog1.capture('custom event 1')
-            const { posthog: posthog2, onCapture: onCapture2 } = await setup('always', undefined, persistenceName)
+            const { posthog: posthog2, beforeSendMock: beforeSendMock2 } = await setup(
+                'always',
+                undefined,
+                persistenceName
+            )
 
             // act
             posthog2.capture('custom event 2')
 
             // assert
-            expect(onCapture1.mock.calls.length).toEqual(1)
-            expect(onCapture2.mock.calls.length).toEqual(1)
-            expect(onCapture1.mock.calls[0][1].properties.$process_person_profile).toEqual(false)
-            expect(onCapture2.mock.calls[0][1].properties.$process_person_profile).toEqual(true)
+            expect(beforeSendMock1.mock.calls.length).toEqual(1)
+            expect(beforeSendMock2.mock.calls.length).toEqual(1)
+            expect(beforeSendMock1.mock.calls[0][0].properties.$process_person_profile).toEqual(false)
+            expect(beforeSendMock2.mock.calls[0][0].properties.$process_person_profile).toEqual(true)
         })
     })
 
     describe('decide', () => {
         it('should change the person mode from default when decide response is handled', async () => {
             // arrange
-            const { posthog, onCapture } = await setup(undefined)
+            const { posthog, beforeSendMock } = await setup(undefined)
             posthog.capture('startup page view')
 
             // act
@@ -644,14 +652,14 @@ describe('person processing', () => {
             posthog.capture('custom event')
 
             // assert
-            expect(onCapture.mock.calls.length).toEqual(2)
-            expect(onCapture.mock.calls[0][1].properties.$process_person_profile).toEqual(false)
-            expect(onCapture.mock.calls[1][1].properties.$process_person_profile).toEqual(true)
+            expect(beforeSendMock.mock.calls.length).toEqual(2)
+            expect(beforeSendMock.mock.calls[0][0].properties.$process_person_profile).toEqual(false)
+            expect(beforeSendMock.mock.calls[1][0].properties.$process_person_profile).toEqual(true)
         })
 
         it('should NOT change the person mode from user-defined when decide response is handled', async () => {
             // arrange
-            const { posthog, onCapture } = await setup('identified_only')
+            const { posthog, beforeSendMock } = await setup('identified_only')
             posthog.capture('startup page view')
 
             // act
@@ -659,27 +667,35 @@ describe('person processing', () => {
             posthog.capture('custom event')
 
             // assert
-            expect(onCapture.mock.calls.length).toEqual(2)
-            expect(onCapture.mock.calls[0][1].properties.$process_person_profile).toEqual(false)
-            expect(onCapture.mock.calls[1][1].properties.$process_person_profile).toEqual(false)
+            expect(beforeSendMock.mock.calls.length).toEqual(2)
+            expect(beforeSendMock.mock.calls[0][0].properties.$process_person_profile).toEqual(false)
+            expect(beforeSendMock.mock.calls[1][0].properties.$process_person_profile).toEqual(false)
         })
 
         it('should persist when the default person mode is overridden by decide', async () => {
             // arrange
             const persistenceName = uuidv7()
-            const { posthog: posthog1, onCapture: onCapture1 } = await setup(undefined, undefined, persistenceName)
+            const { posthog: posthog1, beforeSendMock: beforeSendMock1 } = await setup(
+                undefined,
+                undefined,
+                persistenceName
+            )
 
             // act
             posthog1._afterDecideResponse({ defaultIdentifiedOnly: false } as DecideResponse)
             posthog1.capture('custom event 1')
-            const { posthog: posthog2, onCapture: onCapture2 } = await setup(undefined, undefined, persistenceName)
+            const { posthog: posthog2, beforeSendMock: beforeSendMock2 } = await setup(
+                undefined,
+                undefined,
+                persistenceName
+            )
             posthog2.capture('custom event 2')
 
             // assert
-            expect(onCapture1.mock.calls.length).toEqual(1)
-            expect(onCapture2.mock.calls.length).toEqual(1)
-            expect(onCapture1.mock.calls[0][1].properties.$process_person_profile).toEqual(true)
-            expect(onCapture2.mock.calls[0][1].properties.$process_person_profile).toEqual(true)
+            expect(beforeSendMock1.mock.calls.length).toEqual(1)
+            expect(beforeSendMock2.mock.calls.length).toEqual(1)
+            expect(beforeSendMock1.mock.calls[0][0].properties.$process_person_profile).toEqual(true)
+            expect(beforeSendMock2.mock.calls[0][0].properties.$process_person_profile).toEqual(true)
         })
     })
 })
