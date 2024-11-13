@@ -79,6 +79,7 @@ export const initPosthog = (testName, config) => {
             }
             clientPosthogConfig.before_send = (event) => {
                 window.fullCaptures.push(event)
+                return event
             }
             window.posthog.init(clientPosthogConfig.api_key, clientPosthogConfig)
             window.posthog.register(register)
