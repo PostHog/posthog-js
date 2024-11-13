@@ -54,7 +54,6 @@ import { uuidv7 } from './uuidv7'
 import { Survey, SurveyCallback, SurveyQuestionBranchingType } from './posthog-surveys-types'
 import {
     isArray,
-    isBoolean,
     isEmptyObject,
     isEmptyString,
     isFunction,
@@ -1821,37 +1820,35 @@ export class PostHog {
     startSessionRecording(
         override?: { sampling?: boolean; linked_flag?: boolean; url_trigger?: true; event_trigger?: true } | true
     ): void {
-        const overrideAll = isBoolean(override) && override
-        if (
-            overrideAll ||
-            override?.sampling ||
-            override?.linked_flag ||
-            override?.url_trigger ||
-            override?.event_trigger
-        ) {
-            // allow the session id check to rotate session id if necessary
-            const ids = this.sessionManager?.checkAndGetSessionAndWindowId()
-            let msg = 'Session recording with id "' + ids?.sessionId + '" started'
-
-            if (overrideAll || override?.sampling) {
-                this.sessionRecording?.overrideSampling()
-                msg += ' with sampling override'
-            }
-            if (overrideAll || override?.linked_flag) {
-                this.sessionRecording?.overrideLinkedFlag()
-                msg += ' with linked_flag override'
-            }
-            if (overrideAll || override?.url_trigger) {
-                this.sessionRecording?.overrideTrigger('url')
-                msg += ' with url_trigger override'
-            }
-            if (overrideAll || override?.event_trigger) {
-                this.sessionRecording?.overrideTrigger('event')
-                msg += ' with event_trigger override'
-            }
-
-            logger.info(msg)
+        const overrideAll = override === true
+        const overrideConfig = {
+            sampling: overrideAll || !!override?.sampling,
+            linked_flag: overrideAll || !!override?.linked_flag,
+            url_trigger: overrideAll || !!override?.url_trigger,
+            event_trigger: overrideAll || !!override?.event_trigger,
         }
+
+        if (Object.values(overrideConfig).some(Boolean)) {
+            // allow the session id check to rotate session id if necessary
+            this.sessionManager?.checkAndGetSessionAndWindowId()
+
+            if (overrideConfig.sampling) {
+                this.sessionRecording?.overrideSampling()
+            }
+
+            if (overrideConfig.linked_flag) {
+                this.sessionRecording?.overrideLinkedFlag()
+            }
+
+            if (overrideConfig.url_trigger) {
+                this.sessionRecording?.overrideTrigger('url')
+            }
+
+            if (overrideConfig.event_trigger) {
+                this.sessionRecording?.overrideTrigger('event')
+            }
+        }
+
         this.set_config({ disable_session_recording: false })
     }
 
