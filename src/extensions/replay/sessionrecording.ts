@@ -19,6 +19,7 @@ import {
 } from './sessionrecording-utils'
 import { PostHog } from '../../posthog-core'
 import {
+    CaptureResult,
     DecideResponse,
     FlagVariant,
     NetworkRecordOptions,
@@ -1287,11 +1288,11 @@ export class SessionRecording {
             return
         }
 
-        this._removeEventTriggerCaptureHook = this.instance._addCaptureHook((eventName) => {
+        this._removeEventTriggerCaptureHook = this.instance.on('eventCaptured', (event: CaptureResult) => {
             // If anything could go wrong here it has the potential to block the main loop,
             // so we catch all errors.
             try {
-                if (this._eventTriggers.includes(eventName)) {
+                if (this._eventTriggers.includes(event.event)) {
                     this._activateTrigger('event')
                 }
             } catch (e) {
