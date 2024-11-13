@@ -550,6 +550,8 @@ export class SessionRecording {
 
             this._removePageViewCaptureHook?.()
             this._removePageViewCaptureHook = undefined
+            this._removeEventTriggerCaptureHook?.()
+            this._removeEventTriggerCaptureHook = undefined
             this._onSessionIdListener?.()
             this._onSessionIdListener = undefined
             this._samplingSessionListener?.()
@@ -1241,10 +1243,11 @@ export class SessionRecording {
     private _activateTrigger(triggerType: 'url' | 'event') {
         if (this.triggerStatus === 'trigger_pending') {
             this.triggerStatus = 'trigger_activated'
-            this._tryAddCustomEvent(`${triggerType} trigger activated`, {})
-            this._reportStarted(triggerType === 'url' ? 'url_trigger_match' : 'event_trigger_match')
             this._flushBuffer()
-            logger.info(LOGGER_PREFIX + ` recording triggered by ${triggerType}`)
+            const msg = `${triggerType} trigger activated`
+            this._tryAddCustomEvent(msg, {})
+            this._reportStarted(triggerType === 'url' ? 'url_trigger_match' : 'event_trigger_match')
+            logger.info(LOGGER_PREFIX + ' ' + msg)
         }
     }
 
@@ -1252,8 +1255,8 @@ export class SessionRecording {
         if (this.status === 'paused') {
             return
         }
-        logger.info(LOGGER_PREFIX + ' recording paused due to URL blocker')
 
+        logger.info(LOGGER_PREFIX + ' recording paused due to URL blocker')
         this._tryAddCustomEvent('recording paused', { reason: 'url blocker' })
 
         this._urlBlocked = true
@@ -1277,8 +1280,8 @@ export class SessionRecording {
         document?.body?.classList?.remove('ph-no-capture')
 
         this._tryTakeFullSnapshot()
-
         this._scheduleFullSnapshot()
+
         this._tryAddCustomEvent('recording resumed', { reason: 'left blocked url' })
         logger.info(LOGGER_PREFIX + ' recording resumed')
     }
@@ -1296,7 +1299,7 @@ export class SessionRecording {
                     this._activateTrigger('event')
                 }
             } catch (e) {
-                logger.error('Could not activate event trigger', e)
+                logger.error(LOGGER_PREFIX + 'Could not activate event trigger', e)
             }
         })
     }
