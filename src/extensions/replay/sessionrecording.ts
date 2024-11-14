@@ -44,6 +44,7 @@ import { isLocalhost } from '../../utils/request-utils'
 import { MutationRateLimiter } from './mutation-rate-limiter'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
 import { clampToRange } from '../../utils/number-utils'
+import { includes } from '../../utils'
 
 type SessionStartReason =
     | 'sampling_overridden'
@@ -1349,7 +1350,7 @@ export class SessionRecording {
             $session_recording_start_reason: startReason,
         })
         logger.info(LOGGER_PREFIX + ' ' + startReason.replace('_', ' '), tagPayload)
-        if (startReason !== 'recording_initialized') {
+        if (!includes(['recording_initialized', 'session_id_changed'], startReason)) {
             this._tryAddCustomEvent(startReason, tagPayload)
         }
     }
