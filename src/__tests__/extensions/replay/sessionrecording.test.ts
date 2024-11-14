@@ -2293,7 +2293,7 @@ describe('SessionRecording', () => {
             expect(sessionRecording['buffer'].data).toHaveLength(0)
         })
 
-        it('does not start if sees an event but waiting for a URL', async () => {
+        it('starts if sees an event but still waiting for a URL', async () => {
             sessionRecording.afterDecideResponse(
                 makeDecideResponse({
                     sessionRecording: {
@@ -2318,11 +2318,7 @@ describe('SessionRecording', () => {
 
             simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
 
-            // still waiting for URL to trigger
-            expect(sessionRecording['status']).toBe('buffering')
-
-            sessionRecording.overrideTrigger('url')
-
+            // even though still waiting for URL to trigger
             expect(sessionRecording['status']).toBe('active')
         })
     })

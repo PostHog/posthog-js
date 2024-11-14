@@ -298,7 +298,7 @@ export class SessionRecording {
     }
 
     private get fullSnapshotIntervalMillis(): number {
-        if (this.triggerStatus() === 'trigger_pending') {
+        if (this.triggerStatus === 'trigger_pending') {
             return ONE_MINUTE
         }
 
@@ -396,7 +396,7 @@ export class SessionRecording {
             return 'buffering'
         }
 
-        if (this.triggerStatus() === 'trigger_pending') {
+        if (this.triggerStatus === 'trigger_pending') {
             return 'buffering'
         }
 
@@ -429,17 +429,18 @@ export class SessionRecording {
         return currentTriggerSession === this.sessionId ? 'trigger_activated' : 'trigger_pending'
     }
 
-    private triggerStatus(): TriggerStatus {
-        if (this.urlTriggerStatus === this.eventTriggerStatus) {
-            return this.urlTriggerStatus
-        } else if (this.urlTriggerStatus === 'trigger_disabled') {
-            return this.eventTriggerStatus
-        } else if (this.eventTriggerStatus === 'trigger_disabled') {
-            return this.urlTriggerStatus
-        } else {
-            // if they're not the same and neither is disabled, then one must be pending
-            return 'trigger_pending'
-        }
+    /**
+     * Any one trigger can activate the session
+     * So, if they are all the same - return that value
+     * If either is disabled return the other's valu
+     * @private
+     */
+    private get triggerStatus(): TriggerStatus {
+        const eitherIsActivated =
+            this.eventTriggerStatus === 'trigger_activated' || this.urlTriggerStatus === 'trigger_activated'
+        const eitherIsPending =
+            this.eventTriggerStatus === 'trigger_pending' || this.urlTriggerStatus === 'trigger_pending'
+        return eitherIsActivated ? 'trigger_activated' : eitherIsPending ? 'trigger_pending' : 'trigger_disabled'
     }
 
     constructor(private readonly instance: PostHog) {
@@ -1038,7 +1039,7 @@ export class SessionRecording {
         }
 
         // Clear the buffer if waiting for a trigger, and only keep data from after the current full snapshot
-        if (rawEvent.type === EventType.FullSnapshot && this.triggerStatus() === 'trigger_pending') {
+        if (rawEvent.type === EventType.FullSnapshot && this.triggerStatus === 'trigger_pending') {
             this.clearBuffer()
         }
 
@@ -1241,7 +1242,7 @@ export class SessionRecording {
     }
 
     private _activateTrigger(triggerType: TriggerType) {
-        if (this.triggerStatus() === 'trigger_pending') {
+        if (this.triggerStatus === 'trigger_pending') {
             // status is stored separately for URL and event triggers
             this.instance?.persistence?.register({
                 [triggerType === 'url'
@@ -1249,11 +1250,8 @@ export class SessionRecording {
                     : SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION]: this.sessionId,
             })
 
-            // it was pending but is now active and we can start
-            if (this.triggerStatus() === 'trigger_activated') {
-                this._flushBuffer()
-                this._reportStarted((triggerType + '_trigger_matched') as SessionStartReason)
-            }
+            this._flushBuffer()
+            this._reportStarted((triggerType + '_trigger_matched') as SessionStartReason)
         }
     }
 
