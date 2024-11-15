@@ -81,7 +81,7 @@
         "eslint": "8.57.0",
         "eslint-config-posthog-js": "link:eslint-rules",
         "eslint-config-prettier": "^8.5.0",
-        "eslint-plugin-compat": "^4.1.4",
+        "eslint-plugin-compat": "^6.0.1",
         "eslint-plugin-jest": "^28.8.3",
         "eslint-plugin-no-only-tests": "^3.1.0",
         "eslint-plugin-posthog-js": "link:eslint-rules",
@@ -122,7 +122,7 @@
         ]
     },
     "browserslist": [
-        ">0.07%, last 2 versions, Firefox ESR, not dead"
+        "defaults, fully supports es6"
     ],
     "pnpm": {
         "patchedDependencies": {

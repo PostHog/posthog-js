@@ -22,9 +22,7 @@ const plugins = (es5) => [
             [
                 '@babel/preset-env',
                 {
-                    targets: es5
-                        ? '>0.07%, last 2 versions, Firefox ESR, not dead, IE 11'
-                        : '>0.07%, last 2 versions, Firefox ESR, not dead',
+                    targets: es5 ? 'defaults, fully supports es6, IE 11' : 'defaults, fully supports es6',
                 },
             ],
         ],
