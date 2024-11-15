@@ -429,12 +429,6 @@ export class SessionRecording {
         return currentTriggerSession === this.sessionId ? 'trigger_activated' : 'trigger_pending'
     }
 
-    /**
-     * Any one trigger can activate the session
-     * So, if they are all the same - return that value
-     * If either is disabled return the other's valu
-     * @private
-     */
     private get triggerStatus(): TriggerStatus {
         const eitherIsActivated =
             this.eventTriggerStatus === 'trigger_activated' || this.urlTriggerStatus === 'trigger_activated'

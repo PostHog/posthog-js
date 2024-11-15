@@ -280,6 +280,62 @@ describe('Session recording', () => {
                     )
                 })
             })
+
+            it('it captures XHR method correctly', () => {
+                cy.get('[data-cy-xhr-call-button]').click()
+                cy.wait('@example.com')
+                cy.wait('@session-recording')
+                cy.phCaptures({ full: true }).then((captures) => {
+                    const snapshots = captures.filter((c) => c.event === '$snapshot')
+
+                    const capturedRequests: Record<string, any>[] = []
+                    for (const snapshot of snapshots) {
+                        for (const snapshotData of snapshot.properties['$snapshot_data']) {
+                            if (snapshotData.type === 6) {
+                                for (const req of snapshotData.data.payload.requests) {
+                                    capturedRequests.push(req)
+                                }
+                            }
+                        }
+                    }
+
+                    const expectedCaptureds: [RegExp, string][] = [
+                        [/http:\/\/localhost:\d+\/playground\/cypress\//, 'navigation'],
+                        [/http:\/\/localhost:\d+\/static\/array.js/, 'script'],
+                        [
+                            /http:\/\/localhost:\d+\/decide\/\?v=3&ip=1&_=\d+&ver=1\.\d\d\d\.\d+&compression=base64/,
+                            'xmlhttprequest',
+                        ],
+                        [/http:\/\/localhost:\d+\/static\/recorder.js\?v=1\.\d\d\d\.\d+/, 'script'],
+                        [/https:\/\/example.com/, 'xmlhttprequest'],
+                    ]
+
+                    // yay, includes expected type 6 network data
+                    expect(capturedRequests.length).to.equal(expectedCaptureds.length)
+                    expectedCaptureds.forEach(([url, initiatorType], index) => {
+                        expect(capturedRequests[index].name).to.match(url)
+                        expect(capturedRequests[index].initiatorType).to.equal(initiatorType)
+                    })
+
+                    // the HTML file that cypress is operating on (playground/cypress/index.html)
+                    // when the button for this test is click makes a post to https://example.com
+                    const capturedFetchRequest = capturedRequests.find((cr) => cr.name === 'https://example.com/')
+                    expect(capturedFetchRequest).to.not.be.undefined
+
+                    expect(capturedFetchRequest.fetchStart).to.be.greaterThan(0) // proxy for including network timing info
+
+                    expect(capturedFetchRequest.initiatorType).to.eql('xmlhttprequest')
+                    expect(capturedFetchRequest.method).to.eql('POST')
+                    expect(capturedFetchRequest.isInitial).to.be.undefined
+                    expect(capturedFetchRequest.requestBody).to.eq('i am the xhr body')
+
+                    expect(capturedFetchRequest.responseBody).to.eq(
+                        JSON.stringify({
+                            message: 'This is a JSON response',
+                        })
+                    )
+                })
+            })
         })
     })
 
