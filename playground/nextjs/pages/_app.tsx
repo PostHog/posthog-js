@@ -46,8 +46,8 @@ export default function App({ Component, pageProps }: AppProps) {
                     default-src 'self';
                     connect-src 'self' http://localhost:8000 https://*.posthog.com;
                     script-src 'self' 'unsafe-eval' 'unsafe-inline' http://localhost:8000 https://*.posthog.com;
-                    style-src 'self' 'unsafe-inline' http://localhost:8000;
-                    img-src 'self' http://localhost:8000;
+                    style-src 'self' 'unsafe-inline' http://localhost:8000 https://*.posthog.com;
+                    img-src 'self' http://localhost:8000 https://*.posthog.com;
                 `}
                 />
             </Head>
