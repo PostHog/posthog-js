@@ -13,7 +13,7 @@ beforeAll(() => {
 
 describe('before send utils', () => {
     it('can sample by event name', () => {
-        const sampleFn = sampleByEvent(['$autocapture'], 50)
+        const sampleFn = sampleByEvent(['$autocapture'], 0.5)
 
         const results = []
         Array.from({ length: 100 }).forEach(() => {
@@ -22,12 +22,16 @@ describe('before send utils', () => {
         })
         const emittedEvents = results.filter((r) => !isNull(r))
 
-        // random is mocked so that it alternates between 0.48 and 0.51
         expect(emittedEvents.length).toBe(50)
+        expect(emittedEvents[0].properties).toMatchObject({
+            $sample_type: 'sampleByEvent',
+            $sample_rate: 0.5,
+            $sampled_events: ['$autocapture'],
+        })
     })
 
     it('can sample by distinct id', () => {
-        const sampleFn = sampleByDistinctId(50)
+        const sampleFn = sampleByDistinctId(0.5)
         const results = []
         const distinct_id_one = 'user-1'
         const distinct_id_two = 'user-that-hashes-to-no-events'
@@ -42,10 +46,15 @@ describe('before send utils', () => {
 
         expect(distinctIdOneEvents.length).toBe(100)
         expect(distinctIdTwoEvents.length).toBe(0)
+
+        expect(distinctIdOneEvents[0].properties).toMatchObject({
+            $sample_type: 'sampleByDistinctId',
+            $sample_rate: 0.5,
+        })
     })
 
     it('can sample by session id', () => {
-        const sampleFn = sampleBySessionId(50)
+        const sampleFn = sampleBySessionId(0.5)
         const results = []
         const session_id_one = 'a-session-id'
         const session_id_two = 'id-that-hashes-to-not-sending-events'
@@ -60,5 +69,10 @@ describe('before send utils', () => {
 
         expect(sessionIdOneEvents.length).toBe(100)
         expect(sessionIdTwoEvents.length).toBe(0)
+
+        expect(sessionIdOneEvents[0].properties).toMatchObject({
+            $sample_type: 'sampleBySessionId',
+            $sample_rate: 0.5,
+        })
     })
 })
