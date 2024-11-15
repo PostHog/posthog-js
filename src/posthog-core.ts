@@ -55,7 +55,6 @@ import { uuidv7 } from './uuidv7'
 import { Survey, SurveyCallback, SurveyQuestionBranchingType } from './posthog-surveys-types'
 import {
     isArray,
-    isBoolean,
     isEmptyObject,
     isEmptyString,
     isFunction,
@@ -81,7 +80,7 @@ import { ExceptionObserver } from './extensions/exception-autocapture'
 import { WebVitalsAutocapture } from './extensions/web-vitals'
 import { WebExperiments } from './web-experiments'
 import { PostHogExceptions } from './posthog-exceptions'
-import { DeadClicksAutocapture } from './extensions/dead-clicks-autocapture'
+import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -417,7 +416,7 @@ export class PostHog {
 
         this.persistence = new PostHogPersistence(this.config)
         this.sessionPersistence =
-            this.config.persistence === 'sessionStorage'
+            this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
                 ? this.persistence
                 : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
@@ -453,7 +452,7 @@ export class PostHog {
         this.exceptionObserver = new ExceptionObserver(this)
         this.exceptionObserver.startIfEnabled()
 
-        this.deadClicksAutocapture = new DeadClicksAutocapture(this)
+        this.deadClicksAutocapture = new DeadClicksAutocapture(this, isDeadClicksEnabledForAutocapture)
         this.deadClicksAutocapture.startIfEnabled()
 
         // if any instance on the page has debug = true, we set the
@@ -1815,7 +1814,7 @@ export class PostHog {
 
             this.persistence?.update_config(this.config, oldConfig)
             this.sessionPersistence =
-                this.config.persistence === 'sessionStorage'
+                this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
                     ? this.persistence
                     : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
@@ -1843,22 +1842,42 @@ export class PostHog {
      * turns session recording on, and updates the config option `disable_session_recording` to false
      * @param override.sampling - optional boolean to override the default sampling behavior - ensures the next session recording to start will not be skipped by sampling config.
      * @param override.linked_flag - optional boolean to override the default linked_flag behavior - ensures the next session recording to start will not be skipped by linked_flag config.
+     * @param override.url_trigger - optional boolean to override the default url_trigger behavior - ensures the next session recording to start will not be skipped by url_trigger config.
+     * @param override.event_trigger - optional boolean to override the default event_trigger behavior - ensures the next session recording to start will not be skipped by event_trigger config.
      * @param override - optional boolean to override the default sampling behavior - ensures the next session recording to start will not be skipped by sampling or linked_flag config. `true` is shorthand for { sampling: true, linked_flag: true }
      */
-    startSessionRecording(override?: { sampling?: boolean; linked_flag?: boolean } | true): void {
-        const overrideAll = isBoolean(override) && override
-        if (overrideAll || override?.sampling || override?.linked_flag) {
+    startSessionRecording(
+        override?: { sampling?: boolean; linked_flag?: boolean; url_trigger?: true; event_trigger?: true } | true
+    ): void {
+        const overrideAll = override === true
+        const overrideConfig = {
+            sampling: overrideAll || !!override?.sampling,
+            linked_flag: overrideAll || !!override?.linked_flag,
+            url_trigger: overrideAll || !!override?.url_trigger,
+            event_trigger: overrideAll || !!override?.event_trigger,
+        }
+
+        if (Object.values(overrideConfig).some(Boolean)) {
             // allow the session id check to rotate session id if necessary
-            const ids = this.sessionManager?.checkAndGetSessionAndWindowId()
-            if (overrideAll || override?.sampling) {
+            this.sessionManager?.checkAndGetSessionAndWindowId()
+
+            if (overrideConfig.sampling) {
                 this.sessionRecording?.overrideSampling()
-                logger.info('Session recording started with sampling override for session: ', ids?.sessionId)
             }
-            if (overrideAll || override?.linked_flag) {
+
+            if (overrideConfig.linked_flag) {
                 this.sessionRecording?.overrideLinkedFlag()
-                logger.info('Session recording started with linked_flags override')
+            }
+
+            if (overrideConfig.url_trigger) {
+                this.sessionRecording?.overrideTrigger('url')
+            }
+
+            if (overrideConfig.event_trigger) {
+                this.sessionRecording?.overrideTrigger('event')
             }
         }
+
         this.set_config({ disable_session_recording: false })
     }
 

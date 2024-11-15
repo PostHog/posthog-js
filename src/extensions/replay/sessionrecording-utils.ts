@@ -1,15 +1,5 @@
-import type {
-    blockClass,
-    eventWithTime,
-    hooksParam,
-    KeepIframeSrcFn,
-    listenerHandler,
-    maskTextClass,
-    pluginEvent,
-    RecordPlugin,
-    SamplingStrategy,
-} from '@rrweb/types'
-import type { DataURLOptions, MaskInputFn, MaskInputOptions, MaskTextFn, Mirror, SlimDOMOptions } from 'rrweb-snapshot'
+import type { eventWithTime, listenerHandler, pluginEvent } from '@rrweb/types'
+import type { record } from '@rrweb/record'
 
 import { isObject } from '../../utils/type-utils'
 import { SnapshotBuffer } from './sessionrecording'
@@ -51,43 +41,16 @@ export const MUTATION_SOURCE_TYPE = 0
 export const MAX_MESSAGE_SIZE = 5000000 // ~5mb
 
 export type rrwebRecord = {
-    (options: recordOptions<eventWithTime>): listenerHandler
+    (options: recordOptions): listenerHandler
     addCustomEvent: (tag: string, payload: any) => void
     takeFullSnapshot: () => void
-    mirror: Mirror
+    mirror: {
+        getId(n: Node | undefined | null): number
+        getNode(id: number): Node | null
+    }
 }
 
-export declare type recordOptions<T> = {
-    emit?: (e: T, isCheckout?: boolean) => void
-    checkoutEveryNth?: number
-    checkoutEveryNms?: number
-    blockClass?: blockClass
-    blockSelector?: string
-    ignoreClass?: string
-    maskTextClass?: maskTextClass
-    maskTextSelector?: string
-    maskAllInputs?: boolean
-    maskInputOptions?: MaskInputOptions
-    maskInputFn?: MaskInputFn
-    maskTextFn?: MaskTextFn
-    slimDOMOptions?: SlimDOMOptions | 'all' | true
-    ignoreCSSAttributes?: Set<string>
-    inlineStylesheet?: boolean
-    hooks?: hooksParam
-    // packFn?: PackFn
-    sampling?: SamplingStrategy
-    dataURLOptions?: DataURLOptions
-    recordCanvas?: boolean
-    recordCrossOriginIframes?: boolean
-    recordAfter?: 'DOMContentLoaded' | 'load'
-    userTriggeredOnInput?: boolean
-    collectFonts?: boolean
-    inlineImages?: boolean
-    plugins?: RecordPlugin[]
-    mousemoveWait?: number
-    keepIframeSrcFn?: KeepIframeSrcFn
-    // errorHandler?: ErrorHandler
-}
+export declare type recordOptions = Exclude<Parameters<typeof record<eventWithTime>>[0], undefined>
 
 /*
  * Check whether a data payload is nearing 5mb. If it is, it checks the data for

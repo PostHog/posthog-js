@@ -3,9 +3,18 @@ import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../constants'
 import { isBoolean, isObject } from '../utils/type-utils'
 import { assignableWindow, document, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { logger } from '../utils/logger'
-import { DecideResponse } from '../types'
+import { DeadClicksAutoCaptureConfig, DecideResponse } from '../types'
 
 const LOGGER_PREFIX = '[Dead Clicks]'
+
+export const isDeadClicksEnabledForHeatmaps = () => {
+    return true
+}
+export const isDeadClicksEnabledForAutocapture = (instance: DeadClicksAutocapture) => {
+    const isRemoteEnabled = !!instance.instance.persistence?.get_property(DEAD_CLICKS_ENABLED_SERVER_SIDE)
+    const clientConfig = instance.instance.config.capture_dead_clicks
+    return isBoolean(clientConfig) ? clientConfig : isRemoteEnabled
+}
 
 export class DeadClicksAutocapture {
     get lazyLoadedDeadClicksAutocapture(): LazyLoadedDeadClicksAutocaptureInterface | undefined {
@@ -14,17 +23,12 @@ export class DeadClicksAutocapture {
 
     private _lazyLoadedDeadClicksAutocapture: LazyLoadedDeadClicksAutocaptureInterface | undefined
 
-    constructor(readonly instance: PostHog) {
+    constructor(
+        readonly instance: PostHog,
+        readonly isEnabled: (dca: DeadClicksAutocapture) => boolean,
+        readonly onCapture?: DeadClicksAutoCaptureConfig['__onCapture']
+    ) {
         this.startIfEnabled()
-    }
-
-    public get isRemoteEnabled(): boolean {
-        return !!this.instance.persistence?.get_property(DEAD_CLICKS_ENABLED_SERVER_SIDE)
-    }
-
-    public get isEnabled(): boolean {
-        const clientConfig = this.instance.config.capture_dead_clicks
-        return isBoolean(clientConfig) ? clientConfig : this.isRemoteEnabled
     }
 
     public afterDecideResponse(response: DecideResponse) {
@@ -37,8 +41,10 @@ export class DeadClicksAutocapture {
     }
 
     public startIfEnabled() {
-        if (this.isEnabled) {
-            this.loadScript(this.start.bind(this))
+        if (this.isEnabled(this)) {
+            this.loadScript(() => {
+                this.start()
+            })
         }
     }
 
@@ -70,11 +76,14 @@ export class DeadClicksAutocapture {
             !this._lazyLoadedDeadClicksAutocapture &&
             assignableWindow.__PosthogExtensions__?.initDeadClicksAutocapture
         ) {
+            const config = isObject(this.instance.config.capture_dead_clicks)
+                ? this.instance.config.capture_dead_clicks
+                : {}
+            config.__onCapture = this.onCapture
+
             this._lazyLoadedDeadClicksAutocapture = assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture(
                 this.instance,
-                isObject(this.instance.config.capture_dead_clicks)
-                    ? this.instance.config.capture_dead_clicks
-                    : undefined
+                config
             )
             this._lazyLoadedDeadClicksAutocapture.start(document)
             logger.info(`${LOGGER_PREFIX} starting...`)

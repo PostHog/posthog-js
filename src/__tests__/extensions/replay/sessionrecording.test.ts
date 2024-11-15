@@ -1,5 +1,7 @@
 /// <reference lib="dom" />
 
+import '@testing-library/jest-dom'
+
 import { PostHogPersistence } from '../../../posthog-persistence'
 import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
@@ -45,6 +47,8 @@ import {
 } from '@rrweb/types'
 import Mock = jest.Mock
 import { ConsentManager } from '../../../consent'
+import { waitFor } from '@testing-library/preact'
+import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -182,6 +186,7 @@ describe('SessionRecording', () => {
     let onFeatureFlagsCallback: ((flags: string[], variants: Record<string, string | boolean>) => void) | null
     let removeCaptureHookMock: Mock
     let addCaptureHookMock: Mock
+    let simpleEventEmitter: SimpleEventEmitter
 
     const addRRwebToWindow = () => {
         assignableWindow.__PosthogExtensions__.rrweb = {
@@ -190,7 +195,6 @@ describe('SessionRecording', () => {
                 return () => {}
             }),
             version: 'fake',
-            rrwebVersion: 'fake',
         }
         assignableWindow.__PosthogExtensions__.rrweb.record.takeFullSnapshot = jest.fn(() => {
             // we pretend to be rrweb and call emit
@@ -237,6 +241,8 @@ describe('SessionRecording', () => {
         removeCaptureHookMock = jest.fn()
         addCaptureHookMock = jest.fn().mockImplementation(() => removeCaptureHookMock)
 
+        simpleEventEmitter = new SimpleEventEmitter()
+        // TODO we really need to make this a real posthog instance :cry:
         posthog = {
             get_property: (property_key: string): Property | undefined => {
                 return postHogPersistence?.['props'][property_key]
@@ -259,6 +265,10 @@ describe('SessionRecording', () => {
                 },
             } as unknown as ConsentManager,
             register_for_session() {},
+            _internalEventEmitter: simpleEventEmitter,
+            on: (event, cb) => {
+                return simpleEventEmitter.on(event, cb)
+            },
         } as Partial<PostHog> as PostHog
 
         loadScriptMock.mockImplementation((_ph, _path, callback) => {
@@ -1881,6 +1891,7 @@ describe('SessionRecording', () => {
             loadScriptMock.mockImplementation((_ph, _path, callback) => {
                 callback()
             })
+            sessionRecording = new SessionRecording(posthog)
 
             sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
             sessionRecording.startIfEnabledOrStop()
@@ -2177,6 +2188,138 @@ describe('SessionRecording', () => {
                 },
                 captureOptions
             )
+        })
+    })
+
+    describe('URL blocking', () => {
+        beforeEach(() => {
+            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        urlBlocklist: [
+                            {
+                                matching: 'regex',
+                                url: '/blocked',
+                            },
+                        ],
+                    },
+                })
+            )
+        })
+
+        it('flushes buffer and includes pause event when hitting blocked URL', async () => {
+            // Emit some events before hitting blocked URL
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+
+            // Simulate URL change to blocked URL
+            fakeNavigateTo('https://test.com/blocked')
+            _emit(createIncrementalSnapshot({ data: { source: 3 } }))
+            expect(document.body).toHaveClass('ph-no-capture')
+
+            await waitFor(() => {
+                // Verify the buffer was flushed with all events including pause
+                expect(posthog.capture).toHaveBeenCalledWith(
+                    '$snapshot',
+                    {
+                        $session_id: sessionId,
+                        $window_id: 'windowId',
+                        $snapshot_bytes: expect.any(Number),
+                        $snapshot_data: [
+                            { type: 3, data: { source: 1 } },
+                            { type: 3, data: { source: 2 } },
+                        ],
+                    },
+                    expect.any(Object)
+                )
+            })
+
+            // Verify subsequent events are not captured while on blocked URL
+            _emit(createIncrementalSnapshot({ data: { source: 4 } }))
+            expect(sessionRecording['buffer'].data).toHaveLength(0)
+
+            // Simulate URL change to allowed URL
+            fakeNavigateTo('https://test.com/allowed')
+
+            // Verify recording resumes with resume event
+            _emit(createIncrementalSnapshot({ data: { source: 5 } }))
+
+            expect(document.body).not.toHaveClass('ph-no-capture')
+
+            expect(sessionRecording['buffer'].data).toStrictEqual([
+                expect.objectContaining({
+                    type: 2,
+                }),
+                expect.objectContaining({
+                    type: 3,
+                    data: { source: 5 },
+                }),
+            ])
+        })
+    })
+
+    describe('Event triggering', () => {
+        beforeEach(() => {
+            sessionRecording.startIfEnabledOrStop()
+        })
+
+        it('flushes buffer and starts when sees event', async () => {
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['$exception'],
+                    },
+                })
+            )
+
+            expect(sessionRecording['status']).toBe('buffering')
+
+            // Emit some events before hitting blocked URL
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+
+            expect(sessionRecording['buffer'].data).toHaveLength(2)
+
+            simpleEventEmitter.emit('eventCaptured', { event: 'not-$exception' })
+
+            expect(sessionRecording['status']).toBe('buffering')
+
+            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+
+            expect(sessionRecording['status']).toBe('active')
+            expect(sessionRecording['buffer'].data).toHaveLength(0)
+        })
+
+        it('starts if sees an event but still waiting for a URL', async () => {
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['$exception'],
+                        urlTriggers: [{ url: 'start-on-me', matching: 'regex' }],
+                    },
+                })
+            )
+
+            expect(sessionRecording['status']).toBe('buffering')
+
+            // Emit some events before hitting blocked URL
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+
+            expect(sessionRecording['buffer'].data).toHaveLength(2)
+
+            simpleEventEmitter.emit('eventCaptured', { event: 'not-$exception' })
+
+            expect(sessionRecording['status']).toBe('buffering')
+
+            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+
+            // even though still waiting for URL to trigger
+            expect(sessionRecording['status']).toBe('active')
         })
     })
 })

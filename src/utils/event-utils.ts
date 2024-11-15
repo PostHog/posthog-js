@@ -31,6 +31,25 @@ export const CAMPAIGN_PARAMS = [
     'rdt_cid', // reddit
 ]
 
+export const EVENT_TO_PERSON_PROPERTIES = [
+    // mobile params
+    '$app_build',
+    '$app_name',
+    '$app_namespace',
+    '$app_version',
+    // web params
+    '$browser',
+    '$browser_version',
+    '$device_type',
+    '$current_url',
+    '$pathname',
+    '$os',
+    '$os_name', // $os_name is a special case, it's treated as an alias of $os!
+    '$os_version',
+    '$referring_domain',
+    '$referrer',
+]
+
 export const Info = {
     campaignParams: function (customParams?: string[]): Record<string, string> {
         if (!document) {

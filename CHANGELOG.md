@@ -1,3 +1,36 @@
+## 1.186.1 - 2024-11-15
+
+- fix: XHR req method capture (#1527)
+
+## 1.186.0 - 2024-11-15
+
+- feat: allow triggering sessions when events occur (#1523)
+
+## 1.185.0 - 2024-11-15
+
+- feat: Add customization to add all person profile properties as setPersonPropertiesForFlags (#1517)
+
+## 1.184.2 - 2024-11-13
+
+- fix(flags): support multiple children prop in PostHogFeature (#1516)
+- fix: Don't use session storage in memory mode (#1521)
+
+## 1.184.1 - 2024-11-12
+
+- chore: add type to Sentry exception (#1520)
+
+## 1.184.0 - 2024-11-12
+
+- feat: deadclicks in heatmaps (#1510)
+
+## 1.183.0 - 2024-11-12
+
+- feat: add recording url blocklist (#1500)
+
+## 1.182.0 - 2024-11-11
+
+- chore: upgrade rrweb to alpha.17 (#1489)
+
 ## 1.181.0 - 2024-11-05
 
 - chore: add stack type (#1511)
