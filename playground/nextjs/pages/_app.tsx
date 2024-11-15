@@ -39,6 +39,17 @@ export default function App({ Component, pageProps }: AppProps) {
             <Head>
                 <title>PostHog</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
+                {/* CSP - useful for testing our documented recommendations. NOTE: Unsafe is only needed for nextjs pre-loading */}
+                <meta
+                    http-equiv="Content-Security-Policy"
+                    content={`
+                    default-src 'self';
+                    connect-src 'self' http://localhost:8000 https://*.posthog.com;
+                    script-src 'self' 'unsafe-eval' 'unsafe-inline' http://localhost:8000 https://*.posthog.com;
+                    style-src 'self' 'unsafe-inline' http://localhost:8000;
+                    img-src 'self' http://localhost:8000;
+                `}
+                />
             </Head>
 
             <main>
