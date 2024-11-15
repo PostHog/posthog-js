@@ -1,3 +1,7 @@
+## 1.186.0 - 2024-11-15
+
+- feat: allow triggering sessions when events occur (#1523)
+
 ## 1.185.0 - 2024-11-15
 
 - feat: Add customization to add all person profile properties as setPersonPropertiesForFlags (#1517)
