@@ -1,3 +1,7 @@
+## 1.186.1 - 2024-11-15
+
+- fix: XHR req method capture (#1527)
+
 ## 1.186.0 - 2024-11-15
 
 - feat: allow triggering sessions when events occur (#1523)
