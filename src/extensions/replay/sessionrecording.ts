@@ -430,8 +430,6 @@ export class SessionRecording {
     }
 
     /**
-     * trigger is active if _either_ URL _or_ event trigger is active
-     * and is pending if _either_ URL _or_ event trigger is pending
      */
     private get triggerStatus(): TriggerStatus {
         const eitherIsActivated =
