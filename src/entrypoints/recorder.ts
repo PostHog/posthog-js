@@ -386,7 +386,7 @@ function prepareRequest({
             timeOrigin,
             timestamp,
             method: method,
-            initiatorType: entry ? (entry.initiatorType as InitiatorType) : initiatorType,
+            initiatorType: initiatorType ? initiatorType : entry ? (entry.initiatorType as InitiatorType) : undefined,
             status,
             requestHeaders: networkRequest.requestHeaders,
             requestBody: networkRequest.requestBody,
