@@ -34,6 +34,8 @@ export default function App({ Component, pageProps }: AppProps) {
         }
     }, [])
 
+    const localhostDomain = process.env.NEXT_PUBLIC_CROSSDOMAIN ? 'https://localhost:8000' : 'http://localhost:8000'
+
     return (
         <PostHogProvider client={posthog}>
             <Head>
@@ -44,10 +46,10 @@ export default function App({ Component, pageProps }: AppProps) {
                     http-equiv="Content-Security-Policy"
                     content={`
                     default-src 'self';
-                    connect-src 'self' http://localhost:8000 https://*.posthog.com;
-                    script-src 'self' 'unsafe-eval' 'unsafe-inline' http://localhost:8000 https://*.posthog.com;
-                    style-src 'self' 'unsafe-inline' http://localhost:8000 https://*.posthog.com;
-                    img-src 'self' http://localhost:8000 https://*.posthog.com;
+                    connect-src 'self' ${localhostDomain} https://*.posthog.com;
+                    script-src 'self' 'unsafe-eval' 'unsafe-inline' ${localhostDomain} https://*.posthog.com;
+                    style-src 'self' 'unsafe-inline' ${localhostDomain} https://*.posthog.com;
+                    img-src 'self' ${localhostDomain} https://*.posthog.com;
                 `}
                 />
             </Head>
