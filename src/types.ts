@@ -213,6 +213,8 @@ export interface HeatmapConfig {
     flush_interval_milliseconds: number
 }
 
+export type BeforeSendFn = (cr: CaptureResult | null) => CaptureResult | null
+
 export interface PostHogConfig {
     api_host: string
     /** @deprecated - This property is no longer supported */
@@ -294,10 +296,12 @@ export interface PostHogConfig {
      */
     _onCapture: (eventName: string, eventData: CaptureResult) => void
     /**
-     * This function - if provided - is called immediately before sending data to the server.
+     * This function or array of functions - if provided - are called immediately before sending data to the server.
      * It allows you to edit data before it is sent, or choose not to send it all.
+     * if provided as an array the functions are called in the order they are provided
+     * any one function returning null means the event will not be sent
      */
-    before_send?: (cr: CaptureResult) => CaptureResult | null
+    before_send?: BeforeSendFn | BeforeSendFn[]
     capture_performance?: boolean | PerformanceCaptureConfig
     // Should only be used for testing. Could negatively impact performance.
     disable_compression: boolean

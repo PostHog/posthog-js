@@ -78,6 +78,42 @@ describe('posthog core - before send', () => {
         })
     })
 
+    it('can take an array of fns', () => {
+        const posthog = posthogWith({
+            before_send: [
+                (cr) => {
+                    cr.properties = { ...cr.properties, edited_one: true }
+                    return cr
+                },
+                (cr) => {
+                    if (cr.event === 'to reject') {
+                        return null
+                    }
+                    return cr
+                },
+                (cr) => {
+                    cr.properties = { ...cr.properties, edited_two: true }
+                    return cr
+                },
+            ],
+        })
+        ;(posthog._send_request as jest.Mock).mockClear()
+
+        const capturedData = [posthog.capture(eventName, {}, {}), posthog.capture('to reject', {}, {})]
+
+        expect(capturedData.filter((cd) => !!cd)).toHaveLength(1)
+        expect(capturedData[0]).toHaveProperty(['properties', 'edited_one'], true)
+        expect(capturedData[0]).toHaveProperty(['properties', 'edited_one'], true)
+        expect(posthog._send_request).toHaveBeenCalledWith({
+            batchKey: undefined,
+            callback: expect.any(Function),
+            compression: 'best-available',
+            data: capturedData[0],
+            method: 'POST',
+            url: 'https://us.i.posthog.com/e/',
+        })
+    })
+
     it('can sanitize $set event', () => {
         const posthog = posthogWith({
             before_send: (cr) => {

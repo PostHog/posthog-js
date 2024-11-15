@@ -878,23 +878,11 @@ export class PostHog {
             this.setPersonPropertiesForFlags(finalSet)
         }
 
-        if (isFunction(this.config.before_send)) {
-            const beforeSendResult = this.config.before_send(data)
-            if (isNullish(beforeSendResult)) {
-                const logMessage = `Event '${data.event}' was rejected in beforeSend function`
-                if (isKnownUnsafeEditableEvent(data.event)) {
-                    logger.warn(`${logMessage}. This can cause unexpected behavior.`)
-                } else {
-                    logger.info(logMessage)
-                }
-                // the event is now null so we don't send it
+        if (!isNullish(this.config.before_send)) {
+            const beforeSendResult = this._runBeforeSend(data)
+            if (!beforeSendResult) {
                 return
             } else {
-                if (!beforeSendResult.properties || isEmptyObject(beforeSendResult.properties)) {
-                    logger.warn(
-                        `Event '${data.event}' has no properties after beforeSend function, this is likely an error.`
-                    )
-                }
                 data = beforeSendResult
             }
         }
@@ -2189,6 +2177,33 @@ export class PostHog {
             localStorage && localStorage.setItem('ph_debug', 'true')
             this.set_config({ debug: true })
         }
+    }
+
+    private _runBeforeSend(data: CaptureResult): CaptureResult | null {
+        if (isNullish(this.config.before_send)) {
+            return data
+        }
+
+        const fns = isArray(this.config.before_send) ? this.config.before_send : [this.config.before_send]
+        let beforeSendResult: CaptureResult | null = data
+        for (const fn of fns) {
+            beforeSendResult = fn(beforeSendResult)
+            if (isNullish(beforeSendResult)) {
+                const logMessage = `Event '${data.event}' was rejected in beforeSend function`
+                if (isKnownUnsafeEditableEvent(data.event)) {
+                    logger.warn(`${logMessage}. This can cause unexpected behavior.`)
+                } else {
+                    logger.info(logMessage)
+                }
+                return null
+            }
+            if (!beforeSendResult.properties || isEmptyObject(beforeSendResult.properties)) {
+                logger.warn(
+                    `Event '${data.event}' has no properties after beforeSend function, this is likely an error.`
+                )
+            }
+        }
+        return beforeSendResult
     }
 }
 
