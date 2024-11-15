@@ -1,6 +1,7 @@
 import { clampToRange } from '../utils/number-utils'
-import { CaptureResult, KnownEventName } from '../types'
+import { BeforeSendFn, CaptureResult, KnownEventName } from '../types'
 import { includes } from '../utils'
+import { isArray, isUndefined } from '../utils/type-utils'
 
 function simpleHash(str: string) {
     let hash = 0
@@ -28,19 +29,31 @@ function sampleOnProperty(prop: string, percent: number): boolean {
  *
  * @param percent a number from 0 to 1, 1 means always send and, 0 means never send the event
  */
-export function sampleByDistinctId(percent: number): (c: CaptureResult) => CaptureResult | null {
-    return (captureResult: CaptureResult): CaptureResult | null => {
+export function sampleByDistinctId(percent: number): BeforeSendFn {
+    return (captureResult: CaptureResult | null): CaptureResult | null => {
+        if (!captureResult) {
+            return null
+        }
+
         return sampleOnProperty(captureResult.properties.distinct_id, percent)
             ? {
                   ...captureResult,
                   properties: {
                       ...captureResult.properties,
-                      $sample_type: 'sampleByDistinctId',
-                      $sample_rate: percent,
+                      $sample_type: ['sampleByDistinctId'],
+                      $sample_threshold: percent,
                   },
               }
             : null
     }
+}
+
+function appendArray(currentValue: string[] | undefined, sampleType: string | string[]): string[] {
+    return [...(currentValue ? currentValue : []), ...(isArray(sampleType) ? sampleType : [sampleType])]
+}
+
+function updateThreshold(currentValue: number | undefined, percent: number): number {
+    return (isUndefined(currentValue) ? 1 : currentValue) * percent
 }
 
 /**
@@ -53,15 +66,19 @@ export function sampleByDistinctId(percent: number): (c: CaptureResult) => Captu
  *
  * @param percent a number from 0 to 1, 1 means always send and, 0 means never send the event
  */
-export function sampleBySessionId(percent: number): (c: CaptureResult) => CaptureResult | null {
-    return (captureResult: CaptureResult): CaptureResult | null => {
+export function sampleBySessionId(percent: number): BeforeSendFn {
+    return (captureResult: CaptureResult | null): CaptureResult | null => {
+        if (!captureResult) {
+            return null
+        }
+
         return sampleOnProperty(captureResult.properties.$session_id, percent)
             ? {
                   ...captureResult,
                   properties: {
                       ...captureResult.properties,
-                      $sample_type: 'sampleBySessionId',
-                      $sample_rate: percent,
+                      $sample_type: appendArray(captureResult.properties.$sample_type, 'sampleBySessionId'),
+                      $sample_threshold: updateThreshold(captureResult.properties.$sample_threshold, percent),
                   },
               }
             : null
@@ -76,23 +93,25 @@ export function sampleBySessionId(percent: number): (c: CaptureResult) => Captur
  * @param eventNames an array of event names to sample, sampling is applied across events not per event name
  * @param percent a number from 0 to 1, 1 means always send, 0 means never send the event
  */
-export function sampleByEvent(
-    eventNames: KnownEventName[],
-    percent: number
-): (c: CaptureResult) => CaptureResult | null {
-    return (captureResult: CaptureResult): CaptureResult | null => {
+export function sampleByEvent(eventNames: KnownEventName[], percent: number): BeforeSendFn {
+    return (captureResult: CaptureResult | null): CaptureResult | null => {
+        if (!captureResult) {
+            return null
+        }
+
         if (!includes(eventNames, captureResult.event)) {
             return captureResult
         }
 
-        return Math.random() * 100 < clampToRange(percent * 100, 0, 100)
+        const number = Math.random()
+        return number * 100 < clampToRange(percent * 100, 0, 100)
             ? {
                   ...captureResult,
                   properties: {
                       ...captureResult.properties,
-                      $sample_type: 'sampleByEvent',
-                      $sample_rate: percent,
-                      $sampled_events: eventNames,
+                      $sample_type: appendArray(captureResult.properties?.$sample_type, 'sampleByEvent'),
+                      $sample_threshold: updateThreshold(captureResult.properties?.$sample_threshold, percent),
+                      $sampled_events: appendArray(captureResult.properties?.$sampled_events, eventNames),
                   },
               }
             : null
