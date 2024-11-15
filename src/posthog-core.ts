@@ -183,8 +183,7 @@ export const defaultConfig = (): PostHogConfig => ({
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
     person_profiles: 'identified_only',
     __add_tracing_headers: false,
-    // by default the before capture fn is the identity function
-    before_send: (x) => x,
+    before_send: undefined,
 })
 
 export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostHogConfig> => {
@@ -879,23 +878,25 @@ export class PostHog {
             this.setPersonPropertiesForFlags(finalSet)
         }
 
-        const beforeSendResult = this.config.before_send(data)
-        if (isNullish(beforeSendResult)) {
-            const logMessage = `Event '${data.event}' was rejected in beforeSend function`
-            if (isKnownUnsafeEditableEvent(data.event)) {
-                logger.warn(`${logMessage}. This can cause unexpected behavior.`)
+        if (isFunction(this.config.before_send)) {
+            const beforeSendResult = this.config.before_send(data)
+            if (isNullish(beforeSendResult)) {
+                const logMessage = `Event '${data.event}' was rejected in beforeSend function`
+                if (isKnownUnsafeEditableEvent(data.event)) {
+                    logger.warn(`${logMessage}. This can cause unexpected behavior.`)
+                } else {
+                    logger.info(logMessage)
+                }
+                // the event is now null so we don't send it
+                return
             } else {
-                logger.info(logMessage)
+                if (!beforeSendResult.properties || isEmptyObject(beforeSendResult.properties)) {
+                    logger.warn(
+                        `Event '${data.event}' has no properties after beforeSend function, this is likely an error.`
+                    )
+                }
+                data = beforeSendResult
             }
-            // the event is now null so we don't send it
-            return
-        } else {
-            if (!beforeSendResult.properties || isEmptyObject(beforeSendResult.properties)) {
-                logger.warn(
-                    `Event '${data.event}' has no properties after beforeSend function, this is likely an error.`
-                )
-            }
-            data = beforeSendResult
         }
 
         this._internalEventEmitter.emit('eventCaptured', data)

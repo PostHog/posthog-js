@@ -297,7 +297,7 @@ export interface PostHogConfig {
      * This function - if provided - is called immediately before sending data to the server.
      * It allows you to edit data before it is sent, or choose not to send it all.
      */
-    before_send: (cr: CaptureResult) => CaptureResult | null
+    before_send?: (cr: CaptureResult) => CaptureResult | null
     capture_performance?: boolean | PerformanceCaptureConfig
     // Should only be used for testing. Could negatively impact performance.
     disable_compression: boolean
