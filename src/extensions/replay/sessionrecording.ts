@@ -430,10 +430,8 @@ export class SessionRecording {
     }
 
     /**
-     * Any one trigger can activate the session
-     * So, if they are all the same - return that value
-     * If either is disabled return the other's valu
-     * @private
+     * trigger is active if _either_ URL _or_ event trigger is active
+     * and is pending if _either_ URL _or_ event trigger is pending
      */
     private get triggerStatus(): TriggerStatus {
         const eitherIsActivated =
