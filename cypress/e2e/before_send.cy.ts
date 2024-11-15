@@ -10,6 +10,8 @@ describe('before_send', () => {
         cy.posthog().then((posthog) => {
             let counter = 0
             const og = posthog.config.before_send
+            // cypress tests rely on existing before_send function to capture events
+            // so we have to add it back in here
             posthog.config.before_send = [
                 (cr) => {
                     if (cr.event === 'custom-event') {
