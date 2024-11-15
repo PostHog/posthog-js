@@ -1,3 +1,7 @@
+## 1.185.0 - 2024-11-15
+
+- feat: Add customization to add all person profile properties as setPersonPropertiesForFlags (#1517)
+
 ## 1.184.2 - 2024-11-13
 
 - fix(flags): support multiple children prop in PostHogFeature (#1516)
