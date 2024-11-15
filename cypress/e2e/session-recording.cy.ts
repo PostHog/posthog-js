@@ -654,7 +654,7 @@ describe('Session recording', () => {
             cy.posthog().invoke('capture', 'test_registered_property')
             cy.phCaptures({ full: true }).then((captures) => {
                 expect((captures || []).map((c) => c.event)).to.deep.equal(['$pageview', 'test_registered_property'])
-                expect(captures[1]['properties']['$session_recording_start_reason']).to.equal('sampling_override')
+                expect(captures[1]['properties']['$session_recording_start_reason']).to.equal('sampling_overridden')
             })
 
             cy.resetPhCaptures()
