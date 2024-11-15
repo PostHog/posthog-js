@@ -429,7 +429,6 @@ export class SessionRecording {
         return currentTriggerSession === this.sessionId ? 'trigger_activated' : 'trigger_pending'
     }
 
-    /**
     private get triggerStatus(): TriggerStatus {
         const eitherIsActivated =
             this.eventTriggerStatus === 'trigger_activated' || this.urlTriggerStatus === 'trigger_activated'
