@@ -3,6 +3,14 @@ import { BeforeSendFn, CaptureResult, KnownEventName } from '../types'
 import { includes } from '../utils'
 import { isArray, isUndefined } from '../utils/type-utils'
 
+function appendArray(currentValue: string[] | undefined, sampleType: string | string[]): string[] {
+    return [...(currentValue ? currentValue : []), ...(isArray(sampleType) ? sampleType : [sampleType])]
+}
+
+function updateThreshold(currentValue: number | undefined, percent: number): number {
+    return (isUndefined(currentValue) ? 1 : currentValue) * percent
+}
+
 function simpleHash(str: string) {
     let hash = 0
     for (let i = 0; i < str.length; i++) {
@@ -46,14 +54,6 @@ export function sampleByDistinctId(percent: number): BeforeSendFn {
               }
             : null
     }
-}
-
-function appendArray(currentValue: string[] | undefined, sampleType: string | string[]): string[] {
-    return [...(currentValue ? currentValue : []), ...(isArray(sampleType) ? sampleType : [sampleType])]
-}
-
-function updateThreshold(currentValue: number | undefined, percent: number): number {
-    return (isUndefined(currentValue) ? 1 : currentValue) * percent
 }
 
 /**
