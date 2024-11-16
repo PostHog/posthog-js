@@ -46,6 +46,7 @@
     "devDependencies": {
         "@babel/core": "7.18.9",
         "@babel/plugin-syntax-decorators": "^7.23.3",
+        "@babel/plugin-transform-exponentiation-operator": "^7.25.9",
         "@babel/plugin-transform-nullish-coalescing-operator": "^7.25.8",
         "@babel/plugin-transform-react-jsx": "^7.23.4",
         "@babel/preset-env": "7.18.9",
@@ -76,7 +77,7 @@
         "babel-jest": "^26.6.3",
         "browserslist": "^4.24.2",
         "compare-versions": "^6.1.0",
-        "cypress": "13.6.3",
+        "cypress": "13.15.2",
         "cypress-localstorage-commands": "^2.2.6",
         "date-fns": "^3.6.0",
         "eslint": "8.57.0",
@@ -124,10 +125,28 @@
     },
     "browserslist": {
         "production": [
-            "defaults and chrome >62 and firefox >59 and ios_saf>=10.3 and fully supports es6"
+            "defaults",
+            "supports es6-module",
+            "chrome > 62",
+            "firefox > 59",
+            "ios_saf >= 10.3",
+            "opera > 50",
+            "not chrome 61",
+            "not opera 48",
+            "not chrome 62",
+            "not opera 49"
         ],
         "es5": [
-            "defaults and chrome >62 and firefox >59 and ios_saf>=10.3 and fully supports es5 and IE 11"
+            "defaults",
+            "chrome > 62",
+            "firefox > 59",
+            "ios_saf >= 10.3",
+            "opera > 50",
+            "not chrome 61",
+            "not opera 48",
+            "not chrome 62",
+            "not opera 49",
+            "IE 11"
         ]
     },
     "pnpm": {
