@@ -127,11 +127,11 @@ devDependencies:
     specifier: ^6.1.0
     version: 6.1.0
   cypress:
-    specifier: 13.15.2
-    version: 13.15.2
+    specifier: 13.6.3
+    version: 13.6.3
   cypress-localstorage-commands:
     specifier: ^2.2.6
-    version: 2.2.6(cypress@13.15.2)
+    version: 2.2.6(cypress@13.6.3)
   date-fns:
     specifier: ^3.6.0
     version: 3.6.0
@@ -4322,11 +4322,6 @@ packages:
     resolution: {integrity: sha512-riT/3vI5YpVH6/qomlDnJow6TBee2PBKSEpx3O32EGPYbWGIRsIlGRms3Sm74wYE1JMo8RnO04Hb12+v1J5ICw==}
     dev: true
 
-  /ci-info@4.1.0:
-    resolution: {integrity: sha512-HutrvTNsF48wnxkzERIXOe5/mlcfFcbfCmwcg6CJnizbSue78AbDt+1cgl26zwn61WFxhcPykPfZrbqjGmBb4A==}
-    engines: {node: '>=8'}
-    dev: true
-
   /cjs-module-lexer@1.2.2:
     resolution: {integrity: sha512-cOU9usZw8/dXIXKtwa8pM0OTJQuJkxMN6w30csNRUerHfeQ5R6U3kkU/FtJeIf3M202OHfY2U8ccInBG7/xogA==}
     dev: true
@@ -4637,17 +4632,17 @@ packages:
     resolution: {integrity: sha512-d4ZVpCW31eWwCMe1YT3ur7mUDnTXbgwyzaL320DrcRT45rfjYxkt5QWLrmOJ+/UEAI2+fQgKe/fCjR8l4TpRgw==}
     dev: true
 
-  /cypress-localstorage-commands@2.2.6(cypress@13.15.2):
+  /cypress-localstorage-commands@2.2.6(cypress@13.6.3):
     resolution: {integrity: sha512-l3nZ+Lu6YbBWk4UIfNrRkNK56BkF8zVbCrqzCf35x4Nlx2wA2r0spBOZXnKjbutQZgo6qDqtS8uXoSqV36YM1Q==}
     engines: {node: '>=14.0.0'}
     peerDependencies:
       cypress: '>=2.1.0'
     dependencies:
-      cypress: 13.15.2
+      cypress: 13.6.3
     dev: true
 
-  /cypress@13.15.2:
-    resolution: {integrity: sha512-ARbnUorjcCM3XiPwgHKuqsyr5W9Qn+pIIBPaoilnoBkLdSC2oLQjV1BUpnmc7KR+b7Avah3Ly2RMFnfxr96E/A==}
+  /cypress@13.6.3:
+    resolution: {integrity: sha512-d/pZvgwjAyZsoyJ3FOsJT5lDsqnxQ/clMqnNc++rkHjbkkiF2h9s0JsZSyyH4QXhVFW3zPFg82jD25roFLOdZA==}
     engines: {node: ^16.0.0 || ^18.0.0 || >=20.0.0}
     hasBin: true
     requiresBuild: true
@@ -4663,7 +4658,6 @@ packages:
       cachedir: 2.3.0
       chalk: 4.1.2
       check-more-types: 2.24.0
-      ci-info: 4.1.0
       cli-cursor: 3.1.0
       cli-table3: 0.6.2
       commander: 6.2.1
@@ -4678,6 +4672,7 @@ packages:
       figures: 3.2.0
       fs-extra: 9.1.0
       getos: 3.2.1
+      is-ci: 3.0.1
       is-installed-globally: 0.4.0
       lazy-ass: 1.6.0
       listr2: 3.13.5(enquirer@2.3.6)
@@ -4692,7 +4687,6 @@ packages:
       semver: 7.6.3
       supports-color: 8.1.1
       tmp: 0.2.3
-      tree-kill: 1.2.2
       untildify: 4.0.0
       yauzl: 2.10.0
     dev: true
@@ -6597,6 +6591,13 @@ packages:
     hasBin: true
     dependencies:
       ci-info: 2.0.0
+    dev: true
+
+  /is-ci@3.0.1:
+    resolution: {integrity: sha512-ZYvCgrefwqoQ6yTyYUbQu64HsITZ3NfKX1lzaEYdkTDcfKzzCI/wthRRYKkdjHKFVgNiXKAKm65Zo1pk2as/QQ==}
+    hasBin: true
+    dependencies:
+      ci-info: 3.3.0
     dev: true
 
   /is-core-module@2.13.1:
