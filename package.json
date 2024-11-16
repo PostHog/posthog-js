@@ -122,9 +122,14 @@
             "eslint cypress --fix"
         ]
     },
-    "browserslist": [
-        "defaults, fully supports es6"
-    ],
+    "browserslist": {
+        "production": [
+            "defaults and chrome >62 and firefox >59 and ios_saf>=10.3 and fully supports es6"
+        ],
+        "es5": [
+            "defaults and chrome >62 and firefox >59 and ios_saf>=10.3 and fully supports es5 and IE 11"
+        ]
+    },
     "pnpm": {
         "patchedDependencies": {
             "@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17": "patches/@rrweb__rrweb-plugin-console-record@2.0.0-alpha.17.patch",

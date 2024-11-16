@@ -345,6 +345,7 @@ describe('SurveyManager', () => {
         surveyDiv.className = 'PostHogSurvey_test'
         surveyDiv.attachShadow({ mode: 'open' })
         surveyDiv.shadowRoot!.appendChild(document.createElement('style'))
+        // eslint-disable-next-line compat/compat
         document.body.appendChild(surveyDiv)
 
         expect(surveyManager.getTestAPI().canShowNextEventBasedSurvey()).toBe(true)
@@ -409,6 +410,7 @@ describe('SurveyManager', () => {
             current_iteration: null,
             current_iteration_start_date: null,
         }
+        // eslint-disable-next-line compat/compat
         document.body.innerHTML = '<div class="widget-selector"></div>'
         const handleWidgetSelectorMock = jest
             .spyOn(surveyManager as any, 'handleWidgetSelector')

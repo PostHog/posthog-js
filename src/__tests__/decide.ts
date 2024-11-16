@@ -41,6 +41,7 @@ describe('Decide', () => {
 
     beforeEach(() => {
         // clean the JSDOM to prevent interdependencies between tests
+        // eslint-disable-next-line compat/compat
         document.body.innerHTML = ''
         document.head.innerHTML = ''
         jest.spyOn(window.console, 'error').mockImplementation()

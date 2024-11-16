@@ -491,6 +491,7 @@ describe('surveys', () => {
             })
             assignableWindow.location = originalWindowLocation
 
+            // eslint-disable-next-line compat/compat
             document.body.appendChild(document.createElement('div')).className = 'test-selector'
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithSelector])
@@ -502,6 +503,7 @@ describe('surveys', () => {
 
             // eslint-disable-next-line compat/compat
             assignableWindow.location = new URL('https://posthogapp.com') as unknown as Location
+            // eslint-disable-next-line compat/compat
             document.body.appendChild(document.createElement('div')).id = 'foo'
 
             surveys.getActiveMatchingSurveys((data) => {
@@ -645,6 +647,7 @@ describe('surveys', () => {
         it('returns surveys that inclusively matches any of the above', () => {
             // eslint-disable-next-line compat/compat
             assignableWindow.location = new URL('https://posthogapp.com') as unknown as Location
+            // eslint-disable-next-line compat/compat
             document.body.appendChild(document.createElement('div')).className = 'test-selector'
             surveysResponse = { surveys: [activeSurvey, surveyWithSelector, surveyWithEverything] }
             // activeSurvey returns because there are no restrictions on conditions or flags on it

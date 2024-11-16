@@ -41,6 +41,7 @@ describe('Toolbar', () => {
         assignableWindow.ph_load_toolbar = jest.fn(() => {
             const mockToolbarElement = document.createElement('div')
             mockToolbarElement.setAttribute('id', TOOLBAR_ID)
+            // eslint-disable-next-line compat/compat
             document.body.appendChild(mockToolbarElement)
         })
     })
@@ -188,6 +189,7 @@ describe('Toolbar', () => {
             expect(toolbar.loadToolbar(toolbarParams)).toBe(true)
             expect(toolbar.loadToolbar(toolbarParams)).toBe(false)
 
+            // eslint-disable-next-line compat/compat
             document.body.removeChild(document.getElementById(TOOLBAR_ID)!)
 
             expect(toolbar.loadToolbar(toolbarParams)).toBe(true)

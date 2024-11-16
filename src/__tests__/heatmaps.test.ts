@@ -16,6 +16,7 @@ describe('heatmaps', () => {
 
     const createMockMouseEvent = (props: Partial<MouseEvent> = {}) =>
         ({
+            // eslint-disable-next-line compat/compat
             target: document.body,
             clientX: 10,
             clientY: 20,
@@ -139,6 +140,7 @@ describe('heatmaps', () => {
 
         posthog.heatmaps?.['_onClick']?.(
             createMockMouseEvent({
+                // eslint-disable-next-line compat/compat
                 target: document.body,
             })
         )
