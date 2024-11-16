@@ -134,11 +134,6 @@
         ],
         "es5": [
             "defaults",
-            "chrome > 62",
-            "firefox > 59",
-            "ios_saf >= 10.3",
-            "opera > 50",
-            "safari > 12",
             "IE 11"
         ]
     },
