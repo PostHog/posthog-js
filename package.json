@@ -126,15 +126,11 @@
     "browserslist": {
         "production": [
             "defaults",
-            "supports es6-module",
             "chrome > 62",
             "firefox > 59",
             "ios_saf >= 10.3",
             "opera > 50",
-            "not chrome 61",
-            "not opera 48",
-            "not chrome 62",
-            "not opera 49"
+            "safari > 12"
         ],
         "es5": [
             "defaults",
@@ -142,10 +138,7 @@
             "firefox > 59",
             "ios_saf >= 10.3",
             "opera > 50",
-            "not chrome 61",
-            "not opera 48",
-            "not chrome 62",
-            "not opera 49",
+            "safari > 12",
             "IE 11"
         ]
     },
