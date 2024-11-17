@@ -309,7 +309,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                         .then((entry) => {
                             const requests = prepareRequest({
                                 entry,
-                                method: req.method,
+                                method: method,
                                 status: xhr?.status,
                                 networkRequest,
                                 start,
@@ -386,7 +386,7 @@ function prepareRequest({
             timeOrigin,
             timestamp,
             method: method,
-            initiatorType: entry ? (entry.initiatorType as InitiatorType) : initiatorType,
+            initiatorType: initiatorType ? initiatorType : entry ? (entry.initiatorType as InitiatorType) : undefined,
             status,
             requestHeaders: networkRequest.requestHeaders,
             requestBody: networkRequest.requestBody,
