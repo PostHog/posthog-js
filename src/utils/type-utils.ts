@@ -19,6 +19,22 @@ export const isFunction = function (f: any): f is (...args: any[]) => any {
     // eslint-disable-next-line posthog-js/no-direct-function-check
     return typeof f === 'function'
 }
+
+export const isNativeFunction = function (f: any): f is (...args: any[]) => any {
+    // eslint-disable-next-line no-console
+    console.log(f.toString())
+    return isFunction(f) && f.toString().includes('[native code]')
+}
+
+// When angular patches functions they pass the above `isNativeFunction` check
+export const isAngularZonePatchedFunction = function (f: any): boolean {
+    if (!isFunction(f)) {
+        return false
+    }
+    const prototypeKeys = Object.getOwnPropertyNames(f.prototype || {})
+    return prototypeKeys.some((key) => key.indexOf('__zone'))
+}
+
 // Underscore Addons
 export const isObject = function (x: unknown): x is Record<string, any> {
     // eslint-disable-next-line posthog-js/no-direct-object-check

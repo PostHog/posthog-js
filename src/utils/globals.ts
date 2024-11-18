@@ -2,6 +2,7 @@ import { ErrorProperties } from '../extensions/exception-autocapture/error-conve
 import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
 import { DeadClicksAutoCaptureConfig, ErrorEventArgs, ErrorMetadata, Properties } from '../types'
+import { getNativeMutationObserverImplementation } from './prototype-utils'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
@@ -15,6 +16,12 @@ import { DeadClicksAutoCaptureConfig, ErrorEventArgs, ErrorMetadata, Properties 
 
 // eslint-disable-next-line no-restricted-globals
 const win: (Window & typeof globalThis) | undefined = typeof window !== 'undefined' ? window : undefined
+
+export type AssignableWindow = Window &
+    typeof globalThis &
+    Record<string, any> & {
+        __PosthogExtensions__?: PostHogExtensions
+    }
 
 /**
  * This is our contract between (potentially) lazily loaded extensions and the SDK
@@ -86,10 +93,10 @@ export const XMLHttpRequest =
     global?.XMLHttpRequest && 'withCredentials' in new global.XMLHttpRequest() ? global.XMLHttpRequest : undefined
 export const AbortController = global?.AbortController
 export const userAgent = navigator?.userAgent
-export const assignableWindow: Window &
-    typeof globalThis &
-    Record<string, any> & {
-        __PosthogExtensions__?: PostHogExtensions
-    } = win ?? ({} as any)
-
+export const assignableWindow: AssignableWindow = win ?? ({} as any)
+/**
+ * We have to sometimes load mutation observer from an iframe
+ * because Angular change detection really doesn't like sharing it
+ */
+export const NativeMutationObserver = getNativeMutationObserverImplementation(assignableWindow)
 export { win as window }

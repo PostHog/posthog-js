@@ -5,6 +5,7 @@ import { autocaptureCompatibleElements, getEventTarget } from '../autocapture-ut
 import { DeadClickCandidate, DeadClicksAutoCaptureConfig, Properties } from '../types'
 import { autocapturePropertiesForElement } from '../autocapture'
 import { isElementInToolbar, isElementNode, isTag } from '../utils/element-utils'
+import { NativeMutationObserver } from '../utils/globals'
 
 function asClick(event: MouseEvent): DeadClickCandidate | null {
     const eventTarget = getEventTarget(event)
@@ -66,7 +67,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
 
     private _startMutationObserver(observerTarget: Node) {
         if (!this._mutationObserver) {
-            this._mutationObserver = new MutationObserver((mutations) => {
+            this._mutationObserver = new NativeMutationObserver((mutations) => {
                 this.onMutation(mutations)
             })
             this._mutationObserver.observe(observerTarget, {
@@ -99,6 +100,8 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _onClick = (event: MouseEvent): void => {
         const click = asClick(event)
         if (!isNull(click) && !this._ignoreClick(click)) {
+            // eslint-disable-next-line no-console
+            console.log('deadclicks detected a click', click)
             this._clicks.push(click)
         }
 
@@ -209,8 +212,24 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
 
             if (hadScroll || hadMutation || hadSelectionChange) {
                 // ignore clicks that had a scroll or mutation
+                // eslint-disable-next-line no-console
+                console.log('not a dead click', {
+                    click,
+                    hadScroll,
+                    hadMutation,
+                    hadSelectionChange,
+                })
                 continue
             }
+
+            // eslint-disable-next-line no-console
+            console.log('dead click?', {
+                isdc: scrollTimeout || mutationTimeout || absoluteTimeout || selectionChangedTimeout,
+                scrollTimeout,
+                mutationTimeout,
+                absoluteTimeout,
+                selectionChangedTimeout,
+            })
 
             if (scrollTimeout || mutationTimeout || absoluteTimeout || selectionChangedTimeout) {
                 this._onCapture(click, {
