@@ -563,7 +563,6 @@ export class PostHog {
         this.experiments?.afterDecideResponse(response)
         this.surveys?.afterDecideResponse(response)
         this.webVitalsAutocapture?.afterDecideResponse(response)
-        this.exceptions?.afterDecideResponse(response)
         this.exceptionObserver?.afterDecideResponse(response)
         this.deadClicksAutocapture?.afterDecideResponse(response)
     }
