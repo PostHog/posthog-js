@@ -1,3 +1,9 @@
+## 1.186.3 - 2024-11-18
+
+- fix: refactor native mutation observer implementation (#1535)
+- chore: update dependency versions (#1534)
+- chore: remove custom exceptions endpoint (#1513)
+
 ## 1.186.2 - 2024-11-18
 
 - fix: angular change detection mutation observer (#1531)
