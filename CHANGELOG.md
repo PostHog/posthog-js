@@ -1,3 +1,8 @@
+## 1.186.2 - 2024-11-18
+
+- fix: angular change detection mutation observer (#1531)
+- chore: Added CSP headers to next app for testing what we document (#1528)
+
 ## 1.186.1 - 2024-11-15
 
 - fix: XHR req method capture (#1527)
