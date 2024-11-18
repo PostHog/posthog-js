@@ -19,6 +19,11 @@ export const isFunction = function (f: any): f is (...args: any[]) => any {
     // eslint-disable-next-line posthog-js/no-direct-function-check
     return typeof f === 'function'
 }
+
+export const isNativeFunction = function (f: any): f is (...args: any[]) => any {
+    return isFunction(f) && f.toString().includes('[native code]')
+}
+
 // Underscore Addons
 export const isObject = function (x: unknown): x is Record<string, any> {
     // eslint-disable-next-line posthog-js/no-direct-object-check
