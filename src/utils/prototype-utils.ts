@@ -55,11 +55,6 @@ export function getNativeImplementation<T extends keyof NativeImplementationsCac
     return (cachedImplementations[name] = impl.bind(assignableWindow) as NativeImplementationsCache[T])
 }
 
-/** Clear a cached implementation. */
-export function clearCachedImplementation(name: keyof NativeImplementationsCache): void {
-    cachedImplementations[name] = undefined
-}
-
 export function getNativeMutationObserverImplementation(): typeof MutationObserver {
     return getNativeImplementation('mutationObserverCtor')
 }
