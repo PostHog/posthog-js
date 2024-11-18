@@ -23,7 +23,7 @@ export const isFunction = function (f: any): f is (...args: any[]) => any {
 export const isNativeFunction = function (f: any): f is (...args: any[]) => any {
     // eslint-disable-next-line no-console
     console.log(f.toString())
-    return isFunction(f) && f.toString().includes('[native code]')
+    return isFunction(f) && f.toString().indexOf('[native code]') !== -1
 }
 
 // When angular patches functions they pass the above `isNativeFunction` check
