@@ -9,11 +9,7 @@ import { isAngularZonePatchedFunction, isFunction, isNativeFunction } from './ty
 import { logger } from './logger'
 
 interface NativeImplementationsCache {
-    // eslint-disable-next-line posthog-js/no-direct-mutation-observer
     MutationObserver: typeof MutationObserver
-    setTimeout: typeof setTimeout
-    addEventListener: typeof addEventListener
-    setInterval: typeof setInterval
 }
 
 const cachedImplementations: Partial<NativeImplementationsCache> = {}
@@ -30,8 +26,6 @@ export function getNativeImplementation<T extends keyof NativeImplementationsCac
     let impl = assignableWindow[name] as NativeImplementationsCache[T]
 
     if (isNativeFunction(impl) && !isAngularZonePatchedFunction(impl)) {
-        // eslint-disable-next-line no-console
-        console.log(name + ' is a native function, no need to create a sandbox')
         return (cachedImplementations[name] = impl.bind(assignableWindow) as NativeImplementationsCache[T])
     }
 
@@ -61,7 +55,6 @@ export function getNativeImplementation<T extends keyof NativeImplementationsCac
     return (cachedImplementations[name] = impl.bind(assignableWindow) as NativeImplementationsCache[T])
 }
 
-// eslint-disable-next-line posthog-js/no-direct-mutation-observer
 export function getNativeMutationObserverImplementation(assignableWindow: AssignableWindow): typeof MutationObserver {
     return getNativeImplementation('MutationObserver', assignableWindow)
 }
