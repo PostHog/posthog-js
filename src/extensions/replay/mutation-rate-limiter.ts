@@ -1,6 +1,7 @@
 import type { eventWithTime, mutationCallbackParam } from '@rrweb/types'
 import { INCREMENTAL_SNAPSHOT_EVENT_TYPE, MUTATION_SOURCE_TYPE, rrwebRecord } from './sessionrecording-utils'
 import { clampToRange } from '../../utils/number-utils'
+import { setInterval } from '../../utils/globals'
 
 export class MutationRateLimiter {
     private bucketSize = 100

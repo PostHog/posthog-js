@@ -8,6 +8,15 @@ import { HEATMAPS_ENABLED_SERVER_SIDE } from '../constants'
 import { Heatmaps } from '../heatmaps'
 
 jest.mock('../utils/logger')
+jest.mock('../utils/globals', () => {
+    const og = jest.requireActual('../utils/globals')
+    return {
+        ...og,
+        // because setInterval is wrapped in globals, we need to replace it here so jest's fake timers can affect it
+        setInterval: jest.fn((callback, interval) => global.setInterval(callback, interval)),
+    }
+})
+
 jest.useFakeTimers()
 
 describe('heatmaps', () => {

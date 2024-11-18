@@ -2,6 +2,11 @@ import { ErrorProperties } from '../extensions/exception-autocapture/error-conve
 import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
 import { DeadClicksAutoCaptureConfig, ErrorEventArgs, ErrorMetadata, Properties } from '../types'
+import {
+    getNativeAddEventListener,
+    getNativeSetIntervalImplementation,
+    getNativeSetTimeoutImplementation,
+} from './prototype-utils'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
@@ -12,6 +17,12 @@ import { DeadClicksAutoCaptureConfig, ErrorEventArgs, ErrorMetadata, Properties 
  * If in doubt - export the global you need from this file and use that as an optional value. This way the code path is forced
  * to handle the case where the global is not available.
  */
+
+export type AssignableWindow = Window &
+    typeof globalThis &
+    Record<string, any> & {
+        __PosthogExtensions__?: PostHogExtensions
+    }
 
 // eslint-disable-next-line no-restricted-globals
 const win: (Window & typeof globalThis) | undefined = typeof window !== 'undefined' ? window : undefined
@@ -35,7 +46,7 @@ export interface LazyLoadedDeadClicksAutocaptureInterface {
     stop: () => void
 }
 
-interface PostHogExtensions {
+export interface PostHogExtensions {
     loadExternalDependency?: (
         posthog: PostHog,
         kind: PostHogExtensionKind,
@@ -86,10 +97,10 @@ export const XMLHttpRequest =
     global?.XMLHttpRequest && 'withCredentials' in new global.XMLHttpRequest() ? global.XMLHttpRequest : undefined
 export const AbortController = global?.AbortController
 export const userAgent = navigator?.userAgent
-export const assignableWindow: Window &
-    typeof globalThis &
-    Record<string, any> & {
-        __PosthogExtensions__?: PostHogExtensions
-    } = win ?? ({} as any)
+
+export const assignableWindow: AssignableWindow = win ?? ({} as any)
+export const setTimeout = getNativeSetTimeoutImplementation(assignableWindow)
+export const setInterval = getNativeSetIntervalImplementation(assignableWindow)
+export const addEventListener = getNativeAddEventListener(assignableWindow)
 
 export { win as window }

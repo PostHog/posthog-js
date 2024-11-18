@@ -4,18 +4,22 @@
  * after a number of performance reports from Angular users
  */
 
-import { assignableWindow } from './globals'
-import { isFunction, isNativeFunction } from './type-utils'
+import { AssignableWindow } from './globals'
+import { isAngularZonePatchedFunction, isFunction, isNativeFunction } from './type-utils'
 import { logger } from './logger'
 
 interface NativeImplementationsCache {
     MutationObserver: typeof MutationObserver
+    setTimeout: typeof setTimeout
+    addEventListener: typeof addEventListener
+    setInterval: typeof setInterval
 }
 
 const cachedImplementations: Partial<NativeImplementationsCache> = {}
 
 export function getNativeImplementation<T extends keyof NativeImplementationsCache>(
-    name: T
+    name: T,
+    assignableWindow: AssignableWindow
 ): NativeImplementationsCache[T] {
     const cached = cachedImplementations[name]
     if (cached) {
@@ -24,8 +28,9 @@ export function getNativeImplementation<T extends keyof NativeImplementationsCac
 
     let impl = assignableWindow[name] as NativeImplementationsCache[T]
 
-    // Fast path to avoid DOM I/O
-    if (isNativeFunction(impl)) {
+    if (isNativeFunction(impl) && !isAngularZonePatchedFunction(impl)) {
+        // eslint-disable-next-line no-console
+        console.log(name + ' is a native function, no need to create a sandbox')
         return (cachedImplementations[name] = impl.bind(assignableWindow) as NativeImplementationsCache[T])
     }
 
@@ -48,13 +53,25 @@ export function getNativeImplementation<T extends keyof NativeImplementationsCac
 
     // Sanity check: This _should_ not happen, but if it does, we just skip caching...
     // This can happen e.g. in tests where fetch may not be available in the env, or similar.
-    if (!impl) {
+    if (!impl || !isFunction(impl)) {
         return impl
     }
 
     return (cachedImplementations[name] = impl.bind(assignableWindow) as NativeImplementationsCache[T])
 }
 
-export function getNativeMutationObserverImplementation(): typeof MutationObserver {
-    return getNativeImplementation('MutationObserver')
+export function getNativeMutationObserverImplementation(assignableWindow: AssignableWindow): typeof MutationObserver {
+    return getNativeImplementation('MutationObserver', assignableWindow)
+}
+
+export function getNativeSetTimeoutImplementation(assignableWindow: AssignableWindow): typeof setTimeout {
+    return getNativeImplementation('setTimeout', assignableWindow)
+}
+
+export function getNativeSetIntervalImplementation(assignableWindow: AssignableWindow): typeof setInterval {
+    return getNativeImplementation('setInterval', assignableWindow)
+}
+
+export function getNativeAddEventListener(assignableWindow: AssignableWindow): typeof addEventListener {
+    return getNativeImplementation('addEventListener', assignableWindow)
 }

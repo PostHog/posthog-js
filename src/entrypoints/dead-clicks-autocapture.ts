@@ -6,6 +6,7 @@ import { DeadClickCandidate, DeadClicksAutoCaptureConfig, Properties } from '../
 import { autocapturePropertiesForElement } from '../autocapture'
 import { isElementInToolbar, isElementNode, isTag } from '../utils/element-utils'
 import { getNativeMutationObserverImplementation } from '../utils/prototype-utils'
+import { setTimeout, addEventListener } from '../utils/globals'
 
 function asClick(event: MouseEvent): DeadClickCandidate | null {
     const eventTarget = getEventTarget(event)
@@ -28,7 +29,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _lastMutation: number | undefined
     private _lastSelectionChanged: number | undefined
     private _clicks: DeadClickCandidate[] = []
-    private _checkClickTimer: number | undefined
+    private _checkClickTimer: NodeJS.Timeout | number | undefined
     private _config: Required<DeadClicksAutoCaptureConfig>
     private _onCapture: (click: DeadClickCandidate, properties: Properties) => void
 
@@ -67,7 +68,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
 
     private _startMutationObserver(observerTarget: Node) {
         if (!this._mutationObserver) {
-            const NativeMutationObserver = getNativeMutationObserverImplementation()
+            const NativeMutationObserver = getNativeMutationObserverImplementation(assignableWindow)
             this._mutationObserver = new NativeMutationObserver((mutations) => {
                 this.onMutation(mutations)
             })
@@ -91,21 +92,25 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     private onMutation(_mutations: MutationRecord[]): void {
         // we don't actually care about the content of the mutations, right now
+        // eslint-disable-next-line no-console
+        console.log('mutation')
         this._lastMutation = Date.now()
     }
 
     private _startClickObserver() {
-        assignableWindow.addEventListener('click', this._onClick)
+        addEventListener('click', this._onClick)
     }
 
     private _onClick = (event: MouseEvent): void => {
+        // eslint-disable-next-line no-console
+        console.log('dead clicks on click')
         const click = asClick(event)
         if (!isNull(click) && !this._ignoreClick(click)) {
             this._clicks.push(click)
         }
 
         if (this._clicks.length && isUndefined(this._checkClickTimer)) {
-            this._checkClickTimer = assignableWindow.setTimeout(() => {
+            this._checkClickTimer = setTimeout(() => {
                 this._checkClicks()
             }, 1000)
         }
@@ -115,7 +120,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         // setting the third argument to `true` means that we will receive scroll events for other scrollable elements
         // on the page, not just the window
         // see https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener#usecapture
-        assignableWindow.addEventListener('scroll', this._onScroll, true)
+        addEventListener('scroll', this._onScroll, true)
     }
 
     private _onScroll = (): void => {
@@ -134,7 +139,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _startSelectionChangedObserver() {
-        assignableWindow.addEventListener('selectionchange', this._onSelectionChange)
+        addEventListener('selectionchange', this._onSelectionChange)
     }
 
     private _onSelectionChange = (): void => {
@@ -214,6 +219,15 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
                 continue
             }
 
+            // eslint-disable-next-line no-console
+            console.log('dead click?', {
+                isdc: scrollTimeout || mutationTimeout || absoluteTimeout || selectionChangedTimeout,
+                scrollTimeout,
+                mutationTimeout,
+                absoluteTimeout,
+                selectionChangedTimeout,
+            })
+
             if (scrollTimeout || mutationTimeout || absoluteTimeout || selectionChangedTimeout) {
                 this._onCapture(click, {
                     $dead_click_last_mutation_timestamp: this._lastMutation,
@@ -230,7 +244,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         }
 
         if (this._clicks.length && isUndefined(this._checkClickTimer)) {
-            this._checkClickTimer = assignableWindow.setTimeout(() => {
+            this._checkClickTimer = setTimeout(() => {
                 this._checkClicks()
             }, 1000)
         }

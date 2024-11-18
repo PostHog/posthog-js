@@ -49,6 +49,19 @@ import Mock = jest.Mock
 import { ConsentManager } from '../../../consent'
 import { waitFor } from '@testing-library/preact'
 import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
+import { addEventListener } from '../../../utils/globals'
+
+jest.mock('../../../utils/globals', () => {
+    const og = jest.requireActual<Record<string, any>>('../../../utils/globals')
+    return {
+        ...og,
+        // because setInterval is wrapped in globals, we need to replace it here so jest's fake timers can affect it
+        setInterval: jest.fn((callback, interval) => global.setInterval(callback, interval)),
+        addEventListener: jest.fn().mockImplementation(og.addEventListener),
+        // because setTimeout is wrapped in globals, we need to replace it here so jest's fake timers can affect it
+        setTimeout: jest.fn((callback, interval) => global.setTimeout(callback, interval)),
+    }
+})
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -438,14 +451,10 @@ describe('SessionRecording', () => {
         })
 
         it('sets the window event listeners', () => {
-            //mock window add event listener to check if it is called
-            const addEventListener = jest.fn().mockImplementation(() => () => {})
-            window.addEventListener = addEventListener
-
             sessionRecording.startIfEnabledOrStop()
             expect(sessionRecording['_onBeforeUnload']).not.toBeNull()
             // we register 4 event listeners
-            expect(window.addEventListener).toHaveBeenCalledTimes(4)
+            expect(addEventListener).toHaveBeenCalledTimes(4)
 
             // window.addEventListener('blah', someFixedListenerInstance) is safe to call multiple times,
             // so we don't need to test if the addEvenListener registrations are called multiple times

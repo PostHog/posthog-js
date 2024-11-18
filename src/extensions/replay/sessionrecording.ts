@@ -45,6 +45,7 @@ import { MutationRateLimiter } from './mutation-rate-limiter'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
 import { clampToRange } from '../../utils/number-utils'
 import { includes } from '../../utils'
+import { setInterval, setTimeout, addEventListener } from '../../utils/globals'
 
 type SessionStartReason =
     | 'sampling_overridden'
@@ -487,10 +488,10 @@ export class SessionRecording {
             this._startCapture(startReason)
 
             // calling addEventListener multiple times is safe and will not add duplicates
-            window?.addEventListener('beforeunload', this._onBeforeUnload)
-            window?.addEventListener('offline', this._onOffline)
-            window?.addEventListener('online', this._onOnline)
-            window?.addEventListener('visibilitychange', this._onVisibilityChange)
+            addEventListener('beforeunload', this._onBeforeUnload)
+            addEventListener('offline', this._onOffline)
+            addEventListener('online', this._onOnline)
+            addEventListener('visibilitychange', this._onVisibilityChange)
 
             // on reload there might be an already sampled session that should be continued before decide response,
             // so we call this here _and_ in the decide response

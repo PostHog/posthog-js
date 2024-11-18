@@ -10,6 +10,7 @@ import { isEmptyObject, isObject, isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 import { isElementInToolbar, isElementNode, isTag } from './utils/element-utils'
 import { DeadClicksAutocapture, isDeadClicksEnabledForHeatmaps } from './extensions/dead-clicks-autocapture'
+import { setInterval } from './utils/globals'
 
 const DEFAULT_FLUSH_INTERVAL = 5000
 const HEATMAPS = 'heatmaps'
@@ -48,7 +49,7 @@ export class Heatmaps {
 
     // TODO: Periodically flush this if no other event has taken care of it
     private buffer: HeatmapEventBuffer
-    private _flushInterval: ReturnType<typeof setInterval> | null = null
+    private _flushInterval: number | NodeJS.Timeout | null = null
     private deadClicksCapture: DeadClicksAutocapture | undefined
 
     constructor(instance: PostHog) {
@@ -119,6 +120,8 @@ export class Heatmaps {
     }
 
     private _onDeadClick(click: DeadClickCandidate): void {
+        // eslint-disable-next-line no-console
+        console.log('heatmap detected deadclick')
         this._onClick(click.originalEvent, 'deadclick')
     }
 
