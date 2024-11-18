@@ -15,10 +15,24 @@ export const isUint8Array = function (x: unknown): x is Uint8Array {
 // from a comment on http://dbj.org/dbj/?p=286
 // fails on only one very rare and deliberate custom object:
 // let bomb = { toString : undefined, valueOf: function(o) { return "function BOMBA!"; }};
-export const isFunction = function (f: any): f is (...args: any[]) => any {
+export const isFunction = function (x: unknown): x is (...args: any[]) => any {
     // eslint-disable-next-line posthog-js/no-direct-function-check
-    return typeof f === 'function'
+    return typeof x === 'function'
 }
+
+export const isNativeFunction = function (x: unknown): x is (...args: any[]) => any {
+    return isFunction(x) && x.toString().indexOf('[native code]') !== -1
+}
+
+// When angular patches functions they pass the above `isNativeFunction` check
+export const isAngularZonePatchedFunction = function (x: unknown): boolean {
+    if (!isFunction(x)) {
+        return false
+    }
+    const prototypeKeys = Object.getOwnPropertyNames(x.prototype || {})
+    return prototypeKeys.some((key) => key.indexOf('__zone'))
+}
+
 // Underscore Addons
 export const isObject = function (x: unknown): x is Record<string, any> {
     // eslint-disable-next-line posthog-js/no-direct-object-check

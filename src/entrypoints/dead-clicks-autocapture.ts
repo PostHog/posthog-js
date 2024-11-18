@@ -5,6 +5,7 @@ import { autocaptureCompatibleElements, getEventTarget } from '../autocapture-ut
 import { DeadClickCandidate, DeadClicksAutoCaptureConfig, Properties } from '../types'
 import { autocapturePropertiesForElement } from '../autocapture'
 import { isElementInToolbar, isElementNode, isTag } from '../utils/element-utils'
+import { NativeMutationObserver } from '../utils/globals'
 
 function asClick(event: MouseEvent): DeadClickCandidate | null {
     const eventTarget = getEventTarget(event)
@@ -66,7 +67,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
 
     private _startMutationObserver(observerTarget: Node) {
         if (!this._mutationObserver) {
-            this._mutationObserver = new MutationObserver((mutations) => {
+            this._mutationObserver = new NativeMutationObserver((mutations) => {
                 this.onMutation(mutations)
             })
             this._mutationObserver.observe(observerTarget, {
