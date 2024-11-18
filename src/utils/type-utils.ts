@@ -9,23 +9,20 @@ export const isArray =
     function (obj: any): obj is any[] {
         return toString.call(obj) === '[object Array]'
     }
-export const isUint8Array = function (x: unknown): x is Uint8Array {
-    return toString.call(x) === '[object Uint8Array]'
-}
+
 // from a comment on http://dbj.org/dbj/?p=286
 // fails on only one very rare and deliberate custom object:
 // let bomb = { toString : undefined, valueOf: function(o) { return "function BOMBA!"; }};
-export const isFunction = function (x: unknown): x is (...args: any[]) => any {
+export const isFunction = (x: unknown): x is (...args: any[]) => any => {
     // eslint-disable-next-line posthog-js/no-direct-function-check
     return typeof x === 'function'
 }
 
-export const isNativeFunction = function (x: unknown): x is (...args: any[]) => any {
-    return isFunction(x) && x.toString().indexOf('[native code]') !== -1
-}
+export const isNativeFunction = (x: unknown): x is (...args: any[]) => any =>
+    isFunction(x) && x.toString().indexOf('[native code]') !== -1
 
 // When angular patches functions they pass the above `isNativeFunction` check
-export const isAngularZonePatchedFunction = function (x: unknown): boolean {
+export const isAngularZonePatchedFunction = (x: unknown): boolean => {
     if (!isFunction(x)) {
         return false
     }
@@ -34,11 +31,11 @@ export const isAngularZonePatchedFunction = function (x: unknown): boolean {
 }
 
 // Underscore Addons
-export const isObject = function (x: unknown): x is Record<string, any> {
+export const isObject = (x: unknown): x is Record<string, any> => {
     // eslint-disable-next-line posthog-js/no-direct-object-check
     return x === Object(x) && !isArray(x)
 }
-export const isEmptyObject = function (x: unknown): x is Record<string, any> {
+export const isEmptyObject = (x: unknown): x is Record<string, any> => {
     if (isObject(x)) {
         for (const key in x) {
             if (hasOwnProperty.call(x, key)) {
@@ -49,20 +46,16 @@ export const isEmptyObject = function (x: unknown): x is Record<string, any> {
     }
     return false
 }
-export const isUndefined = function (x: unknown): x is undefined {
-    return x === void 0
-}
+export const isUndefined = (x: unknown): x is undefined => x === void 0
 
-export const isString = function (x: unknown): x is string {
+export const isString = (x: unknown): x is string => {
     // eslint-disable-next-line posthog-js/no-direct-string-check
     return toString.call(x) == '[object String]'
 }
 
-export const isEmptyString = function (x: unknown): boolean {
-    return isString(x) && x.trim().length === 0
-}
+export const isEmptyString = (x: unknown): boolean => isString(x) && x.trim().length === 0
 
-export const isNull = function (x: unknown): x is null {
+export const isNull = (x: unknown): x is null => {
     // eslint-disable-next-line posthog-js/no-direct-null-check
     return x === null
 }
@@ -71,19 +64,13 @@ export const isNull = function (x: unknown): x is null {
     sometimes you want to check if something is null or undefined
     that's what this is for
  */
-export const isNullish = function (x: unknown): x is null | undefined {
-    return isUndefined(x) || isNull(x)
-}
+export const isNullish = (x: unknown): x is null | undefined => isUndefined(x) || isNull(x)
 
-export const isDate = function (x: unknown): x is Date {
-    // eslint-disable-next-line posthog-js/no-direct-date-check
-    return toString.call(x) == '[object Date]'
-}
-export const isNumber = function (x: unknown): x is number {
+export const isNumber = (x: unknown): x is number => {
     // eslint-disable-next-line posthog-js/no-direct-number-check
     return toString.call(x) == '[object Number]'
 }
-export const isBoolean = function (x: unknown): x is boolean {
+export const isBoolean = (x: unknown): x is boolean => {
     // eslint-disable-next-line posthog-js/no-direct-boolean-check
     return toString.call(x) === '[object Boolean]'
 }
