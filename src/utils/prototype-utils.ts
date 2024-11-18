@@ -9,7 +9,7 @@ import { isFunction, isNativeFunction } from './type-utils'
 import { logger } from './logger'
 
 interface NativeImplementationsCache {
-    mutationObserverCtor: typeof MutationObserver
+    MutationObserver: typeof MutationObserver
 }
 
 const cachedImplementations: Partial<NativeImplementationsCache> = {}
@@ -56,5 +56,5 @@ export function getNativeImplementation<T extends keyof NativeImplementationsCac
 }
 
 export function getNativeMutationObserverImplementation(): typeof MutationObserver {
-    return getNativeImplementation('mutationObserverCtor')
+    return getNativeImplementation('MutationObserver')
 }
