@@ -1,3 +1,7 @@
+## 1.187.1 - 2024-11-19
+
+- fix: patch angular wrap detection in rrweb (#1543)
+
 ## 1.187.0 - 2024-11-19
 
 - feat: allow config of before_send function to edit or reject events (#1515)
