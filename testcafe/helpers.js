@@ -77,8 +77,9 @@ export const initPosthog = (testName, config) => {
                 window.loaded = true
                 window.fullCaptures = []
             }
-            clientPosthogConfig._onCapture = (_, event) => {
+            clientPosthogConfig.before_send = (event) => {
                 window.fullCaptures.push(event)
+                return event
             }
             window.posthog.init(clientPosthogConfig.api_key, clientPosthogConfig)
             window.posthog.register(register)

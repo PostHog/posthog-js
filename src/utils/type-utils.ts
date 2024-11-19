@@ -1,3 +1,6 @@
+import { includes } from '.'
+import { knownUnsafeEditableEvent, KnownUnsafeEditableEvent } from '../types'
+
 // eslint-disable-next-line posthog-js/no-direct-array-check
 const nativeIsArray = Array.isArray
 const ObjProto = Object.prototype
@@ -88,4 +91,8 @@ export const isFormData = (x: unknown): x is FormData => {
 export const isFile = (x: unknown): x is File => {
     // eslint-disable-next-line posthog-js/no-direct-file-check
     return x instanceof File
+}
+
+export const isKnownUnsafeEditableEvent = (x: unknown): x is KnownUnsafeEditableEvent => {
+    return includes(knownUnsafeEditableEvent as unknown as string[], x)
 }

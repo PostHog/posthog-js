@@ -15,7 +15,7 @@ import {
     splitClassString,
 } from './autocapture-utils'
 import RageClick from './extensions/rageclick'
-import { AutocaptureConfig, DecideResponse, Properties } from './types'
+import { AutocaptureConfig, COPY_AUTOCAPTURE_EVENT, DecideResponse, EventName, Properties } from './types'
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
@@ -24,8 +24,6 @@ import { logger } from './utils/logger'
 import { document, window } from './utils/globals'
 import { convertToURL } from './utils/request-utils'
 import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
-
-const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
 
 function limitText(length: number, text: string): string {
     if (text.length > length) {
@@ -343,7 +341,7 @@ export class Autocapture {
         return !disabledClient && !disabledServer
     }
 
-    private _captureEvent(e: Event, eventName = '$autocapture'): boolean | void {
+    private _captureEvent(e: Event, eventName: EventName = '$autocapture'): boolean | void {
         if (!this.isEnabled) {
             return
         }

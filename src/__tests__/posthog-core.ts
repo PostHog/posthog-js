@@ -96,7 +96,6 @@ describe('posthog core', () => {
                 {
                     property_denylist: [],
                     property_blacklist: [],
-                    _onCapture: jest.fn(),
                     store_google: true,
                     save_referrer: true,
                 },
@@ -168,13 +167,12 @@ describe('posthog core', () => {
                     'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36',
             }
 
-            const hook = jest.fn()
+            const hook = jest.fn().mockImplementation((event) => event)
             const posthog = posthogWith(
                 {
                     opt_out_useragent_filter: true,
                     property_denylist: [],
                     property_blacklist: [],
-                    _onCapture: jest.fn(),
                 },
                 defaultOverrides
             )
@@ -198,7 +196,6 @@ describe('posthog core', () => {
                     properties_string_max_length: 1000,
                     property_denylist: [],
                     property_blacklist: [],
-                    _onCapture: jest.fn(),
                 },
                 defaultOverrides
             )
@@ -220,7 +217,6 @@ describe('posthog core', () => {
                     properties_string_max_length: undefined,
                     property_denylist: [],
                     property_blacklist: [],
-                    _onCapture: jest.fn(),
                 },
                 defaultOverrides
             )
@@ -269,7 +265,6 @@ describe('posthog core', () => {
                 {
                     property_denylist: [],
                     property_blacklist: [],
-                    _onCapture: jest.fn(),
                 },
                 defaultOverrides
             )
