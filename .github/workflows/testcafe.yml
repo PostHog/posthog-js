@@ -54,6 +54,7 @@ jobs:
         run: pnpm build-rollup
 
       - name: Run ${{ matrix.name }} test
+        timeout-minutes: 10
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
           RUN_ID: ${{ github.run_id }}
@@ -61,4 +62,5 @@ jobs:
         run: pnpm testcafe ${{ matrix.browser }} --stop-on-first-fail
 
       - name: Check ${{ matrix.name }} events
+        timeout-minutes: 10
         run: pnpm check-testcafe-results
