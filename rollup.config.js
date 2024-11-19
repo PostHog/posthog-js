@@ -17,14 +17,16 @@ const plugins = (es5) => [
     babel({
         extensions: ['.js', '.jsx', '.ts', '.tsx'],
         babelHelpers: 'bundled',
-        plugins: ['@babel/plugin-transform-nullish-coalescing-operator'],
+        plugins: [
+            '@babel/plugin-transform-nullish-coalescing-operator',
+            // Explicitly included so we transform 1 ** 2 to Math.pow(1, 2) for ES6 compatability
+            '@babel/plugin-transform-exponentiation-operator',
+        ],
         presets: [
             [
                 '@babel/preset-env',
                 {
-                    targets: es5
-                        ? '>0.5%, last 2 versions, Firefox ESR, not dead, IE 11'
-                        : '>0.5%, last 2 versions, Firefox ESR, not dead',
+                    targets: es5 ? 'defaults, IE 11' : '>0.5%, last 2 versions, Firefox ESR, not dead',
                 },
             ],
         ],

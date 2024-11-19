@@ -1,3 +1,8 @@
+## 1.186.4 - 2024-11-19
+
+- chore: always transform exponentiation (#1537)
+- chore: very small change to IE11 bundling (#1536)
+
 ## 1.186.3 - 2024-11-18
 
 - fix: refactor native mutation observer implementation (#1535)
