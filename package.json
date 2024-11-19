@@ -122,9 +122,25 @@
             "eslint cypress --fix"
         ]
     },
-    "browserslist": [
-        "> 0.5%, last 2 versions, Firefox ESR, not dead, IE 11"
-    ],
+    "browserslist": {
+        "production": [
+            "> 0.5%, last 2 versions, Firefox ESR, not dead",
+            "chrome > 62",
+            "firefox > 59",
+            "ios_saf >= 10.3",
+            "opera > 50",
+            "safari > 12"
+        ],
+        "es5": [
+            "> 0.5%, last 2 versions, Firefox ESR, not dead",
+            "chrome > 62",
+            "firefox > 59",
+            "ios_saf >= 10.3",
+            "opera > 50",
+            "safari > 12",
+            "IE 11"
+        ]
+    },
     "pnpm": {
         "patchedDependencies": {
             "@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17": "patches/@rrweb__rrweb-plugin-console-record@2.0.0-alpha.17.patch",
