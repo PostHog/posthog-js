@@ -16,6 +16,12 @@ import { DeadClicksAutoCaptureConfig, ErrorEventArgs, ErrorMetadata, Properties 
 // eslint-disable-next-line no-restricted-globals
 const win: (Window & typeof globalThis) | undefined = typeof window !== 'undefined' ? window : undefined
 
+export type AssignableWindow = Window &
+    typeof globalThis &
+    Record<string, any> & {
+        __PosthogExtensions__?: PostHogExtensions
+    }
+
 /**
  * This is our contract between (potentially) lazily loaded extensions and the SDK
  * changes to this interface can be breaking changes for users of the SDK
@@ -86,10 +92,6 @@ export const XMLHttpRequest =
     global?.XMLHttpRequest && 'withCredentials' in new global.XMLHttpRequest() ? global.XMLHttpRequest : undefined
 export const AbortController = global?.AbortController
 export const userAgent = navigator?.userAgent
-export const assignableWindow: Window &
-    typeof globalThis &
-    Record<string, any> & {
-        __PosthogExtensions__?: PostHogExtensions
-    } = win ?? ({} as any)
+export const assignableWindow: AssignableWindow = win ?? ({} as any)
 
 export { win as window }
