@@ -8,6 +8,7 @@ import { visualizer } from 'rollup-plugin-visualizer'
 import commonjs from '@rollup/plugin-commonjs'
 import fs from 'fs'
 import path from 'path'
+import { browserslist } from './package.json'
 
 const plugins = (es5) => [
     json(),
@@ -26,7 +27,7 @@ const plugins = (es5) => [
             [
                 '@babel/preset-env',
                 {
-                    targets: es5 ? 'defaults, IE 11' : '>0.5%, last 2 versions, Firefox ESR, not dead',
+                    targets: es5 ? '>0.5%, last 2 versions, Firefox ESR, not dead, IE 11' : browserslist.production,
                 },
             ],
         ],
