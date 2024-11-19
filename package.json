@@ -75,6 +75,7 @@
         "@typescript-eslint/eslint-plugin": "^8.2.0",
         "@typescript-eslint/parser": "^8.2.0",
         "babel-jest": "^26.6.3",
+        "browserslist": "^4.24.2",
         "compare-versions": "^6.1.0",
         "cypress": "13.6.3",
         "cypress-localstorage-commands": "^2.2.6",
