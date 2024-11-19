@@ -46,6 +46,7 @@
     "devDependencies": {
         "@babel/core": "7.18.9",
         "@babel/plugin-syntax-decorators": "^7.23.3",
+        "@babel/plugin-transform-exponentiation-operator": "^7.25.9",
         "@babel/plugin-transform-nullish-coalescing-operator": "^7.25.8",
         "@babel/plugin-transform-react-jsx": "^7.23.4",
         "@babel/preset-env": "7.18.9",
