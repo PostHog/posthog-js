@@ -17,7 +17,11 @@ const plugins = (es5) => [
     babel({
         extensions: ['.js', '.jsx', '.ts', '.tsx'],
         babelHelpers: 'bundled',
-        plugins: ['@babel/plugin-transform-nullish-coalescing-operator'],
+        plugins: [
+            '@babel/plugin-transform-nullish-coalescing-operator',
+            // Explicitly included so we transform 1 ** 2 to Math.pow(1, 2) for ES6 compatability
+            '@babel/plugin-transform-exponentiation-operator',
+        ],
         presets: [
             [
                 '@babel/preset-env',
