@@ -48,6 +48,7 @@ import {
 import Mock = jest.Mock
 import { ConsentManager } from '../../../consent'
 import { waitFor } from '@testing-library/preact'
+import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -185,6 +186,7 @@ describe('SessionRecording', () => {
     let onFeatureFlagsCallback: ((flags: string[], variants: Record<string, string | boolean>) => void) | null
     let removeCaptureHookMock: Mock
     let addCaptureHookMock: Mock
+    let simpleEventEmitter: SimpleEventEmitter
 
     const addRRwebToWindow = () => {
         assignableWindow.__PosthogExtensions__.rrweb = {
@@ -239,6 +241,8 @@ describe('SessionRecording', () => {
         removeCaptureHookMock = jest.fn()
         addCaptureHookMock = jest.fn().mockImplementation(() => removeCaptureHookMock)
 
+        simpleEventEmitter = new SimpleEventEmitter()
+        // TODO we really need to make this a real posthog instance :cry:
         posthog = {
             get_property: (property_key: string): Property | undefined => {
                 return postHogPersistence?.['props'][property_key]
@@ -261,6 +265,10 @@ describe('SessionRecording', () => {
                 },
             } as unknown as ConsentManager,
             register_for_session() {},
+            _internalEventEmitter: simpleEventEmitter,
+            on: (event, cb) => {
+                return simpleEventEmitter.on(event, cb)
+            },
         } as Partial<PostHog> as PostHog
 
         loadScriptMock.mockImplementation((_ph, _path, callback) => {
@@ -1883,6 +1891,7 @@ describe('SessionRecording', () => {
             loadScriptMock.mockImplementation((_ph, _path, callback) => {
                 callback()
             })
+            sessionRecording = new SessionRecording(posthog)
 
             sessionRecording.afterDecideResponse(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
             sessionRecording.startIfEnabledOrStop()
@@ -2248,6 +2257,69 @@ describe('SessionRecording', () => {
                     data: { source: 5 },
                 }),
             ])
+        })
+    })
+
+    describe('Event triggering', () => {
+        beforeEach(() => {
+            sessionRecording.startIfEnabledOrStop()
+        })
+
+        it('flushes buffer and starts when sees event', async () => {
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['$exception'],
+                    },
+                })
+            )
+
+            expect(sessionRecording['status']).toBe('buffering')
+
+            // Emit some events before hitting blocked URL
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+
+            expect(sessionRecording['buffer'].data).toHaveLength(2)
+
+            simpleEventEmitter.emit('eventCaptured', { event: 'not-$exception' })
+
+            expect(sessionRecording['status']).toBe('buffering')
+
+            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+
+            expect(sessionRecording['status']).toBe('active')
+            expect(sessionRecording['buffer'].data).toHaveLength(0)
+        })
+
+        it('starts if sees an event but still waiting for a URL', async () => {
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['$exception'],
+                        urlTriggers: [{ url: 'start-on-me', matching: 'regex' }],
+                    },
+                })
+            )
+
+            expect(sessionRecording['status']).toBe('buffering')
+
+            // Emit some events before hitting blocked URL
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+
+            expect(sessionRecording['buffer'].data).toHaveLength(2)
+
+            simpleEventEmitter.emit('eventCaptured', { event: 'not-$exception' })
+
+            expect(sessionRecording['status']).toBe('buffering')
+
+            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+
+            // even though still waiting for URL to trigger
+            expect(sessionRecording['status']).toBe('active')
         })
     })
 })

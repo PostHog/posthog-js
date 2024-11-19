@@ -12,7 +12,7 @@ jest.useFakeTimers()
 
 describe('heatmaps', () => {
     let posthog: PostHog
-    let onCapture = jest.fn()
+    let beforeSendMock = jest.fn().mockImplementation((e) => e)
 
     const createMockMouseEvent = (props: Partial<MouseEvent> = {}) =>
         ({
@@ -23,10 +23,10 @@ describe('heatmaps', () => {
         } as unknown as MouseEvent)
 
     beforeEach(async () => {
-        onCapture = onCapture.mockClear()
+        beforeSendMock = beforeSendMock.mockClear()
 
         posthog = await createPosthogInstance(uuidv7(), {
-            _onCapture: onCapture,
+            before_send: beforeSendMock,
             sanitize_properties: (props) => {
                 // what ever sanitization makes sense
                 const sanitizeUrl = (url: string) => url.replace(/https?:\/\/[^/]+/g, 'http://replaced')
@@ -61,9 +61,8 @@ describe('heatmaps', () => {
 
         jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
-        expect(onCapture).toBeCalledTimes(1)
-        expect(onCapture.mock.lastCall[0]).toEqual('$$heatmap')
-        expect(onCapture.mock.lastCall[1]).toMatchObject({
+        expect(beforeSendMock).toBeCalledTimes(1)
+        expect(beforeSendMock.mock.lastCall[0]).toMatchObject({
             event: '$$heatmap',
             properties: {
                 $heatmap_data: {
@@ -85,7 +84,7 @@ describe('heatmaps', () => {
 
         jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds - 1)
 
-        expect(onCapture).toBeCalledTimes(0)
+        expect(beforeSendMock).toBeCalledTimes(0)
         expect(posthog.heatmaps!.getAndClearBuffer()).toBeDefined()
     })
 
@@ -96,9 +95,9 @@ describe('heatmaps', () => {
 
         jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
-        expect(onCapture).toBeCalledTimes(1)
-        expect(onCapture.mock.lastCall[0]).toEqual('$$heatmap')
-        const heatmapData = onCapture.mock.lastCall[1].properties.$heatmap_data
+        expect(beforeSendMock).toBeCalledTimes(1)
+        expect(beforeSendMock.mock.lastCall[0].event).toEqual('$$heatmap')
+        const heatmapData = beforeSendMock.mock.lastCall[0].properties.$heatmap_data
         expect(heatmapData).toBeDefined()
         expect(heatmapData['http://replaced/']).toHaveLength(4)
         expect(heatmapData['http://replaced/'].map((x) => x.type)).toEqual(['click', 'click', 'rageclick', 'click'])
@@ -110,16 +109,16 @@ describe('heatmaps', () => {
 
         jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
-        expect(onCapture).toBeCalledTimes(1)
-        expect(onCapture.mock.lastCall[0]).toEqual('$$heatmap')
-        expect(onCapture.mock.lastCall[1].properties.$heatmap_data).toBeDefined()
-        expect(onCapture.mock.lastCall[1].properties.$heatmap_data['http://replaced/']).toHaveLength(2)
+        expect(beforeSendMock).toBeCalledTimes(1)
+        expect(beforeSendMock.mock.lastCall[0].event).toEqual('$$heatmap')
+        expect(beforeSendMock.mock.lastCall[0].properties.$heatmap_data).toBeDefined()
+        expect(beforeSendMock.mock.lastCall[0].properties.$heatmap_data['http://replaced/']).toHaveLength(2)
 
         expect(posthog.heatmaps!['buffer']).toEqual(undefined)
 
         jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
-        expect(onCapture).toBeCalledTimes(1)
+        expect(beforeSendMock).toBeCalledTimes(1)
     })
 
     it('should ignore clicks if they come from the toolbar', async () => {
@@ -143,17 +142,17 @@ describe('heatmaps', () => {
             })
         )
         expect(posthog.heatmaps?.getAndClearBuffer()).not.toEqual(undefined)
-        expect(onCapture.mock.calls).toEqual([])
+        expect(beforeSendMock.mock.calls).toEqual([])
     })
 
     it('should ignore an empty buffer', async () => {
-        expect(onCapture.mock.calls).toEqual([])
+        expect(beforeSendMock.mock.calls).toEqual([])
 
         expect(posthog.heatmaps?.['buffer']).toEqual(undefined)
 
         jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
-        expect(onCapture.mock.calls).toEqual([])
+        expect(beforeSendMock.mock.calls).toEqual([])
     })
 
     describe('isEnabled()', () => {

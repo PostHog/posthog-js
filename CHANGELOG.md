@@ -1,3 +1,42 @@
+## 1.187.0 - 2024-11-19
+
+- feat: allow config of before_send function to edit or reject events (#1515)
+- chore: timeout test cafe jobs (#1540)
+- chore: specify an explicit browserslist version (#1539)
+
+## 1.186.4 - 2024-11-19
+
+- chore: always transform exponentiation (#1537)
+- chore: very small change to IE11 bundling (#1536)
+
+## 1.186.3 - 2024-11-18
+
+- fix: refactor native mutation observer implementation (#1535)
+- chore: update dependency versions (#1534)
+- chore: remove custom exceptions endpoint (#1513)
+
+## 1.186.2 - 2024-11-18
+
+- fix: angular change detection mutation observer (#1531)
+- chore: Added CSP headers to next app for testing what we document (#1528)
+
+## 1.186.1 - 2024-11-15
+
+- fix: XHR req method capture (#1527)
+
+## 1.186.0 - 2024-11-15
+
+- feat: allow triggering sessions when events occur (#1523)
+
+## 1.185.0 - 2024-11-15
+
+- feat: Add customization to add all person profile properties as setPersonPropertiesForFlags (#1517)
+
+## 1.184.2 - 2024-11-13
+
+- fix(flags): support multiple children prop in PostHogFeature (#1516)
+- fix: Don't use session storage in memory mode (#1521)
+
 ## 1.184.1 - 2024-11-12
 
 - chore: add type to Sentry exception (#1520)
