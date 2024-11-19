@@ -26,7 +26,7 @@ const plugins = (es5) => [
             [
                 '@babel/preset-env',
                 {
-                    targets: es5 ? 'defaults, IE 11' : 'defaults',
+                    browsersListEnv: es5 ? 'es5' : 'production',
                 },
             ],
         ],
