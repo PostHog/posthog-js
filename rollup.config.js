@@ -26,7 +26,7 @@ const plugins = (es5) => [
             [
                 '@babel/preset-env',
                 {
-                    browsersListEnv: es5 ? 'es5' : 'production',
+                    browserslistEnv: es5 ? 'es5' : 'production',
                 },
             ],
         ],
