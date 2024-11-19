@@ -1,3 +1,9 @@
+## 1.187.0 - 2024-11-19
+
+- feat: allow config of before_send function to edit or reject events (#1515)
+- chore: timeout test cafe jobs (#1540)
+- chore: specify an explicit browserslist version (#1539)
+
 ## 1.186.4 - 2024-11-19
 
 - chore: always transform exponentiation (#1537)
