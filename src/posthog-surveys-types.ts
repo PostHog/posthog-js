@@ -83,11 +83,20 @@ export interface MultipleSurveyQuestion extends SurveyQuestionBase {
     shuffleOptions?: boolean
 }
 
+
+export interface RankingSurveyQuestion extends SurveyQuestionBase {
+    type: SurveyQuestionType.Rating
+    choices: string[]
+    hasOpenChoice?: boolean
+    shuffleOptions?: boolean
+}
+
 export enum SurveyQuestionType {
     Open = 'open',
     MultipleChoice = 'multiple_choice',
     SingleChoice = 'single_choice',
     Rating = 'rating',
+    Ranking = 'rating',
     Link = 'link',
 }
 

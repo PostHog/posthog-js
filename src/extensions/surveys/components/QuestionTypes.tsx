@@ -5,6 +5,7 @@ import {
     RatingSurveyQuestion,
     MultipleSurveyQuestion,
     SurveyQuestionType,
+    RankingSurveyQuestion,
 } from '../../../posthog-surveys-types'
 import { RefObject } from 'preact'
 import { useRef, useState, useMemo } from 'preact/hooks'
@@ -21,6 +22,18 @@ import {
 import { getDisplayOrderChoices } from '../surveys-utils'
 import { BottomSection } from './BottomSection'
 import { QuestionHeader } from './QuestionHeader'
+import {
+    DndContext,
+    closestCenter,
+    KeyboardSensor,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    DragEndEvent,
+} from '@dnd-kit/core'
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 export function OpenTextQuestion({
     question,
@@ -344,6 +357,102 @@ export function MultipleChoiceQuestion({
                         onSubmit(selectedChoices)
                     }
                 }}
+            />
+        </div>
+    )
+}
+
+export function RankingChoiceQuestion({
+    question,
+    forceDisableHtml,
+    displayQuestionIndex,
+    appearance,
+    onSave,
+}: {
+    question: RankingSurveyQuestion
+    forceDisableHtml: boolean
+    displayQuestionIndex: number
+    appearance: SurveyAppearance
+    onSave: (choices: string[]) => void
+}) {
+    const choices = useMemo(() => getDisplayOrderChoices(question), [question])
+    const [orderedChoices, setOrderedChoices] = useState<string[]>(choices)
+
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    )
+
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event
+
+        if (over && active.id !== over.id) {
+            setOrderedChoices((items) => {
+                const oldIndex = items.indexOf(active.id as string)
+                const newIndex = items.indexOf(over.id as string)
+                const newChoices = arrayMove(items, oldIndex, newIndex)
+                onSave(newChoices)
+                return newChoices
+            })
+        }
+    }
+
+    return (
+        <div>
+            <QuestionHeader
+                question={question.question}
+                description={question.description}
+                descriptionContentType={question.descriptionContentType}
+                forceDisableHtml={forceDisableHtml}
+                backgroundColor={appearance.backgroundColor}
+            />
+            <div className="ranking-choice-options">
+                <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                >
+                    <SortableContext
+                        items={orderedChoices}
+                        strategy={verticalListSortingStrategy}
+                    >
+                        <div 
+                            className="ranking-choices"
+                            style={{
+                                backgroundColor: appearance.backgroundColor,
+                                borderColor: appearance.borderColor,
+                            }}
+                        >
+                            {orderedChoices.map((choice) => {
+                                const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: choice })
+                                return (
+                                    <div
+                                        key={choice}
+                                        ref={setNodeRef}
+                                        style={{
+                                            transform: CSS.Transform.toString(transform),
+                                            transition,
+                                        }}
+                                        className="ranking-choice"
+                                        {...attributes}
+                                        {...listeners}
+                                    >
+                                        <span className="drag-handle">☰</span>
+                                        {choice}
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </SortableContext>
+                </DndContext>
+            </div>
+            <BottomSection
+                text={question.buttonText || 'Submit'}
+                submitDisabled={false}
+                appearance={appearance}
+                onSubmit={() => onSave(orderedChoices)}
             />
         </div>
     )

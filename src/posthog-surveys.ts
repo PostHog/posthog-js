@@ -61,7 +61,7 @@ function getRatingBucketForResponseValue(responseValue: number, scale: number) {
 export class PostHogSurveys {
     private _decideServerResponse?: boolean
     public _surveyEventReceiver: SurveyEventReceiver | null
-    private _surveyManager: any
+    private _aSurveyManager: any
 
     constructor(private readonly instance: PostHog) {
         // we set this to undefined here because we need the persistence storage for this type
@@ -93,7 +93,7 @@ export class PostHogSurveys {
                     return logger.error(LOGGER_PREFIX, 'Could not load surveys script', err)
                 }
 
-                this._surveyManager = assignableWindow.__PosthogExtensions__?.generateSurveys?.(this.instance)
+                this._aSurveyManager = assignableWindow.__PosthogExtensions__?.generateSurveys?.(this.instance)
             })
         }
     }
@@ -288,24 +288,35 @@ export class PostHogSurveys {
     }
 
     canRenderSurvey(surveyId: string) {
-        if (isNullish(this._surveyManager)) {
+        if (isNullish(this._aSurveyManager)) {
             logger.warn(LOGGER_PREFIX, 'canActivateRepeatedly is not defined, must init before calling')
             return
         }
         this.getSurveys((surveys) => {
             const survey = surveys.filter((x) => x.id === surveyId)[0]
-            this._surveyManager.canRenderSurvey(survey)
+            this._aSurveyManager.canRenderSurvey(survey)
         })
     }
 
     renderSurvey(surveyId: string, selector: string) {
-        if (isNullish(this._surveyManager)) {
+        if (isNullish(this._aSurveyManager)) {
             logger.warn(LOGGER_PREFIX, 'canActivateRepeatedly is not defined, must init before calling')
             return
         }
         this.getSurveys((surveys) => {
             const survey = surveys.filter((x) => x.id === surveyId)[0]
-            this._surveyManager.renderSurvey(survey, document?.querySelector(selector))
+            this._aSurveyManager.renderSurvey(survey, document?.querySelector(selector))
+        })
+    }
+
+    renderSurveyForm(surveyId: string, selector: string) {
+        if (isNullish(this._aSurveyManager)) {
+            logger.warn(LOGGER_PREFIX, 'canActivateRepeatedly is not defined, must init before calling')
+            return
+        }
+        this.getSurveys((surveys) => {
+            const survey = surveys.filter((x) => x.id === surveyId)[0]
+            this._aSurveyManager.renderSurveyForm(survey, document?.querySelector(selector))
         })
     }
 }

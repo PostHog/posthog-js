@@ -210,6 +210,10 @@ export class SurveyManager {
         )
     }
 
+    public renderSurveyForm = (survey: Survey, selector: Element): void => {
+        Preact.render(<SurveyForm key={'form-survey'} posthog={this.posthog} survey={survey} />, selector)
+    }
+
     public callSurveysAndEvaluateDisplayLogic = (forceReload: boolean = false): void => {
         this.posthog?.getActiveMatchingSurveys((surveys) => {
             const nonAPISurveys = surveys.filter((survey) => survey.type !== 'api')
@@ -439,6 +443,29 @@ export function usePopupVisibility(
     return { isPopupVisible, isSurveySent, setIsPopupVisible }
 }
 
+export function SurveyForm({
+    survey,
+    posthog,
+}: {
+    survey: Survey
+    forceDisableHtml?: boolean
+    posthog?: PostHog
+    style?: React.CSSProperties
+}) {
+    return (
+        <SurveyContext.Provider
+            value={{
+                isPreviewMode: false,
+                previewPageIndex: undefined,
+                handleCloseSurveyPopup: () => dismissedSurveyEvent(survey, posthog, false),
+                isPopup: false,
+            }}
+        >
+            <QuestionsForm survey={survey} />
+        </SurveyContext.Provider>
+    )
+}
+
 export function SurveyPopup({
     survey,
     forceDisableHtml,
@@ -508,6 +535,24 @@ export function SurveyPopup({
         </SurveyContext.Provider>
     ) : (
         <></>
+    )
+}
+
+export function QuestionsForm({ survey }: { survey: Survey }) {
+    const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
+    return (
+        <form className="survey-form">
+            {surveyQuestions.map((question, displayQuestionIndex) => {
+                const { originalQuestionIndex } = question
+                return (
+                    <div>
+                        <span id={`survey-question-${originalQuestionIndex}`}>
+                            {displayQuestionIndex} : {question.question}
+                        </span>
+                    </div>
+                )
+            })}
+        </form>
     )
 }
 

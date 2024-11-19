@@ -1249,6 +1249,10 @@ export class PostHog {
         this.surveys.renderSurvey(surveyId, selector)
     }
 
+    renderSurveyForm(surveyId: string, selector: string): void {
+        this.surveys.renderSurveyForm(surveyId, selector)
+    }
+
     /** Checks the feature flags associated with this Survey to see if the survey can be rendered. */
     canRenderSurvey(surveyId: string): void {
         this.surveys.canRenderSurvey(surveyId)

@@ -16,6 +16,9 @@ dependencies:
   core-js:
     specifier: ^3.38.1
     version: 3.38.1
+  dnd-kit:
+    specifier: ^0.0.2
+    version: 0.0.2
   fflate:
     specifier: ^0.4.8
     version: 0.4.8
@@ -4858,6 +4861,11 @@ packages:
     dependencies:
       path-type: 4.0.0
     dev: true
+
+  /dnd-kit@0.0.2:
+    resolution: {integrity: sha512-d8AYd6I7D2b5u882+QNVGw0slBAt851/LWZ2j/pU+onf5/TGEKXeb47sCyhPYKEAUXp4oLfvWfNCqfkU03R1lw==}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
+    dev: false
 
   /doctrine@2.1.0:
     resolution: {integrity: sha512-35mSku4ZXK0vfCuHEDAwt55dg2jNajHZ1odvF+8SSr82EsZY4QmXfuWso8oEd8zRhVObSN18aM0CjSdoBX7zIw==}

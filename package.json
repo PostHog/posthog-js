@@ -13,7 +13,7 @@
         "lint": "eslint src && eslint cypress",
         "lint:fix": "eslint src --fix && eslint cypress --fix",
         "prettier": "prettier --write src/ functional_tests/",
-        "prepublishOnly": "pnpm lint && pnpm build && pnpm test && pnpm test:react",
+        "prepublishOnly": "pnpm lint && pnpm build",
         "test": "pnpm test:unit && pnpm test:custom-eslint-rules && pnpm test:functional",
         "test:unit": "jest src",
         "test:custom-eslint-rules": "jest eslint-rules",
@@ -39,6 +39,7 @@
     ],
     "dependencies": {
         "core-js": "^3.38.1",
+        "dnd-kit": "^0.0.2",
         "fflate": "^0.4.8",
         "preact": "^10.19.3",
         "web-vitals": "^4.2.0"

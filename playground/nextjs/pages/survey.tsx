@@ -34,7 +34,7 @@ export default function SurveyForm() {
                     {arraySurveyItems}
                 </select>
                 <button
-                    onClick={() => posthog.renderSurvey(selectedSurvey, '#survey-container')}
+                    onClick={() => posthog.renderSurveyForm(selectedSurvey, '#survey-container')}
                     disabled={!selectedSurvey}
                 >
                     Render Survey below

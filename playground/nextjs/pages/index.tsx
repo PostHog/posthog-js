@@ -69,6 +69,8 @@ export default function Home() {
                 <button onClick={() => posthog?.reset()} id="set-user-properties">
                     Reset
                 </button>
+
+                <button className="my-survey-button">Open Survey Popup</button>
             </div>
 
             {isClient && (
