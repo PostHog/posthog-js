@@ -7,15 +7,15 @@ jest.mock('../decide')
 
 describe('identify()', () => {
     let instance: PostHog
-    let captureMock: jest.Mock
+    let beforeSendMock: jest.Mock
 
     beforeEach(() => {
-        captureMock = jest.fn()
+        beforeSendMock = jest.fn().mockImplementation((e) => e)
         const posthog = defaultPostHog().init(
             uuidv7(),
             {
                 api_host: 'https://test.com',
-                _onCapture: captureMock,
+                before_send: beforeSendMock,
             },
             uuidv7()
         )
@@ -46,9 +46,9 @@ describe('identify()', () => {
 
         instance.identify('calls capture when identity changes')
 
-        expect(captureMock).toHaveBeenCalledWith(
-            '$identify',
+        expect(beforeSendMock).toHaveBeenCalledWith(
             expect.objectContaining({
+                event: '$identify',
                 properties: expect.objectContaining({
                     distinct_id: 'calls capture when identity changes',
                     $anon_distinct_id: 'oldIdentity',
@@ -72,9 +72,9 @@ describe('identify()', () => {
 
         instance.identify('a-new-id')
 
-        expect(captureMock).toHaveBeenCalledWith(
-            '$identify',
+        expect(beforeSendMock).toHaveBeenCalledWith(
             expect.objectContaining({
+                event: '$identify',
                 properties: expect.objectContaining({
                     distinct_id: 'a-new-id',
                     $anon_distinct_id: 'oldIdentity',
@@ -91,9 +91,9 @@ describe('identify()', () => {
 
         instance.identify('a-new-id')
 
-        expect(captureMock).toHaveBeenCalledWith(
-            '$identify',
+        expect(beforeSendMock).toHaveBeenCalledWith(
             expect.objectContaining({
+                event: '$identify',
                 properties: expect.objectContaining({
                     distinct_id: 'a-new-id',
                     $anon_distinct_id: 'oldIdentity',
@@ -115,7 +115,7 @@ describe('identify()', () => {
 
         instance.identify('a-new-id')
 
-        expect(captureMock).not.toHaveBeenCalled()
+        expect(beforeSendMock).not.toHaveBeenCalled()
         expect(instance.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
     })
 
@@ -130,7 +130,7 @@ describe('identify()', () => {
 
         instance.identify('a-new-id')
 
-        expect(captureMock).not.toHaveBeenCalled()
+        expect(beforeSendMock).not.toHaveBeenCalled()
         expect(instance.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
     })
 
@@ -141,9 +141,9 @@ describe('identify()', () => {
 
         instance.identify('a-new-id')
 
-        expect(captureMock).toHaveBeenCalledWith(
-            '$identify',
+        expect(beforeSendMock).toHaveBeenCalledWith(
             expect.objectContaining({
+                event: '$identify',
                 properties: expect.objectContaining({
                     distinct_id: 'a-new-id',
                     $anon_distinct_id: 'oldIdentity',
@@ -155,9 +155,9 @@ describe('identify()', () => {
     it('calls capture with user properties if passed', () => {
         instance.identify('a-new-id', { email: 'john@example.com' }, { howOftenAmISet: 'once!' })
 
-        expect(captureMock).toHaveBeenCalledWith(
-            '$identify',
+        expect(beforeSendMock).toHaveBeenCalledWith(
             expect.objectContaining({
+                event: '$identify',
                 properties: expect.objectContaining({
                     distinct_id: 'a-new-id',
                     $anon_distinct_id: 'oldIdentity',
@@ -178,16 +178,16 @@ describe('identify()', () => {
         it('does not capture or set user properties', () => {
             instance.identify('a-new-id')
 
-            expect(captureMock).not.toHaveBeenCalled()
+            expect(beforeSendMock).not.toHaveBeenCalled()
             expect(instance.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
         })
 
         it('calls $set when user properties passed with same ID', () => {
             instance.identify('a-new-id', { email: 'john@example.com' }, { howOftenAmISet: 'once!' })
 
-            expect(captureMock).toHaveBeenCalledWith(
-                '$set',
+            expect(beforeSendMock).toHaveBeenCalledWith(
                 expect.objectContaining({
+                    event: '$set',
                     // get set at the top level and in properties
                     // $set: { email: 'john@example.com' },
                     // $set_once: expect.objectContaining({ howOftenAmISet: 'once!' }),
@@ -209,7 +209,7 @@ describe('identify()', () => {
 
             instance.identify(null as unknown as string)
 
-            expect(captureMock).not.toHaveBeenCalled()
+            expect(beforeSendMock).not.toHaveBeenCalled()
             expect(instance.register).not.toHaveBeenCalled()
             expect(console.error).toHaveBeenCalledWith(
                 '[PostHog.js]',
@@ -274,9 +274,9 @@ describe('identify()', () => {
         it('captures a $set event', () => {
             instance.setPersonProperties({ email: 'john@example.com' }, { name: 'john' })
 
-            expect(captureMock).toHaveBeenCalledWith(
-                '$set',
+            expect(beforeSendMock).toHaveBeenCalledWith(
                 expect.objectContaining({
+                    event: '$set',
                     // get set at the top level and in properties
                     // $set: { email: 'john@example.com' },
                     // $set_once: expect.objectContaining({ name: 'john' }),
@@ -291,9 +291,9 @@ describe('identify()', () => {
         it('calls proxies prople.set to setPersonProperties', () => {
             instance.people.set({ email: 'john@example.com' })
 
-            expect(captureMock).toHaveBeenCalledWith(
-                '$set',
+            expect(beforeSendMock).toHaveBeenCalledWith(
                 expect.objectContaining({
+                    event: '$set',
                     properties: expect.objectContaining({
                         $set: { email: 'john@example.com' },
                         $set_once: {},
@@ -306,9 +306,9 @@ describe('identify()', () => {
         it('calls proxies prople.set_once to setPersonProperties', () => {
             instance.people.set_once({ email: 'john@example.com' })
 
-            expect(captureMock).toHaveBeenCalledWith(
-                '$set',
+            expect(beforeSendMock).toHaveBeenCalledWith(
                 expect.objectContaining({
+                    event: '$set',
                     properties: expect.objectContaining({
                         $set: {},
                         $set_once: { email: 'john@example.com' },

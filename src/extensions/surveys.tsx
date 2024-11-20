@@ -34,8 +34,6 @@ import {
 } from './surveys/components/QuestionTypes'
 import { logger } from '../utils/logger'
 import { Cancel } from './surveys/components/QuestionHeader'
-import { uuidv7 } from '../uuidv7'
-import { uuid } from 'fast-check'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis

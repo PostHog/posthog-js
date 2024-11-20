@@ -34,6 +34,7 @@ import { SeverityLevel } from '../types'
 // Uncomment the above and comment the below to get type checking for development
 
 type _SentryEvent = any
+type _SentryException = any
 type _SentryEventProcessor = any
 type _SentryHub = any
 
@@ -90,13 +91,20 @@ export function createEventProcessor(
             event.tags['PostHog Recording URL'] = _posthog.get_session_replay_url({ withTimestamp: true })
         }
 
-        const exceptions = event.exception?.values || []
+        const exceptions: _SentryException[] = event.exception?.values || []
+
+        exceptions.map((exception) => {
+            if (exception.stacktrace) {
+                exception.stacktrace.type = 'raw'
+            }
+        })
 
         const data: SentryExceptionProperties & {
             // two properties added to match any exception auto-capture
             // added manually to avoid any dependency on the lazily loaded content
             $exception_message: any
             $exception_type: any
+            $exception_list: any
             $exception_personURL: string
             $exception_level: SeverityLevel
             $level: SeverityLevel
@@ -106,6 +114,7 @@ export function createEventProcessor(
             $exception_type: exceptions[0]?.type,
             $exception_personURL: personUrl,
             $exception_level: event.level,
+            $exception_list: exceptions,
             // Sentry Exception Properties
             $sentry_event_id: event.event_id,
             $sentry_exception: event.exception,

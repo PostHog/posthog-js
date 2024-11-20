@@ -2,11 +2,10 @@ import { PostHog } from '../../posthog-core'
 import { Survey, SurveyAppearance, MultipleSurveyQuestion, SurveyQuestion } from '../../posthog-surveys-types'
 import { window as _window, document as _document } from '../../utils/globals'
 import { VNode, cloneElement, createContext } from 'preact'
-import { CaptureOptions } from '../../types'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
-
+const SurveySeenPrefix = 'seenSurvey_'
 export const style = (appearance: SurveyAppearance | null) => {
     const positions = {
         left: 'left: 30px;',
@@ -667,12 +666,24 @@ export const getSurveySeen = (survey: Survey): boolean => {
 }
 
 export const getSurveySeenKey = (survey: Survey): string => {
-    let surveySeenKey = `seenSurvey_${survey.id}`
+    let surveySeenKey = `${SurveySeenPrefix}${survey.id}`
     if (survey.current_iteration && survey.current_iteration > 0) {
-        surveySeenKey = `seenSurvey_${survey.id}_${survey.current_iteration}`
+        surveySeenKey = `${SurveySeenPrefix}${survey.id}_${survey.current_iteration}`
     }
 
     return surveySeenKey
+}
+
+export const getSurveySeenStorageKeys = (): string[] => {
+    const surveyKeys = []
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key?.startsWith(SurveySeenPrefix)) {
+            surveyKeys.push(key)
+        }
+    }
+
+    return surveyKeys
 }
 
 const getSurveyInteractionProperty = (survey: Survey, action: string): string => {

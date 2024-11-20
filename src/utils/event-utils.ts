@@ -2,7 +2,7 @@ import { getQueryParam, convertToURL } from './request-utils'
 import { isNull } from './type-utils'
 import { Properties } from '../types'
 import Config from '../config'
-import { each, extend, stripEmptyProperties, stripLeadingDollar, timestamp } from './index'
+import { each, extend, stripEmptyProperties, stripLeadingDollar } from './index'
 import { document, location, userAgent, window } from './globals'
 import { detectBrowser, detectBrowserVersion, detectDevice, detectDeviceType, detectOS } from './user-agent-utils'
 
@@ -31,6 +31,25 @@ export const CAMPAIGN_PARAMS = [
     'rdt_cid', // reddit
 ]
 
+export const EVENT_TO_PERSON_PROPERTIES = [
+    // mobile params
+    '$app_build',
+    '$app_name',
+    '$app_namespace',
+    '$app_version',
+    // web params
+    '$browser',
+    '$browser_version',
+    '$device_type',
+    '$current_url',
+    '$pathname',
+    '$os',
+    '$os_name', // $os_name is a special case, it's treated as an alias of $os!
+    '$os_version',
+    '$referring_domain',
+    '$referrer',
+]
+
 export const Info = {
     campaignParams: function (customParams?: string[]): Record<string, string> {
         if (!document) {
@@ -45,9 +64,7 @@ export const Info = {
         const params: Record<string, any> = {}
         each(campaign_keywords, function (kwkey) {
             const kw = getQueryParam(url, kwkey)
-            if (kw) {
-                params[kwkey] = kw
-            }
+            params[kwkey] = kw ? kw : null
         })
 
         return params
@@ -184,6 +201,14 @@ export const Info = {
         return props
     },
 
+    timezone: function (): string | undefined {
+        try {
+            return Intl.DateTimeFormat().resolvedOptions().timeZone
+        } catch {
+            return undefined
+        }
+    },
+
     properties: function (): Properties {
         if (!userAgent) {
             return {}
@@ -196,6 +221,7 @@ export const Info = {
                 $browser: Info.browser(userAgent, navigator.vendor),
                 $device: Info.device(userAgent),
                 $device_type: Info.deviceType(userAgent),
+                $timezone: Info.timezone(),
             }),
             {
                 $current_url: location?.href,
@@ -211,7 +237,7 @@ export const Info = {
                 $lib: 'web',
                 $lib_version: Config.LIB_VERSION,
                 $insert_id: Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10),
-                $time: timestamp() / 1000, // epoch time in seconds
+                $time: Date.now() / 1000, // epoch time in seconds
             }
         )
     },

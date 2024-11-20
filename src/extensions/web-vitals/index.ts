@@ -4,11 +4,10 @@ import { logger } from '../../utils/logger'
 import { isBoolean, isNullish, isNumber, isObject, isUndefined } from '../../utils/type-utils'
 import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { assignableWindow, window } from '../../utils/globals'
-import Config from '../../config'
 
 type WebVitalsMetricCallback = (metric: any) => void
 
-export const FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS = 8000
+export const DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS = 5000
 const ONE_MINUTE_IN_MILLIS = 60 * 1000
 export const FIFTEEN_MINUTES_IN_MILLIS = 15 * ONE_MINUTE_IN_MILLIS
 
@@ -37,6 +36,13 @@ export class WebVitalsAutocapture {
         return !isUndefined(clientConfigMetricAllowList)
             ? clientConfigMetricAllowList
             : this.instance.persistence?.props[WEB_VITALS_ALLOWED_METRICS] || ['CLS', 'FCP', 'INP', 'LCP']
+    }
+
+    public get flushToCaptureTimeoutMs(): number {
+        const clientConfig: number | undefined = isObject(this.instance.config.capture_performance)
+            ? this.instance.config.capture_performance.web_vitals_delayed_flush_ms
+            : undefined
+        return clientConfig || DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS
     }
 
     public get _maxAllowedValue(): number {
@@ -91,8 +97,7 @@ export class WebVitalsAutocapture {
             // already loaded
             cb()
         }
-
-        this.instance.requestRouter.loadScript(`/static/web-vitals.js?v=${Config.LIB_VERSION}`, (err) => {
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'web-vitals', (err) => {
             if (err) {
                 logger.error(LOGGER_PREFIX + ' failed to load script', err)
                 return
@@ -165,7 +170,7 @@ export class WebVitalsAutocapture {
             // poor performance is >4s, we wait twice that time to send
             // this is in case we haven't received all metrics
             // we'll at least gather some
-            this._delayedFlushTimer = setTimeout(this._flushToCapture, FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS)
+            this._delayedFlushTimer = setTimeout(this._flushToCapture, this.flushToCaptureTimeoutMs)
         }
 
         if (isUndefined(this.buffer.url)) {
@@ -175,6 +180,14 @@ export class WebVitalsAutocapture {
         this.buffer.firstMetricTimestamp = isUndefined(this.buffer.firstMetricTimestamp)
             ? Date.now()
             : this.buffer.firstMetricTimestamp
+
+        if (metric.attribution && metric.attribution.interactionTargetElement) {
+            // we don't want to send the entire element
+            // they can be very large
+            // TODO we could run this through autocapture code so that we get elements chain info
+            //  and can display the element in the UI
+            metric.attribution.interactionTargetElement = undefined
+        }
 
         this.buffer.metrics.push({
             ...metric,
@@ -197,7 +210,7 @@ export class WebVitalsAutocapture {
         let onINP: WebVitalsMetricCallback | undefined
 
         const posthogExtensions = assignableWindow.__PosthogExtensions__
-        if (!isUndefined(posthogExtensions)) {
+        if (!isUndefined(posthogExtensions) && !isUndefined(posthogExtensions.postHogWebVitalsCallbacks)) {
             ;({ onLCP, onCLS, onFCP, onINP } = posthogExtensions.postHogWebVitalsCallbacks)
         }
 

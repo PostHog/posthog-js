@@ -1,16 +1,16 @@
 import { createPosthogInstance } from '../helpers/posthog-instance'
 import { uuidv7 } from '../../uuidv7'
 import { PostHog } from '../../posthog-core'
-import { DecideResponse, SupportedWebVitalsMetrics } from '../../types'
+import { DecideResponse, PerformanceCaptureConfig, SupportedWebVitalsMetrics } from '../../types'
 import { assignableWindow } from '../../utils/globals'
-import { FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, FIFTEEN_MINUTES_IN_MILLIS } from '../../extensions/web-vitals'
+import { DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, FIFTEEN_MINUTES_IN_MILLIS } from '../../extensions/web-vitals'
 
 jest.mock('../../utils/logger')
 jest.useFakeTimers()
 
 describe('web vitals', () => {
     let posthog: PostHog
-    let onCapture = jest.fn()
+    let beforeSendMock = jest.fn().mockImplementation((e) => e)
     let onLCPCallback: ((metric: Record<string, any>) => void) | undefined = undefined
     let onCLSCallback: ((metric: Record<string, any>) => void) | undefined = undefined
     let onFCPCallback: ((metric: Record<string, any>) => void) | undefined = undefined
@@ -81,15 +81,15 @@ describe('web vitals', () => {
             expectedProperties: Record<string, any>
         ) => {
             beforeEach(async () => {
-                onCapture.mockClear()
+                beforeSendMock.mockClear()
                 posthog = await createPosthogInstance(uuidv7(), {
-                    _onCapture: onCapture,
+                    before_send: beforeSendMock,
                     capture_performance: { web_vitals: true, web_vitals_allowed_metrics: clientConfig },
                     // sometimes pageviews sneak in and make asserting on mock capture tricky
                     capture_pageview: false,
                 })
 
-                loadScriptMock.mockImplementation((_path, callback) => {
+                loadScriptMock.mockImplementation((_ph, _path, callback) => {
                     // we need a set of fake web vitals handlers, so we can manually trigger the events
                     assignableWindow.__PosthogExtensions__ = {}
                     assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = {
@@ -109,7 +109,8 @@ describe('web vitals', () => {
                     callback()
                 })
 
-                posthog.requestRouter.loadScript = loadScriptMock
+                assignableWindow.__PosthogExtensions__ = {}
+                assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
 
                 // need to force this to get the web vitals script loaded
                 posthog.webVitalsAutocapture!.afterDecideResponse({
@@ -122,10 +123,9 @@ describe('web vitals', () => {
             it('should emit when all allowed metrics are captured', async () => {
                 emitAllMetrics()
 
-                expect(onCapture).toBeCalledTimes(1)
+                expect(beforeSendMock).toBeCalledTimes(1)
 
-                expect(onCapture.mock.lastCall).toMatchObject([
-                    '$web_vitals',
+                expect(beforeSendMock.mock.lastCall).toMatchObject([
                     {
                         event: '$web_vitals',
                         properties: expectedProperties,
@@ -133,17 +133,34 @@ describe('web vitals', () => {
                 ])
             })
 
-            it('should emit after 8 seconds even when only 1 to 3 metrics captured', async () => {
+            it('should emit after 5 seconds even when only 1 to 3 metrics captured', async () => {
                 onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
 
-                expect(onCapture).toBeCalledTimes(0)
+                expect(beforeSendMock).toBeCalledTimes(0)
 
-                jest.advanceTimersByTime(FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+                jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
                 // for some reason advancing the timer emits a $pageview event as well 🤷
-                // expect(onCapture).toBeCalledTimes(2)
-                expect(onCapture.mock.lastCall).toMatchObject([
-                    '$web_vitals',
+                expect(beforeSendMock.mock.lastCall).toMatchObject([
+                    {
+                        event: '$web_vitals',
+                        properties: {
+                            $web_vitals_CLS_event: expectedEmittedWebVitals('CLS'),
+                            $web_vitals_CLS_value: 123.45,
+                        },
+                    },
+                ])
+            })
+
+            it('should emit after configured timeout even when only 1 to 3 metrics captured', async () => {
+                ;(posthog.config.capture_performance as PerformanceCaptureConfig).web_vitals_delayed_flush_ms = 1000
+                onCLSCallback?.({ name: 'CLS', value: 123.45, extra: 'property' })
+
+                expect(beforeSendMock).toBeCalledTimes(0)
+
+                jest.advanceTimersByTime(1000 + 1)
+
+                expect(beforeSendMock.mock.lastCall).toMatchObject([
                     {
                         event: '$web_vitals',
                         properties: {
@@ -157,22 +174,22 @@ describe('web vitals', () => {
             it('should ignore a ridiculous value', async () => {
                 onCLSCallback?.({ name: 'CLS', value: FIFTEEN_MINUTES_IN_MILLIS, extra: 'property' })
 
-                expect(onCapture).toBeCalledTimes(0)
+                expect(beforeSendMock).toBeCalledTimes(0)
 
-                jest.advanceTimersByTime(FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+                jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
-                expect(onCapture.mock.calls).toEqual([])
+                expect(beforeSendMock.mock.calls).toEqual([])
             })
 
             it('can be configured not to ignore a ridiculous value', async () => {
                 posthog.config.capture_performance = { __web_vitals_max_value: 0 }
                 onCLSCallback?.({ name: 'CLS', value: FIFTEEN_MINUTES_IN_MILLIS, extra: 'property' })
 
-                expect(onCapture).toBeCalledTimes(0)
+                expect(beforeSendMock).toBeCalledTimes(0)
 
-                jest.advanceTimersByTime(FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
+                jest.advanceTimersByTime(DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS + 1)
 
-                expect(onCapture).toBeCalledTimes(1)
+                expect(beforeSendMock).toBeCalledTimes(1)
             })
         }
     )
@@ -196,9 +213,9 @@ describe('web vitals', () => {
                 },
             }
 
-            onCapture = jest.fn()
+            beforeSendMock = jest.fn()
             posthog = await createPosthogInstance(uuidv7(), {
-                _onCapture: onCapture,
+                before_send: beforeSendMock,
             })
         })
 

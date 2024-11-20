@@ -4,7 +4,7 @@ import { Info } from '../utils/event-utils'
 import { document, window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
 import * as globals from '../utils/globals'
-import { USER_STATE } from '../constants'
+import { ENABLE_PERSON_PROCESSING, USER_STATE } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { logger } from '../utils/logger'
 import { DecideResponse, PostHogConfig } from '../types'
@@ -96,7 +96,6 @@ describe('posthog core', () => {
                 {
                     property_denylist: [],
                     property_blacklist: [],
-                    _onCapture: jest.fn(),
                     store_google: true,
                     save_referrer: true,
                 },
@@ -168,13 +167,12 @@ describe('posthog core', () => {
                     'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36',
             }
 
-            const hook = jest.fn()
+            const hook = jest.fn().mockImplementation((event) => event)
             const posthog = posthogWith(
                 {
                     opt_out_useragent_filter: true,
                     property_denylist: [],
                     property_blacklist: [],
-                    _onCapture: jest.fn(),
                 },
                 defaultOverrides
             )
@@ -198,7 +196,6 @@ describe('posthog core', () => {
                     properties_string_max_length: 1000,
                     property_denylist: [],
                     property_blacklist: [],
-                    _onCapture: jest.fn(),
                 },
                 defaultOverrides
             )
@@ -220,7 +217,6 @@ describe('posthog core', () => {
                     properties_string_max_length: undefined,
                     property_denylist: [],
                     property_blacklist: [],
-                    _onCapture: jest.fn(),
                 },
                 defaultOverrides
             )
@@ -269,7 +265,6 @@ describe('posthog core', () => {
                 {
                     property_denylist: [],
                     property_blacklist: [],
-                    _onCapture: jest.fn(),
                 },
                 defaultOverrides
             )
@@ -345,6 +340,20 @@ describe('posthog core', () => {
 
             expect(posthog.compression).toEqual('gzip-js')
         })
+        it('uses defaultIdentifiedOnly from decide response', () => {
+            const posthog = posthogWith({})
+
+            posthog._afterDecideResponse({ defaultIdentifiedOnly: true } as DecideResponse)
+            expect(posthog.config.person_profiles).toEqual('identified_only')
+
+            posthog._afterDecideResponse({ defaultIdentifiedOnly: false } as DecideResponse)
+            expect(posthog.config.person_profiles).toEqual('always')
+        })
+        it('defaultIdentifiedOnly does not override person_profiles if already set', () => {
+            const posthog = posthogWith({ person_profiles: 'always' })
+            posthog._afterDecideResponse({ defaultIdentifiedOnly: true } as DecideResponse)
+            expect(posthog.config.person_profiles).toEqual('always')
+        })
 
         it('enables compression from decide response when only one received', () => {
             const posthog = posthogWith({})
@@ -387,6 +396,8 @@ describe('posthog core', () => {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop', $is_identified: false }),
                 remove_event_timer: jest.fn(),
                 get_property: () => 'anonymous',
+                props: {},
+                register: jest.fn(),
             } as unknown as PostHogPersistence,
             sessionPersistence: {
                 properties: () => ({ distinct_id: 'abc', persistent: 'prop' }),
@@ -425,7 +436,7 @@ describe('posthog core', () => {
                 $window_id: 'windowId',
                 $session_id: 'sessionId',
                 $is_identified: false,
-                $process_person_profile: true,
+                $process_person_profile: false,
             })
         })
 
@@ -447,7 +458,7 @@ describe('posthog core', () => {
                 $session_id: 'sessionId',
                 $lib_custom_api_host: 'https://custom.posthog.com',
                 $is_identified: false,
-                $process_person_profile: true,
+                $process_person_profile: false,
             })
         })
 
@@ -465,7 +476,7 @@ describe('posthog core', () => {
                 posthog._calculate_event_properties('custom_event', { event: 'prop' }, new Date())[
                     '$process_person_profile'
                 ]
-            ).toEqual(true)
+            ).toEqual(false)
         })
 
         it('only adds token and distinct_id if event_name is $snapshot', () => {
@@ -496,7 +507,26 @@ describe('posthog core', () => {
             expect(posthog._calculate_event_properties('custom_event', { event: 'prop' }, new Date())).toEqual({
                 event_name: 'custom_event',
                 token: 'testtoken',
-                $process_person_profile: true,
+                $process_person_profile: false,
+            })
+        })
+
+        it('calls sanitize_properties for $set_once', () => {
+            posthog = posthogWith(
+                {
+                    api_host: 'https://custom.posthog.com',
+                    sanitize_properties: (props, event_name) => ({ token: props.token, event_name, ...props }),
+                },
+                overrides
+            )
+
+            posthog.persistence.get_initial_props = () => ({ initial: 'prop' })
+            posthog.persistence.props[ENABLE_PERSON_PROCESSING] = true // person processing is needed for $set_once
+            expect(posthog._calculate_set_once_properties({ key: 'prop' })).toEqual({
+                event_name: '$set_once',
+                token: undefined,
+                initial: 'prop',
+                key: 'prop',
             })
         })
 

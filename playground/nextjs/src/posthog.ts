@@ -51,6 +51,7 @@ if (typeof window !== 'undefined') {
         },
         disable_survey_partial_response: false,
         debug: true,
+        disable_web_experiments: false,
         scroll_root_selector: ['#scroll_element', 'html'],
         persistence: cookieConsentGiven() ? 'localStorage+cookie' : 'memory',
         person_profiles: PERSON_PROCESSING_MODE === 'never' ? 'identified_only' : PERSON_PROCESSING_MODE,

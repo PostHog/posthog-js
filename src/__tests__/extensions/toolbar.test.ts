@@ -27,7 +27,10 @@ describe('Toolbar', () => {
             set_config: jest.fn(),
         } as unknown as PostHog
 
-        instance.requestRouter.loadScript = jest.fn((_path: any, callback: any) => callback())
+        assignableWindow.__PosthogExtensions__ = {
+            loadExternalDependency: jest.fn((_ph, _path: any, callback: any) => callback()),
+        }
+
         toolbar = new Toolbar(instance)
     })
 

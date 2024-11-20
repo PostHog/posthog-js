@@ -9,9 +9,10 @@ Cypress.Commands.add('posthogInit', (options) => {
     cy.posthog().invoke('init', 'test_token', {
         api_host: location.origin,
         debug: true,
-        _onCapture: (event, eventData) => {
-            $captures.push(event)
-            $fullCaptures.push(eventData)
+        before_send: (event) => {
+            $captures.push(event.event)
+            $fullCaptures.push(event)
+            return event
         },
         opt_out_useragent_filter: true,
         ...options,

@@ -35,24 +35,26 @@ describe('Exception Observer', () => {
     let exceptionObserver: ExceptionObserver
     let posthog: PostHog
     let sendRequestSpy: jest.SpyInstance
-    const mockCapture = jest.fn()
+    const beforeSendMock = jest.fn().mockImplementation((e) => e)
     const loadScriptMock = jest.fn()
 
     const addErrorWrappingFlagToWindow = () => {
         // assignableWindow.onerror = jest.fn()
         // assignableWindow.onerror__POSTHOG_INSTRUMENTED__ = true
 
-        assignableWindow.posthogErrorHandlers = posthogErrorWrappingFunctions
+        assignableWindow.__PosthogExtensions__.errorWrappingFunctions = posthogErrorWrappingFunctions
     }
 
     beforeEach(async () => {
-        loadScriptMock.mockImplementation((_path, callback) => {
+        loadScriptMock.mockImplementation((_ph, _path, callback) => {
             addErrorWrappingFlagToWindow()
             callback()
         })
 
-        posthog = await createPosthogInstance(uuidv7(), { _onCapture: mockCapture })
-        posthog.requestRouter.loadScript = loadScriptMock
+        posthog = await createPosthogInstance(uuidv7(), { before_send: beforeSendMock })
+        assignableWindow.__PosthogExtensions__ = {
+            loadExternalDependency: loadScriptMock,
+        }
 
         sendRequestSpy = jest.spyOn(posthog, '_send_request')
 
@@ -89,15 +91,21 @@ describe('Exception Observer', () => {
             const error = new Error('test error')
             window!.onerror?.call(window, 'message', 'source', 0, 0, error)
 
-            const captureCalls = mockCapture.mock.calls
+            const captureCalls = beforeSendMock.mock.calls
             expect(captureCalls.length).toBe(1)
             const singleCall = captureCalls[0]
-            expect(singleCall[0]).toBe('$exception')
-            expect(singleCall[1]).toMatchObject({
+            expect(singleCall[0]).toMatchObject({
+                event: '$exception',
                 properties: {
-                    $exception_message: 'test error',
-                    $exception_type: 'Error',
                     $exception_personURL: expect.any(String),
+                    $exception_list: [
+                        {
+                            type: 'Error',
+                            value: 'test error',
+                            stacktrace: { frames: expect.any(Array) },
+                            mechanism: { synthetic: false, handled: true },
+                        },
+                    ],
                 },
             })
         })
@@ -112,15 +120,21 @@ describe('Exception Observer', () => {
             })
             window!.onunhandledrejection?.call(window!, promiseRejectionEvent)
 
-            const captureCalls = mockCapture.mock.calls
+            const captureCalls = beforeSendMock.mock.calls
             expect(captureCalls.length).toBe(1)
             const singleCall = captureCalls[0]
-            expect(singleCall[0]).toBe('$exception')
-            expect(singleCall[1]).toMatchObject({
+            expect(singleCall[0]).toMatchObject({
+                event: '$exception',
                 properties: {
-                    $exception_message: 'test error',
-                    $exception_type: 'UnhandledRejection',
                     $exception_personURL: expect.any(String),
+                    $exception_list: [
+                        {
+                            type: 'UnhandledRejection',
+                            value: 'test error',
+                            stacktrace: { frames: expect.any(Array) },
+                            mechanism: { synthetic: false, handled: false },
+                        },
+                    ],
                 },
             })
         })
@@ -135,10 +149,15 @@ describe('Exception Observer', () => {
             expect(request.data).toMatchObject({
                 event: '$exception',
                 properties: {
-                    $exception_message: 'test error',
-                    $exception_type: 'Error',
                     $exception_personURL: expect.any(String),
-                    $exception_stack_trace_raw: expect.any(String),
+                    $exception_list: [
+                        {
+                            type: 'Error',
+                            value: 'test error',
+                            stacktrace: { frames: expect.any(Array) },
+                            mechanism: { synthetic: false, handled: true },
+                        },
+                    ],
                 },
             })
             expect(request.batchKey).toBe('exceptionEvent')

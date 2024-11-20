@@ -1,7 +1,7 @@
 import { Breaker, EventHandler, Properties } from '../types'
-import { isArray, isFormData, isFunction, isNull, isNullish, isString, hasOwnProperty } from './type-utils'
+import { hasOwnProperty, isArray, isFormData, isFunction, isNull, isNullish, isString } from './type-utils'
 import { logger } from './logger'
-import { window, nativeForEach, nativeIndexOf } from './globals'
+import { nativeForEach, nativeIndexOf, window } from './globals'
 
 const breaker: Breaker = {}
 
@@ -115,15 +115,6 @@ export const isValidRegex = function (str: string): boolean {
         return false
     }
     return true
-}
-
-export const timestamp = function (): number {
-    Date.now =
-        Date.now ||
-        function () {
-            return +new Date()
-        }
-    return Date.now()
 }
 
 export const trySafe = function <T>(fn: () => T): T | undefined {

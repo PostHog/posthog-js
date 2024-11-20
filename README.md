@@ -37,9 +37,12 @@ After all this, you'll be able to run through the below steps:
 You can use the create react app setup in `playground/nextjs` to test posthog-js as an npm module in a Nextjs application.
 
 1. Run `posthog` locally on port 8000 (`DEBUG=1 TEST=1 ./bin/start`).
-2. Run `python manage.py setup_dev --no-data` on posthog repo, which sets up a demo account.
-3. Copy posthog token found in `http://localhost:8000/project/settings` and then
-4. `cd playground/nextjs`and run `NEXT_PUBLIC_POSTHOG_KEY='<your-local-api-key>' pnpm dev`
+1. Run `python manage.py setup_dev --no-data` on posthog repo, which sets up a demo account.
+1. Copy Project API key found in `http://localhost:8000/project/settings` and save it for the last step.
+1. Run `cd playground/nextjs`.
+1. Run `pnpm i` to install dependencies.
+1. Run `pnpm run build-posthog-js` to build `posthog-js` locally.
+1. Run `NEXT_PUBLIC_POSTHOG_KEY='<your-local-api-key>' NEXT_PUBLIC_POSTHOG_HOST='http://localhost:8000' pnpm dev` to start the application.
 
 ### Tiers of testing
 
@@ -79,6 +82,10 @@ If you forget to add the label, don't try to update the version locally as you w
 
 To release an alpha or beta version, you'll need to use the CLI locally:
 
+#### CLI
+
+Only one person is set as a collaborator on NPM, so they're the only person that can manually publish alphas
+
 1. Make sure you're a collaborator on `posthog-js` in npm ([check here](https://www.npmjs.com/package/posthog-js)).
 2. Make sure you're logged into the npm CLI (`npm login`).
 3. Check out your work-in-progress branch (do not release an alpha/beta from `main`).
@@ -91,3 +98,9 @@ To release an alpha or beta version, you'll need to use the CLI locally:
     ```
 
 5. Enjoy the new prerelease version. You can now use it locally, in a dummy app, or in the [main repo](https://github.com/posthog/PostHog).
+
+#### Automagically
+
+Use the "release alpha" label on your PR to have an alpha version published automatically. This automation currently doesn't check whether an alpha exists for the version it will try to publish. If you need to publish two alphas from one PR you'll need to fix that
+
+Remember that these versions are public and folk might use them, so make sure they're not _too_ alpha 🙈

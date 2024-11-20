@@ -1,18 +1,24 @@
 import 'regenerator-runtime/runtime'
 import { waitFor } from '@testing-library/dom'
-import { v4 } from 'uuid'
 import { getRequests } from './mock-server'
 import { createPosthogInstance } from '../src/__tests__/helpers/posthog-instance'
 import { logger } from '../src/utils/logger'
+import { uuidv7 } from '../src/uuidv7'
+import { PostHog } from '../src/posthog-core'
 jest.mock('../src/utils/logger')
 
 describe('FunctionalTests / Identify', () => {
+    let token: string
+    let posthog: PostHog
+    let anonymousId: string
+
+    beforeEach(async () => {
+        token = uuidv7()
+        posthog = await createPosthogInstance(token)
+        anonymousId = posthog.get_distinct_id()
+    })
+
     test('identify sends a identify event', async () => {
-        const token = v4()
-        const posthog = await createPosthogInstance(token)
-
-        const anonymousId = posthog.get_distinct_id()
-
         posthog.identify('test-id')
 
         await waitFor(() =>
@@ -34,11 +40,6 @@ describe('FunctionalTests / Identify', () => {
     test('identify sends an engage request if identify called twice with the same distinct id and with $set/$set_once', async () => {
         // The intention here is to reduce the number of unncecessary $identify
         // requests to process.
-        const token = v4()
-        const posthog = await createPosthogInstance(token)
-
-        const anonymousId = posthog.get_distinct_id()
-
         // The first time we identify, it calls the /e/ endpoint with an $identify
         posthog.identify('test-id', { email: 'first@email.com' }, { location: 'first' })
 
@@ -82,11 +83,6 @@ describe('FunctionalTests / Identify', () => {
 
     test('identify sends an $set event if identify called twice with a different distinct_id', async () => {
         // This is due to $identify only being called for anonymous users.
-        const token = v4()
-        const posthog = await createPosthogInstance(token)
-
-        const anonymousId = posthog.get_distinct_id()
-
         // The first time we identify, it calls the /e/ endpoint with an $identify
         posthog.identify('test-id', { email: 'first@email.com' }, { location: 'first' })
 

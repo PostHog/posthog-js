@@ -3,6 +3,10 @@ import { getPayload } from '../support/compression'
 import 'cypress-localstorage-commands'
 
 function onPageLoad(options = {}) {
+    cy.posthog().then((ph) => {
+        ph.persistence?.properties().clear()
+    })
+
     cy.posthogInit(options)
     cy.wait('@decide')
     cy.wait('@surveys')
@@ -335,8 +339,13 @@ describe('Surveys', () => {
             onPageLoad()
             cy.wait('@capture-assertion')
             cy.get('.PostHogSurvey12345').shadow().find('.survey-form').should('be.visible')
-            cy.get('.PostHogSurvey12345').shadow().find('#surveyQuestion0Choice3').click()
-            cy.get('.PostHogSurvey12345').shadow().find('input[type=text]').type('Product engineer')
+            cy.get('.PostHogSurvey12345').shadow().find('#surveyQuestion0Choice3').and('not.be.disabled').click()
+            // TODO: you have to click on the input to activate it, really clicking on the parent should select the input
+            cy.get('.PostHogSurvey12345').shadow().find('#surveyQuestion0Choice3Open').and('not.be.disabled').click()
+            cy.get('.PostHogSurvey12345')
+                .shadow()
+                .find('input[type=text]#surveyQuestion0Choice3Open')
+                .type('Product engineer')
             cy.get('.PostHogSurvey12345').shadow().find('.form-submit').click()
             cy.wait('@capture-assertion').then(async ({ request }) => {
                 const captures = await getPayload(request)
@@ -590,7 +599,7 @@ describe('Surveys', () => {
             cy.phCaptures().should('include', 'survey sent')
         })
 
-        it('wigetType is custom selector', () => {
+        it('widgetType is custom selector', () => {
             cy.intercept('GET', '**/surveys/*', {
                 surveys: [
                     {
@@ -615,6 +624,7 @@ describe('Surveys', () => {
             onPageLoad()
             cy.get('.PostHogWidget123').shadow().find('.ph-survey-widget-tab').should('not.exist')
             cy.get('.test-surveys').click()
+            cy.wait(5000)
             cy.get('.PostHogWidget123').shadow().find('.survey-form').should('be.visible')
             cy.get('.PostHogWidget123').shadow().find('.survey-question').should('have.text', 'Feedback for us?')
             cy.get('.PostHogWidget123')
