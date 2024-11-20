@@ -845,15 +845,10 @@ export class PostHog {
         const systemTime = new Date()
         const timestamp = options?.timestamp || systemTime
 
-        logger.info(`CORE: in capture function, insert_id is : `, options?.insert_id)
         let data: CaptureResult = {
             uuid: uuidv7(),
             event: event_name,
             properties: this._calculate_event_properties(event_name, properties || {}, timestamp),
-        }
-
-        if (options?.insert_id) {
-            data.properties.$insert_id = options?.insert_id
         }
 
         if (clientRateLimitContext) {

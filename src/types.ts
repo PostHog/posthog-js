@@ -470,7 +470,6 @@ export interface CaptureOptions {
     skip_client_rate_limiting?: boolean /** if set skips the client side rate limiting */
     transport?: RequestOptions['transport'] /** if set, overrides the desired transport method */
     timestamp?: Date
-    insert_id?: string
 }
 
 export type FlagVariant = { flag: string; variant: string }
