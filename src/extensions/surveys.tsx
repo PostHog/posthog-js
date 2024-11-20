@@ -564,11 +564,6 @@ export function Questions({
                 `POSTHOG SURVEYS: Sending survey response with id : ${surveyResponseInsertID} `,
                 questionsResponses
             )
-            // eslint-disable-next-line no-console
-            console.log(
-                `POSTHOG SURVEYS: Sending survey response with id : ${surveyResponseInsertID} `,
-                questionsResponses
-            )
             sendSurveyEvent(
                 { ...questionsResponses, [responseKey]: res },
                 survey,
@@ -582,8 +577,6 @@ export function Questions({
 
         const nextStep = posthog.getNextSurveyStep(survey, displayQuestionIndex, res)
         logger.info(`POSTHOG SURVEYS: Sending survey response  with id : ${surveyResponseInsertID}`, questionsResponses)
-        // eslint-disable-next-line no-console
-        console.log(`POSTHOG SURVEYS: Sending survey response  with id : ${surveyResponseInsertID}`, questionsResponses)
         sendSurveyEvent(
             { ...questionsResponses, [responseKey]: res },
             survey,

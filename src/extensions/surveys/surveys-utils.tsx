@@ -545,25 +545,20 @@ export const sendSurveyEvent = (
 
     localStorage.setItem(getSurveySeenKey(survey), 'true')
 
-    posthog.capture(
-        'survey sent',
-        {
-            $survey_name: survey.name,
-            $survey_completed: surveyCompleted || false,
-            $survey_id: survey.id,
-            $survey_iteration: survey.current_iteration,
-            $survey_iteration_start_date: survey.current_iteration_start_date,
-            $survey_questions: survey.questions.map((question) => question.question),
-            sessionRecordingUrl: posthog.get_session_replay_url?.(),
-            ...responses,
-            $set: {
-                [getSurveyInteractionProperty(survey, 'responded')]: true,
-            },
+    posthog.capture('survey sent', {
+        $survey_name: survey.name,
+        $survey_completed: surveyCompleted || false,
+        $survey_id: survey.id,
+        $survey_response_id: surveyResponseInsertID,
+        $survey_iteration: survey.current_iteration,
+        $survey_iteration_start_date: survey.current_iteration_start_date,
+        $survey_questions: survey.questions.map((question) => question.question),
+        sessionRecordingUrl: posthog.get_session_replay_url?.(),
+        ...responses,
+        $set: {
+            [getSurveyInteractionProperty(survey, 'responded')]: true,
         },
-        {
-            insert_id: surveyResponseInsertID,
-        }
-    )
+    })
 
     if (surveyCompleted) {
         window.dispatchEvent(new Event('PHSurveySent'))
