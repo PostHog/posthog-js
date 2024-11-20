@@ -1,3 +1,7 @@
+## 1.187.2 - 2024-11-20
+
+- fix: improve ES6 bundling (#1542)
+
 ## 1.187.1 - 2024-11-19
 
 - fix: patch angular wrap detection in rrweb (#1543)
