@@ -19,6 +19,28 @@
         Make network call
     </button>
 
+    <button data-cy-xhr-call-button onclick="makeXHRNetworkPOST()">
+    Make XHR post network call
+</button>
+
+<script>
+    function makeXHRNetworkPOST() {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', 'https://example.com');
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.onload = function () {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                console.log('Response:', xhr.responseText);
+            } else {
+                console.error('Request failed with status:', xhr.status);
+            }
+        };
+        xhr.onerror = function () {
+            console.error('Network error');
+        };
+        xhr.send('i am the xhr body');
+    }
+</script>
     <br />
 
     <button data-cy-feature-flag-button onclick="console.log(posthog.isFeatureEnabled('some-feature'))">

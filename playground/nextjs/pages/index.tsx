@@ -1,6 +1,9 @@
+/* eslint-disable no-console */
 import { useActiveFeatureFlags, usePostHog } from 'posthog-js/react'
-import React, { useEffect, useState } from 'react'
-import { PERSON_PROCESSING_MODE, cookieConsentGiven } from '@/src/posthog'
+import { useEffect, useState } from 'react'
+import { cookieConsentGiven, PERSON_PROCESSING_MODE } from '@/src/posthog'
+import { setAllPersonProfilePropertiesAsPersonPropertiesForFlags } from 'posthog-js/lib/src/customizations/setAllPersonProfilePropertiesAsPersonPropertiesForFlags'
+import { STORED_PERSON_PROPERTIES_KEY } from '../../../src/constants'
 
 export default function Home() {
     const posthog = usePostHog()
@@ -40,6 +43,15 @@ export default function Home() {
                 <a className="Button" data-attr="autocapture-button" href="#">
                     <span>Autocapture a &gt; span</span>
                 </a>
+                <button
+                    onClick={() => {
+                        console.log(posthog.persistence?.props[STORED_PERSON_PROPERTIES_KEY])
+                        setAllPersonProfilePropertiesAsPersonPropertiesForFlags(posthog as any)
+                        console.log(posthog.persistence?.props[STORED_PERSON_PROPERTIES_KEY])
+                    }}
+                >
+                    SetPersonPropertiesForFlags
+                </button>
                 <a href={'https://www.google.com'}>External link</a>
                 {isClient && typeof window !== 'undefined' && process.env.NEXT_PUBLIC_CROSSDOMAIN && (
                     <a

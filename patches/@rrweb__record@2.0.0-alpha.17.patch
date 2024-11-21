@@ -1,8 +1,32 @@
 diff --git a/dist/record.js b/dist/record.js
-index 46ec389fefb698243008b39db65470dbdf0a3857..39d9ac821fd84f5a1494ac1e00c8d4e0e58c432a 100644
+index 46ec389fefb698243008b39db65470dbdf0a3857..891e1cf6439630d19e9b745ff428db438943a0b2 100644
 --- a/dist/record.js
 +++ b/dist/record.js
-@@ -246,6 +246,9 @@ function isCSSImportRule(rule2) {
+@@ -26,6 +26,14 @@ const testableMethods$1 = {
+   Element: [],
+   MutationObserver: ["constructor"]
+ };
++const isFunction = (x) => typeof x === 'function';
++const isAngularZonePatchedFunction = (x) => {
++  if (!isFunction(x)) {
++      return false;
++  }
++  const prototypeKeys = Object.getOwnPropertyNames(x.prototype || {});
++  return prototypeKeys.some((key) => key.indexOf('__zone'));
++}
+ const untaintedBasePrototype$1 = {};
+ function getUntaintedPrototype$1(key) {
+   if (untaintedBasePrototype$1[key])
+@@ -54,7 +62,7 @@ function getUntaintedPrototype$1(key) {
+       }
+     )
+   );
+-  if (isUntaintedAccessors && isUntaintedMethods) {
++  if (isUntaintedAccessors && isUntaintedMethods && !isAngularZonePatchedFunction(defaultObj)) {
+     untaintedBasePrototype$1[key] = defaultObj.prototype;
+     return defaultObj.prototype;
+   }
+@@ -246,6 +254,9 @@ function isCSSImportRule(rule2) {
  function isCSSStyleRule(rule2) {
    return "selectorText" in rule2;
  }
@@ -12,7 +36,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..39d9ac821fd84f5a1494ac1e00c8d4e0
  class Mirror {
    constructor() {
      __publicField$1(this, "idNodeMap", /* @__PURE__ */ new Map());
-@@ -809,9 +812,14 @@ function serializeElementNode(n2, options) {
+@@ -809,9 +820,14 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "link" && inlineStylesheet) {
@@ -30,7 +54,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..39d9ac821fd84f5a1494ac1e00c8d4e0
      let cssText = null;
      if (stylesheet) {
        cssText = stringifyStylesheet(stylesheet);
-@@ -1116,7300 +1124,227 @@ function serializeNodeWithId(n2, options) {
+@@ -1116,7300 +1132,227 @@ function serializeNodeWithId(n2, options) {
        keepIframeSrcFn
      };
      if (serializedNode.type === NodeType$2.Element && serializedNode.tagName === "textarea" && serializedNode.attributes.value !== void 0) ;
@@ -7540,7 +7564,16 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..39d9ac821fd84f5a1494ac1e00c8d4e0
  class BaseRRNode {
    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
    constructor(..._args) {
-@@ -11382,11 +4317,19 @@ class CanvasManager {
+@@ -8507,7 +1450,7 @@ function getUntaintedPrototype(key) {
+       }
+     )
+   );
+-  if (isUntaintedAccessors && isUntaintedMethods) {
++  if (isUntaintedAccessors && isUntaintedMethods && !isAngularZonePatchedFunction(defaultObj)) {
+     untaintedBasePrototype[key] = defaultObj.prototype;
+     return defaultObj.prototype;
+   }
+@@ -11382,11 +4325,19 @@ class CanvasManager {
      let rafId;
      const getCanvas = () => {
        const matchedCanvas = [];
@@ -7565,7 +7598,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..39d9ac821fd84f5a1494ac1e00c8d4e0
        return matchedCanvas;
      };
      const takeCanvasSnapshots = (timestamp) => {
-@@ -11407,13 +4350,20 @@ class CanvasManager {
+@@ -11407,13 +4358,20 @@ class CanvasManager {
              context.clear(context.COLOR_BUFFER_BIT);
            }
          }
