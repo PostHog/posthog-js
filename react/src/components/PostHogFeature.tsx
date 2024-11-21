@@ -1,6 +1,7 @@
 import { useFeatureFlagPayload, useFeatureFlagVariantKey, usePostHog } from '../hooks'
-import React, { useCallback, useEffect, useRef } from 'react'
+import React, { Children, ReactNode, useCallback, useEffect, useRef } from 'react'
 import { PostHog } from '../context'
+import { isFunction, isNull, isUndefined } from '../utils/type-utils'
 
 export type PostHogFeatureProps = React.HTMLProps<HTMLDivElement> & {
     flag: string
@@ -28,10 +29,10 @@ export function PostHogFeature({
     const shouldTrackInteraction = trackInteraction ?? true
     const shouldTrackView = trackView ?? true
 
-    if (match === undefined || variant === match) {
-        const childNode: React.ReactNode = typeof children === 'function' ? children(payload) : children
+    if (isUndefined(match) || variant === match) {
+        const childNode: React.ReactNode = isFunction(children) ? children(payload) : children
         return (
-            <VisibilityAndClickTracker
+            <VisibilityAndClickTrackers
                 flag={flag}
                 options={visibilityObserverOptions}
                 trackInteraction={shouldTrackInteraction}
@@ -39,7 +40,7 @@ export function PostHogFeature({
                 {...props}
             >
                 {childNode}
-            </VisibilityAndClickTracker>
+            </VisibilityAndClickTrackers>
         )
     }
     return <>{fallback}</>
@@ -56,6 +57,44 @@ function captureFeatureView(flag: string, posthog: PostHog) {
 function VisibilityAndClickTracker({
     flag,
     children,
+    onIntersect,
+    onClick,
+    trackView,
+    options,
+    ...props
+}: {
+    flag: string
+    children: React.ReactNode
+    onIntersect: (entry: IntersectionObserverEntry) => void
+    onClick: () => void
+    trackView: boolean
+    options?: IntersectionObserverInit
+}): JSX.Element {
+    const ref = useRef<HTMLDivElement>(null)
+    const posthog = usePostHog()
+
+    useEffect(() => {
+        if (isNull(ref.current) || !trackView) return
+
+        // eslint-disable-next-line compat/compat
+        const observer = new IntersectionObserver(([entry]) => onIntersect(entry), {
+            threshold: 0.1,
+            ...options,
+        })
+        observer.observe(ref.current)
+        return () => observer.disconnect()
+    }, [flag, options, posthog, ref, trackView, onIntersect])
+
+    return (
+        <div ref={ref} {...props} onClick={onClick}>
+            {children}
+        </div>
+    )
+}
+
+function VisibilityAndClickTrackers({
+    flag,
+    children,
     trackInteraction,
     trackView,
     options,
@@ -67,10 +106,9 @@ function VisibilityAndClickTracker({
     trackView: boolean
     options?: IntersectionObserverInit
 }): JSX.Element {
-    const ref = useRef<HTMLDivElement>(null)
-    const posthog = usePostHog()
-    const visibilityTrackedRef = useRef(false)
     const clickTrackedRef = useRef(false)
+    const visibilityTrackedRef = useRef(false)
+    const posthog = usePostHog()
 
     const cachedOnClick = useCallback(() => {
         if (!clickTrackedRef.current && trackInteraction) {
@@ -79,28 +117,27 @@ function VisibilityAndClickTracker({
         }
     }, [flag, posthog, trackInteraction])
 
-    useEffect(() => {
-        if (ref.current === null || !trackView) return
-
-        const onIntersect = (entry: IntersectionObserverEntry) => {
-            if (!visibilityTrackedRef.current && entry.isIntersecting) {
-                captureFeatureView(flag, posthog)
-                visibilityTrackedRef.current = true
-            }
+    const onIntersect = (entry: IntersectionObserverEntry) => {
+        if (!visibilityTrackedRef.current && entry.isIntersecting) {
+            captureFeatureView(flag, posthog)
+            visibilityTrackedRef.current = true
         }
+    }
 
-        // eslint-disable-next-line compat/compat
-        const observer = new IntersectionObserver(([entry]) => onIntersect(entry), {
-            threshold: 0.1,
-            ...options,
-        })
-        observer.observe(ref.current)
-        return () => observer.disconnect()
-    }, [flag, options, posthog, ref, trackView])
+    const trackedChildren = Children.map(children, (child: ReactNode) => {
+        return (
+            <VisibilityAndClickTracker
+                flag={flag}
+                onClick={cachedOnClick}
+                onIntersect={onIntersect}
+                trackView={trackView}
+                options={options}
+                {...props}
+            >
+                {child}
+            </VisibilityAndClickTracker>
+        )
+    })
 
-    return (
-        <div ref={ref} {...props} onClick={cachedOnClick}>
-            {children}
-        </div>
-    )
+    return <>{trackedChildren}</>
 }

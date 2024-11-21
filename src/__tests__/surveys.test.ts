@@ -212,6 +212,16 @@ describe('surveys', () => {
         expect(instance._send_request).toHaveBeenCalledTimes(1)
     })
 
+    it('posthog.reset() removes surveys tracking properties from storage', () => {
+        localStorage.setItem('seenSurvey_XYZ', '1')
+        localStorage.setItem('seenSurvey_ABC', '1')
+        localStorage.setItem('lastSeenSurveyDate', 'some date here')
+        surveys.reset()
+        expect(localStorage.getItem('lastSeenSurveyDate')).toBeNull()
+        expect(localStorage.getItem('seenSurvey_XYZ')).toBeNull()
+        expect(localStorage.getItem('seenSurvey_ABC')).toBeNull()
+    })
+
     it('getSurveys registers the survey event receiver if a survey has events', () => {
         surveysResponse = { surveys: surveysWithEvents }
         surveys.getSurveys((data) => {

@@ -34,6 +34,7 @@ import {
     Compression,
     DecideResponse,
     EarlyAccessFeatureCallback,
+    EventName,
     IsFeatureEnabledOptions,
     JsonType,
     PostHogConfig,
@@ -54,10 +55,11 @@ import { uuidv7 } from './uuidv7'
 import { Survey, SurveyCallback, SurveyQuestionBranchingType } from './posthog-surveys-types'
 import {
     isArray,
-    isBoolean,
     isEmptyObject,
     isEmptyString,
     isFunction,
+    isKnownUnsafeEditableEvent,
+    isNullish,
     isNumber,
     isObject,
     isString,
@@ -78,6 +80,7 @@ import { ExceptionObserver } from './extensions/exception-autocapture'
 import { WebVitalsAutocapture } from './extensions/web-vitals'
 import { WebExperiments } from './web-experiments'
 import { PostHogExceptions } from './posthog-exceptions'
+import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -180,6 +183,7 @@ export const defaultConfig = (): PostHogConfig => ({
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
     person_profiles: 'identified_only',
     __add_tracing_headers: false,
+    before_send: undefined,
 })
 
 export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostHogConfig> => {
@@ -258,6 +262,7 @@ export class PostHog {
     heatmaps?: Heatmaps
     webVitalsAutocapture?: WebVitalsAutocapture
     exceptionObserver?: ExceptionObserver
+    deadClicksAutocapture?: DeadClicksAutocapture
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -410,7 +415,7 @@ export class PostHog {
 
         this.persistence = new PostHogPersistence(this.config)
         this.sessionPersistence =
-            this.config.persistence === 'sessionStorage'
+            this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
                 ? this.persistence
                 : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
@@ -445,6 +450,9 @@ export class PostHog {
 
         this.exceptionObserver = new ExceptionObserver(this)
         this.exceptionObserver.startIfEnabled()
+
+        this.deadClicksAutocapture = new DeadClicksAutocapture(this, isDeadClicksEnabledForAutocapture)
+        this.deadClicksAutocapture.startIfEnabled()
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
@@ -516,14 +524,15 @@ export class PostHog {
 
         this.toolbar.maybeLoadToolbar()
 
-        // We wan't to avoid promises for IE11 compatibility, so we use callbacks here
+        // We want to avoid promises for IE11 compatibility, so we use callbacks here
         if (config.segment) {
             setupSegmentIntegration(this, () => this._loaded())
         } else {
             this._loaded()
         }
 
-        if (isFunction(this.config._onCapture)) {
+        if (isFunction(this.config._onCapture) && this.config._onCapture !== __NOOP) {
+            logger.warn('onCapture is deprecated. Please use `before_send` instead')
             this.on('eventCaptured', (data) => this.config._onCapture(data.event, data))
         }
 
@@ -559,14 +568,13 @@ export class PostHog {
         this.experiments?.afterDecideResponse(response)
         this.surveys?.afterDecideResponse(response)
         this.webVitalsAutocapture?.afterDecideResponse(response)
-        this.exceptions?.afterDecideResponse(response)
         this.exceptionObserver?.afterDecideResponse(response)
+        this.deadClicksAutocapture?.afterDecideResponse(response)
     }
 
     _loaded(): void {
         // Pause `reloadFeatureFlags` calls in config.loaded callback.
-        // These feature flags are loaded in the decide call made right
-        // afterwards
+        // These feature flags are loaded in the decide call made right after
         const disableDecide = this.config.advanced_disable_decide
         if (!disableDecide) {
             this.featureFlags.setReloadingPaused(true)
@@ -782,7 +790,11 @@ export class PostHog {
      * @param {String} [config.transport] Transport method for network request ('XHR' or 'sendBeacon').
      * @param {Date} [config.timestamp] Timestamp is a Date object. If not set, it'll automatically be set to the current time.
      */
-    capture(event_name: string, properties?: Properties | null, options?: CaptureOptions): CaptureResult | undefined {
+    capture(
+        event_name: EventName,
+        properties?: Properties | null,
+        options?: CaptureOptions
+    ): CaptureResult | undefined {
         // While developing, a developer might purposefully _not_ call init(),
         // in this case, we would like capture to be a noop.
         if (!this.__loaded || !this.persistence || !this.sessionPersistence || !this._requestQueue) {
@@ -863,6 +875,15 @@ export class PostHog {
         const finalSet = { ...data.properties['$set'], ...data['$set'] }
         if (!isEmptyObject(finalSet)) {
             this.setPersonPropertiesForFlags(finalSet)
+        }
+
+        if (!isNullish(this.config.before_send)) {
+            const beforeSendResult = this._runBeforeSend(data)
+            if (!beforeSendResult) {
+                return
+            } else {
+                data = beforeSendResult
+            }
         }
 
         this._internalEventEmitter.emit('eventCaptured', data)
@@ -1513,6 +1534,7 @@ export class PostHog {
         this.consent.reset()
         this.persistence?.clear()
         this.sessionPersistence?.clear()
+        this.surveys?.reset()
         this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()
         const uuid = this.config.get_device_id(uuidv7())
@@ -1780,7 +1802,7 @@ export class PostHog {
 
             this.persistence?.update_config(this.config, oldConfig)
             this.sessionPersistence =
-                this.config.persistence === 'sessionStorage'
+                this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
                     ? this.persistence
                     : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
@@ -1808,22 +1830,42 @@ export class PostHog {
      * turns session recording on, and updates the config option `disable_session_recording` to false
      * @param override.sampling - optional boolean to override the default sampling behavior - ensures the next session recording to start will not be skipped by sampling config.
      * @param override.linked_flag - optional boolean to override the default linked_flag behavior - ensures the next session recording to start will not be skipped by linked_flag config.
+     * @param override.url_trigger - optional boolean to override the default url_trigger behavior - ensures the next session recording to start will not be skipped by url_trigger config.
+     * @param override.event_trigger - optional boolean to override the default event_trigger behavior - ensures the next session recording to start will not be skipped by event_trigger config.
      * @param override - optional boolean to override the default sampling behavior - ensures the next session recording to start will not be skipped by sampling or linked_flag config. `true` is shorthand for { sampling: true, linked_flag: true }
      */
-    startSessionRecording(override?: { sampling?: boolean; linked_flag?: boolean } | true): void {
-        const overrideAll = isBoolean(override) && override
-        if (overrideAll || override?.sampling || override?.linked_flag) {
+    startSessionRecording(
+        override?: { sampling?: boolean; linked_flag?: boolean; url_trigger?: true; event_trigger?: true } | true
+    ): void {
+        const overrideAll = override === true
+        const overrideConfig = {
+            sampling: overrideAll || !!override?.sampling,
+            linked_flag: overrideAll || !!override?.linked_flag,
+            url_trigger: overrideAll || !!override?.url_trigger,
+            event_trigger: overrideAll || !!override?.event_trigger,
+        }
+
+        if (Object.values(overrideConfig).some(Boolean)) {
             // allow the session id check to rotate session id if necessary
-            const ids = this.sessionManager?.checkAndGetSessionAndWindowId()
-            if (overrideAll || override?.sampling) {
+            this.sessionManager?.checkAndGetSessionAndWindowId()
+
+            if (overrideConfig.sampling) {
                 this.sessionRecording?.overrideSampling()
-                logger.info('Session recording started with sampling override for session: ', ids?.sessionId)
             }
-            if (overrideAll || override?.linked_flag) {
+
+            if (overrideConfig.linked_flag) {
                 this.sessionRecording?.overrideLinkedFlag()
-                logger.info('Session recording started with linked_flags override')
+            }
+
+            if (overrideConfig.url_trigger) {
+                this.sessionRecording?.overrideTrigger('url')
+            }
+
+            if (overrideConfig.event_trigger) {
+                this.sessionRecording?.overrideTrigger('event')
             }
         }
+
         this.set_config({ disable_session_recording: false })
     }
 
@@ -2034,7 +2076,7 @@ export class PostHog {
      * @param {Object} [config.capture_properties] Set of properties to be captured along with the opt-in action
      */
     opt_in_capturing(options?: {
-        captureEventName?: string | null | false /** event name to be used for capturing the opt-in action */
+        captureEventName?: EventName | null | false /** event name to be used for capturing the opt-in action */
         captureProperties?: Properties /** set of properties to be captured along with the opt-in action */
     }): void {
         this.consent.optInOut(true)
@@ -2134,6 +2176,33 @@ export class PostHog {
             localStorage && localStorage.setItem('ph_debug', 'true')
             this.set_config({ debug: true })
         }
+    }
+
+    private _runBeforeSend(data: CaptureResult): CaptureResult | null {
+        if (isNullish(this.config.before_send)) {
+            return data
+        }
+
+        const fns = isArray(this.config.before_send) ? this.config.before_send : [this.config.before_send]
+        let beforeSendResult: CaptureResult | null = data
+        for (const fn of fns) {
+            beforeSendResult = fn(beforeSendResult)
+            if (isNullish(beforeSendResult)) {
+                const logMessage = `Event '${data.event}' was rejected in beforeSend function`
+                if (isKnownUnsafeEditableEvent(data.event)) {
+                    logger.warn(`${logMessage}. This can cause unexpected behavior.`)
+                } else {
+                    logger.info(logMessage)
+                }
+                return null
+            }
+            if (!beforeSendResult.properties || isEmptyObject(beforeSendResult.properties)) {
+                logger.warn(
+                    `Event '${data.event}' has no properties after beforeSend function, this is likely an error.`
+                )
+            }
+        }
+        return beforeSendResult
     }
 }
 

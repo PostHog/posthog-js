@@ -1,5 +1,6 @@
 import type { eventWithTime, mutationCallbackParam } from '@rrweb/types'
 import { INCREMENTAL_SNAPSHOT_EVENT_TYPE, MUTATION_SOURCE_TYPE, rrwebRecord } from './sessionrecording-utils'
+import { clampToRange } from '../../utils/number-utils'
 
 export class MutationRateLimiter {
     private bucketSize = 100
@@ -15,8 +16,18 @@ export class MutationRateLimiter {
             onBlockedNode?: (id: number, node: Node | null) => void
         } = {}
     ) {
-        this.refillRate = this.options.refillRate ?? this.refillRate
-        this.bucketSize = this.options.bucketSize ?? this.bucketSize
+        this.refillRate = clampToRange(
+            this.options.refillRate ?? this.refillRate,
+            0,
+            100,
+            'mutation throttling refill rate'
+        )
+        this.bucketSize = clampToRange(
+            this.options.bucketSize ?? this.bucketSize,
+            0,
+            100,
+            'mutation throttling bucket size'
+        )
         setInterval(() => {
             this.refillBuckets()
         }, 1000)

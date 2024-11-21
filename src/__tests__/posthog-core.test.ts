@@ -1,43 +1,31 @@
-const mockReferrerGetter = jest.fn()
-const mockURLGetter = jest.fn()
-
+import { defaultPostHog } from './helpers/posthog-instance'
 import type { PostHogConfig } from '../types'
 import { uuidv7 } from '../uuidv7'
 
-jest.mock('../utils/globals', () => {
-    const orig = jest.requireActual('../utils/globals')
-    return {
-        ...orig,
-        document: {
-            ...orig.document,
-            createElement: (...args: any[]) => orig.document.createElement(...args),
-            get referrer() {
-                return mockReferrerGetter?.()
-            },
-            get URL() {
-                return mockURLGetter?.()
-            },
-        },
-        get location() {
-            const url = mockURLGetter?.()
-            return {
-                href: url,
-                toString: () => url,
-            }
-        },
-    }
-})
-
 describe('posthog core', () => {
-    let defaultPostHog: typeof import('./helpers/posthog-instance').defaultPostHog
-    beforeEach(async () => {
-        // delay the import to ensure the mocks are set up before being accessed
-        // @ts-expect-error -  allow dynamic imports
-        const posthogModule = await import('./helpers/posthog-instance')
-        defaultPostHog = posthogModule.defaultPostHog
+    const mockURL = jest.fn()
+    const mockReferrer = jest.fn()
 
-        mockReferrerGetter.mockReturnValue('https://referrer.com')
-        mockURLGetter.mockReturnValue('https://example.com')
+    beforeAll(() => {
+        // Mock getters using Object.defineProperty
+        Object.defineProperty(document, 'URL', {
+            get: mockURL,
+        })
+        Object.defineProperty(document, 'referrer', {
+            get: mockReferrer,
+        })
+        Object.defineProperty(window, 'location', {
+            get: () => ({
+                href: mockURL(),
+                toString: () => mockURL(),
+            }),
+            configurable: true,
+        })
+    })
+
+    beforeEach(() => {
+        mockReferrer.mockReturnValue('https://referrer.com')
+        mockURL.mockReturnValue('https://example.com')
         console.error = jest.fn()
     })
 
@@ -51,10 +39,10 @@ describe('posthog core', () => {
             event: 'prop',
         }
         const setup = (config: Partial<PostHogConfig> = {}, token: string = uuidv7()) => {
-            const onCapture = jest.fn()
-            const posthog = defaultPostHog().init(token, { ...config, _onCapture: onCapture }, token)!
+            const beforeSendMock = jest.fn().mockImplementation((e) => e)
+            const posthog = defaultPostHog().init(token, { ...config, before_send: beforeSendMock }, token)!
             posthog.debug()
-            return { posthog, onCapture }
+            return { posthog, beforeSendMock }
         }
 
         it('respects property_denylist and property_blacklist', () => {
@@ -77,11 +65,11 @@ describe('posthog core', () => {
 
         describe('rate limiting', () => {
             it('includes information about remaining rate limit', () => {
-                const { posthog, onCapture } = setup()
+                const { posthog, beforeSendMock } = setup()
 
                 posthog.capture(eventName, eventProperties)
 
-                expect(onCapture.mock.calls[0][1]).toMatchObject({
+                expect(beforeSendMock.mock.calls[0][0]).toMatchObject({
                     properties: {
                         $lib_rate_limit_remaining_tokens: 99,
                     },
@@ -93,18 +81,18 @@ describe('posthog core', () => {
                 jest.setSystemTime(Date.now())
 
                 console.error = jest.fn()
-                const { posthog, onCapture } = setup()
+                const { posthog, beforeSendMock } = setup()
                 for (let i = 0; i < 100; i++) {
                     posthog.capture(eventName, eventProperties)
                 }
-                expect(onCapture).toHaveBeenCalledTimes(100)
-                onCapture.mockClear()
+                expect(beforeSendMock).toHaveBeenCalledTimes(100)
+                beforeSendMock.mockClear()
                 ;(console.error as any).mockClear()
                 for (let i = 0; i < 50; i++) {
                     posthog.capture(eventName, eventProperties)
                 }
-                expect(onCapture).toHaveBeenCalledTimes(1)
-                expect(onCapture.mock.calls[0][0]).toBe('$$client_ingestion_warning')
+                expect(beforeSendMock).toHaveBeenCalledTimes(1)
+                expect(beforeSendMock.mock.calls[0][0].event).toBe('$$client_ingestion_warning')
                 expect(console.error).toHaveBeenCalledTimes(50)
                 expect(console.error).toHaveBeenCalledWith(
                     '[PostHog.js]',
@@ -117,8 +105,8 @@ describe('posthog core', () => {
             it("should send referrer info with the event's properties", () => {
                 // arrange
                 const token = uuidv7()
-                mockReferrerGetter.mockReturnValue('https://referrer.example.com/some/path')
-                const { posthog, onCapture } = setup({
+                mockReferrer.mockReturnValue('https://referrer.example.com/some/path')
+                const { posthog, beforeSendMock } = setup({
                     token,
                     persistence_name: token,
                     person_profiles: 'always',
@@ -128,7 +116,7 @@ describe('posthog core', () => {
                 posthog.capture(eventName, eventProperties)
 
                 // assert
-                const { $set_once, properties } = onCapture.mock.calls[0][1]
+                const { $set_once, properties } = beforeSendMock.mock.calls[0][0]
                 expect($set_once['$initial_referrer']).toBe('https://referrer.example.com/some/path')
                 expect($set_once['$initial_referring_domain']).toBe('referrer.example.com')
                 expect(properties['$referrer']).toBe('https://referrer.example.com/some/path')
@@ -138,15 +126,15 @@ describe('posthog core', () => {
             it('should not update the referrer within the same session', () => {
                 // arrange
                 const token = uuidv7()
-                mockReferrerGetter.mockReturnValue('https://referrer1.example.com/some/path')
+                mockReferrer.mockReturnValue('https://referrer1.example.com/some/path')
                 const { posthog: posthog1 } = setup({
                     token,
                     persistence_name: token,
                     person_profiles: 'always',
                 })
                 posthog1.capture(eventName, eventProperties)
-                mockReferrerGetter.mockReturnValue('https://referrer2.example.com/some/path')
-                const { posthog: posthog2, onCapture: onCapture2 } = setup({
+                mockReferrer.mockReturnValue('https://referrer2.example.com/some/path')
+                const { posthog: posthog2, beforeSendMock } = setup({
                     token,
                     persistence_name: token,
                 })
@@ -159,7 +147,7 @@ describe('posthog core', () => {
                     'https://referrer1.example.com/some/path'
                 )
                 expect(posthog2.sessionPersistence!.props.$referrer).toEqual('https://referrer1.example.com/some/path')
-                const { $set_once, properties } = onCapture2.mock.calls[0][1]
+                const { $set_once, properties } = beforeSendMock.mock.calls[0][0]
                 expect($set_once['$initial_referrer']).toBe('https://referrer1.example.com/some/path')
                 expect($set_once['$initial_referring_domain']).toBe('referrer1.example.com')
                 expect(properties['$referrer']).toBe('https://referrer1.example.com/some/path')
@@ -169,15 +157,15 @@ describe('posthog core', () => {
             it('should use the new referrer in a new session', () => {
                 // arrange
                 const token = uuidv7()
-                mockReferrerGetter.mockReturnValue('https://referrer1.example.com/some/path')
+                mockReferrer.mockReturnValue('https://referrer1.example.com/some/path')
                 const { posthog: posthog1 } = setup({
                     token,
                     persistence_name: token,
                     person_profiles: 'always',
                 })
                 posthog1.capture(eventName, eventProperties)
-                mockReferrerGetter.mockReturnValue('https://referrer2.example.com/some/path')
-                const { posthog: posthog2, onCapture: onCapture2 } = setup({
+                mockReferrer.mockReturnValue('https://referrer2.example.com/some/path')
+                const { posthog: posthog2, beforeSendMock: beforeSendMock2 } = setup({
                     token,
                     persistence_name: token,
                 })
@@ -190,7 +178,7 @@ describe('posthog core', () => {
                 expect(posthog2.persistence!.props.$initial_person_info.r).toEqual(
                     'https://referrer1.example.com/some/path'
                 )
-                const { $set_once, properties } = onCapture2.mock.calls[0][1]
+                const { $set_once, properties } = beforeSendMock2.mock.calls[0][0]
                 expect($set_once['$initial_referrer']).toBe('https://referrer1.example.com/some/path')
                 expect($set_once['$initial_referring_domain']).toBe('referrer1.example.com')
                 expect(properties['$referrer']).toBe('https://referrer2.example.com/some/path')
@@ -200,8 +188,8 @@ describe('posthog core', () => {
             it('should use $direct when there is no referrer', () => {
                 // arrange
                 const token = uuidv7()
-                mockReferrerGetter.mockReturnValue('')
-                const { posthog, onCapture } = setup({
+                mockReferrer.mockReturnValue('')
+                const { posthog, beforeSendMock } = setup({
                     token,
                     persistence_name: token,
                     person_profiles: 'always',
@@ -211,11 +199,47 @@ describe('posthog core', () => {
                 posthog.capture(eventName, eventProperties)
 
                 // assert
-                const { $set_once, properties } = onCapture.mock.calls[0][1]
+                const { $set_once, properties } = beforeSendMock.mock.calls[0][0]
                 expect($set_once['$initial_referrer']).toBe('$direct')
                 expect($set_once['$initial_referring_domain']).toBe('$direct')
                 expect(properties['$referrer']).toBe('$direct')
                 expect(properties['$referring_domain']).toBe('$direct')
+            })
+        })
+
+        describe('campaign params', () => {
+            it('should not send campaign params as null if there are no non-null ones', () => {
+                // arrange
+                const token = uuidv7()
+                mockURL.mockReturnValue('https://www.example.com/some/path')
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                })
+
+                // act
+                posthog.capture('$pageview')
+
+                //assert
+                expect(beforeSendMock.mock.calls[0][0].properties).not.toHaveProperty('utm_source')
+                expect(beforeSendMock.mock.calls[0][0].properties).not.toHaveProperty('utm_medium')
+            })
+
+            it('should send present campaign params, and nulls for others', () => {
+                // arrange
+                const token = uuidv7()
+                mockURL.mockReturnValue('https://www.example.com/some/path?utm_source=source')
+                const { posthog, beforeSendMock } = setup({
+                    token,
+                    persistence_name: token,
+                })
+
+                // act
+                posthog.capture('$pageview')
+
+                //assert
+                expect(beforeSendMock.mock.calls[0][0].properties.utm_source).toBe('source')
+                expect(beforeSendMock.mock.calls[0][0].properties.utm_medium).toBe(null)
             })
         })
     })

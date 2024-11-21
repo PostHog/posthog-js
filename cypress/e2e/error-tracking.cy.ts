@@ -50,6 +50,7 @@ describe('Exception capture', () => {
             cy.phCaptures({ full: true }).then((captures) => {
                 expect(captures.map((c) => c.event)).to.deep.equal(['$pageview', '$autocapture', '$exception'])
                 expect(captures[2].event).to.be.eql('$exception')
+                expect(captures[2].properties.$exception_list[0].stacktrace.type).to.be.eq('raw')
                 expect(captures[2].properties.$exception_list[0].stacktrace.frames.length).to.be.eq(1)
                 expect(captures[2].properties.$exception_list[0].stacktrace.frames[0].function).to.be.eq(
                     'HTMLButtonElement.onclick'

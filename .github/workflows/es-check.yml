@@ -5,7 +5,7 @@ on:
 
 jobs:
   ssr:
-    name: Cypress
+    name: Build and check ES5/ES6 support
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,3 +21,6 @@ jobs:
 
       - name: Run es-check to check if our ie11 bundle is ES5 compatible
         run: npx es-check@7.2.1 es5 dist/array.full.es5.js
+
+      - name: Run es-check to check if our main bundle is ES6 compatible
+        run: npx es-check@7.2.1 es6 dist/array.full.js

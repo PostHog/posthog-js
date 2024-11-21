@@ -1,3 +1,119 @@
+## 1.187.2 - 2024-11-20
+
+- fix: improve ES6 bundling (#1542)
+
+## 1.187.1 - 2024-11-19
+
+- fix: patch angular wrap detection in rrweb (#1543)
+
+## 1.187.0 - 2024-11-19
+
+- feat: allow config of before_send function to edit or reject events (#1515)
+- chore: timeout test cafe jobs (#1540)
+- chore: specify an explicit browserslist version (#1539)
+
+## 1.186.4 - 2024-11-19
+
+- chore: always transform exponentiation (#1537)
+- chore: very small change to IE11 bundling (#1536)
+
+## 1.186.3 - 2024-11-18
+
+- fix: refactor native mutation observer implementation (#1535)
+- chore: update dependency versions (#1534)
+- chore: remove custom exceptions endpoint (#1513)
+
+## 1.186.2 - 2024-11-18
+
+- fix: angular change detection mutation observer (#1531)
+- chore: Added CSP headers to next app for testing what we document (#1528)
+
+## 1.186.1 - 2024-11-15
+
+- fix: XHR req method capture (#1527)
+
+## 1.186.0 - 2024-11-15
+
+- feat: allow triggering sessions when events occur (#1523)
+
+## 1.185.0 - 2024-11-15
+
+- feat: Add customization to add all person profile properties as setPersonPropertiesForFlags (#1517)
+
+## 1.184.2 - 2024-11-13
+
+- fix(flags): support multiple children prop in PostHogFeature (#1516)
+- fix: Don't use session storage in memory mode (#1521)
+
+## 1.184.1 - 2024-11-12
+
+- chore: add type to Sentry exception (#1520)
+
+## 1.184.0 - 2024-11-12
+
+- feat: deadclicks in heatmaps (#1510)
+
+## 1.183.0 - 2024-11-12
+
+- feat: add recording url blocklist (#1500)
+
+## 1.182.0 - 2024-11-11
+
+- chore: upgrade rrweb to alpha.17 (#1489)
+
+## 1.181.0 - 2024-11-05
+
+- chore: add stack type (#1511)
+
+## 1.180.1 - 2024-11-01
+
+- fix: dead click fixes from watching in prod (#1508)
+
+## 1.180.0 - 2024-10-31
+
+- feat: allow mutation rate limiter configuration (#1506)
+
+## 1.179.0 - 2024-10-31
+
+- feat: dead click detection (#1463)
+- chore: refactor towards dead clicks autocapture (#1505)
+
+## 1.178.0 - 2024-10-30
+
+- feat: Add timezone to events (#1504)
+- chore: update README to include missing steps for running local nextjs playground (#1455)
+
+## 1.177.0 - 2024-10-28
+
+- feat: Only set missing campaign params to null if there is at least one non-null (#1493)
+
+## 1.176.1 - 2024-10-28
+
+- fix: reduce keep alive threshold (#1501)
+- fix: empty query param when calling external dependency toolbar.js (#1456)
+- fix: careful now (#1497)
+
+## 1.176.0 - 2024-10-24
+
+- fix(surveys): Reset Survey storage after posthog.reset is called (#1494)
+
+## 1.175.1 - 2024-10-24
+
+- chore: set platform on stack frame (#1495)
+
+## 1.175.0 - 2024-10-24
+
+- fix: allow canvas local config (#1496)
+
+## 1.174.4 - 2024-10-24
+
+- fix: expose the last activity timestamp in session id check result (#1491)
+
+## 1.174.3 - 2024-10-22
+
+- chore: upgrade rrweb to alpha.16 (#1276)
+- chore: test that autocapture allowlists are unioned (#1476)
+
 ## 1.174.2 - 2024-10-18
 
 - fix: no need to swallow import errors (#1486)
