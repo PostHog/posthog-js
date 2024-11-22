@@ -81,6 +81,9 @@ devDependencies:
   '@rrweb/types':
     specifier: 2.0.0-alpha.17
     version: 2.0.0-alpha.17
+  '@sentry/types':
+    specifier: 8.7.0
+    version: 8.7.0
   '@testing-library/dom':
     specifier: ^9.3.0
     version: 9.3.0
@@ -2892,6 +2895,11 @@ packages:
 
   /@rrweb/utils@2.0.0-alpha.17:
     resolution: {integrity: sha512-HCsasPERBwOS9/LQeOytO2ETKTCqRj1wORBuxiy3t41hKhmi225DdrUPiWnyDdTQm1GdVbOymMRknJVPnZaSXw==}
+    dev: true
+
+  /@sentry/types@8.7.0:
+    resolution: {integrity: sha512-11KLOKumP6akugVGLvSoEig+JlP0ZEzW3nN9P+ppgdIx9HAxMIh6UvumbieG4/DWjAh2kh6NPNfUw3gk2Gfq1A==}
+    engines: {node: '>=14.18'}
     dev: true
 
   /@sinclair/typebox@0.27.8:
