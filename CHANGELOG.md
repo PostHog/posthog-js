@@ -1,3 +1,8 @@
+## 1.188.0 - 2024-11-22
+
+- fix(surveys): Process feature_flag_keys on Survey object (#1548)
+- chore: sentry integration fixes (#1544)
+
 ## 1.187.2 - 2024-11-20
 
 - fix: improve ES6 bundling (#1542)
