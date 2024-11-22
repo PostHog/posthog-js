@@ -48,8 +48,6 @@ interface PostHogExtensions {
         callback: (error?: string | Event, event?: Event) => void
     ) => void
 
-    loadSiteApp?: (posthog: PostHog, appUrl: string, callback: (error?: string | Event, event?: Event) => void) => void
-
     parseErrorAsProperties?: (
         [event, source, lineno, colno, error]: ErrorEventArgs,
         metadata?: ErrorMetadata

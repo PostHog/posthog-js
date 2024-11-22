@@ -80,6 +80,7 @@ import { ExceptionObserver } from './extensions/exception-autocapture'
 import { WebVitalsAutocapture } from './extensions/web-vitals'
 import { WebExperiments } from './web-experiments'
 import { PostHogExceptions } from './posthog-exceptions'
+import { SiteApps } from './site-apps'
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 
 /*
@@ -258,6 +259,7 @@ export class PostHog {
     sessionManager?: SessionIdManager
     sessionPropsManager?: SessionPropsManager
     requestRouter: RequestRouter
+    siteApps?: SiteApps
     autocapture?: Autocapture
     heatmaps?: Heatmaps
     webVitalsAutocapture?: WebVitalsAutocapture
@@ -432,6 +434,9 @@ export class PostHog {
 
         new TracingHeaders(this).startIfEnabledOrStop()
 
+        this.siteApps = new SiteApps(this)
+        this.siteApps?.init()
+
         this.sessionRecording = new SessionRecording(this)
         this.sessionRecording.startIfEnabledOrStop()
 
@@ -562,6 +567,7 @@ export class PostHog {
                 : 'always',
         })
 
+        this.siteApps?.afterDecideResponse(response)
         this.sessionRecording?.afterDecideResponse(response)
         this.autocapture?.afterDecideResponse(response)
         this.heatmaps?.afterDecideResponse(response)
