@@ -101,7 +101,14 @@ const ignorePostHogPaths = (
     apiHostConfig: PostHogConfig['api_host']
 ): CapturedNetworkRequest | undefined => {
     const url = convertToURL(data.name)
-    const pathname = url?.pathname.replace(apiHostConfig, '')
+
+    // we need to account for api host config as e.g. pathname could be /ingest/s/ and we want to ignore that
+    let replaceValue = apiHostConfig.indexOf('http') === 0 ? convertToURL(apiHostConfig)?.pathname : apiHostConfig
+    if (replaceValue === '/') {
+        replaceValue = ''
+    }
+    const pathname = url?.pathname.replace(replaceValue || '', '')
+
     if (url && pathname && POSTHOG_PATHS_TO_IGNORE.some((path) => pathname.indexOf(path) === 0)) {
         return undefined
     }

@@ -114,8 +114,19 @@ describe('config', () => {
                     undefined,
                     '/ingest',
                 ],
+                [
+                    {
+                        // even an imaginary future world of rust session replay capture
+                        name: 'https://app.posthog.com/ingest/s/?ip=1&ver=123',
+                    },
+                    undefined,
+                    'https://app.posthog.com/ingest',
+                ],
             ])('ignores ingestion paths', (capturedRequest, expected, apiHost?: string) => {
-                const networkOptions = buildNetworkRequestOptions({ ...defaultConfig(), api_host: apiHost }, {})
+                const networkOptions = buildNetworkRequestOptions(
+                    { ...defaultConfig(), api_host: apiHost || 'https://us.posthog.com' },
+                    {}
+                )
                 const x = networkOptions.maskRequestFn!(capturedRequest as CapturedNetworkRequest)
                 expect(x).toEqual(expected)
             })
