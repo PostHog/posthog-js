@@ -2,11 +2,7 @@ import type { PostHog } from '../posthog-core'
 import { assignableWindow, document, PostHogExtensionKind } from '../utils/globals'
 import { logger } from '../utils/logger'
 
-export const loadScript = (
-    posthog: PostHog,
-    url: string,
-    callback: (error?: string | Event, event?: Event) => void
-) => {
+const loadScript = (posthog: PostHog, url: string, callback: (error?: string | Event, event?: Event) => void) => {
     if (posthog.config.disable_external_dependency_loading) {
         logger.warn(`${url} was requested but loading of external scripts is disabled.`)
         return callback('Loading of external scripts is disabled')
@@ -59,4 +55,14 @@ assignableWindow.__PosthogExtensions__.loadExternalDependency = (
     const url = posthog.requestRouter.endpointFor('assets', scriptUrlToLoad)
 
     loadScript(posthog, url, callback)
+}
+
+assignableWindow.__PosthogExtensions__.loadSiteApp = (
+    posthog: PostHog,
+    url: string,
+    callback: (error?: string | Event, event?: Event) => void
+): void => {
+    const scriptUrl = posthog.requestRouter.endpointFor('api', url)
+
+    loadScript(posthog, scriptUrl, callback)
 }

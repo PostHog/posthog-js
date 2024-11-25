@@ -1,8 +1,8 @@
-import { loadScript } from './entrypoints/external-scripts-loader'
 import { PostHog } from './posthog-core'
 import { CaptureResult, DecideResponse } from './types'
 import { assignableWindow } from './utils/globals'
 import { logger } from './utils/logger'
+import { isArray } from './utils/type-utils'
 
 export class SiteApps {
     instance: PostHog
@@ -74,13 +74,8 @@ export class SiteApps {
         return globals
     }
 
-    loadSiteApp(posthog: PostHog, url: string, callback: (error?: string | Event, event?: Event) => void) {
-        const scriptUrl = posthog.requestRouter.endpointFor('api', url)
-        loadScript(posthog, scriptUrl, callback)
-    }
-
     afterDecideResponse(response?: DecideResponse): void {
-        if (response?.['siteApps']) {
+        if (isArray(response?.siteApps) && response.siteApps.length > 0) {
             if (this.enabled && this.instance.config.opt_in_site_apps) {
                 const checkIfAllLoaded = () => {
                     // Stop collecting events once all site apps are loaded
@@ -97,7 +92,7 @@ export class SiteApps {
                         this.appsLoading.delete(id)
                         checkIfAllLoaded()
                     }
-                    this.loadSiteApp(this.instance, url, (err) => {
+                    assignableWindow.__PosthogExtensions__?.loadSiteApp?.(this.instance, url, (err) => {
                         if (err) {
                             this.appsLoading.delete(id)
                             checkIfAllLoaded()
