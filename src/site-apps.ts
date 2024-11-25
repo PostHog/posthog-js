@@ -30,7 +30,7 @@ export class SiteApps {
             const globals = this.globalsForEvent(eventPayload)
             this.missedInvocations.push(globals)
             if (this.missedInvocations.length > 1000) {
-                this.missedInvocations = this.missedInvocations.slice(990)
+                this.missedInvocations = this.missedInvocations.slice(10)
             }
         }
     }
@@ -107,6 +107,9 @@ export class SiteApps {
                 }
             } else if (response['siteApps'].length > 0) {
                 logger.error('PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.')
+                this.loaded = true
+            } else {
+                this.loaded = true
             }
         } else {
             this.loaded = true
