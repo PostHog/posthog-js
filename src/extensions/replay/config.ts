@@ -98,7 +98,15 @@ const POSTHOG_PATHS_TO_IGNORE = ['/s/', '/e/', '/i/']
 // because calls to PostHog would be reported using a call to PostHog which would be reported....
 const ignorePostHogPaths = (data: CapturedNetworkRequest): CapturedNetworkRequest | undefined => {
     const url = convertToURL(data.name)
-    if (url && url.pathname && POSTHOG_PATHS_TO_IGNORE.some((path) => url.pathname.indexOf(path) === 0)) {
+    if (
+        url &&
+        url.pathname &&
+        // matches our `/s/` path but also paths within a reverse proxy like `/ingest/s/`
+        POSTHOG_PATHS_TO_IGNORE.some((path) => url.pathname.indexOf(path) >= 0) &&
+        // since we're matching `/blah/` loosely, also check a couple of the query params we add
+        url.search.indexOf('ver=') >= 0 &&
+        url.search.indexOf('ip=') >= 0
+    ) {
         return undefined
     }
     return data
