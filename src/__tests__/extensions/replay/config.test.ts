@@ -78,26 +78,26 @@ describe('config', () => {
                 ],
                 [
                     {
-                        name: 'https://app.posthog.com/s/',
+                        name: 'https://app.posthog.com/s/?ip=1&ver=123',
                     },
                     undefined,
                 ],
                 [
                     {
-                        name: 'https://app.posthog.com/e/',
+                        name: 'https://app.posthog.com/e/?ip=1&ver=123',
                     },
                     undefined,
                 ],
                 [
                     {
-                        name: 'https://app.posthog.com/i/v0/e/',
+                        name: 'https://app.posthog.com/i/v0/e/?ip=1&ver=123',
                     },
                     undefined,
                 ],
                 [
                     {
                         // even an imaginary future world of rust session replay capture
-                        name: 'https://app.posthog.com/i/v0/s/',
+                        name: 'https://app.posthog.com/i/v0/s/?ip=1&ver=123',
                     },
                     undefined,
                 ],
