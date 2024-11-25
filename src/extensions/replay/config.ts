@@ -96,17 +96,13 @@ const removeAuthorizationHeader = (data: CapturedNetworkRequest): CapturedNetwor
 const POSTHOG_PATHS_TO_IGNORE = ['/s/', '/e/', '/i/']
 // want to ignore posthog paths when capturing requests, or we can get trapped in a loop
 // because calls to PostHog would be reported using a call to PostHog which would be reported....
-const ignorePostHogPaths = (data: CapturedNetworkRequest): CapturedNetworkRequest | undefined => {
+const ignorePostHogPaths = (
+    data: CapturedNetworkRequest,
+    apiHostConfig: PostHogConfig['api_host']
+): CapturedNetworkRequest | undefined => {
     const url = convertToURL(data.name)
-    if (
-        url &&
-        url.pathname &&
-        // matches our `/s/` path but also paths within a reverse proxy like `/ingest/s/`
-        POSTHOG_PATHS_TO_IGNORE.some((path) => url.pathname.indexOf(path) >= 0) &&
-        // since we're matching `/blah/` loosely, also check a couple of the query params we add
-        url.search.indexOf('ver=') >= 0 &&
-        url.search.indexOf('ip=') >= 0
-    ) {
+    const pathname = url?.pathname.replace(apiHostConfig, '')
+    if (url && pathname && POSTHOG_PATHS_TO_IGNORE.some((path) => pathname.indexOf(path) === 0)) {
         return undefined
     }
     return data
@@ -219,7 +215,7 @@ export const buildNetworkRequestOptions = (
     const payloadLimiter = limitPayloadSize(config)
 
     const enforcedCleaningFn: NetworkRecordOptions['maskRequestFn'] = (d: CapturedNetworkRequest) =>
-        payloadLimiter(ignorePostHogPaths(removeAuthorizationHeader(d)))
+        payloadLimiter(ignorePostHogPaths(removeAuthorizationHeader(d), instanceConfig.api_host))
 
     const hasDeprecatedMaskFunction = isFunction(instanceConfig.session_recording.maskNetworkRequestFn)
 
