@@ -1,5 +1,3 @@
-// __tests__/site-apps.ts
-
 import { SiteApps } from '../site-apps'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
