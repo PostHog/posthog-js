@@ -1,3 +1,9 @@
+## 1.188.1 - 2024-11-26
+
+- fix: safari support requires we don't use (#1553)
+- fix: endless capturing /s/ (#1551)
+- chore: make platform more specific (#1549)
+
 ## 1.188.0 - 2024-11-22
 
 - fix(surveys): Process feature_flag_keys on Survey object (#1548)
