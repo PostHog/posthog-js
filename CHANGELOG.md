@@ -1,3 +1,7 @@
+## 1.189.0 - 2024-11-26
+
+- feat: Add better npm import, and script entrypoint for customizations (#1550)
+
 ## 1.188.1 - 2024-11-26
 
 - fix: safari support requires we don't use (#1553)
