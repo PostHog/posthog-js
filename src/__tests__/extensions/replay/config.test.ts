@@ -108,7 +108,7 @@ describe('config', () => {
                 ],
                 [
                     {
-                        // even an imaginary future world of rust session replay capture
+                        // using a relative path as a reverse proxy api host
                         name: 'https://app.posthog.com/ingest/s/?ip=1&ver=123',
                     },
                     undefined,
@@ -116,7 +116,7 @@ describe('config', () => {
                 ],
                 [
                     {
-                        // even an imaginary future world of rust session replay capture
+                        // using a reverse proxy with a path
                         name: 'https://app.posthog.com/ingest/s/?ip=1&ver=123',
                     },
                     undefined,
