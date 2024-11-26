@@ -9,9 +9,10 @@ import { isArray, isNumber, isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
 
 import { clampToRange } from './utils/number-utils'
+import { PostHog } from './posthog-core'
 
-const DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS = 30 * 60 // 30 minutes
-const MAX_SESSION_IDLE_TIMEOUT_SECONDS = 10 * 60 * 60 // 10 hours
+export const DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS = 30 * 60 // 30 minutes
+export const MAX_SESSION_IDLE_TIMEOUT_SECONDS = 10 * 60 * 60 // 10 hours
 const MIN_SESSION_IDLE_TIMEOUT_SECONDS = 60 // 1 minute
 const SESSION_LENGTH_LIMIT_MILLISECONDS = 24 * 3600 * 1000 // 24 hours
 
@@ -30,14 +31,13 @@ export class SessionIdManager {
     private _sessionIdChangedHandlers: SessionIdChangedCallback[] = []
     private readonly _sessionTimeoutMs: number
 
-    constructor(
-        config: Partial<PostHogConfig>,
-        persistence: PostHogPersistence,
-        sessionIdGenerator?: () => string,
-        windowIdGenerator?: () => string
-    ) {
-        this.config = config
-        this.persistence = persistence
+    constructor(instance: PostHog, sessionIdGenerator?: () => string, windowIdGenerator?: () => string) {
+        if (!instance.persistence) {
+            throw new Error('SessionIdManager requires a PostHogPersistence instance')
+        }
+
+        this.config = instance.config
+        this.persistence = instance.persistence
         this._windowId = undefined
         this._sessionId = undefined
         this._sessionStartTimestamp = null
@@ -45,16 +45,19 @@ export class SessionIdManager {
         this._sessionIdGenerator = sessionIdGenerator || uuidv7
         this._windowIdGenerator = windowIdGenerator || uuidv7
 
-        const persistenceName = config['persistence_name'] || config['token']
+        const persistenceName = this.config['persistence_name'] || this.config['token']
 
-        const desiredTimeout = config['session_idle_timeout_seconds'] || DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS
+        const desiredTimeout = this.config['session_idle_timeout_seconds'] || DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS
         this._sessionTimeoutMs =
             clampToRange(
                 desiredTimeout,
                 MIN_SESSION_IDLE_TIMEOUT_SECONDS,
                 MAX_SESSION_IDLE_TIMEOUT_SECONDS,
-                'session_idle_timeout_seconds'
+                'session_idle_timeout_seconds',
+                DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS
             ) * 1000
+
+        instance.register({ $configured_session_timeout_ms: this._sessionTimeoutMs })
 
         this._window_id_storage_key = 'ph_' + persistenceName + '_window_id'
         this._primary_window_exists_storage_key = 'ph_' + persistenceName + '_primary_window_exists'
