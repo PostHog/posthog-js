@@ -112,7 +112,7 @@ export class MutationRateLimiter {
             }
             return event
         } catch (e) {
-            logger.warn('error throttling mutations', e)
+            logger.warn('[SessionRecording] error throttling mutations', e)
             return event
         }
     }
