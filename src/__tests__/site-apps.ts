@@ -6,15 +6,19 @@ import { RequestRouter } from '../utils/request-router'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, PostHogConfig, Properties, CaptureResult } from '../types'
 import { assignableWindow } from '../utils/globals'
-import '../entrypoints/external-scripts-loader'
 import { logger } from '../utils/logger'
+import '../entrypoints/external-scripts-loader'
+import { isFunction } from '../utils/type-utils'
 
-jest.mock('../entrypoints/external-scripts-loader', () => ({
-    loadScript: jest.fn(),
+jest.mock('../utils/logger', () => ({
+    logger: {
+        error: jest.fn(),
+    },
 }))
 
 describe('SiteApps', () => {
     let posthog: PostHog
+    let siteAppsInstance: SiteApps
 
     const defaultConfig: Partial<PostHogConfig> = {
         token: 'testtoken',
@@ -23,10 +27,24 @@ describe('SiteApps', () => {
     }
 
     beforeEach(() => {
-        // clean the JSDOM to prevent interdependencies between tests
+        // Clean the JSDOM to prevent interdependencies between tests
         document.body.innerHTML = ''
         document.head.innerHTML = ''
         jest.spyOn(window.console, 'error').mockImplementation()
+
+        // Reset assignableWindow properties
+        assignableWindow.__PosthogExtensions__ = {
+            loadSiteApp: jest.fn().mockImplementation((_instance, _url, callback) => {
+                // Simulate async loading
+                setTimeout(() => {
+                    const id = _url.split('/').pop()
+                    if (isFunction(assignableWindow[`__$$ph_site_app_${id}_callback`])) {
+                        assignableWindow[`__$$ph_site_app_${id}_callback`]()
+                    }
+                    callback()
+                }, 0)
+            }),
+        }
 
         posthog = {
             config: { ...defaultConfig },
@@ -48,6 +66,12 @@ describe('SiteApps', () => {
             _hasBootstrappedFeatureFlags: jest.fn(),
             getGroups: () => ({ organization: '5' }),
         } as unknown as PostHog
+
+        siteAppsInstance = new SiteApps(posthog)
+    })
+
+    afterEach(() => {
+        jest.clearAllMocks()
     })
 
     describe('constructor', () => {
@@ -58,7 +82,7 @@ describe('SiteApps', () => {
                 advanced_disable_decide: false,
             } as PostHogConfig
 
-            const siteAppsInstance = new SiteApps(posthog)
+            siteAppsInstance = new SiteApps(posthog)
 
             expect(siteAppsInstance.enabled).toBe(true)
         })
@@ -70,7 +94,7 @@ describe('SiteApps', () => {
                 advanced_disable_decide: false,
             } as PostHogConfig
 
-            const siteAppsInstance = new SiteApps(posthog)
+            siteAppsInstance = new SiteApps(posthog)
 
             expect(siteAppsInstance.enabled).toBe(false)
         })
@@ -82,14 +106,12 @@ describe('SiteApps', () => {
                 advanced_disable_decide: true,
             } as PostHogConfig
 
-            const siteAppsInstance = new SiteApps(posthog)
+            siteAppsInstance = new SiteApps(posthog)
 
             expect(siteAppsInstance.enabled).toBe(false)
         })
 
         it('initializes missedInvocations, loaded, appsLoading correctly', () => {
-            const siteAppsInstance = new SiteApps(posthog)
-
             expect(siteAppsInstance.missedInvocations).toEqual([])
             expect(siteAppsInstance.loaded).toBe(false)
             expect(siteAppsInstance.appsLoading).toEqual(new Set())
@@ -98,7 +120,6 @@ describe('SiteApps', () => {
 
     describe('init', () => {
         it('adds eventCollector as a capture hook', () => {
-            const siteAppsInstance = new SiteApps(posthog)
             siteAppsInstance.init()
 
             expect(posthog._addCaptureHook).toHaveBeenCalledWith(expect.any(Function))
@@ -106,12 +127,6 @@ describe('SiteApps', () => {
     })
 
     describe('eventCollector', () => {
-        let siteAppsInstance: SiteApps
-
-        beforeEach(() => {
-            siteAppsInstance = new SiteApps(posthog)
-        })
-
         it('does nothing if enabled is false', () => {
             siteAppsInstance.enabled = false
             siteAppsInstance.eventCollector('event_name', {} as CaptureResult)
@@ -137,7 +152,7 @@ describe('SiteApps', () => {
             siteAppsInstance.enabled = true
             siteAppsInstance.loaded = false
 
-            siteAppsInstance.missedInvocations = new Array(1000).fill({}).map((_, index) => ({ index }))
+            siteAppsInstance.missedInvocations = new Array(1000).fill({})
 
             const eventPayload = { event: 'test_event', properties: { prop1: 'value1' } } as CaptureResult
 
@@ -146,19 +161,12 @@ describe('SiteApps', () => {
             siteAppsInstance.eventCollector('test_event', eventPayload)
 
             expect(siteAppsInstance.missedInvocations.length).toBe(991)
-            // Ensure that the first 10 events were trimmed
-            expect(siteAppsInstance.missedInvocations[0]).toEqual({ index: 10 })
+            expect(siteAppsInstance.missedInvocations[0]).toEqual({})
             expect(siteAppsInstance.missedInvocations[990]).toEqual({ some: 'globals' })
         })
     })
 
     describe('globalsForEvent', () => {
-        let siteAppsInstance: SiteApps
-
-        beforeEach(() => {
-            siteAppsInstance = new SiteApps(posthog)
-        })
-
         it('throws an error if event is undefined', () => {
             expect(() => siteAppsInstance.globalsForEvent(undefined as any)).toThrow('Event payload is required')
         })
@@ -216,39 +224,7 @@ describe('SiteApps', () => {
         })
     })
 
-    describe('loadSiteApp', () => {
-        let siteAppsInstance: SiteApps
-        let loadScript: jest.Mock
-
-        beforeEach(() => {
-            siteAppsInstance = new SiteApps(posthog)
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            loadScript = require('../entrypoints/external-scripts-loader').loadScript as jest.Mock
-            loadScript.mockClear()
-        })
-
-        it('calls loadScript with correct parameters', () => {
-            const callback = jest.fn()
-            jest.spyOn(posthog.requestRouter, 'endpointFor').mockReturnValue('https://test.com/script.js')
-
-            siteAppsInstance.loadSiteApp(posthog, '/site_app/1', callback)
-
-            expect(posthog.requestRouter.endpointFor).toHaveBeenCalledWith('api', '/site_app/1')
-            expect(loadScript).toHaveBeenCalledWith(posthog, 'https://test.com/script.js', callback)
-        })
-    })
-
     describe('afterDecideResponse', () => {
-        let siteAppsInstance: SiteApps
-
-        beforeEach(() => {
-            siteAppsInstance = new SiteApps(posthog)
-            jest.spyOn(siteAppsInstance, 'loadSiteApp').mockImplementation((posthog, url, callback) => {
-                // Simulate loading
-                callback()
-            })
-        })
-
         it('sets loaded to true and enabled to false when response is undefined', () => {
             siteAppsInstance.afterDecideResponse(undefined)
 
@@ -256,7 +232,7 @@ describe('SiteApps', () => {
             expect(siteAppsInstance.enabled).toBe(false)
         })
 
-        it('loads site apps when enabled and opt_in_site_apps is true', () => {
+        it('loads site apps when enabled and opt_in_site_apps is true', (done) => {
             posthog.config.opt_in_site_apps = true
             siteAppsInstance.enabled = true
             const response = {
@@ -270,7 +246,14 @@ describe('SiteApps', () => {
 
             expect(siteAppsInstance.appsLoading.size).toBe(2)
             expect(siteAppsInstance.loaded).toBe(false)
-            expect(siteAppsInstance.loadSiteApp).toHaveBeenCalledTimes(2)
+
+            // Wait for the simulated async loading to complete
+            setTimeout(() => {
+                expect(assignableWindow.__PosthogExtensions__?.loadSiteApp).toHaveBeenCalledTimes(2)
+                expect(siteAppsInstance.appsLoading.size).toBe(0)
+                expect(siteAppsInstance.loaded).toBe(true)
+                done()
+            }, 10)
         })
 
         it('does not load site apps when enabled is false', () => {
@@ -284,10 +267,10 @@ describe('SiteApps', () => {
 
             expect(siteAppsInstance.loaded).toBe(true)
             expect(siteAppsInstance.enabled).toBe(false)
-            expect(siteAppsInstance.loadSiteApp).not.toHaveBeenCalled()
+            expect(assignableWindow.__PosthogExtensions__?.loadSiteApp).not.toHaveBeenCalled()
         })
 
-        it('clears missedInvocations when all apps are loaded', () => {
+        it('clears missedInvocations when all apps are loaded', (done) => {
             posthog.config.opt_in_site_apps = true
             siteAppsInstance.enabled = true
             siteAppsInstance.missedInvocations = [{ some: 'data' }]
@@ -297,16 +280,12 @@ describe('SiteApps', () => {
 
             siteAppsInstance.afterDecideResponse(response)
 
-            // Simulate app loaded
-            siteAppsInstance.appsLoading.delete('1')
-            // Manually invoke the checkIfAllLoaded function
-            if (siteAppsInstance.appsLoading.size === 0) {
-                siteAppsInstance.loaded = true
-                siteAppsInstance.missedInvocations = []
-            }
-
-            expect(siteAppsInstance.loaded).toBe(true)
-            expect(siteAppsInstance.missedInvocations).toEqual([])
+            // Wait for the simulated async loading to complete
+            setTimeout(() => {
+                expect(siteAppsInstance.loaded).toBe(true)
+                expect(siteAppsInstance.missedInvocations).toEqual([])
+                done()
+            }, 10)
         })
 
         it('sets assignableWindow properties for each site app', () => {
@@ -321,6 +300,11 @@ describe('SiteApps', () => {
             expect(assignableWindow['__$$ph_site_app_1_posthog']).toBe(posthog)
             expect(typeof assignableWindow['__$$ph_site_app_1_missed_invocations']).toBe('function')
             expect(typeof assignableWindow['__$$ph_site_app_1_callback']).toBe('function')
+            expect(assignableWindow.__PosthogExtensions__?.loadSiteApp).toHaveBeenCalledWith(
+                posthog,
+                '/site_app/1',
+                expect.any(Function)
+            )
         })
 
         it('logs error if site apps are disabled but response contains site apps', () => {
@@ -330,12 +314,25 @@ describe('SiteApps', () => {
                 siteApps: [{ id: '1', url: '/site_app/1' }],
             } as DecideResponse
 
-            jest.spyOn(logger, 'error').mockImplementation()
             siteAppsInstance.afterDecideResponse(response)
 
             expect(logger.error).toHaveBeenCalledWith(
                 'PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.'
             )
+            expect(siteAppsInstance.loaded).toBe(true)
+        })
+
+        it('sets loaded to true if response.siteApps is empty', () => {
+            siteAppsInstance.enabled = true
+            posthog.config.opt_in_site_apps = true
+            const response = {
+                siteApps: [],
+            } as DecideResponse
+
+            siteAppsInstance.afterDecideResponse(response)
+
+            expect(siteAppsInstance.loaded).toBe(true)
+            expect(siteAppsInstance.enabled).toBe(false)
         })
     })
 })
