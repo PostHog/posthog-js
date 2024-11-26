@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 import { PostHogPersistence } from '../posthog-persistence'
-import { SESSION_ID, USER_STATE } from '../constants'
+import { INITIAL_PERSON_INFO, SESSION_ID, USER_STATE } from '../constants'
 import { PostHogConfig } from '../types'
 import Mock = jest.Mock
 import { PostHog } from '../posthog-core'
@@ -160,6 +160,15 @@ describe('persistence', () => {
                 })}`
             )
 
+            lib.register({ [INITIAL_PERSON_INFO]: { u: 'https://www.example.com', r: 'https://www.referrer.com' } })
+            expect(document.cookie).toContain(
+                `ph__posthog=${encode({
+                    distinct_id: 'test',
+                    $sesid: [1000, 'sid', 2000],
+                    $initial_person_info: { u: 'https://www.example.com', r: 'https://www.referrer.com' },
+                })}`
+            )
+
             // Clear localstorage to simulate being on a different domain
             localStorage.clear()
 
@@ -168,6 +177,7 @@ describe('persistence', () => {
             expect(newLib.props).toEqual({
                 distinct_id: 'test',
                 $sesid: [1000, 'sid', 2000],
+                $initial_person_info: { u: 'https://www.example.com', r: 'https://www.referrer.com' },
             })
         })
 
