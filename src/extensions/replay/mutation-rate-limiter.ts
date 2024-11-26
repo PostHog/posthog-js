@@ -1,6 +1,7 @@
 import type { eventWithTime, mutationCallbackParam } from '@rrweb/types'
 import { INCREMENTAL_SNAPSHOT_EVENT_TYPE, MUTATION_SOURCE_TYPE, rrwebRecord } from './sessionrecording-utils'
 import { clampToRange } from '../../utils/number-utils'
+import { logger } from '../../utils/logger'
 
 export class MutationRateLimiter {
     private bucketSize = 100
@@ -75,39 +76,44 @@ export class MutationRateLimiter {
             return event
         }
 
-        const data = event.data as Partial<mutationCallbackParam>
-        const initialMutationCount = this.numberOfChanges(data)
+        try {
+            const data = event.data as Partial<mutationCallbackParam>
+            const initialMutationCount = this.numberOfChanges(data)
 
-        if (data.attributes) {
-            // Most problematic mutations come from attrs where the style or minor properties are changed rapidly
-            data.attributes = data.attributes.filter((attr) => {
-                const [nodeId, node] = this.getNodeOrRelevantParent(attr.id)
+            if (data.attributes) {
+                // Most problematic mutations come from attrs where the style or minor properties are changed rapidly
+                data.attributes = data.attributes.filter((attr) => {
+                    const [nodeId, node] = this.getNodeOrRelevantParent(attr.id)
 
-                if (this.mutationBuckets[nodeId] === 0) {
-                    return false
-                }
-
-                this.mutationBuckets[nodeId] = this.mutationBuckets[nodeId] ?? this.bucketSize
-                this.mutationBuckets[nodeId] = Math.max(this.mutationBuckets[nodeId] - 1, 0)
-
-                if (this.mutationBuckets[nodeId] === 0) {
-                    if (!this.loggedTracker[nodeId]) {
-                        this.loggedTracker[nodeId] = true
-                        this.options.onBlockedNode?.(nodeId, node)
+                    if (this.mutationBuckets[nodeId] === 0) {
+                        return false
                     }
-                }
 
-                return attr
-            })
+                    this.mutationBuckets[nodeId] = this.mutationBuckets[nodeId] ?? this.bucketSize
+                    this.mutationBuckets[nodeId] = Math.max(this.mutationBuckets[nodeId] - 1, 0)
+
+                    if (this.mutationBuckets[nodeId] === 0) {
+                        if (!this.loggedTracker[nodeId]) {
+                            this.loggedTracker[nodeId] = true
+                            this.options.onBlockedNode?.(nodeId, node)
+                        }
+                    }
+
+                    return attr
+                })
+            }
+
+            // Check if every part of the mutation is empty in which case there is nothing to do
+            const mutationCount = this.numberOfChanges(data)
+
+            if (mutationCount === 0 && initialMutationCount !== mutationCount) {
+                // If we have modified the mutation count and the remaining count is 0, then we don't need the event.
+                return
+            }
+            return event
+        } catch (e) {
+            logger.warn('error throttling mutations', e)
+            return event
         }
-
-        // Check if every part of the mutation is empty in which case there is nothing to do
-        const mutationCount = this.numberOfChanges(data)
-
-        if (mutationCount === 0 && initialMutationCount !== mutationCount) {
-            // If we have modified the mutation count and the remaining count is 0, then we don't need the event.
-            return
-        }
-        return event
     }
 }
