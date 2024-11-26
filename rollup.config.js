@@ -106,7 +106,7 @@ const entrypointTargets = entrypoints.map((file) => {
 const typeTargets = entrypoints
     .filter((file) => file.endsWith('.es.ts'))
     .map((file) => {
-        const source = `./lib/entrypoints/${file.replace('.ts', '.d.ts')}`
+        const source = `./lib/src/entrypoints/${file.replace('.ts', '.d.ts')}`
         /** @type {import('rollup').RollupOptions} */
         return {
             input: source,
