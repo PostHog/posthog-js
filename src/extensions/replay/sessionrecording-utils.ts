@@ -11,7 +11,7 @@ export function circularReferenceReplacer() {
         if (isObject(value)) {
             // `this` is the object that value is contained in,
             // i.e., its direct parent.
-            while (ancestors.length > 0 && ancestors.at(-1) !== this) {
+            while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
                 ancestors.pop()
             }
             if (ancestors.includes(value)) {
