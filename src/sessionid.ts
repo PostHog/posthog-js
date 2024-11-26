@@ -10,9 +10,10 @@ import { logger } from './utils/logger'
 
 import { clampToRange } from './utils/number-utils'
 
-const MAX_SESSION_IDLE_TIMEOUT = 30 * 60 // 30 minutes
-const MIN_SESSION_IDLE_TIMEOUT = 60 // 1 minute
-const SESSION_LENGTH_LIMIT = 24 * 3600 * 1000 // 24 hours
+const DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS = 30 * 60 // 30 minutes
+const MAX_SESSION_IDLE_TIMEOUT_SECONDS = 10 * 60 * 60 // 10 hours
+const MIN_SESSION_IDLE_TIMEOUT_SECONDS = 60 // 1 minute
+const SESSION_LENGTH_LIMIT_MILLISECONDS = 24 * 3600 * 1000 // 24 hours
 
 export class SessionIdManager {
     private readonly _sessionIdGenerator: () => string
@@ -46,12 +47,12 @@ export class SessionIdManager {
 
         const persistenceName = config['persistence_name'] || config['token']
 
-        const desiredTimeout = config['session_idle_timeout_seconds'] || MAX_SESSION_IDLE_TIMEOUT
+        const desiredTimeout = config['session_idle_timeout_seconds'] || DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS
         this._sessionTimeoutMs =
             clampToRange(
                 desiredTimeout,
-                MIN_SESSION_IDLE_TIMEOUT,
-                MAX_SESSION_IDLE_TIMEOUT,
+                MIN_SESSION_IDLE_TIMEOUT_SECONDS,
+                MAX_SESSION_IDLE_TIMEOUT_SECONDS,
                 'session_idle_timeout_seconds'
             ) * 1000
 
@@ -218,7 +219,7 @@ export class SessionIdManager {
         const sessionPastMaximumLength =
             isNumber(startTimestamp) &&
             startTimestamp > 0 &&
-            Math.abs(timestamp - startTimestamp) > SESSION_LENGTH_LIMIT
+            Math.abs(timestamp - startTimestamp) > SESSION_LENGTH_LIMIT_MILLISECONDS
 
         let valuesChanged = false
         const noSessionId = !sessionId
