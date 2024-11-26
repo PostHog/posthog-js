@@ -14,7 +14,10 @@ export class SiteApps {
     constructor(instance: PostHog) {
         this.instance = instance
         // can't use if site apps are disabled, or if we're not asking /decide for site apps
-        this.enabled = !!this.instance.config.opt_in_site_apps && !this.instance.config.advanced_disable_decide
+        this.enabled =
+            this.instance.config.opt_in_site_apps &&
+            !this.instance.config.advanced_disable_decide &&
+            this.instance.consent.isOptedIn()
         // events captured between loading posthog-js and the site app; up to 1000 events
         this.missedInvocations = []
         // capture events until loaded
@@ -76,7 +79,7 @@ export class SiteApps {
 
     afterDecideResponse(response?: DecideResponse): void {
         if (isArray(response?.siteApps) && response.siteApps.length > 0) {
-            if (this.enabled && this.instance.config.opt_in_site_apps) {
+            if (this.enabled) {
                 const checkIfAllLoaded = () => {
                     // Stop collecting events once all site apps are loaded
                     if (this.appsLoading.size === 0) {
@@ -100,6 +103,10 @@ export class SiteApps {
                         }
                     })
                 }
+            } else if (!this.instance.consent.isOptedIn()) {
+                logger.warn(
+                    'PostHog site apps are disabled. User has opted out. Call "posthog.opt_in_capturing()" to proceed.'
+                )
             } else if (response['siteApps'].length > 0) {
                 logger.error('PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.')
                 this.loaded = true
@@ -111,6 +118,4 @@ export class SiteApps {
             this.enabled = false
         }
     }
-
-    // TODO: opting out of stuff should disable this
 }
