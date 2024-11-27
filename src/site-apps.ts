@@ -2,7 +2,7 @@ import { PostHog } from './posthog-core'
 import { CaptureResult, DecideResponse } from './types'
 import { assignableWindow } from './utils/globals'
 import { logger } from './utils/logger'
-import { isArray } from './utils/type-utils'
+import { isArray, isUndefined } from './utils/type-utils'
 
 export class SiteApps {
     private _decideServerResponse?: DecideResponse['siteApps']
@@ -89,10 +89,10 @@ export class SiteApps {
                     }
                 }
                 for (const { id, type, url } of this._decideServerResponse) {
+                    // if consent isn't given, skip site destinations
                     if (this.instance.consent.isOptedOut() && type === 'site_destination') continue
                     // if the site app is already loaded, skip it
-                    // eslint-disable-next-line no-restricted-globals
-                    if (`__$$ph_site_app_${id}_posthog` in window) continue
+                    if (!isUndefined(assignableWindow[`__$$ph_site_app_${id}_posthog`])) continue
                     this.appsLoading.add(id)
                     assignableWindow[`__$$ph_site_app_${id}_posthog`] = this.instance
                     assignableWindow[`__$$ph_site_app_${id}_missed_invocations`] = () => this.missedInvocations
