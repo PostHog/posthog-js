@@ -1,23 +1,28 @@
 diff --git a/dist/record.js b/dist/record.js
-index 46ec389fefb698243008b39db65470dbdf0a3857..bfebdc6a3887a3ddae46b21d21896092d2963fe9 100644
+index 46ec389fefb698243008b39db65470dbdf0a3857..70db907755d68b08232e25e1b255a974f56f3c65 100644
 --- a/dist/record.js
 +++ b/dist/record.js
-@@ -26,6 +26,14 @@ const testableMethods$1 = {
+@@ -26,6 +26,19 @@ const testableMethods$1 = {
    Element: [],
    MutationObserver: ["constructor"]
  };
 +const isFunction = (x) => typeof x === 'function';
 +const isAngularZonePatchedFunction = (x) => {
-+  if (!isFunction(x)) {
-+      return false;
++  try {
++    if (!isFunction(x)) {
++        return false;
++    }
++    const prototypeKeys = Object.getOwnPropertyNames(x.prototype || {});
++    return prototypeKeys.some((key) => key.indexOf('__zone'));
++  } catch {
++    // we've seen some intermittent problems in Safari since introducing this check
++    return false
 +  }
-+  const prototypeKeys = Object.getOwnPropertyNames(x.prototype || {});
-+  return prototypeKeys.some((key) => key.indexOf('__zone'));
 +}
  const untaintedBasePrototype$1 = {};
  function getUntaintedPrototype$1(key) {
    if (untaintedBasePrototype$1[key])
-@@ -54,7 +62,7 @@ function getUntaintedPrototype$1(key) {
+@@ -54,7 +67,7 @@ function getUntaintedPrototype$1(key) {
        }
      )
    );
@@ -26,7 +31,20 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..bfebdc6a3887a3ddae46b21d21896092
      untaintedBasePrototype$1[key] = defaultObj.prototype;
      return defaultObj.prototype;
    }
-@@ -246,6 +254,9 @@ function isCSSImportRule(rule2) {
+@@ -65,10 +78,10 @@ function getUntaintedPrototype$1(key) {
+     if (!win) return defaultObj.prototype;
+     const untaintedObject = win[key].prototype;
+     document.body.removeChild(iframeEl);
+-    if (!untaintedObject) return defaultPrototype;
++    if (!untaintedObject) return defaultObj.prototype;
+     return untaintedBasePrototype$1[key] = untaintedObject;
+   } catch {
+-    return defaultPrototype;
++    return defaultObj.prototype;
+   }
+ }
+ const untaintedAccessorCache$1 = {};
+@@ -246,6 +259,9 @@ function isCSSImportRule(rule2) {
  function isCSSStyleRule(rule2) {
    return "selectorText" in rule2;
  }
@@ -36,7 +54,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..bfebdc6a3887a3ddae46b21d21896092
  class Mirror {
    constructor() {
      __publicField$1(this, "idNodeMap", /* @__PURE__ */ new Map());
-@@ -809,9 +820,14 @@ function serializeElementNode(n2, options) {
+@@ -809,9 +825,14 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "link" && inlineStylesheet) {
@@ -54,7 +72,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..bfebdc6a3887a3ddae46b21d21896092
      let cssText = null;
      if (stylesheet) {
        cssText = stringifyStylesheet(stylesheet);
-@@ -855,7 +871,15 @@ function serializeElementNode(n2, options) {
+@@ -855,7 +876,15 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "dialog" && n2.open) {
@@ -71,7 +89,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..bfebdc6a3887a3ddae46b21d21896092
    }
    if (tagName === "canvas" && recordCanvas) {
      if (n2.__context === "2d") {
-@@ -1116,7300 +1140,227 @@ function serializeNodeWithId(n2, options) {
+@@ -1116,7300 +1145,227 @@ function serializeNodeWithId(n2, options) {
        keepIframeSrcFn
      };
      if (serializedNode.type === NodeType$2.Element && serializedNode.tagName === "textarea" && serializedNode.attributes.value !== void 0) ;
@@ -7581,7 +7599,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..bfebdc6a3887a3ddae46b21d21896092
  class BaseRRNode {
    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
    constructor(..._args) {
-@@ -8507,7 +1458,7 @@ function getUntaintedPrototype(key) {
+@@ -8507,7 +1463,7 @@ function getUntaintedPrototype(key) {
        }
      )
    );
@@ -7590,7 +7608,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..bfebdc6a3887a3ddae46b21d21896092
      untaintedBasePrototype[key] = defaultObj.prototype;
      return defaultObj.prototype;
    }
-@@ -11382,11 +4333,19 @@ class CanvasManager {
+@@ -11382,11 +4338,19 @@ class CanvasManager {
      let rafId;
      const getCanvas = () => {
        const matchedCanvas = [];
@@ -7615,7 +7633,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..bfebdc6a3887a3ddae46b21d21896092
        return matchedCanvas;
      };
      const takeCanvasSnapshots = (timestamp) => {
-@@ -11407,13 +4366,20 @@ class CanvasManager {
+@@ -11407,13 +4371,20 @@ class CanvasManager {
              context.clear(context.COLOR_BUFFER_BIT);
            }
          }
