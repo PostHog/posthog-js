@@ -313,5 +313,25 @@ describe('SiteApps', () => {
             expect(typeof assignableWindow['__$$ph_site_app_5_callback']).toBe('function')
             expect(typeof assignableWindow['__$$ph_site_app_6_callback']).toBe('undefined')
         })
+
+        it('load site destinations if consent is given at a later time', () => {
+            posthog.config.opt_in_site_apps = true
+            posthog.consent.isOptedOut = () => true
+            const response = {
+                siteApps: [
+                    { id: '5', type: 'site_app', url: '/site_app/5' },
+                    { id: '6', type: 'site_destination', url: '/site_app/6' },
+                ],
+            } as DecideResponse
+
+            siteAppsInstance.afterDecideResponse(response)
+
+            posthog.consent.isOptedOut = () => false
+
+            siteAppsInstance.loadIfEnabled()
+
+            expect(typeof assignableWindow['__$$ph_site_app_5_callback']).toBe('function')
+            expect(typeof assignableWindow['__$$ph_site_app_6_callback']).toBe('function')
+        })
     })
 })
