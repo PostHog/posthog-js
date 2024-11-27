@@ -1,3 +1,8 @@
+## 1.190.2 - 2024-11-27
+
+- fix: patch to angular detection in rrweb (#1566)
+- chore: fix changelog (#1564)
+
 ## 1.190.1 - 2024-11-27
 
 - fix: catch errors detecting dialog state when recording (#1562)
