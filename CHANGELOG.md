@@ -1,3 +1,7 @@
+## 1.190.0 - 2024-11-27
+
+- feat: Add initial person info to cookie when using localPlusCookieStore (#1559)
+
 ## 1.189.1 - 2024-11-27
 
 - feat: hog site functions (#1546)
