@@ -1,3 +1,7 @@
+## 1.189.1 - 2024-11-27
+
+- feat: hog site functions (#1546)
+
 ## 1.189.0 - 2024-11-26
 
 - feat: Add better npm import, and script entrypoint for customizations (#1550)
