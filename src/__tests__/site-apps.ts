@@ -7,6 +7,7 @@ import { assignableWindow } from '../utils/globals'
 import { logger } from '../utils/logger'
 import '../entrypoints/external-scripts-loader'
 import { isFunction } from '../utils/type-utils'
+import { ConsentManager } from '../consent'
 
 jest.mock('../utils/logger', () => ({
     logger: {
@@ -50,6 +51,11 @@ describe('SiteApps', () => {
             register: (props: Properties) => posthog.persistence!.register(props),
             unregister: (key: string) => posthog.persistence!.unregister(key),
             get_property: (key: string) => posthog.persistence!.props[key],
+            consent: {
+                isOptedOut(): boolean {
+                    return false
+                },
+            } as unknown as ConsentManager,
             capture: jest.fn(),
             _addCaptureHook: jest.fn(),
             _afterDecideResponse: jest.fn(),
@@ -73,42 +79,6 @@ describe('SiteApps', () => {
     })
 
     describe('constructor', () => {
-        it('sets enabled to true when opt_in_site_apps is true and advanced_disable_decide is false', () => {
-            posthog.config = {
-                ...defaultConfig,
-                opt_in_site_apps: true,
-                advanced_disable_decide: false,
-            } as PostHogConfig
-
-            siteAppsInstance = new SiteApps(posthog)
-
-            expect(siteAppsInstance.enabled).toBe(true)
-        })
-
-        it('sets enabled to false when opt_in_site_apps is false', () => {
-            posthog.config = {
-                ...defaultConfig,
-                opt_in_site_apps: false,
-                advanced_disable_decide: false,
-            } as PostHogConfig
-
-            siteAppsInstance = new SiteApps(posthog)
-
-            expect(siteAppsInstance.enabled).toBe(false)
-        })
-
-        it('sets enabled to false when advanced_disable_decide is true', () => {
-            posthog.config = {
-                ...defaultConfig,
-                opt_in_site_apps: true,
-                advanced_disable_decide: true,
-            } as PostHogConfig
-
-            siteAppsInstance = new SiteApps(posthog)
-
-            expect(siteAppsInstance.enabled).toBe(false)
-        })
-
         it('initializes missedInvocations, loaded, appsLoading correctly', () => {
             expect(siteAppsInstance.missedInvocations).toEqual([])
             expect(siteAppsInstance.loaded).toBe(false)
@@ -126,17 +96,17 @@ describe('SiteApps', () => {
 
     describe('eventCollector', () => {
         it('does nothing if enabled is false', () => {
-            siteAppsInstance.enabled = false
+            posthog.config.opt_in_site_apps = false
             siteAppsInstance.eventCollector('event_name', {} as CaptureResult)
 
             expect(siteAppsInstance.missedInvocations.length).toBe(0)
         })
 
         it('collects event if enabled and loaded is false', () => {
-            siteAppsInstance.enabled = true
+            posthog.config.opt_in_site_apps = true
             siteAppsInstance.loaded = false
 
-            const eventPayload = { event: 'test_event', properties: { prop1: 'value1' } } as CaptureResult
+            const eventPayload = { event: 'test_event', properties: { prop1: 'value1' } } as unknown as CaptureResult
 
             jest.spyOn(siteAppsInstance, 'globalsForEvent').mockReturnValue({ some: 'globals' })
 
@@ -147,12 +117,12 @@ describe('SiteApps', () => {
         })
 
         it('trims missedInvocations to last 990 when exceeding 1000', () => {
-            siteAppsInstance.enabled = true
+            posthog.config.opt_in_site_apps = true
             siteAppsInstance.loaded = false
 
             siteAppsInstance.missedInvocations = new Array(1000).fill({})
 
-            const eventPayload = { event: 'test_event', properties: { prop1: 'value1' } } as CaptureResult
+            const eventPayload = { event: 'test_event', properties: { prop1: 'value1' } } as unknown as CaptureResult
 
             jest.spyOn(siteAppsInstance, 'globalsForEvent').mockReturnValue({ some: 'globals' })
 
@@ -223,20 +193,22 @@ describe('SiteApps', () => {
     })
 
     describe('afterDecideResponse', () => {
-        it('sets loaded to true and enabled to false when response is undefined', () => {
-            siteAppsInstance.afterDecideResponse(undefined)
+        it('sets loaded to true response is undefined', () => {
+            const response = {
+                siteApps: [],
+            } as DecideResponse
+            siteAppsInstance.afterDecideResponse(response)
 
             expect(siteAppsInstance.loaded).toBe(true)
-            expect(siteAppsInstance.enabled).toBe(false)
+            expect(siteAppsInstance._decideServerResponse.length).toBe(0)
         })
 
         it('loads site apps when enabled and opt_in_site_apps is true', (done) => {
             posthog.config.opt_in_site_apps = true
-            siteAppsInstance.enabled = true
             const response = {
                 siteApps: [
-                    { id: '1', url: '/site_app/1' },
-                    { id: '2', url: '/site_app/2' },
+                    { id: '1', type: 'site_app', url: '/site_app/1' },
+                    { id: '2', type: 'site_app', url: '/site_app/2' },
                 ],
             } as DecideResponse
 
@@ -255,25 +227,22 @@ describe('SiteApps', () => {
         })
 
         it('does not load site apps when enabled is false', () => {
-            siteAppsInstance.enabled = false
             posthog.config.opt_in_site_apps = false
             const response = {
-                siteApps: [{ id: '1', url: '/site_app/1' }],
+                siteApps: [{ id: '1', type: 'site_app', url: '/site_app/1' }],
             } as DecideResponse
 
             siteAppsInstance.afterDecideResponse(response)
 
             expect(siteAppsInstance.loaded).toBe(true)
-            expect(siteAppsInstance.enabled).toBe(false)
             expect(assignableWindow.__PosthogExtensions__?.loadSiteApp).not.toHaveBeenCalled()
         })
 
         it('clears missedInvocations when all apps are loaded', (done) => {
             posthog.config.opt_in_site_apps = true
-            siteAppsInstance.enabled = true
             siteAppsInstance.missedInvocations = [{ some: 'data' }]
             const response = {
-                siteApps: [{ id: '1', url: '/site_app/1' }],
+                siteApps: [{ id: '1', type: 'site_app', url: '/site_app/1' }],
             } as DecideResponse
 
             siteAppsInstance.afterDecideResponse(response)
@@ -288,28 +257,26 @@ describe('SiteApps', () => {
 
         it('sets assignableWindow properties for each site app', () => {
             posthog.config.opt_in_site_apps = true
-            siteAppsInstance.enabled = true
             const response = {
-                siteApps: [{ id: '1', url: '/site_app/1' }],
+                siteApps: [{ id: '8', type: 'site_app', url: '/site_app/8' }],
             } as DecideResponse
 
             siteAppsInstance.afterDecideResponse(response)
 
-            expect(assignableWindow['__$$ph_site_app_1_posthog']).toBe(posthog)
-            expect(typeof assignableWindow['__$$ph_site_app_1_missed_invocations']).toBe('function')
-            expect(typeof assignableWindow['__$$ph_site_app_1_callback']).toBe('function')
+            expect(assignableWindow['__$$ph_site_app_8_posthog']).toBe(posthog)
+            expect(typeof assignableWindow['__$$ph_site_app_8_missed_invocations']).toBe('function')
+            expect(typeof assignableWindow['__$$ph_site_app_8_callback']).toBe('function')
             expect(assignableWindow.__PosthogExtensions__?.loadSiteApp).toHaveBeenCalledWith(
                 posthog,
-                '/site_app/1',
+                '/site_app/8',
                 expect.any(Function)
             )
         })
 
         it('logs error if site apps are disabled but response contains site apps', () => {
             posthog.config.opt_in_site_apps = false
-            siteAppsInstance.enabled = false
             const response = {
-                siteApps: [{ id: '1', url: '/site_app/1' }],
+                siteApps: [{ id: '1', type: 'site_app', url: '/site_app/1' }],
             } as DecideResponse
 
             siteAppsInstance.afterDecideResponse(response)
@@ -321,7 +288,6 @@ describe('SiteApps', () => {
         })
 
         it('sets loaded to true if response.siteApps is empty', () => {
-            siteAppsInstance.enabled = true
             posthog.config.opt_in_site_apps = true
             const response = {
                 siteApps: [],
@@ -330,7 +296,22 @@ describe('SiteApps', () => {
             siteAppsInstance.afterDecideResponse(response)
 
             expect(siteAppsInstance.loaded).toBe(true)
-            expect(siteAppsInstance.enabled).toBe(false)
+        })
+
+        it('does not load site destinations if consent is not given', () => {
+            posthog.config.opt_in_site_apps = true
+            posthog.consent.isOptedOut = () => true
+            const response = {
+                siteApps: [
+                    { id: '5', type: 'site_app', url: '/site_app/5' },
+                    { id: '6', type: 'site_destination', url: '/site_app/6' },
+                ],
+            } as DecideResponse
+
+            siteAppsInstance.afterDecideResponse(response)
+
+            expect(typeof assignableWindow['__$$ph_site_app_5_callback']).toBe('function')
+            expect(typeof assignableWindow['__$$ph_site_app_6_callback']).toBe('undefined')
         })
     })
 })

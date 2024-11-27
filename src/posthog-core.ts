@@ -1828,7 +1828,7 @@ export class PostHog {
             this.autocapture?.startIfEnabled()
             this.heatmaps?.startIfEnabled()
             this.surveys.loadIfEnabled()
-            this.siteApps?.loadIfEnabled()
+            // this.siteApps?.loadIfEnabled()
             this._sync_opt_out_with_persistence()
         }
     }

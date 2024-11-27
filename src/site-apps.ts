@@ -5,7 +5,7 @@ import { logger } from './utils/logger'
 import { isArray, isUndefined } from './utils/type-utils'
 
 export class SiteApps {
-    private _decideServerResponse?: DecideResponse['siteApps']
+    _decideServerResponse?: DecideResponse['siteApps']
     missedInvocations: Record<string, any>[]
     loaded: boolean
     appsLoading: Set<string>
@@ -90,9 +90,15 @@ export class SiteApps {
                 }
                 for (const { id, type, url } of this._decideServerResponse) {
                     // if consent isn't given, skip site destinations
-                    if (this.instance.consent.isOptedOut() && type === 'site_destination') continue
+                    if (this.instance.consent.isOptedOut() && type === 'site_destination') {
+                        checkIfAllLoaded()
+                        continue
+                    }
                     // if the site app is already loaded, skip it
-                    if (!isUndefined(assignableWindow[`__$$ph_site_app_${id}_posthog`])) continue
+                    if (!isUndefined(assignableWindow[`__$$ph_site_app_${id}_posthog`])) {
+                        checkIfAllLoaded()
+                        continue
+                    }
                     this.appsLoading.add(id)
                     assignableWindow[`__$$ph_site_app_${id}_posthog`] = this.instance
                     assignableWindow[`__$$ph_site_app_${id}_missed_invocations`] = () => this.missedInvocations
