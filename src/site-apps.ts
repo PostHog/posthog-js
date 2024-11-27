@@ -5,16 +5,12 @@ import { logger } from './utils/logger'
 import { isArray } from './utils/type-utils'
 
 export class SiteApps {
-    instance: PostHog
-    enabled: boolean
+    private _decideServerResponse?: DecideResponse['siteApps']
     missedInvocations: Record<string, any>[]
     loaded: boolean
     appsLoading: Set<string>
 
-    constructor(instance: PostHog) {
-        this.instance = instance
-        // can't use if site apps are disabled, or if we're not asking /decide for site apps
-        this.enabled = !!this.instance.config.opt_in_site_apps && !this.instance.config.advanced_disable_decide
+    constructor(private readonly instance: PostHog) {
         // events captured between loading posthog-js and the site app; up to 1000 events
         this.missedInvocations = []
         // capture events until loaded
@@ -23,7 +19,9 @@ export class SiteApps {
     }
 
     eventCollector(_eventName: string, eventPayload?: CaptureResult | undefined) {
-        if (!this.enabled) {
+        // can't use if site apps are disabled, or if we're not asking /decide for site apps
+        const enabled = this.instance.config.opt_in_site_apps && !this.instance.config.advanced_disable_decide
+        if (!enabled) {
             return
         }
         if (!this.loaded && eventPayload) {
@@ -74,9 +72,15 @@ export class SiteApps {
         return globals
     }
 
-    afterDecideResponse(response?: DecideResponse): void {
-        if (isArray(response?.siteApps) && response.siteApps.length > 0) {
-            if (this.enabled && this.instance.config.opt_in_site_apps) {
+    loadIfEnabled() {
+        if (
+            this._decideServerResponse &&
+            isArray(this._decideServerResponse) &&
+            this._decideServerResponse.length > 0
+        ) {
+            // can't use if site apps are disabled, or if we're not asking /decide for site apps
+            const enabled = this.instance.config.opt_in_site_apps && !this.instance.config.advanced_disable_decide
+            if (enabled) {
                 const checkIfAllLoaded = () => {
                     // Stop collecting events once all site apps are loaded
                     if (this.appsLoading.size === 0) {
@@ -84,8 +88,11 @@ export class SiteApps {
                         this.missedInvocations = []
                     }
                 }
-                for (const { id, url } of response['siteApps']) {
-                    // TODO: if we have opted out and "type" is "site_destination", ignore it... but do include "site_app" types
+                for (const { id, type, url } of this._decideServerResponse) {
+                    if (this.instance.config.disable_site_apps_destinations && type === 'site_destination') continue
+                    // if the site app is already loaded, skip it
+                    // eslint-disable-next-line no-restricted-globals
+                    if (`__$$ph_site_app_${id}_posthog` in window) continue
                     this.appsLoading.add(id)
                     assignableWindow[`__$$ph_site_app_${id}_posthog`] = this.instance
                     assignableWindow[`__$$ph_site_app_${id}_missed_invocations`] = () => this.missedInvocations
@@ -101,7 +108,7 @@ export class SiteApps {
                         }
                     })
                 }
-            } else if (response['siteApps'].length > 0) {
+            } else if (this._decideServerResponse.length > 0) {
                 logger.error('PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.')
                 this.loaded = true
             } else {
@@ -109,9 +116,11 @@ export class SiteApps {
             }
         } else {
             this.loaded = true
-            this.enabled = false
         }
     }
 
-    // TODO: opting out of stuff should disable this
+    afterDecideResponse(response: DecideResponse): void {
+        this._decideServerResponse = response['siteApps']
+        this.loadIfEnabled()
+    }
 }

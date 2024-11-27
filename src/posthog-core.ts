@@ -145,6 +145,7 @@ export const defaultConfig = (): PostHogConfig => ({
     disable_persistence: false,
     disable_web_experiments: true, // disabled in beta.
     disable_surveys: false,
+    disable_site_apps_destinations: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
     ip: true,
@@ -308,6 +309,7 @@ export class PostHog {
         this.scrollManager = new ScrollManager(this)
         this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
+        this.siteApps = new SiteApps(this)
         this.experiments = new WebExperiments(this)
         this.exceptions = new PostHogExceptions(this)
         this.rateLimiter = new RateLimiter(this)
@@ -434,7 +436,6 @@ export class PostHog {
 
         new TracingHeaders(this).startIfEnabledOrStop()
 
-        this.siteApps = new SiteApps(this)
         this.siteApps?.init()
 
         this.sessionRecording = new SessionRecording(this)
@@ -1828,6 +1829,7 @@ export class PostHog {
             this.autocapture?.startIfEnabled()
             this.heatmaps?.startIfEnabled()
             this.surveys.loadIfEnabled()
+            this.siteApps?.loadIfEnabled()
             this._sync_opt_out_with_persistence()
         }
     }
