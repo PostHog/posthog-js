@@ -3,7 +3,6 @@ import { uuidv7 } from '../uuidv7'
 import { logger } from '../utils/logger'
 import { INITIAL_CAMPAIGN_PARAMS, INITIAL_REFERRER_INFO } from '../constants'
 import { DecideResponse } from '../types'
-import { window } from '../utils/globals'
 
 jest.mock('../utils/logger')
 
@@ -38,6 +37,7 @@ jest.mock('../utils/globals', () => {
     const orig = jest.requireActual('../utils/globals')
     const mockURLGetter = jest.fn()
     const mockReferrerGetter = jest.fn()
+    let mockedCookieVal = ''
     return {
         ...orig,
         mockURLGetter,
@@ -51,6 +51,12 @@ jest.mock('../utils/globals', () => {
             get URL() {
                 return mockURLGetter()
             },
+            get cookie() {
+                return mockedCookieVal
+            },
+            set cookie(value: string) {
+                mockedCookieVal = value
+            },
         },
         get location() {
             const url = mockURLGetter()
@@ -63,7 +69,7 @@ jest.mock('../utils/globals', () => {
 })
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURLGetter, mockReferrerGetter } = require('../utils/globals')
+const { mockURLGetter, mockReferrerGetter, document } = require('../utils/globals')
 
 describe('person processing', () => {
     const distinctId = '123'
@@ -71,6 +77,7 @@ describe('person processing', () => {
         console.error = jest.fn()
         mockReferrerGetter.mockReturnValue('https://referrer.com')
         mockURLGetter.mockReturnValue('https://example.com?utm_source=foo')
+        document.cookie = ''
     })
 
     const setup = async (
