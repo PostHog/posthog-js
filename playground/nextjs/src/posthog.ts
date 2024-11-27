@@ -28,6 +28,7 @@ export const configForConsent = (): Partial<PostHogConfig> => {
     return {
         persistence: consentGiven ? 'localStorage+cookie' : 'memory',
         disable_surveys: !consentGiven,
+        disable_site_apps_destinations: !consentGiven,
         autocapture: consentGiven,
         disable_session_recording: !consentGiven,
     }
@@ -49,6 +50,7 @@ if (typeof window !== 'undefined') {
         session_recording: {
             recordCrossOriginIframes: true,
         },
+        opt_in_site_apps: true,
         debug: true,
         disable_web_experiments: false,
         scroll_root_selector: ['#scroll_element', 'html'],

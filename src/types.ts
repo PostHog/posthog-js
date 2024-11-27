@@ -248,6 +248,7 @@ export interface PostHogConfig {
     /** @deprecated - use `disable_persistence` instead  */
     disable_cookie?: boolean
     disable_surveys: boolean
+    disable_site_apps_destinations: boolean
     disable_web_experiments: boolean
     /** If set, posthog-js will never load external scripts such as those needed for Session Replay or Surveys. */
     disable_external_dependency_loading?: boolean
@@ -523,7 +524,7 @@ export interface DecideResponse {
     editorParams?: ToolbarParams /** @deprecated, renamed to toolbarParams, still present on older API responses */
     toolbarVersion: 'toolbar' /** @deprecated, moved to toolbarParams */
     isAuthenticated: boolean
-    siteApps: { id: string; url: string }[]
+    siteApps: { id: string; type: string; url: string }[]
     heatmaps?: boolean
     defaultIdentifiedOnly?: boolean
     captureDeadClicks?: boolean
