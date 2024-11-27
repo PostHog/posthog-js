@@ -60,7 +60,7 @@ if (typeof window !== 'undefined') {
         persistence_name: `${process.env.NEXT_PUBLIC_POSTHOG_KEY}_nextjs`,
         ...configForConsent(),
     })
-
+    ;(window as any).posthog = posthog
     // Help with debugging(window as any).posthog = posthog
 }
 
