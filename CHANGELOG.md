@@ -1,6 +1,6 @@
 ## 1.190.1 - 2024-11-27
 
-
+- fix: catch errors detecting dialog state when recording (#1562)
 
 ## 1.190.0 - 2024-11-27
 
