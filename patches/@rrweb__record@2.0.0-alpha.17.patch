@@ -1,5 +1,5 @@
 diff --git a/dist/record.js b/dist/record.js
-index 46ec389fefb698243008b39db65470dbdf0a3857..891e1cf6439630d19e9b745ff428db438943a0b2 100644
+index 46ec389fefb698243008b39db65470dbdf0a3857..bfebdc6a3887a3ddae46b21d21896092d2963fe9 100644
 --- a/dist/record.js
 +++ b/dist/record.js
 @@ -26,6 +26,14 @@ const testableMethods$1 = {
@@ -54,7 +54,24 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..891e1cf6439630d19e9b745ff428db43
      let cssText = null;
      if (stylesheet) {
        cssText = stringifyStylesheet(stylesheet);
-@@ -1116,7300 +1132,227 @@ function serializeNodeWithId(n2, options) {
+@@ -855,7 +871,15 @@ function serializeElementNode(n2, options) {
+     }
+   }
+   if (tagName === "dialog" && n2.open) {
+-    attributes.rr_open_mode = n2.matches("dialog:modal") ? "modal" : "non-modal";
++    try {
++      attributes.rr_open_mode = n2.matches("dialog:modal") ? "modal" : "non-modal";
++    } catch {
++      // likely this is safari not able to deal with the `:modal` selector
++      // we can't detect whether the dialog is modal or non-modal open, so have to guess
++      // hopefully this is only safari 15.4 and 15.5
++      attributes.rr_open_mode = "modal"
++      attributes.ph_rr_could_not_detect_modal = true
++    }
+   }
+   if (tagName === "canvas" && recordCanvas) {
+     if (n2.__context === "2d") {
+@@ -1116,7300 +1140,227 @@ function serializeNodeWithId(n2, options) {
        keepIframeSrcFn
      };
      if (serializedNode.type === NodeType$2.Element && serializedNode.tagName === "textarea" && serializedNode.attributes.value !== void 0) ;
@@ -7564,7 +7581,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..891e1cf6439630d19e9b745ff428db43
  class BaseRRNode {
    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
    constructor(..._args) {
-@@ -8507,7 +1450,7 @@ function getUntaintedPrototype(key) {
+@@ -8507,7 +1458,7 @@ function getUntaintedPrototype(key) {
        }
      )
    );
@@ -7573,7 +7590,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..891e1cf6439630d19e9b745ff428db43
      untaintedBasePrototype[key] = defaultObj.prototype;
      return defaultObj.prototype;
    }
-@@ -11382,11 +4325,19 @@ class CanvasManager {
+@@ -11382,11 +4333,19 @@ class CanvasManager {
      let rafId;
      const getCanvas = () => {
        const matchedCanvas = [];
@@ -7598,7 +7615,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..891e1cf6439630d19e9b745ff428db43
        return matchedCanvas;
      };
      const takeCanvasSnapshots = (timestamp) => {
-@@ -11407,13 +4358,20 @@ class CanvasManager {
+@@ -11407,13 +4366,20 @@ class CanvasManager {
              context.clear(context.COLOR_BUFFER_BIT);
            }
          }
