@@ -523,7 +523,7 @@ export interface DecideResponse {
     editorParams?: ToolbarParams /** @deprecated, renamed to toolbarParams, still present on older API responses */
     toolbarVersion: 'toolbar' /** @deprecated, moved to toolbarParams */
     isAuthenticated: boolean
-    siteApps: { id: number; url: string }[]
+    siteApps: { id: string; url: string }[]
     heatmaps?: boolean
     defaultIdentifiedOnly?: boolean
     captureDeadClicks?: boolean
