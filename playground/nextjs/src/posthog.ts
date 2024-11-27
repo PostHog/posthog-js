@@ -28,7 +28,6 @@ export const configForConsent = (): Partial<PostHogConfig> => {
     return {
         persistence: consentGiven ? 'localStorage+cookie' : 'memory',
         disable_surveys: !consentGiven,
-        disable_site_apps_destinations: !consentGiven,
         autocapture: consentGiven,
         disable_session_recording: !consentGiven,
     }
@@ -37,8 +36,10 @@ export const configForConsent = (): Partial<PostHogConfig> => {
 export const updatePostHogConsent = (consentGiven: boolean) => {
     if (consentGiven) {
         localStorage.setItem('cookie_consent', 'true')
+        posthog.opt_in_capturing()
     } else {
         localStorage.removeItem('cookie_consent')
+        posthog.opt_out_capturing()
     }
 
     posthog.set_config(configForConsent())

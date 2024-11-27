@@ -89,7 +89,7 @@ export class SiteApps {
                     }
                 }
                 for (const { id, type, url } of this._decideServerResponse) {
-                    if (this.instance.config.disable_site_apps_destinations && type === 'site_destination') continue
+                    if (this.instance.consent.isOptedOut() && type === 'site_destination') continue
                     // if the site app is already loaded, skip it
                     // eslint-disable-next-line no-restricted-globals
                     if (`__$$ph_site_app_${id}_posthog` in window) continue
