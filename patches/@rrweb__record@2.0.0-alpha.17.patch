@@ -1,23 +1,174 @@
+diff --git a/.idea/.gitignore b/.idea/.gitignore
+new file mode 100644
+index 0000000000000000000000000000000000000000..13566b81b018ad684f3a35fee301741b2734c8f4
+--- /dev/null
++++ b/.idea/.gitignore
+@@ -0,0 +1,8 @@
++# Default ignored files
++/shelf/
++/workspace.xml
++# Editor-based HTTP Client requests
++/httpRequests/
++# Datasource local storage ignored files
++/dataSources/
++/dataSources.local.xml
+diff --git a/.idea/inspectionProfiles/Project_Default.xml b/.idea/inspectionProfiles/Project_Default.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..78cbde0e501b1f4ccab65d545b3f80b82be93fbd
+--- /dev/null
++++ b/.idea/inspectionProfiles/Project_Default.xml
+@@ -0,0 +1,8 @@
++<component name="InspectionProjectProfileManager">
++  <profile version="1.0">
++    <option name="myName" value="Project Default" />
++    <inspection_tool class="Eslint" enabled="true" level="WARNING" enabled_by_default="true" />
++    <inspection_tool class="PyUnresolvedReferencesInspection" enabled="true" level="ERROR" enabled_by_default="true" editorAttributes="ERRORS_ATTRIBUTES" />
++    <inspection_tool class="Stylelint" enabled="true" level="ERROR" enabled_by_default="true" />
++  </profile>
++</component>
+\ No newline at end of file
+diff --git a/.idea/inspectionProfiles/profiles_settings.xml b/.idea/inspectionProfiles/profiles_settings.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..105ce2da2d6447d11dfe32bfb846c3d5b199fc99
+--- /dev/null
++++ b/.idea/inspectionProfiles/profiles_settings.xml
+@@ -0,0 +1,6 @@
++<component name="InspectionProjectProfileManager">
++  <settings>
++    <option name="USE_PROJECT_PROFILE" value="false" />
++    <version value="1.0" />
++  </settings>
++</component>
+\ No newline at end of file
+diff --git a/.idea/misc.xml b/.idea/misc.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..a0aa130ec69917e0c8eddc5c7ca71f5038a52a76
+--- /dev/null
++++ b/.idea/misc.xml
+@@ -0,0 +1,4 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project version="4">
++  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.11 (billing)" project-jdk-type="Python SDK" />
++</project>
+\ No newline at end of file
+diff --git a/.idea/modules.xml b/.idea/modules.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..2c3a9afdb42fc222bbdd7f440ef2d54e9b5d8dd7
+--- /dev/null
++++ b/.idea/modules.xml
+@@ -0,0 +1,8 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project version="4">
++  <component name="ProjectModuleManager">
++    <modules>
++      <module fileurl="file://$PROJECT_DIR$/.idea/rrweb-patches.iml" filepath="$PROJECT_DIR$/.idea/rrweb-patches.iml" />
++    </modules>
++  </component>
++</project>
+\ No newline at end of file
+diff --git a/.idea/rrweb-patches.iml b/.idea/rrweb-patches.iml
+new file mode 100644
+index 0000000000000000000000000000000000000000..8e0aff82ebe1aeea29e71909288b6d60f5eb0eed
+--- /dev/null
++++ b/.idea/rrweb-patches.iml
+@@ -0,0 +1,8 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<module type="PYTHON_MODULE" version="4">
++  <component name="NewModuleRootManager">
++    <content url="file://$MODULE_DIR$" />
++    <orderEntry type="jdk" jdkName="Python 3.11 (billing)" jdkType="Python SDK" />
++    <orderEntry type="sourceFolder" forTests="false" />
++  </component>
++</module>
+\ No newline at end of file
+diff --git a/.idea/workspace.xml b/.idea/workspace.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..806ae68118716096837f934443b31ee7fbbbd98f
+--- /dev/null
++++ b/.idea/workspace.xml
+@@ -0,0 +1,56 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project version="4">
++  <component name="AutoImportSettings">
++    <option name="autoReloadType" value="SELECTIVE" />
++  </component>
++  <component name="ChangeListManager">
++    <list default="true" id="adbd2a9f-6bc7-41fa-9cee-2b0ef3d366a2" name="Changes" comment="" />
++    <option name="SHOW_DIALOG" value="false" />
++    <option name="HIGHLIGHT_CONFLICTS" value="true" />
++    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
++    <option name="LAST_RESOLUTION" value="IGNORE" />
++  </component>
++  <component name="ProjectColorInfo"><![CDATA[{
++  "associatedIndex": 5
++}]]></component>
++  <component name="ProjectId" id="2pQlq2HpC2K2kKaLFf4pit1pU51" />
++  <component name="ProjectViewState">
++    <option name="hideEmptyMiddlePackages" value="true" />
++    <option name="showLibraryContents" value="true" />
++  </component>
++  <component name="PropertiesComponent"><![CDATA[{
++  "keyToString": {
++    "RunOnceActivity.ShowReadmeOnStart": "true",
++    "last_opened_file_path": "/Users/paul/github/rrweb-patches",
++    "node.js.detected.package.eslint": "true",
++    "node.js.detected.package.tslint": "true",
++    "node.js.selected.package.eslint": "(autodetect)",
++    "node.js.selected.package.tslint": "(autodetect)",
++    "nodejs_package_manager_path": "npm",
++    "vue.rearranger.settings.migration": "true"
++  }
++}]]></component>
++  <component name="SharedIndexes">
++    <attachedChunks>
++      <set>
++        <option value="bundled-js-predefined-d6986cc7102b-e768b9ed790e-JavaScript-PY-243.21565.199" />
++        <option value="bundled-python-sdk-cab1f2013843-4ae2d6a61b08-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-243.21565.199" />
++      </set>
++    </attachedChunks>
++  </component>
++  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
++  <component name="TaskManager">
++    <task active="true" id="Default" summary="Default task">
++      <changelist id="adbd2a9f-6bc7-41fa-9cee-2b0ef3d366a2" name="Changes" comment="" />
++      <created>1732706367464</created>
++      <option name="number" value="Default" />
++      <option name="presentableId" value="Default" />
++      <updated>1732706367464</updated>
++      <workItem from="1732706369011" duration="1354000" />
++    </task>
++    <servers />
++  </component>
++  <component name="TypeScriptGeneratedFilesManager">
++    <option name="version" value="3" />
++  </component>
++</project>
+\ No newline at end of file
 diff --git a/dist/record.js b/dist/record.js
-index 46ec389fefb698243008b39db65470dbdf0a3857..bfebdc6a3887a3ddae46b21d21896092d2963fe9 100644
+index 46ec389fefb698243008b39db65470dbdf0a3857..5a314ad204b3b0a38b9fad9bf984b81eb239f16d 100644
 --- a/dist/record.js
 +++ b/dist/record.js
-@@ -26,6 +26,14 @@ const testableMethods$1 = {
+@@ -26,6 +26,19 @@ const testableMethods$1 = {
    Element: [],
    MutationObserver: ["constructor"]
  };
 +const isFunction = (x) => typeof x === 'function';
 +const isAngularZonePatchedFunction = (x) => {
-+  if (!isFunction(x)) {
++  try {
++    if (!isFunction(x)) {
 +      return false;
++    }
++    const prototypeKeys = Object.getOwnPropertyNames(x.prototype || {});
++    return prototypeKeys.some((key) => key.indexOf('__zone'));
++  } catch {
++    // we have seen some issues with Safari since releasing this check
++    return false
 +  }
-+  const prototypeKeys = Object.getOwnPropertyNames(x.prototype || {});
-+  return prototypeKeys.some((key) => key.indexOf('__zone'));
 +}
  const untaintedBasePrototype$1 = {};
  function getUntaintedPrototype$1(key) {
    if (untaintedBasePrototype$1[key])
-@@ -54,7 +62,7 @@ function getUntaintedPrototype$1(key) {
+@@ -54,7 +67,7 @@ function getUntaintedPrototype$1(key) {
        }
      )
    );
@@ -26,7 +177,20 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..bfebdc6a3887a3ddae46b21d21896092
      untaintedBasePrototype$1[key] = defaultObj.prototype;
      return defaultObj.prototype;
    }
-@@ -246,6 +254,9 @@ function isCSSImportRule(rule2) {
+@@ -65,10 +78,10 @@ function getUntaintedPrototype$1(key) {
+     if (!win) return defaultObj.prototype;
+     const untaintedObject = win[key].prototype;
+     document.body.removeChild(iframeEl);
+-    if (!untaintedObject) return defaultPrototype;
++    if (!untaintedObject) return defaultObj.prototype;
+     return untaintedBasePrototype$1[key] = untaintedObject;
+   } catch {
+-    return defaultPrototype;
++    return defaultObj.prototype;
+   }
+ }
+ const untaintedAccessorCache$1 = {};
+@@ -246,6 +259,9 @@ function isCSSImportRule(rule2) {
  function isCSSStyleRule(rule2) {
    return "selectorText" in rule2;
  }
@@ -36,7 +200,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..bfebdc6a3887a3ddae46b21d21896092
  class Mirror {
    constructor() {
      __publicField$1(this, "idNodeMap", /* @__PURE__ */ new Map());
-@@ -809,9 +820,14 @@ function serializeElementNode(n2, options) {
+@@ -809,9 +825,14 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "link" && inlineStylesheet) {
@@ -54,7 +218,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..bfebdc6a3887a3ddae46b21d21896092
      let cssText = null;
      if (stylesheet) {
        cssText = stringifyStylesheet(stylesheet);
-@@ -855,7 +871,15 @@ function serializeElementNode(n2, options) {
+@@ -855,7 +876,15 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "dialog" && n2.open) {
@@ -71,7 +235,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..bfebdc6a3887a3ddae46b21d21896092
    }
    if (tagName === "canvas" && recordCanvas) {
      if (n2.__context === "2d") {
-@@ -1116,7300 +1140,227 @@ function serializeNodeWithId(n2, options) {
+@@ -1116,7300 +1145,227 @@ function serializeNodeWithId(n2, options) {
        keepIframeSrcFn
      };
      if (serializedNode.type === NodeType$2.Element && serializedNode.tagName === "textarea" && serializedNode.attributes.value !== void 0) ;
@@ -7581,7 +7745,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..bfebdc6a3887a3ddae46b21d21896092
  class BaseRRNode {
    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
    constructor(..._args) {
-@@ -8507,7 +1458,7 @@ function getUntaintedPrototype(key) {
+@@ -8507,7 +1463,7 @@ function getUntaintedPrototype(key) {
        }
      )
    );
@@ -7590,7 +7754,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..bfebdc6a3887a3ddae46b21d21896092
      untaintedBasePrototype[key] = defaultObj.prototype;
      return defaultObj.prototype;
    }
-@@ -11382,11 +4333,19 @@ class CanvasManager {
+@@ -11382,11 +4338,19 @@ class CanvasManager {
      let rafId;
      const getCanvas = () => {
        const matchedCanvas = [];
@@ -7615,7 +7779,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..bfebdc6a3887a3ddae46b21d21896092
        return matchedCanvas;
      };
      const takeCanvasSnapshots = (timestamp) => {
-@@ -11407,13 +4366,20 @@ class CanvasManager {
+@@ -11407,13 +4371,20 @@ class CanvasManager {
              context.clear(context.COLOR_BUFFER_BIT);
            }
          }
