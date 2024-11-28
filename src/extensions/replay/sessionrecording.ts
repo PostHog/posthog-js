@@ -509,7 +509,7 @@ export class SessionRecording {
                             const href = event?.properties.$current_url
                                 ? this._maskUrl(event?.properties.$current_url)
                                 : ''
-                            if (!href || this.status !== 'active') {
+                            if (!href) {
                                 return
                             }
                             this._tryAddCustomEvent('$pageview', { href })
