@@ -344,4 +344,35 @@ describe(`event-utils`, () => {
             }
         })
     })
+
+    describe('timezones', () => {
+        it('should compute timezone', () => {
+            const timezone = Info.timezone()
+            expect(typeof timezone).toBe('string')
+        })
+
+        it('should compute timezone offset as a number', () => {
+            const offset = Info.timezoneOffset()
+            expect(typeof offset).toBe('number')
+        })
+    })
+
+    describe('browser language', () => {
+        let languageGetter: jest.SpyInstance
+
+        beforeEach(() => {
+            languageGetter = jest.spyOn(window.navigator, 'language', 'get')
+            languageGetter.mockReturnValue('pt-BR')
+        })
+
+        it('should compute browser language', () => {
+            const language = Info.browserLanguage()
+            expect(language).toBe('pt-BR')
+        })
+
+        it('should compute browser language prefix', () => {
+            const languagePrefix = Info.browserLanguagePrefix()
+            expect(languagePrefix).toBe('pt')
+        })
+    })
 })
