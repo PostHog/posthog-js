@@ -5,7 +5,7 @@ import { logger } from './utils/logger'
 import { isArray, isUndefined } from './utils/type-utils'
 
 export class SiteApps {
-    _decideServerResponse?: DecideResponse['siteApps']
+    _decideServerSiteAppsResponse?: DecideResponse['siteApps']
     missedInvocations: Record<string, any>[]
     loaded: boolean
     appsLoading: Set<string>
@@ -74,9 +74,9 @@ export class SiteApps {
 
     loadIfEnabled() {
         if (
-            this._decideServerResponse &&
-            isArray(this._decideServerResponse) &&
-            this._decideServerResponse.length > 0
+            this._decideServerSiteAppsResponse &&
+            isArray(this._decideServerSiteAppsResponse) &&
+            this._decideServerSiteAppsResponse.length > 0
         ) {
             // can't use if site apps are disabled, or if we're not asking /decide for site apps
             const enabled = this.instance.config.opt_in_site_apps && !this.instance.config.advanced_disable_decide
@@ -88,7 +88,7 @@ export class SiteApps {
                         this.missedInvocations = []
                     }
                 }
-                for (const { id, type, url } of this._decideServerResponse) {
+                for (const { id, type, url } of this._decideServerSiteAppsResponse) {
                     // if consent isn't given, skip site destinations
                     if (this.instance.consent.isOptedOut() && type === 'site_destination') {
                         checkIfAllLoaded()
@@ -114,7 +114,7 @@ export class SiteApps {
                         }
                     })
                 }
-            } else if (this._decideServerResponse.length > 0) {
+            } else if (this._decideServerSiteAppsResponse.length > 0) {
                 logger.error('PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.')
                 this.loaded = true
             } else {
@@ -126,7 +126,7 @@ export class SiteApps {
     }
 
     afterDecideResponse(response: DecideResponse): void {
-        this._decideServerResponse = response['siteApps']
+        this._decideServerSiteAppsResponse = response['siteApps']
         this.loadIfEnabled()
     }
 }
