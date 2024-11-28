@@ -505,7 +505,7 @@ export class SessionRecording {
                     // If anything could go wrong here it has the potential to block the main loop,
                     // so we catch all errors.
                     try {
-                        if (event === '$pageview') {
+                        if (event.event === '$pageview') {
                             const href = event?.properties.$current_url
                                 ? this._maskUrl(event?.properties.$current_url)
                                 : ''
