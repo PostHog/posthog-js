@@ -20,6 +20,8 @@ export type AssignableWindow = Window &
     typeof globalThis &
     Record<string, any> & {
         __PosthogExtensions__?: PostHogExtensions
+        _POSTHOG_CONFIG?: Record<string, any> // TODO: Better typing
+        _POSTHOG_SITE_APPS?: { token: string; load: (posthog: PostHog) => void }[]
     }
 
 /**

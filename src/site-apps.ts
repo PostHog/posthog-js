@@ -75,6 +75,18 @@ export class SiteApps {
     }
 
     afterDecideResponse(response?: DecideResponse): void {
+        if (assignableWindow._POSTHOG_SITE_APPS) {
+            // Loaded via new config so we have the apps preloaded
+            if (this.instance.config.opt_in_site_apps) {
+                assignableWindow._POSTHOG_SITE_APPS.forEach((app) => {
+                    app.load(this.instance)
+                })
+            }
+            this.loaded = true
+
+            return
+        }
+
         if (isArray(response?.siteApps) && response.siteApps.length > 0) {
             if (this.enabled && this.instance.config.opt_in_site_apps) {
                 const checkIfAllLoaded = () => {
