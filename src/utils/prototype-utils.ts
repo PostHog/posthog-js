@@ -5,7 +5,7 @@
  */
 
 import { AssignableWindow } from './globals'
-import { isAngularZonePatchedFunction, isFunction, isNativeFunction } from './type-utils'
+import { isAngularZonePresent, isFunction, isNativeFunction } from './type-utils'
 import { logger } from './logger'
 
 interface NativeImplementationsCache {
@@ -25,7 +25,7 @@ export function getNativeImplementation<T extends keyof NativeImplementationsCac
 
     let impl = assignableWindow[name] as NativeImplementationsCache[T]
 
-    if (isNativeFunction(impl) && !isAngularZonePatchedFunction(impl)) {
+    if (isNativeFunction(impl) && !isAngularZonePresent()) {
         return (cachedImplementations[name] = impl.bind(assignableWindow) as NativeImplementationsCache[T])
     }
 
