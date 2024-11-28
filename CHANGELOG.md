@@ -1,3 +1,7 @@
+## 1.193.1 - 2024-11-28
+
+- fix: zone detection (#1570)
+
 ## 1.193.0 - 2024-11-28
 
 - feat: allow decide to provide script name for recorder (#1509)
