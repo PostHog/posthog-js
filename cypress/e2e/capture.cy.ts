@@ -160,6 +160,31 @@ describe('Event capture', () => {
         cy.phCaptures().should('include', '$feature_flag_called')
     })
 
+    it('captures $feature_flag_called with bootstrapped value properties', () => {
+        start({
+            options: {
+                bootstrap: {
+                    featureFlags: {
+                        'some-feature': 'some-value',
+                    },
+                    featureFlagPayloads: {
+                        'some-feature': 'some-payload',
+                    },
+                },
+            },
+        })
+
+        cy.get('[data-cy-feature-flag-button]').click()
+
+        cy.phCaptures({ full: true }).then((captures) => {
+            const flagCallEvents = captures.filter((capture) => capture.event === '$feature_flag_called')
+            expect(flagCallEvents.length).to.eq(1)
+            const flagCallEvent = flagCallEvents[0]
+            expect(flagCallEvent.properties.$feature_flag_bootstrapped_response).to.equal('some-value')
+            expect(flagCallEvent.properties.$feature_flag_bootstrapped_payload).to.equal('some-payload')
+        })
+    })
+
     it('captures rage clicks', () => {
         start({ options: { rageclick: true } })
 
