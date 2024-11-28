@@ -1,13 +1,64 @@
-import type { MaskInputOptions, SlimDOMOptions } from 'rrweb-snapshot'
 import { PostHog } from './posthog-core'
 import type { SegmentAnalytics } from './extensions/segment-integration'
+import { recordOptions } from './extensions/replay/sessionrecording-utils'
 
 export type Property = any
 export type Properties = Record<string, Property>
 
+export const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
+
+export const knownUnsafeEditableEvent = [
+    '$snapshot',
+    '$pageview',
+    '$pageleave',
+    '$set',
+    'survey dismissed',
+    'survey sent',
+    'survey shown',
+    '$identify',
+    '$groupidentify',
+    '$create_alias',
+    '$$client_ingestion_warning',
+    '$web_experiment_applied',
+    '$feature_enrollment_update',
+    '$feature_flag_called',
+] as const
+
+/**
+ * These events can be processed by the `beforeCapture` function
+ * but can cause unexpected confusion in data.
+ *
+ * Some features of PostHog rely on receiving 100% of these events
+ */
+export type KnownUnsafeEditableEvent = typeof knownUnsafeEditableEvent[number]
+
+/**
+ * These are known events PostHog events that can be processed by the `beforeCapture` function
+ * That means PostHog functionality does not rely on receiving 100% of these for calculations
+ * So, it is safe to sample them to reduce the volume of events sent to PostHog
+ */
+export type KnownEventName =
+    | '$heatmaps_data'
+    | '$opt_in'
+    | '$exception'
+    | '$$heatmap'
+    | '$web_vitals'
+    | '$dead_click'
+    | '$autocapture'
+    | typeof COPY_AUTOCAPTURE_EVENT
+    | '$rageclick'
+
+export type EventName =
+    | KnownUnsafeEditableEvent
+    | KnownEventName
+    // magic value so that the type of EventName is a set of known strings or any other string
+    // which means you get autocomplete for known strings
+    // but no type complaints when you add an arbitrary string
+    | (string & {})
+
 export interface CaptureResult {
     uuid: string
-    event: string
+    event: EventName
     properties: Properties
     $set?: Properties
     $set_once?: Properties
@@ -122,6 +173,20 @@ export interface PerformanceCaptureConfig {
     web_vitals_delayed_flush_ms?: number
 }
 
+export interface DeadClickCandidate {
+    node: Element
+    originalEvent: MouseEvent
+    timestamp: number
+    // time between click and the most recent scroll
+    scrollDelayMs?: number
+    // time between click and the most recent mutation
+    mutationDelayMs?: number
+    // time between click and the most recent selection changed event
+    selectionChangedDelayMs?: number
+    // if neither scroll nor mutation seen before threshold passed
+    absoluteDelayMs?: number
+}
+
 export type DeadClicksAutoCaptureConfig = {
     // by default if a click is followed by a sroll within 100ms it is not a dead click
     scroll_threshold_ms?: number
@@ -129,6 +194,15 @@ export type DeadClicksAutoCaptureConfig = {
     selection_change_threshold_ms?: number
     // by default if a click is followed by a mutation within 2500ms it is not a dead click
     mutation_threshold_ms?: number
+    /**
+     * Allows setting behavior for when a dead click is captured.
+     * For e.g. to support capture to heatmaps
+     *
+     * If not provided the default behavior is to auto-capture dead click events
+     *
+     * Only intended to be provided by the SDK
+     */
+    __onCapture?: ((click: DeadClickCandidate, properties: Properties) => void) | undefined
 } & Pick<AutocaptureConfig, 'element_attribute_ignorelist'>
 
 export interface HeatmapConfig {
@@ -138,6 +212,8 @@ export interface HeatmapConfig {
      * */
     flush_interval_milliseconds: number
 }
+
+export type BeforeSendFn = (cr: CaptureResult | null) => CaptureResult | null
 
 export interface PostHogConfig {
     api_host: string
@@ -214,7 +290,18 @@ export interface PostHogConfig {
     feature_flag_request_timeout_ms: number
     get_device_id: (uuid: string) => string
     name: string
+    /**
+     * this is a read-only function that can be used to react to event capture
+     * @deprecated - use `before_send` instead - NB before_send is not read only
+     */
     _onCapture: (eventName: string, eventData: CaptureResult) => void
+    /**
+     * This function or array of functions - if provided - are called immediately before sending data to the server.
+     * It allows you to edit data before it is sent, or choose not to send it all.
+     * if provided as an array the functions are called in the order they are provided
+     * any one function returning null means the event will not be sent
+     */
+    before_send?: BeforeSendFn | BeforeSendFn[]
     capture_performance?: boolean | PerformanceCaptureConfig
     // Should only be used for testing. Could negatively impact performance.
     disable_compression: boolean
@@ -278,9 +365,9 @@ export interface SessionRecordingOptions {
     maskTextSelector?: string | null
     maskTextFn?: ((text: string, element: HTMLElement | null) => string) | null
     maskAllInputs?: boolean
-    maskInputOptions?: MaskInputOptions
+    maskInputOptions?: recordOptions['maskInputOptions']
     maskInputFn?: ((text: string, element?: HTMLElement) => string) | null
-    slimDOMOptions?: SlimDOMOptions | 'all' | true
+    slimDOMOptions?: recordOptions['slimDOMOptions']
     collectFonts?: boolean
     inlineStylesheet?: boolean
     recordCrossOriginIframes?: boolean
@@ -429,13 +516,15 @@ export interface DecideResponse {
         networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
         urlTriggers?: SessionRecordingUrlTrigger[]
         scriptConfig?: { script?: string | undefined }
+        urlBlocklist?: SessionRecordingUrlTrigger[]
+        eventTriggers?: string[]
     }
     surveys?: boolean
     toolbarParams: ToolbarParams
     editorParams?: ToolbarParams /** @deprecated, renamed to toolbarParams, still present on older API responses */
     toolbarVersion: 'toolbar' /** @deprecated, moved to toolbarParams */
     isAuthenticated: boolean
-    siteApps: { id: number; url: string }[]
+    siteApps: { id: string; url: string }[]
     heatmaps?: boolean
     defaultIdentifiedOnly?: boolean
     captureDeadClicks?: boolean

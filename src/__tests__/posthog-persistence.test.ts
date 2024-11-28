@@ -1,8 +1,11 @@
 /// <reference lib="dom" />
 import { PostHogPersistence } from '../posthog-persistence'
-import { SESSION_ID, USER_STATE } from '../constants'
+import { INITIAL_PERSON_INFO, SESSION_ID, USER_STATE } from '../constants'
 import { PostHogConfig } from '../types'
 import Mock = jest.Mock
+import { PostHog } from '../posthog-core'
+import { window } from '../utils/globals'
+import { uuidv7 } from '../uuidv7'
 
 let referrer = '' // No referrer by default
 Object.defineProperty(document, 'referrer', { get: () => referrer })
@@ -117,13 +120,13 @@ describe('persistence', () => {
         it('should migrate data from cookies to localStorage', () => {
             const lib = new PostHogPersistence(makePostHogConfig('bla', 'cookie'))
             lib.register_once({ distinct_id: 'testy', test_prop: 'test_value' }, undefined, undefined)
-            expect(document.cookie).toEqual(
+            expect(document.cookie).toContain(
                 'ph__posthog=%7B%22distinct_id%22%3A%22testy%22%2C%22test_prop%22%3A%22test_value%22%7D'
             )
             const lib2 = new PostHogPersistence(makePostHogConfig('bla', 'localStorage+cookie'))
-            expect(document.cookie).toEqual('ph__posthog=%7B%22distinct_id%22%3A%22testy%22%7D')
+            expect(document.cookie).toContain('ph__posthog=%7B%22distinct_id%22%3A%22testy%22%7D')
             lib2.register({ test_prop2: 'test_val', distinct_id: 'test2' })
-            expect(document.cookie).toEqual('ph__posthog=%7B%22distinct_id%22%3A%22test2%22%7D')
+            expect(document.cookie).toContain('ph__posthog=%7B%22distinct_id%22%3A%22test2%22%7D')
             expect(lib2.props).toEqual({ distinct_id: 'test2', test_prop: 'test_value', test_prop2: 'test_val' })
             lib2.remove()
             expect(localStorage.getItem('ph__posthog')).toEqual(null)
@@ -157,6 +160,15 @@ describe('persistence', () => {
                 })}`
             )
 
+            lib.register({ [INITIAL_PERSON_INFO]: { u: 'https://www.example.com', r: 'https://www.referrer.com' } })
+            expect(document.cookie).toContain(
+                `ph__posthog=${encode({
+                    distinct_id: 'test',
+                    $sesid: [1000, 'sid', 2000],
+                    $initial_person_info: { u: 'https://www.example.com', r: 'https://www.referrer.com' },
+                })}`
+            )
+
             // Clear localstorage to simulate being on a different domain
             localStorage.clear()
 
@@ -165,6 +177,7 @@ describe('persistence', () => {
             expect(newLib.props).toEqual({
                 distinct_id: 'test',
                 $sesid: [1000, 'sid', 2000],
+                $initial_person_info: { u: 'https://www.example.com', r: 'https://www.referrer.com' },
             })
         })
 
@@ -201,6 +214,47 @@ describe('persistence', () => {
             expect(document.cookie).toEqual('')
             expect(localStorage.getItem('ph__posthog')).toEqual(JSON.stringify(expectedProps()))
             expect(lib.properties()).toEqual(expectedProps())
+        })
+    })
+
+    describe('posthog', () => {
+        it('should not store anything in localstorage, or cookies when in sessionStorage mode', () => {
+            const token = uuidv7()
+            const persistenceKey = `ph_${token}_posthog`
+            const posthog = new PostHog().init(token, {
+                persistence: 'sessionStorage',
+            })
+            posthog.register({ distinct_id: 'test', test_prop: 'test_val' })
+            posthog.capture('test_event')
+            expect(window.localStorage.getItem(persistenceKey)).toEqual(null)
+            expect(document.cookie).toEqual('')
+            expect(window.sessionStorage.getItem(persistenceKey)).toBeTruthy()
+        })
+
+        it('should not store anything in localstorage, sessionstorage, or cookies when in memory mode', () => {
+            const token = uuidv7()
+            const persistenceKey = `ph_${token}_posthog`
+            const posthog = new PostHog().init(token, {
+                persistence: 'memory',
+            })
+            posthog.register({ distinct_id: 'test', test_prop: 'test_val' })
+            posthog.capture('test_event')
+            expect(window.localStorage.getItem(persistenceKey)).toEqual(null)
+            expect(window.sessionStorage.getItem(persistenceKey)).toEqual(null)
+            expect(document.cookie).toEqual('')
+        })
+
+        it('should not store anything in cookies when in localstorage mode', () => {
+            const token = uuidv7()
+            const persistenceKey = `ph_${token}_posthog`
+            const posthog = new PostHog().init(token, {
+                persistence: 'localStorage',
+            })
+            posthog.register({ distinct_id: 'test', test_prop: 'test_val' })
+            posthog.capture('test_event')
+            expect(window.localStorage.getItem(persistenceKey)).toBeTruthy()
+            expect(window.sessionStorage.getItem(persistenceKey)).toBeTruthy()
+            expect(document.cookie).toEqual('')
         })
     })
 })

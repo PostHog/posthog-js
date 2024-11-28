@@ -6,7 +6,6 @@ import {
 } from '../../../extensions/replay/sessionrecording-utils'
 import { jest } from '@jest/globals'
 import { eventWithTime, mutationData } from '@rrweb/types'
-import { serializedNodeWithId } from 'rrweb-snapshot'
 jest.useFakeTimers()
 
 const makeEvent = (mutations: {
@@ -72,7 +71,8 @@ describe('MutationRateLimiter', () => {
 
     test('returns event if _any_ adds are left', () => {
         const event = makeEvent({
-            adds: [{ parentId: 0, nextId: 0, node: {} as unknown as serializedNodeWithId }],
+            // TODO: add serializedNodeWithId type once https://github.com/rrweb-io/rrweb/pull/1593 merges
+            adds: [{ parentId: 0, nextId: 0, node: {} as unknown as any }],
             attributes: [{ id: 1, attributes: { a: 'ttribute' } }],
         })
 
@@ -82,7 +82,8 @@ describe('MutationRateLimiter', () => {
 
         expect(result).toStrictEqual(
             makeEvent({
-                adds: [{ parentId: 0, nextId: 0, node: {} as unknown as serializedNodeWithId }],
+                // TODO: add serializedNodeWithId type once https://github.com/rrweb-io/rrweb/pull/1593 merges
+                adds: [{ parentId: 0, nextId: 0, node: {} as unknown as any }],
                 attributes: [],
             })
         )

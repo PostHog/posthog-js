@@ -14,6 +14,7 @@
  * @param {string} [organization] Optional: The Sentry organization, used to send a direct link from PostHog to Sentry
  * @param {Number} [projectId] Optional: The Sentry project id, used to send a direct link from PostHog to Sentry
  * @param {string} [prefix] Optional: Url of a self-hosted sentry instance (default: https://sentry.io/organizations/)
+ * @param {SeverityLevel[] | '*'} [severityAllowList] Optional: send events matching the provided levels. Use '*' to send all events (default: ['error'])
  */
 
 import { PostHog } from '../posthog-core'
@@ -34,17 +35,18 @@ import { SeverityLevel } from '../types'
 // Uncomment the above and comment the below to get type checking for development
 
 type _SentryEvent = any
+type _SentryException = any
 type _SentryEventProcessor = any
 type _SentryHub = any
-
-interface _SentryIntegrationClass {
-    name: string
-    setupOnce(addGlobalEventProcessor: (callback: _SentryEventProcessor) => void, getCurrentHub: () => _SentryHub): void
-}
 
 interface _SentryIntegration {
     name: string
     processEvent(event: _SentryEvent): _SentryEvent
+}
+
+interface _SentryIntegrationClass {
+    name: string
+    setupOnce(addGlobalEventProcessor: (callback: _SentryEventProcessor) => void, getCurrentHub: () => _SentryHub): void
 }
 
 interface SentryExceptionProperties {
@@ -60,13 +62,6 @@ export type SentryIntegrationOptions = {
     organization?: string
     projectId?: number
     prefix?: string
-    /**
-     * By default, only errors are sent to PostHog. You can set this to '*' to send all events.
-     * Or to an error of SeverityLevel to only send events matching the provided levels.
-     * e.g. ['error', 'fatal'] to send only errors and fatals
-     * e.g. ['error'] to send only errors -- the default when omitted
-     * e.g. '*' to send all events
-     */
     severityAllowList?: SeverityLevel[] | '*'
 }
 
@@ -90,7 +85,13 @@ export function createEventProcessor(
             event.tags['PostHog Recording URL'] = _posthog.get_session_replay_url({ withTimestamp: true })
         }
 
-        const exceptions = event.exception?.values || []
+        const exceptions: _SentryException[] = event.exception?.values || []
+
+        exceptions.map((exception) => {
+            if (exception.stacktrace) {
+                exception.stacktrace.type = 'raw'
+            }
+        })
 
         const data: SentryExceptionProperties & {
             // two properties added to match any exception auto-capture
@@ -100,7 +101,6 @@ export function createEventProcessor(
             $exception_list: any
             $exception_personURL: string
             $exception_level: SeverityLevel
-            $level: SeverityLevel
         } = {
             // PostHog Exception Properties,
             $exception_message: exceptions[0]?.value || event.message,
@@ -114,7 +114,6 @@ export function createEventProcessor(
             $sentry_exception_message: exceptions[0]?.value || event.message,
             $sentry_exception_type: exceptions[0]?.type,
             $sentry_tags: event.tags,
-            $level: event.level,
         }
 
         if (organization && projectId) {
@@ -157,13 +156,6 @@ export class SentryIntegration implements _SentryIntegrationClass {
         organization?: string,
         projectId?: number,
         prefix?: string,
-        /**
-         * By default, only errors are sent to PostHog. You can set this to '*' to send all events.
-         * Or to an error of SeverityLevel to only send events matching the provided levels.
-         * e.g. ['error', 'fatal'] to send only errors and fatals
-         * e.g. ['error'] to send only errors -- the default when omitted
-         * e.g. '*' to send all events
-         */
         severityAllowList?: SeverityLevel[] | '*'
     ) {
         // setupOnce gets called by Sentry when it intializes the plugin

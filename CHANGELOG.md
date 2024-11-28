@@ -1,3 +1,102 @@
+## 1.191.0 - 2024-11-28
+
+- feat: different default and max idle period (#1558)
+
+## 1.190.2 - 2024-11-27
+
+- fix: patch to angular detection in rrweb (#1566)
+- chore: fix changelog (#1564)
+
+## 1.190.1 - 2024-11-27
+
+- fix: catch errors detecting dialog state when recording (#1562)
+
+## 1.190.0 - 2024-11-27
+
+- feat: Add initial person info to cookie when using localPlusCookieStore (#1559)
+
+## 1.189.1 - 2024-11-27
+
+- feat: hog site functions (#1546)
+
+## 1.189.0 - 2024-11-26
+
+- feat: Add better npm import, and script entrypoint for customizations (#1550)
+
+## 1.188.1 - 2024-11-26
+
+- fix: safari support requires we don't use (#1553)
+- fix: endless capturing /s/ (#1551)
+- chore: make platform more specific (#1549)
+
+## 1.188.0 - 2024-11-22
+
+- fix(surveys): Process feature_flag_keys on Survey object (#1548)
+- chore: sentry integration fixes (#1544)
+
+## 1.187.2 - 2024-11-20
+
+- fix: improve ES6 bundling (#1542)
+
+## 1.187.1 - 2024-11-19
+
+- fix: patch angular wrap detection in rrweb (#1543)
+
+## 1.187.0 - 2024-11-19
+
+- feat: allow config of before_send function to edit or reject events (#1515)
+- chore: timeout test cafe jobs (#1540)
+- chore: specify an explicit browserslist version (#1539)
+
+## 1.186.4 - 2024-11-19
+
+- chore: always transform exponentiation (#1537)
+- chore: very small change to IE11 bundling (#1536)
+
+## 1.186.3 - 2024-11-18
+
+- fix: refactor native mutation observer implementation (#1535)
+- chore: update dependency versions (#1534)
+- chore: remove custom exceptions endpoint (#1513)
+
+## 1.186.2 - 2024-11-18
+
+- fix: angular change detection mutation observer (#1531)
+- chore: Added CSP headers to next app for testing what we document (#1528)
+
+## 1.186.1 - 2024-11-15
+
+- fix: XHR req method capture (#1527)
+
+## 1.186.0 - 2024-11-15
+
+- feat: allow triggering sessions when events occur (#1523)
+
+## 1.185.0 - 2024-11-15
+
+- feat: Add customization to add all person profile properties as setPersonPropertiesForFlags (#1517)
+
+## 1.184.2 - 2024-11-13
+
+- fix(flags): support multiple children prop in PostHogFeature (#1516)
+- fix: Don't use session storage in memory mode (#1521)
+
+## 1.184.1 - 2024-11-12
+
+- chore: add type to Sentry exception (#1520)
+
+## 1.184.0 - 2024-11-12
+
+- feat: deadclicks in heatmaps (#1510)
+
+## 1.183.0 - 2024-11-12
+
+- feat: add recording url blocklist (#1500)
+
+## 1.182.0 - 2024-11-11
+
+- chore: upgrade rrweb to alpha.17 (#1489)
+
 ## 1.181.0 - 2024-11-05
 
 - chore: add stack type (#1511)
