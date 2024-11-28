@@ -1,3 +1,39 @@
+## 1.191.0 - 2024-11-28
+
+- feat: different default and max idle period (#1558)
+
+## 1.190.2 - 2024-11-27
+
+- fix: patch to angular detection in rrweb (#1566)
+- chore: fix changelog (#1564)
+
+## 1.190.1 - 2024-11-27
+
+- fix: catch errors detecting dialog state when recording (#1562)
+
+## 1.190.0 - 2024-11-27
+
+- feat: Add initial person info to cookie when using localPlusCookieStore (#1559)
+
+## 1.189.1 - 2024-11-27
+
+- feat: hog site functions (#1546)
+
+## 1.189.0 - 2024-11-26
+
+- feat: Add better npm import, and script entrypoint for customizations (#1550)
+
+## 1.188.1 - 2024-11-26
+
+- fix: safari support requires we don't use (#1553)
+- fix: endless capturing /s/ (#1551)
+- chore: make platform more specific (#1549)
+
+## 1.188.0 - 2024-11-22
+
+- fix(surveys): Process feature_flag_keys on Survey object (#1548)
+- chore: sentry integration fixes (#1544)
+
 ## 1.187.2 - 2024-11-20
 
 - fix: improve ES6 bundling (#1542)

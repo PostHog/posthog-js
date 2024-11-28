@@ -228,6 +228,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                     $dead_click_selection_changed_timeout: true,
                     $ce_version: 1,
                     $el_text: 'text',
+                    $elements_chain: 'body:text="text"nth-child="2"nth-of-type="1"',
                     $elements: [
                         {
                             $el_text: 'text',
@@ -270,6 +271,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                     $dead_click_selection_changed_timeout: false,
                     $ce_version: 1,
                     $el_text: 'text',
+                    $elements_chain: 'body:text="text"nth-child="2"nth-of-type="1"',
                     $elements: [
                         {
                             $el_text: 'text',
@@ -312,6 +314,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                     $dead_click_selection_changed_timeout: false,
                     $ce_version: 1,
                     $el_text: 'text',
+                    $elements_chain: 'body:text="text"nth-child="2"nth-of-type="1"',
                     $elements: [
                         {
                             $el_text: 'text',
@@ -354,6 +357,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                     $dead_click_selection_changed_timeout: false,
                     $ce_version: 1,
                     $el_text: 'text',
+                    $elements_chain: 'body:text="text"nth-child="2"nth-of-type="1"',
                     $elements: [
                         {
                             $el_text: 'text',

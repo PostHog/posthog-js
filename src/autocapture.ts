@@ -213,13 +213,10 @@ export function autocapturePropertiesForElement(
 
     const props = extend(
         getDefaultProperties(e.type),
-        elementsChainAsString
-            ? {
-                  $elements_chain: getElementsChainString(elementsJson),
-              }
-            : {
-                  $elements: elementsJson,
-              },
+        // Sending "$elements" is deprecated. Only one client on US cloud uses this.
+        !elementsChainAsString ? { $elements: elementsJson } : {},
+        // Always send $elements_chain, as it's needed downstream in site app filtering
+        { $elements_chain: getElementsChainString(elementsJson) },
         elementsJson[0]?.['$el_text'] ? { $el_text: elementsJson[0]?.['$el_text'] } : {},
         externalHref && e.type === 'click' ? { $external_click_url: externalHref } : {},
         autocaptureAugmentProperties

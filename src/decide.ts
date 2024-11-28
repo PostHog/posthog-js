@@ -3,7 +3,7 @@ import { Compression, DecideResponse } from './types'
 import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './constants'
 
 import { logger } from './utils/logger'
-import { document, assignableWindow } from './utils/globals'
+import { document } from './utils/globals'
 
 export class Decide {
     constructor(private readonly instance: PostHog) {
@@ -64,20 +64,5 @@ export class Decide {
         }
 
         this.instance._afterDecideResponse(response)
-
-        if (response['siteApps']) {
-            if (this.instance.config.opt_in_site_apps) {
-                for (const { id, url } of response['siteApps']) {
-                    assignableWindow[`__$$ph_site_app_${id}`] = this.instance
-                    assignableWindow.__PosthogExtensions__?.loadSiteApp?.(this.instance, url, (err) => {
-                        if (err) {
-                            return logger.error(`Error while initializing PostHog app with config id ${id}`, err)
-                        }
-                    })
-                }
-            } else if (response['siteApps'].length > 0) {
-                logger.error('PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.')
-            }
-        }
     }
 }

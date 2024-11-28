@@ -164,8 +164,8 @@ export const Info = {
     initialPersonInfo: function (): Record<string, any> {
         // we're being a bit more economical with bytes here because this is stored in the cookie
         return {
-            r: this.referrer(),
-            u: location?.href,
+            r: this.referrer().substring(0, 1000),
+            u: location?.href.substring(0, 1000),
         }
     },
 
