@@ -1,5 +1,5 @@
 diff --git a/dist/record.js b/dist/record.js
-index 46ec389fefb698243008b39db65470dbdf0a3857..efc65d8c393de8d0ad35083cba315aef91a04c2c 100644
+index 46ec389fefb698243008b39db65470dbdf0a3857..a18724d8b6ba43a30935daf257127fbb0c898541 100644
 --- a/dist/record.js
 +++ b/dist/record.js
 @@ -26,6 +26,14 @@ const testableMethods$1 = {
@@ -7599,7 +7599,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..efc65d8c393de8d0ad35083cba315aef
      )
    );
 -  if (isUntaintedAccessors && isUntaintedMethods) {
-+  if (isUntaintedAccessors && isUntaintedMethods && !isAngularZonePatchedFunction(defaultObj)) {
++  if (isUntaintedAccessors && isUntaintedMethods && !isAngularZonePresent()) {
      untaintedBasePrototype[key] = defaultObj.prototype;
      return defaultObj.prototype;
    }
