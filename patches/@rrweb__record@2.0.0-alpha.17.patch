@@ -1,8 +1,8 @@
 diff --git a/dist/record.js b/dist/record.js
-index 46ec389fefb698243008b39db65470dbdf0a3857..610c1f4cb3d208eb9a4736958176ad78cf85ead7 100644
+index 46ec389fefb698243008b39db65470dbdf0a3857..6c62dab78676066344afb27976dd7d83a7e17c58 100644
 --- a/dist/record.js
 +++ b/dist/record.js
-@@ -26,6 +26,23 @@ const testableMethods$1 = {
+@@ -26,6 +26,27 @@ const testableMethods$1 = {
    Element: [],
    MutationObserver: ["constructor"]
  };
@@ -12,7 +12,11 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..610c1f4cb3d208eb9a4736958176ad78
 +    if (!isFunction(x)) {
 +        return false;
 +    }
-+    for (const key of Object.getOwnPropertyNames(x.prototype || {})) {
++    // if Angular has a zone, then whatever this is could be tainted
++    if (globalThis.Zone) {
++      return true
++    }
++    for (const key of Object.getOwnPropertyNames(x || {})) {
 +        if (key.indexOf('__zone') !== -1) {
 +            return true;
 +        }
@@ -26,7 +30,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..610c1f4cb3d208eb9a4736958176ad78
  const untaintedBasePrototype$1 = {};
  function getUntaintedPrototype$1(key) {
    if (untaintedBasePrototype$1[key])
-@@ -54,7 +71,7 @@ function getUntaintedPrototype$1(key) {
+@@ -54,7 +75,7 @@ function getUntaintedPrototype$1(key) {
        }
      )
    );
@@ -35,7 +39,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..610c1f4cb3d208eb9a4736958176ad78
      untaintedBasePrototype$1[key] = defaultObj.prototype;
      return defaultObj.prototype;
    }
-@@ -65,10 +82,10 @@ function getUntaintedPrototype$1(key) {
+@@ -65,10 +86,10 @@ function getUntaintedPrototype$1(key) {
      if (!win) return defaultObj.prototype;
      const untaintedObject = win[key].prototype;
      document.body.removeChild(iframeEl);
@@ -48,7 +52,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..610c1f4cb3d208eb9a4736958176ad78
    }
  }
  const untaintedAccessorCache$1 = {};
-@@ -246,6 +263,9 @@ function isCSSImportRule(rule2) {
+@@ -246,6 +267,9 @@ function isCSSImportRule(rule2) {
  function isCSSStyleRule(rule2) {
    return "selectorText" in rule2;
  }
@@ -58,7 +62,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..610c1f4cb3d208eb9a4736958176ad78
  class Mirror {
    constructor() {
      __publicField$1(this, "idNodeMap", /* @__PURE__ */ new Map());
-@@ -809,9 +829,14 @@ function serializeElementNode(n2, options) {
+@@ -809,9 +833,14 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "link" && inlineStylesheet) {
@@ -76,7 +80,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..610c1f4cb3d208eb9a4736958176ad78
      let cssText = null;
      if (stylesheet) {
        cssText = stringifyStylesheet(stylesheet);
-@@ -855,7 +880,15 @@ function serializeElementNode(n2, options) {
+@@ -855,7 +884,15 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "dialog" && n2.open) {
@@ -93,7 +97,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..610c1f4cb3d208eb9a4736958176ad78
    }
    if (tagName === "canvas" && recordCanvas) {
      if (n2.__context === "2d") {
-@@ -1116,7300 +1149,227 @@ function serializeNodeWithId(n2, options) {
+@@ -1116,7300 +1153,227 @@ function serializeNodeWithId(n2, options) {
        keepIframeSrcFn
      };
      if (serializedNode.type === NodeType$2.Element && serializedNode.tagName === "textarea" && serializedNode.attributes.value !== void 0) ;
@@ -7603,7 +7607,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..610c1f4cb3d208eb9a4736958176ad78
  class BaseRRNode {
    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
    constructor(..._args) {
-@@ -8507,7 +1467,7 @@ function getUntaintedPrototype(key) {
+@@ -8507,7 +1471,7 @@ function getUntaintedPrototype(key) {
        }
      )
    );
@@ -7612,7 +7616,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..610c1f4cb3d208eb9a4736958176ad78
      untaintedBasePrototype[key] = defaultObj.prototype;
      return defaultObj.prototype;
    }
-@@ -11382,11 +4342,19 @@ class CanvasManager {
+@@ -11382,11 +4346,19 @@ class CanvasManager {
      let rafId;
      const getCanvas = () => {
        const matchedCanvas = [];
@@ -7637,7 +7641,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..610c1f4cb3d208eb9a4736958176ad78
        return matchedCanvas;
      };
      const takeCanvasSnapshots = (timestamp) => {
-@@ -11407,13 +4375,20 @@ class CanvasManager {
+@@ -11407,13 +4379,20 @@ class CanvasManager {
              context.clear(context.COLOR_BUFFER_BIT);
            }
          }
