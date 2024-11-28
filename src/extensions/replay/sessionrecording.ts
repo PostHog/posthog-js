@@ -392,16 +392,16 @@ export class SessionRecording {
             return 'disabled'
         }
 
+        if (this._urlBlocked) {
+            return 'paused'
+        }
+
         if (!isNullish(this._linkedFlag) && !this._linkedFlagSeen) {
             return 'buffering'
         }
 
         if (this.triggerStatus === 'trigger_pending') {
             return 'buffering'
-        }
-
-        if (this._urlBlocked) {
-            return 'paused'
         }
 
         if (isBoolean(this.isSampled)) {
@@ -501,12 +501,14 @@ export class SessionRecording {
             if (isNullish(this._removePageViewCaptureHook)) {
                 // :TRICKY: rrweb does not capture navigation within SPA-s, so hook into our $pageview events to get access to all events.
                 //   Dropping the initial event is fine (it's always captured by rrweb).
-                this._removePageViewCaptureHook = this.instance._addCaptureHook((eventName) => {
+                this._removePageViewCaptureHook = this.instance.on('eventCaptured', (event) => {
                     // If anything could go wrong here it has the potential to block the main loop,
                     // so we catch all errors.
                     try {
-                        if (eventName === '$pageview') {
-                            const href = window ? this._maskUrl(window.location.href) : ''
+                        if (event.event === '$pageview') {
+                            const href = event?.properties.$current_url
+                                ? this._maskUrl(event?.properties.$current_url)
+                                : ''
                             if (!href) {
                                 return
                             }
