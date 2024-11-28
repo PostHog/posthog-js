@@ -95,8 +95,16 @@ describe('SiteApps', () => {
     })
 
     describe('eventCollector', () => {
-        it('does nothing if enabled is false', () => {
+        it('does nothing if opt_in_site_apps is false', () => {
             posthog.config.opt_in_site_apps = false
+            siteAppsInstance.eventCollector('event_name', {} as CaptureResult)
+
+            expect(siteAppsInstance.missedInvocations.length).toBe(0)
+        })
+
+        it('does nothing if decide is disabled', () => {
+            posthog.config.opt_in_site_apps = true
+            posthog.config.advanced_disable_decide = true
             siteAppsInstance.eventCollector('event_name', {} as CaptureResult)
 
             expect(siteAppsInstance.missedInvocations.length).toBe(0)
