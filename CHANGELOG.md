@@ -1,3 +1,7 @@
+## 1.191.0 - 2024-11-28
+
+- feat: different default and max idle period (#1558)
+
 ## 1.190.2 - 2024-11-27
 
 - fix: patch to angular detection in rrweb (#1566)
