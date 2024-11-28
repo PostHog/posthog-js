@@ -1,19 +1,12 @@
 import { SiteApps } from '../site-apps'
-import { PostHogPersistence } from '../posthog-persistence'
-import { RequestRouter } from '../utils/request-router'
 import { PostHog } from '../posthog-core'
-import { DecideResponse, PostHogConfig, Properties, CaptureResult } from '../types'
+import { DecideResponse, PostHogConfig, CaptureResult } from '../types'
 import { assignableWindow } from '../utils/globals'
 import { logger } from '../utils/logger'
 import '../entrypoints/external-scripts-loader'
 import { isFunction } from '../utils/type-utils'
-import { ConsentManager } from '../consent'
-
-jest.mock('../utils/logger', () => ({
-    logger: {
-        error: jest.fn(),
-    },
-}))
+import { uuidv7 } from '../uuidv7'
+import { defaultPostHog } from './helpers/posthog-instance'
 
 describe('SiteApps', () => {
     let posthog: PostHog
@@ -45,31 +38,17 @@ describe('SiteApps', () => {
             }),
         }
 
-        posthog = {
-            config: { ...defaultConfig },
-            persistence: new PostHogPersistence(defaultConfig as PostHogConfig),
-            register: (props: Properties) => posthog.persistence!.register(props),
-            unregister: (key: string) => posthog.persistence!.unregister(key),
-            get_property: (key: string) => posthog.persistence!.props[key],
-            consent: {
-                isOptedOut(): boolean {
-                    return false
-                },
-            } as unknown as ConsentManager,
-            capture: jest.fn(),
-            _addCaptureHook: jest.fn(),
-            _afterDecideResponse: jest.fn(),
-            get_distinct_id: jest.fn().mockImplementation(() => 'distinctid'),
-            _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
-            featureFlags: {
-                receivedFeatureFlags: jest.fn(),
-                setReloadingPaused: jest.fn(),
-                _startReloadTimer: jest.fn(),
-            },
-            requestRouter: new RequestRouter({ config: defaultConfig } as unknown as PostHog),
-            _hasBootstrappedFeatureFlags: jest.fn(),
-            getGroups: () => ({ organization: '5' }),
-        } as unknown as PostHog
+        const createPostHog = (config: Partial<PostHogConfig> = {}) => {
+            const posthog = defaultPostHog().init('testtoken', { ...config }, uuidv7())!
+            posthog.debug()
+            return posthog
+        }
+
+        posthog = createPostHog(defaultConfig)
+        posthog._addCaptureHook = jest.fn()
+        posthog.capture = jest.fn()
+        posthog._send_request = jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} }))
+        logger.error = jest.fn()
 
         siteAppsInstance = new SiteApps(posthog)
     })
@@ -324,7 +303,7 @@ describe('SiteApps', () => {
 
         it('load site destinations if consent is given at a later time', () => {
             posthog.config.opt_in_site_apps = true
-            posthog.consent.isOptedOut = () => true
+            posthog.opt_out_capturing()
             const response = {
                 siteApps: [
                     { id: '5', type: 'site_app', url: '/site_app/5' },
@@ -334,7 +313,7 @@ describe('SiteApps', () => {
 
             siteAppsInstance.afterDecideResponse(response)
 
-            posthog.consent.isOptedOut = () => false
+            posthog.opt_in_capturing()
 
             siteAppsInstance.loadIfEnabled()
 
