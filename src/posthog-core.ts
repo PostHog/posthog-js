@@ -429,7 +429,7 @@ export class PostHog {
         this._retryQueue = new RetryQueue(this)
         this.__request_queue = []
 
-        this.sessionManager = new SessionIdManager(this.config, this.persistence)
+        this.sessionManager = new SessionIdManager(this)
         this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
 
         new TracingHeaders(this).startIfEnabledOrStop()

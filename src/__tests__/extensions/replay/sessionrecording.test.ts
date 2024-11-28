@@ -235,7 +235,11 @@ describe('SessionRecording', () => {
         const postHogPersistence = new PostHogPersistence(config)
         postHogPersistence.clear()
 
-        sessionManager = new SessionIdManager(config, postHogPersistence, sessionIdGeneratorMock, windowIdGeneratorMock)
+        sessionManager = new SessionIdManager(
+            { config, persistence: postHogPersistence, register: jest.fn() } as unknown as PostHog,
+            sessionIdGeneratorMock,
+            windowIdGeneratorMock
+        )
 
         // add capture hook returns an unsubscribe function
         removeCaptureHookMock = jest.fn()
@@ -1130,7 +1134,11 @@ describe('SessionRecording', () => {
                 let unsubscribeCallback: () => void
 
                 beforeEach(() => {
-                    sessionManager = new SessionIdManager(config, new PostHogPersistence(config))
+                    sessionManager = new SessionIdManager({
+                        config,
+                        persistence: new PostHogPersistence(config),
+                        register: jest.fn(),
+                    } as unknown as PostHog)
                     posthog.sessionManager = sessionManager
 
                     mockCallback = jest.fn()
@@ -1216,7 +1224,11 @@ describe('SessionRecording', () => {
 
             describe('with a real session id manager', () => {
                 beforeEach(() => {
-                    sessionManager = new SessionIdManager(config, new PostHogPersistence(config))
+                    sessionManager = new SessionIdManager({
+                        config,
+                        persistence: new PostHogPersistence(config),
+                        register: jest.fn(),
+                    } as unknown as PostHog)
                     posthog.sessionManager = sessionManager
 
                     sessionRecording.startIfEnabledOrStop()
