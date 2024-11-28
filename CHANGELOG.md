@@ -1,3 +1,7 @@
+## 1.192.0 - 2024-11-28
+
+- feat: Start tracking timezone offset and language prefix (#1568)
+
 ## 1.191.0 - 2024-11-28
 
 - feat: different default and max idle period (#1558)
