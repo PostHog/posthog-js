@@ -1,3 +1,7 @@
+## 1.192.1 - 2024-11-28
+
+
+
 ## 1.192.0 - 2024-11-28
 
 - feat: Start tracking timezone offset and language prefix (#1568)
