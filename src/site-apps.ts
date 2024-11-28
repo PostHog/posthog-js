@@ -90,15 +90,9 @@ export class SiteApps {
                 }
                 for (const { id, type, url } of this._decideServerSiteAppsResponse) {
                     // if consent isn't given, skip site destinations
-                    if (this.instance.consent.isOptedOut() && type === 'site_destination') {
-                        checkIfAllLoaded()
-                        continue
-                    }
+                    if (this.instance.consent.isOptedOut() && type === 'site_destination') continue
                     // if the site app is already loaded, skip it
-                    if (!isUndefined(assignableWindow[`__$$ph_site_app_${id}_posthog`])) {
-                        checkIfAllLoaded()
-                        continue
-                    }
+                    if (!isUndefined(assignableWindow[`__$$ph_site_app_${id}_posthog`])) continue
                     this.appsLoading.add(id)
                     assignableWindow[`__$$ph_site_app_${id}_posthog`] = this.instance
                     assignableWindow[`__$$ph_site_app_${id}_missed_invocations`] = () => this.missedInvocations
@@ -114,6 +108,7 @@ export class SiteApps {
                         }
                     })
                 }
+                checkIfAllLoaded()
             } else if (this._decideServerSiteAppsResponse.length > 0) {
                 logger.error('PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.')
                 this.loaded = true
