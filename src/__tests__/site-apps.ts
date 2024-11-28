@@ -200,7 +200,7 @@ describe('SiteApps', () => {
             siteAppsInstance.afterDecideResponse(response)
 
             expect(siteAppsInstance.loaded).toBe(true)
-            expect(siteAppsInstance._decideServerResponse.length).toBe(0)
+            expect(siteAppsInstance._decideServerSiteAppsResponse.length).toBe(0)
         })
 
         it('loads site apps when enabled and opt_in_site_apps is true', (done) => {
