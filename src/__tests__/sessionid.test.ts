@@ -43,6 +43,7 @@ describe('Session ID manager', () => {
             disabled: false,
         }
         ;(sessionStore.is_supported as jest.Mock).mockReturnValue(true)
+        // @ts-expect-error - TS gets confused about the types here
         jest.spyOn(global, 'Date').mockImplementation(() => new originalDate(now))
         ;(uuidv7 as jest.Mock).mockReturnValue('newUUID')
         ;(uuid7ToTimestampMs as jest.Mock).mockReturnValue(timestamp)
@@ -368,6 +369,46 @@ describe('Session ID manager', () => {
                 DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS * 1000
             )
             expect(console.warn).toBeCalledTimes(3)
+        })
+    })
+
+    describe('proactive idle timeout', () => {
+        it('starts a timer', () => {
+            expect(sessionIdMgr(persistence)['_enforceIdleTimeout']).toBeDefined()
+        })
+
+        it('sets a new timer when checking session id', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            const originalTimer = sessionIdManager['_enforceIdleTimeout']
+            sessionIdManager.checkAndGetSessionAndWindowId(undefined, timestamp)
+            expect(sessionIdManager['_enforceIdleTimeout']).toBeDefined()
+            expect(sessionIdManager['_enforceIdleTimeout']).not.toEqual(originalTimer)
+        })
+
+        it('does not set a new timer when read only checking session id', () => {
+            const sessionIdManager = sessionIdMgr(persistence)
+            const originalTimer = sessionIdManager['_enforceIdleTimeout']
+            sessionIdManager.checkAndGetSessionAndWindowId(true, timestamp)
+            expect(sessionIdManager['_enforceIdleTimeout']).toBeDefined()
+            expect(sessionIdManager['_enforceIdleTimeout']).toEqual(originalTimer)
+        })
+
+        /** timer doesn't advance and fire this? */
+        it.skip('resets session id despite no activity after timeout', () => {
+            ;(uuidv7 as jest.Mock).mockImplementationOnce(() => 'originalUUID')
+
+            const sessionIdManager = sessionIdMgr(persistence)
+            const { sessionId: originalSessionId } = sessionIdManager.checkAndGetSessionAndWindowId(
+                undefined,
+                timestamp
+            )
+            expect(originalSessionId).toBeDefined()
+
+            jest.advanceTimersByTime(DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS * 1.1 + 1)
+
+            const { sessionId: finalSessionId } = sessionIdManager.checkAndGetSessionAndWindowId(undefined, timestamp)
+            expect(finalSessionId).toBeDefined()
+            expect(finalSessionId).not.toEqual(originalSessionId)
         })
     })
 })

@@ -61,6 +61,7 @@ export class SessionIdManager {
             ) * 1000
 
         instance.register({ $configured_session_timeout_ms: this._sessionTimeoutMs })
+        this.resetIdleTimer()
 
         this._window_id_storage_key = 'ph_' + persistenceName + '_window_id'
         this._primary_window_exists_storage_key = 'ph_' + persistenceName + '_primary_window_exists'
@@ -253,11 +254,7 @@ export class SessionIdManager {
         this._setSessionId(sessionId, newActivityTimestamp, sessionStartTimestamp)
 
         if (!readOnly) {
-            clearTimeout(this._enforceIdleTimeout)
-            this._enforceIdleTimeout = setTimeout(() => {
-                // enforce idle timeout a little after the session timeout to ensure the session is reset even without activity
-                // this.resetSessionId()
-            }, this.sessionTimeoutMs * 1.1)
+            this.resetIdleTimer()
         }
 
         if (valuesChanged) {
@@ -277,5 +274,13 @@ export class SessionIdManager {
             changeReason: valuesChanged ? { noSessionId, activityTimeout, sessionPastMaximumLength } : undefined,
             lastActivityTimestamp: lastActivityTimestamp,
         }
+    }
+
+    private resetIdleTimer() {
+        clearTimeout(this._enforceIdleTimeout)
+        this._enforceIdleTimeout = setTimeout(() => {
+            // enforce idle timeout a little after the session timeout to ensure the session is reset even without activity
+            this.resetSessionId()
+        }, this.sessionTimeoutMs * 1.1)
     }
 }
