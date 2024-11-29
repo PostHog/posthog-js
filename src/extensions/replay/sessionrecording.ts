@@ -384,7 +384,7 @@ export class SessionRecording {
      * defaults to buffering mode until a decide response is received
      * once a decide response is received status can be disabled, active or sampled
      */
-    private get status(): SessionRecordingStatus {
+    get status(): SessionRecordingStatus {
         if (!this.receivedDecide) {
             return 'buffering'
         }
