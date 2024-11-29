@@ -1,3 +1,7 @@
+## 1.194.0 - 2024-11-29
+
+- feat: add $recording_status property (#1571)
+
 ## 1.193.1 - 2024-11-28
 
 - fix: zone detection (#1570)
