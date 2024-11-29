@@ -149,6 +149,12 @@ export interface Survey {
     name: string
     description: string
     type: SurveyType
+    feature_flag_keys:
+        | {
+              key: string
+              value?: string
+          }[]
+        | null
     linked_flag_key: string | null
     targeting_flag_key: string | null
     internal_targeting_flag_key: string | null

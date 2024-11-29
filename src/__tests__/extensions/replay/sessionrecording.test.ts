@@ -184,8 +184,7 @@ describe('SessionRecording', () => {
     let sessionIdGeneratorMock: Mock
     let windowIdGeneratorMock: Mock
     let onFeatureFlagsCallback: ((flags: string[], variants: Record<string, string | boolean>) => void) | null
-    let removeCaptureHookMock: Mock
-    let addCaptureHookMock: Mock
+    let removePageviewCaptureHookMock: Mock
     let simpleEventEmitter: SimpleEventEmitter
 
     const addRRwebToWindow = () => {
@@ -208,6 +207,7 @@ describe('SessionRecording', () => {
     }
 
     beforeEach(() => {
+        removePageviewCaptureHookMock = jest.fn()
         sessionId = 'sessionId' + uuidv7()
 
         config = {
@@ -235,11 +235,11 @@ describe('SessionRecording', () => {
         const postHogPersistence = new PostHogPersistence(config)
         postHogPersistence.clear()
 
-        sessionManager = new SessionIdManager(config, postHogPersistence, sessionIdGeneratorMock, windowIdGeneratorMock)
-
-        // add capture hook returns an unsubscribe function
-        removeCaptureHookMock = jest.fn()
-        addCaptureHookMock = jest.fn().mockImplementation(() => removeCaptureHookMock)
+        sessionManager = new SessionIdManager(
+            { config, persistence: postHogPersistence, register: jest.fn() } as unknown as PostHog,
+            sessionIdGeneratorMock,
+            windowIdGeneratorMock
+        )
 
         simpleEventEmitter = new SimpleEventEmitter()
         // TODO we really need to make this a real posthog instance :cry:
@@ -258,7 +258,6 @@ describe('SessionRecording', () => {
             },
             sessionManager: sessionManager,
             requestRouter: new RequestRouter({ config } as any),
-            _addCaptureHook: addCaptureHookMock,
             consent: {
                 isOptedOut(): boolean {
                     return false
@@ -266,9 +265,10 @@ describe('SessionRecording', () => {
             } as unknown as ConsentManager,
             register_for_session() {},
             _internalEventEmitter: simpleEventEmitter,
-            on: (event, cb) => {
-                return simpleEventEmitter.on(event, cb)
-            },
+            on: jest.fn().mockImplementation((event, cb) => {
+                const unsubscribe = simpleEventEmitter.on(event, cb)
+                return removePageviewCaptureHookMock.mockImplementation(unsubscribe)
+            }),
         } as Partial<PostHog> as PostHog
 
         loadScriptMock.mockImplementation((_ph, _path, callback) => {
@@ -419,21 +419,21 @@ describe('SessionRecording', () => {
             sessionRecording.startIfEnabledOrStop()
 
             expect(sessionRecording['_removePageViewCaptureHook']).not.toBeUndefined()
-            expect(posthog._addCaptureHook).toHaveBeenCalledTimes(1)
+            expect(posthog.on).toHaveBeenCalledTimes(1)
 
             // calling a second time doesn't add another capture hook
             sessionRecording.startIfEnabledOrStop()
-            expect(posthog._addCaptureHook).toHaveBeenCalledTimes(1)
+            expect(posthog.on).toHaveBeenCalledTimes(1)
         })
 
         it('removes the pageview capture hook on stop', () => {
             sessionRecording.startIfEnabledOrStop()
             expect(sessionRecording['_removePageViewCaptureHook']).not.toBeUndefined()
 
-            expect(removeCaptureHookMock).not.toHaveBeenCalled()
+            expect(removePageviewCaptureHookMock).not.toHaveBeenCalled()
             sessionRecording.stopRecording()
 
-            expect(removeCaptureHookMock).toHaveBeenCalledTimes(1)
+            expect(removePageviewCaptureHookMock).toHaveBeenCalledTimes(1)
             expect(sessionRecording['_removePageViewCaptureHook']).toBeUndefined()
         })
 
@@ -483,6 +483,15 @@ describe('SessionRecording', () => {
     describe('afterDecideResponse()', () => {
         beforeEach(() => {
             jest.spyOn(sessionRecording, 'startIfEnabledOrStop')
+        })
+
+        it('loads script based on script config', () => {
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({
+                    sessionRecording: { endpoint: '/s/', scriptConfig: { script: 'experimental-recorder' } },
+                })
+            )
+            expect(loadScriptMock).toHaveBeenCalledWith(posthog, 'experimental-recorder', expect.any(Function))
         })
 
         it('when the first event is a meta it does not take a manual full snapshot', () => {
@@ -1130,7 +1139,11 @@ describe('SessionRecording', () => {
                 let unsubscribeCallback: () => void
 
                 beforeEach(() => {
-                    sessionManager = new SessionIdManager(config, new PostHogPersistence(config))
+                    sessionManager = new SessionIdManager({
+                        config,
+                        persistence: new PostHogPersistence(config),
+                        register: jest.fn(),
+                    } as unknown as PostHog)
                     posthog.sessionManager = sessionManager
 
                     mockCallback = jest.fn()
@@ -1216,7 +1229,11 @@ describe('SessionRecording', () => {
 
             describe('with a real session id manager', () => {
                 beforeEach(() => {
-                    sessionManager = new SessionIdManager(config, new PostHogPersistence(config))
+                    sessionManager = new SessionIdManager({
+                        config,
+                        persistence: new PostHogPersistence(config),
+                        register: jest.fn(),
+                    } as unknown as PostHog)
                     posthog.sessionManager = sessionManager
 
                     sessionRecording.startIfEnabledOrStop()
@@ -1760,6 +1777,66 @@ describe('SessionRecording', () => {
             sessionRecording.overrideLinkedFlag()
 
             expect(sessionRecording['_linkedFlagSeen']).toEqual(true)
+            expect(sessionRecording['status']).toEqual('active')
+        })
+
+        /**
+         * this is partly a regression test, with a running rrweb,
+         * if you don't pause while buffering
+         * the browser can be trapped in an infinite loop of pausing
+         * while trying to report it is paused 🙈
+         */
+        it('can be paused while waiting for flag', () => {
+            fakeNavigateTo('https://test.com/blocked')
+
+            expect(sessionRecording['_linkedFlag']).toEqual(null)
+            expect(sessionRecording['_linkedFlagSeen']).toEqual(false)
+            expect(sessionRecording['status']).toEqual('buffering')
+
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        linkedFlag: 'the-flag-key',
+                        urlBlocklist: [
+                            {
+                                matching: 'regex',
+                                url: '/blocked',
+                            },
+                        ],
+                    },
+                })
+            )
+
+            expect(sessionRecording['_linkedFlag']).toEqual('the-flag-key')
+            expect(sessionRecording['_linkedFlagSeen']).toEqual(false)
+            expect(sessionRecording['status']).toEqual('buffering')
+            expect(sessionRecording['paused']).toBeUndefined()
+
+            const snapshotEvent = {
+                event: 123,
+                type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
+                data: {
+                    source: 1,
+                },
+                timestamp: new Date().getTime(),
+            }
+            _emit(snapshotEvent)
+
+            expect(sessionRecording['_linkedFlag']).toEqual('the-flag-key')
+            expect(sessionRecording['_linkedFlagSeen']).toEqual(false)
+            expect(sessionRecording['status']).toEqual('paused')
+
+            sessionRecording.overrideLinkedFlag()
+
+            expect(sessionRecording['_linkedFlagSeen']).toEqual(true)
+            expect(sessionRecording['status']).toEqual('paused')
+
+            fakeNavigateTo('https://test.com/allowed')
+
+            expect(sessionRecording['status']).toEqual('paused')
+
+            _emit(snapshotEvent)
             expect(sessionRecording['status']).toEqual('active')
         })
     })

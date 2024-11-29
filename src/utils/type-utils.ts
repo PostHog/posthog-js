@@ -1,4 +1,5 @@
 import { includes } from '.'
+import { window } from './globals'
 import { knownUnsafeEditableEvent, KnownUnsafeEditableEvent } from '../types'
 
 // eslint-disable-next-line posthog-js/no-direct-array-check
@@ -24,13 +25,9 @@ export const isFunction = (x: unknown): x is (...args: any[]) => any => {
 export const isNativeFunction = (x: unknown): x is (...args: any[]) => any =>
     isFunction(x) && x.toString().indexOf('[native code]') !== -1
 
-// When angular patches functions they pass the above `isNativeFunction` check
-export const isAngularZonePatchedFunction = (x: unknown): boolean => {
-    if (!isFunction(x)) {
-        return false
-    }
-    const prototypeKeys = Object.getOwnPropertyNames(x.prototype || {})
-    return prototypeKeys.some((key) => key.indexOf('__zone'))
+// When angular patches functions they pass the above `isNativeFunction` check (at least the MutationObserver)
+export const isAngularZonePresent = (): boolean => {
+    return !!(window as any).Zone
 }
 
 // Underscore Addons

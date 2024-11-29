@@ -75,34 +75,58 @@ describe('config', () => {
                     {
                         name: 'https://app.posthog.com/api/feature_flag/',
                     },
-                ],
-                [
-                    {
-                        name: 'https://app.posthog.com/s/',
-                    },
                     undefined,
                 ],
                 [
                     {
-                        name: 'https://app.posthog.com/e/',
+                        name: 'https://app.posthog.com/s/?ip=1&ver=123',
                     },
+                    undefined,
                     undefined,
                 ],
                 [
                     {
-                        name: 'https://app.posthog.com/i/v0/e/',
+                        name: 'https://app.posthog.com/e/?ip=1&ver=123',
                     },
+                    undefined,
+                    undefined,
+                ],
+                [
+                    {
+                        name: 'https://app.posthog.com/i/v0/e/?ip=1&ver=123',
+                    },
+                    undefined,
                     undefined,
                 ],
                 [
                     {
                         // even an imaginary future world of rust session replay capture
-                        name: 'https://app.posthog.com/i/v0/s/',
+                        name: 'https://app.posthog.com/i/v0/s/?ip=1&ver=123',
                     },
                     undefined,
+                    undefined,
                 ],
-            ])('ignores ingestion paths', (capturedRequest, expected) => {
-                const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
+                [
+                    {
+                        // using a relative path as a reverse proxy api host
+                        name: 'https://app.posthog.com/ingest/s/?ip=1&ver=123',
+                    },
+                    undefined,
+                    '/ingest',
+                ],
+                [
+                    {
+                        // using a reverse proxy with a path
+                        name: 'https://app.posthog.com/ingest/s/?ip=1&ver=123',
+                    },
+                    undefined,
+                    'https://app.posthog.com/ingest',
+                ],
+            ])('ignores ingestion paths', (capturedRequest, expected, apiHost?: string) => {
+                const networkOptions = buildNetworkRequestOptions(
+                    { ...defaultConfig(), api_host: apiHost || 'https://us.posthog.com' },
+                    {}
+                )
                 const x = networkOptions.maskRequestFn!(capturedRequest as CapturedNetworkRequest)
                 expect(x).toEqual(expected)
             })

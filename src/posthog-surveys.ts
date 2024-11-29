@@ -172,7 +172,12 @@ export class PostHogSurveys {
             // get all the surveys that have been activated so far with user actions.
             const activatedSurveys: string[] | undefined = this._surveyEventReceiver?.getSurveys()
             const targetingMatchedSurveys = conditionMatchedSurveys.filter((survey) => {
-                if (!survey.linked_flag_key && !survey.targeting_flag_key && !survey.internal_targeting_flag_key) {
+                if (
+                    !survey.linked_flag_key &&
+                    !survey.targeting_flag_key &&
+                    !survey.internal_targeting_flag_key &&
+                    !survey.feature_flag_keys?.length
+                ) {
                     return true
                 }
                 const linkedFlagCheck = survey.linked_flag_key
@@ -199,9 +204,13 @@ export class PostHogSurveys {
                     survey.internal_targeting_flag_key && !overrideInternalTargetingFlagCheck
                         ? this.instance.featureFlags.isFeatureEnabled(survey.internal_targeting_flag_key)
                         : true
-
+                const flagsCheck = this.checkFlags(survey)
                 return (
-                    linkedFlagCheck && targetingFlagCheck && internalTargetingFlagCheck && eventBasedTargetingFlagCheck
+                    linkedFlagCheck &&
+                    targetingFlagCheck &&
+                    internalTargetingFlagCheck &&
+                    eventBasedTargetingFlagCheck &&
+                    flagsCheck
                 )
             })
 
@@ -209,6 +218,18 @@ export class PostHogSurveys {
         }, forceReload)
     }
 
+    checkFlags(survey: Survey): boolean {
+        if (!survey.feature_flag_keys?.length) {
+            return true
+        }
+
+        return survey.feature_flag_keys.every(({ key, value }) => {
+            if (!key || !value) {
+                return true
+            }
+            return this.instance.featureFlags.isFeatureEnabled(value)
+        })
+    }
     getNextSurveyStep(survey: Survey, currentQuestionIndex: number, response: string | string[] | number | null) {
         const question = survey.questions[currentQuestionIndex]
         const nextQuestionIndex = currentQuestionIndex + 1

@@ -523,6 +523,7 @@ describe('Session recording', () => {
                         capturedSnapshot['properties']['$snapshot_data'][3],
                         capturedSnapshot['properties']['$snapshot_data'][4],
                     ])
+
                     expectPageViewCustomEvent(customEvents[0])
                     expectPostHogConfigCustomEvent(customEvents[1])
                     expectSessionOptionsCustomEvent(customEvents[2])
