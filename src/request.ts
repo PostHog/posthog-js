@@ -41,8 +41,17 @@ export const extendURLParams = (url: string, params: Record<string, any>): strin
     return `${baseUrl}?${newSearch}`
 }
 
+export const jsonStringify = (data: any, space?: string | number): string => {
+    // With plain JSON.stringify, we get an exception when a property is a BigInt. This has caused problems for some users,
+    // see https://github.com/PostHog/posthog-js/issues/1440
+    // To work around this, we convert BigInts to strings before stringifying the data. This is not ideal, as we lose
+    // information that this was originally a number, but given ClickHouse doesn't support BigInts, the customer
+    // would not be able to operate on these numerically anyway.
+    return JSON.stringify(data, (_, value) => (typeof value === 'bigint' ? value.toString() : value), space)
+}
+
 const encodeToDataString = (data: string | Record<string, any>): string => {
-    return 'data=' + encodeURIComponent(typeof data === 'string' ? data : JSON.stringify(data))
+    return 'data=' + encodeURIComponent(typeof data === 'string' ? data : jsonStringify(data))
 }
 
 const encodePostData = ({ data, compression }: RequestOptions): EncodedBody | undefined => {
@@ -51,7 +60,7 @@ const encodePostData = ({ data, compression }: RequestOptions): EncodedBody | un
     }
 
     if (compression === Compression.GZipJS) {
-        const gzipData = gzipSync(strToU8(JSON.stringify(data)), { mtime: 0 })
+        const gzipData = gzipSync(strToU8(jsonStringify(data)), { mtime: 0 })
         const blob = new Blob([gzipData], { type: CONTENT_TYPE_PLAIN })
         return {
             contentType: CONTENT_TYPE_PLAIN,
@@ -61,7 +70,7 @@ const encodePostData = ({ data, compression }: RequestOptions): EncodedBody | un
     }
 
     if (compression === Compression.Base64) {
-        const b64data = _base64Encode(JSON.stringify(data))
+        const b64data = _base64Encode(jsonStringify(data))
         const encodedBody = encodeToDataString(b64data)
 
         return {
@@ -71,7 +80,7 @@ const encodePostData = ({ data, compression }: RequestOptions): EncodedBody | un
         }
     }
 
-    const jsonBody = JSON.stringify(data)
+    const jsonBody = jsonStringify(data)
     return {
         contentType: CONTENT_TYPE_JSON,
         body: jsonBody,
