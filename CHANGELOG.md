@@ -1,3 +1,8 @@
+## 1.194.1 - 2024-11-30
+
+- fix: Don't crash on bigints (#1573)
+- feat: Add customization to print events drop them (#1572)
+
 ## 1.194.0 - 2024-11-29
 
 - feat: add $recording_status property (#1571)
