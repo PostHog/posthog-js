@@ -40,8 +40,8 @@ describe('consentManager', () => {
         deleteAllCookies()
     })
 
-    it('should start default opted in', () => {
-        expect(posthog.has_opted_in_capturing()).toBe(true)
+    it('should start neither opted in or out', () => {
+        expect(posthog.has_opted_in_capturing()).toBe(false)
         expect(posthog.has_opted_out_capturing()).toBe(false)
 
         expect(posthog.persistence?.disabled).toBe(false)
@@ -188,10 +188,12 @@ describe('consentManager', () => {
         it('should respect it if explicitly set', () => {
             posthog = createPostHog({ respect_dnt: true })
             expect(posthog.has_opted_in_capturing()).toBe(false)
+            expect(posthog.has_opted_out_capturing()).toBe(true)
         })
 
         it('should not respect it if not explicitly set', () => {
-            expect(posthog.has_opted_in_capturing()).toBe(true)
+            expect(posthog.has_opted_in_capturing()).toBe(false)
+            expect(posthog.has_opted_out_capturing()).toBe(false)
         })
     })
 

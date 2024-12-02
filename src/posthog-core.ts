@@ -599,7 +599,7 @@ export class PostHog {
             // NOTE: We want to fire this on the next tick as the previous implementation had this side effect
             // and some clients may rely on it
             setTimeout(() => {
-                if (this.consent.isOptedIn()) {
+                if (!this.consent.isOptedOut()) {
                     this._captureInitialPageview()
                 }
             }, 1)

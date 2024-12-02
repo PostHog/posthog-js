@@ -32,6 +32,7 @@ export class ConsentManager {
         return this.storedConsent
     }
 
+    // NOTE: This is the method that should generally be used internally to check for whether we can track
     public isOptedOut() {
         return (
             this.consent === ConsentStatus.DENIED ||
@@ -39,8 +40,9 @@ export class ConsentManager {
         )
     }
 
+    // Only returns true if _explicitly_ opted in. If the user is pending, they are not opted in.
     public isOptedIn() {
-        return !this.isOptedOut()
+        return this.consent === ConsentStatus.GRANTED
     }
 
     public optInOut(isOptedIn: boolean) {
