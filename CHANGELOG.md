@@ -1,3 +1,7 @@
+## 1.194.2 - 2024-12-02
+
+- fix: use previous site-app variables (#1574)
+
 ## 1.194.1 - 2024-11-30
 
 - fix: Don't crash on bigints (#1573)
