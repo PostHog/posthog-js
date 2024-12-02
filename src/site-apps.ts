@@ -94,7 +94,7 @@ export class SiteApps {
                     // if the site app is already loaded, skip it
                     if (!isUndefined(assignableWindow[`__$$ph_site_app_${id}_posthog`])) continue
                     this.appsLoading.add(id)
-                    assignableWindow[`__$$ph_site_app_${id}_posthog`] = this.instance
+                    assignableWindow[`__$$ph_site_app_${id}`] = this.instance
                     assignableWindow[`__$$ph_site_app_${id}_missed_invocations`] = () => this.missedInvocations
                     assignableWindow[`__$$ph_site_app_${id}_callback`] = () => {
                         this.appsLoading.delete(id)
