@@ -92,7 +92,7 @@ export class SiteApps {
                     // if consent isn't given, skip site destinations
                     if (this.instance.consent.isOptedOut() && type === 'site_destination') continue
                     // if the site app is already loaded, skip it
-                    if (!isUndefined(assignableWindow[`__$$ph_site_app_${id}_posthog`])) continue
+                    if (!isUndefined(assignableWindow[`__$$ph_site_app_${id}`])) continue
                     this.appsLoading.add(id)
                     assignableWindow[`__$$ph_site_app_${id}`] = this.instance
                     assignableWindow[`__$$ph_site_app_${id}_missed_invocations`] = () => this.missedInvocations
