@@ -229,11 +229,11 @@ describe(`event-utils`, () => {
                 expectedBrowser: 'Android Mobile',
             },
             {
-                name: 'Android Browser on Galaxy S3',
+                name: 'Chrome Browser on Galaxy S3',
                 userAgent:
                     'Mozilla/5.0 (Linux; Android 4.4.4; en-us; SAMSUNG GT-I9300I Build/KTU84P) AppleWebKit/537.36 (KHTML, like Gecko) Version/1.5 Chrome/28.0.1500.94 Mobile Safari/537.36',
-                expectedVersion: 4.4,
-                expectedBrowser: 'Android Mobile',
+                expectedVersion: 28.0,
+                expectedBrowser: 'Chrome',
             },
         ]
 
