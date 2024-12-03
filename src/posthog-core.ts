@@ -32,7 +32,6 @@ import {
     CaptureOptions,
     CaptureResult,
     Compression,
-    DecideResponse,
     EarlyAccessFeatureCallback,
     EventName,
     IsFeatureEnabledOptions,
@@ -545,42 +544,39 @@ export class PostHog {
         return this
     }
 
-    // Private methods
-    _afterDecideResponse(response: DecideResponse) {
+    _onRemoteConfig(config: RemoteConfig) {
+        // TODO: check config. If "hasFlags" is anything other than false - load the flags from decide (later will be /flags)
+
         this.compression = undefined
-        if (response.supportedCompression && !this.config.disable_compression) {
-            this.compression = includes(response['supportedCompression'], Compression.GZipJS)
+        if (config.supportedCompression && !this.config.disable_compression) {
+            this.compression = includes(config['supportedCompression'], Compression.GZipJS)
                 ? Compression.GZipJS
-                : includes(response['supportedCompression'], Compression.Base64)
+                : includes(config['supportedCompression'], Compression.Base64)
                 ? Compression.Base64
                 : undefined
         }
 
-        if (response.analytics?.endpoint) {
-            this.analyticsDefaultEndpoint = response.analytics.endpoint
+        if (config.analytics?.endpoint) {
+            this.analyticsDefaultEndpoint = config.analytics.endpoint
         }
 
         this.set_config({
             person_profiles: this._initialPersonProfilesConfig
                 ? this._initialPersonProfilesConfig
-                : response['defaultIdentifiedOnly']
+                : config['defaultIdentifiedOnly']
                 ? 'identified_only'
                 : 'always',
         })
 
-        this.siteApps?.onRemoteConfig(response)
-        this.sessionRecording?.onRemoteConfig(response)
-        this.autocapture?.onRemoteConfig(response)
-        this.heatmaps?.onRemoteConfig(response)
-        this.experiments?.onRemoteConfig(response)
-        this.surveys?.onRemoteConfig(response)
-        this.webVitalsAutocapture?.onRemoteConfig(response)
-        this.exceptionObserver?.onRemoteConfig(response)
-        this.deadClicksAutocapture?.onRemoteConfig(response)
-    }
-
-    _onRemoteConfig(config: RemoteConfig) {
-        // TODO: check config. If "hasFlags" is anything other than false - load the flags from decide (later will be /flags)
+        this.siteApps?.onRemoteConfig(config)
+        this.sessionRecording?.onRemoteConfig(config)
+        this.autocapture?.onRemoteConfig(config)
+        this.heatmaps?.onRemoteConfig(config)
+        this.experiments?.onRemoteConfig(config)
+        this.surveys?.onRemoteConfig(config)
+        this.webVitalsAutocapture?.onRemoteConfig(config)
+        this.exceptionObserver?.onRemoteConfig(config)
+        this.deadClicksAutocapture?.onRemoteConfig(config)
 
         if (config.hasFeatureFlags !== false) {
             // Check explicitly for false - anything else means we there could be so lets load them

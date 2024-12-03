@@ -7,7 +7,7 @@ import * as globals from '../utils/globals'
 import { ENABLE_PERSON_PROCESSING, USER_STATE } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { logger } from '../utils/logger'
-import { DecideResponse, PostHogConfig } from '../types'
+import { PostHogConfig, RemoteConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
@@ -295,7 +295,7 @@ describe('posthog core', () => {
 
         it('sends payloads to alternative endpoint if given', () => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
-            posthog._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } } as DecideResponse)
+            posthog._onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
 
             posthog.capture('event-name', { foo: 'bar', length: 0 })
 
@@ -320,7 +320,7 @@ describe('posthog core', () => {
 
         it('sends payloads to overriden _url, even if alternative endpoint is set', () => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
-            posthog._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } } as DecideResponse)
+            posthog._onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
 
             posthog.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
 
@@ -336,29 +336,29 @@ describe('posthog core', () => {
         it('enables compression from decide response', () => {
             const posthog = posthogWith({})
 
-            posthog._afterDecideResponse({ supportedCompression: ['gzip-js', 'base64'] } as DecideResponse)
+            posthog._onRemoteConfig({ supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig)
 
             expect(posthog.compression).toEqual('gzip-js')
         })
         it('uses defaultIdentifiedOnly from decide response', () => {
             const posthog = posthogWith({})
 
-            posthog._afterDecideResponse({ defaultIdentifiedOnly: true } as DecideResponse)
+            posthog._onRemoteConfig({ defaultIdentifiedOnly: true } as RemoteConfig)
             expect(posthog.config.person_profiles).toEqual('identified_only')
 
-            posthog._afterDecideResponse({ defaultIdentifiedOnly: false } as DecideResponse)
+            posthog._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
             expect(posthog.config.person_profiles).toEqual('always')
         })
         it('defaultIdentifiedOnly does not override person_profiles if already set', () => {
             const posthog = posthogWith({ person_profiles: 'always' })
-            posthog._afterDecideResponse({ defaultIdentifiedOnly: true } as DecideResponse)
+            posthog._onRemoteConfig({ defaultIdentifiedOnly: true } as RemoteConfig)
             expect(posthog.config.person_profiles).toEqual('always')
         })
 
         it('enables compression from decide response when only one received', () => {
             const posthog = posthogWith({})
 
-            posthog._afterDecideResponse({ supportedCompression: ['base64'] } as DecideResponse)
+            posthog._onRemoteConfig({ supportedCompression: ['base64'] } as RemoteConfig)
 
             expect(posthog.compression).toEqual('base64')
         })
@@ -366,7 +366,7 @@ describe('posthog core', () => {
         it('does not enable compression from decide response if compression is disabled', () => {
             const posthog = posthogWith({ disable_compression: true, persistence: 'memory' })
 
-            posthog._afterDecideResponse({ supportedCompression: ['gzip-js', 'base64'] } as DecideResponse)
+            posthog._onRemoteConfig({ supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig)
 
             expect(posthog.compression).toEqual(undefined)
         })
@@ -374,7 +374,7 @@ describe('posthog core', () => {
         it('defaults to /e if no endpoint is given', () => {
             const posthog = posthogWith({})
 
-            posthog._afterDecideResponse({} as DecideResponse)
+            posthog._onRemoteConfig({} as RemoteConfig)
 
             expect(posthog.analyticsDefaultEndpoint).toEqual('/e/')
         })
@@ -382,7 +382,7 @@ describe('posthog core', () => {
         it('uses the specified analytics endpoint if given', () => {
             const posthog = posthogWith({})
 
-            posthog._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } } as DecideResponse)
+            posthog._onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
 
             expect(posthog.analyticsDefaultEndpoint).toEqual('/i/v0/e/')
         })

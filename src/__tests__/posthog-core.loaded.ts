@@ -27,6 +27,7 @@ describe('loaded() with flags', () => {
                 resetRequestQueue: jest.fn(),
                 _startReloadTimer: jest.fn(),
                 receivedFeatureFlags: jest.fn(),
+                onFeatureFlags: jest.fn(),
             },
             _send_request: jest.fn(({ callback }) => callback?.({ status: 200, json: {} })),
         })

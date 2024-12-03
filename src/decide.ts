@@ -114,7 +114,7 @@ export class Decide {
             return
         }
 
-        this.instance._afterDecideResponse(response)
+        this.instance._onRemoteConfig(response)
     }
 
     private onRemoteConfig(config?: RemoteConfig): void {

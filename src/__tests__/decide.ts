@@ -52,7 +52,7 @@ describe('Decide', () => {
             get_property: (key: string) => posthog.persistence!.props[key],
             capture: jest.fn(),
             _addCaptureHook: jest.fn(),
-            _afterDecideResponse: jest.fn(),
+            _onRemoteConfig: jest.fn(),
             get_distinct_id: jest.fn().mockImplementation(() => 'distinctid'),
             _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
             featureFlags: {
@@ -200,7 +200,7 @@ describe('Decide', () => {
             subject({} as DecideResponse)
 
             expect(posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith({}, false)
-            expect(posthog._afterDecideResponse).toHaveBeenCalledWith({})
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({})
         })
 
         it('Make sure receivedFeatureFlags is called with errors if the decide response fails', () => {
@@ -225,7 +225,7 @@ describe('Decide', () => {
             } as unknown as DecideResponse
             subject(decideResponse)
 
-            expect(posthog._afterDecideResponse).toHaveBeenCalledWith(decideResponse)
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith(decideResponse)
             expect(posthog.featureFlags.receivedFeatureFlags).not.toHaveBeenCalled()
         })
 
@@ -242,7 +242,7 @@ describe('Decide', () => {
             } as unknown as DecideResponse
             subject(decideResponse)
 
-            expect(posthog._afterDecideResponse).toHaveBeenCalledWith(decideResponse)
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith(decideResponse)
             expect(posthog.featureFlags.receivedFeatureFlags).not.toHaveBeenCalled()
         })
     })

@@ -1,5 +1,5 @@
 import { PostHog } from './posthog-core'
-import { DecideResponse } from './types'
+import { RemoteConfig } from './types'
 import { navigator, window } from './utils/globals'
 import {
     WebExperiment,
@@ -9,7 +9,7 @@ import {
     WebExperimentVariant,
 } from './web-experiments-types'
 import { WEB_EXPERIMENTS } from './constants'
-import { isNullish } from './utils/type-utils'
+import { isNullish, isString } from './utils/type-utils'
 import { getQueryParam, isUrlMatchingRegex } from './utils/request-utils'
 import { logger } from './utils/logger'
 import { Info } from './utils/event-utils'
@@ -31,7 +31,6 @@ export const webExperimentUrlValidationMap: Record<
 
 export class WebExperiments {
     instance: PostHog
-    private _featureFlags?: Record<string, string | boolean>
     private _flagToExperiments?: Map<string, WebExperiment>
 
     constructor(instance: PostHog) {
@@ -65,15 +64,18 @@ export class WebExperiments {
         })
     }
 
-    onRemoteConfig(response: DecideResponse) {
+    onRemoteConfig(config: RemoteConfig) {
+        // TODO: Does this need to listen to config or rather just flags??
         if (this._is_bot()) {
             WebExperiments.logInfo('Refusing to render web experiment since the viewer is a likely bot')
             return
         }
 
-        this._featureFlags = response.featureFlags
-        this.loadIfEnabled()
-        this.previewWebExperiment()
+        this.instance.onFeatureFlags(() => {
+            // NOTE: Should this only fire once?
+            this.loadIfEnabled()
+            this.previewWebExperiment()
+        })
     }
 
     previewWebExperiment() {
@@ -108,11 +110,7 @@ export class WebExperiments {
             this._flagToExperiments = new Map<string, WebExperiment>()
 
             webExperiments.forEach((webExperiment) => {
-                if (
-                    webExperiment.feature_flag_key &&
-                    this._featureFlags &&
-                    this._featureFlags[webExperiment.feature_flag_key]
-                ) {
+                if (webExperiment.feature_flag_key) {
                     if (this._flagToExperiments) {
                         WebExperiments.logInfo(
                             `setting flag key `,
@@ -123,8 +121,8 @@ export class WebExperiments {
                         this._flagToExperiments?.set(webExperiment.feature_flag_key, webExperiment)
                     }
 
-                    const selectedVariant = this._featureFlags[webExperiment.feature_flag_key] as unknown as string
-                    if (selectedVariant && webExperiment.variants[selectedVariant]) {
+                    const selectedVariant = this.instance.featureFlags.getFeatureFlag(webExperiment.feature_flag_key)
+                    if (isString(selectedVariant) && webExperiment.variants[selectedVariant]) {
                         this.applyTransforms(
                             webExperiment.name,
                             selectedVariant,
