@@ -2,8 +2,9 @@ import { Decide } from '../decide'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 import { PostHog } from '../posthog-core'
-import { DecideResponse, PostHogConfig, Properties } from '../types'
+import { DecideResponse, PostHogConfig, Properties, RemoteConfig } from '../types'
 import '../entrypoints/external-scripts-loader'
+import { assignableWindow } from '../utils/globals'
 
 const expectDecodedSendRequest = (
     send_request: PostHog['_send_request'],
@@ -244,6 +245,65 @@ describe('Decide', () => {
 
             expect(posthog._onRemoteConfig).toHaveBeenCalledWith(decideResponse)
             expect(posthog.featureFlags.receivedFeatureFlags).not.toHaveBeenCalled()
+        })
+    })
+
+    describe('remote config', () => {
+        const config = { surveys: true } as RemoteConfig
+
+        beforeEach(() => {
+            posthog.config.__preview_remote_config = true
+            assignableWindow._POSTHOG_CONFIG = undefined
+            assignableWindow.POSTHOG_DEBUG = true
+
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
+                (_ph: PostHog, _name: string, cb: (err?: any) => void) => {
+                    assignableWindow._POSTHOG_CONFIG = config as RemoteConfig
+                    cb()
+                }
+            )
+
+            posthog._send_request = jest.fn().mockImplementation(({ callback }) => callback?.({ json: config }))
+        })
+
+        it('properly pulls from the window and uses it if set', () => {
+            assignableWindow._POSTHOG_CONFIG = config as RemoteConfig
+            decide().call()
+
+            expect(assignableWindow.__PosthogExtensions__.loadExternalDependency).not.toHaveBeenCalled()
+            expect(posthog._send_request).not.toHaveBeenCalled()
+
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith(config)
+        })
+
+        it('loads the script if window config not set', () => {
+            decide().call()
+
+            expect(assignableWindow.__PosthogExtensions__.loadExternalDependency).toHaveBeenCalledWith(
+                posthog,
+                'remote-config',
+                expect.any(Function)
+            )
+            expect(posthog._send_request).not.toHaveBeenCalled()
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith(config)
+        })
+
+        it('loads the json if window config not set and js failed', () => {
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
+                (_ph: PostHog, _name: string, cb: (err?: any) => void) => {
+                    cb()
+                }
+            )
+
+            decide().call()
+
+            expect(assignableWindow.__PosthogExtensions__.loadExternalDependency).toHaveBeenCalled()
+            expect(posthog._send_request).toHaveBeenCalledWith({
+                method: 'GET',
+                url: 'https://test.com/array/testtoken/config',
+                callback: expect.any(Function),
+            })
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith(config)
         })
     })
 })

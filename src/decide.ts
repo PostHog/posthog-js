@@ -26,6 +26,9 @@ export class Decide {
             assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'remote-config', () => {
                 return cb(assignableWindow._POSTHOG_CONFIG)
             })
+        } else {
+            logger.error('PostHog Extensions not found. Cannot load remote config.')
+            cb()
         }
     }
 
@@ -43,6 +46,7 @@ export class Decide {
         if (this.instance.config.__preview_remote_config) {
             // Attempt 1 - use the pre-loaded config if it came as part of the token-specific array.js
             if (assignableWindow._POSTHOG_CONFIG) {
+                logger.info('Using preloaded remote config', assignableWindow._POSTHOG_CONFIG)
                 this.onRemoteConfig(assignableWindow._POSTHOG_CONFIG)
                 return
             }
@@ -50,6 +54,7 @@ export class Decide {
             // Attempt 2 - if we have the external deps loader then lets load the script version of the config that includes site apps
             this._loadRemoteConfigJs((config) => {
                 if (!config) {
+                    logger.info('No config found after loading remote JS config. Falling back to JSON.')
                     // Attempt 3 Load the config json instead of the script - we won't get site apps etc. but we will get the config
                     this._loadRemoteConfigJSON((config) => {
                         this.onRemoteConfig(config)
