@@ -1,3 +1,7 @@
+## 1.194.3 - 2024-12-03
+
+- fix: parse Chrome instead of Android as browser (#1575)
+
 ## 1.194.2 - 2024-12-02
 
 - fix: use previous site-app variables (#1574)
