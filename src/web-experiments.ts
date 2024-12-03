@@ -1,5 +1,4 @@
 import { PostHog } from './posthog-core'
-import { RemoteConfig } from './types'
 import { navigator, window } from './utils/globals'
 import {
     WebExperiment,
@@ -30,20 +29,28 @@ export const webExperimentUrlValidationMap: Record<
 }
 
 export class WebExperiments {
-    instance: PostHog
     private _flagToExperiments?: Map<string, WebExperiment>
 
-    constructor(instance: PostHog) {
-        this.instance = instance
-        const appFeatureFLags = (flags: string[]) => {
+    constructor(private instance: PostHog) {
+        this.instance.onFeatureFlags((flags: string[]) => {
             this.applyFeatureFlagChanges(flags)
-        }
-
-        this.instance.onFeatureFlags(appFeatureFLags)
-        this._flagToExperiments = new Map<string, WebExperiment>()
+        })
     }
 
     applyFeatureFlagChanges(flags: string[]) {
+        if (this._is_bot()) {
+            WebExperiments.logInfo('Refusing to render web experiment since the viewer is a likely bot')
+            return
+        }
+
+        if (!this._flagToExperiments) {
+            // Indicates first load so we trigger the loaders
+            this._flagToExperiments = new Map<string, WebExperiment>()
+            // NOTE: Should this only fire once?
+            this.loadIfEnabled()
+            this.previewWebExperiment()
+        }
+
         if (isNullish(this._flagToExperiments) || this.instance.config.disable_web_experiments) {
             return
         }
@@ -61,20 +68,6 @@ export class WebExperiments {
                     )
                 }
             }
-        })
-    }
-
-    onRemoteConfig(config: RemoteConfig) {
-        // TODO: Does this need to listen to config or rather just flags??
-        if (this._is_bot()) {
-            WebExperiments.logInfo('Refusing to render web experiment since the viewer is a likely bot')
-            return
-        }
-
-        this.instance.onFeatureFlags(() => {
-            // NOTE: Should this only fire once?
-            this.loadIfEnabled()
-            this.previewWebExperiment()
         })
     }
 

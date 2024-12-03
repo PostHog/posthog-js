@@ -572,7 +572,6 @@ export class PostHog {
         this.sessionRecording?.onRemoteConfig(config)
         this.autocapture?.onRemoteConfig(config)
         this.heatmaps?.onRemoteConfig(config)
-        this.experiments?.onRemoteConfig(config)
         this.surveys?.onRemoteConfig(config)
         this.webVitalsAutocapture?.onRemoteConfig(config)
         this.exceptionObserver?.onRemoteConfig(config)
