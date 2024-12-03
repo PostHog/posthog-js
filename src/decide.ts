@@ -43,11 +43,27 @@ export class Decide {
     }
 
     call(): void {
+        // Call decide to get what features are enabled and other settings.
+        // As a reminder, if the /decide endpoint is disabled, feature flags, toolbar, session recording, autocapture,
+        // and compression will not be available.
+        const disableRemoteCalls = !!this.instance.config.advanced_disable_decide
+
+        if (!disableRemoteCalls) {
+            // TRICKY: Reset any decide reloads queued during config.loaded because they'll be
+            // covered by the decide call right above.
+            this.instance.featureFlags.resetRequestQueue()
+        }
+
         if (this.instance.config.__preview_remote_config) {
             // Attempt 1 - use the pre-loaded config if it came as part of the token-specific array.js
             if (assignableWindow._POSTHOG_CONFIG) {
                 logger.info('Using preloaded remote config', assignableWindow._POSTHOG_CONFIG)
                 this.onRemoteConfig(assignableWindow._POSTHOG_CONFIG)
+                return
+            }
+
+            if (disableRemoteCalls) {
+                logger.warn('Remote config is disabled. Falling back to local config.')
                 return
             }
 
@@ -138,6 +154,10 @@ export class Decide {
 
         this.instance._onRemoteConfig(config)
 
-        // Additionally trigger loading of flags if necessary
+        if (config.hasFeatureFlags !== false) {
+            // If the config has feature flags, we need to call decide to get the feature flags
+            // This completely separates it from the config logic which is good in terms of separation of concerns
+            this.instance.featureFlags.reloadFeatureFlags()
+        }
     }
 }

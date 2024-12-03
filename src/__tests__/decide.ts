@@ -57,6 +57,8 @@ describe('Decide', () => {
             get_distinct_id: jest.fn().mockImplementation(() => 'distinctid'),
             _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
             featureFlags: {
+                resetRequestQueue: jest.fn(),
+                reloadFeatureFlags: jest.fn(),
                 receivedFeatureFlags: jest.fn(),
                 setReloadingPaused: jest.fn(),
                 _startReloadTimer: jest.fn(),
@@ -304,6 +306,21 @@ describe('Decide', () => {
                 callback: expect.any(Function),
             })
             expect(posthog._onRemoteConfig).toHaveBeenCalledWith(config)
+        })
+
+        it.each([
+            [true, true],
+            [false, false],
+            [undefined, true],
+        ])('conditionally reloads feature flags - hasFlags: %s, shouldReload: %s', (hasFeatureFlags, shouldReload) => {
+            assignableWindow._POSTHOG_CONFIG = { hasFeatureFlags } as RemoteConfig
+            decide().call()
+
+            if (shouldReload) {
+                expect(posthog.featureFlags.reloadFeatureFlags).toHaveBeenCalled()
+            } else {
+                expect(posthog.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
+            }
         })
     })
 })
