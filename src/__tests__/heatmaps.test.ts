@@ -217,7 +217,7 @@ describe('heatmaps', () => {
             (deprecatedclientSideOptIn, clientSideOptIn, serverSideOptIn, expected) => {
                 posthog.config.enable_heatmaps = deprecatedclientSideOptIn
                 posthog.config.capture_heatmaps = clientSideOptIn
-                posthog.heatmaps!.afterDecideResponse({
+                posthog.heatmaps!.onRemoteConfig({
                     heatmaps: serverSideOptIn,
                 } as DecideResponse)
                 expect(posthog.heatmaps!.isEnabled).toBe(expected)

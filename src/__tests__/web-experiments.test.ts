@@ -128,6 +128,7 @@ describe('Web Experimentation', () => {
                 .fn()
                 .mockImplementation(({ callback }) => callback({ statusCode: 200, json: experimentsResponse })),
             consent: { isOptedOut: () => true } as unknown as ConsentManager,
+            onFeatureFlags: jest.fn(),
         })
 
         posthog.requestRouter = new RequestRouter(posthog)
@@ -170,7 +171,7 @@ describe('Web Experimentation', () => {
     function assertElementChanged(variant: string, expectedProperty: string, value: string) {
         const elParent = createTestDocument()
         webExperiment = new WebExperiments(posthog)
-        webExperiment.afterDecideResponse({
+        webExperiment.onRemoteConfig({
             featureFlags: {
                 'signup-button-test': variant,
             },
@@ -200,7 +201,7 @@ describe('Web Experimentation', () => {
             webExperiment._is_bot = () => true
             const elParent = createTestDocument()
 
-            webExperiment.afterDecideResponse({
+            webExperiment.onRemoteConfig({
                 featureFlags: {
                     'signup-button-test': 'Sign me up',
                 },
@@ -262,6 +263,7 @@ describe('Web Experimentation', () => {
                     .fn()
                     .mockImplementation(({ callback }) => callback({ statusCode: 200, json: expResponse })),
                 consent: { isOptedOut: () => true } as unknown as ConsentManager,
+                onFeatureFlags: jest.fn(),
             })
 
             posthog.requestRouter = new RequestRouter(disabledPostHog)

@@ -65,7 +65,7 @@ export class WebExperiments {
         })
     }
 
-    afterDecideResponse(response: DecideResponse) {
+    onRemoteConfig(response: DecideResponse) {
         if (this._is_bot()) {
             WebExperiments.logInfo('Refusing to render web experiment since the viewer is a likely bot')
             return

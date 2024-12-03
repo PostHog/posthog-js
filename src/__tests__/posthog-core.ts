@@ -842,7 +842,7 @@ describe('posthog core', () => {
             expect(posthog.persistence.register).not.toHaveBeenCalled() // FFs are saved this way
 
             // Session recording
-            expect(posthog.sessionRecording.afterDecideResponse).not.toHaveBeenCalled()
+            expect(posthog.sessionRecording.onRemoteConfig).not.toHaveBeenCalled()
         })
 
         describe('device id behavior', () => {

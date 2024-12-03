@@ -224,7 +224,7 @@ describe('SiteApps', () => {
 
     describe('afterDecideResponse', () => {
         it('sets loaded to true and enabled to false when response is undefined', () => {
-            siteAppsInstance.afterDecideResponse(undefined)
+            siteAppsInstance.onRemoteConfig(undefined)
 
             expect(siteAppsInstance.loaded).toBe(true)
             expect(siteAppsInstance.enabled).toBe(false)
@@ -240,7 +240,7 @@ describe('SiteApps', () => {
                 ],
             } as DecideResponse
 
-            siteAppsInstance.afterDecideResponse(response)
+            siteAppsInstance.onRemoteConfig(response)
 
             expect(siteAppsInstance.appsLoading.size).toBe(2)
             expect(siteAppsInstance.loaded).toBe(false)
@@ -261,7 +261,7 @@ describe('SiteApps', () => {
                 siteApps: [{ id: '1', url: '/site_app/1' }],
             } as DecideResponse
 
-            siteAppsInstance.afterDecideResponse(response)
+            siteAppsInstance.onRemoteConfig(response)
 
             expect(siteAppsInstance.loaded).toBe(true)
             expect(siteAppsInstance.enabled).toBe(false)
@@ -276,7 +276,7 @@ describe('SiteApps', () => {
                 siteApps: [{ id: '1', url: '/site_app/1' }],
             } as DecideResponse
 
-            siteAppsInstance.afterDecideResponse(response)
+            siteAppsInstance.onRemoteConfig(response)
 
             // Wait for the simulated async loading to complete
             setTimeout(() => {
@@ -293,7 +293,7 @@ describe('SiteApps', () => {
                 siteApps: [{ id: '1', url: '/site_app/1' }],
             } as DecideResponse
 
-            siteAppsInstance.afterDecideResponse(response)
+            siteAppsInstance.onRemoteConfig(response)
 
             expect(assignableWindow['__$$ph_site_app_1']).toBe(posthog)
             expect(typeof assignableWindow['__$$ph_site_app_1_missed_invocations']).toBe('function')
@@ -312,7 +312,7 @@ describe('SiteApps', () => {
                 siteApps: [{ id: '1', url: '/site_app/1' }],
             } as DecideResponse
 
-            siteAppsInstance.afterDecideResponse(response)
+            siteAppsInstance.onRemoteConfig(response)
 
             expect(logger.error).toHaveBeenCalledWith(
                 'PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.'
@@ -327,7 +327,7 @@ describe('SiteApps', () => {
                 siteApps: [],
             } as DecideResponse
 
-            siteAppsInstance.afterDecideResponse(response)
+            siteAppsInstance.onRemoteConfig(response)
 
             expect(siteAppsInstance.loaded).toBe(true)
             expect(siteAppsInstance.enabled).toBe(false)

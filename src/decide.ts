@@ -118,6 +118,7 @@ export class Decide {
     }
 
     private onRemoteConfig(config?: RemoteConfig): void {
+        // NOTE: Once this is rolled out we will remove the "decide" related code above. Until then the code duplication is fine.
         if (!config) {
             logger.error('Failed to fetch remote config from PostHog.')
             return
