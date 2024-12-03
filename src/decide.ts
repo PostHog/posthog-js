@@ -155,6 +155,8 @@ export class Decide {
         this.instance._onRemoteConfig(config)
 
         if (config.hasFeatureFlags !== false) {
+            // TRICKY: This is set in the parent for some reason...
+            this.instance.featureFlags.setReloadingPaused(false)
             // If the config has feature flags, we need to call decide to get the feature flags
             // This completely separates it from the config logic which is good in terms of separation of concerns
             this.instance.featureFlags.reloadFeatureFlags()

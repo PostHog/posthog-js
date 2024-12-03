@@ -33,11 +33,11 @@ export class WebExperiments {
 
     constructor(private instance: PostHog) {
         this.instance.onFeatureFlags((flags: string[]) => {
-            this.applyFeatureFlagChanges(flags)
+            this.onFeatureFlags(flags)
         })
     }
 
-    applyFeatureFlagChanges(flags: string[]) {
+    onFeatureFlags(flags: string[]) {
         if (this._is_bot()) {
             WebExperiments.logInfo('Refusing to render web experiment since the viewer is a likely bot')
             return
@@ -49,6 +49,7 @@ export class WebExperiments {
             // NOTE: Should this only fire once?
             this.loadIfEnabled()
             this.previewWebExperiment()
+            return
         }
 
         if (isNullish(this._flagToExperiments) || this.instance.config.disable_web_experiments) {
