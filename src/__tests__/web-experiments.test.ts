@@ -1,6 +1,6 @@
 import { WebExperiments } from '../web-experiments'
 import { PostHog } from '../posthog-core'
-import { DecideResponse, PostHogConfig } from '../types'
+import { PostHogConfig } from '../types'
 import { PostHogPersistence } from '../posthog-persistence'
 import { WebExperiment } from '../web-experiments-types'
 import { RequestRouter } from '../utils/request-router'
@@ -111,7 +111,10 @@ describe('Web Experimentation', () => {
         },
     } as unknown as WebExperiment
 
+    const simulateFeatureFlags: jest.Mock = jest.fn()
+
     beforeEach(() => {
+        let cachedFlags = {}
         persistence = { props: {}, register: jest.fn() } as unknown as PostHogPersistence
         posthog = makePostHog({
             config: {
@@ -129,6 +132,14 @@ describe('Web Experimentation', () => {
                 .mockImplementation(({ callback }) => callback({ statusCode: 200, json: experimentsResponse })),
             consent: { isOptedOut: () => true } as unknown as ConsentManager,
             onFeatureFlags: jest.fn(),
+            getFeatureFlag: (key: string) => {
+                return cachedFlags[key]
+            },
+        })
+
+        simulateFeatureFlags.mockImplementation((flags) => {
+            cachedFlags = flags
+            webExperiment.onFeatureFlags(Object.keys(flags))
         })
 
         posthog.requestRouter = new RequestRouter(posthog)
@@ -171,11 +182,10 @@ describe('Web Experimentation', () => {
     function assertElementChanged(variant: string, expectedProperty: string, value: string) {
         const elParent = createTestDocument()
         webExperiment = new WebExperiments(posthog)
-        webExperiment.onRemoteConfig({
-            featureFlags: {
-                'signup-button-test': variant,
-            },
-        } as unknown as DecideResponse)
+
+        simulateFeatureFlags({
+            'signup-button-test': variant,
+        })
 
         switch (expectedProperty) {
             case 'css':
@@ -201,11 +211,10 @@ describe('Web Experimentation', () => {
             webExperiment._is_bot = () => true
             const elParent = createTestDocument()
 
-            webExperiment.onRemoteConfig({
-                featureFlags: {
-                    'signup-button-test': 'Sign me up',
-                },
-            } as unknown as DecideResponse)
+            simulateFeatureFlags({
+                'signup-button-test': 'Sign me up',
+            })
+
             expect(elParent.innerText).toEqual('original')
         })
     })

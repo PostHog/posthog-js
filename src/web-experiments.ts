@@ -114,7 +114,7 @@ export class WebExperiments {
                         this._flagToExperiments?.set(webExperiment.feature_flag_key, webExperiment)
                     }
 
-                    const selectedVariant = this.instance.featureFlags.getFeatureFlag(webExperiment.feature_flag_key)
+                    const selectedVariant = this.instance.getFeatureFlag(webExperiment.feature_flag_key)
                     if (isString(selectedVariant) && webExperiment.variants[selectedVariant]) {
                         this.applyTransforms(
                             webExperiment.name,
