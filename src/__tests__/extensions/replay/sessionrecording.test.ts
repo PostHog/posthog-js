@@ -485,6 +485,15 @@ describe('SessionRecording', () => {
             jest.spyOn(sessionRecording, 'startIfEnabledOrStop')
         })
 
+        it('loads script based on script config', () => {
+            sessionRecording.afterDecideResponse(
+                makeDecideResponse({
+                    sessionRecording: { endpoint: '/s/', scriptConfig: { script: 'experimental-recorder' } },
+                })
+            )
+            expect(loadScriptMock).toHaveBeenCalledWith(posthog, 'experimental-recorder', expect.any(Function))
+        })
+
         it('when the first event is a meta it does not take a manual full snapshot', () => {
             sessionRecording.startIfEnabledOrStop()
             expect(loadScriptMock).toHaveBeenCalled()

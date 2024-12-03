@@ -7,6 +7,7 @@ import {
     SESSION_RECORDING_MINIMUM_DURATION,
     SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE,
     SESSION_RECORDING_SAMPLE_RATE,
+    SESSION_RECORDING_SCRIPT_CONFIG,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
 } from '../../constants'
 import {
@@ -38,7 +39,7 @@ import {
 
 import { isBoolean, isFunction, isNullish, isNumber, isObject, isString, isUndefined } from '../../utils/type-utils'
 import { logger } from '../../utils/logger'
-import { assignableWindow, document, window } from '../../utils/globals'
+import { assignableWindow, document, PostHogExtensionKind, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
 import { MutationRateLimiter } from './mutation-rate-limiter'
@@ -383,7 +384,7 @@ export class SessionRecording {
      * defaults to buffering mode until a decide response is received
      * once a decide response is received status can be disabled, active or sampled
      */
-    private get status(): SessionRecordingStatus {
+    get status(): SessionRecordingStatus {
         if (!this.receivedDecide) {
             return 'buffering'
         }
@@ -696,6 +697,7 @@ export class SessionRecording {
                     [SESSION_RECORDING_MINIMUM_DURATION]: isUndefined(receivedMinimumDuration)
                         ? null
                         : receivedMinimumDuration,
+                    [SESSION_RECORDING_SCRIPT_CONFIG]: response.sessionRecording?.scriptConfig,
                 })
             }
 
@@ -752,7 +754,7 @@ export class SessionRecording {
         // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
         // imported), don't load script. Otherwise, remotely import recorder.js from cdn since it hasn't been loaded.
         if (!this.rrwebRecord) {
-            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'recorder', (err) => {
+            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, this.scriptName, (err) => {
                 if (err) {
                     return logger.error(LOGGER_PREFIX + ` could not load recorder`, err)
                 }
@@ -767,6 +769,13 @@ export class SessionRecording {
         if (this.status === 'active') {
             this._reportStarted(startReason || 'recording_initialized')
         }
+    }
+
+    private get scriptName(): PostHogExtensionKind {
+        return (
+            (this.instance?.persistence?.get_property(SESSION_RECORDING_SCRIPT_CONFIG)
+                ?.script as PostHogExtensionKind) || 'recorder'
+        )
     }
 
     private isInteractiveEvent(event: eventWithTime) {

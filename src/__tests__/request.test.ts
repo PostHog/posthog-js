@@ -343,6 +343,21 @@ describe('request', () => {
                 'application/x-www-form-urlencoded'
             )
         })
+
+        it('converts bigint properties to string without throwing', () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/',
+                    method: 'POST',
+                    compression: Compression.Base64,
+                    data: { foo: BigInt('999999999999999999999') },
+                })
+            )
+            expect(mockedXHR.send.mock.calls[0][0]).toMatchInlineSnapshot(
+                `"data=eyJmb28iOiI5OTk5OTk5OTk5OTk5OTk5OTk5OTkifQ%3D%3D"`
+            )
+            expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/x-www-form-urlencoded')
+        })
     })
 
     describe('sendBeacon', () => {

@@ -1,3 +1,24 @@
+## 1.194.2 - 2024-12-02
+
+- fix: use previous site-app variables (#1574)
+
+## 1.194.1 - 2024-11-30
+
+- fix: Don't crash on bigints (#1573)
+- feat: Add customization to print events drop them (#1572)
+
+## 1.194.0 - 2024-11-29
+
+- feat: add $recording_status property (#1571)
+
+## 1.193.1 - 2024-11-28
+
+- fix: zone detection (#1570)
+
+## 1.193.0 - 2024-11-28
+
+- feat: allow decide to provide script name for recorder (#1509)
+
 ## 1.192.1 - 2024-11-28
 
 

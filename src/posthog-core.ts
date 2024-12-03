@@ -947,6 +947,10 @@ export class PostHog {
             properties['$window_id'] = windowId
         }
 
+        if (this.sessionRecording) {
+            properties['$recording_status'] = this.sessionRecording.status
+        }
+
         if (this.requestRouter.region === RequestRouterRegion.CUSTOM) {
             properties['$lib_custom_api_host'] = this.config.api_host
         }
