@@ -43,16 +43,15 @@ export class WebExperiments {
             return
         }
 
-        if (!this._flagToExperiments) {
-            // Indicates first load so we trigger the loaders
-            this._flagToExperiments = new Map<string, WebExperiment>()
-            // NOTE: Should this only fire once?
-            this.loadIfEnabled()
-            this.previewWebExperiment()
+        if (this.instance.config.disable_web_experiments) {
             return
         }
 
-        if (isNullish(this._flagToExperiments) || this.instance.config.disable_web_experiments) {
+        if (isNullish(this._flagToExperiments)) {
+            // Indicates first load so we trigger the loaders
+            this._flagToExperiments = new Map<string, WebExperiment>()
+            this.loadIfEnabled()
+            this.previewWebExperiment()
             return
         }
 
