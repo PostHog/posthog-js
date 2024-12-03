@@ -87,7 +87,7 @@ export class SiteApps {
                 for (const { id, url } of response['siteApps']) {
                     // TODO: if we have opted out and "type" is "site_destination", ignore it... but do include "site_app" types
                     this.appsLoading.add(id)
-                    assignableWindow[`__$$ph_site_app_${id}_posthog`] = this.instance
+                    assignableWindow[`__$$ph_site_app_${id}`] = this.instance
                     assignableWindow[`__$$ph_site_app_${id}_missed_invocations`] = () => this.missedInvocations
                     assignableWindow[`__$$ph_site_app_${id}_callback`] = () => {
                         this.appsLoading.delete(id)
