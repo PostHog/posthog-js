@@ -85,10 +85,7 @@ export class SiteApps {
                     // Stop collecting events once all site apps are loaded
                     if (this.appsLoading.size === 0) {
                         this.loaded = true
-                        // only clear missedInvocations after site_destinations have been loaded
-                        if (!this.instance.consent.isOptedOut()) {
-                            this.missedInvocations = []
-                        }
+                        this.missedInvocations = []
                     }
                 }
                 for (const { id, type, url } of this._decideServerSiteAppsResponse) {
@@ -118,6 +115,8 @@ export class SiteApps {
             } else {
                 this.loaded = true
             }
+        } else {
+            this.loaded = true
         }
     }
 
