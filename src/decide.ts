@@ -1,9 +1,19 @@
 import { PostHog } from './posthog-core'
-import { Compression, DecideResponse } from './types'
+import { Compression, DecideResponse, RemoteConfig } from './types'
 import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './constants'
 
 import { logger } from './utils/logger'
-import { document } from './utils/globals'
+import { assignableWindow, document } from './utils/globals'
+
+// TODO: Add check for global config existing.
+// Modify the whole "afterDecideResponse" function to be a method of the PostHog class
+
+// 1. Option is to load the config endpoint (if __preview is enabled) and then if flags are needed call decide, and then call "afterDecideResponse" with the combined response :thinking:
+// 2. Other option is to separate out the values so that we have a "config response" and a "flags response" separately...
+
+// TODO: Fix WebExperiments to wait for flags instead of only decide
+// TODO: Fix Surveys to do the same
+// TODO: Background refresh of the config - every 5 minutes to match CDN cache - at least when active
 
 export class Decide {
     constructor(private readonly instance: PostHog) {
@@ -11,7 +21,48 @@ export class Decide {
         this.instance.decideEndpointWasHit = this.instance._hasBootstrappedFeatureFlags()
     }
 
+    private _loadRemoteConfigJs(cb: (config?: RemoteConfig) => void): void {
+        if (assignableWindow.__PosthogExtensions__?.loadExternalDependency) {
+            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'remote-config', () => {
+                return cb(assignableWindow._POSTHOG_CONFIG)
+            })
+        }
+    }
+
+    private _loadRemoteConfigJSON(cb: (config?: RemoteConfig) => void): void {
+        this.instance._send_request({
+            method: 'GET',
+            url: this.instance.requestRouter.endpointFor('assets', `/array/${this.instance.config.token}/config`),
+            callback: (response) => {
+                cb(response.json as RemoteConfig | undefined)
+            },
+        })
+    }
+
     call(): void {
+        if (this.instance.config.__preview_remote_config) {
+            // Attempt 1 - use the pre-loaded config if it came as part of the token-specific array.js
+            if (assignableWindow._POSTHOG_CONFIG) {
+                this.onRemoteConfig(assignableWindow._POSTHOG_CONFIG)
+                return
+            }
+
+            // Attempt 2 - if we have the external deps loader then lets load the script version of the config that includes site apps
+            this._loadRemoteConfigJs((config) => {
+                if (!config) {
+                    // Attempt 3 Load the config json instead of the script - we won't get site apps etc. but we will get the config
+                    this._loadRemoteConfigJSON((config) => {
+                        this.onRemoteConfig(config)
+                    })
+                    return
+                }
+
+                this.onRemoteConfig(config)
+            })
+
+            return
+        }
+
         /*
         Calls /decide endpoint to fetch options for autocapture, session recording, feature flags & compression.
         */
@@ -64,5 +115,23 @@ export class Decide {
         }
 
         this.instance._afterDecideResponse(response)
+    }
+
+    private onRemoteConfig(config?: RemoteConfig): void {
+        if (!config) {
+            logger.error('Failed to fetch remote config from PostHog.')
+            return
+        }
+        if (!(document && document.body)) {
+            logger.info('document not ready yet, trying again in 500 milliseconds...')
+            setTimeout(() => {
+                this.onRemoteConfig(config)
+            }, 500)
+            return
+        }
+
+        this.instance._onRemoteConfig(config)
+
+        // Additionally trigger loading of flags if necessary
     }
 }

@@ -10,7 +10,7 @@ import {
 import { isUrlMatchingRegex } from './utils/request-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import { assignableWindow, document, window } from './utils/globals'
-import { DecideResponse } from './types'
+import { RemoteConfig } from './types'
 import { logger } from './utils/logger'
 import { isNullish } from './utils/type-utils'
 import { getSurveySeenStorageKeys } from './extensions/surveys/surveys-utils'
@@ -69,7 +69,7 @@ export class PostHogSurveys {
         this._surveyEventReceiver = null
     }
 
-    afterDecideResponse(response: DecideResponse) {
+    onRemoteConfig(response: RemoteConfig) {
         this._decideServerResponse = !!response['surveys']
         this.loadIfEnabled()
     }

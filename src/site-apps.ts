@@ -1,5 +1,5 @@
 import { PostHog } from './posthog-core'
-import { CaptureResult, DecideResponse } from './types'
+import { CaptureResult, RemoteConfig } from './types'
 import { assignableWindow } from './utils/globals'
 import { logger } from './utils/logger'
 import { isArray } from './utils/type-utils'
@@ -74,7 +74,7 @@ export class SiteApps {
         return globals
     }
 
-    afterDecideResponse(response?: DecideResponse): void {
+    onRemoteConfig(response?: RemoteConfig): void {
         if (assignableWindow._POSTHOG_SITE_APPS) {
             // Loaded via new config so we have the apps preloaded
             if (this.instance.config.opt_in_site_apps) {

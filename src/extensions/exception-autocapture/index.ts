@@ -1,6 +1,6 @@
 import { assignableWindow, window } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
-import { DecideResponse, Properties } from '../../types'
+import { Properties, RemoteConfig } from '../../types'
 
 import { logger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
@@ -86,7 +86,7 @@ export class ExceptionObserver {
         this.unwrapUnhandledRejection?.()
     }
 
-    afterDecideResponse(response: DecideResponse) {
+    onRemoteConfig(response: RemoteConfig) {
         const autocaptureExceptionsResponse = response.autocaptureExceptions
 
         // store this in-memory in case persistence is disabled

@@ -41,6 +41,7 @@ import {
     Properties,
     Property,
     QueuedRequestOptions,
+    RemoteConfig,
     RequestCallback,
     SessionIdChangedCallback,
     SnippetArrayItem,
@@ -567,15 +568,23 @@ export class PostHog {
                 : 'always',
         })
 
-        this.siteApps?.afterDecideResponse(response)
-        this.sessionRecording?.afterDecideResponse(response)
-        this.autocapture?.afterDecideResponse(response)
-        this.heatmaps?.afterDecideResponse(response)
+        this.siteApps?.onRemoteConfig(response)
+        this.sessionRecording?.onRemoteConfig(response)
+        this.autocapture?.onRemoteConfig(response)
+        this.heatmaps?.onRemoteConfig(response)
         this.experiments?.afterDecideResponse(response)
-        this.surveys?.afterDecideResponse(response)
-        this.webVitalsAutocapture?.afterDecideResponse(response)
-        this.exceptionObserver?.afterDecideResponse(response)
-        this.deadClicksAutocapture?.afterDecideResponse(response)
+        this.surveys?.onRemoteConfig(response)
+        this.webVitalsAutocapture?.onRemoteConfig(response)
+        this.exceptionObserver?.onRemoteConfig(response)
+        this.deadClicksAutocapture?.onRemoteConfig(response)
+    }
+
+    _onRemoteConfig(config: RemoteConfig) {
+        // TODO: check config. If "hasFlags" is anything other than false - load the flags from decide (later will be /flags)
+
+        if (config.hasFeatureFlags !== false) {
+            // Check explicitly for false - anything else means we there could be so lets load them
+        }
     }
 
     _loaded(): void {

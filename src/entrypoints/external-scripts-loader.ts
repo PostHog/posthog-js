@@ -43,6 +43,10 @@ assignableWindow.__PosthogExtensions__.loadExternalDependency = (
 ): void => {
     let scriptUrlToLoad = `/static/${kind}.js` + `?v=${posthog.version}`
 
+    if (kind === 'remote-config') {
+        scriptUrlToLoad = `/array/${posthog.config.token}/config.js`
+    }
+
     if (kind === 'toolbar') {
         // toolbar.js is served from the PostHog CDN, this has a TTL of 24 hours.
         // the toolbar asset includes a rotating "token" that is valid for 5 minutes.

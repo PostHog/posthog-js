@@ -3,7 +3,7 @@ import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../constants'
 import { isBoolean, isObject } from '../utils/type-utils'
 import { assignableWindow, document, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { logger } from '../utils/logger'
-import { DeadClicksAutoCaptureConfig, DecideResponse } from '../types'
+import { DeadClicksAutoCaptureConfig, RemoteConfig } from '../types'
 
 const LOGGER_PREFIX = '[Dead Clicks]'
 
@@ -31,7 +31,7 @@ export class DeadClicksAutocapture {
         this.startIfEnabled()
     }
 
-    public afterDecideResponse(response: DecideResponse) {
+    public onRemoteConfig(response: RemoteConfig) {
         if (this.instance.persistence) {
             this.instance.persistence.register({
                 [DEAD_CLICKS_ENABLED_SERVER_SIDE]: response?.captureDeadClicks,

@@ -40,9 +40,7 @@ export class WebExperiments {
             this.applyFeatureFlagChanges(flags)
         }
 
-        if (this.instance.onFeatureFlags) {
-            this.instance.onFeatureFlags(appFeatureFLags)
-        }
+        this.instance.onFeatureFlags(appFeatureFLags)
         this._flagToExperiments = new Map<string, WebExperiment>()
     }
 
