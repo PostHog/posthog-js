@@ -1,5 +1,3 @@
-import { Decide } from '../decide'
-
 import { Info } from '../utils/event-utils'
 import { document, window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
@@ -14,8 +12,6 @@ import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
 import { SessionRecording } from '../extensions/replay/sessionrecording'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
-
-jest.mock('../decide')
 
 describe('posthog core', () => {
     const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
@@ -1141,21 +1137,15 @@ describe('posthog core', () => {
         })
 
         describe('/decide', () => {
-            beforeEach(() => {
-                const call = jest.fn()
-                ;(Decide as any).mockImplementation(() => ({ call }))
-            })
-
-            afterEach(() => {
-                ;(Decide as any).mockReset()
-            })
-
             it('is called by default', async () => {
                 const instance = await createPosthogInstance(uuidv7())
                 instance.featureFlags.setReloadingPaused = jest.fn()
+                instance._send_request = jest.fn()
                 instance._loaded()
 
-                expect(new Decide(instance).call).toHaveBeenCalled()
+                expect(instance._send_request.mock.calls[0][0]).toMatchObject({
+                    url: 'http://localhost/decide/?v=3',
+                })
                 expect(instance.featureFlags.setReloadingPaused).toHaveBeenCalledWith(true)
             })
 
@@ -1164,9 +1154,10 @@ describe('posthog core', () => {
                     advanced_disable_decide: true,
                 })
                 instance.featureFlags.setReloadingPaused = jest.fn()
+                instance._send_request = jest.fn()
                 instance._loaded()
 
-                expect(new Decide(instance).call).not.toHaveBeenCalled()
+                expect(instance._send_request).not.toHaveBeenCalled()
                 expect(instance.featureFlags.setReloadingPaused).not.toHaveBeenCalled()
             })
         })

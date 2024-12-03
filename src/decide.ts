@@ -84,6 +84,10 @@ export class Decide {
             return
         }
 
+        if (disableRemoteCalls) {
+            return
+        }
+
         /*
         Calls /decide endpoint to fetch options for autocapture, session recording, feature flags & compression.
         */
