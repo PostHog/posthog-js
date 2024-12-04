@@ -545,8 +545,6 @@ export class PostHog {
     }
 
     _onRemoteConfig(config: RemoteConfig) {
-        // TODO: check config. If "hasFlags" is anything other than false - load the flags from decide (later will be /flags)
-
         this.compression = undefined
         if (config.supportedCompression && !this.config.disable_compression) {
             this.compression = includes(config['supportedCompression'], Compression.GZipJS)
@@ -576,10 +574,6 @@ export class PostHog {
         this.webVitalsAutocapture?.onRemoteConfig(config)
         this.exceptionObserver?.onRemoteConfig(config)
         this.deadClicksAutocapture?.onRemoteConfig(config)
-
-        if (config.hasFeatureFlags !== false) {
-            // Check explicitly for false - anything else means we there could be so lets load them
-        }
     }
 
     _loaded(): void {
