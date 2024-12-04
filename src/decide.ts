@@ -5,16 +5,6 @@ import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './con
 import { logger } from './utils/logger'
 import { assignableWindow, document } from './utils/globals'
 
-// TODO: Add check for global config existing.
-// Modify the whole "afterDecideResponse" function to be a method of the PostHog class
-
-// 1. Option is to load the config endpoint (if __preview is enabled) and then if flags are needed call decide, and then call "afterDecideResponse" with the combined response :thinking:
-// 2. Other option is to separate out the values so that we have a "config response" and a "flags response" separately...
-
-// TODO: Fix WebExperiments to wait for flags instead of only decide
-// TODO: Fix Surveys to do the same
-// TODO: Background refresh of the config - every 5 minutes to match CDN cache - at least when active
-
 export class Decide {
     constructor(private readonly instance: PostHog) {
         // don't need to wait for `decide` to return if flags were provided on initialisation
