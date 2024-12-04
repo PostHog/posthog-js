@@ -276,6 +276,7 @@ export class PostHog {
     compression?: Compression
     __request_queue: QueuedRequestOptions[]
     decideEndpointWasHit: boolean
+    receivedFlagValues: boolean
     analyticsDefaultEndpoint: string
     version = Config.LIB_VERSION
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
@@ -295,6 +296,7 @@ export class PostHog {
         this.config = defaultConfig()
 
         this.decideEndpointWasHit = false
+        this.receivedFlagValues = false
         this.SentryIntegration = SentryIntegration
         this.sentryIntegration = (options?: SentryIntegrationOptions) => sentryIntegration(this, options)
         this.__request_queue = []
