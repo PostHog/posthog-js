@@ -338,6 +338,11 @@ export interface PostHogConfig {
      * whether to wrap fetch and add tracing headers to the request
      * */
     __add_tracing_headers?: boolean
+
+    /**
+     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+     * */
+    __preview_remote_config?: boolean
 }
 
 export interface OptInOutCapturingOptions {
@@ -480,11 +485,8 @@ export type SessionRecordingCanvasOptions = {
     canvasQuality?: string | null
 }
 
-export interface DecideResponse {
+export interface RemoteConfig {
     supportedCompression: Compression[]
-    featureFlags: Record<string, string | boolean>
-    featureFlagPayloads: Record<string, JsonType>
-    errorsWhileComputingFlags: boolean
     autocapture_opt_out?: boolean
     /**
      *     originally capturePerformance was replay only and so boolean true
@@ -528,6 +530,13 @@ export interface DecideResponse {
     heatmaps?: boolean
     defaultIdentifiedOnly?: boolean
     captureDeadClicks?: boolean
+    hasFeatureFlags?: boolean // Indicates if the team has any flags enabled (if not we don't need to load them)
+}
+
+export interface DecideResponse extends RemoteConfig {
+    featureFlags: Record<string, string | boolean>
+    featureFlagPayloads: Record<string, JsonType>
+    errorsWhileComputingFlags: boolean
 }
 
 export type FeatureFlagsCallback = (

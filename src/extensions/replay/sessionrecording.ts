@@ -21,11 +21,11 @@ import {
 import { PostHog } from '../../posthog-core'
 import {
     CaptureResult,
-    DecideResponse,
     FlagVariant,
     NetworkRecordOptions,
     NetworkRequest,
     Properties,
+    RemoteConfig,
     SessionRecordingUrlTrigger,
 } from '../../types'
 import {
@@ -617,8 +617,8 @@ export class SessionRecording {
         })
     }
 
-    afterDecideResponse(response: DecideResponse) {
-        this._persistDecideResponse(response)
+    onRemoteConfig(response: RemoteConfig) {
+        this._persistRemoteConfig(response)
 
         this._linkedFlag = response.sessionRecording?.linkedFlag || null
 
@@ -671,7 +671,7 @@ export class SessionRecording {
         }
     }
 
-    private _persistDecideResponse(response: DecideResponse): void {
+    private _persistRemoteConfig(response: RemoteConfig): void {
         if (this.instance.persistence) {
             const persistence = this.instance.persistence
 

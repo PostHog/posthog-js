@@ -1,6 +1,6 @@
 import { usePostHog } from 'posthog-js/react'
 import { useEffect, useState } from 'react'
-import { Survey } from 'posthog-js'
+import type { Survey } from 'posthog-js'
 
 export default function SurveyForm() {
     const posthog = usePostHog()

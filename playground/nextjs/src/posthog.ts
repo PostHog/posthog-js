@@ -4,12 +4,19 @@
 // import 'posthog-js/dist/exception-autocapture'
 // import 'posthog-js/dist/tracing-headers'
 
-import posthog, { PostHogConfig } from 'posthog-js'
+import posthogJS, { PostHogConfig } from 'posthog-js'
 import { User } from './auth'
 
 export const PERSON_PROCESSING_MODE: 'always' | 'identified_only' | 'never' =
     (process.env.NEXT_PUBLIC_POSTHOG_PERSON_PROCESSING_MODE as any) || 'identified_only'
 
+export const POSTHOG_USE_SNIPPET: boolean = (process.env.NEXT_PUBLIC_POSTHOG_USE_SNIPPET as any) || false
+
+export const posthog = POSTHOG_USE_SNIPPET
+    ? typeof window !== 'undefined'
+        ? (window as any).posthog
+        : null
+    : posthogJS
 /**
  * Below is an example of a consent-driven config for PostHog
  * Lots of things start in a disabled state and posthog will not use cookies without consent
@@ -55,9 +62,9 @@ if (typeof window !== 'undefined') {
         persistence: cookieConsentGiven() ? 'localStorage+cookie' : 'memory',
         person_profiles: PERSON_PROCESSING_MODE === 'never' ? 'identified_only' : PERSON_PROCESSING_MODE,
         persistence_name: `${process.env.NEXT_PUBLIC_POSTHOG_KEY}_nextjs`,
+        __preview_remote_config: true,
         ...configForConsent(),
     })
-
     // Help with debugging(window as any).posthog = posthog
 }
 

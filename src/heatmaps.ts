@@ -1,6 +1,6 @@
 import { includes, registerEvent } from './utils'
 import RageClick from './extensions/rageclick'
-import { DeadClickCandidate, DecideResponse, Properties } from './types'
+import { DeadClickCandidate, Properties, RemoteConfig } from './types'
 import { PostHog } from './posthog-core'
 
 import { document, window } from './utils/globals'
@@ -99,7 +99,7 @@ export class Heatmaps {
         }
     }
 
-    public afterDecideResponse(response: DecideResponse) {
+    public onRemoteConfig(response: RemoteConfig) {
         const optIn = !!response['heatmaps']
 
         if (this.instance.persistence) {

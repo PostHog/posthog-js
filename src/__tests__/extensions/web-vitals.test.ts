@@ -113,7 +113,7 @@ describe('web vitals', () => {
                 assignableWindow.__PosthogExtensions__.loadExternalDependency = loadScriptMock
 
                 // need to force this to get the web vitals script loaded
-                posthog.webVitalsAutocapture!.afterDecideResponse({
+                posthog.webVitalsAutocapture!.onRemoteConfig({
                     capturePerformance: { web_vitals: true },
                 } as unknown as DecideResponse)
 
@@ -244,7 +244,7 @@ describe('web vitals', () => {
             'when client side config is %p and remote opt in is %p - web vitals enabled should be %p',
             (clientSideOptIn, serverSideOptIn, expected) => {
                 posthog.config.capture_performance = { web_vitals: clientSideOptIn }
-                posthog.webVitalsAutocapture!.afterDecideResponse({
+                posthog.webVitalsAutocapture!.onRemoteConfig({
                     capturePerformance: { web_vitals: serverSideOptIn },
                 } as DecideResponse)
                 expect(posthog.webVitalsAutocapture!.isEnabled).toBe(expected)
