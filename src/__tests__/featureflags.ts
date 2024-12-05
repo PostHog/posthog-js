@@ -87,7 +87,7 @@ describe('featureflags', () => {
         expect(featureFlags.getFlags()).toEqual([])
         expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(undefined)
         expect(window.console.warn).toHaveBeenCalledWith(
-            '[PostHog.js]',
+            '[PostHog.js] [FeatureFlags]',
             'isFeatureEnabled for key "beta-feature" failed. Feature flags didn\'t load in time.'
         )
 
@@ -95,7 +95,7 @@ describe('featureflags', () => {
 
         expect(featureFlags.getFeatureFlag('beta-feature')).toEqual(undefined)
         expect(window.console.warn).toHaveBeenCalledWith(
-            '[PostHog.js]',
+            '[PostHog.js] [FeatureFlags]',
             'getFeatureFlag for key "beta-feature" failed. Feature flags didn\'t load in time.'
         )
     })
@@ -246,7 +246,7 @@ describe('featureflags', () => {
             'alpha-feature-2': true,
         })
         expect(window.console.warn).toHaveBeenCalledWith(
-            '[PostHog.js]',
+            '[PostHog.js] [FeatureFlags]',
             ' Overriding feature flags!',
             expect.any(Object)
         )

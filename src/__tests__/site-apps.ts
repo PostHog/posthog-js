@@ -1,18 +1,13 @@
+import { mockLogger } from './helpers/mock-logger'
+
 import { SiteApps } from '../site-apps'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 import { PostHog } from '../posthog-core'
 import { DecideResponse, PostHogConfig, Properties, CaptureResult } from '../types'
 import { assignableWindow } from '../utils/globals'
-import { logger } from '../utils/logger'
 import '../entrypoints/external-scripts-loader'
 import { isFunction } from '../utils/type-utils'
-
-jest.mock('../utils/logger', () => ({
-    logger: {
-        error: jest.fn(),
-    },
-}))
 
 describe('SiteApps', () => {
     let posthog: PostHog
@@ -314,8 +309,8 @@ describe('SiteApps', () => {
 
             siteAppsInstance.onRemoteConfig(response)
 
-            expect(logger.error).toHaveBeenCalledWith(
-                'PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.'
+            expect(mockLogger.error).toHaveBeenCalledWith(
+                'Site apps exist but "opt_in_site_apps" is not set so they are not loaded.'
             )
             expect(siteAppsInstance.loaded).toBe(true)
         })

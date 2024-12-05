@@ -1,3 +1,5 @@
+import './helpers/mock-logger'
+
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 import { PostHog } from '../posthog-core'
@@ -7,7 +9,6 @@ import { beforeEach, expect } from '@jest/globals'
 import { HEATMAPS_ENABLED_SERVER_SIDE } from '../constants'
 import { Heatmaps } from '../heatmaps'
 
-jest.mock('../utils/logger')
 jest.useFakeTimers()
 
 describe('heatmaps', () => {

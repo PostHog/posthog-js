@@ -1,10 +1,9 @@
+import { mockLogger } from './helpers/mock-logger'
+
 import { uuidv7 } from '../uuidv7'
 import { defaultPostHog } from './helpers/posthog-instance'
-import { logger } from '../utils/logger'
 import { CaptureResult, knownUnsafeEditableEvent, PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
-
-jest.mock('../utils/logger')
 
 const rejectingEventFn = () => {
     return null
@@ -53,9 +52,7 @@ describe('posthog core - before send', () => {
 
         expect(capturedData).toBeUndefined()
         expect(posthog._send_request).not.toHaveBeenCalled()
-        expect(jest.mocked(logger).info).toHaveBeenCalledWith(
-            `Event '${eventName}' was rejected in beforeSend function`
-        )
+        expect(mockLogger.info).toHaveBeenCalledWith(`Event '${eventName}' was rejected in beforeSend function`)
     })
 
     it('can edit an event', () => {
@@ -156,7 +153,7 @@ describe('posthog core - before send', () => {
             method: 'POST',
             url: 'https://us.i.posthog.com/e/',
         })
-        expect(jest.mocked(logger).warn).toHaveBeenCalledWith(
+        expect(mockLogger.warn).toHaveBeenCalledWith(
             `Event '${eventName}' has no properties after beforeSend function, this is likely an error.`
         )
     })
@@ -172,7 +169,7 @@ describe('posthog core - before send', () => {
 
         posthog.capture(randomUnsafeEditableEvent, {}, {})
 
-        expect(jest.mocked(logger).warn).toHaveBeenCalledWith(
+        expect(mockLogger.warn).toHaveBeenCalledWith(
             `Event '${randomUnsafeEditableEvent}' was rejected in beforeSend function. This can cause unexpected behavior.`
         )
     })
