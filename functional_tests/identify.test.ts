@@ -1,4 +1,4 @@
-import './helpers/mock-logger'
+import '../src/__tests__/helpers/mock-logger'
 
 import 'regenerator-runtime/runtime'
 import { waitFor } from '@testing-library/dom'
