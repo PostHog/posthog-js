@@ -341,7 +341,6 @@ export interface PostHogConfig {
 
     /**
      * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * whether to wrap fetch and add tracing headers to the request
      * */
     __preview_remote_config?: boolean
 }
