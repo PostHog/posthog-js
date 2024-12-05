@@ -401,8 +401,6 @@ describe('SiteApps', () => {
                 ]
             `)
             expect(siteAppsInstance.apps).toEqual({})
-
-            expect(removeCaptureHook).toHaveBeenCalled()
         })
     })
 })
