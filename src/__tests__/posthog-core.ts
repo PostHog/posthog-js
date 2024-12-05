@@ -437,6 +437,7 @@ describe('posthog core', () => {
                 $session_id: 'sessionId',
                 $is_identified: false,
                 $process_person_profile: false,
+                $recording_status: 'buffering',
             })
         })
 
@@ -459,6 +460,7 @@ describe('posthog core', () => {
                 $lib_custom_api_host: 'https://custom.posthog.com',
                 $is_identified: false,
                 $process_person_profile: false,
+                $recording_status: 'buffering',
             })
         })
 

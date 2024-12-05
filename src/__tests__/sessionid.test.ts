@@ -1,10 +1,11 @@
-import { SessionIdManager } from '../sessionid'
+import { DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS, MAX_SESSION_IDLE_TIMEOUT_SECONDS, SessionIdManager } from '../sessionid'
 import { SESSION_ID } from '../constants'
 import { sessionStore } from '../storage'
 import { uuid7ToTimestampMs, uuidv7 } from '../uuidv7'
 import { BootstrapConfig, PostHogConfig, Properties } from '../types'
 import { PostHogPersistence } from '../posthog-persistence'
 import { assignableWindow } from '../utils/globals'
+import { PostHog } from '../posthog-core'
 
 jest.mock('../uuidv7')
 jest.mock('../storage')
@@ -13,14 +14,22 @@ describe('Session ID manager', () => {
     let timestamp: number | undefined
     let now: number
     let timestampOfSessionStart: number
+    let registerMock: jest.Mock
+
     const config: Partial<PostHogConfig> = {
         persistence_name: 'persistance-name',
     }
 
     let persistence: { props: Properties } & Partial<PostHogPersistence>
 
-    const sessionIdMgr = (phPersistence: Partial<PostHogPersistence>) =>
-        new SessionIdManager(config, phPersistence as PostHogPersistence)
+    const sessionIdMgr = (phPersistence: Partial<PostHogPersistence>) => {
+        registerMock = jest.fn()
+        return new SessionIdManager({
+            config,
+            persistence: phPersistence as PostHogPersistence,
+            register: registerMock,
+        } as unknown as PostHog)
+    }
 
     const originalDate = Date
 
@@ -70,7 +79,11 @@ describe('Session ID manager', () => {
             const bootstrap: BootstrapConfig = {
                 sessionID: bootstrapSessionId,
             }
-            const sessionIdManager = new SessionIdManager({ ...config, bootstrap }, persistence as PostHogPersistence)
+            const sessionIdManager = new SessionIdManager({
+                config: { ...config, bootstrap },
+                persistence: persistence as PostHogPersistence,
+                register: jest.fn(),
+            } as unknown as PostHog)
 
             // act
             const { sessionId, sessionStartTimestamp } = sessionIdManager.checkAndGetSessionAndWindowId(false, now)
@@ -78,6 +91,15 @@ describe('Session ID manager', () => {
             // assert
             expect(sessionId).toEqual(bootstrapSessionId)
             expect(sessionStartTimestamp).toEqual(timestamp)
+        })
+
+        it('registers the session timeout as an event property', () => {
+            config.session_idle_timeout_seconds = 8 * 60 * 60
+            const sessionIdManager = sessionIdMgr(persistence)
+            sessionIdManager.checkAndGetSessionAndWindowId(undefined, timestamp)
+            expect(registerMock).toHaveBeenCalledWith({
+                $configured_session_timeout_ms: config.session_idle_timeout_seconds * 1000,
+            })
         })
     })
 
@@ -317,12 +339,13 @@ describe('Session ID manager', () => {
 
     describe('custom session_idle_timeout_seconds', () => {
         const mockSessionManager = (timeout: number | undefined) =>
-            new SessionIdManager(
-                {
+            new SessionIdManager({
+                config: {
                     session_idle_timeout_seconds: timeout,
                 },
-                persistence as PostHogPersistence
-            )
+                persistence: persistence as PostHogPersistence,
+                register: jest.fn(),
+            } as unknown as PostHog)
 
         beforeEach(() => {
             console.warn = jest.fn()
@@ -336,10 +359,14 @@ describe('Session ID manager', () => {
             expect(console.warn).toBeCalledTimes(1)
             expect(mockSessionManager(30 * 60 - 1)['_sessionTimeoutMs']).toEqual((30 * 60 - 1) * 1000)
             expect(console.warn).toBeCalledTimes(1)
-            expect(mockSessionManager(30 * 60 + 1)['_sessionTimeoutMs']).toEqual(30 * 60 * 1000)
+            expect(mockSessionManager(MAX_SESSION_IDLE_TIMEOUT_SECONDS + 1)['_sessionTimeoutMs']).toEqual(
+                MAX_SESSION_IDLE_TIMEOUT_SECONDS * 1000
+            )
             expect(console.warn).toBeCalledTimes(2)
             // @ts-expect-error - test invalid input
-            expect(mockSessionManager('foobar')['_sessionTimeoutMs']).toEqual(30 * 60 * 1000)
+            expect(mockSessionManager('foobar')['_sessionTimeoutMs']).toEqual(
+                DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS * 1000
+            )
             expect(console.warn).toBeCalledTimes(3)
         })
     })

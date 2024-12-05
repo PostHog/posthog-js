@@ -431,7 +431,7 @@ export class PostHog {
         this._retryQueue = new RetryQueue(this)
         this.__request_queue = []
 
-        this.sessionManager = new SessionIdManager(this.config, this.persistence)
+        this.sessionManager = new SessionIdManager(this)
         this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
 
         new TracingHeaders(this).startIfEnabledOrStop()
@@ -947,6 +947,10 @@ export class PostHog {
             const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
             properties['$session_id'] = sessionId
             properties['$window_id'] = windowId
+        }
+
+        if (this.sessionRecording) {
+            properties['$recording_status'] = this.sessionRecording.status
         }
 
         if (this.requestRouter.region === RequestRouterRegion.CUSTOM) {

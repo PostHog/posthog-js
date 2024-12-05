@@ -295,7 +295,7 @@ describe('SiteApps', () => {
 
             siteAppsInstance.afterDecideResponse(response)
 
-            expect(assignableWindow['__$$ph_site_app_1_posthog']).toBe(posthog)
+            expect(assignableWindow['__$$ph_site_app_1']).toBe(posthog)
             expect(typeof assignableWindow['__$$ph_site_app_1_missed_invocations']).toBe('function')
             expect(typeof assignableWindow['__$$ph_site_app_1_callback']).toBe('function')
             expect(assignableWindow.__PosthogExtensions__?.loadSiteApp).toHaveBeenCalledWith(

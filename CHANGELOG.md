@@ -1,3 +1,40 @@
+## 1.194.3 - 2024-12-03
+
+- fix: parse Chrome instead of Android as browser (#1575)
+
+## 1.194.2 - 2024-12-02
+
+- fix: use previous site-app variables (#1574)
+
+## 1.194.1 - 2024-11-30
+
+- fix: Don't crash on bigints (#1573)
+- feat: Add customization to print events drop them (#1572)
+
+## 1.194.0 - 2024-11-29
+
+- feat: add $recording_status property (#1571)
+
+## 1.193.1 - 2024-11-28
+
+- fix: zone detection (#1570)
+
+## 1.193.0 - 2024-11-28
+
+- feat: allow decide to provide script name for recorder (#1509)
+
+## 1.192.1 - 2024-11-28
+
+
+
+## 1.192.0 - 2024-11-28
+
+- feat: Start tracking timezone offset and language prefix (#1568)
+
+## 1.191.0 - 2024-11-28
+
+- feat: different default and max idle period (#1558)
+
 ## 1.190.2 - 2024-11-27
 
 - fix: patch to angular detection in rrweb (#1566)
