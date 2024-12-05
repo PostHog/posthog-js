@@ -380,7 +380,7 @@ describe('Autocapture system', () => {
         beforeEach(() => {
             posthog.config.rageclick = true
             // Trigger proper enabling
-            autocapture.afterDecideResponse({} as DecideResponse)
+            autocapture.onRemoteConfig({} as DecideResponse)
         })
 
         it('should capture rageclick', () => {
@@ -502,7 +502,7 @@ describe('Autocapture system', () => {
 
         it('should not capture events when config returns false, when an element matching any of the event selectors is clicked', () => {
             posthog.config.autocapture = false
-            autocapture.afterDecideResponse({} as DecideResponse)
+            autocapture.onRemoteConfig({} as DecideResponse)
 
             const eventElement1 = document.createElement('div')
             const eventElement2 = document.createElement('div')
@@ -524,7 +524,7 @@ describe('Autocapture system', () => {
         })
 
         it('should not capture events when config returns true but server setting is disabled', () => {
-            autocapture.afterDecideResponse({
+            autocapture.onRemoteConfig({
                 autocapture_opt_out: true,
             } as DecideResponse)
 
@@ -932,7 +932,7 @@ describe('Autocapture system', () => {
                 type: 'click',
             } as unknown as MouseEvent
 
-            autocapture.afterDecideResponse({
+            autocapture.onRemoteConfig({
                 elementsChainAsString: true,
             } as DecideResponse)
 
@@ -1003,7 +1003,7 @@ describe('Autocapture system', () => {
         beforeEach(() => {
             document.title = 'test page'
             posthog.config.mask_all_element_attributes = false
-            autocapture.afterDecideResponse({} as DecideResponse)
+            autocapture.onRemoteConfig({} as DecideResponse)
         })
 
         it('should capture click events', () => {
@@ -1056,7 +1056,7 @@ describe('Autocapture system', () => {
             'when client side config is %p and remote opt out is %p - autocapture enabled should be %p',
             (clientSideOptIn, serverSideOptOut, expected) => {
                 posthog.config.autocapture = clientSideOptIn
-                autocapture.afterDecideResponse({
+                autocapture.onRemoteConfig({
                     autocapture_opt_out: serverSideOptOut,
                 } as DecideResponse)
                 expect(autocapture.isEnabled).toBe(expected)
@@ -1065,12 +1065,12 @@ describe('Autocapture system', () => {
 
         it('should call _addDomEventHandlders if autocapture is true in client config', () => {
             posthog.config.autocapture = true
-            autocapture.afterDecideResponse({} as DecideResponse)
+            autocapture.onRemoteConfig({} as DecideResponse)
             expect(autocapture['_addDomEventHandlers']).toHaveBeenCalled()
         })
 
         it('should not call _addDomEventHandlders if autocapture is opted out in server config', () => {
-            autocapture.afterDecideResponse({ autocapture_opt_out: true } as DecideResponse)
+            autocapture.onRemoteConfig({ autocapture_opt_out: true } as DecideResponse)
             expect(autocapture['_addDomEventHandlers']).not.toHaveBeenCalled()
         })
 
@@ -1078,16 +1078,16 @@ describe('Autocapture system', () => {
             expect(autocapture['_addDomEventHandlers']).not.toHaveBeenCalled()
             posthog.config.autocapture = false
 
-            autocapture.afterDecideResponse({} as DecideResponse)
+            autocapture.onRemoteConfig({} as DecideResponse)
 
             expect(autocapture['_addDomEventHandlers']).not.toHaveBeenCalled()
         })
 
         it('should NOT call _addDomEventHandlders when the token has already been initialized', () => {
-            autocapture.afterDecideResponse({} as DecideResponse)
+            autocapture.onRemoteConfig({} as DecideResponse)
             expect(autocapture['_addDomEventHandlers']).toHaveBeenCalledTimes(1)
 
-            autocapture.afterDecideResponse({} as DecideResponse)
+            autocapture.onRemoteConfig({} as DecideResponse)
             expect(autocapture['_addDomEventHandlers']).toHaveBeenCalledTimes(1)
         })
     })

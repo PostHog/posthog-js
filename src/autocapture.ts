@@ -15,7 +15,7 @@ import {
     splitClassString,
 } from './autocapture-utils'
 import RageClick from './extensions/rageclick'
-import { AutocaptureConfig, COPY_AUTOCAPTURE_EVENT, DecideResponse, EventName, Properties } from './types'
+import { AutocaptureConfig, COPY_AUTOCAPTURE_EVENT, EventName, Properties, RemoteConfig } from './types'
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
@@ -286,7 +286,7 @@ export class Autocapture {
         }
     }
 
-    public afterDecideResponse(response: DecideResponse) {
+    public onRemoteConfig(response: RemoteConfig) {
         if (response.elementsChainAsString) {
             this._elementsChainAsString = response.elementsChainAsString
         }

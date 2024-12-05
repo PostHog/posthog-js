@@ -1,5 +1,4 @@
 import { PostHog } from './posthog-core'
-import { DecideResponse } from './types'
 import { navigator, window } from './utils/globals'
 import {
     WebExperiment,
@@ -9,7 +8,7 @@ import {
     WebExperimentVariant,
 } from './web-experiments-types'
 import { WEB_EXPERIMENTS } from './constants'
-import { isNullish } from './utils/type-utils'
+import { isNullish, isString } from './utils/type-utils'
 import { getQueryParam, isUrlMatchingRegex } from './utils/request-utils'
 import { logger } from './utils/logger'
 import { Info } from './utils/event-utils'
@@ -30,24 +29,29 @@ export const webExperimentUrlValidationMap: Record<
 }
 
 export class WebExperiments {
-    instance: PostHog
-    private _featureFlags?: Record<string, string | boolean>
     private _flagToExperiments?: Map<string, WebExperiment>
 
-    constructor(instance: PostHog) {
-        this.instance = instance
-        const appFeatureFLags = (flags: string[]) => {
-            this.applyFeatureFlagChanges(flags)
-        }
-
-        if (this.instance.onFeatureFlags) {
-            this.instance.onFeatureFlags(appFeatureFLags)
-        }
-        this._flagToExperiments = new Map<string, WebExperiment>()
+    constructor(private instance: PostHog) {
+        this.instance.onFeatureFlags((flags: string[]) => {
+            this.onFeatureFlags(flags)
+        })
     }
 
-    applyFeatureFlagChanges(flags: string[]) {
-        if (isNullish(this._flagToExperiments) || this.instance.config.disable_web_experiments) {
+    onFeatureFlags(flags: string[]) {
+        if (this._is_bot()) {
+            WebExperiments.logInfo('Refusing to render web experiment since the viewer is a likely bot')
+            return
+        }
+
+        if (this.instance.config.disable_web_experiments) {
+            return
+        }
+
+        if (isNullish(this._flagToExperiments)) {
+            // Indicates first load so we trigger the loaders
+            this._flagToExperiments = new Map<string, WebExperiment>()
+            this.loadIfEnabled()
+            this.previewWebExperiment()
             return
         }
 
@@ -65,17 +69,6 @@ export class WebExperiments {
                 }
             }
         })
-    }
-
-    afterDecideResponse(response: DecideResponse) {
-        if (this._is_bot()) {
-            WebExperiments.logInfo('Refusing to render web experiment since the viewer is a likely bot')
-            return
-        }
-
-        this._featureFlags = response.featureFlags
-        this.loadIfEnabled()
-        this.previewWebExperiment()
     }
 
     previewWebExperiment() {
@@ -110,11 +103,7 @@ export class WebExperiments {
             this._flagToExperiments = new Map<string, WebExperiment>()
 
             webExperiments.forEach((webExperiment) => {
-                if (
-                    webExperiment.feature_flag_key &&
-                    this._featureFlags &&
-                    this._featureFlags[webExperiment.feature_flag_key]
-                ) {
+                if (webExperiment.feature_flag_key) {
                     if (this._flagToExperiments) {
                         WebExperiments.logInfo(
                             `setting flag key `,
@@ -125,8 +114,8 @@ export class WebExperiments {
                         this._flagToExperiments?.set(webExperiment.feature_flag_key, webExperiment)
                     }
 
-                    const selectedVariant = this._featureFlags[webExperiment.feature_flag_key] as unknown as string
-                    if (selectedVariant && webExperiment.variants[selectedVariant]) {
+                    const selectedVariant = this.instance.getFeatureFlag(webExperiment.feature_flag_key)
+                    if (isString(selectedVariant) && webExperiment.variants[selectedVariant]) {
                         this.applyTransforms(
                             webExperiment.name,
                             selectedVariant,

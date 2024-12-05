@@ -1,7 +1,7 @@
 import { ErrorProperties } from '../extensions/exception-autocapture/error-conversion'
 import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
-import { DeadClicksAutoCaptureConfig, ErrorEventArgs, ErrorMetadata, Properties } from '../types'
+import { DeadClicksAutoCaptureConfig, ErrorEventArgs, ErrorMetadata, Properties, RemoteConfig } from '../types'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
@@ -20,6 +20,8 @@ export type AssignableWindow = Window &
     typeof globalThis &
     Record<string, any> & {
         __PosthogExtensions__?: PostHogExtensions
+        _POSTHOG_CONFIG?: RemoteConfig
+        _POSTHOG_SITE_APPS?: { token: string; load: (posthog: PostHog) => void }[]
     }
 
 /**
@@ -35,6 +37,7 @@ export type PostHogExtensionKind =
     | 'tracing-headers'
     | 'surveys'
     | 'dead-clicks-autocapture'
+    | 'remote-config'
 
 export interface LazyLoadedDeadClicksAutocaptureInterface {
     start: (observerTarget: Node) => void

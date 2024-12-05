@@ -2,7 +2,7 @@ import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 import { logger } from '../utils/logger'
 import { INITIAL_CAMPAIGN_PARAMS, INITIAL_REFERRER_INFO } from '../constants'
-import { DecideResponse } from '../types'
+import { RemoteConfig } from '../types'
 
 jest.mock('../utils/logger')
 
@@ -725,7 +725,7 @@ describe('person processing', () => {
             posthog.capture('startup page view')
 
             // act
-            posthog._afterDecideResponse({ defaultIdentifiedOnly: false } as DecideResponse)
+            posthog._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
             posthog.capture('custom event')
 
             // assert
@@ -740,7 +740,7 @@ describe('person processing', () => {
             posthog.capture('startup page view')
 
             // act
-            posthog._afterDecideResponse({ defaultIdentifiedOnly: false } as DecideResponse)
+            posthog._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
             posthog.capture('custom event')
 
             // assert
@@ -759,7 +759,7 @@ describe('person processing', () => {
             )
 
             // act
-            posthog1._afterDecideResponse({ defaultIdentifiedOnly: false } as DecideResponse)
+            posthog1._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
             posthog1.capture('custom event 1')
             const { posthog: posthog2, beforeSendMock: beforeSendMock2 } = await setup(
                 undefined,

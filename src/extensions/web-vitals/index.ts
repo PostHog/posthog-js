@@ -1,5 +1,5 @@
 import { PostHog } from '../../posthog-core'
-import { DecideResponse, SupportedWebVitalsMetrics } from '../../types'
+import { RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
 import { logger } from '../../utils/logger'
 import { isBoolean, isNullish, isNumber, isObject, isUndefined } from '../../utils/type-utils'
 import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
@@ -70,7 +70,7 @@ export class WebVitalsAutocapture {
         }
     }
 
-    public afterDecideResponse(response: DecideResponse) {
+    public onRemoteConfig(response: RemoteConfig) {
         const webVitalsOptIn = isObject(response.capturePerformance) && !!response.capturePerformance.web_vitals
 
         const allowedMetrics = isObject(response.capturePerformance)
