@@ -21,6 +21,7 @@ jest.mock('../utils/logger', () => ({
 describe('SiteApps', () => {
     let posthog: PostHog
     let siteAppsInstance: SiteApps
+    let emitCaptureEvent: ((eventName: string, eventPayload: CaptureResult) => void) | undefined
 
     const defaultConfig: Partial<PostHogConfig> = {
         token: 'testtoken',
@@ -48,14 +49,19 @@ describe('SiteApps', () => {
             }),
         }
 
+        const removeCaptureHook = jest.fn()
+
         posthog = {
-            config: { ...defaultConfig },
+            config: { ...defaultConfig, opt_in_site_apps: true },
             persistence: new PostHogPersistence(defaultConfig as PostHogConfig),
             register: (props: Properties) => posthog.persistence!.register(props),
             unregister: (key: string) => posthog.persistence!.unregister(key),
             get_property: (key: string) => posthog.persistence!.props[key],
             capture: jest.fn(),
-            _addCaptureHook: jest.fn(),
+            _addCaptureHook: jest.fn((cb) => {
+                emitCaptureEvent = cb
+                return removeCaptureHook
+            }),
             _afterDecideResponse: jest.fn(),
             get_distinct_id: jest.fn().mockImplementation(() => 'distinctid'),
             _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
@@ -77,94 +83,86 @@ describe('SiteApps', () => {
     })
 
     describe('constructor', () => {
-        it('sets enabled to true when opt_in_site_apps is true and advanced_disable_decide is false', () => {
+        it('sets enabled to true when opt_in_site_apps is true', () => {
             posthog.config = {
                 ...defaultConfig,
                 opt_in_site_apps: true,
-                advanced_disable_decide: false,
             } as PostHogConfig
 
-            siteAppsInstance = new SiteApps(posthog)
-
-            expect(siteAppsInstance.enabled).toBe(true)
+            expect(siteAppsInstance.isEnabled).toBe(true)
         })
 
         it('sets enabled to false when opt_in_site_apps is false', () => {
             posthog.config = {
                 ...defaultConfig,
                 opt_in_site_apps: false,
-                advanced_disable_decide: false,
             } as PostHogConfig
 
             siteAppsInstance = new SiteApps(posthog)
 
-            expect(siteAppsInstance.enabled).toBe(false)
-        })
-
-        it('sets enabled to false when advanced_disable_decide is true', () => {
-            posthog.config = {
-                ...defaultConfig,
-                opt_in_site_apps: true,
-                advanced_disable_decide: true,
-            } as PostHogConfig
-
-            siteAppsInstance = new SiteApps(posthog)
-
-            expect(siteAppsInstance.enabled).toBe(false)
+            expect(siteAppsInstance.isEnabled).toBe(false)
         })
 
         it('initializes missedInvocations, loaded, appsLoading correctly', () => {
-            expect(siteAppsInstance.missedInvocations).toEqual([])
-            expect(siteAppsInstance.loaded).toBe(false)
-            expect(siteAppsInstance.appsLoading).toEqual(new Set())
+            expect(siteAppsInstance['bufferedInvocations']).toEqual([])
+            expect(siteAppsInstance.apps).toEqual({})
         })
     })
 
     describe('init', () => {
         it('adds eventCollector as a capture hook', () => {
+            expect(siteAppsInstance['stopBuffering']).toBeUndefined()
             siteAppsInstance.init()
 
             expect(posthog._addCaptureHook).toHaveBeenCalledWith(expect.any(Function))
+            expect(siteAppsInstance['stopBuffering']).toEqual(expect.any(Function))
+        })
+
+        it('does not add eventCollector as a capture hook if disabled', () => {
+            posthog.config.opt_in_site_apps = false
+            siteAppsInstance.init()
+
+            expect(posthog._addCaptureHook).not.toHaveBeenCalled()
+            expect(siteAppsInstance['stopBuffering']).toBeUndefined()
         })
     })
 
     describe('eventCollector', () => {
-        it('does nothing if enabled is false', () => {
-            siteAppsInstance.enabled = false
-            siteAppsInstance.eventCollector('event_name', {} as CaptureResult)
-
-            expect(siteAppsInstance.missedInvocations.length).toBe(0)
+        beforeEach(() => {
+            siteAppsInstance.init()
         })
 
-        it('collects event if enabled and loaded is false', () => {
-            siteAppsInstance.enabled = true
-            siteAppsInstance.loaded = false
+        it('collects events if enabled after init', () => {
+            emitCaptureEvent?.('test_event', { event: 'test_event', properties: { prop1: 'value1' } } as any)
 
-            const eventPayload = { event: 'test_event', properties: { prop1: 'value1' } } as CaptureResult
-
-            jest.spyOn(siteAppsInstance, 'globalsForEvent').mockReturnValue({ some: 'globals' })
-
-            siteAppsInstance.eventCollector('test_event', eventPayload)
-
-            expect(siteAppsInstance.globalsForEvent).toHaveBeenCalledWith(eventPayload)
-            expect(siteAppsInstance.missedInvocations).toEqual([{ some: 'globals' }])
+            expect(siteAppsInstance['bufferedInvocations']).toMatchInlineSnapshot(`
+                Array [
+                  Object {
+                    "event": Object {
+                      "distinct_id": undefined,
+                      "elements_chain": "",
+                      "event": "test_event",
+                      "properties": Object {
+                        "prop1": "value1",
+                      },
+                    },
+                    "groups": Object {},
+                    "person": Object {
+                      "properties": undefined,
+                    },
+                  },
+                ]
+            `)
         })
 
         it('trims missedInvocations to last 990 when exceeding 1000', () => {
-            siteAppsInstance.enabled = true
-            siteAppsInstance.loaded = false
+            siteAppsInstance['bufferedInvocations'] = new Array(1000).fill({})
 
-            siteAppsInstance.missedInvocations = new Array(1000).fill({})
+            emitCaptureEvent?.('test_event', { event: 'test_event', properties: { prop1: 'value1' } } as any)
 
-            const eventPayload = { event: 'test_event', properties: { prop1: 'value1' } } as CaptureResult
-
-            jest.spyOn(siteAppsInstance, 'globalsForEvent').mockReturnValue({ some: 'globals' })
-
-            siteAppsInstance.eventCollector('test_event', eventPayload)
-
-            expect(siteAppsInstance.missedInvocations.length).toBe(991)
-            expect(siteAppsInstance.missedInvocations[0]).toEqual({})
-            expect(siteAppsInstance.missedInvocations[990]).toEqual({ some: 'globals' })
+            expect(siteAppsInstance['bufferedInvocations'].length).toBe(991)
+            expect(siteAppsInstance['bufferedInvocations'][0]).toEqual({})
+            expect(siteAppsInstance['bufferedInvocations'][990]).toMatchObject({ event: { event: 'test_event' } })
         })
     })
 
@@ -226,17 +224,17 @@ describe('SiteApps', () => {
         })
     })
 
-    describe('afterDecideResponse', () => {
+    describe('onRemoteConfig', () => {
         it('sets loaded to true and enabled to false when response is undefined', () => {
             siteAppsInstance.onRemoteConfig(undefined)
 
             expect(siteAppsInstance.loaded).toBe(true)
-            expect(siteAppsInstance.enabled).toBe(false)
+            expect(siteAppsInstance.isEnabled).toBe(false)
         })
 
         it('loads site apps when enabled and opt_in_site_apps is true', (done) => {
             posthog.config.opt_in_site_apps = true
-            siteAppsInstance.enabled = true
+            siteAppsInstance.isEnabled = true
             const response = {
                 siteApps: [
                     { id: '1', url: '/site_app/1' },
@@ -259,7 +257,7 @@ describe('SiteApps', () => {
         })
 
         it('does not load site apps when enabled is false', () => {
-            siteAppsInstance.enabled = false
+            siteAppsInstance.isEnabled = false
             posthog.config.opt_in_site_apps = false
             const response = {
                 siteApps: [{ id: '1', url: '/site_app/1' }],
@@ -268,13 +266,13 @@ describe('SiteApps', () => {
             siteAppsInstance.onRemoteConfig(response)
 
             expect(siteAppsInstance.loaded).toBe(true)
-            expect(siteAppsInstance.enabled).toBe(false)
+            expect(siteAppsInstance.isEnabled).toBe(false)
             expect(assignableWindow.__PosthogExtensions__?.loadSiteApp).not.toHaveBeenCalled()
         })
 
         it('clears missedInvocations when all apps are loaded', (done) => {
             posthog.config.opt_in_site_apps = true
-            siteAppsInstance.enabled = true
+            siteAppsInstance.isEnabled = true
             siteAppsInstance.missedInvocations = [{ some: 'data' }]
             const response = {
                 siteApps: [{ id: '1', url: '/site_app/1' }],
@@ -292,7 +290,7 @@ describe('SiteApps', () => {
 
         it('sets assignableWindow properties for each site app', () => {
             posthog.config.opt_in_site_apps = true
-            siteAppsInstance.enabled = true
+            siteAppsInstance.isEnabled = true
             const response = {
                 siteApps: [{ id: '1', url: '/site_app/1' }],
             } as DecideResponse
@@ -311,7 +309,7 @@ describe('SiteApps', () => {
 
         it('logs error if site apps are disabled but response contains site apps', () => {
             posthog.config.opt_in_site_apps = false
-            siteAppsInstance.enabled = false
+            siteAppsInstance.isEnabled = false
             const response = {
                 siteApps: [{ id: '1', url: '/site_app/1' }],
             } as DecideResponse
@@ -325,7 +323,7 @@ describe('SiteApps', () => {
         })
 
         it('sets loaded to true if response.siteApps is empty', () => {
-            siteAppsInstance.enabled = true
+            siteAppsInstance.isEnabled = true
             posthog.config.opt_in_site_apps = true
             const response = {
                 siteApps: [],
@@ -334,7 +332,7 @@ describe('SiteApps', () => {
             siteAppsInstance.onRemoteConfig(response)
 
             expect(siteAppsInstance.loaded).toBe(true)
-            expect(siteAppsInstance.enabled).toBe(false)
+            expect(siteAppsInstance.isEnabled).toBe(false)
         })
     })
 })

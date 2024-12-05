@@ -7,32 +7,36 @@ import { isArray } from './utils/type-utils'
 const logger = _logger.createLogger('[Site Apps]')
 
 export class SiteApps {
-    enabled: boolean
     apps: Record<string, SiteApp>
 
     private stopBuffering?: () => void
     private bufferedInvocations: SiteAppGlobals[]
 
     constructor(private instance: PostHog) {
-        this.enabled = !!this.instance.config.opt_in_site_apps
         // events captured between loading posthog-js and the site app; up to 1000 events
         this.bufferedInvocations = []
         this.apps = {}
     }
 
-    eventCollector(_eventName: string, eventPayload?: CaptureResult | undefined) {
+    public get isEnabled(): boolean {
+        return !!this.instance.config.opt_in_site_apps
+    }
+
+    private eventCollector(_eventName: string, eventPayload?: CaptureResult | undefined) {
+        console.log('eventCollector', _eventName, eventPayload)
         if (!eventPayload) {
             return
         }
         const globals = this.globalsForEvent(eventPayload)
         this.bufferedInvocations.push(globals)
+        console.log('globals', globals, this.bufferedInvocations)
         if (this.bufferedInvocations.length > 1000) {
             this.bufferedInvocations = this.bufferedInvocations.slice(10)
         }
     }
 
     init() {
-        if (this.enabled) {
+        if (this.isEnabled) {
             const stop = this.instance._addCaptureHook(this.eventCollector.bind(this))
             this.stopBuffering = () => {
                 stop()
@@ -140,7 +144,7 @@ export class SiteApps {
 
     onRemoteConfig(response: RemoteConfig): void {
         if (isArray(assignableWindow._POSTHOG_JS_APPS)) {
-            if (!this.enabled) {
+            if (!this.isEnabled) {
                 logger.error(`PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.`)
                 return
             }
@@ -162,7 +166,7 @@ export class SiteApps {
         // NOTE: Below his is now only the fallback for legacy site app support. Once we have fully removed to the remote config loader we can get rid of this
 
         this.stopBuffering?.()
-        if (!this.enabled) {
+        if (!this.isEnabled) {
             logger.error(`PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.`)
             return
         }
