@@ -808,6 +808,13 @@ export class PostHog {
             return
         }
 
+        // The initial campaign/referrer props need to be stored in the regular persistence, as they are there to mimic
+        // the person-initial props. The non-initial versions are stored in the sessionPersistence, as they are sent
+        // with every event and used by the session table to create session-initial props.
+        if (this.config.store_google) {
+            this.sessionPersistence.update_campaign_params()
+        }
+
         if (this.consent.isOptedOut()) {
             return
         }
@@ -837,9 +844,6 @@ export class PostHog {
         // The initial campaign/referrer props need to be stored in the regular persistence, as they are there to mimic
         // the person-initial props. The non-initial versions are stored in the sessionPersistence, as they are sent
         // with every event and used by the session table to create session-initial props.
-        if (this.config.store_google) {
-            this.sessionPersistence.update_campaign_params()
-        }
         if (this.config.save_referrer) {
             this.sessionPersistence.update_referrer_info()
         }
