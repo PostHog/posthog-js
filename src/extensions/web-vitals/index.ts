@@ -13,7 +13,6 @@ export const DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS = 5000
 const ONE_MINUTE_IN_MILLIS = 60 * 1000
 export const FIFTEEN_MINUTES_IN_MILLIS = 15 * ONE_MINUTE_IN_MILLIS
 
-const LOGGER_PREFIX = '[Web Vitals]'
 type WebVitalsEventBuffer = { url: string | undefined; metrics: any[]; firstMetricTimestamp: number | undefined }
 
 export class WebVitalsAutocapture {
