@@ -6,6 +6,7 @@ import { shouldCaptureValue } from '../../autocapture-utils'
 import { each } from '../../utils'
 
 const LOGGER_PREFIX = '[SessionRecording]'
+
 const REDACTED = 'redacted'
 
 export const defaultNetworkOptions: Required<NetworkRecordOptions> = {

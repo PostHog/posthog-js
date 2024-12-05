@@ -38,7 +38,7 @@ import {
 } from '@rrweb/types'
 
 import { isBoolean, isFunction, isNullish, isNumber, isObject, isString, isUndefined } from '../../utils/type-utils'
-import { logger } from '../../utils/logger'
+import { createLogger } from '../../utils/logger'
 import { assignableWindow, document, PostHogExtensionKind, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
@@ -46,6 +46,9 @@ import { MutationRateLimiter } from './mutation-rate-limiter'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
 import { clampToRange } from '../../utils/number-utils'
 import { includes } from '../../utils'
+
+const LOGGER_PREFIX = '[SessionRecording]'
+const logger = createLogger(LOGGER_PREFIX)
 
 type SessionStartReason =
     | 'sampling_overridden'
@@ -118,8 +121,6 @@ const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
     enqueuedAt: Date.now(),
     attempt: 1,
 })
-
-const LOGGER_PREFIX = '[SessionRecording]'
 
 type compressedFullSnapshotEvent = {
     type: EventType.FullSnapshot
@@ -207,7 +208,7 @@ function compressEvent(event: eventWithTime): eventWithTime | compressedEventWit
             }
         }
     } catch (e) {
-        logger.error(LOGGER_PREFIX + ' could not compress event - will use uncompressed event', e)
+        logger.error('could not compress event - will use uncompressed event', e)
     }
     return event
 }
@@ -445,7 +446,7 @@ export class SessionRecording {
         this.receivedDecide = false
 
         if (!this.instance.sessionManager) {
-            logger.error(LOGGER_PREFIX + ' started without valid sessionManager')
+            logger.error('started without valid sessionManager')
             throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
         }
 
@@ -458,8 +459,7 @@ export class SessionRecording {
 
         if (this.sessionIdleThresholdMilliseconds >= this.sessionManager.sessionTimeoutMs) {
             logger.warn(
-                LOGGER_PREFIX +
-                    ` session_idle_threshold_ms (${this.sessionIdleThresholdMilliseconds}) is greater than the session timeout (${this.sessionManager.sessionTimeoutMs}). Session will never be detected as idle`
+                `session_idle_threshold_ms (${this.sessionIdleThresholdMilliseconds}) is greater than the session timeout (${this.sessionManager.sessionTimeoutMs}). Session will never be detected as idle`
             )
         }
     }
@@ -559,7 +559,7 @@ export class SessionRecording {
             this._samplingSessionListener?.()
             this._samplingSessionListener = undefined
 
-            logger.info(LOGGER_PREFIX + ' stopped')
+            logger.info('stopped')
         }
     }
 
@@ -601,8 +601,7 @@ export class SessionRecording {
                 this._reportStarted('sampled')
             } else {
                 logger.warn(
-                    LOGGER_PREFIX +
-                        ` Sample rate (${currentSampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
+                    `Sample rate (${currentSampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
                 )
             }
 
@@ -756,7 +755,7 @@ export class SessionRecording {
         if (!this.rrwebRecord) {
             assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, this.scriptName, (err) => {
                 if (err) {
-                    return logger.error(LOGGER_PREFIX + ` could not load recorder`, err)
+                    return logger.error('could not load recorder', err)
                 }
 
                 this._onScriptLoaded()
@@ -765,7 +764,7 @@ export class SessionRecording {
             this._onScriptLoaded()
         }
 
-        logger.info(LOGGER_PREFIX + ' starting')
+        logger.info('starting')
         if (this.status === 'active') {
             this._reportStarted(startReason || 'recording_initialized')
         }
@@ -868,7 +867,7 @@ export class SessionRecording {
                     rrwebMethod: queuedRRWebEvent.rrwebMethod,
                 })
             } else {
-                logger.warn(LOGGER_PREFIX + ' could not emit queued rrweb event.', e, queuedRRWebEvent)
+                logger.warn('could not emit queued rrweb event.', e, queuedRRWebEvent)
             }
 
             return false
@@ -926,8 +925,7 @@ export class SessionRecording {
 
         if (!this.rrwebRecord) {
             logger.error(
-                LOGGER_PREFIX +
-                    'onScriptLoaded was called but rrwebRecord is not available. This indicates something has gone wrong.'
+                'onScriptLoaded was called but rrwebRecord is not available. This indicates something has gone wrong.'
             )
             return
         }
@@ -1006,7 +1004,7 @@ export class SessionRecording {
                     networkPlugin(buildNetworkRequestOptions(this.instance.config, this.networkPayloadCapture))
                 )
             } else {
-                logger.info(LOGGER_PREFIX + ' NetworkCapture not started because we are on localhost.')
+                logger.info('NetworkCapture not started because we are on localhost.')
             }
         }
 
@@ -1276,7 +1274,7 @@ export class SessionRecording {
             this._flushBuffer()
         }, 100)
 
-        logger.info(LOGGER_PREFIX + ' recording paused due to URL blocker')
+        logger.info('recording paused due to URL blocker')
         this._tryAddCustomEvent('recording paused', { reason: 'url blocker' })
     }
 
@@ -1292,7 +1290,7 @@ export class SessionRecording {
         this._scheduleFullSnapshot()
 
         this._tryAddCustomEvent('recording resumed', { reason: 'left blocked url' })
-        logger.info(LOGGER_PREFIX + ' recording resumed')
+        logger.info('recording resumed')
     }
 
     private _addEventTriggerListener() {
@@ -1308,7 +1306,7 @@ export class SessionRecording {
                     this._activateTrigger('event')
                 }
             } catch (e) {
-                logger.error(LOGGER_PREFIX + 'Could not activate event trigger', e)
+                logger.error('Could not activate event trigger', e)
             }
         })
     }
@@ -1352,7 +1350,7 @@ export class SessionRecording {
         this.instance.register_for_session({
             $session_recording_start_reason: startReason,
         })
-        logger.info(LOGGER_PREFIX + ' ' + startReason.replace('_', ' '), tagPayload)
+        logger.info(startReason.replace('_', ' '), tagPayload)
         if (!includes(['recording_initialized', 'session_id_changed'], startReason)) {
             this._tryAddCustomEvent(startReason, tagPayload)
         }
