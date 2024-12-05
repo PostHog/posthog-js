@@ -11,6 +11,10 @@ import { isFunction } from '../utils/type-utils'
 jest.mock('../utils/logger', () => ({
     logger: {
         error: jest.fn(),
+        createLogger: jest.fn(() => ({
+            error: jest.fn(),
+            info: jest.fn(),
+        })),
     },
 }))
 
