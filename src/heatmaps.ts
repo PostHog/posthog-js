@@ -7,13 +7,13 @@ import { document, window } from './utils/globals'
 import { getEventTarget, getParentElement } from './autocapture-utils'
 import { HEATMAPS_ENABLED_SERVER_SIDE } from './constants'
 import { isEmptyObject, isObject, isUndefined } from './utils/type-utils'
-import { logger } from './utils/logger'
+import { createLogger } from './utils/logger'
 import { isElementInToolbar, isElementNode, isTag } from './utils/element-utils'
 import { DeadClicksAutocapture, isDeadClicksEnabledForHeatmaps } from './extensions/dead-clicks-autocapture'
 
 const DEFAULT_FLUSH_INTERVAL = 5000
-const HEATMAPS = 'heatmaps'
-const LOGGER_PREFIX = '[' + HEATMAPS + ']'
+
+const logger = createLogger('[Heatmaps]')
 
 type HeatmapEventBuffer =
     | {
@@ -89,7 +89,7 @@ export class Heatmaps {
             if (this._initialized) {
                 return
             }
-            logger.info(LOGGER_PREFIX + ' starting...')
+            logger.info('starting...')
             this._setupListeners()
             this._flushInterval = setInterval(this.flush.bind(this), this.flushIntervalMilliseconds)
         } else {

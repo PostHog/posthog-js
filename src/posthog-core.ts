@@ -412,7 +412,7 @@ export class PostHog {
         )
 
         if (this.config.on_xhr_error) {
-            logger.error('[posthog] on_xhr_error is deprecated. Use on_request_error instead')
+            logger.error('on_xhr_error is deprecated. Use on_request_error instead')
         }
 
         this.compression = config.disable_compression ? undefined : Compression.GZipJS

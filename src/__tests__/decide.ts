@@ -212,7 +212,10 @@ describe('Decide', () => {
             subject(undefined as unknown as DecideResponse)
 
             expect(posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith({}, true)
-            expect(console.error).toHaveBeenCalledWith('[PostHog.js]', 'Failed to fetch feature flags from PostHog.')
+            expect(console.error).toHaveBeenCalledWith(
+                '[PostHog.js] [Decide]',
+                'Failed to fetch feature flags from PostHog.'
+            )
         })
 
         it('Make sure receivedFeatureFlags is not called if advanced_disable_feature_flags_on_first_load is set', () => {

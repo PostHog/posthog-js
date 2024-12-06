@@ -1,8 +1,6 @@
+import { clearLoggerMocks, mockLogger } from './helpers/mock-logger'
 import { window } from '../../src/utils/globals'
 import { RateLimiter } from '../rate-limiter'
-import { logger } from '../utils/logger'
-
-jest.mock('../../src/utils/logger')
 
 describe('Rate Limiter', () => {
     let rateLimiter: RateLimiter
@@ -44,6 +42,8 @@ describe('Rate Limiter', () => {
         }
 
         rateLimiter = new RateLimiter(mockPostHog as any)
+
+        clearLoggerMocks()
     })
 
     describe('client side', () => {
@@ -270,7 +270,7 @@ describe('Rate Limiter', () => {
                 text: '',
             })
 
-            expect(jest.mocked(logger).error).not.toHaveBeenCalled()
+            expect(mockLogger.error).not.toHaveBeenCalled()
         })
     })
 })

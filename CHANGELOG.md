@@ -1,3 +1,7 @@
+## 1.194.5 - 2024-12-06
+
+- feat: Added better sub logging utils (#1581)
+
 ## 1.194.4 - 2024-12-05
 
 - feat: RemoteConfig loader (#1577)

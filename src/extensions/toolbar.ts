@@ -160,7 +160,7 @@ export class Toolbar {
 
             assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'toolbar', (err) => {
                 if (err) {
-                    logger.error('Failed to load toolbar', err)
+                    logger.error('[Toolbar] Failed to load', err)
                     this.setToolbarState(ToolbarState.UNINITIALIZED)
                     return
                 }

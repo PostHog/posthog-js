@@ -2,8 +2,10 @@ import { PostHog } from './posthog-core'
 import { Compression, DecideResponse, RemoteConfig } from './types'
 import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './constants'
 
-import { logger } from './utils/logger'
+import { createLogger } from './utils/logger'
 import { assignableWindow, document } from './utils/globals'
+
+const logger = createLogger('[Decide]')
 
 export class Decide {
     constructor(private readonly instance: PostHog) {
