@@ -341,7 +341,7 @@ export interface PostHogConfig {
 
     /**
      * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * whether to wrap fetch and add tracing headers to the request
+     * enables the new RemoteConfig approach to loading config instead of decide
      * */
     __preview_remote_config?: boolean
 }
