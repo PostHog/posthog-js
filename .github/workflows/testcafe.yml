@@ -33,7 +33,7 @@ jobs:
           - browser: 'browserstack:ie'
             name: IE11
           - browser: 'browserstack:safari:iPhone 7'
-            name: Safari
+            name: Mobile Safari
 
     steps:
       - uses: actions/checkout@v4
