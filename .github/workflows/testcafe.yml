@@ -24,7 +24,6 @@ jobs:
           - 'firefox:headless'
           - 'browserstack:ie'
           - 'browserstack:safari'
-          - 'browserstack:safari:iPhone 7'
         include:
           - browser: 'chrome:headless'
             name: Chrome
@@ -32,8 +31,6 @@ jobs:
             name: Firefox
           - browser: 'browserstack:ie'
             name: IE11
-          - browser: 'browserstack:safari:iPhone 7'
-            name: Mobile Safari
 
     steps:
       - uses: actions/checkout@v4
