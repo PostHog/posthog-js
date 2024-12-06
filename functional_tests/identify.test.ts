@@ -1,3 +1,5 @@
+import '../src/__tests__/helpers/mock-logger'
+
 import 'regenerator-runtime/runtime'
 import { waitFor } from '@testing-library/dom'
 import { getRequests } from './mock-server'
@@ -5,7 +7,6 @@ import { createPosthogInstance } from '../src/__tests__/helpers/posthog-instance
 import { logger } from '../src/utils/logger'
 import { uuidv7 } from '../src/uuidv7'
 import { PostHog } from '../src/posthog-core'
-jest.mock('../src/utils/logger')
 
 describe('FunctionalTests / Identify', () => {
     let token: string

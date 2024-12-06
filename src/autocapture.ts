@@ -20,10 +20,12 @@ import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
 import { isBoolean, isFunction, isNull, isObject } from './utils/type-utils'
-import { logger } from './utils/logger'
+import { createLogger } from './utils/logger'
 import { document, window } from './utils/globals'
 import { convertToURL } from './utils/request-utils'
 import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
+
+const logger = createLogger('[AutoCapture]')
 
 function limitText(length: number, text: string): string {
     if (text.length > length) {

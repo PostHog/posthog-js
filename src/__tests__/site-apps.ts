@@ -1,3 +1,5 @@
+import { mockLogger } from './helpers/mock-logger'
+
 import { SiteApps } from '../site-apps'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
@@ -23,7 +25,6 @@ describe('SiteApps', () => {
         // Clean the JSDOM to prevent interdependencies between tests
         document.body.innerHTML = ''
         document.head.innerHTML = ''
-        jest.spyOn(window.console, 'error').mockImplementation()
 
         // Reset assignableWindow properties
         assignableWindow.__PosthogExtensions__ = {
@@ -393,13 +394,9 @@ describe('SiteApps', () => {
 
             siteAppsInstance.onRemoteConfig({} as RemoteConfig)
 
-            expect(window.console.error).toBeCalledTimes(1)
-            expect(window.console.error.mock.calls[0]).toMatchInlineSnapshot(`
-                Array [
-                  "[PostHog.js] [Site Apps]",
-                  "PostHog site apps are disabled. Enable the \\"opt_in_site_apps\\" config to proceed.",
-                ]
-            `)
+            expect(mockLogger.error).toHaveBeenCalledWith(
+                'PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.'
+            )
             expect(siteAppsInstance.apps).toEqual({})
         })
     })

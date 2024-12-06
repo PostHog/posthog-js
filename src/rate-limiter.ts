@@ -1,7 +1,9 @@
 import { CAPTURE_RATE_LIMIT } from './constants'
 import type { PostHog } from './posthog-core'
 import { RequestResponse } from './types'
-import { logger } from './utils/logger'
+import { createLogger } from './utils/logger'
+
+const logger = createLogger('[RateLimiter]')
 
 const ONE_MINUTE_IN_MILLISECONDS = 60 * 1000
 const RATE_LIMIT_EVENT = '$$client_ingestion_warning'
@@ -96,11 +98,11 @@ export class RateLimiter {
             const response: CaptureResponse = JSON.parse(text)
             const quotaLimitedProducts = response.quota_limited || []
             quotaLimitedProducts.forEach((batchKey) => {
-                logger.info(`[RateLimiter] ${batchKey || 'events'} is quota limited.`)
+                logger.info(`${batchKey || 'events'} is quota limited.`)
                 this.serverLimits[batchKey] = new Date().getTime() + ONE_MINUTE_IN_MILLISECONDS
             })
         } catch (e: any) {
-            logger.warn(`[RateLimiter] could not rate limit - continuing. Error: "${e?.message}"`, { text })
+            logger.warn(`could not rate limit - continuing. Error: "${e?.message}"`, { text })
             return
         }
     }

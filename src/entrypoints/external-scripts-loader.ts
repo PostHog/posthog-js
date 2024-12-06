@@ -1,6 +1,8 @@
 import type { PostHog } from '../posthog-core'
 import { assignableWindow, document, PostHogExtensionKind } from '../utils/globals'
-import { logger } from '../utils/logger'
+import { createLogger } from '../utils/logger'
+
+const logger = createLogger('[ExternalScriptsLoader]')
 
 const loadScript = (posthog: PostHog, url: string, callback: (error?: string | Event, event?: Event) => void) => {
     if (posthog.config.disable_external_dependency_loading) {

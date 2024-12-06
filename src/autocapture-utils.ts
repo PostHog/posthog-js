@@ -417,7 +417,7 @@ export function getNestedSpanText(target: Element): string {
                         text = `${text} ${getNestedSpanText(child)}`.trim()
                     }
                 } catch (e) {
-                    logger.error(e)
+                    logger.error('[AutoCapture]', e)
                 }
             }
         })

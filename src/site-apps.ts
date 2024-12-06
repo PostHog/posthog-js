@@ -1,10 +1,10 @@
 import { PostHog } from './posthog-core'
 import { CaptureResult, Properties, RemoteConfig, SiteApp, SiteAppGlobals, SiteAppLoader } from './types'
 import { assignableWindow } from './utils/globals'
-import { logger as _logger } from './utils/logger'
+import { createLogger } from './utils/logger'
 import { isArray } from './utils/type-utils'
 
-const logger = _logger.createLogger('[Site Apps]')
+const logger = createLogger('[SiteApps]')
 
 export class SiteApps {
     apps: Record<string, SiteApp>

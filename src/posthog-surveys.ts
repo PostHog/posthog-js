@@ -11,11 +11,11 @@ import { isUrlMatchingRegex } from './utils/request-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import { assignableWindow, document, window } from './utils/globals'
 import { RemoteConfig } from './types'
-import { logger } from './utils/logger'
+import { createLogger } from './utils/logger'
 import { isNullish } from './utils/type-utils'
 import { getSurveySeenStorageKeys } from './extensions/surveys/surveys-utils'
 
-const LOGGER_PREFIX = '[Surveys]'
+const logger = createLogger('[Surveys]')
 
 export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: string) => boolean> = {
     icontains: (conditionsUrl) =>
@@ -90,7 +90,7 @@ export class PostHogSurveys {
 
             assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'surveys', (err) => {
                 if (err) {
-                    return logger.error(LOGGER_PREFIX, 'Could not load surveys script', err)
+                    return logger.error('Could not load surveys script', err)
                 }
 
                 this._surveyManager = assignableWindow.__PosthogExtensions__?.generateSurveys?.(this.instance)
@@ -295,14 +295,14 @@ export class PostHogSurveys {
             return nextQuestionIndex
         }
 
-        logger.warn(LOGGER_PREFIX, 'Falling back to next question index due to unexpected branching type')
+        logger.warn('Falling back to next question index due to unexpected branching type')
         return nextQuestionIndex
     }
 
     // this method is lazily loaded onto the window to avoid loading preact and other dependencies if surveys is not enabled
     private _canActivateRepeatedly(survey: Survey) {
         if (isNullish(assignableWindow.__PosthogExtensions__?.canActivateRepeatedly)) {
-            logger.warn(LOGGER_PREFIX, 'canActivateRepeatedly is not defined, must init before calling')
+            logger.warn('init was not called')
             return false // TODO does it make sense to have a default here?
         }
         return assignableWindow.__PosthogExtensions__.canActivateRepeatedly(survey)
@@ -310,7 +310,7 @@ export class PostHogSurveys {
 
     canRenderSurvey(surveyId: string) {
         if (isNullish(this._surveyManager)) {
-            logger.warn(LOGGER_PREFIX, 'canActivateRepeatedly is not defined, must init before calling')
+            logger.warn('init was not called')
             return
         }
         this.getSurveys((surveys) => {
@@ -321,7 +321,7 @@ export class PostHogSurveys {
 
     renderSurvey(surveyId: string, selector: string) {
         if (isNullish(this._surveyManager)) {
-            logger.warn(LOGGER_PREFIX, 'canActivateRepeatedly is not defined, must init before calling')
+            logger.warn('init was not called')
             return
         }
         this.getSurveys((surveys) => {

@@ -12,7 +12,7 @@ export type Logger = {
     createLogger: (prefix: string) => Logger
 }
 
-const createLogger = (prefix: string): Logger => {
+const _createLogger = (prefix: string): Logger => {
     const logger: Logger = {
         _log: (level: 'log' | 'warn' | 'error', ...args: any[]) => {
             if (
@@ -53,9 +53,11 @@ const createLogger = (prefix: string): Logger => {
             logger.error(`You must initialize PostHog before calling ${methodName}`)
         },
 
-        createLogger: (additionalPrefix: string) => createLogger(`${prefix} ${additionalPrefix}`),
+        createLogger: (additionalPrefix: string) => _createLogger(`${prefix} ${additionalPrefix}`),
     }
     return logger
 }
 
-export const logger = createLogger('[PostHog.js]')
+export const logger = _createLogger('[PostHog.js]')
+
+export const createLogger = logger.createLogger
