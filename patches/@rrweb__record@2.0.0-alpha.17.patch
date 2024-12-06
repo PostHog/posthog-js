@@ -1,5 +1,5 @@
 diff --git a/dist/record.js b/dist/record.js
-index 46ec389fefb698243008b39db65470dbdf0a3857..6396cbb3f6b41d7b58920bac1499e4695f844365 100644
+index 46ec389fefb698243008b39db65470dbdf0a3857..a18724d8b6ba43a30935daf257127fbb0c898541 100644
 --- a/dist/record.js
 +++ b/dist/record.js
 @@ -26,6 +26,14 @@ const testableMethods$1 = {
@@ -17,47 +17,29 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..6396cbb3f6b41d7b58920bac1499e469
  const untaintedBasePrototype$1 = {};
  function getUntaintedPrototype$1(key) {
    if (untaintedBasePrototype$1[key])
-@@ -54,22 +62,30 @@ function getUntaintedPrototype$1(key) {
+@@ -54,7 +62,7 @@ function getUntaintedPrototype$1(key) {
        }
      )
    );
 -  if (isUntaintedAccessors && isUntaintedMethods) {
--    untaintedBasePrototype$1[key] = defaultObj.prototype;
--    return defaultObj.prototype;
-+  let valueToUse = defaultObj.prototype;
-+
 +  if (isUntaintedAccessors && isUntaintedMethods && !isAngularZonePresent()) {
-+    untaintedBasePrototype[key] = defaultObj.prototype;
-+    return valueToUse;
+     untaintedBasePrototype$1[key] = defaultObj.prototype;
+     return defaultObj.prototype;
    }
-+
-   try {
--    const iframeEl = document.createElement("iframe");
-+    const iframeEl = document.createElement('iframe');
-+    iframeEl.hidden = true;
-     document.body.appendChild(iframeEl);
-     const win = iframeEl.contentWindow;
--    if (!win) return defaultObj.prototype;
--    const untaintedObject = win[key].prototype;
-+    const wink = (win||{})[key]
-+    const prototype = wink?.prototype
-+    if (prototype) {
-+      valueToUse = prototype;
-+    }
-+
-+    // cleanup
+@@ -65,10 +73,10 @@ function getUntaintedPrototype$1(key) {
+     if (!win) return defaultObj.prototype;
+     const untaintedObject = win[key].prototype;
      document.body.removeChild(iframeEl);
 -    if (!untaintedObject) return defaultPrototype;
--    return untaintedBasePrototype$1[key] = untaintedObject;
++    if (!untaintedObject) return defaultObj.prototype;
+     return untaintedBasePrototype$1[key] = untaintedObject;
    } catch {
 -    return defaultPrototype;
-+    // ignore
++    return defaultObj.prototype;
    }
-+  return valueToUse
  }
  const untaintedAccessorCache$1 = {};
- function getUntaintedAccessor$1(key, instance, accessor) {
-@@ -246,6 +262,9 @@ function isCSSImportRule(rule2) {
+@@ -246,6 +254,9 @@ function isCSSImportRule(rule2) {
  function isCSSStyleRule(rule2) {
    return "selectorText" in rule2;
  }
@@ -67,7 +49,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..6396cbb3f6b41d7b58920bac1499e469
  class Mirror {
    constructor() {
      __publicField$1(this, "idNodeMap", /* @__PURE__ */ new Map());
-@@ -809,9 +828,14 @@ function serializeElementNode(n2, options) {
+@@ -809,9 +820,14 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "link" && inlineStylesheet) {
@@ -85,7 +67,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..6396cbb3f6b41d7b58920bac1499e469
      let cssText = null;
      if (stylesheet) {
        cssText = stringifyStylesheet(stylesheet);
-@@ -855,7 +879,15 @@ function serializeElementNode(n2, options) {
+@@ -855,7 +871,15 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "dialog" && n2.open) {
@@ -102,7 +84,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..6396cbb3f6b41d7b58920bac1499e469
    }
    if (tagName === "canvas" && recordCanvas) {
      if (n2.__context === "2d") {
-@@ -1116,7300 +1148,227 @@ function serializeNodeWithId(n2, options) {
+@@ -1116,7300 +1140,227 @@ function serializeNodeWithId(n2, options) {
        keepIframeSrcFn
      };
      if (serializedNode.type === NodeType$2.Element && serializedNode.tagName === "textarea" && serializedNode.attributes.value !== void 0) ;
@@ -7612,7 +7594,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..6396cbb3f6b41d7b58920bac1499e469
  class BaseRRNode {
    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
    constructor(..._args) {
-@@ -8507,7 +1466,7 @@ function getUntaintedPrototype(key) {
+@@ -8507,7 +1458,7 @@ function getUntaintedPrototype(key) {
        }
      )
    );
@@ -7621,7 +7603,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..6396cbb3f6b41d7b58920bac1499e469
      untaintedBasePrototype[key] = defaultObj.prototype;
      return defaultObj.prototype;
    }
-@@ -11382,11 +4341,19 @@ class CanvasManager {
+@@ -11382,11 +4333,19 @@ class CanvasManager {
      let rafId;
      const getCanvas = () => {
        const matchedCanvas = [];
@@ -7646,7 +7628,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..6396cbb3f6b41d7b58920bac1499e469
        return matchedCanvas;
      };
      const takeCanvasSnapshots = (timestamp) => {
-@@ -11407,13 +4374,20 @@ class CanvasManager {
+@@ -11407,13 +4366,20 @@ class CanvasManager {
              context.clear(context.COLOR_BUFFER_BIT);
            }
          }
