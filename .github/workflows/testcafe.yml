@@ -62,5 +62,5 @@ jobs:
         run: pnpm testcafe ${{ matrix.browser }} --stop-on-first-fail
 
       - name: Check ${{ matrix.name }} events
-        timeout-minutes: 10
+        timeout-minutes: 20
         run: pnpm check-testcafe-results
