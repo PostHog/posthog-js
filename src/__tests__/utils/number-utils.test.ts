@@ -1,11 +1,6 @@
-import { clampToRange } from '../../utils/number-utils'
-import { logger } from '../../utils/logger'
+import { mockLogger } from '../helpers/mock-logger'
 
-jest.mock('../../utils/logger', () => ({
-    logger: {
-        warn: jest.fn(),
-    },
-}))
+import { clampToRange } from '../../utils/number-utils'
 
 describe('number-utils', () => {
     describe('clampToRange', () => {
@@ -87,7 +82,7 @@ describe('number-utils', () => {
 
         it('logs a warning when min is greater than max', () => {
             expect(clampToRange(50, 100, 10, 'Test Label')).toBe(10)
-            expect(logger.warn).toHaveBeenCalledWith('min cannot be greater than max.')
+            expect(mockLogger.warn).toHaveBeenCalledWith('min cannot be greater than max.')
         })
     })
 })

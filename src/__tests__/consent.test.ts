@@ -1,3 +1,5 @@
+import './helpers/mock-logger'
+
 import { PostHog } from '../posthog-core'
 import { defaultPostHog } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'

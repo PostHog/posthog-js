@@ -1,8 +1,10 @@
 import { PostHog } from './posthog-core'
 import { CaptureResult, RemoteConfig } from './types'
 import { assignableWindow } from './utils/globals'
-import { logger } from './utils/logger'
+import { createLogger } from './utils/logger'
 import { isArray } from './utils/type-utils'
+
+const logger = createLogger('[SiteApps]')
 
 export class SiteApps {
     instance: PostHog
@@ -102,7 +104,7 @@ export class SiteApps {
                     })
                 }
             } else if (response['siteApps'].length > 0) {
-                logger.error('PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.')
+                logger.error('Site apps exist but "opt_in_site_apps" is not set so they are not loaded.')
                 this.loaded = true
             } else {
                 this.loaded = true

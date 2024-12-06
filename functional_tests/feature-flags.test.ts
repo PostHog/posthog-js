@@ -1,3 +1,5 @@
+import '../src/__tests__/helpers/mock-logger'
+
 import { createPosthogInstance } from '../src/__tests__/helpers/posthog-instance'
 import { waitFor } from '@testing-library/dom'
 import { getRequests, resetRequests } from './mock-server'

@@ -20,7 +20,9 @@ import {
 } from './constants'
 
 import { isArray } from './utils/type-utils'
-import { logger } from './utils/logger'
+import { createLogger } from './utils/logger'
+
+const logger = createLogger('[FeatureFlags]')
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'

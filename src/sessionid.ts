@@ -6,10 +6,12 @@ import { uuid7ToTimestampMs, uuidv7 } from './uuidv7'
 import { window } from './utils/globals'
 
 import { isArray, isNumber, isUndefined } from './utils/type-utils'
-import { logger } from './utils/logger'
+import { createLogger } from './utils/logger'
 
 import { clampToRange } from './utils/number-utils'
 import { PostHog } from './posthog-core'
+
+const logger = createLogger('[SessionId]')
 
 export const DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS = 30 * 60 // 30 minutes
 export const MAX_SESSION_IDLE_TIMEOUT_SECONDS = 10 * 60 * 60 // 10 hours
@@ -230,7 +232,7 @@ export class SessionIdManager {
         if (noSessionId || activityTimeout || sessionPastMaximumLength) {
             sessionId = this._sessionIdGenerator()
             windowId = this._windowIdGenerator()
-            logger.info('[SessionId] new session ID generated', {
+            logger.info('new session ID generated', {
                 sessionId,
                 windowId,
                 changeReason: { noSessionId, activityTimeout, sessionPastMaximumLength },

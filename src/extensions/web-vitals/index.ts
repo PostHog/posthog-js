@@ -1,9 +1,11 @@
 import { PostHog } from '../../posthog-core'
 import { RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
-import { logger } from '../../utils/logger'
+import { createLogger } from '../../utils/logger'
 import { isBoolean, isNullish, isNumber, isObject, isUndefined } from '../../utils/type-utils'
 import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { assignableWindow, window } from '../../utils/globals'
+
+const logger = createLogger('[Web Vitals]')
 
 type WebVitalsMetricCallback = (metric: any) => void
 
@@ -11,7 +13,6 @@ export const DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS = 5000
 const ONE_MINUTE_IN_MILLIS = 60 * 1000
 export const FIFTEEN_MINUTES_IN_MILLIS = 15 * ONE_MINUTE_IN_MILLIS
 
-const LOGGER_PREFIX = '[Web Vitals]'
 type WebVitalsEventBuffer = { url: string | undefined; metrics: any[]; firstMetricTimestamp: number | undefined }
 
 export class WebVitalsAutocapture {
@@ -65,7 +66,7 @@ export class WebVitalsAutocapture {
 
     public startIfEnabled(): void {
         if (this.isEnabled && !this._initialized) {
-            logger.info(LOGGER_PREFIX + ' enabled, starting...')
+            logger.info('enabled, starting...')
             this.loadScript(this._startCapturing)
         }
     }
@@ -99,7 +100,7 @@ export class WebVitalsAutocapture {
         }
         assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'web-vitals', (err) => {
             if (err) {
-                logger.error(LOGGER_PREFIX + ' failed to load script', err)
+                logger.error('failed to load script', err)
                 return
             }
             cb()
@@ -110,7 +111,7 @@ export class WebVitalsAutocapture {
         // TODO you should be able to mask the URL here
         const href = window ? window.location.href : undefined
         if (!href) {
-            logger.error(LOGGER_PREFIX + 'Could not determine current URL')
+            logger.error('Could not determine current URL')
         }
         return href
     }
@@ -139,7 +140,7 @@ export class WebVitalsAutocapture {
     private _addToBuffer = (metric: any) => {
         const sessionIds = this.instance.sessionManager?.checkAndGetSessionAndWindowId(true)
         if (isUndefined(sessionIds)) {
-            logger.error(LOGGER_PREFIX + 'Could not read session ID. Dropping metrics!')
+            logger.error('Could not read session ID. Dropping metrics!')
             return
         }
 
@@ -151,14 +152,14 @@ export class WebVitalsAutocapture {
         }
 
         if (isNullish(metric?.name) || isNullish(metric?.value)) {
-            logger.error(LOGGER_PREFIX + 'Invalid metric received', metric)
+            logger.error('Invalid metric received', metric)
             return
         }
 
         // we observe some very large values sometimes, we'll ignore them
         // since the likelihood of LCP > 1 hour being correct is very low
         if (this._maxAllowedValue && metric.value >= this._maxAllowedValue) {
-            logger.error(LOGGER_PREFIX + 'Ignoring metric with value >= ' + this._maxAllowedValue, metric)
+            logger.error('Ignoring metric with value >= ' + this._maxAllowedValue, metric)
             return
         }
 
@@ -215,7 +216,7 @@ export class WebVitalsAutocapture {
         }
 
         if (!onLCP || !onCLS || !onFCP || !onINP) {
-            logger.error(LOGGER_PREFIX + 'web vitals callbacks not loaded - not starting')
+            logger.error('web vitals callbacks not loaded - not starting')
             return
         }
 

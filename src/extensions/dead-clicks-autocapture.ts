@@ -2,10 +2,10 @@ import { PostHog } from '../posthog-core'
 import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../constants'
 import { isBoolean, isObject } from '../utils/type-utils'
 import { assignableWindow, document, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
-import { logger } from '../utils/logger'
+import { createLogger } from '../utils/logger'
 import { DeadClicksAutoCaptureConfig, RemoteConfig } from '../types'
 
-const LOGGER_PREFIX = '[Dead Clicks]'
+const logger = createLogger('[Dead Clicks]')
 
 export const isDeadClicksEnabledForHeatmaps = () => {
     return true
@@ -58,7 +58,7 @@ export class DeadClicksAutocapture {
             'dead-clicks-autocapture',
             (err) => {
                 if (err) {
-                    logger.error(LOGGER_PREFIX + ' failed to load script', err)
+                    logger.error('failed to load script', err)
                     return
                 }
                 cb()
@@ -68,7 +68,7 @@ export class DeadClicksAutocapture {
 
     private start() {
         if (!document) {
-            logger.error(LOGGER_PREFIX + ' `document` not found. Cannot start.')
+            logger.error('`document` not found. Cannot start.')
             return
         }
 
@@ -86,7 +86,7 @@ export class DeadClicksAutocapture {
                 config
             )
             this._lazyLoadedDeadClicksAutocapture.start(document)
-            logger.info(`${LOGGER_PREFIX} starting...`)
+            logger.info(`starting...`)
         }
     }
 
@@ -94,7 +94,7 @@ export class DeadClicksAutocapture {
         if (this._lazyLoadedDeadClicksAutocapture) {
             this._lazyLoadedDeadClicksAutocapture.stop()
             this._lazyLoadedDeadClicksAutocapture = undefined
-            logger.info(`${LOGGER_PREFIX} stopping...`)
+            logger.info(`stopping...`)
         }
     }
 }

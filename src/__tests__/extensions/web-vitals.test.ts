@@ -1,3 +1,5 @@
+import '../helpers/mock-logger'
+
 import { createPosthogInstance } from '../helpers/posthog-instance'
 import { uuidv7 } from '../../uuidv7'
 import { PostHog } from '../../posthog-core'
@@ -5,7 +7,6 @@ import { DecideResponse, PerformanceCaptureConfig, SupportedWebVitalsMetrics } f
 import { assignableWindow } from '../../utils/globals'
 import { DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, FIFTEEN_MINUTES_IN_MILLIS } from '../../extensions/web-vitals'
 
-jest.mock('../../utils/logger')
 jest.useFakeTimers()
 
 describe('web vitals', () => {

@@ -1,10 +1,11 @@
+import { mockLogger } from './helpers/mock-logger'
+
 import { Info } from '../utils/event-utils'
 import { document, window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
 import * as globals from '../utils/globals'
 import { ENABLE_PERSON_PROCESSING, USER_STATE } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
-import { logger } from '../utils/logger'
 import { PostHogConfig, RemoteConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
@@ -119,16 +120,14 @@ describe('posthog core', () => {
 
             const posthog = posthogWith(defaultConfig, defaultOverrides)
             posthog._addCaptureHook(hook)
-            jest.spyOn(logger, 'error').mockImplementation()
 
             expect(() => posthog.capture(undefined)).not.toThrow()
             expect(hook).not.toHaveBeenCalled()
-            expect(logger.error).toHaveBeenCalledWith('No event name provided to posthog.capture')
+            expect(mockLogger.error).toHaveBeenCalledWith('No event name provided to posthog.capture')
         })
 
         it('errors with object event name', () => {
             const hook = jest.fn()
-            jest.spyOn(logger, 'error').mockImplementation()
 
             const posthog = posthogWith(defaultConfig, defaultOverrides)
             posthog._addCaptureHook(hook)
@@ -136,7 +135,7 @@ describe('posthog core', () => {
             // @ts-expect-error - testing invalid input
             expect(() => posthog.capture({ event: 'object as name' })).not.toThrow()
             expect(hook).not.toHaveBeenCalled()
-            expect(logger.error).toHaveBeenCalledWith('No event name provided to posthog.capture')
+            expect(mockLogger.error).toHaveBeenCalledWith('No event name provided to posthog.capture')
         })
 
         it('respects opt_out_useragent_filter (default: false)', () => {
@@ -746,8 +745,6 @@ describe('posthog core', () => {
         })
 
         it('does nothing when empty', () => {
-            jest.spyOn(logger, 'warn').mockImplementation()
-
             const posthog = posthogWith({
                 bootstrap: {},
                 persistence: 'memory',
@@ -756,7 +753,7 @@ describe('posthog core', () => {
             expect(posthog.get_distinct_id()).not.toBe('abcd')
             expect(posthog.get_distinct_id()).not.toEqual(undefined)
             expect(posthog.getFeatureFlag('multivariant')).toBe(undefined)
-            expect(logger.warn).toHaveBeenCalledWith(
+            expect(mockLogger.warn).toHaveBeenCalledWith(
                 expect.stringContaining('getFeatureFlag for key "multivariant" failed')
             )
             expect(posthog.getFeatureFlag('disabled')).toBe(undefined)
@@ -902,11 +899,9 @@ describe('posthog core', () => {
 
     describe('skipped init()', () => {
         it('capture() does not throw', () => {
-            jest.spyOn(logger, 'error').mockImplementation()
-
             expect(() => defaultPostHog().capture('$pageview')).not.toThrow()
 
-            expect(logger.error).toHaveBeenCalledWith('You must initialize PostHog before calling posthog.capture')
+            expect(mockLogger.uninitializedWarning).toHaveBeenCalledWith('posthog.capture')
         })
     })
 
@@ -1112,8 +1107,6 @@ describe('posthog core', () => {
         })
 
         it('handles loaded config option throwing gracefully', () => {
-            jest.spyOn(logger, 'critical').mockImplementation()
-
             const posthog = posthogWith(
                 {
                     loaded: () => {
@@ -1133,7 +1126,7 @@ describe('posthog core', () => {
 
             posthog._loaded()
 
-            expect(logger.critical).toHaveBeenCalledWith('`loaded` function failed', expect.anything())
+            expect(mockLogger.critical).toHaveBeenCalledWith('`loaded` function failed', expect.anything())
         })
 
         describe('/decide', () => {
