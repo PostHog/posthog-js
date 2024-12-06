@@ -13,7 +13,7 @@ import { DeadClicksAutocapture, isDeadClicksEnabledForHeatmaps } from './extensi
 
 const DEFAULT_FLUSH_INTERVAL = 5000
 
-const logger = createLogger('[heatmaps')
+const logger = createLogger('[Heatmaps]')
 
 type HeatmapEventBuffer =
     | {
