@@ -24,6 +24,7 @@ jobs:
           - 'firefox:headless'
           - 'browserstack:ie'
           - 'browserstack:safari'
+          - 'browserstack:safari:emulation:device=iPhone 4'
         include:
           - browser: 'chrome:headless'
             name: Chrome
@@ -31,7 +32,7 @@ jobs:
             name: Firefox
           - browser: 'browserstack:ie'
             name: IE11
-          - browser: 'browserstack:safari'
+          - browser: 'browserstack:safari:emulation:device=iPhone 4'
             name: Safari
 
     steps:

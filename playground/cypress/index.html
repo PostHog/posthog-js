@@ -23,6 +23,11 @@
     Make XHR post network call
 </button>
 
+    <div id="a-red-box" style="padding: 4px 8px; color: white;width: 250px; height: 75px; background-color: red;">I START RED, BUT CAN BE CHANGED BY A BUTTON BELOW</div>
+    <button data-cy-change-dom-button onclick="document.getElementById('a-red-box').style.backgroundColor='blue';document.getElementById('a-red-box').innerText='i r been changed'">
+        Change the DOM
+    </button>
+
 <script>
     function makeXHRNetworkPOST() {
         const xhr = new XMLHttpRequest();
