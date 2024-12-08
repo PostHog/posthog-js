@@ -858,6 +858,7 @@ describe('SessionRecording', () => {
                     ],
                     $session_id: sessionId,
                     $window_id: 'windowId',
+                    $snapshot_library: 'web/ver/v0.0.1/script_name/recorder',
                 },
                 {
                     _url: 'https://test.com/s/',
@@ -893,6 +894,7 @@ describe('SessionRecording', () => {
                         { type: 3, data: { source: 1 } },
                         { type: 3, data: { source: 2 } },
                     ],
+                    $snapshot_library: 'web/ver/v0.0.1/script_name/recorder',
                 },
                 {
                     _url: 'https://test.com/s/',
@@ -973,6 +975,7 @@ describe('SessionRecording', () => {
                     $window_id: 'windowId',
                     $snapshot_data: [{ data: { source: 1 }, emit: 1, type: 3 }],
                     $snapshot_bytes: 39,
+                    $snapshot_library: 'web/ver/v0.0.1/script_name/recorder',
                 },
                 {
                     _url: 'https://test.com/s/',
@@ -1580,6 +1583,7 @@ describe('SessionRecording', () => {
                     $session_id: firstSessionId,
                     $snapshot_bytes: 186,
                     $window_id: expect.any(String),
+                    $snapshot_library: 'web/ver/v0.0.1/script_name/recorder',
                 },
                 {
                     _batchKey: 'recordings',
@@ -1670,6 +1674,7 @@ describe('SessionRecording', () => {
                     $session_id: firstSessionId,
                     $snapshot_bytes: 186,
                     $window_id: expect.any(String),
+                    $snapshot_library: 'web/ver/v0.0.1/script_name/recorder',
                 },
                 {
                     _batchKey: 'recordings',
@@ -1696,6 +1701,7 @@ describe('SessionRecording', () => {
                     $session_id: firstSessionId,
                     $snapshot_bytes: 186,
                     $window_id: expect.any(String),
+                    $snapshot_library: 'web/ver/v0.0.1/script_name/recorder',
                 },
                 {
                     _batchKey: 'recordings',
@@ -2116,6 +2122,7 @@ describe('SessionRecording', () => {
                     $session_id: sessionId,
                     $snapshot_bytes: expect.any(Number),
                     $window_id: 'windowId',
+                    $snapshot_library: 'web/ver/v0.0.1/script_name/recorder',
                 },
                 captureOptions
             )
@@ -2137,6 +2144,7 @@ describe('SessionRecording', () => {
                     $session_id: sessionId,
                     $snapshot_bytes: expect.any(Number),
                     $window_id: 'windowId',
+                    $snapshot_library: 'web/ver/v0.0.1/script_name/recorder',
                 },
                 captureOptions
             )
@@ -2166,6 +2174,7 @@ describe('SessionRecording', () => {
                     $session_id: sessionId,
                     $snapshot_bytes: expect.any(Number),
                     $window_id: 'windowId',
+                    $snapshot_library: 'web/ver/v0.0.1/script_name/recorder',
                 },
                 captureOptions
             )
@@ -2196,6 +2205,7 @@ describe('SessionRecording', () => {
                     $session_id: sessionId,
                     $snapshot_bytes: expect.any(Number),
                     $window_id: 'windowId',
+                    $snapshot_library: 'web/ver/v0.0.1/script_name/recorder',
                 },
                 captureOptions
             )
@@ -2215,6 +2225,7 @@ describe('SessionRecording', () => {
                     $session_id: sessionId,
                     $snapshot_bytes: 86,
                     $window_id: 'windowId',
+                    $snapshot_library: 'web/ver/v0.0.1/script_name/recorder',
                 },
                 captureOptions
             )
@@ -2239,6 +2250,7 @@ describe('SessionRecording', () => {
                     $session_id: sessionId,
                     $snapshot_bytes: 58,
                     $window_id: 'windowId',
+                    $snapshot_library: 'web/ver/v0.0.1/script_name/recorder',
                 },
                 captureOptions
             )
@@ -2262,6 +2274,7 @@ describe('SessionRecording', () => {
                     $session_id: sessionId,
                     $snapshot_bytes: 69,
                     $window_id: 'windowId',
+                    $snapshot_library: 'web/ver/v0.0.1/script_name/recorder',
                 },
                 captureOptions
             )
@@ -2308,6 +2321,7 @@ describe('SessionRecording', () => {
                             { type: 3, data: { source: 1 } },
                             { type: 3, data: { source: 2 } },
                         ],
+                        $snapshot_library: 'web/ver/v0.0.1/script_name/recorder',
                     },
                     expect.any(Object)
                 )
