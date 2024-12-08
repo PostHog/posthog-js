@@ -31,7 +31,7 @@ import {
     RECORDING_IDLE_THRESHOLD_MS,
     RECORDING_MAX_EVENT_SIZE,
     SessionRecording,
-} from '../../../extensions/replay/sessionrecording'
+} from '../../../entrypoints/sessionrecording'
 import { assignableWindow, window } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
 import {

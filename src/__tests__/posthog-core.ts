@@ -11,7 +11,7 @@ import { PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
-import { SessionRecording } from '../extensions/replay/sessionrecording'
+import { SessionRecording } from '../entrypoints/sessionrecording'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
 
 describe('posthog core', () => {

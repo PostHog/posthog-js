@@ -2,7 +2,7 @@ import type { eventWithTime, listenerHandler, pluginEvent } from '@rrweb/types'
 import type { record } from '@rrweb/record'
 
 import { isObject } from '../../utils/type-utils'
-import { SnapshotBuffer } from './sessionrecording'
+import { SnapshotBuffer } from '../../entrypoints/sessionrecording'
 
 // taken from https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Cyclic_object_value#circular_references
 export function circularReferenceReplacer() {

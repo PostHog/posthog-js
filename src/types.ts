@@ -423,6 +423,26 @@ export type SessionIdChangedCallback = (
     changeReason?: { noSessionId: boolean; activityTimeout: boolean; sessionPastMaximumLength: boolean }
 ) => void
 
+export type SessionStartReason =
+    | 'recording_initialized'
+    | 'sampling_overridden'
+    | 'linked_flag_matched'
+    | 'linked_flag_overridden'
+    | 'sampled'
+    | 'session_id_changed'
+    | 'url_trigger_matched'
+    | 'event_trigger_matched'
+
+/**
+ * Session recording starts in buffering mode while waiting for decide response
+ * Once the response is received it might be disabled, active or sampled
+ * When sampled that means a sample rate is set and the last time the session id was rotated
+ * the sample rate determined this session should be sent to the server.
+ */
+export type SessionRecordingStatus = 'disabled' | 'sampled' | 'active' | 'buffering' | 'paused'
+
+export type TriggerType = 'url' | 'event'
+
 export enum Compression {
     GZipJS = 'gzip-js',
     Base64 = 'base64',

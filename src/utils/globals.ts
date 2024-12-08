@@ -1,7 +1,16 @@
 import { ErrorProperties } from '../extensions/exception-autocapture/error-conversion'
 import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
-import { DeadClicksAutoCaptureConfig, ErrorEventArgs, ErrorMetadata, Properties, RemoteConfig } from '../types'
+import {
+    DeadClicksAutoCaptureConfig,
+    ErrorEventArgs,
+    ErrorMetadata,
+    Properties,
+    RemoteConfig,
+    SessionRecordingStatus,
+    SessionStartReason,
+    TriggerType,
+} from '../types'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
@@ -33,11 +42,23 @@ export type PostHogExtensionKind =
     | 'toolbar'
     | 'exception-autocapture'
     | 'web-vitals'
+    | 'session-recording'
     | 'recorder'
     | 'tracing-headers'
     | 'surveys'
     | 'dead-clicks-autocapture'
     | 'remote-config'
+
+export interface LazyLoadedSessionRecordingInterface {
+    start: (startReason?: SessionStartReason) => void
+    stop: () => void
+    onRemoteConfig(response: RemoteConfig): void
+    get status(): SessionRecordingStatus
+    overrideTrigger: (triggerType: TriggerType) => void
+    overrideSampling: () => void
+    overrideLinkedFlag: () => void
+    get started(): boolean
+}
 
 export interface LazyLoadedDeadClicksAutocaptureInterface {
     start: (observerTarget: Node) => void
@@ -79,6 +100,7 @@ interface PostHogExtensions {
         ph: PostHog,
         config: DeadClicksAutoCaptureConfig
     ) => LazyLoadedDeadClicksAutocaptureInterface
+    initSessionRecording?: (ph: PostHog) => LazyLoadedSessionRecordingInterface
 }
 
 const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win

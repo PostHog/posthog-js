@@ -20,7 +20,6 @@ import {
     USER_STATE,
     ENABLE_PERSON_PROCESSING,
 } from './constants'
-import { SessionRecording } from './extensions/replay/sessionrecording'
 import { Decide } from './decide'
 import { Toolbar } from './extensions/toolbar'
 import { localStore } from './storage'
@@ -82,6 +81,7 @@ import { WebExperiments } from './web-experiments'
 import { PostHogExceptions } from './posthog-exceptions'
 import { SiteApps } from './site-apps'
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
+import { isSessionRecordingEnabled, SessionRecordingLoader } from './extensions/replay/session-recording-loader'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -268,7 +268,7 @@ export class PostHog {
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
-    sessionRecording?: SessionRecording
+    sessionRecording?: SessionRecordingLoader
     webPerformance = new DeprecatedWebPerformanceObserver()
 
     _initialPageviewCaptured: boolean
@@ -437,8 +437,8 @@ export class PostHog {
         this.siteApps = new SiteApps(this)
         this.siteApps?.init()
 
-        this.sessionRecording = new SessionRecording(this)
-        this.sessionRecording.startIfEnabledOrStop()
+        this.sessionRecording = new SessionRecordingLoader(this, isSessionRecordingEnabled)
+        this.sessionRecording.startIfEnabled()
 
         if (!this.config.disable_scroll_properties) {
             this.scrollManager.startMeasuringScrollPosition()
@@ -937,7 +937,7 @@ export class PostHog {
         }
 
         if (this.sessionRecording) {
-            properties['$recording_status'] = this.sessionRecording.status
+            properties['$recording_status'] = this.sessionRecording.lazyLoaded?.status
         }
 
         if (this.requestRouter.region === RequestRouterRegion.CUSTOM) {
@@ -1817,7 +1817,7 @@ export class PostHog {
                 })
             }
 
-            this.sessionRecording?.startIfEnabledOrStop()
+            this.sessionRecording?.startIfEnabled()
             this.autocapture?.startIfEnabled()
             this.heatmaps?.startIfEnabled()
             this.surveys.loadIfEnabled()
@@ -1849,19 +1849,19 @@ export class PostHog {
             this.sessionManager?.checkAndGetSessionAndWindowId()
 
             if (overrideConfig.sampling) {
-                this.sessionRecording?.overrideSampling()
+                this.sessionRecording?.lazyLoaded?.overrideSampling()
             }
 
             if (overrideConfig.linked_flag) {
-                this.sessionRecording?.overrideLinkedFlag()
+                this.sessionRecording?.lazyLoaded?.overrideLinkedFlag()
             }
 
             if (overrideConfig.url_trigger) {
-                this.sessionRecording?.overrideTrigger('url')
+                this.sessionRecording?.lazyLoaded?.overrideTrigger('url')
             }
 
             if (overrideConfig.event_trigger) {
-                this.sessionRecording?.overrideTrigger('event')
+                this.sessionRecording?.lazyLoaded?.overrideTrigger('event')
             }
         }
 
@@ -1881,7 +1881,7 @@ export class PostHog {
      * is currently running
      */
     sessionRecordingStarted(): boolean {
-        return !!this.sessionRecording?.started
+        return !!this.sessionRecording?.lazyLoaded?.started
     }
 
     /** Capture a caught exception manually */
