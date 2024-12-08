@@ -443,6 +443,13 @@ export type SessionRecordingStatus = 'disabled' | 'sampled' | 'active' | 'buffer
 
 export type TriggerType = 'url' | 'event'
 
+export interface SnapshotBuffer {
+    size: number
+    data: any[]
+    sessionId: string
+    windowId: string
+}
+
 export enum Compression {
     GZipJS = 'gzip-js',
     Base64 = 'base64',

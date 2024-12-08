@@ -29,6 +29,7 @@ import {
     SessionRecordingStatus,
     SessionRecordingUrlTrigger,
     SessionStartReason,
+    SnapshotBuffer,
     TriggerType,
 } from '../types'
 import {
@@ -83,13 +84,6 @@ const ACTIVE_SOURCES = [
 ]
 
 type TriggerStatus = 'trigger_activated' | 'trigger_pending' | 'trigger_disabled'
-
-export interface SnapshotBuffer {
-    size: number
-    data: any[]
-    sessionId: string
-    windowId: string
-}
 
 interface QueuedRRWebEvent {
     rrwebMethod: () => void

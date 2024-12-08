@@ -27,11 +27,6 @@ import {
     SessionRecordingOptions,
 } from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
-import {
-    RECORDING_IDLE_THRESHOLD_MS,
-    RECORDING_MAX_EVENT_SIZE,
-    SessionRecording,
-} from '../../../entrypoints/sessionrecording'
 import { assignableWindow, window } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
 import {
@@ -49,6 +44,10 @@ import Mock = jest.Mock
 import { ConsentManager } from '../../../consent'
 import { waitFor } from '@testing-library/preact'
 import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
+import LazyLoadedSessionRecording, {
+    RECORDING_IDLE_THRESHOLD_MS,
+    RECORDING_MAX_EVENT_SIZE,
+} from '../../../entrypoints/session-recorder'
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -177,7 +176,7 @@ describe('SessionRecording', () => {
     const loadScriptMock = jest.fn()
     let _emit: any
     let posthog: PostHog
-    let sessionRecording: SessionRecording
+    let sessionRecording: LazyLoadedSessionRecording
     let sessionId: string
     let sessionManager: SessionIdManager
     let config: PostHogConfig
@@ -285,7 +284,7 @@ describe('SessionRecording', () => {
             [SESSION_RECORDING_IS_SAMPLED]: undefined,
         })
 
-        sessionRecording = new SessionRecording(posthog)
+        sessionRecording = new LazyLoadedSessionRecording(posthog)
     })
 
     afterEach(() => {
@@ -400,38 +399,38 @@ describe('SessionRecording', () => {
         )
     })
 
-    describe('startIfEnabledOrStop', () => {
+    describe('start', () => {
         beforeEach(() => {
             // need to cast as any to mock private methods
             jest.spyOn(sessionRecording as any, '_startCapture')
-            jest.spyOn(sessionRecording, 'stopRecording')
+            jest.spyOn(sessionRecording, 'stop')
             jest.spyOn(sessionRecording as any, '_tryAddCustomEvent')
         })
 
         it('call _startCapture if its enabled', () => {
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect((sessionRecording as any)._startCapture).toHaveBeenCalled()
         })
 
         it('sets the pageview capture hook once', () => {
             expect(sessionRecording['_removePageViewCaptureHook']).toBeUndefined()
 
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
 
             expect(sessionRecording['_removePageViewCaptureHook']).not.toBeUndefined()
             expect(posthog.on).toHaveBeenCalledTimes(1)
 
             // calling a second time doesn't add another capture hook
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(posthog.on).toHaveBeenCalledTimes(1)
         })
 
         it('removes the pageview capture hook on stop', () => {
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(sessionRecording['_removePageViewCaptureHook']).not.toBeUndefined()
 
             expect(removePageviewCaptureHookMock).not.toHaveBeenCalled()
-            sessionRecording.stopRecording()
+            sessionRecording.stop()
 
             expect(removePageviewCaptureHookMock).toHaveBeenCalledTimes(1)
             expect(sessionRecording['_removePageViewCaptureHook']).toBeUndefined()
@@ -442,7 +441,7 @@ describe('SessionRecording', () => {
             const addEventListener = jest.fn().mockImplementation(() => () => {})
             window.addEventListener = addEventListener
 
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(sessionRecording['_onBeforeUnload']).not.toBeNull()
             // we register 4 event listeners
             expect(window.addEventListener).toHaveBeenCalledTimes(4)
@@ -452,7 +451,7 @@ describe('SessionRecording', () => {
         })
 
         it('emits an options event', () => {
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect((sessionRecording as any)['_tryAddCustomEvent']).toHaveBeenCalledWith('$session_options', {
                 activePlugins: [],
                 sessionRecordingOptions: {
@@ -473,16 +472,16 @@ describe('SessionRecording', () => {
             })
         })
 
-        it('call stopRecording if its not enabled', () => {
+        it('call stop if its not enabled', () => {
             posthog.config.disable_session_recording = true
-            sessionRecording.startIfEnabledOrStop()
-            expect(sessionRecording.stopRecording).toHaveBeenCalled()
+            sessionRecording.start()
+            expect(sessionRecording.stop).toHaveBeenCalled()
         })
     })
 
     describe('afterDecideResponse()', () => {
         beforeEach(() => {
-            jest.spyOn(sessionRecording, 'startIfEnabledOrStop')
+            jest.spyOn(sessionRecording, 'start')
         })
 
         it('loads script based on script config', () => {
@@ -495,7 +494,7 @@ describe('SessionRecording', () => {
         })
 
         it('when the first event is a meta it does not take a manual full snapshot', () => {
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(loadScriptMock).toHaveBeenCalled()
             expect(sessionRecording['status']).toBe('buffering')
             expect(sessionRecording['buffer']).toEqual({
@@ -515,7 +514,7 @@ describe('SessionRecording', () => {
         })
 
         it('when the first event is a full snapshot it does not take a manual full snapshot', () => {
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(loadScriptMock).toHaveBeenCalled()
             expect(sessionRecording['status']).toBe('buffering')
             expect(sessionRecording['buffer']).toEqual({
@@ -535,7 +534,7 @@ describe('SessionRecording', () => {
         })
 
         it('buffers snapshots until decide is received and drops them if disabled', () => {
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(loadScriptMock).toHaveBeenCalled()
             expect(sessionRecording['status']).toBe('buffering')
             expect(sessionRecording['buffer']).toEqual({
@@ -560,7 +559,7 @@ describe('SessionRecording', () => {
         })
 
         it('emit is not active until decide is called', () => {
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(loadScriptMock).toHaveBeenCalled()
             expect(sessionRecording['status']).toBe('buffering')
 
@@ -569,7 +568,7 @@ describe('SessionRecording', () => {
         })
 
         it('sample rate is null when decide does not return it', () => {
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(loadScriptMock).toHaveBeenCalled()
             expect(sessionRecording['isSampled']).toBe(null)
 
@@ -630,7 +629,7 @@ describe('SessionRecording', () => {
                 })
             )
 
-            expect(sessionRecording.startIfEnabledOrStop).toHaveBeenCalled()
+            expect(sessionRecording.start).toHaveBeenCalled()
             expect(loadScriptMock).toHaveBeenCalled()
             expect(posthog.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)).toBe(true)
             expect(sessionRecording['_endpoint']).toEqual('/ses/')
@@ -640,7 +639,7 @@ describe('SessionRecording', () => {
     describe('recording', () => {
         describe('sampling', () => {
             it('does not emit to capture if the sample rate is 0', () => {
-                sessionRecording.startIfEnabledOrStop()
+                sessionRecording.start()
 
                 sessionRecording.onRemoteConfig(
                     makeDecideResponse({
@@ -655,7 +654,7 @@ describe('SessionRecording', () => {
             })
 
             it('does emit to capture if the sample rate is null', () => {
-                sessionRecording.startIfEnabledOrStop()
+                sessionRecording.start()
 
                 sessionRecording.onRemoteConfig(
                     makeDecideResponse({
@@ -667,7 +666,7 @@ describe('SessionRecording', () => {
             })
 
             it('stores excluded session when excluded', () => {
-                sessionRecording.startIfEnabledOrStop()
+                sessionRecording.start()
 
                 sessionRecording.onRemoteConfig(
                     makeDecideResponse({
@@ -679,7 +678,7 @@ describe('SessionRecording', () => {
             })
 
             it('does emit to capture if the sample rate is 1', () => {
-                sessionRecording.startIfEnabledOrStop()
+                sessionRecording.start()
 
                 _emit(createIncrementalSnapshot({ data: { source: 1 } }))
                 expect(posthog.capture).not.toHaveBeenCalled()
@@ -702,7 +701,7 @@ describe('SessionRecording', () => {
             })
 
             it('sets emit as expected when sample rate is 0.5', () => {
-                sessionRecording.startIfEnabledOrStop()
+                sessionRecording.start()
 
                 sessionRecording.onRemoteConfig(
                     makeDecideResponse({
@@ -740,7 +739,7 @@ describe('SessionRecording', () => {
                     },
                 })
 
-                sessionRecording.startIfEnabledOrStop()
+                sessionRecording.start()
 
                 sessionRecording['_onScriptLoaded']()
                 expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
@@ -756,7 +755,7 @@ describe('SessionRecording', () => {
             })
 
             it('skips when any config variable is missing', () => {
-                sessionRecording.startIfEnabledOrStop()
+                sessionRecording.start()
 
                 sessionRecording.onRemoteConfig(
                     makeDecideResponse({
@@ -776,7 +775,7 @@ describe('SessionRecording', () => {
         it('calls rrweb.record with the right options', () => {
             posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: false })
 
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             // maskAllInputs should change from default
             // someUnregisteredProp should not be present
             expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith({
@@ -806,7 +805,7 @@ describe('SessionRecording', () => {
                 ['password set to false', { maskInputOptions: { password: false } } as SessionRecordingOptions, false],
             ])('%s', (_name: string, session_recording: SessionRecordingOptions, expected: boolean) => {
                 posthog.config.session_recording = session_recording
-                sessionRecording.startIfEnabledOrStop()
+                sessionRecording.start()
                 expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
                     expect.objectContaining({
                         maskInputOptions: expect.objectContaining({ password: expected }),
@@ -816,7 +815,7 @@ describe('SessionRecording', () => {
         })
 
         it('records events emitted before and after starting recording', () => {
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(loadScriptMock).toHaveBeenCalled()
 
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
@@ -870,7 +869,7 @@ describe('SessionRecording', () => {
 
         it('buffers emitted events', () => {
             sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(loadScriptMock).toHaveBeenCalled()
 
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
@@ -905,7 +904,7 @@ describe('SessionRecording', () => {
 
         it('flushes buffer if the size of the buffer hits the limit', () => {
             sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(loadScriptMock).toHaveBeenCalled()
             const bigData = 'a'.repeat(RECORDING_MAX_EVENT_SIZE * 0.8)
 
@@ -924,7 +923,7 @@ describe('SessionRecording', () => {
         })
 
         it('maintains the buffer if the recording is buffering', () => {
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(loadScriptMock).toHaveBeenCalled()
 
             const bigData = 'a'.repeat(RECORDING_MAX_EVENT_SIZE * 0.8)
@@ -950,7 +949,7 @@ describe('SessionRecording', () => {
 
         it('flushes buffer if the session_id changes', () => {
             sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
 
             expect(sessionRecording['buffer'].sessionId).toEqual(sessionId)
 
@@ -1001,12 +1000,12 @@ describe('SessionRecording', () => {
 
         it("doesn't load recording script if already loaded", () => {
             addRRwebToWindow()
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(loadScriptMock).not.toHaveBeenCalled()
         })
 
         it('loads recording script from right place', () => {
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
 
             expect(loadScriptMock).toHaveBeenCalledWith(expect.anything(), 'recorder', expect.anything())
         })
@@ -1014,7 +1013,7 @@ describe('SessionRecording', () => {
         it('loads script after `_startCapture` if not previously loaded', () => {
             posthog.persistence?.register({ [SESSION_RECORDING_ENABLED_SERVER_SIDE]: false })
 
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(loadScriptMock).not.toHaveBeenCalled()
 
             sessionRecording['_startCapture']()
@@ -1025,7 +1024,7 @@ describe('SessionRecording', () => {
         it('does not load script if disable_session_recording passed', () => {
             posthog.config.disable_session_recording = true
 
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             sessionRecording['_startCapture']()
 
             expect(loadScriptMock).not.toHaveBeenCalled()
@@ -1034,12 +1033,12 @@ describe('SessionRecording', () => {
         it('session recording can be turned on and off', () => {
             expect(sessionRecording['stopRrweb']).toEqual(undefined)
 
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
 
             expect(sessionRecording.started).toEqual(true)
             expect(sessionRecording['stopRrweb']).not.toEqual(undefined)
 
-            sessionRecording.stopRecording()
+            sessionRecording.stop()
 
             expect(sessionRecording['stopRrweb']).toEqual(undefined)
             expect(sessionRecording.started).toEqual(false)
@@ -1048,12 +1047,12 @@ describe('SessionRecording', () => {
         it('session recording can be turned on after being turned off', () => {
             expect(sessionRecording['stopRrweb']).toEqual(undefined)
 
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
 
             expect(sessionRecording.started).toEqual(true)
             expect(sessionRecording['stopRrweb']).not.toEqual(undefined)
 
-            sessionRecording.stopRecording()
+            sessionRecording.stop()
 
             expect(sessionRecording['stopRrweb']).toEqual(undefined)
             expect(sessionRecording.started).toEqual(false)
@@ -1062,7 +1061,7 @@ describe('SessionRecording', () => {
         it('can emit when there are circular references', () => {
             posthog.config.session_recording.compress_events = false
             sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
 
             const someObject = { emit: 1 }
             // the same object can be there multiple times
@@ -1105,7 +1104,7 @@ describe('SessionRecording', () => {
             it('if not enabled, plugin is not used', () => {
                 posthog.config.enable_recording_console_log = false
 
-                sessionRecording.startIfEnabledOrStop()
+                sessionRecording.start()
 
                 expect(
                     assignableWindow.__PosthogExtensions__.rrwebPlugins.getRecordConsolePlugin
@@ -1115,7 +1114,7 @@ describe('SessionRecording', () => {
             it('if enabled, plugin is used', () => {
                 posthog.config.enable_recording_console_log = true
 
-                sessionRecording.startIfEnabledOrStop()
+                sessionRecording.start()
 
                 expect(assignableWindow.__PosthogExtensions__.rrwebPlugins.getRecordConsolePlugin).toHaveBeenCalled()
             })
@@ -1151,7 +1150,7 @@ describe('SessionRecording', () => {
 
                     expect(mockCallback).not.toHaveBeenCalled()
 
-                    sessionRecording.startIfEnabledOrStop()
+                    sessionRecording.start()
                     sessionRecording['_startCapture']()
 
                     expect(mockCallback).toHaveBeenCalledTimes(1)
@@ -1236,7 +1235,7 @@ describe('SessionRecording', () => {
                     } as unknown as PostHog)
                     posthog.sessionManager = sessionManager
 
-                    sessionRecording.startIfEnabledOrStop()
+                    sessionRecording.start()
                     sessionRecording['_startCapture']()
                 })
 
@@ -1260,8 +1259,8 @@ describe('SessionRecording', () => {
                 it('restarts recording if the session is rotated because session has been inactive for 30 minutes', () => {
                     const startingSessionId = sessionManager['_getSessionId']()[1]
 
-                    sessionRecording.stopRecording = jest.fn()
-                    sessionRecording.startIfEnabledOrStop = jest.fn()
+                    sessionRecording.stop = jest.fn()
+                    sessionRecording.start = jest.fn()
 
                     emitAtDateTime(startingDate)
                     emitAtDateTime(
@@ -1284,15 +1283,15 @@ describe('SessionRecording', () => {
                     emitAtDateTime(inactivityThresholdLater)
 
                     expect(sessionManager['_getSessionId']()[1]).not.toEqual(startingSessionId)
-                    expect(sessionRecording.stopRecording).toHaveBeenCalled()
-                    expect(sessionRecording.startIfEnabledOrStop).toHaveBeenCalled()
+                    expect(sessionRecording.stop).toHaveBeenCalled()
+                    expect(sessionRecording.start).toHaveBeenCalled()
                 })
 
                 it('restarts recording if the session is rotated because max time has passed', () => {
                     const startingSessionId = sessionManager['_getSessionId']()[1]
 
-                    sessionRecording.stopRecording = jest.fn()
-                    sessionRecording.startIfEnabledOrStop = jest.fn()
+                    sessionRecording.stop = jest.fn()
+                    sessionRecording.start = jest.fn()
 
                     emitAtDateTime(startingDate)
                     emitAtDateTime(
@@ -1315,8 +1314,8 @@ describe('SessionRecording', () => {
 
                     expect(sessionManager['_getSessionId']()[1]).not.toEqual(startingSessionId)
 
-                    expect(sessionRecording.stopRecording).toHaveBeenCalled()
-                    expect(sessionRecording.startIfEnabledOrStop).toHaveBeenCalled()
+                    expect(sessionRecording.stop).toHaveBeenCalled()
+                    expect(sessionRecording.start).toHaveBeenCalled()
                 })
             })
         })
@@ -1361,7 +1360,7 @@ describe('SessionRecording', () => {
         }
 
         beforeEach(() => {
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
             expect(sessionRecording['status']).toEqual('active')
 
@@ -1843,13 +1842,13 @@ describe('SessionRecording', () => {
 
     describe('buffering minimum duration', () => {
         it('can report no duration when no data', () => {
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(sessionRecording['status']).toBe('buffering')
             expect(sessionRecording['sessionDuration']).toBe(null)
         })
 
         it('can report zero duration', () => {
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(sessionRecording['status']).toBe('buffering')
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp }))
@@ -1857,7 +1856,7 @@ describe('SessionRecording', () => {
         })
 
         it('can report a duration', () => {
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(sessionRecording['status']).toBe('buffering')
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
@@ -1865,7 +1864,7 @@ describe('SessionRecording', () => {
         })
 
         it('starts with an undefined minimum duration', () => {
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(sessionRecording['minimumDuration']).toBe(null)
         })
 
@@ -1884,7 +1883,7 @@ describe('SessionRecording', () => {
                     sessionRecording: { minimumDurationMilliseconds: 1500 },
                 })
             )
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(sessionRecording['status']).toBe('active')
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
@@ -1904,7 +1903,7 @@ describe('SessionRecording', () => {
                     sessionRecording: { minimumDurationMilliseconds: 1500 },
                 })
             )
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(sessionRecording['status']).toBe('active')
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
 
@@ -1929,7 +1928,7 @@ describe('SessionRecording', () => {
                     sessionRecording: { minimumDurationMilliseconds: 1500 },
                 })
             )
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(sessionRecording['status']).toBe('active')
             const { sessionStartTimestamp } = sessionManager.checkAndGetSessionAndWindowId(true)
             _emit(createIncrementalSnapshot({ data: { source: 1 }, timestamp: sessionStartTimestamp + 100 }))
@@ -1968,10 +1967,10 @@ describe('SessionRecording', () => {
             loadScriptMock.mockImplementation((_ph, _path, callback) => {
                 callback()
             })
-            sessionRecording = new SessionRecording(posthog)
+            sessionRecording = new LazyLoadedSessionRecording(posthog)
 
             sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(loadScriptMock).toHaveBeenCalled()
 
             expect(sessionRecording['queuedRRWebEvents']).toHaveLength(0)
@@ -2009,12 +2008,12 @@ describe('SessionRecording', () => {
         })
 
         it('does not schedule a snapshot on start', () => {
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             expect(sessionRecording['_fullSnapshotTimer']).toBe(undefined)
         })
 
         it('schedules a snapshot, when we take a full snapshot', () => {
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             const startTimer = sessionRecording['_fullSnapshotTimer']
 
             _emit(createFullSnapshot())
@@ -2028,7 +2027,7 @@ describe('SessionRecording', () => {
         beforeEach(() => {
             jest.spyOn(sessionRecording as any, '_tryAddCustomEvent')
             posthog.config.capture_pageview = false
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             // clear the spy calls
             ;(sessionRecording as any)._tryAddCustomEvent.mockClear()
         })
@@ -2067,7 +2066,7 @@ describe('SessionRecording', () => {
         beforeEach(() => {
             jest.spyOn(sessionRecording as any, '_tryAddCustomEvent')
             posthog.config.capture_pageview = true
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             // clear the spy calls
             ;(sessionRecording as any)._tryAddCustomEvent.mockClear()
         })
@@ -2090,7 +2089,7 @@ describe('SessionRecording', () => {
         beforeEach(() => {
             posthog.config.session_recording.compress_events = true
             sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
         })
 
         it('compresses full snapshot data', () => {
@@ -2270,7 +2269,7 @@ describe('SessionRecording', () => {
 
     describe('URL blocking', () => {
         beforeEach(() => {
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
             sessionRecording.onRemoteConfig(
                 makeDecideResponse({
                     sessionRecording: {
@@ -2339,7 +2338,7 @@ describe('SessionRecording', () => {
 
     describe('Event triggering', () => {
         beforeEach(() => {
-            sessionRecording.startIfEnabledOrStop()
+            sessionRecording.start()
         })
 
         it('flushes buffer and starts when sees event', async () => {

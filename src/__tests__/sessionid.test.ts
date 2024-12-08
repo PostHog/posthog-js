@@ -43,6 +43,7 @@ describe('Session ID manager', () => {
             disabled: false,
         }
         ;(sessionStore.is_supported as jest.Mock).mockReturnValue(true)
+        // @ts-expect-error - typescript gets confused about type of Date here
         jest.spyOn(global, 'Date').mockImplementation(() => new originalDate(now))
         ;(uuidv7 as jest.Mock).mockReturnValue('newUUID')
         ;(uuid7ToTimestampMs as jest.Mock).mockReturnValue(timestamp)

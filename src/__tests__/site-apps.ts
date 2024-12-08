@@ -3,7 +3,7 @@ import { mockLogger } from './helpers/mock-logger'
 import { SiteApps } from '../site-apps'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
-import { PostHog } from '../posthog-core'
+import { OnlyValidKeys, PostHog } from '../posthog-core'
 import { DecideResponse, PostHogConfig, Properties, CaptureResult } from '../types'
 import { assignableWindow } from '../utils/globals'
 import '../entrypoints/external-scripts-loader'
@@ -131,7 +131,10 @@ describe('SiteApps', () => {
             siteAppsInstance.enabled = true
             siteAppsInstance.loaded = false
 
-            const eventPayload = { event: 'test_event', properties: { prop1: 'value1' } } as CaptureResult
+            const eventPayload = { event: 'test_event', properties: { prop1: 'value1' } } as OnlyValidKeys<
+                Partial<CaptureResult>,
+                Partial<CaptureResult>
+            > as CaptureResult
 
             jest.spyOn(siteAppsInstance, 'globalsForEvent').mockReturnValue({ some: 'globals' })
 
@@ -147,7 +150,10 @@ describe('SiteApps', () => {
 
             siteAppsInstance.missedInvocations = new Array(1000).fill({})
 
-            const eventPayload = { event: 'test_event', properties: { prop1: 'value1' } } as CaptureResult
+            const eventPayload = { event: 'test_event', properties: { prop1: 'value1' } } as OnlyValidKeys<
+                Partial<CaptureResult>,
+                Partial<CaptureResult>
+            > as CaptureResult
 
             jest.spyOn(siteAppsInstance, 'globalsForEvent').mockReturnValue({ some: 'globals' })
 

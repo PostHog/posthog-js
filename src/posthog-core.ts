@@ -101,7 +101,11 @@ Globals should be all caps
  * That's a really tricky mistake to spot.
  * The OnlyValidKeys type ensures that only keys that are valid in the PostHogConfig type are allowed.
  */
-type OnlyValidKeys<T, Shape> = T extends Shape ? (Exclude<keyof T, keyof Shape> extends never ? T : never) : never
+export type OnlyValidKeys<T, Shape> = T extends Shape
+    ? Exclude<keyof T, keyof Shape> extends never
+        ? T
+        : never
+    : never
 
 const instances: Record<string, PostHog> = {}
 

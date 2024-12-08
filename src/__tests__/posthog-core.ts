@@ -7,12 +7,12 @@ import * as globals from '../utils/globals'
 import { ENABLE_PERSON_PROCESSING, USER_STATE } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { PostHogConfig, RemoteConfig } from '../types'
-import { PostHog } from '../posthog-core'
+import { OnlyValidKeys, PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
-import { SessionRecording } from '../entrypoints/sessionrecording'
 import { PostHogFeatureFlags } from '../posthog-featureflags'
+import { SessionRecordingLoader } from '../extensions/replay/session-recording-loader'
 
 describe('posthog core', () => {
     const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
@@ -825,7 +825,10 @@ describe('posthog core', () => {
             posthog.sessionRecording = {
                 afterDecideResponse: jest.fn(),
                 startIfEnabledOrStop: jest.fn(),
-            } as unknown as SessionRecording
+            } as OnlyValidKeys<
+                Partial<SessionRecordingLoader>,
+                Partial<SessionRecordingLoader>
+            > as SessionRecordingLoader
             posthog.persistence = {
                 register: jest.fn(),
                 update_config: jest.fn(),
@@ -1136,7 +1139,7 @@ describe('posthog core', () => {
                 instance._send_request = jest.fn()
                 instance._loaded()
 
-                expect(instance._send_request.mock.calls[0][0]).toMatchObject({
+                expect(jest.mocked(instance._send_request).mock.calls[0][0]).toMatchObject({
                     url: 'http://localhost/decide/?v=3',
                 })
                 expect(instance.featureFlags.setReloadingPaused).toHaveBeenCalledWith(true)
