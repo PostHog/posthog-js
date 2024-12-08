@@ -48,6 +48,7 @@ import LazyLoadedSessionRecording, {
     RECORDING_IDLE_THRESHOLD_MS,
     RECORDING_MAX_EVENT_SIZE,
 } from '../../../entrypoints/session-recorder'
+import SessionRecorder from '../../../entrypoints/session-recorder'
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -1967,23 +1968,24 @@ describe('SessionRecording', () => {
             loadScriptMock.mockImplementation((_ph, _path, callback) => {
                 callback()
             })
-            sessionRecording = new LazyLoadedSessionRecording(posthog)
+            sessionRecording = new SessionRecorder(posthog)
 
             sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
             sessionRecording.start()
             expect(loadScriptMock).toHaveBeenCalled()
 
-            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(0)
+            // called with `recording_initialized` event
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(1)
 
             sessionRecording['_tryAddCustomEvent']('test', { test: 'test' })
         })
 
         it('queues events', () => {
-            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(1)
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(2)
         })
 
         it('limits the queue of events', () => {
-            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(1)
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(2)
 
             for (let i = 0; i < 100; i++) {
                 sessionRecording['_tryAddCustomEvent']('test', { test: 'test' })

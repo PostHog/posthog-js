@@ -1,9 +1,9 @@
 import { mockLogger } from './helpers/mock-logger'
 
 import { Info } from '../utils/event-utils'
-import { document, window } from '../utils/globals'
-import { uuidv7 } from '../uuidv7'
 import * as globals from '../utils/globals'
+import { assignableWindow, document, window } from '../utils/globals'
+import { uuidv7 } from '../uuidv7'
 import { ENABLE_PERSON_PROCESSING, USER_STATE } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { PostHogConfig, RemoteConfig } from '../types'
@@ -31,6 +31,23 @@ describe('posthog core', () => {
 
     beforeEach(() => {
         jest.useFakeTimers().setSystemTime(baseUTCDateTime)
+
+        assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
+        assignableWindow.__PosthogExtensions__.initSessionRecording = () => ({
+            start: jest.fn(),
+            stop: jest.fn(),
+            onRemoteConfig: jest.fn(),
+            status: 'buffering',
+            started: true,
+            overrideLinkedFlag: jest.fn(),
+            overrideSampling: jest.fn(),
+            overrideTrigger: jest.fn(),
+        })
+        assignableWindow.__PosthogExtensions__.loadExternalDependency = jest
+            .fn()
+            .mockImplementation(() => (_ph: PostHog, _name: string, cb: (err?: Error) => void) => {
+                cb()
+            })
     })
 
     afterEach(() => {
@@ -419,6 +436,7 @@ describe('posthog core', () => {
                 },
                 overrides
             )
+            posthog.sessionRecording = new SessionRecordingLoader(posthog, () => true)
         })
 
         it('returns calculated properties', () => {
@@ -455,7 +473,6 @@ describe('posthog core', () => {
                 $lib_custom_api_host: 'https://custom.posthog.com',
                 $is_identified: false,
                 $process_person_profile: false,
-                $recording_status: 'buffering',
             })
         })
 
