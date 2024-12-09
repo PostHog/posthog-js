@@ -62,10 +62,12 @@ if (typeof window !== 'undefined') {
         persistence: cookieConsentGiven() ? 'localStorage+cookie' : 'memory',
         person_profiles: PERSON_PROCESSING_MODE === 'never' ? 'identified_only' : PERSON_PROCESSING_MODE,
         persistence_name: `${process.env.NEXT_PUBLIC_POSTHOG_KEY}_nextjs`,
+        opt_in_site_apps: true,
         __preview_remote_config: true,
         ...configForConsent(),
     })
-    // Help with debugging(window as any).posthog = posthog
+    // Help with debugging
+    ;(window as any).posthog = posthog
 }
 
 export const posthogHelpers = {
