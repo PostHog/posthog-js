@@ -341,6 +341,7 @@ export interface PostHogConfig {
 
     /**
      * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+     * enables the new RemoteConfig approach to loading config instead of decide
      * */
     __preview_remote_config?: boolean
 }
@@ -537,6 +538,35 @@ export interface DecideResponse extends RemoteConfig {
     featureFlags: Record<string, string | boolean>
     featureFlagPayloads: Record<string, JsonType>
     errorsWhileComputingFlags: boolean
+}
+
+export type SiteAppGlobals = {
+    event: {
+        uuid: string
+        event: EventName
+        properties: Properties
+        timestamp?: Date
+        elements_chain?: string
+        distinct_id?: string
+    }
+    person: {
+        properties: Properties
+    }
+    groups: Record<string, { id: string; type: string; properties: Properties }>
+}
+
+export type SiteAppLoader = {
+    id: string
+    init: (config: { posthog: PostHog; callback: (success: boolean) => void }) => {
+        processEvent?: (globals: SiteAppGlobals) => void
+    }
+}
+
+export type SiteApp = {
+    id: string
+    loaded: boolean
+    errored: boolean
+    processEvent?: (globals: SiteAppGlobals) => void
 }
 
 export type FeatureFlagsCallback = (
