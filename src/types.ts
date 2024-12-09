@@ -1,6 +1,7 @@
 import { PostHog } from './posthog-core'
 import type { SegmentAnalytics } from './extensions/segment-integration'
 import { recordOptions } from './extensions/replay/sessionrecording-utils'
+import { Survey, SurveyType } from './posthog-surveys-types'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -522,7 +523,8 @@ export interface RemoteConfig {
         urlBlocklist?: SessionRecordingUrlTrigger[]
         eventTriggers?: string[]
     }
-    surveys?: boolean
+    surveys?: boolean | Survey[]
+    survey_config?: Record<string, any> // TODO: Type this better
     toolbarParams: ToolbarParams
     editorParams?: ToolbarParams /** @deprecated, renamed to toolbarParams, still present on older API responses */
     toolbarVersion: 'toolbar' /** @deprecated, moved to toolbarParams */
