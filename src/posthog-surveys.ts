@@ -151,8 +151,6 @@ export class PostHogSurveys {
 
         const existingSurveys = this.surveys ?? this.instance.get_property(SURVEYS)
 
-        console.log('existingSurveys', existingSurveys, forceReload)
-
         if (forceReload) {
             throw new Error('forceReload')
         }
