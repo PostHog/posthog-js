@@ -1,3 +1,7 @@
+## 1.194.6 - 2024-12-09
+
+- feat: Load site functions via RemoteConfig (#1580)
+
 ## 1.194.5 - 2024-12-06
 
 - feat: Added better sub logging utils (#1581)
