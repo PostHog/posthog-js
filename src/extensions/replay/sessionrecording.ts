@@ -1186,7 +1186,8 @@ export class SessionRecording {
                     $snapshot_data: snapshotBuffer.data,
                     $session_id: snapshotBuffer.sessionId,
                     $window_id: snapshotBuffer.windowId,
-                    $snapshot_library: `web/ver/${Config.LIB_VERSION}/script_name/${this.scriptName}`,
+                    $lib: 'web',
+                    $lib_version: Config.LIB_VERSION,
                 })
             })
         }
