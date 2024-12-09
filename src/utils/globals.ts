@@ -42,7 +42,7 @@ export type PostHogExtensionKind =
     | 'toolbar'
     | 'exception-autocapture'
     | 'web-vitals'
-    | 'session-recording'
+    | 'session-recorder'
     | 'recorder'
     | 'tracing-headers'
     | 'surveys'

@@ -3,6 +3,7 @@ import { PostHog } from '../../posthog-core'
 import { RemoteConfig } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { SESSION_RECORDING_ENABLED_SERVER_SIDE } from '../../constants'
+import { isBoolean, isUndefined } from '../../utils/type-utils'
 
 const logger = createLogger('[Session-Recording-Loader]')
 
@@ -13,6 +14,8 @@ export const isSessionRecordingEnabled = (loader: SessionRecordingLoader) => {
 }
 
 export class SessionRecordingLoader {
+    _forceAllowLocalhostNetworkCapture = false
+
     get lazyLoaded(): LazyLoadedSessionRecordingInterface | undefined {
         return this._lazyLoadedSessionRecording
     }
@@ -43,7 +46,7 @@ export class SessionRecordingLoader {
             // already loaded
             cb()
         }
-        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'session-recording', (err) => {
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'session-recorder', (err) => {
             if (err) {
                 logger.error('failed to load script', err)
                 return
@@ -59,6 +62,17 @@ export class SessionRecordingLoader {
         }
 
         if (!this._lazyLoadedSessionRecording && assignableWindow.__PosthogExtensions__?.initSessionRecording) {
+            if (
+                isUndefined(this.instance.config.session_recording._forceAllowLocalhostNetworkCapture) &&
+                isBoolean(this._forceAllowLocalhostNetworkCapture)
+            ) {
+                logger.warn(
+                    '`_forceAllowLocalhostNetworkCapture` has moved to `session_recording` config. Copying your setting over.'
+                )
+                this.instance.config.session_recording._forceAllowLocalhostNetworkCapture =
+                    this._forceAllowLocalhostNetworkCapture
+            }
+
             this._lazyLoadedSessionRecording = assignableWindow.__PosthogExtensions__.initSessionRecording(
                 this.instance
             )

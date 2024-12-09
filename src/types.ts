@@ -384,31 +384,42 @@ export interface SessionRecordingOptions {
     maskNetworkRequestFn?: ((data: NetworkRequest) => NetworkRequest | null | undefined) | null
     /** Modify the network request before it is captured. Returning null or undefined stops it being captured */
     maskCapturedNetworkRequestFn?: ((data: CapturedNetworkRequest) => CapturedNetworkRequest | null | undefined) | null
-    // our settings here only support a subset of those proposed for rrweb's network capture plugin
+    /**
+     * our settings here only support a subset of those proposed for rrweb's network capture plugin
+     */
     recordHeaders?: boolean
     recordBody?: boolean
-    // ADVANCED: while a user is active we take a full snapshot of the browser every interval. For very few sites playback performance might be better with different interval. Set to 0 to disable
+    /**
+     * ADVANCED: while a user is active we take a full snapshot of the browser every interval. For very few sites playback performance might be better with different interval. Set to 0 to disable
+     */
     full_snapshot_interval_millis?: number
-    /*
+    /**
      ADVANCED: whether to partially compress rrweb events before sending them to the server,
      defaults to true, can be set to false to disable partial compression
      NB requests are still compressed when sent to the server regardless of this setting
     */
     compress_events?: boolean
-    /*
+    /**
      ADVANCED: alters the threshold before a recording considers a user has become idle.
      Normally only altered alongside changes to session_idle_timeout_ms.
      Default is 5 minutes.
     */
     session_idle_threshold_ms?: number
-    /*
+    /**
+     * ADVANCED: allow capture of network performance and payload data when running on localhost
+     * (still requires other config to enable). This is disabled by default for performance reasons.
+     * Normally only useful for debugging and development. But can be necessary for some frameworks
+     * such as capacitor that run on localhost.
+     */
+    _forceAllowLocalhostNetworkCapture?: boolean
+    /**
      ADVANCED: alters the refill rate for the token bucket mutation throttling
      Normally only altered alongside posthog support guidance.
      Accepts values between 0 and 100
      Default is 10.
     */
     __mutationRateLimiterRefillRate?: number
-    /*
+    /**
      ADVANCED: alters the bucket size for the token bucket mutation throttling
      Normally only altered alongside posthog support guidance.
      Accepts values between 0 and 100
