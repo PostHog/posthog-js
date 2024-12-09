@@ -147,7 +147,6 @@ export interface Survey {
     // Sync this with the backend's SurveyAPISerializer!
     id: string
     name: string
-    description: string
     type: SurveyType
     feature_flag_keys:
         | {
@@ -172,7 +171,7 @@ export interface Survey {
             }[]
         } | null
         actions: {
-            values: ActionType[]
+            values: SurveyActionType[]
         } | null
     } | null
     start_date: string | null
@@ -181,16 +180,10 @@ export interface Survey {
     current_iteration_start_date: string | null
 }
 
-export interface ActionType {
-    count?: number
-    created_at: string
-    deleted?: boolean
+export interface SurveyActionType {
     id: number
     name: string | null
     steps?: ActionStepType[]
-    tags?: string[]
-    is_action?: true
-    action_id?: number // alias of id to make it compatible with event definitions uuid
 }
 
 /** Sync with plugin-server/src/types.ts */
