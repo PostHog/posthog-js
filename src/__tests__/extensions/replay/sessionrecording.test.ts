@@ -52,7 +52,7 @@ import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
 
 // Type and source defined here designate a non-user-generated recording event
 
-jest.mock('../../../config', () => ({ LIB_VERSION: 'v0.0.1' }))
+jest.mock('../../../config', () => ({ LIB_VERSION: '0.0.1' }))
 
 const EMPTY_BUFFER = {
     data: [],
@@ -859,7 +859,7 @@ describe('SessionRecording', () => {
                     $session_id: sessionId,
                     $window_id: 'windowId',
                     $lib: 'web',
-                    $lib_version: 'v0.0.1',
+                    $lib_version: '0.0.1',
                 },
                 {
                     _url: 'https://test.com/s/',
@@ -896,7 +896,7 @@ describe('SessionRecording', () => {
                         { type: 3, data: { source: 2 } },
                     ],
                     $lib: 'web',
-                    $lib_version: 'v0.0.1',
+                    $lib_version: '0.0.1',
                 },
                 {
                     _url: 'https://test.com/s/',
@@ -978,7 +978,7 @@ describe('SessionRecording', () => {
                     $snapshot_data: [{ data: { source: 1 }, emit: 1, type: 3 }],
                     $snapshot_bytes: 39,
                     $lib: 'web',
-                    $lib_version: 'v0.0.1',
+                    $lib_version: '0.0.1',
                 },
                 {
                     _url: 'https://test.com/s/',
@@ -1587,7 +1587,7 @@ describe('SessionRecording', () => {
                     $snapshot_bytes: 186,
                     $window_id: expect.any(String),
                     $lib: 'web',
-                    $lib_version: 'v0.0.1',
+                    $lib_version: '0.0.1',
                 },
                 {
                     _batchKey: 'recordings',
@@ -1679,7 +1679,7 @@ describe('SessionRecording', () => {
                     $snapshot_bytes: 186,
                     $window_id: expect.any(String),
                     $lib: 'web',
-                    $lib_version: 'v0.0.1',
+                    $lib_version: '0.0.1',
                 },
                 {
                     _batchKey: 'recordings',
@@ -1707,7 +1707,7 @@ describe('SessionRecording', () => {
                     $snapshot_bytes: 186,
                     $window_id: expect.any(String),
                     $lib: 'web',
-                    $lib_version: 'v0.0.1',
+                    $lib_version: '0.0.1',
                 },
                 {
                     _batchKey: 'recordings',
@@ -2129,7 +2129,7 @@ describe('SessionRecording', () => {
                     $snapshot_bytes: expect.any(Number),
                     $window_id: 'windowId',
                     $lib: 'web',
-                    $lib_version: 'v0.0.1',
+                    $lib_version: '0.0.1',
                 },
                 captureOptions
             )
@@ -2152,7 +2152,7 @@ describe('SessionRecording', () => {
                     $snapshot_bytes: expect.any(Number),
                     $window_id: 'windowId',
                     $lib: 'web',
-                    $lib_version: 'v0.0.1',
+                    $lib_version: '0.0.1',
                 },
                 captureOptions
             )
@@ -2183,7 +2183,7 @@ describe('SessionRecording', () => {
                     $snapshot_bytes: expect.any(Number),
                     $window_id: 'windowId',
                     $lib: 'web',
-                    $lib_version: 'v0.0.1',
+                    $lib_version: '0.0.1',
                 },
                 captureOptions
             )
@@ -2215,7 +2215,7 @@ describe('SessionRecording', () => {
                     $snapshot_bytes: expect.any(Number),
                     $window_id: 'windowId',
                     $lib: 'web',
-                    $lib_version: 'v0.0.1',
+                    $lib_version: '0.0.1',
                 },
                 captureOptions
             )
@@ -2236,7 +2236,7 @@ describe('SessionRecording', () => {
                     $snapshot_bytes: 86,
                     $window_id: 'windowId',
                     $lib: 'web',
-                    $lib_version: 'v0.0.1',
+                    $lib_version: '0.0.1',
                 },
                 captureOptions
             )
@@ -2262,7 +2262,7 @@ describe('SessionRecording', () => {
                     $snapshot_bytes: 58,
                     $window_id: 'windowId',
                     $lib: 'web',
-                    $lib_version: 'v0.0.1',
+                    $lib_version: '0.0.1',
                 },
                 captureOptions
             )
@@ -2287,7 +2287,7 @@ describe('SessionRecording', () => {
                     $snapshot_bytes: 69,
                     $window_id: 'windowId',
                     $lib: 'web',
-                    $lib_version: 'v0.0.1',
+                    $lib_version: '0.0.1',
                 },
                 captureOptions
             )
@@ -2335,7 +2335,7 @@ describe('SessionRecording', () => {
                             { type: 3, data: { source: 2 } },
                         ],
                         $lib: 'web',
-                        $lib_version: 'v0.0.1',
+                        $lib_version: '0.0.1',
                     },
                     expect.any(Object)
                 )
