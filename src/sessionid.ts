@@ -1,5 +1,5 @@
 import { PostHogPersistence } from './posthog-persistence'
-import { COOKIELESS_SENTINEL_VALUE, SESSION_ID } from './constants'
+import { SESSION_ID } from './constants'
 import { sessionStore } from './storage'
 import { PostHogConfig, SessionIdChangedCallback } from './types'
 import { uuid7ToTimestampMs, uuidv7 } from './uuidv7'
@@ -215,6 +215,14 @@ export class SessionIdManager {
      * @param {Number} timestamp (optional) Defaults to the current time. The timestamp to be stored with the sessionId (used when determining if a new sessionId should be generated)
      */
     checkAndGetSessionAndWindowId(readOnly = false, _timestamp: number | null = null) {
+        if (this.config.__preview_experimental_cookieless_mode) {
+            return {
+                sessionId: undefined,
+                windowId: undefined,
+                sessionStartTimestamp: undefined,
+                lastActivityTimestamp: undefined,
+            }
+        }
         const timestamp = _timestamp || new Date().getTime()
 
         // eslint-disable-next-line prefer-const
@@ -230,11 +238,7 @@ export class SessionIdManager {
         const noSessionId = !sessionId
         const activityTimeout = !readOnly && Math.abs(timestamp - lastTimestamp) > this.sessionTimeoutMs
         if (noSessionId || activityTimeout || sessionPastMaximumLength) {
-            if (this.config.__preview_experimental_cookieless_mode) {
-                sessionId = COOKIELESS_SENTINEL_VALUE
-            } else {
-                sessionId = this._sessionIdGenerator()
-            }
+            sessionId = this._sessionIdGenerator()
             windowId = this._windowIdGenerator()
             logger.info('new session ID generated', {
                 sessionId,
