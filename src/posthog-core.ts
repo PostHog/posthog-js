@@ -508,7 +508,15 @@ export class PostHog {
             this.featureFlags.receivedFeatureFlags({ featureFlags: activeFlags, featureFlagPayloads })
         }
 
-        if (!this.get_distinct_id()) {
+        if (this.config.__preview_experimental_cookieless_mode) {
+            this.register_once(
+                {
+                    distinct_id: COOKIELESS_SENTINEL_VALUE,
+                    $device_id: null,
+                },
+                ''
+            )
+        } else if (!this.get_distinct_id()) {
             // There is no need to set the distinct id
             // or the device id if something was already stored
             // in the persistence
@@ -915,6 +923,10 @@ export class PostHog {
         const startTimestamp = this.persistence.remove_event_timer(event_name)
         let properties = { ...event_properties }
         properties['token'] = this.config.token
+
+        if (this.config.__preview_experimental_cookieless_mode) {
+            properties['$cookieless'] = true
+        }
 
         if (event_name === '$snapshot') {
             const persistenceProps = { ...this.persistence.properties(), ...this.sessionPersistence.properties() }
@@ -2054,9 +2066,6 @@ export class PostHog {
     }
 
     private _create_device_id(): string {
-        if (this.config.__preview_experimental_cookieless_mode) {
-            return COOKIELESS_SENTINEL_VALUE
-        }
         return this.config.get_device_id(uuidv7())
     }
 
