@@ -347,9 +347,9 @@ export interface PostHogConfig {
 
     /**
      * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * whether to send a sentinel distinct id value, which will be replaced on the server by a hash
+     * whether to send a sentinel value for distinct id, device id, and session id, which will be replaced server-side by a cookieless hash
      * */
-    __use_cookieless_server_hash?: boolean
+    __preview_experimental_cookieless_mode?: boolean
 }
 
 export interface OptInOutCapturingOptions {

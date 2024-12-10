@@ -230,7 +230,7 @@ export class SessionIdManager {
         const noSessionId = !sessionId
         const activityTimeout = !readOnly && Math.abs(timestamp - lastTimestamp) > this.sessionTimeoutMs
         if (noSessionId || activityTimeout || sessionPastMaximumLength) {
-            if (this.config.__use_cookieless_server_hash) {
+            if (this.config.__preview_experimental_cookieless_mode) {
                 sessionId = COOKIELESS_SENTINEL_VALUE
             } else {
                 sessionId = this._sessionIdGenerator()

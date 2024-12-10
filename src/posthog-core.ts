@@ -1534,7 +1534,7 @@ export class PostHog {
         this.surveys?.reset()
         this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()
-        const uuid = this.config.__use_cookieless_server_hash
+        const uuid = this.config.__preview_experimental_cookieless_mode
             ? COOKIELESS_SENTINEL_VALUE
             : this.config.get_device_id(uuidv7())
         this.register_once(
@@ -2054,7 +2054,7 @@ export class PostHog {
     }
 
     private _create_device_id(): string {
-        if (this.config.__use_cookieless_server_hash) {
+        if (this.config.__preview_experimental_cookieless_mode) {
             return COOKIELESS_SENTINEL_VALUE
         }
         return this.config.get_device_id(uuidv7())
