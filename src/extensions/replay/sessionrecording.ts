@@ -97,8 +97,8 @@ type SessionRecordingStatus = 'disabled' | 'sampled' | 'active' | 'buffering' | 
 export interface SnapshotBuffer {
     size: number
     data: any[]
-    sessionId: string
-    windowId: string
+    sessionId: string | null
+    windowId: string | null
 }
 
 interface QueuedRRWebEvent {
@@ -252,8 +252,8 @@ export class SessionRecording {
 
     private _linkedFlagSeen: boolean = false
     private _lastActivityTimestamp: number = Date.now()
-    private windowId: string
-    private sessionId: string
+    private windowId: string | null
+    private sessionId: string | null
     private _linkedFlag: string | FlagVariant | null = null
 
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
@@ -315,6 +315,9 @@ export class SessionRecording {
     private get sessionDuration(): number | null {
         const mostRecentSnapshot = this.buffer?.data[this.buffer?.data.length - 1]
         const { sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
+        if (sessionStartTimestamp == null) {
+            return null
+        }
         return mostRecentSnapshot ? mostRecentSnapshot.timestamp - sessionStartTimestamp : null
     }
 

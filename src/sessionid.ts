@@ -217,10 +217,10 @@ export class SessionIdManager {
     checkAndGetSessionAndWindowId(readOnly = false, _timestamp: number | null = null) {
         if (this.config.__preview_experimental_cookieless_mode) {
             return {
-                sessionId: undefined,
-                windowId: undefined,
-                sessionStartTimestamp: undefined,
-                lastActivityTimestamp: undefined,
+                sessionId: null,
+                windowId: null,
+                sessionStartTimestamp: null,
+                lastActivityTimestamp: null,
             }
         }
         const timestamp = _timestamp || new Date().getTime()

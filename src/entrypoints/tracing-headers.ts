@@ -4,8 +4,12 @@ import { assignableWindow, window } from '../utils/globals'
 
 const addTracingHeaders = (sessionManager: SessionIdManager, req: Request) => {
     const { sessionId, windowId } = sessionManager.checkAndGetSessionAndWindowId(true)
-    req.headers.set('X-POSTHOG-SESSION-ID', sessionId)
-    req.headers.set('X-POSTHOG-WINDOW-ID', windowId)
+    if (sessionId) {
+        req.headers.set('X-POSTHOG-SESSION-ID', sessionId)
+    }
+    if (windowId) {
+        req.headers.set('X-POSTHOG-WINDOW-ID', windowId)
+    }
 }
 
 const patchFetch = (sessionManager: SessionIdManager): (() => void) => {
