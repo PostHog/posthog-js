@@ -24,7 +24,7 @@ function deleteAllCookies() {
 
 describe('consentManager', () => {
     const createPostHog = (config: Partial<PostHogConfig> = {}) => {
-        const posthog = defaultPostHog().init('testtoken', { ...config }, uuidv7())!
+        const posthog = defaultPostHog().init('testtoken', { ...config, api_host: 'http://localhost' }, uuidv7())!
         posthog.debug()
         return posthog
     }
