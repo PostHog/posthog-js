@@ -4,6 +4,14 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@rrweb/record@2.0.0-alpha.18':
+    hash: zwzxgwbxsp4bdiazgdnusob7em
+    path: patches/@rrweb__record@2.0.0-alpha.18.patch
+  '@rrweb/rrweb-plugin-console-record@2.0.0-alpha.18':
+    hash: xqev6zvgnatibyueo4tkcc7s5q
+    path: patches/@rrweb__rrweb-plugin-console-record@2.0.0-alpha.18.patch
+
 dependencies:
   core-js:
     specifier: ^3.38.1
@@ -66,10 +74,10 @@ devDependencies:
     version: 12.1.1(rollup@4.24.0)(tslib@2.5.0)(typescript@5.5.4)
   '@rrweb/record':
     specifier: 2.0.0-alpha.18
-    version: 2.0.0-alpha.18
+    version: 2.0.0-alpha.18(patch_hash=zwzxgwbxsp4bdiazgdnusob7em)
   '@rrweb/rrweb-plugin-console-record':
     specifier: 2.0.0-alpha.18
-    version: 2.0.0-alpha.18(rrweb@2.0.0-alpha.18)
+    version: 2.0.0-alpha.18(patch_hash=xqev6zvgnatibyueo4tkcc7s5q)(rrweb@2.0.0-alpha.18)
   '@rrweb/types':
     specifier: 2.0.0-alpha.18
     version: 2.0.0-alpha.18
@@ -2862,20 +2870,22 @@ packages:
     dev: true
     optional: true
 
-  /@rrweb/record@2.0.0-alpha.18:
+  /@rrweb/record@2.0.0-alpha.18(patch_hash=zwzxgwbxsp4bdiazgdnusob7em):
     resolution: {integrity: sha512-WbzcybTEqT+cKkOnzYiyaAYvNzAIxTK9f8qNLNOG9lOqWsmi+qu/W7CEdxHmfjlfgXGw/f7bxGZggAWVaizKqg==}
     dependencies:
       '@rrweb/types': 2.0.0-alpha.18
       rrweb: 2.0.0-alpha.18
     dev: true
+    patched: true
 
-  /@rrweb/rrweb-plugin-console-record@2.0.0-alpha.18(rrweb@2.0.0-alpha.18):
+  /@rrweb/rrweb-plugin-console-record@2.0.0-alpha.18(patch_hash=xqev6zvgnatibyueo4tkcc7s5q)(rrweb@2.0.0-alpha.18):
     resolution: {integrity: sha512-R/ys7jrOXjCwcVOf3EkXtT3/XZQ+OMqy+3VhUmgrwngpvppThZlbK4a13OCECwkB8OCJ81S9oYleNbszja2IYA==}
     peerDependencies:
       rrweb: ^2.0.0-alpha.18
     dependencies:
       rrweb: 2.0.0-alpha.18
     dev: true
+    patched: true
 
   /@rrweb/types@2.0.0-alpha.18:
     resolution: {integrity: sha512-iMH3amHthJZ9x3gGmBPmdfim7wLGygC2GciIkw2A6SO8giSn8PHYtRT8OKNH4V+k3SZ6RSnYHcTQxBA7pSWZ3Q==}

@@ -124,5 +124,11 @@
     },
     "browserslist": [
         "> 0.5%, last 2 versions, Firefox ESR, not dead, IE 11"
-    ]
+    ],
+    "pnpm": {
+        "patchedDependencies": {
+            "@rrweb/record@2.0.0-alpha.18": "patches/@rrweb__record@2.0.0-alpha.18.patch",
+            "@rrweb/rrweb-plugin-console-record@2.0.0-alpha.18": "patches/@rrweb__rrweb-plugin-console-record@2.0.0-alpha.18.patch"
+        }
+    }
 }
