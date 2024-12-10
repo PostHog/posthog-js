@@ -59,9 +59,9 @@
         "@rollup/plugin-node-resolve": "^15.3.0",
         "@rollup/plugin-terser": "^0.4.4",
         "@rollup/plugin-typescript": "^12.1.1",
-        "@rrweb/record": "2.0.0-alpha.17",
-        "@rrweb/rrweb-plugin-console-record": "2.0.0-alpha.17",
-        "@rrweb/types": "2.0.0-alpha.17",
+        "@rrweb/record": "2.0.0-alpha.18",
+        "@rrweb/rrweb-plugin-console-record": "2.0.0-alpha.18",
+        "@rrweb/types": "2.0.0-alpha.18",
         "@sentry/types": "8.7.0",
         "@testing-library/dom": "^9.3.0",
         "@testing-library/jest-dom": "^6.5.0",
@@ -124,11 +124,5 @@
     },
     "browserslist": [
         "> 0.5%, last 2 versions, Firefox ESR, not dead, IE 11"
-    ],
-    "pnpm": {
-        "patchedDependencies": {
-            "@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17": "patches/@rrweb__rrweb-plugin-console-record@2.0.0-alpha.17.patch",
-            "@rrweb/record@2.0.0-alpha.17": "patches/@rrweb__record@2.0.0-alpha.17.patch"
-        }
-    }
+    ]
 }
