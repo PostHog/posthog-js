@@ -1,5 +1,5 @@
 import { PostHogPersistence } from './posthog-persistence'
-import { SENTINEL_COOKIELESS_SERVER_HASH, SESSION_ID } from './constants'
+import { COOKIELESS_SENTINEL_VALUE, SESSION_ID } from './constants'
 import { sessionStore } from './storage'
 import { PostHogConfig, SessionIdChangedCallback } from './types'
 import { uuid7ToTimestampMs, uuidv7 } from './uuidv7'
@@ -231,7 +231,7 @@ export class SessionIdManager {
         const activityTimeout = !readOnly && Math.abs(timestamp - lastTimestamp) > this.sessionTimeoutMs
         if (noSessionId || activityTimeout || sessionPastMaximumLength) {
             if (this.config.__use_cookieless_server_hash) {
-                sessionId = SENTINEL_COOKIELESS_SERVER_HASH
+                sessionId = COOKIELESS_SENTINEL_VALUE
             } else {
                 sessionId = this._sessionIdGenerator()
             }

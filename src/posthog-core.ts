@@ -19,7 +19,7 @@ import {
     PEOPLE_DISTINCT_ID_KEY,
     USER_STATE,
     ENABLE_PERSON_PROCESSING,
-    SENTINEL_COOKIELESS_SERVER_HASH,
+    COOKIELESS_SENTINEL_VALUE,
 } from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { Decide } from './decide'
@@ -1535,7 +1535,7 @@ export class PostHog {
         this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()
         const uuid = this.config.__use_cookieless_server_hash
-            ? SENTINEL_COOKIELESS_SERVER_HASH
+            ? COOKIELESS_SENTINEL_VALUE
             : this.config.get_device_id(uuidv7())
         this.register_once(
             {
@@ -2055,7 +2055,7 @@ export class PostHog {
 
     private _create_device_id(): string {
         if (this.config.__use_cookieless_server_hash) {
-            return SENTINEL_COOKIELESS_SERVER_HASH
+            return COOKIELESS_SENTINEL_VALUE
         }
         return this.config.get_device_id(uuidv7())
     }
