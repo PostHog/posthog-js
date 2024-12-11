@@ -56,7 +56,10 @@ export const initPosthog = (testName, config) => {
         api_host: POSTHOG_API_HOST,
         api_key: POSTHOG_PROJECT_KEY,
         bootstrap: {
-            distinctID: 'automated-tester', // We set this to get around the ingestion delay for new distinctIDs
+            // We set this to get around the ingestion delay for new distinctIDs. It's not ideal, as if we have a
+            // lagging partition on prod then we can be blocked from merging any PRs. Until we run these tests against
+            // a local posthog instance, you can change this ID to change the partition.
+            distinctID: 'automated-tester-2',
             isIdentifiedID: true,
         },
         opt_out_useragent_filter: true,
