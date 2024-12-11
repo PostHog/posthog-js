@@ -15,15 +15,17 @@ import {
     splitClassString,
 } from './autocapture-utils'
 import RageClick from './extensions/rageclick'
-import { AutocaptureConfig, COPY_AUTOCAPTURE_EVENT, DecideResponse, EventName, Properties } from './types'
+import { AutocaptureConfig, COPY_AUTOCAPTURE_EVENT, EventName, Properties, RemoteConfig } from './types'
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
 import { isBoolean, isFunction, isNull, isObject } from './utils/type-utils'
-import { logger } from './utils/logger'
+import { createLogger } from './utils/logger'
 import { document, window } from './utils/globals'
 import { convertToURL } from './utils/request-utils'
 import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
+
+const logger = createLogger('[AutoCapture]')
 
 function limitText(length: number, text: string): string {
     if (text.length > length) {
@@ -213,13 +215,10 @@ export function autocapturePropertiesForElement(
 
     const props = extend(
         getDefaultProperties(e.type),
-        elementsChainAsString
-            ? {
-                  $elements_chain: getElementsChainString(elementsJson),
-              }
-            : {
-                  $elements: elementsJson,
-              },
+        // Sending "$elements" is deprecated. Only one client on US cloud uses this.
+        !elementsChainAsString ? { $elements: elementsJson } : {},
+        // Always send $elements_chain, as it's needed downstream in site app filtering
+        { $elements_chain: getElementsChainString(elementsJson) },
         elementsJson[0]?.['$el_text'] ? { $el_text: elementsJson[0]?.['$el_text'] } : {},
         externalHref && e.type === 'click' ? { $external_click_url: externalHref } : {},
         autocaptureAugmentProperties
@@ -289,7 +288,7 @@ export class Autocapture {
         }
     }
 
-    public afterDecideResponse(response: DecideResponse) {
+    public onRemoteConfig(response: RemoteConfig) {
         if (response.elementsChainAsString) {
             this._elementsChainAsString = response.elementsChainAsString
         }

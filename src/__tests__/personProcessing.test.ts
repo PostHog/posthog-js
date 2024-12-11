@@ -1,10 +1,9 @@
+import { mockLogger } from './helpers/mock-logger'
+
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
-import { logger } from '../utils/logger'
 import { INITIAL_CAMPAIGN_PARAMS, INITIAL_REFERRER_INFO } from '../constants'
-import { DecideResponse } from '../types'
-
-jest.mock('../utils/logger')
+import { RemoteConfig } from '../types'
 
 const INITIAL_CAMPAIGN_PARAMS_NULL = {
     $initial_current_url: null,
@@ -37,6 +36,7 @@ jest.mock('../utils/globals', () => {
     const orig = jest.requireActual('../utils/globals')
     const mockURLGetter = jest.fn()
     const mockReferrerGetter = jest.fn()
+    let mockedCookieVal = ''
     return {
         ...orig,
         mockURLGetter,
@@ -50,6 +50,12 @@ jest.mock('../utils/globals', () => {
             get URL() {
                 return mockURLGetter()
             },
+            get cookie() {
+                return mockedCookieVal
+            },
+            set cookie(value: string) {
+                mockedCookieVal = value
+            },
         },
         get location() {
             const url = mockURLGetter()
@@ -62,7 +68,7 @@ jest.mock('../utils/globals', () => {
 })
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { mockURLGetter, mockReferrerGetter } = require('../utils/globals')
+const { mockURLGetter, mockReferrerGetter, document } = require('../utils/globals')
 
 describe('person processing', () => {
     const distinctId = '123'
@@ -70,6 +76,7 @@ describe('person processing', () => {
         console.error = jest.fn()
         mockReferrerGetter.mockReturnValue('https://referrer.com')
         mockURLGetter.mockReturnValue('https://example.com?utm_source=foo')
+        document.cookie = ''
     })
 
     const setup = async (
@@ -148,8 +155,8 @@ describe('person processing', () => {
             posthog.identify(distinctId)
 
             // assert
-            expect(jest.mocked(logger).error).toBeCalledTimes(1)
-            expect(jest.mocked(logger).error).toHaveBeenCalledWith(
+            expect(mockLogger.error).toBeCalledTimes(1)
+            expect(mockLogger.error).toHaveBeenCalledWith(
                 'posthog.identify was called, but process_person is set to "never". This call will be ignored.'
             )
             expect(beforeSendMock).toBeCalledTimes(0)
@@ -164,7 +171,7 @@ describe('person processing', () => {
             posthog.identify(distinctId)
             posthog.capture('custom event after identify')
             // assert
-            expect(jest.mocked(logger).error).toBeCalledTimes(0)
+            expect(mockLogger.error).toBeCalledTimes(0)
             const eventBeforeIdentify = beforeSendMock.mock.calls[0]
             expect(eventBeforeIdentify[0].properties.$process_person_profile).toEqual(false)
             const identifyCall = beforeSendMock.mock.calls[1]
@@ -183,7 +190,7 @@ describe('person processing', () => {
             posthog.identify(distinctId)
             posthog.capture('custom event after identify')
             // assert
-            expect(jest.mocked(logger).error).toBeCalledTimes(0)
+            expect(mockLogger.error).toBeCalledTimes(0)
             const eventBeforeIdentify = beforeSendMock.mock.calls[0]
             expect(eventBeforeIdentify[0].properties.$process_person_profile).toEqual(true)
             const identifyCall = beforeSendMock.mock.calls[1]
@@ -244,6 +251,75 @@ describe('person processing', () => {
             expect(eventS1[0].$set_once).toEqual(undefined)
 
             expect(eventS2Before[0].$set_once).toEqual(undefined)
+
+            expect(eventS2Identify[0].event).toEqual('$identify')
+            expect(eventS2Identify[0].$set_once).toEqual({
+                ...INITIAL_CAMPAIGN_PARAMS_NULL,
+                $initial_current_url: 'https://example1.com/pathname1?utm_source=foo1',
+                $initial_host: 'example1.com',
+                $initial_pathname: '/pathname1',
+                $initial_referrer: 'https://referrer1.com',
+                $initial_referring_domain: 'referrer1.com',
+                $initial_utm_source: 'foo1',
+            })
+
+            expect(eventS2After[0].event).toEqual('event s2 after identify')
+            expect(eventS2After[0].$set_once).toEqual({
+                ...INITIAL_CAMPAIGN_PARAMS_NULL,
+                $initial_current_url: 'https://example1.com/pathname1?utm_source=foo1',
+                $initial_host: 'example1.com',
+                $initial_pathname: '/pathname1',
+                $initial_referrer: 'https://referrer1.com',
+                $initial_referring_domain: 'referrer1.com',
+                $initial_utm_source: 'foo1',
+            })
+        })
+
+        it('should preserve initial referrer info across subdomain', async () => {
+            const persistenceName = uuidv7()
+
+            // arrange
+            const { posthog: posthog1, beforeSendMock: beforeSendMock1 } = await setup(
+                'identified_only',
+                undefined,
+                persistenceName
+            )
+            mockReferrerGetter.mockReturnValue('https://referrer1.com')
+            mockURLGetter.mockReturnValue('https://example1.com/pathname1?utm_source=foo1')
+
+            // act
+            // subdomain 1
+            posthog1.register({ testProp: 'foo' })
+            posthog1.capture('event s1')
+
+            // clear localstorage, but not cookies, to simulate changing subdomain
+            window.localStorage.clear()
+
+            // subdomain 2
+            const { posthog: posthog2, beforeSendMock: beforeSendMock2 } = await setup(
+                'identified_only',
+                undefined,
+                persistenceName
+            )
+
+            mockReferrerGetter.mockReturnValue('https://referrer2.com')
+            mockURLGetter.mockReturnValue('https://example2.com/pathname2?utm_source=foo2')
+            posthog2.capture('event s2 before identify')
+            posthog2.identify(distinctId)
+            posthog2.capture('event s2 after identify')
+
+            // assert
+            const eventS1 = beforeSendMock1.mock.calls[0]
+            const eventS2Before = beforeSendMock2.mock.calls[0]
+            const eventS2Identify = beforeSendMock2.mock.calls[1]
+            const eventS2After = beforeSendMock2.mock.calls[2]
+
+            expect(eventS1[0].$set_once).toEqual(undefined)
+            expect(eventS1[0].properties.testProp).toEqual('foo')
+
+            expect(eventS2Before[0].$set_once).toEqual(undefined)
+            // most properties are lost across subdomain, that's intentional as we don't want to save too many things in cookies
+            expect(eventS2Before[0].properties.testProp).toEqual(undefined)
 
             expect(eventS2Identify[0].event).toEqual('$identify')
             expect(eventS2Identify[0].$set_once).toEqual({
@@ -426,8 +502,8 @@ describe('person processing', () => {
             posthog.capture('custom event after group')
 
             // assert
-            expect(jest.mocked(logger).error).toBeCalledTimes(1)
-            expect(jest.mocked(logger).error).toHaveBeenCalledWith(
+            expect(mockLogger.error).toBeCalledTimes(1)
+            expect(mockLogger.error).toHaveBeenCalledWith(
                 'posthog.group was called, but process_person is set to "never". This call will be ignored.'
             )
 
@@ -449,8 +525,8 @@ describe('person processing', () => {
 
             // assert
             expect(beforeSendMock).toBeCalledTimes(0)
-            expect(jest.mocked(logger).error).toBeCalledTimes(1)
-            expect(jest.mocked(logger).error).toHaveBeenCalledWith(
+            expect(mockLogger.error).toBeCalledTimes(1)
+            expect(mockLogger.error).toHaveBeenCalledWith(
                 'posthog.setPersonProperties was called, but process_person is set to "never". This call will be ignored.'
             )
         })
@@ -516,8 +592,8 @@ describe('person processing', () => {
 
             // assert
             expect(beforeSendMock).toBeCalledTimes(0)
-            expect(jest.mocked(logger).error).toBeCalledTimes(1)
-            expect(jest.mocked(logger).error).toHaveBeenCalledWith(
+            expect(mockLogger.error).toBeCalledTimes(1)
+            expect(mockLogger.error).toHaveBeenCalledWith(
                 'posthog.alias was called, but process_person is set to "never". This call will be ignored.'
             )
         })
@@ -567,7 +643,7 @@ describe('person processing', () => {
 
             // assert
             expect(beforeSendMock).toBeCalledTimes(0)
-            expect(jest.mocked(logger).error).toBeCalledTimes(0)
+            expect(mockLogger.error).toBeCalledTimes(0)
         })
     })
 
@@ -648,7 +724,7 @@ describe('person processing', () => {
             posthog.capture('startup page view')
 
             // act
-            posthog._afterDecideResponse({ defaultIdentifiedOnly: false } as DecideResponse)
+            posthog._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
             posthog.capture('custom event')
 
             // assert
@@ -663,7 +739,7 @@ describe('person processing', () => {
             posthog.capture('startup page view')
 
             // act
-            posthog._afterDecideResponse({ defaultIdentifiedOnly: false } as DecideResponse)
+            posthog._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
             posthog.capture('custom event')
 
             // assert
@@ -682,7 +758,7 @@ describe('person processing', () => {
             )
 
             // act
-            posthog1._afterDecideResponse({ defaultIdentifiedOnly: false } as DecideResponse)
+            posthog1._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
             posthog1.capture('custom event 1')
             const { posthog: posthog2, beforeSendMock: beforeSendMock2 } = await setup(
                 undefined,

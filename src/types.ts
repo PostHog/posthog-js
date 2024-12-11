@@ -339,6 +339,12 @@ export interface PostHogConfig {
      * whether to wrap fetch and add tracing headers to the request
      * */
     __add_tracing_headers?: boolean
+
+    /**
+     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+     * enables the new RemoteConfig approach to loading config instead of decide
+     * */
+    __preview_remote_config?: boolean
 }
 
 export interface OptInOutCapturingOptions {
@@ -481,11 +487,8 @@ export type SessionRecordingCanvasOptions = {
     canvasQuality?: string | null
 }
 
-export interface DecideResponse {
+export interface RemoteConfig {
     supportedCompression: Compression[]
-    featureFlags: Record<string, string | boolean>
-    featureFlagPayloads: Record<string, JsonType>
-    errorsWhileComputingFlags: boolean
     autocapture_opt_out?: boolean
     /**
      *     originally capturePerformance was replay only and so boolean true
@@ -516,6 +519,7 @@ export interface DecideResponse {
         linkedFlag?: string | FlagVariant | null
         networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
         urlTriggers?: SessionRecordingUrlTrigger[]
+        scriptConfig?: { script?: string | undefined }
         urlBlocklist?: SessionRecordingUrlTrigger[]
         eventTriggers?: string[]
     }
@@ -524,10 +528,46 @@ export interface DecideResponse {
     editorParams?: ToolbarParams /** @deprecated, renamed to toolbarParams, still present on older API responses */
     toolbarVersion: 'toolbar' /** @deprecated, moved to toolbarParams */
     isAuthenticated: boolean
-    siteApps: { id: number; url: string }[]
+    siteApps: { id: string; url: string }[]
     heatmaps?: boolean
     defaultIdentifiedOnly?: boolean
     captureDeadClicks?: boolean
+    hasFeatureFlags?: boolean // Indicates if the team has any flags enabled (if not we don't need to load them)
+}
+
+export interface DecideResponse extends RemoteConfig {
+    featureFlags: Record<string, string | boolean>
+    featureFlagPayloads: Record<string, JsonType>
+    errorsWhileComputingFlags: boolean
+}
+
+export type SiteAppGlobals = {
+    event: {
+        uuid: string
+        event: EventName
+        properties: Properties
+        timestamp?: Date
+        elements_chain?: string
+        distinct_id?: string
+    }
+    person: {
+        properties: Properties
+    }
+    groups: Record<string, { id: string; type: string; properties: Properties }>
+}
+
+export type SiteAppLoader = {
+    id: string
+    init: (config: { posthog: PostHog; callback: (success: boolean) => void }) => {
+        processEvent?: (globals: SiteAppGlobals) => void
+    }
+}
+
+export type SiteApp = {
+    id: string
+    loaded: boolean
+    errored: boolean
+    processEvent?: (globals: SiteAppGlobals) => void
 }
 
 export type FeatureFlagsCallback = (

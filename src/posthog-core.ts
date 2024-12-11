@@ -32,7 +32,6 @@ import {
     CaptureOptions,
     CaptureResult,
     Compression,
-    DecideResponse,
     EarlyAccessFeatureCallback,
     EventName,
     IsFeatureEnabledOptions,
@@ -41,6 +40,7 @@ import {
     Properties,
     Property,
     QueuedRequestOptions,
+    RemoteConfig,
     RequestCallback,
     SessionIdChangedCallback,
     SnippetArrayItem,
@@ -80,6 +80,7 @@ import { ExceptionObserver } from './extensions/exception-autocapture'
 import { WebVitalsAutocapture } from './extensions/web-vitals'
 import { WebExperiments } from './web-experiments'
 import { PostHogExceptions } from './posthog-exceptions'
+import { SiteApps } from './site-apps'
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 
 /*
@@ -259,6 +260,7 @@ export class PostHog {
     sessionManager?: SessionIdManager
     sessionPropsManager?: SessionPropsManager
     requestRouter: RequestRouter
+    siteApps?: SiteApps
     autocapture?: Autocapture
     heatmaps?: Heatmaps
     webVitalsAutocapture?: WebVitalsAutocapture
@@ -409,7 +411,7 @@ export class PostHog {
         )
 
         if (this.config.on_xhr_error) {
-            logger.error('[posthog] on_xhr_error is deprecated. Use on_request_error instead')
+            logger.error('on_xhr_error is deprecated. Use on_request_error instead')
         }
 
         this.compression = config.disable_compression ? undefined : Compression.GZipJS
@@ -428,10 +430,13 @@ export class PostHog {
         this._retryQueue = new RetryQueue(this)
         this.__request_queue = []
 
-        this.sessionManager = new SessionIdManager(this.config, this.persistence)
+        this.sessionManager = new SessionIdManager(this)
         this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
 
         new TracingHeaders(this).startIfEnabledOrStop()
+
+        this.siteApps = new SiteApps(this)
+        this.siteApps?.init()
 
         this.sessionRecording = new SessionRecording(this)
         this.sessionRecording.startIfEnabledOrStop()
@@ -540,37 +545,36 @@ export class PostHog {
         return this
     }
 
-    // Private methods
-    _afterDecideResponse(response: DecideResponse) {
+    _onRemoteConfig(config: RemoteConfig) {
         this.compression = undefined
-        if (response.supportedCompression && !this.config.disable_compression) {
-            this.compression = includes(response['supportedCompression'], Compression.GZipJS)
+        if (config.supportedCompression && !this.config.disable_compression) {
+            this.compression = includes(config['supportedCompression'], Compression.GZipJS)
                 ? Compression.GZipJS
-                : includes(response['supportedCompression'], Compression.Base64)
+                : includes(config['supportedCompression'], Compression.Base64)
                 ? Compression.Base64
                 : undefined
         }
 
-        if (response.analytics?.endpoint) {
-            this.analyticsDefaultEndpoint = response.analytics.endpoint
+        if (config.analytics?.endpoint) {
+            this.analyticsDefaultEndpoint = config.analytics.endpoint
         }
 
         this.set_config({
             person_profiles: this._initialPersonProfilesConfig
                 ? this._initialPersonProfilesConfig
-                : response['defaultIdentifiedOnly']
+                : config['defaultIdentifiedOnly']
                 ? 'identified_only'
                 : 'always',
         })
 
-        this.sessionRecording?.afterDecideResponse(response)
-        this.autocapture?.afterDecideResponse(response)
-        this.heatmaps?.afterDecideResponse(response)
-        this.experiments?.afterDecideResponse(response)
-        this.surveys?.afterDecideResponse(response)
-        this.webVitalsAutocapture?.afterDecideResponse(response)
-        this.exceptionObserver?.afterDecideResponse(response)
-        this.deadClicksAutocapture?.afterDecideResponse(response)
+        this.siteApps?.onRemoteConfig(config)
+        this.sessionRecording?.onRemoteConfig(config)
+        this.autocapture?.onRemoteConfig(config)
+        this.heatmaps?.onRemoteConfig(config)
+        this.surveys?.onRemoteConfig(config)
+        this.webVitalsAutocapture?.onRemoteConfig(config)
+        this.exceptionObserver?.onRemoteConfig(config)
+        this.deadClicksAutocapture?.onRemoteConfig(config)
     }
 
     _loaded(): void {
@@ -600,16 +604,7 @@ export class PostHog {
             }, 1)
         }
 
-        // Call decide to get what features are enabled and other settings.
-        // As a reminder, if the /decide endpoint is disabled, feature flags, toolbar, session recording, autocapture,
-        // and compression will not be available.
-        if (!disableDecide) {
-            new Decide(this).call()
-
-            // TRICKY: Reset any decide reloads queued during config.loaded because they'll be
-            // covered by the decide call right above.
-            this.featureFlags.resetRequestQueue()
-        }
+        new Decide(this).call()
     }
 
     _start_queue_if_opted_in(): void {
@@ -940,6 +935,10 @@ export class PostHog {
             const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
             properties['$session_id'] = sessionId
             properties['$window_id'] = windowId
+        }
+
+        if (this.sessionRecording) {
+            properties['$recording_status'] = this.sessionRecording.status
         }
 
         if (this.requestRouter.region === RequestRouterRegion.CUSTOM) {

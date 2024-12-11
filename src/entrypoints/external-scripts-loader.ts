@@ -1,6 +1,8 @@
 import type { PostHog } from '../posthog-core'
 import { assignableWindow, document, PostHogExtensionKind } from '../utils/globals'
-import { logger } from '../utils/logger'
+import { createLogger } from '../utils/logger'
+
+const logger = createLogger('[ExternalScriptsLoader]')
 
 const loadScript = (posthog: PostHog, url: string, callback: (error?: string | Event, event?: Event) => void) => {
     if (posthog.config.disable_external_dependency_loading) {
@@ -42,6 +44,10 @@ assignableWindow.__PosthogExtensions__.loadExternalDependency = (
     callback: (error?: string | Event, event?: Event) => void
 ): void => {
     let scriptUrlToLoad = `/static/${kind}.js` + `?v=${posthog.version}`
+
+    if (kind === 'remote-config') {
+        scriptUrlToLoad = `/array/${posthog.config.token}/config.js`
+    }
 
     if (kind === 'toolbar') {
         // toolbar.js is served from the PostHog CDN, this has a TTL of 24 hours.

@@ -224,7 +224,7 @@ export class PostHogPersistence {
             const campaignParams = Info.campaignParams(this.config.custom_campaign_params)
             // only save campaign params if there were any
             if (!isEmptyObject(stripEmptyProperties(campaignParams))) {
-                this.register(Info.campaignParams(this.config.custom_campaign_params))
+                this.register(campaignParams)
             }
             this.campaign_params_saved = true
         }

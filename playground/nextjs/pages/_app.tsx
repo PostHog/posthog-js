@@ -4,10 +4,9 @@ import { useEffect } from 'react'
 import type { AppProps } from 'next/app'
 import { useRouter } from 'next/router'
 
-import posthog from 'posthog-js'
 import { PostHogProvider } from 'posthog-js/react'
 import { CookieBanner } from '@/src/CookieBanner'
-import '@/src/posthog'
+import { posthog } from '@/src/posthog'
 import Head from 'next/head'
 import { PageHeader } from '@/src/Header'
 import { useUser } from '@/src/auth'
@@ -46,10 +45,10 @@ export default function App({ Component, pageProps }: AppProps) {
                     http-equiv="Content-Security-Policy"
                     content={`
                     default-src 'self';
-                    connect-src 'self' ${localhostDomain} https://*.posthog.com;
+                    connect-src 'self' ${localhostDomain} https://*.posthog.com https://lottie.host;
                     script-src 'self' 'unsafe-eval' 'unsafe-inline' ${localhostDomain} https://*.posthog.com;
                     style-src 'self' 'unsafe-inline' ${localhostDomain} https://*.posthog.com;
-                    img-src 'self' ${localhostDomain} https://*.posthog.com;
+                    img-src 'self' ${localhostDomain} https://*.posthog.com https://lottie.host;
                 `}
                 />
             </Head>

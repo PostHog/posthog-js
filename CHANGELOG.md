@@ -1,3 +1,88 @@
+## 1.195.0 - 2024-12-10
+
+- Reduce type (#1590)
+
+## 1.194.6 - 2024-12-09
+
+- feat: Load site functions via RemoteConfig (#1580)
+
+## 1.194.5 - 2024-12-06
+
+- feat: Added better sub logging utils (#1581)
+
+## 1.194.4 - 2024-12-05
+
+- feat: RemoteConfig loader (#1577)
+
+## 1.194.3 - 2024-12-03
+
+- fix: parse Chrome instead of Android as browser (#1575)
+
+## 1.194.2 - 2024-12-02
+
+- fix: use previous site-app variables (#1574)
+
+## 1.194.1 - 2024-11-30
+
+- fix: Don't crash on bigints (#1573)
+- feat: Add customization to print events drop them (#1572)
+
+## 1.194.0 - 2024-11-29
+
+- feat: add $recording_status property (#1571)
+
+## 1.193.1 - 2024-11-28
+
+- fix: zone detection (#1570)
+
+## 1.193.0 - 2024-11-28
+
+- feat: allow decide to provide script name for recorder (#1509)
+
+## 1.192.1 - 2024-11-28
+
+
+
+## 1.192.0 - 2024-11-28
+
+- feat: Start tracking timezone offset and language prefix (#1568)
+
+## 1.191.0 - 2024-11-28
+
+- feat: different default and max idle period (#1558)
+
+## 1.190.2 - 2024-11-27
+
+- fix: patch to angular detection in rrweb (#1566)
+- chore: fix changelog (#1564)
+
+## 1.190.1 - 2024-11-27
+
+- fix: catch errors detecting dialog state when recording (#1562)
+
+## 1.190.0 - 2024-11-27
+
+- feat: Add initial person info to cookie when using localPlusCookieStore (#1559)
+
+## 1.189.1 - 2024-11-27
+
+- feat: hog site functions (#1546)
+
+## 1.189.0 - 2024-11-26
+
+- feat: Add better npm import, and script entrypoint for customizations (#1550)
+
+## 1.188.1 - 2024-11-26
+
+- fix: safari support requires we don't use (#1553)
+- fix: endless capturing /s/ (#1551)
+- chore: make platform more specific (#1549)
+
+## 1.188.0 - 2024-11-22
+
+- fix(surveys): Process feature_flag_keys on Survey object (#1548)
+- chore: sentry integration fixes (#1544)
+
 ## 1.187.2 - 2024-11-20
 
 - fix: improve ES6 bundling (#1542)

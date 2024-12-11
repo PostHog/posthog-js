@@ -22,12 +22,14 @@ import {
     isString,
     isUndefined,
 } from '../utils/type-utils'
-import { logger } from '../utils/logger'
+import { createLogger } from '../utils/logger'
 import { assignableWindow } from '../utils/globals'
 import { defaultNetworkOptions } from '../extensions/replay/config'
 import { formDataToQuery } from '../utils/request-utils'
 import { patch } from '../extensions/replay/rrweb-plugins/patch'
 import { isHostOnDenyList } from '../extensions/replay/external/denylist'
+
+const logger = createLogger('[Recorder]')
 
 export type NetworkData = {
     requests: CapturedNetworkRequest[]

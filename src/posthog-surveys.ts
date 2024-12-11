@@ -10,12 +10,12 @@ import {
 import { isUrlMatchingRegex } from './utils/request-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import { assignableWindow, document, window } from './utils/globals'
-import { DecideResponse } from './types'
-import { logger } from './utils/logger'
+import { RemoteConfig } from './types'
+import { createLogger } from './utils/logger'
 import { isNullish } from './utils/type-utils'
 import { getSurveySeenStorageKeys } from './extensions/surveys/surveys-utils'
 
-const LOGGER_PREFIX = '[Surveys]'
+const logger = createLogger('[Surveys]')
 
 export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: string) => boolean> = {
     icontains: (conditionsUrl) =>
@@ -69,7 +69,7 @@ export class PostHogSurveys {
         this._surveyEventReceiver = null
     }
 
-    afterDecideResponse(response: DecideResponse) {
+    onRemoteConfig(response: RemoteConfig) {
         this._decideServerResponse = !!response['surveys']
         this.loadIfEnabled()
     }
@@ -90,7 +90,7 @@ export class PostHogSurveys {
 
             assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'surveys', (err) => {
                 if (err) {
-                    return logger.error(LOGGER_PREFIX, 'Could not load surveys script', err)
+                    return logger.error('Could not load surveys script', err)
                 }
 
                 this._surveyManager = assignableWindow.__PosthogExtensions__?.generateSurveys?.(this.instance)
@@ -172,7 +172,12 @@ export class PostHogSurveys {
             // get all the surveys that have been activated so far with user actions.
             const activatedSurveys: string[] | undefined = this._surveyEventReceiver?.getSurveys()
             const targetingMatchedSurveys = conditionMatchedSurveys.filter((survey) => {
-                if (!survey.linked_flag_key && !survey.targeting_flag_key && !survey.internal_targeting_flag_key) {
+                if (
+                    !survey.linked_flag_key &&
+                    !survey.targeting_flag_key &&
+                    !survey.internal_targeting_flag_key &&
+                    !survey.feature_flag_keys?.length
+                ) {
                     return true
                 }
                 const linkedFlagCheck = survey.linked_flag_key
@@ -199,9 +204,13 @@ export class PostHogSurveys {
                     survey.internal_targeting_flag_key && !overrideInternalTargetingFlagCheck
                         ? this.instance.featureFlags.isFeatureEnabled(survey.internal_targeting_flag_key)
                         : true
-
+                const flagsCheck = this.checkFlags(survey)
                 return (
-                    linkedFlagCheck && targetingFlagCheck && internalTargetingFlagCheck && eventBasedTargetingFlagCheck
+                    linkedFlagCheck &&
+                    targetingFlagCheck &&
+                    internalTargetingFlagCheck &&
+                    eventBasedTargetingFlagCheck &&
+                    flagsCheck
                 )
             })
 
@@ -209,6 +218,18 @@ export class PostHogSurveys {
         }, forceReload)
     }
 
+    checkFlags(survey: Survey): boolean {
+        if (!survey.feature_flag_keys?.length) {
+            return true
+        }
+
+        return survey.feature_flag_keys.every(({ key, value }) => {
+            if (!key || !value) {
+                return true
+            }
+            return this.instance.featureFlags.isFeatureEnabled(value)
+        })
+    }
     getNextSurveyStep(survey: Survey, currentQuestionIndex: number, response: string | string[] | number | null) {
         const question = survey.questions[currentQuestionIndex]
         const nextQuestionIndex = currentQuestionIndex + 1
@@ -274,14 +295,14 @@ export class PostHogSurveys {
             return nextQuestionIndex
         }
 
-        logger.warn(LOGGER_PREFIX, 'Falling back to next question index due to unexpected branching type')
+        logger.warn('Falling back to next question index due to unexpected branching type')
         return nextQuestionIndex
     }
 
     // this method is lazily loaded onto the window to avoid loading preact and other dependencies if surveys is not enabled
     private _canActivateRepeatedly(survey: Survey) {
         if (isNullish(assignableWindow.__PosthogExtensions__?.canActivateRepeatedly)) {
-            logger.warn(LOGGER_PREFIX, 'canActivateRepeatedly is not defined, must init before calling')
+            logger.warn('init was not called')
             return false // TODO does it make sense to have a default here?
         }
         return assignableWindow.__PosthogExtensions__.canActivateRepeatedly(survey)
@@ -289,7 +310,7 @@ export class PostHogSurveys {
 
     canRenderSurvey(surveyId: string) {
         if (isNullish(this._surveyManager)) {
-            logger.warn(LOGGER_PREFIX, 'canActivateRepeatedly is not defined, must init before calling')
+            logger.warn('init was not called')
             return
         }
         this.getSurveys((surveys) => {
@@ -300,7 +321,7 @@ export class PostHogSurveys {
 
     renderSurvey(surveyId: string, selector: string) {
         if (isNullish(this._surveyManager)) {
-            logger.warn(LOGGER_PREFIX, 'canActivateRepeatedly is not defined, must init before calling')
+            logger.warn('init was not called')
             return
         }
         this.getSurveys((surveys) => {

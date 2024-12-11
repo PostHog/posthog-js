@@ -32,8 +32,9 @@ import {
     RatingQuestion,
     MultipleChoiceQuestion,
 } from './surveys/components/QuestionTypes'
-import { logger } from '../utils/logger'
 import { Cancel } from './surveys/components/QuestionHeader'
+import { createLogger } from '../utils/logger'
+const logger = createLogger('[Surveys]')
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis

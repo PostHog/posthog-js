@@ -1,10 +1,10 @@
 import { Decide } from '../decide'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
-import { expectScriptToExist, expectScriptToNotExist } from './helpers/script-utils'
 import { PostHog } from '../posthog-core'
-import { DecideResponse, PostHogConfig, Properties } from '../types'
+import { DecideResponse, PostHogConfig, Properties, RemoteConfig } from '../types'
 import '../entrypoints/external-scripts-loader'
+import { assignableWindow } from '../utils/globals'
 
 const expectDecodedSendRequest = (
     send_request: PostHog['_send_request'],
@@ -53,10 +53,12 @@ describe('Decide', () => {
             get_property: (key: string) => posthog.persistence!.props[key],
             capture: jest.fn(),
             _addCaptureHook: jest.fn(),
-            _afterDecideResponse: jest.fn(),
+            _onRemoteConfig: jest.fn(),
             get_distinct_id: jest.fn().mockImplementation(() => 'distinctid'),
             _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
             featureFlags: {
+                resetRequestQueue: jest.fn(),
+                reloadFeatureFlags: jest.fn(),
                 receivedFeatureFlags: jest.fn(),
                 setReloadingPaused: jest.fn(),
                 _startReloadTimer: jest.fn(),
@@ -201,7 +203,7 @@ describe('Decide', () => {
             subject({} as DecideResponse)
 
             expect(posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith({}, false)
-            expect(posthog._afterDecideResponse).toHaveBeenCalledWith({})
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith({})
         })
 
         it('Make sure receivedFeatureFlags is called with errors if the decide response fails', () => {
@@ -210,7 +212,10 @@ describe('Decide', () => {
             subject(undefined as unknown as DecideResponse)
 
             expect(posthog.featureFlags.receivedFeatureFlags).toHaveBeenCalledWith({}, true)
-            expect(console.error).toHaveBeenCalledWith('[PostHog.js]', 'Failed to fetch feature flags from PostHog.')
+            expect(console.error).toHaveBeenCalledWith(
+                '[PostHog.js] [Decide]',
+                'Failed to fetch feature flags from PostHog.'
+            )
         })
 
         it('Make sure receivedFeatureFlags is not called if advanced_disable_feature_flags_on_first_load is set', () => {
@@ -226,7 +231,7 @@ describe('Decide', () => {
             } as unknown as DecideResponse
             subject(decideResponse)
 
-            expect(posthog._afterDecideResponse).toHaveBeenCalledWith(decideResponse)
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith(decideResponse)
             expect(posthog.featureFlags.receivedFeatureFlags).not.toHaveBeenCalled()
         })
 
@@ -243,38 +248,82 @@ describe('Decide', () => {
             } as unknown as DecideResponse
             subject(decideResponse)
 
-            expect(posthog._afterDecideResponse).toHaveBeenCalledWith(decideResponse)
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith(decideResponse)
             expect(posthog.featureFlags.receivedFeatureFlags).not.toHaveBeenCalled()
         })
+    })
 
-        it('runs site apps if opted in', () => {
-            posthog.config = {
-                api_host: 'https://test.com',
-                opt_in_site_apps: true,
-                persistence: 'memory',
-            } as PostHogConfig
+    describe('remote config', () => {
+        const config = { surveys: true } as RemoteConfig
 
-            subject({ siteApps: [{ id: 1, url: '/site_app/1/tokentoken/hash/' }] } as DecideResponse)
+        beforeEach(() => {
+            posthog.config.__preview_remote_config = true
+            assignableWindow._POSTHOG_CONFIG = undefined
+            assignableWindow.POSTHOG_DEBUG = true
 
-            expectScriptToExist('https://test.com/site_app/1/tokentoken/hash/')
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
+                (_ph: PostHog, _name: string, cb: (err?: any) => void) => {
+                    assignableWindow._POSTHOG_CONFIG = config as RemoteConfig
+                    cb()
+                }
+            )
+
+            posthog._send_request = jest.fn().mockImplementation(({ callback }) => callback?.({ json: config }))
         })
 
-        it('does not run site apps code if not opted in', () => {
-            ;(window as any).POSTHOG_DEBUG = true
-            // don't technically need to run this but this test assumes opt_in_site_apps is false, let's make that explicit
-            posthog.config = {
-                api_host: 'https://test.com',
-                opt_in_site_apps: false,
-                persistence: 'memory',
-            } as unknown as PostHogConfig
+        it('properly pulls from the window and uses it if set', () => {
+            assignableWindow._POSTHOG_CONFIG = config as RemoteConfig
+            decide().call()
 
-            subject({ siteApps: [{ id: 1, url: '/site_app/1/tokentoken/hash/' }] } as DecideResponse)
+            expect(assignableWindow.__PosthogExtensions__.loadExternalDependency).not.toHaveBeenCalled()
+            expect(posthog._send_request).not.toHaveBeenCalled()
 
-            expect(console.error).toHaveBeenCalledWith(
-                '[PostHog.js]',
-                'PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.'
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith(config)
+        })
+
+        it('loads the script if window config not set', () => {
+            decide().call()
+
+            expect(assignableWindow.__PosthogExtensions__.loadExternalDependency).toHaveBeenCalledWith(
+                posthog,
+                'remote-config',
+                expect.any(Function)
             )
-            expectScriptToNotExist('https://test.com/site_app/1/tokentoken/hash/')
+            expect(posthog._send_request).not.toHaveBeenCalled()
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith(config)
+        })
+
+        it('loads the json if window config not set and js failed', () => {
+            assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
+                (_ph: PostHog, _name: string, cb: (err?: any) => void) => {
+                    cb()
+                }
+            )
+
+            decide().call()
+
+            expect(assignableWindow.__PosthogExtensions__.loadExternalDependency).toHaveBeenCalled()
+            expect(posthog._send_request).toHaveBeenCalledWith({
+                method: 'GET',
+                url: 'https://test.com/array/testtoken/config',
+                callback: expect.any(Function),
+            })
+            expect(posthog._onRemoteConfig).toHaveBeenCalledWith(config)
+        })
+
+        it.each([
+            [true, true],
+            [false, false],
+            [undefined, true],
+        ])('conditionally reloads feature flags - hasFlags: %s, shouldReload: %s', (hasFeatureFlags, shouldReload) => {
+            assignableWindow._POSTHOG_CONFIG = { hasFeatureFlags } as RemoteConfig
+            decide().call()
+
+            if (shouldReload) {
+                expect(posthog.featureFlags.reloadFeatureFlags).toHaveBeenCalled()
+            } else {
+                expect(posthog.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
+            }
         })
     })
 })
