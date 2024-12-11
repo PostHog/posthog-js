@@ -1,6 +1,5 @@
 import { PostHog } from './posthog-core'
-import { Compression, DecideResponse, RemoteConfig } from './types'
-import { STORED_GROUP_PROPERTIES_KEY, STORED_PERSON_PROPERTIES_KEY } from './constants'
+import { RemoteConfig } from './types'
 
 import { createLogger } from './utils/logger'
 import { assignableWindow, document } from './utils/globals'
@@ -40,12 +39,6 @@ export class Decide {
         // and compression will not be available.
         const disableRemoteCalls = !!this.instance.config.advanced_disable_decide
 
-        if (!disableRemoteCalls) {
-            // TRICKY: Reset any decide reloads queued during config.loaded because they'll be
-            // covered by the decide call right above.
-            this.instance.featureFlags.resetRequestQueue()
-        }
-
         if (this.instance.config.__preview_remote_config) {
             // Attempt 1 - use the pre-loaded config if it came as part of the token-specific array.js
             if (assignableWindow._POSTHOG_CONFIG) {
@@ -80,61 +73,18 @@ export class Decide {
             return
         }
 
-        /*
-        Calls /decide endpoint to fetch options for autocapture, session recording, feature flags & compression.
-        */
-        const data = {
-            token: this.instance.config.token,
-            distinct_id: this.instance.get_distinct_id(),
-            groups: this.instance.getGroups(),
-            person_properties: this.instance.get_property(STORED_PERSON_PROPERTIES_KEY),
-            group_properties: this.instance.get_property(STORED_GROUP_PROPERTIES_KEY),
-            disable_flags:
-                this.instance.config.advanced_disable_feature_flags ||
-                this.instance.config.advanced_disable_feature_flags_on_first_load ||
-                undefined,
-        }
-
-        this.instance._send_request({
-            method: 'POST',
-            url: this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
-            data,
-            compression: this.instance.config.disable_compression ? undefined : Compression.Base64,
-            timeout: this.instance.config.feature_flag_request_timeout_ms,
-            callback: (response) => this.parseDecideResponse(response.json as DecideResponse | undefined),
+        this.instance.featureFlags._callDecideEndpoint({
+            data: {
+                disable_flags:
+                    this.instance.config.advanced_disable_feature_flags ||
+                    this.instance.config.advanced_disable_feature_flags_on_first_load ||
+                    undefined,
+            },
+            callback: (response) => this.onRemoteConfig(response, true),
         })
     }
 
-    parseDecideResponse(response?: DecideResponse): void {
-        this.instance.featureFlags.setReloadingPaused(false)
-        // :TRICKY: Reload - start another request if queued!
-        this.instance.featureFlags._startReloadTimer()
-
-        const errorsLoading = !response
-
-        if (
-            !this.instance.config.advanced_disable_feature_flags_on_first_load &&
-            !this.instance.config.advanced_disable_feature_flags
-        ) {
-            this.instance.featureFlags.receivedFeatureFlags(response ?? {}, errorsLoading)
-        }
-
-        if (errorsLoading) {
-            logger.error('Failed to fetch feature flags from PostHog.')
-            return
-        }
-        if (!(document && document.body)) {
-            logger.info('document not ready yet, trying again in 500 milliseconds...')
-            setTimeout(() => {
-                this.parseDecideResponse(response)
-            }, 500)
-            return
-        }
-
-        this.instance._onRemoteConfig(response)
-    }
-
-    private onRemoteConfig(config?: RemoteConfig): void {
+    private onRemoteConfig(config?: RemoteConfig, fromDecide?: boolean): void {
         // NOTE: Once this is rolled out we will remove the "decide" related code above. Until then the code duplication is fine.
         if (!config) {
             logger.error('Failed to fetch remote config from PostHog.')
@@ -150,9 +100,8 @@ export class Decide {
 
         this.instance._onRemoteConfig(config)
 
-        if (config.hasFeatureFlags !== false) {
-            // TRICKY: This is set in the parent for some reason...
-            this.instance.featureFlags.setReloadingPaused(false)
+        if (config.hasFeatureFlags !== false && !fromDecide) {
+            logger.info('hasFeatureFlags is true, reloading flags')
             // If the config has feature flags, we need to call decide to get the feature flags
             // This completely separates it from the config logic which is good in terms of separation of concerns
             this.instance.featureFlags.reloadFeatureFlags()

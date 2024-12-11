@@ -577,13 +577,6 @@ export class PostHog {
     }
 
     _loaded(): void {
-        // Pause `reloadFeatureFlags` calls in config.loaded callback.
-        // These feature flags are loaded in the decide call made right after
-        const disableDecide = this.config.advanced_disable_decide
-        if (!disableDecide) {
-            this.featureFlags.setReloadingPaused(true)
-        }
-
         try {
             this.config.loaded(this)
         } catch (err) {
