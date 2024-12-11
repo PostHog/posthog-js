@@ -59,7 +59,7 @@ export const initPosthog = (testName, config) => {
             // We set this to get around the ingestion delay for new distinctIDs. It's not ideal, as if we have a
             // lagging partition on prod then we can be blocked from merging any PRs. Until we run these tests against
             // a local posthog instance, you can change this ID to change the partition.
-            distinctID: 'automated-tester-2',
+            distinctID: 'automated-tester-3',
             isIdentifiedID: true,
         },
         opt_out_useragent_filter: true,
