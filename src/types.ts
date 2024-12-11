@@ -333,6 +333,15 @@ export interface PostHogConfig {
         events_burst_limit?: number
     }
 
+    /** Used when sending data via `fetch`, use with care, this is intentionally meant to be used with NextJS `fetch`
+     *  Incorrect usage may cause out-of-date data for feature flags, actions tracking, etc.
+     *  See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
+     */
+    fetch_options?: {
+        cache?: RequestInit['cache']
+        next_options?: NextOptions
+    }
+
     /**
      * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
      * whether to wrap fetch and add tracing headers to the request
@@ -440,6 +449,9 @@ export interface RequestResponse {
 
 export type RequestCallback = (response: RequestResponse) => void
 
+// See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
+type NextOptions = { revalidate: false | 0 | number; tags: string[] }
+
 export interface RequestOptions {
     url: string
     // Data can be a single object or an array of objects when batched
@@ -452,6 +464,10 @@ export interface RequestOptions {
     timeout?: number
     noRetries?: boolean
     compression?: Compression | 'best-available'
+    fetchOptions?: {
+        cache?: RequestInit['cache']
+        next?: NextOptions
+    }
 }
 
 // Queued request types - the same as a request but with additional queueing information
