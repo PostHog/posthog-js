@@ -21,7 +21,7 @@ import {
     ENABLE_PERSON_PROCESSING,
 } from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
-import { Decide } from './decide'
+import { RemoteConfigLoader } from './remote-config'
 import { Toolbar } from './extensions/toolbar'
 import { localStore } from './storage'
 import { RequestQueue } from './request-queue'
@@ -548,6 +548,14 @@ export class PostHog {
     }
 
     _onRemoteConfig(config: RemoteConfig) {
+        if (!(document && document.body)) {
+            logger.info('document not ready yet, trying again in 500 milliseconds...')
+            setTimeout(() => {
+                this._onRemoteConfig(config)
+            }, 500)
+            return
+        }
+
         this.compression = undefined
         if (config.supportedCompression && !this.config.disable_compression) {
             this.compression = includes(config['supportedCompression'], Compression.GZipJS)
@@ -599,7 +607,8 @@ export class PostHog {
             }, 1)
         }
 
-        new Decide(this).call()
+        new RemoteConfigLoader(this).load()
+        this.featureFlags.decide()
     }
 
     _start_queue_if_opted_in(): void {

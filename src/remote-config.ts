@@ -2,11 +2,11 @@ import { PostHog } from './posthog-core'
 import { RemoteConfig } from './types'
 
 import { createLogger } from './utils/logger'
-import { assignableWindow, document } from './utils/globals'
+import { assignableWindow } from './utils/globals'
 
 const logger = createLogger('[Decide]')
 
-export class Decide {
+export class RemoteConfigLoader {
     constructor(private readonly instance: PostHog) {}
 
     private _loadRemoteConfigJs(cb: (config?: RemoteConfig) => void): void {
@@ -30,54 +30,40 @@ export class Decide {
         })
     }
 
-    call(): void {
+    load(): void {
         // Call decide to get what features are enabled and other settings.
         // As a reminder, if the /decide endpoint is disabled, feature flags, toolbar, session recording, autocapture,
         // and compression will not be available.
-        const disableRemoteCalls = !!this.instance.config.advanced_disable_decide
 
-        if (this.instance.config.__preview_remote_config) {
-            // Attempt 1 - use the pre-loaded config if it came as part of the token-specific array.js
-            if (assignableWindow._POSTHOG_CONFIG) {
-                logger.info('Using preloaded remote config', assignableWindow._POSTHOG_CONFIG)
-                this.onRemoteConfig(assignableWindow._POSTHOG_CONFIG)
-                return
-            }
-
-            if (disableRemoteCalls) {
-                logger.warn('Remote config is disabled. Falling back to local config.')
-                return
-            }
-
-            // Attempt 2 - if we have the external deps loader then lets load the script version of the config that includes site apps
-            this._loadRemoteConfigJs((config) => {
-                if (!config) {
-                    logger.info('No config found after loading remote JS config. Falling back to JSON.')
-                    // Attempt 3 Load the config json instead of the script - we won't get site apps etc. but we will get the config
-                    this._loadRemoteConfigJSON((config) => {
-                        this.onRemoteConfig(config)
-                    })
-                    return
-                }
-
-                this.onRemoteConfig(config)
-            })
-
+        if (!this.instance.config.__preview_remote_config) {
             return
         }
 
-        if (disableRemoteCalls) {
+        // Attempt 1 - use the pre-loaded config if it came as part of the token-specific array.js
+        if (assignableWindow._POSTHOG_CONFIG) {
+            logger.info('Using preloaded remote config', assignableWindow._POSTHOG_CONFIG)
+            this.onRemoteConfig(assignableWindow._POSTHOG_CONFIG)
             return
         }
 
-        this.instance.featureFlags._callDecideEndpoint({
-            data: {
-                disable_flags:
-                    this.instance.config.advanced_disable_feature_flags ||
-                    this.instance.config.advanced_disable_feature_flags_on_first_load ||
-                    undefined,
-            },
-            callback: (response) => this.onRemoteConfig(response),
+        if (this.instance.config.advanced_disable_decide) {
+            // This setting is essentially saying "dont call external APIs" hence we respect it here
+            logger.warn('Remote config is disabled. Falling back to local config.')
+            return
+        }
+
+        // Attempt 2 - if we have the external deps loader then lets load the script version of the config that includes site apps
+        this._loadRemoteConfigJs((config) => {
+            if (!config) {
+                logger.info('No config found after loading remote JS config. Falling back to JSON.')
+                // Attempt 3 Load the config json instead of the script - we won't get site apps etc. but we will get the config
+                this._loadRemoteConfigJSON((config) => {
+                    this.onRemoteConfig(config)
+                })
+                return
+            }
+
+            this.onRemoteConfig(config)
         })
     }
 
@@ -87,14 +73,6 @@ export class Decide {
             logger.error('Failed to fetch remote config from PostHog.')
             return
         }
-        if (!(document && document.body)) {
-            logger.info('document not ready yet, trying again in 500 milliseconds...')
-            setTimeout(() => {
-                this.onRemoteConfig(config)
-            }, 500)
-            return
-        }
-
         this.instance._onRemoteConfig(config)
 
         // We only need to reload if we haven't already loaded the flags or if the request is in flight

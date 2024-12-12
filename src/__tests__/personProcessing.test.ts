@@ -44,6 +44,7 @@ jest.mock('../utils/globals', () => {
         document: {
             ...orig.document,
             createElement: (...args: any[]) => orig.document.createElement(...args),
+            body: {},
             get referrer() {
                 return mockReferrerGetter()
             },

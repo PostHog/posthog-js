@@ -22,7 +22,7 @@ describe('featureflags', () => {
 
     beforeEach(() => {
         instance = {
-            config,
+            config: { ...config },
             get_distinct_id: () => 'blah id',
             getGroups: () => {},
             persistence: new PostHogPersistence(config),
@@ -38,6 +38,7 @@ describe('featureflags', () => {
                     json: {},
                 })
             ),
+            _onRemoteConfig: jest.fn(),
             reloadFeatureFlags: () => featureFlags.reloadFeatureFlags(),
         }
 
@@ -268,6 +269,97 @@ describe('featureflags', () => {
         expect(featureFlags.getFlagVariants()).toEqual({
             'beta-feature': true,
             'alpha-feature-2': false,
+        })
+    })
+
+    describe('decide()', () => {
+        it('should not call decide if advanced_disable_decide is true', () => {
+            instance.config.advanced_disable_decide = true
+            featureFlags.decide()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(0)
+        })
+
+        it('should call decide', () => {
+            featureFlags.decide()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0]).toMatchObject({
+                data: {
+                    disable_flags: undefined,
+                },
+            })
+
+            jest.runOnlyPendingTimers()
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+        })
+
+        it('should call decide with flags disabled if set', () => {
+            instance.config.advanced_disable_feature_flags_on_first_load = true
+            featureFlags.decide()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0]).toMatchObject({
+                data: {
+                    disable_flags: true,
+                },
+            })
+        })
+
+        it('should call decide with flags disabled if set generally', () => {
+            instance.config.advanced_disable_feature_flags = true
+            featureFlags.decide()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0]).toMatchObject({
+                data: {
+                    disable_flags: true,
+                },
+            })
+        })
+
+        it('should call decide once even if reload called before', () => {
+            featureFlags.reloadFeatureFlags()
+            featureFlags.decide()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0]).toMatchObject({
+                data: {
+                    disable_flags: false,
+                },
+            })
+
+            jest.runOnlyPendingTimers()
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+        })
+
+        it('should not disable flags if reload was called on decide', () => {
+            instance.config.advanced_disable_feature_flags_on_first_load = true
+            featureFlags.reloadFeatureFlags()
+            featureFlags.decide()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0]).toMatchObject({
+                data: {
+                    disable_flags: false,
+                },
+            })
+
+            jest.runOnlyPendingTimers()
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+        })
+
+        it('should always disable flags if set', () => {
+            instance.config.advanced_disable_feature_flags = true
+            featureFlags.reloadFeatureFlags()
+            featureFlags.decide()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0]).toMatchObject({
+                data: {
+                    disable_flags: true,
+                },
+            })
         })
     })
 

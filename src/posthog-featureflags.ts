@@ -90,9 +90,30 @@ export class PostHogFeatureFlags {
     private _reloadingDisabled: boolean = false
     private _additionalReloadRequested: boolean = false
     private _reloadDebouncer?: any
+    private _decideCalled: boolean = false
 
     constructor(private instance: PostHog) {
         this.featureFlagEventHandlers = []
+    }
+
+    decide(): void {
+        if (this.instance.config.__preview_remote_config) {
+            // If remote config is enabled we don't call decide and we mark it as called so that we don't simulate it
+            this._decideCalled = true
+            return
+        }
+
+        // TRICKY: We want to disable flags if we don't have a queued reload, and one of the settings exist for disabling on first load
+        const disableFlags =
+            !this._reloadDebouncer &&
+            (this.instance.config.advanced_disable_feature_flags ||
+                this.instance.config.advanced_disable_feature_flags_on_first_load)
+
+        this._callDecideEndpoint({
+            data: {
+                disable_flags: disableFlags,
+            },
+        })
     }
 
     get hasLoadedFlags(): boolean {
@@ -153,13 +174,17 @@ export class PostHogFeatureFlags {
 
         // Debounce multiple calls on the same tick
         this._reloadDebouncer = setTimeout(() => {
-            this._reloadDebouncer = undefined
             this._callDecideEndpoint()
         }, 5)
     }
 
+    private clearDebouncer(): void {
+        clearTimeout(this._reloadDebouncer)
+        this._reloadDebouncer = undefined
+    }
+
     ensureFlagsLoaded(): void {
-        if (this._hasLoadedFlags || this._requestInFlight) {
+        if (this._hasLoadedFlags || this._requestInFlight || this._reloadDebouncer) {
             // If we are or have already loaded the flags then we don't want to do anything
             return
         }
@@ -179,7 +204,9 @@ export class PostHogFeatureFlags {
      * NOTE: This is used both for flags and remote config. Once the RemoteConfig is fully released this will essentially only
      * be for flags and can eventually be replaced wiht the new flags endpoint
      */
-    _callDecideEndpoint(options?: { data: Record<string, any>; callback: (response: DecideResponse) => void }): void {
+    _callDecideEndpoint(options?: { data: Record<string, any> }): void {
+        // Ensure we don't have double queued decide requests
+        this.clearDebouncer()
         if (this.instance.config.advanced_disable_decide) {
             // The way this is documented is essentially used to refuse to ever call the decide endpoint.
             return
@@ -208,10 +235,6 @@ export class PostHogFeatureFlags {
             compression: this.instance.config.disable_compression ? undefined : Compression.Base64,
             timeout: this.instance.config.feature_flag_request_timeout_ms,
             callback: (response) => {
-                this._requestInFlight = false
-
-                options?.callback?.(response.json ?? {})
-
                 let errorsLoading = true
 
                 if (response.statusCode === 200) {
@@ -220,6 +243,13 @@ export class PostHogFeatureFlags {
                     // makes it through
                     this.$anon_distinct_id = undefined
                     errorsLoading = false
+                }
+
+                this._requestInFlight = false
+
+                if (!this._decideCalled) {
+                    this._decideCalled = true
+                    this.instance._onRemoteConfig(response.json ?? {})
                 }
 
                 if (data.disable_flags) {
