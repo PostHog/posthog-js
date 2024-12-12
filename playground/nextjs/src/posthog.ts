@@ -65,7 +65,6 @@ if (typeof window !== 'undefined') {
         opt_in_site_apps: true,
         __preview_remote_config: true,
         ...configForConsent(),
-        __use_cookieless_server_hash: true,
     })
     // Help with debugging
     ;(window as any).posthog = posthog
