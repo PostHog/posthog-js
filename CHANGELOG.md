@@ -1,3 +1,7 @@
+## 1.196.0 - 2024-12-12
+
+- feat: include attribution with all web vitals (#1594)
+
 ## 1.195.0 - 2024-12-10
 
 - Reduce type (#1590)
