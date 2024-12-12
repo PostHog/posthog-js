@@ -284,9 +284,9 @@ export class PostHog {
 
     private _internalEventEmitter = new SimpleEventEmitter()
 
-    // Legacy property to support existing usage
+    // Legacy property to support existing usage - this isn't technically correct but it's what it has always been - a proxy for flags being loaded
     public get decideEndpointWasHit(): boolean {
-        return this.featureFlags._decideEndpointWasHit
+        return this.featureFlags.hasLoadedFlags
     }
 
     /** DEPRECATED: We keep this to support existing usage but now one should just call .setPersonProperties */

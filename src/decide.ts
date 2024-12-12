@@ -77,11 +77,11 @@ export class Decide {
                     this.instance.config.advanced_disable_feature_flags_on_first_load ||
                     undefined,
             },
-            callback: (response) => this.onRemoteConfig(response, true),
+            callback: (response) => this.onRemoteConfig(response),
         })
     }
 
-    private onRemoteConfig(config?: RemoteConfig, fromDecide?: boolean): void {
+    private onRemoteConfig(config?: RemoteConfig): void {
         // NOTE: Once this is rolled out we will remove the "decide" related code above. Until then the code duplication is fine.
         if (!config) {
             logger.error('Failed to fetch remote config from PostHog.')
@@ -97,13 +97,11 @@ export class Decide {
 
         this.instance._onRemoteConfig(config)
 
-        if (config.hasFeatureFlags !== false && !fromDecide) {
-            // TODO: It's possible that some other code path called reload flags - we should check if this is the case
-
-            logger.info('hasFeatureFlags is true, reloading flags')
+        // We only need to reload if we haven't already loaded the flags or if the request is in flight
+        if (config.hasFeatureFlags !== false) {
             // If the config has feature flags, we need to call decide to get the feature flags
             // This completely separates it from the config logic which is good in terms of separation of concerns
-            this.instance.featureFlags.reloadFeatureFlags()
+            this.instance.featureFlags.ensureFlagsLoaded()
         }
     }
 }

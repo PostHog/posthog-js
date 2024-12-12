@@ -35,7 +35,7 @@ describe('Decide', () => {
             _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
             featureFlags: {
                 resetRequestQueue: jest.fn(),
-                reloadFeatureFlags: jest.fn(),
+                ensureFlagsLoaded: jest.fn(),
                 receivedFeatureFlags: jest.fn(),
                 setReloadingPaused: jest.fn(),
                 _callDecideEndpoint: jest.fn(),
@@ -212,9 +212,9 @@ describe('Decide', () => {
             new Decide(posthog).call()
 
             if (shouldReload) {
-                expect(posthog.featureFlags.reloadFeatureFlags).toHaveBeenCalled()
+                expect(posthog.featureFlags.ensureFlagsLoaded).toHaveBeenCalled()
             } else {
-                expect(posthog.featureFlags.reloadFeatureFlags).not.toHaveBeenCalled()
+                expect(posthog.featureFlags.ensureFlagsLoaded).not.toHaveBeenCalled()
             }
         })
     })

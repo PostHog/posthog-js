@@ -85,15 +85,18 @@ export class PostHogFeatureFlags {
     _override_warning: boolean = false
     featureFlagEventHandlers: FeatureFlagsCallback[]
     $anon_distinct_id: string | undefined
-    _decideEndpointWasHit: boolean = false
+    private _hasLoadedFlags: boolean = false
     private _requestInFlight: boolean = false
     private _reloadingDisabled: boolean = false
     private _additionalReloadRequested: boolean = false
     private _reloadDebouncer?: any
-    private _hasLoadedFlags: boolean = false
 
     constructor(private instance: PostHog) {
         this.featureFlagEventHandlers = []
+    }
+
+    get hasLoadedFlags(): boolean {
+        return this._hasLoadedFlags
     }
 
     getFlags(): string[] {
@@ -155,6 +158,15 @@ export class PostHogFeatureFlags {
         }, 5)
     }
 
+    ensureFlagsLoaded(): void {
+        if (this._hasLoadedFlags || this._requestInFlight) {
+            // If we are or have already loaded the flags then we don't want to do anything
+            return
+        }
+
+        this.reloadFeatureFlags()
+    }
+
     setAnonymousDistinctId(anon_distinct_id: string): void {
         this.$anon_distinct_id = anon_distinct_id
     }
@@ -168,6 +180,10 @@ export class PostHogFeatureFlags {
      * be for flags and can eventually be replaced wiht the new flags endpoint
      */
     _callDecideEndpoint(options?: { data: Record<string, any>; callback: (response: DecideResponse) => void }): void {
+        if (this.instance.config.advanced_disable_decide) {
+            // The way this is documented is essentially used to refuse to ever call the decide endpoint.
+            return
+        }
         if (this._requestInFlight) {
             this._additionalReloadRequested = true
             return
