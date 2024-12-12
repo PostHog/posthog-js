@@ -10,7 +10,7 @@ const logger = createLogger('[Decide]')
 export class Decide {
     constructor(private readonly instance: PostHog) {
         // don't need to wait for `decide` to return if flags were provided on initialisation
-        this.instance.decideEndpointWasHit = this.instance._hasBootstrappedFeatureFlags()
+        this.instance.receivedFlagValues = this.instance._hasBootstrappedFeatureFlags()
     }
 
     private _loadRemoteConfigJs(cb: (config?: RemoteConfig) => void): void {
@@ -118,6 +118,8 @@ export class Decide {
         ) {
             this.instance.featureFlags.receivedFeatureFlags(response ?? {}, errorsLoading)
         }
+
+        this.instance.decideEndpointWasHit = !errorsLoading
 
         if (errorsLoading) {
             logger.error('Failed to fetch feature flags from PostHog.')
