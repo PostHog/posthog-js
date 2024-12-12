@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 
-import { ActionType, ActionStepStringMatching } from '../../../posthog-surveys-types'
+import { SurveyActionType, ActionStepStringMatching } from '../../../posthog-surveys-types'
 import { PostHogPersistence } from '../../../posthog-persistence'
 import { PostHog } from '../../../posthog-core'
 import { CaptureResult, PostHogConfig } from '../../../types'
@@ -45,7 +45,7 @@ describe('action-matcher', () => {
         eventName: string,
         currentUrl?: string,
         urlMatch?: ActionStepStringMatching
-    ): ActionType => {
+    ): SurveyActionType => {
         return {
             id: id,
             name: `${eventName || 'user defined '} action`,
@@ -68,7 +68,7 @@ describe('action-matcher', () => {
     }
 
     it('can match action on event name', () => {
-        const pageViewAction = createAction(3, '$mypageview') as unknown as ActionType
+        const pageViewAction = createAction(3, '$mypageview') as unknown as SurveyActionType
         const actionMatcher = new ActionMatcher(instance)
         actionMatcher.register([pageViewAction])
         let pageViewActionMatched = false

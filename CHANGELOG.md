@@ -1,3 +1,7 @@
+## 1.195.0 - 2024-12-10
+
+- Reduce type (#1590)
+
 ## 1.194.6 - 2024-12-09
 
 - feat: Load site functions via RemoteConfig (#1580)
