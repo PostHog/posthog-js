@@ -29,7 +29,7 @@ describe('cookieless', () => {
         expect(event.properties.$device_id).toBe(null)
         expect(event.properties.$session_id).toBe(null)
         expect(event.properties.$window_id).toBe(null)
-        expect(event.properties.$cookieless).toEqual(true)
+        expect(event.properties.$cklsh).toEqual(true)
         expect(document.cookie).toBe('')
 
         // simulate user giving cookie consent
@@ -44,7 +44,7 @@ describe('cookieless', () => {
         expect(event.properties.$device_id).toBe(null)
         expect(event.properties.$session_id).toBe(null)
         expect(event.properties.$window_id).toBe(null)
-        expect(event.properties.$cookieless).toEqual(true)
+        expect(event.properties.$cklsh).toEqual(true)
         expect(document.cookie).not.toBe('')
 
         // a user identifying
@@ -56,7 +56,7 @@ describe('cookieless', () => {
         expect(event.properties.$device_id).toBe(null)
         expect(event.properties.$session_id).toBe(null)
         expect(event.properties.$window_id).toBe(null)
-        expect(event.properties.$cookieless).toEqual(true)
+        expect(event.properties.$cklsh).toEqual(true)
 
         // an event after identifying
         posthog.capture(eventName, eventProperties)
@@ -67,6 +67,22 @@ describe('cookieless', () => {
         expect(event.properties.$device_id).toBe(null)
         expect(event.properties.$session_id).toBe(null)
         expect(event.properties.$window_id).toBe(null)
-        expect(event.properties.$cookieless).toEqual(true)
+        expect(event.properties.$cklsh).toEqual(true)
+
+        // reset
+        posthog.reset()
+        posthog.set_config({ persistence: 'memory' })
+
+        // an event after reset
+        posthog.capture(eventName, eventProperties)
+        expect(beforeSendMock).toBeCalledTimes(5)
+        event = beforeSendMock.mock.calls[4][0]
+        expect(event.properties.distinct_id).toBe('$posthog_cklsh')
+        expect(event.properties.$anon_distinct_id).toBe(undefined)
+        expect(event.properties.$device_id).toBe(null)
+        expect(event.properties.$session_id).toBe(null)
+        expect(event.properties.$window_id).toBe(null)
+        expect(event.properties.$cklsh).toEqual(true)
+        expect(document.cookie).toBe('')
     })
 })

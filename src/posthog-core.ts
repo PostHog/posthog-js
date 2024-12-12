@@ -1549,16 +1549,24 @@ export class PostHog {
         this.surveys?.reset()
         this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()
-        const uuid = this.config.__preview_experimental_cookieless_mode
-            ? COOKIELESS_SENTINEL_VALUE
-            : this.config.get_device_id(uuidv7())
-        this.register_once(
-            {
-                distinct_id: uuid,
-                $device_id: reset_device_id ? uuid : device_id,
-            },
-            ''
-        )
+        if (this.config.__preview_experimental_cookieless_mode) {
+            this.register_once(
+                {
+                    distinct_id: COOKIELESS_SENTINEL_VALUE,
+                    $device_id: null,
+                },
+                ''
+            )
+        } else {
+            const uuid = this.config.get_device_id(uuidv7())
+            this.register_once(
+                {
+                    distinct_id: uuid,
+                    $device_id: reset_device_id ? uuid : device_id,
+                },
+                ''
+            )
+        }
     }
 
     /**
