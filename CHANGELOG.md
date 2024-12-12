@@ -1,3 +1,7 @@
+## 1.198.0 - 2024-12-12
+
+- feat: Allow users to customize `fetch` behavior (#1599)
+
 ## 1.197.0 - 2024-12-12
 
 - feat: send snapshot library (#1587)
