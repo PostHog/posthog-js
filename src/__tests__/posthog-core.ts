@@ -12,7 +12,6 @@ import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
 import { SessionRecording } from '../extensions/replay/sessionrecording'
-import { PostHogFeatureFlags } from '../posthog-featureflags'
 
 describe('posthog core', () => {
     const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
