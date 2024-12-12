@@ -665,6 +665,10 @@ export class PostHog {
         }
         options.compression = options.compression === 'best-available' ? this.compression : options.compression
 
+        // Specially useful if you're doing SSR with NextJS
+        // Users must be careful when tweaking `cache` because they might get out-of-date feature flags
+        options.fetchOptions = options.fetchOptions || this.config.fetch_options
+
         request({
             ...options,
             callback: (response) => {
@@ -1493,9 +1497,6 @@ export class PostHog {
      * to update user properties.
      */
     setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
-        if (!this._requirePersonProcessing('posthog.setPersonPropertiesForFlags')) {
-            return
-        }
         this.featureFlags.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
     }
 
