@@ -1,5 +1,5 @@
 import { PostHog } from '../../posthog-core'
-import { ActionStepStringMatching, ActionStepType, ActionType, SurveyElement } from '../../posthog-surveys-types'
+import { ActionStepStringMatching, ActionStepType, SurveyActionType, SurveyElement } from '../../posthog-surveys-types'
 import { SimpleEventEmitter } from '../../utils/simple-event-emitter'
 import { CaptureResult } from '../../types'
 import { isUndefined } from '../../utils/type-utils'
@@ -7,7 +7,7 @@ import { window } from '../../utils/globals'
 import { isUrlMatchingRegex } from '../../utils/request-utils'
 
 export class ActionMatcher {
-    private readonly actionRegistry?: Set<ActionType>
+    private readonly actionRegistry?: Set<SurveyActionType>
     private readonly instance?: PostHog
     private readonly actionEvents: Set<string>
     private _debugEventEmitter = new SimpleEventEmitter()
@@ -15,7 +15,7 @@ export class ActionMatcher {
     constructor(instance?: PostHog) {
         this.instance = instance
         this.actionEvents = new Set<string>()
-        this.actionRegistry = new Set<ActionType>()
+        this.actionRegistry = new Set<SurveyActionType>()
     }
 
     init() {
@@ -27,7 +27,7 @@ export class ActionMatcher {
         }
     }
 
-    register(actions: ActionType[]): void {
+    register(actions: SurveyActionType[]): void {
         if (isUndefined(this.instance?._addCaptureHook)) {
             return
         }
@@ -74,7 +74,7 @@ export class ActionMatcher {
         this.onAction('actionCaptured', (data) => callback(data))
     }
 
-    private checkAction(event?: CaptureResult, action?: ActionType): boolean {
+    private checkAction(event?: CaptureResult, action?: SurveyActionType): boolean {
         if (action?.steps == null) {
             return false
         }

@@ -1491,9 +1491,6 @@ export class PostHog {
      * to update user properties.
      */
     setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
-        if (!this._requirePersonProcessing('posthog.setPersonPropertiesForFlags')) {
-            return
-        }
         this.featureFlags.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
     }
 

@@ -1,3 +1,15 @@
+## 1.196.1 - 2024-12-12
+
+- feat: Don't create person profile when setting properties for flags (#1586)
+
+## 1.196.0 - 2024-12-12
+
+- feat: include attribution with all web vitals (#1594)
+
+## 1.195.0 - 2024-12-10
+
+- Reduce type (#1590)
+
 ## 1.194.6 - 2024-12-09
 
 - feat: Load site functions via RemoteConfig (#1580)
