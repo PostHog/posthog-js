@@ -85,10 +85,12 @@ export class PostHogFeatureFlags {
     _override_warning: boolean = false
     featureFlagEventHandlers: FeatureFlagsCallback[]
     $anon_distinct_id: string | undefined
+    _decideEndpointWasHit: boolean = false
     private _requestInFlight: boolean = false
     private _reloadingDisabled: boolean = false
     private _additionalReloadRequested: boolean = false
     private _reloadDebouncer?: any
+    private _hasLoadedFlags: boolean = false
 
     constructor(private instance: PostHog) {
         this.featureFlagEventHandlers = []
@@ -135,8 +137,9 @@ export class PostHogFeatureFlags {
      * 2. Delay a few milliseconds after each reloadFeatureFlags call to batch subsequent changes together
      */
     reloadFeatureFlags(): void {
-        if (this._reloadingDisabled) {
+        if (this._reloadingDisabled || this.instance.config.advanced_disable_feature_flags) {
             // If reloading has been explicitly disabled then we don't want to do anything
+            // Or if feature flags are disabled
             return
         }
 
@@ -229,7 +232,7 @@ export class PostHogFeatureFlags {
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
     getFeatureFlag(key: string, options: { send_event?: boolean } = {}): boolean | string | undefined {
-        if (!this.instance.decideEndpointWasHit && !(this.getFlags() && this.getFlags().length > 0)) {
+        if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
             logger.warn('getFeatureFlag for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
         }
@@ -268,7 +271,7 @@ export class PostHogFeatureFlags {
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
     isFeatureEnabled(key: string, options: { send_event?: boolean } = {}): boolean | undefined {
-        if (!this.instance.decideEndpointWasHit && !(this.getFlags() && this.getFlags().length > 0)) {
+        if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
             logger.warn('isFeatureEnabled for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
         }
@@ -287,7 +290,8 @@ export class PostHogFeatureFlags {
         if (!this.instance.persistence) {
             return
         }
-        this.instance.decideEndpointWasHit = true
+        this._hasLoadedFlags = true
+
         const currentFlags = this.getFlagVariants()
         const currentFlagPayloads = this.getFlagPayloads()
         parseFeatureFlagDecideResponse(response, this.instance.persistence, currentFlags, currentFlagPayloads)
@@ -341,7 +345,7 @@ export class PostHogFeatureFlags {
      */
     onFeatureFlags(callback: FeatureFlagsCallback): () => void {
         this.addFeatureFlagsHandler(callback)
-        if (this.instance.decideEndpointWasHit) {
+        if (this._hasLoadedFlags) {
             const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
             callback(flags, flagVariants)
         }

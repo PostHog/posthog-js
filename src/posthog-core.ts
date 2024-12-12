@@ -275,7 +275,6 @@ export class PostHog {
     _triggered_notifs: any
     compression?: Compression
     __request_queue: QueuedRequestOptions[]
-    decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
     version = Config.LIB_VERSION
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
@@ -284,6 +283,11 @@ export class PostHog {
     sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
 
     private _internalEventEmitter = new SimpleEventEmitter()
+
+    // Legacy property to support existing usage
+    public get decideEndpointWasHit(): boolean {
+        return this.featureFlags._decideEndpointWasHit
+    }
 
     /** DEPRECATED: We keep this to support existing usage but now one should just call .setPersonProperties */
     people: {
@@ -294,7 +298,6 @@ export class PostHog {
     constructor() {
         this.config = defaultConfig()
 
-        this.decideEndpointWasHit = false
         this.SentryIntegration = SentryIntegration
         this.sentryIntegration = (options?: SentryIntegrationOptions) => sentryIntegration(this, options)
         this.__request_queue = []

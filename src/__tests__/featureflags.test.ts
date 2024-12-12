@@ -67,7 +67,7 @@ describe('featureflags', () => {
     })
 
     it('should return flags from persistence even if decide endpoint was not hit', () => {
-        featureFlags.instance.decideEndpointWasHit = false
+        featureFlags._hasLoadedFlags = false
 
         expect(featureFlags.getFlags()).toEqual([
             'beta-feature',
@@ -80,7 +80,7 @@ describe('featureflags', () => {
 
     it('should warn if decide endpoint was not hit and no flags exist', () => {
         ;(window as any).POSTHOG_DEBUG = true
-        featureFlags.instance.decideEndpointWasHit = false
+        featureFlags._hasLoadedFlags = false
         instance.persistence.unregister('$enabled_feature_flags')
         instance.persistence.unregister('$active_feature_flags')
 
@@ -101,7 +101,7 @@ describe('featureflags', () => {
     })
 
     it('should return the right feature flag and call capture', () => {
-        featureFlags.instance.decideEndpointWasHit = false
+        featureFlags._hasLoadedFlags = false
 
         expect(featureFlags.getFlags()).toEqual([
             'beta-feature',
@@ -132,7 +132,7 @@ describe('featureflags', () => {
     })
 
     it('should call capture for every different flag response', () => {
-        featureFlags.instance.decideEndpointWasHit = true
+        featureFlags._hasLoadedFlags = true
 
         instance.persistence.register({
             $enabled_feature_flags: {
@@ -156,13 +156,13 @@ describe('featureflags', () => {
         instance.persistence.register({
             $enabled_feature_flags: {},
         })
-        featureFlags.instance.decideEndpointWasHit = false
+        featureFlags._hasLoadedFlags = false
         expect(featureFlags.getFlagVariants()).toEqual({})
         expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(undefined)
         // no extra capture call because flags haven't loaded yet.
         expect(instance.capture).toHaveBeenCalledTimes(1)
 
-        featureFlags.instance.decideEndpointWasHit = true
+        featureFlags._hasLoadedFlags = true
         instance.persistence.register({
             $enabled_feature_flags: { x: 'y' },
         })
@@ -185,7 +185,7 @@ describe('featureflags', () => {
     })
 
     it('should return the right feature flag and not call capture', () => {
-        featureFlags.instance.decideEndpointWasHit = true
+        featureFlags._hasLoadedFlags = true
 
         expect(featureFlags.isFeatureEnabled('beta-feature', { send_event: false })).toEqual(true)
         expect(instance.capture).not.toHaveBeenCalled()
@@ -315,7 +315,7 @@ describe('featureflags', () => {
         })
 
         it('onFeatureFlags callback should be called immediately if feature flags were loaded', () => {
-            featureFlags.instance.decideEndpointWasHit = true
+            featureFlags._hasLoadedFlags = true
             let called = false
             featureFlags.onFeatureFlags(() => (called = true))
             expect(called).toEqual(true)
@@ -324,7 +324,7 @@ describe('featureflags', () => {
         })
 
         it('onFeatureFlags should not return flags that are off', () => {
-            featureFlags.instance.decideEndpointWasHit = true
+            featureFlags._hasLoadedFlags = true
             let _flags = []
             let _variants = {}
             featureFlags.onFeatureFlags((flags, variants) => {

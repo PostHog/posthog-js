@@ -7,10 +7,7 @@ import { assignableWindow, document } from './utils/globals'
 const logger = createLogger('[Decide]')
 
 export class Decide {
-    constructor(private readonly instance: PostHog) {
-        // don't need to wait for `decide` to return if flags were provided on initialisation
-        this.instance.decideEndpointWasHit = this.instance._hasBootstrappedFeatureFlags()
-    }
+    constructor(private readonly instance: PostHog) {}
 
     private _loadRemoteConfigJs(cb: (config?: RemoteConfig) => void): void {
         if (assignableWindow.__PosthogExtensions__?.loadExternalDependency) {
