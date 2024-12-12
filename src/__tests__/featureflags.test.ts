@@ -284,11 +284,7 @@ describe('featureflags', () => {
             featureFlags.decide()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0]).toMatchObject({
-                data: {
-                    disable_flags: undefined,
-                },
-            })
+            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
 
             jest.runOnlyPendingTimers()
             expect(instance._send_request).toHaveBeenCalledTimes(1)

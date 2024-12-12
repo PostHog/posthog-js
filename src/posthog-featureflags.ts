@@ -110,9 +110,7 @@ export class PostHogFeatureFlags {
                 this.instance.config.advanced_disable_feature_flags_on_first_load)
 
         this._callDecideEndpoint({
-            data: {
-                disable_flags: disableFlags,
-            },
+            disableFlags,
         })
     }
 
