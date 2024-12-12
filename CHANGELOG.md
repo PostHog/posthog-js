@@ -1,3 +1,7 @@
+## 1.197.0 - 2024-12-12
+
+- feat: send snapshot library (#1587)
+
 ## 1.196.1 - 2024-12-12
 
 - feat: Don't create person profile when setting properties for flags (#1586)
