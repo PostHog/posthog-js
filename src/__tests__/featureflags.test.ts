@@ -299,11 +299,7 @@ describe('featureflags', () => {
             featureFlags.decide()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0]).toMatchObject({
-                data: {
-                    disable_flags: true,
-                },
-            })
+            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(true)
         })
 
         it('should call decide with flags disabled if set generally', () => {
@@ -311,11 +307,7 @@ describe('featureflags', () => {
             featureFlags.decide()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0]).toMatchObject({
-                data: {
-                    disable_flags: true,
-                },
-            })
+            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(true)
         })
 
         it('should call decide once even if reload called before', () => {
@@ -323,11 +315,7 @@ describe('featureflags', () => {
             featureFlags.decide()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0]).toMatchObject({
-                data: {
-                    disable_flags: false,
-                },
-            })
+            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
 
             jest.runOnlyPendingTimers()
             expect(instance._send_request).toHaveBeenCalledTimes(1)
@@ -339,11 +327,7 @@ describe('featureflags', () => {
             featureFlags.decide()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0]).toMatchObject({
-                data: {
-                    disable_flags: false,
-                },
-            })
+            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
 
             jest.runOnlyPendingTimers()
             expect(instance._send_request).toHaveBeenCalledTimes(1)
@@ -355,11 +339,7 @@ describe('featureflags', () => {
             featureFlags.decide()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
-            expect(instance._send_request.mock.calls[0][0]).toMatchObject({
-                data: {
-                    disable_flags: true,
-                },
-            })
+            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(true)
         })
     })
 

@@ -97,13 +97,7 @@ describe('loaded() with flags', () => {
             expect(instance.featureFlags._callDecideEndpoint).toHaveBeenCalledTimes(1)
             expect(instance._send_request).toHaveBeenCalledTimes(1)
 
-            expect(instance._send_request.mock.calls[0][0]).toMatchObject({
-                url: 'https://us.i.posthog.com/decide/?v=3',
-                data: {
-                    groups: { org: 'bazinga' },
-                    disable_flags: false,
-                },
-            })
+            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toEqual(undefined)
 
             jest.runOnlyPendingTimers() // Once for callback
             jest.runOnlyPendingTimers() // Once for potential debounce

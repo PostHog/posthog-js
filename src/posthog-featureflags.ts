@@ -204,7 +204,7 @@ export class PostHogFeatureFlags {
      * NOTE: This is used both for flags and remote config. Once the RemoteConfig is fully released this will essentially only
      * be for flags and can eventually be replaced wiht the new flags endpoint
      */
-    _callDecideEndpoint(options?: { data: Record<string, any> }): void {
+    _callDecideEndpoint(options?: { disableFlags?: boolean }): void {
         // Ensure we don't have double queued decide requests
         this.clearDebouncer()
         if (this.instance.config.advanced_disable_decide) {
@@ -216,15 +216,17 @@ export class PostHogFeatureFlags {
             return
         }
         const token = this.instance.config.token
-        const data = {
+        const data: Record<string, any> = {
             token: token,
             distinct_id: this.instance.get_distinct_id(),
             groups: this.instance.getGroups(),
             $anon_distinct_id: this.$anon_distinct_id,
             person_properties: this.instance.get_property(STORED_PERSON_PROPERTIES_KEY),
             group_properties: this.instance.get_property(STORED_GROUP_PROPERTIES_KEY),
-            disable_flags: this.instance.config.advanced_disable_feature_flags || undefined,
-            ...(options?.data || {}),
+        }
+
+        if (options?.disableFlags || this.instance.config.advanced_disable_feature_flags) {
+            data.disable_flags = true
         }
 
         this._requestInFlight = true
