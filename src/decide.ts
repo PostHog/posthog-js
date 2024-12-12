@@ -98,6 +98,8 @@ export class Decide {
         this.instance._onRemoteConfig(config)
 
         if (config.hasFeatureFlags !== false && !fromDecide) {
+            // TODO: It's possible that some other code path called reload flags - we should check if this is the case
+
             logger.info('hasFeatureFlags is true, reloading flags')
             // If the config has feature flags, we need to call decide to get the feature flags
             // This completely separates it from the config logic which is good in terms of separation of concerns
