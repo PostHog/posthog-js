@@ -925,7 +925,10 @@ export class PostHog {
         properties['token'] = this.config.token
 
         if (this.config.__preview_experimental_cookieless_mode) {
-            properties['$cookieless'] = true
+            // Set a flag to tell the plugin server to use cookieless server hash mode
+            // on naming: $cklsh = cookieless server hash
+            // I didn't call it $cookieless, as it's possible to use cookies in this mode (after consent is given)
+            properties['$cklsh'] = true
         }
 
         if (event_name === '$snapshot') {
