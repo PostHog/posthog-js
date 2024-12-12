@@ -1,3 +1,7 @@
+## 1.196.1 - 2024-12-12
+
+- feat: Don't create person profile when setting properties for flags (#1586)
+
 ## 1.196.0 - 2024-12-12
 
 - feat: include attribution with all web vitals (#1594)
