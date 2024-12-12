@@ -305,7 +305,7 @@ describe('Decide', () => {
             expect(assignableWindow.__PosthogExtensions__.loadExternalDependency).toHaveBeenCalled()
             expect(posthog._send_request).toHaveBeenCalledWith({
                 method: 'GET',
-                url: 'https://test.com/array/testtoken/config',
+                url: 'https://test.com/array/testtoken/config?domain=localhost',
                 callback: expect.any(Function),
             })
             expect(posthog._onRemoteConfig).toHaveBeenCalledWith(config)

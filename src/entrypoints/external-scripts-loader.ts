@@ -46,7 +46,7 @@ assignableWindow.__PosthogExtensions__.loadExternalDependency = (
     let scriptUrlToLoad = `/static/${kind}.js` + `?v=${posthog.version}`
 
     if (kind === 'remote-config') {
-        scriptUrlToLoad = `/array/${posthog.config.token}/config.js`
+        scriptUrlToLoad = `/array/${posthog.config.token}/config.js?domain=${assignableWindow.location.hostname}`
     }
 
     if (kind === 'toolbar') {

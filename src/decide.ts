@@ -27,7 +27,10 @@ export class Decide {
     private _loadRemoteConfigJSON(cb: (config?: RemoteConfig) => void): void {
         this.instance._send_request({
             method: 'GET',
-            url: this.instance.requestRouter.endpointFor('assets', `/array/${this.instance.config.token}/config`),
+            url: this.instance.requestRouter.endpointFor(
+                'assets',
+                `/array/${this.instance.config.token}/config?domain=${assignableWindow.location.hostname}`
+            ),
             callback: (response) => {
                 cb(response.json as RemoteConfig | undefined)
             },
