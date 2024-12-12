@@ -46,6 +46,7 @@ import { MutationRateLimiter } from './mutation-rate-limiter'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
 import { clampToRange } from '../../utils/number-utils'
 import { includes } from '../../utils'
+import Config from '../../config'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
@@ -1185,6 +1186,8 @@ export class SessionRecording {
                     $snapshot_data: snapshotBuffer.data,
                     $session_id: snapshotBuffer.sessionId,
                     $window_id: snapshotBuffer.windowId,
+                    $lib: 'web',
+                    $lib_version: Config.LIB_VERSION,
                 })
             })
         }
