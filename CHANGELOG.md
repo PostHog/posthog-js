@@ -1,3 +1,7 @@
+## 1.200.1 - 2024-12-13
+
+- fix: Make legacy property sturdier (#1602)
+
 ## 1.200.0 - 2024-12-13
 
 - fix: Refactor decide loading (#1596)
