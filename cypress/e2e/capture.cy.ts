@@ -382,6 +382,7 @@ describe('Event capture', () => {
                     token: 'test_token',
                     distinct_id: 'new-id',
                     person_properties: {},
+                    $anon_distinct_id: payload.$anon_distinct_id,
                     groups: {
                         company: 'id:5',
                         playlist: 'id:77',

@@ -12,7 +12,6 @@ import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
 import { SessionRecording } from '../extensions/replay/sessionrecording'
-import { PostHogFeatureFlags } from '../posthog-featureflags'
 
 describe('posthog core', () => {
     const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
@@ -1088,18 +1087,7 @@ describe('posthog core', () => {
 
     describe('_loaded()', () => {
         it('calls loaded config option', () => {
-            const posthog = posthogWith(
-                { loaded: jest.fn() },
-                {
-                    capture: jest.fn(),
-                    featureFlags: {
-                        setReloadingPaused: jest.fn(),
-                        resetRequestQueue: jest.fn(),
-                        _startReloadTimer: jest.fn(),
-                    } as unknown as PostHogFeatureFlags,
-                    _start_queue_if_opted_in: jest.fn(),
-                }
-            )
+            const posthog = posthogWith({ loaded: jest.fn() })
 
             posthog._loaded()
 
@@ -1107,22 +1095,11 @@ describe('posthog core', () => {
         })
 
         it('handles loaded config option throwing gracefully', () => {
-            const posthog = posthogWith(
-                {
-                    loaded: () => {
-                        throw Error()
-                    },
+            const posthog = posthogWith({
+                loaded: () => {
+                    throw Error()
                 },
-                {
-                    capture: jest.fn(),
-                    featureFlags: {
-                        setReloadingPaused: jest.fn(),
-                        resetRequestQueue: jest.fn(),
-                        _startReloadTimer: jest.fn(),
-                    } as unknown as PostHogFeatureFlags,
-                    _start_queue_if_opted_in: jest.fn(),
-                }
-            )
+            })
 
             posthog._loaded()
 
@@ -1131,27 +1108,27 @@ describe('posthog core', () => {
 
         describe('/decide', () => {
             it('is called by default', async () => {
-                const instance = await createPosthogInstance(uuidv7())
-                instance.featureFlags.setReloadingPaused = jest.fn()
-                instance._send_request = jest.fn()
-                instance._loaded()
+                const sendRequestMock = jest.fn()
+                await createPosthogInstance(uuidv7(), {
+                    loaded: (ph) => {
+                        ph._send_request = sendRequestMock
+                    },
+                })
 
-                expect(instance._send_request.mock.calls[0][0]).toMatchObject({
+                expect(sendRequestMock.mock.calls[0][0]).toMatchObject({
                     url: 'http://localhost/decide/?v=3',
                 })
-                expect(instance.featureFlags.setReloadingPaused).toHaveBeenCalledWith(true)
             })
 
             it('does not call decide if disabled', async () => {
+                const sendRequestMock = jest.fn()
                 const instance = await createPosthogInstance(uuidv7(), {
                     advanced_disable_decide: true,
+                    loaded: (ph) => {
+                        ph._send_request = sendRequestMock
+                    },
                 })
-                instance.featureFlags.setReloadingPaused = jest.fn()
-                instance._send_request = jest.fn()
-                instance._loaded()
-
                 expect(instance._send_request).not.toHaveBeenCalled()
-                expect(instance.featureFlags.setReloadingPaused).not.toHaveBeenCalled()
             })
         })
     })

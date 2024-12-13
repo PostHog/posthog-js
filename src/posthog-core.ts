@@ -21,7 +21,7 @@ import {
     ENABLE_PERSON_PROCESSING,
 } from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
-import { Decide } from './decide'
+import { RemoteConfigLoader } from './remote-config'
 import { Toolbar } from './extensions/toolbar'
 import { localStore } from './storage'
 import { RequestQueue } from './request-queue'
@@ -275,8 +275,6 @@ export class PostHog {
     _triggered_notifs: any
     compression?: Compression
     __request_queue: QueuedRequestOptions[]
-    decideEndpointWasHit: boolean
-    receivedFlagValues: boolean
     analyticsDefaultEndpoint: string
     version = Config.LIB_VERSION
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
@@ -285,6 +283,11 @@ export class PostHog {
     sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
 
     private _internalEventEmitter = new SimpleEventEmitter()
+
+    // Legacy property to support existing usage - this isn't technically correct but it's what it has always been - a proxy for flags being loaded
+    public get decideEndpointWasHit(): boolean {
+        return this.featureFlags.hasLoadedFlags
+    }
 
     /** DEPRECATED: We keep this to support existing usage but now one should just call .setPersonProperties */
     people: {
@@ -295,8 +298,6 @@ export class PostHog {
     constructor() {
         this.config = defaultConfig()
 
-        this.decideEndpointWasHit = false
-        this.receivedFlagValues = false
         this.SentryIntegration = SentryIntegration
         this.sentryIntegration = (options?: SentryIntegrationOptions) => sentryIntegration(this, options)
         this.__request_queue = []
@@ -547,6 +548,14 @@ export class PostHog {
     }
 
     _onRemoteConfig(config: RemoteConfig) {
+        if (!(document && document.body)) {
+            logger.info('document not ready yet, trying again in 500 milliseconds...')
+            setTimeout(() => {
+                this._onRemoteConfig(config)
+            }, 500)
+            return
+        }
+
         this.compression = undefined
         if (config.supportedCompression && !this.config.disable_compression) {
             this.compression = includes(config['supportedCompression'], Compression.GZipJS)
@@ -579,13 +588,6 @@ export class PostHog {
     }
 
     _loaded(): void {
-        // Pause `reloadFeatureFlags` calls in config.loaded callback.
-        // These feature flags are loaded in the decide call made right after
-        const disableDecide = this.config.advanced_disable_decide
-        if (!disableDecide) {
-            this.featureFlags.setReloadingPaused(true)
-        }
-
         try {
             this.config.loaded(this)
         } catch (err) {
@@ -605,7 +607,8 @@ export class PostHog {
             }, 1)
         }
 
-        new Decide(this).call()
+        new RemoteConfigLoader(this).load()
+        this.featureFlags.decide()
     }
 
     _start_queue_if_opted_in(): void {

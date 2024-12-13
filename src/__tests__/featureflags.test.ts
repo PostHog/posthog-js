@@ -22,7 +22,7 @@ describe('featureflags', () => {
 
     beforeEach(() => {
         instance = {
-            config,
+            config: { ...config },
             get_distinct_id: () => 'blah id',
             getGroups: () => {},
             persistence: new PostHogPersistence(config),
@@ -32,13 +32,13 @@ describe('featureflags', () => {
             get_property: (key) => instance.persistence.props[key],
             capture: () => {},
             decideEndpointWasHit: false,
-            receivedFlagValues: false,
             _send_request: jest.fn().mockImplementation(({ callback }) =>
                 callback({
                     statusCode: 200,
                     json: {},
                 })
             ),
+            _onRemoteConfig: jest.fn(),
             reloadFeatureFlags: () => featureFlags.reloadFeatureFlags(),
         }
 
@@ -68,7 +68,7 @@ describe('featureflags', () => {
     })
 
     it('should return flags from persistence even if decide endpoint was not hit', () => {
-        featureFlags.instance.receivedFlagValues = false
+        featureFlags._hasLoadedFlags = false
 
         expect(featureFlags.getFlags()).toEqual([
             'beta-feature',
@@ -81,7 +81,7 @@ describe('featureflags', () => {
 
     it('should warn if decide endpoint was not hit and no flags exist', () => {
         ;(window as any).POSTHOG_DEBUG = true
-        featureFlags.instance.receivedFlagValues = false
+        featureFlags._hasLoadedFlags = false
         instance.persistence.unregister('$enabled_feature_flags')
         instance.persistence.unregister('$active_feature_flags')
 
@@ -102,7 +102,7 @@ describe('featureflags', () => {
     })
 
     it('should return the right feature flag and call capture', () => {
-        featureFlags.instance.receivedFlagValues = false
+        featureFlags._hasLoadedFlags = false
 
         expect(featureFlags.getFlags()).toEqual([
             'beta-feature',
@@ -133,7 +133,7 @@ describe('featureflags', () => {
     })
 
     it('should call capture for every different flag response', () => {
-        featureFlags.instance.receivedFlagValues = true
+        featureFlags._hasLoadedFlags = true
 
         instance.persistence.register({
             $enabled_feature_flags: {
@@ -157,13 +157,13 @@ describe('featureflags', () => {
         instance.persistence.register({
             $enabled_feature_flags: {},
         })
-        featureFlags.instance.receivedFlagValues = false
+        featureFlags._hasLoadedFlags = false
         expect(featureFlags.getFlagVariants()).toEqual({})
         expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(undefined)
         // no extra capture call because flags haven't loaded yet.
         expect(instance.capture).toHaveBeenCalledTimes(1)
 
-        featureFlags.instance.receivedFlagValues = true
+        featureFlags._hasLoadedFlags = true
         instance.persistence.register({
             $enabled_feature_flags: { x: 'y' },
         })
@@ -186,7 +186,7 @@ describe('featureflags', () => {
     })
 
     it('should return the right feature flag and not call capture', () => {
-        featureFlags.instance.receivedFlagValues = true
+        featureFlags._hasLoadedFlags = true
 
         expect(featureFlags.isFeatureEnabled('beta-feature', { send_event: false })).toEqual(true)
         expect(instance.capture).not.toHaveBeenCalled()
@@ -272,6 +272,73 @@ describe('featureflags', () => {
         })
     })
 
+    describe('decide()', () => {
+        it('should not call decide if advanced_disable_decide is true', () => {
+            instance.config.advanced_disable_decide = true
+            featureFlags.decide()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(0)
+        })
+
+        it('should call decide', () => {
+            featureFlags.decide()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
+
+            jest.runOnlyPendingTimers()
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+        })
+
+        it('should call decide with flags disabled if set', () => {
+            instance.config.advanced_disable_feature_flags_on_first_load = true
+            featureFlags.decide()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(true)
+        })
+
+        it('should call decide with flags disabled if set generally', () => {
+            instance.config.advanced_disable_feature_flags = true
+            featureFlags.decide()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(true)
+        })
+
+        it('should call decide once even if reload called before', () => {
+            featureFlags.reloadFeatureFlags()
+            featureFlags.decide()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
+
+            jest.runOnlyPendingTimers()
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+        })
+
+        it('should not disable flags if reload was called on decide', () => {
+            instance.config.advanced_disable_feature_flags_on_first_load = true
+            featureFlags.reloadFeatureFlags()
+            featureFlags.decide()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
+
+            jest.runOnlyPendingTimers()
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+        })
+
+        it('should always disable flags if set', () => {
+            instance.config.advanced_disable_feature_flags = true
+            featureFlags.reloadFeatureFlags()
+            featureFlags.decide()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(true)
+        })
+    })
+
     describe('onFeatureFlags', () => {
         beforeEach(() => {
             instance._send_request = jest.fn().mockImplementation(({ callback }) =>
@@ -316,7 +383,7 @@ describe('featureflags', () => {
         })
 
         it('onFeatureFlags callback should be called immediately if feature flags were loaded', () => {
-            featureFlags.instance.receivedFlagValues = true
+            featureFlags._hasLoadedFlags = true
             let called = false
             featureFlags.onFeatureFlags(() => (called = true))
             expect(called).toEqual(true)
@@ -325,7 +392,7 @@ describe('featureflags', () => {
         })
 
         it('onFeatureFlags should not return flags that are off', () => {
-            featureFlags.instance.receivedFlagValues = true
+            featureFlags._hasLoadedFlags = true
             let _flags = []
             let _variants = {}
             featureFlags.onFeatureFlags((flags, variants) => {

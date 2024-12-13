@@ -13,6 +13,7 @@ export const createPosthogInstance = async (
     // written, we first create an instance, then call init on it which then
     // creates another instance.
     const posthog = new PostHog()
+
     // eslint-disable-next-line compat/compat
     return await new Promise<PostHog>((resolve) =>
         posthog.init(

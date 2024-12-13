@@ -33,7 +33,9 @@ export default function App({ Component, pageProps }: AppProps) {
         }
     }, [])
 
-    const localhostDomain = process.env.NEXT_PUBLIC_CROSSDOMAIN ? 'https://localhost:8000' : 'http://localhost:8000'
+    const localhostDomain = process.env.NEXT_PUBLIC_CROSSDOMAIN
+        ? 'https://localhost:8000'
+        : process.env.NEXT_PUBLIC_POSTHOG_HOST
 
     return (
         <PostHogProvider client={posthog}>

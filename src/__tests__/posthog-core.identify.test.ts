@@ -3,8 +3,6 @@ import { uuidv7 } from '../uuidv7'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { PostHog } from '../posthog-core'
 
-jest.mock('../decide')
-
 describe('identify()', () => {
     let instance: PostHog
     let beforeSendMock: jest.Mock
@@ -19,6 +17,7 @@ describe('identify()', () => {
             },
             uuidv7()
         )
+
         instance = Object.assign(posthog, {
             register: jest.fn(),
             featureFlags: {
