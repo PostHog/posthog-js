@@ -949,7 +949,7 @@ export class PostHog {
 
         const infoProperties = Info.properties()
 
-        if (this.sessionManager && !this.config.__preview_experimental_cookieless_mode) {
+        if (this.sessionManager) {
             const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
             properties['$session_id'] = sessionId
             properties['$window_id'] = windowId
