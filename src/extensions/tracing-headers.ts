@@ -37,7 +37,6 @@ export class TracingHeaders {
     }
 
     private _startCapturing = () => {
-        // NB: we can assert sessionManager is present only because we've checked previously
         if (isUndefined(this._restoreXHRPatch)) {
             assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchXHR(this.instance.sessionManager)
         }
