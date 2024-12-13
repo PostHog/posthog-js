@@ -186,6 +186,23 @@ describe('request', () => {
             })
         })
 
+        it('supports nextOptions parameter', async () => {
+            request(
+                createRequest({
+                    fetchOptions: { cache: 'force-cache', next: { revalidate: 0, tags: ['test'] } },
+                })
+            )
+            await flushPromises()
+
+            expect(mockedFetch).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({
+                    cache: 'force-cache',
+                    next: { revalidate: 0, tags: ['test'] },
+                })
+            )
+        })
+
         describe('keepalive with fetch and large bodies can cause some browsers to reject network calls', () => {
             it.each([
                 ['always keepalive with small json POST', 'POST', 'small', undefined, true, ''],

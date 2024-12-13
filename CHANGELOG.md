@@ -1,3 +1,23 @@
+## 1.199.0 - 2024-12-12
+
+- chore(flags): Add new debugging property `$used_bootstrap_value`, `$feature_flag_bootstrapped_response` and `$feature_flag_bootstrapped_payload` to `$feature_flag_called` event (#1567)
+
+## 1.198.0 - 2024-12-12
+
+- feat: Allow users to customize `fetch` behavior (#1599)
+
+## 1.197.0 - 2024-12-12
+
+- feat: send snapshot library (#1587)
+
+## 1.196.1 - 2024-12-12
+
+- feat: Don't create person profile when setting properties for flags (#1586)
+
+## 1.196.0 - 2024-12-12
+
+- feat: include attribution with all web vitals (#1594)
+
 ## 1.195.0 - 2024-12-10
 
 - Reduce type (#1590)

@@ -295,7 +295,16 @@ export class PostHogFeatureFlags {
                 }
                 this.instance.persistence?.register({ [FLAG_CALL_REPORTED]: flagCallReported })
 
-                this.instance.capture('$feature_flag_called', { $feature_flag: key, $feature_flag_response: flagValue })
+                this.instance.capture('$feature_flag_called', {
+                    $feature_flag: key,
+                    $feature_flag_response: flagValue,
+                    $feature_flag_payload: this.getFeatureFlagPayload(key) || null,
+                    $feature_flag_bootstrapped_response: this.instance.config.bootstrap?.featureFlags?.[key] || null,
+                    $feature_flag_bootstrapped_payload:
+                        this.instance.config.bootstrap?.featureFlagPayloads?.[key] || null,
+                    // If we haven't yet received a response from the /decide endpoint, we must have used the bootstrapped value
+                    $used_bootstrap_value: !this.instance.decideEndpointWasHit,
+                })
             }
         }
         return flagValue

@@ -165,6 +165,7 @@ const _fetch = (options: RequestOptions) => {
         keepalive: options.method === 'POST' && (estimatedSize || 0) < KEEP_ALIVE_THRESHOLD,
         body,
         signal: aborter?.signal,
+        ...options.fetchOptions,
     })
         .then((response) => {
             return response.text().then((responseText) => {
