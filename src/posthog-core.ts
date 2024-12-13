@@ -20,6 +20,7 @@ import {
     USER_STATE,
     ENABLE_PERSON_PROCESSING,
     COOKIELESS_SENTINEL_VALUE,
+    COOKIELESS_MODE_FLAG_PROPERTY,
 } from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { Decide } from './decide'
@@ -430,16 +431,20 @@ export class PostHog {
         this._retryQueue = new RetryQueue(this)
         this.__request_queue = []
 
-        this.sessionManager = new SessionIdManager(this)
-        this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
+        if (!this.config.__preview_experimental_cookieless_mode) {
+            this.sessionManager = new SessionIdManager(this)
+            this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
+        }
 
         new TracingHeaders(this).startIfEnabledOrStop()
 
         this.siteApps = new SiteApps(this)
         this.siteApps?.init()
 
-        this.sessionRecording = new SessionRecording(this)
-        this.sessionRecording.startIfEnabledOrStop()
+        if (!this.config.__preview_experimental_cookieless_mode) {
+            this.sessionRecording = new SessionRecording(this)
+            this.sessionRecording.startIfEnabledOrStop()
+        }
 
         if (!this.config.disable_scroll_properties) {
             this.scrollManager.startMeasuringScrollPosition()
@@ -926,9 +931,7 @@ export class PostHog {
 
         if (this.config.__preview_experimental_cookieless_mode) {
             // Set a flag to tell the plugin server to use cookieless server hash mode
-            // on naming: $cklsh = cookieless server hash
-            // I didn't call it $cookieless, as it's possible to use cookies in this mode (after consent is given)
-            properties['$cklsh'] = true
+            properties[COOKIELESS_MODE_FLAG_PROPERTY] = true
         }
 
         if (event_name === '$snapshot') {
@@ -946,7 +949,7 @@ export class PostHog {
 
         const infoProperties = Info.properties()
 
-        if (this.sessionManager) {
+        if (this.sessionManager && !this.config.__preview_experimental_cookieless_mode) {
             const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
             properties['$session_id'] = sessionId
             properties['$window_id'] = windowId

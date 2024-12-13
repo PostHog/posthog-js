@@ -97,8 +97,8 @@ type SessionRecordingStatus = 'disabled' | 'sampled' | 'active' | 'buffering' | 
 export interface SnapshotBuffer {
     size: number
     data: any[]
-    sessionId: string | null
-    windowId: string | null
+    sessionId: string
+    windowId: string
 }
 
 interface QueuedRRWebEvent {
@@ -252,8 +252,8 @@ export class SessionRecording {
 
     private _linkedFlagSeen: boolean = false
     private _lastActivityTimestamp: number = Date.now()
-    private windowId: string | null
-    private sessionId: string | null
+    private windowId: string
+    private sessionId: string
     private _linkedFlag: string | FlagVariant | null = null
 
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
@@ -451,6 +451,9 @@ export class SessionRecording {
         if (!this.instance.sessionManager) {
             logger.error('started without valid sessionManager')
             throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
+        }
+        if (this.instance.config.__preview_experimental_cookieless_mode) {
+            throw new Error(LOGGER_PREFIX + ' cannot be used with __preview_experimental_cookieless_mode.')
         }
 
         // we know there's a sessionManager, so don't need to start without a session id
