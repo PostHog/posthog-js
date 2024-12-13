@@ -200,7 +200,7 @@ export class PostHogFeatureFlags {
 
     /**
      * NOTE: This is used both for flags and remote config. Once the RemoteConfig is fully released this will essentially only
-     * be for flags and can eventually be replaced wiht the new flags endpoint
+     * be for flags and can eventually be replaced with the new flags endpoint
      */
     _callDecideEndpoint(options?: { disableFlags?: boolean }): void {
         // Ensure we don't have double queued decide requests
