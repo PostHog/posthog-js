@@ -1,3 +1,7 @@
+## 1.200.0 - 2024-12-13
+
+- fix: Refactor decide loading (#1596)
+
 ## 1.199.0 - 2024-12-12
 
 - chore(flags): Add new debugging property `$used_bootstrap_value`, `$feature_flag_bootstrapped_response` and `$feature_flag_bootstrapped_payload` to `$feature_flag_called` event (#1567)
