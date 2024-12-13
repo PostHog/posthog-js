@@ -91,6 +91,7 @@ export class PostHogFeatureFlags {
     private _additionalReloadRequested: boolean = false
     private _reloadDebouncer?: any
     private _decideCalled: boolean = false
+    private _flagsLoadedFromRemote: boolean = false
 
     constructor(private instance: PostHog) {
         this.featureFlagEventHandlers = []
@@ -257,6 +258,7 @@ export class PostHogFeatureFlags {
                     return
                 }
 
+                this._flagsLoadedFromRemote = !errorsLoading
                 this.receivedFeatureFlags(response.json ?? {}, errorsLoading)
 
                 if (this._additionalReloadRequested) {
@@ -303,7 +305,7 @@ export class PostHogFeatureFlags {
                     $feature_flag_bootstrapped_payload:
                         this.instance.config.bootstrap?.featureFlagPayloads?.[key] || null,
                     // If we haven't yet received a response from the /decide endpoint, we must have used the bootstrapped value
-                    $used_bootstrap_value: !this.instance.decideEndpointWasHit,
+                    $used_bootstrap_value: !this._flagsLoadedFromRemote,
                 })
             }
         }
