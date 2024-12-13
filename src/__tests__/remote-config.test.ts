@@ -9,8 +9,6 @@ describe('RemoteConfigLoader', () => {
     let posthog: PostHog
 
     beforeEach(() => {
-        // clean the JSDOM to prevent interdependencies between tests
-
         const defaultConfig: Partial<PostHogConfig> = {
             token: 'testtoken',
             api_host: 'https://test.com',
