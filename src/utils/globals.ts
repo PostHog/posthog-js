@@ -79,8 +79,8 @@ interface PostHogExtensions {
         onINP: (metric: any) => void
     }
     tracingHeadersPatchFns?: {
-        _patchFetch: (sessionManager: SessionIdManager) => () => void
-        _patchXHR: (sessionManager: any) => () => void
+        _patchFetch: (sessionManager?: SessionIdManager) => () => void
+        _patchXHR: (sessionManager?: SessionIdManager) => () => void
     }
     initDeadClicksAutocapture?: (
         ph: PostHog,

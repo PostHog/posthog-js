@@ -2,17 +2,15 @@ import { SessionIdManager } from '../sessionid'
 import { patch } from '../extensions/replay/rrweb-plugins/patch'
 import { assignableWindow, window } from '../utils/globals'
 
-const addTracingHeaders = (sessionManager: SessionIdManager, req: Request) => {
-    const { sessionId, windowId } = sessionManager.checkAndGetSessionAndWindowId(true)
-    if (sessionId) {
+const addTracingHeaders = (sessionManager: SessionIdManager | undefined, req: Request) => {
+    if (sessionManager) {
+        const { sessionId, windowId } = sessionManager.checkAndGetSessionAndWindowId(true)
         req.headers.set('X-POSTHOG-SESSION-ID', sessionId)
-    }
-    if (windowId) {
         req.headers.set('X-POSTHOG-WINDOW-ID', windowId)
     }
 }
 
-const patchFetch = (sessionManager: SessionIdManager): (() => void) => {
+const patchFetch = (sessionManager?: SessionIdManager): (() => void) => {
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     return patch(window, 'fetch', (originalFetch: typeof fetch) => {
@@ -28,7 +26,7 @@ const patchFetch = (sessionManager: SessionIdManager): (() => void) => {
     })
 }
 
-const patchXHR = (sessionManager: SessionIdManager): (() => void) => {
+const patchXHR = (sessionManager?: SessionIdManager): (() => void) => {
     return patch(
         // we can assert this is present because we've checked previously
         window!.XMLHttpRequest.prototype,
