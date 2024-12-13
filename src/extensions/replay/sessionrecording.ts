@@ -315,9 +315,6 @@ export class SessionRecording {
     private get sessionDuration(): number | null {
         const mostRecentSnapshot = this.buffer?.data[this.buffer?.data.length - 1]
         const { sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
-        if (sessionStartTimestamp == null) {
-            return null
-        }
         return mostRecentSnapshot ? mostRecentSnapshot.timestamp - sessionStartTimestamp : null
     }
 
