@@ -245,6 +245,7 @@ describe('Session recording', () => {
                     const expectedCaptureds: [RegExp, string][] = [
                         [/http:\/\/localhost:\d+\/playground\/cypress\//, 'navigation'],
                         [/http:\/\/localhost:\d+\/static\/array.js/, 'script'],
+                        [/http:\/\/localhost:\d+\/array\/\.+\/config.js/, 'script'],
                         [
                             /http:\/\/localhost:\d+\/decide\/\?v=3&ip=1&_=\d+&ver=1\.\d\d\d\.\d+&compression=base64/,
                             'xmlhttprequest',

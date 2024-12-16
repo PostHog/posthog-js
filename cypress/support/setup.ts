@@ -5,7 +5,7 @@ import { EventEmitter } from 'events'
 export const interceptRemoteConfig = (remoteConfigOverrides: Partial<RemoteConfig>) => {
     cy.intercept('GET', '/array/*/config*', remoteConfigOverrides).as('remote-config')
     // We force the config.js to be a 404 as we don't want to test it
-    cy.intercept('GET', '/array/*/config.js', { statusCode: 404 })
+    cy.intercept('GET', '/array/*/config.js', { statusCode: 404 }).as('remote-config-js')
 }
 
 export const interceptFeatureFlags = (featureFlagsOverrides: Partial<DecideResponse>) => {
@@ -68,6 +68,7 @@ export const start = ({
     }
 
     if (waitForRemoteConfig) {
+        cy.wait('@remote-config-js') // JS fires before the normal config
         cy.wait('@remote-config')
     }
 
