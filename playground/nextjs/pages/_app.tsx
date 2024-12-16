@@ -44,7 +44,7 @@ export default function App({ Component, pageProps }: AppProps) {
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
                 {/* CSP - useful for testing our documented recommendations. NOTE: Unsafe is only needed for nextjs pre-loading */}
                 <meta
-                    http-equiv="Content-Security-Policy"
+                    httpEquiv="Content-Security-Policy"
                     content={`
                     default-src 'self';
                     connect-src 'self' ${localhostDomain} https://*.posthog.com https://lottie.host;
