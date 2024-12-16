@@ -183,7 +183,7 @@ export const detectBrowserVersion = function (userAgent: string, vendor: string 
 // the first regex that matches uses its matcher function to return the result
 const osMatchers: [
     RegExp,
-    [string, string] | ((match: RegExpMatchArray | null, user_agent: string) => [string, string])
+    [string, string] | ((match: RegExpMatchArray | null, user_agent: string) => [string, string]),
 ][] = [
     [
         new RegExp(XBOX + '; ' + XBOX + ' (.*?)[);]', 'i'),

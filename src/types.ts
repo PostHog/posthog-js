@@ -758,7 +758,7 @@ export type ErrorEventArgs = [
     source?: string | undefined,
     lineno?: number | undefined,
     colno?: number | undefined,
-    error?: Error | undefined
+    error?: Error | undefined,
 ]
 
 export type ErrorMetadata = {
