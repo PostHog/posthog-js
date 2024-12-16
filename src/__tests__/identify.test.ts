@@ -1,7 +1,7 @@
+import { mockLogger } from './helpers/mock-logger'
+
 import { createPosthogInstance } from './helpers/posthog-instance'
-import { logger } from '../utils/logger'
 import { uuidv7 } from '../uuidv7'
-jest.mock('../utils/logger')
 
 describe('identify', () => {
     // Note that there are other tests for identify in posthog-core.identify.js
@@ -19,8 +19,8 @@ describe('identify', () => {
 
         // assert
         expect(posthog.persistence!.properties()['$user_id']).toEqual(distinctId)
-        expect(jest.mocked(logger).error).toBeCalledTimes(0)
-        expect(jest.mocked(logger).warn).toBeCalledTimes(0)
+        expect(mockLogger.error).toBeCalledTimes(0)
+        expect(mockLogger.warn).toBeCalledTimes(0)
     })
 
     it('should convert a numeric distinct_id to a string', async () => {
@@ -35,8 +35,8 @@ describe('identify', () => {
 
         // assert
         expect(posthog.persistence!.properties()['$user_id']).toEqual(distinctIdString)
-        expect(jest.mocked(logger).error).toBeCalledTimes(0)
-        expect(jest.mocked(logger).warn).toBeCalledTimes(1)
+        expect(mockLogger.error).toBeCalledTimes(0)
+        expect(mockLogger.warn).toBeCalledTimes(1)
     })
 
     it('should send $is_identified = true with the identify event and following events', async () => {

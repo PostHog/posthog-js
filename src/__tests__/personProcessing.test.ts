@@ -1,10 +1,9 @@
+import { mockLogger } from './helpers/mock-logger'
+
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
-import { logger } from '../utils/logger'
 import { INITIAL_CAMPAIGN_PARAMS, INITIAL_REFERRER_INFO } from '../constants'
-import { DecideResponse } from '../types'
-
-jest.mock('../utils/logger')
+import { RemoteConfig } from '../types'
 
 const INITIAL_CAMPAIGN_PARAMS_NULL = {
     $initial_current_url: null,
@@ -45,6 +44,7 @@ jest.mock('../utils/globals', () => {
         document: {
             ...orig.document,
             createElement: (...args: any[]) => orig.document.createElement(...args),
+            body: {},
             get referrer() {
                 return mockReferrerGetter()
             },
@@ -156,8 +156,8 @@ describe('person processing', () => {
             posthog.identify(distinctId)
 
             // assert
-            expect(jest.mocked(logger).error).toBeCalledTimes(1)
-            expect(jest.mocked(logger).error).toHaveBeenCalledWith(
+            expect(mockLogger.error).toBeCalledTimes(1)
+            expect(mockLogger.error).toHaveBeenCalledWith(
                 'posthog.identify was called, but process_person is set to "never". This call will be ignored.'
             )
             expect(beforeSendMock).toBeCalledTimes(0)
@@ -172,7 +172,7 @@ describe('person processing', () => {
             posthog.identify(distinctId)
             posthog.capture('custom event after identify')
             // assert
-            expect(jest.mocked(logger).error).toBeCalledTimes(0)
+            expect(mockLogger.error).toBeCalledTimes(0)
             const eventBeforeIdentify = beforeSendMock.mock.calls[0]
             expect(eventBeforeIdentify[0].properties.$process_person_profile).toEqual(false)
             const identifyCall = beforeSendMock.mock.calls[1]
@@ -191,7 +191,7 @@ describe('person processing', () => {
             posthog.identify(distinctId)
             posthog.capture('custom event after identify')
             // assert
-            expect(jest.mocked(logger).error).toBeCalledTimes(0)
+            expect(mockLogger.error).toBeCalledTimes(0)
             const eventBeforeIdentify = beforeSendMock.mock.calls[0]
             expect(eventBeforeIdentify[0].properties.$process_person_profile).toEqual(true)
             const identifyCall = beforeSendMock.mock.calls[1]
@@ -503,8 +503,8 @@ describe('person processing', () => {
             posthog.capture('custom event after group')
 
             // assert
-            expect(jest.mocked(logger).error).toBeCalledTimes(1)
-            expect(jest.mocked(logger).error).toHaveBeenCalledWith(
+            expect(mockLogger.error).toBeCalledTimes(1)
+            expect(mockLogger.error).toHaveBeenCalledWith(
                 'posthog.group was called, but process_person is set to "never". This call will be ignored.'
             )
 
@@ -526,8 +526,8 @@ describe('person processing', () => {
 
             // assert
             expect(beforeSendMock).toBeCalledTimes(0)
-            expect(jest.mocked(logger).error).toBeCalledTimes(1)
-            expect(jest.mocked(logger).error).toHaveBeenCalledWith(
+            expect(mockLogger.error).toBeCalledTimes(1)
+            expect(mockLogger.error).toHaveBeenCalledWith(
                 'posthog.setPersonProperties was called, but process_person is set to "never". This call will be ignored.'
             )
         })
@@ -593,8 +593,8 @@ describe('person processing', () => {
 
             // assert
             expect(beforeSendMock).toBeCalledTimes(0)
-            expect(jest.mocked(logger).error).toBeCalledTimes(1)
-            expect(jest.mocked(logger).error).toHaveBeenCalledWith(
+            expect(mockLogger.error).toBeCalledTimes(1)
+            expect(mockLogger.error).toHaveBeenCalledWith(
                 'posthog.alias was called, but process_person is set to "never". This call will be ignored.'
             )
         })
@@ -644,7 +644,7 @@ describe('person processing', () => {
 
             // assert
             expect(beforeSendMock).toBeCalledTimes(0)
-            expect(jest.mocked(logger).error).toBeCalledTimes(0)
+            expect(mockLogger.error).toBeCalledTimes(0)
         })
     })
 
@@ -725,7 +725,7 @@ describe('person processing', () => {
             posthog.capture('startup page view')
 
             // act
-            posthog._afterDecideResponse({ defaultIdentifiedOnly: false } as DecideResponse)
+            posthog._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
             posthog.capture('custom event')
 
             // assert
@@ -740,7 +740,7 @@ describe('person processing', () => {
             posthog.capture('startup page view')
 
             // act
-            posthog._afterDecideResponse({ defaultIdentifiedOnly: false } as DecideResponse)
+            posthog._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
             posthog.capture('custom event')
 
             // assert
@@ -759,7 +759,7 @@ describe('person processing', () => {
             )
 
             // act
-            posthog1._afterDecideResponse({ defaultIdentifiedOnly: false } as DecideResponse)
+            posthog1._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
             posthog1.capture('custom event 1')
             const { posthog: posthog2, beforeSendMock: beforeSendMock2 } = await setup(
                 undefined,

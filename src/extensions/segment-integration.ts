@@ -17,11 +17,13 @@
  *  ```
  */
 import { PostHog } from '../posthog-core'
-import { logger } from '../utils/logger'
+import { createLogger } from '../utils/logger'
 
 import { uuidv7 } from '../uuidv7'
 import { isFunction } from '../utils/type-utils'
 import { USER_STATE } from '../constants'
+
+const logger = createLogger('[SegmentIntegration]')
 
 export type SegmentUser = {
     anonymousId(): string | undefined
@@ -72,11 +74,11 @@ const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
         }
         if (!ctx.event.userId && ctx.event.anonymousId !== posthog.get_distinct_id()) {
             // This is our only way of detecting that segment's analytics.reset() has been called so we also call it
-            logger.info('Segment integration does not have a userId set, resetting PostHog')
+            logger.info('No userId set, resetting PostHog')
             posthog.reset()
         }
         if (ctx.event.userId && ctx.event.userId !== posthog.get_distinct_id()) {
-            logger.info('Segment integration has a userId set, identifying with PostHog')
+            logger.info('UserId set, identifying with PostHog')
             posthog.identify(ctx.event.userId)
         }
 

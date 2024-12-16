@@ -130,11 +130,16 @@ export const Info = {
      */
     browserVersion: detectBrowserVersion,
 
-    browserLanguage: function (): string {
+    browserLanguage: function (): string | undefined {
         return (
             navigator.language || // Any modern browser
             (navigator as Record<string, any>).userLanguage // IE11
         )
+    },
+
+    browserLanguagePrefix: function (): string | undefined {
+        const browserLanguage = this.browserLanguage()
+        return typeof browserLanguage === 'string' ? browserLanguage.split('-')[0] : undefined
     },
 
     os: detectOS,
@@ -209,6 +214,14 @@ export const Info = {
         }
     },
 
+    timezoneOffset: function (): number | undefined {
+        try {
+            return new Date().getTimezoneOffset()
+        } catch {
+            return undefined
+        }
+    },
+
     properties: function (): Properties {
         if (!userAgent) {
             return {}
@@ -222,6 +235,7 @@ export const Info = {
                 $device: Info.device(userAgent),
                 $device_type: Info.deviceType(userAgent),
                 $timezone: Info.timezone(),
+                $timezone_offset: Info.timezoneOffset(),
             }),
             {
                 $current_url: location?.href,
@@ -230,6 +244,7 @@ export const Info = {
                 $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,
                 $browser_version: Info.browserVersion(userAgent, navigator.vendor),
                 $browser_language: Info.browserLanguage(),
+                $browser_language_prefix: Info.browserLanguagePrefix(),
                 $screen_height: window?.screen.height,
                 $screen_width: window?.screen.width,
                 $viewport_height: window?.innerHeight,

@@ -229,11 +229,11 @@ describe(`event-utils`, () => {
                 expectedBrowser: 'Android Mobile',
             },
             {
-                name: 'Android Browser on Galaxy S3',
+                name: 'Chrome Browser on Galaxy S3',
                 userAgent:
                     'Mozilla/5.0 (Linux; Android 4.4.4; en-us; SAMSUNG GT-I9300I Build/KTU84P) AppleWebKit/537.36 (KHTML, like Gecko) Version/1.5 Chrome/28.0.1500.94 Mobile Safari/537.36',
-                expectedVersion: 4.4,
-                expectedBrowser: 'Android Mobile',
+                expectedVersion: 28.0,
+                expectedBrowser: 'Chrome',
             },
         ]
 
@@ -342,6 +342,37 @@ describe(`event-utils`, () => {
                 expect(os_name).toBe(osInfo.os_name)
                 expect(os_version).toBe(osInfo.os_version)
             }
+        })
+    })
+
+    describe('timezones', () => {
+        it('should compute timezone', () => {
+            const timezone = Info.timezone()
+            expect(typeof timezone).toBe('string')
+        })
+
+        it('should compute timezone offset as a number', () => {
+            const offset = Info.timezoneOffset()
+            expect(typeof offset).toBe('number')
+        })
+    })
+
+    describe('browser language', () => {
+        let languageGetter: jest.SpyInstance
+
+        beforeEach(() => {
+            languageGetter = jest.spyOn(window.navigator, 'language', 'get')
+            languageGetter.mockReturnValue('pt-BR')
+        })
+
+        it('should compute browser language', () => {
+            const language = Info.browserLanguage()
+            expect(language).toBe('pt-BR')
+        })
+
+        it('should compute browser language prefix', () => {
+            const languagePrefix = Info.browserLanguagePrefix()
+            expect(languagePrefix).toBe('pt')
         })
     })
 })

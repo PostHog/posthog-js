@@ -186,6 +186,23 @@ describe('request', () => {
             })
         })
 
+        it('supports nextOptions parameter', async () => {
+            request(
+                createRequest({
+                    fetchOptions: { cache: 'force-cache', next: { revalidate: 0, tags: ['test'] } },
+                })
+            )
+            await flushPromises()
+
+            expect(mockedFetch).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({
+                    cache: 'force-cache',
+                    next: { revalidate: 0, tags: ['test'] },
+                })
+            )
+        })
+
         describe('keepalive with fetch and large bodies can cause some browsers to reject network calls', () => {
             it.each([
                 ['always keepalive with small json POST', 'POST', 'small', undefined, true, ''],
@@ -342,6 +359,21 @@ describe('request', () => {
                 'Content-Type',
                 'application/x-www-form-urlencoded'
             )
+        })
+
+        it('converts bigint properties to string without throwing', () => {
+            request(
+                createRequest({
+                    url: 'https://any.posthog-instance.com/',
+                    method: 'POST',
+                    compression: Compression.Base64,
+                    data: { foo: BigInt('999999999999999999999') },
+                })
+            )
+            expect(mockedXHR.send.mock.calls[0][0]).toMatchInlineSnapshot(
+                `"data=eyJmb28iOiI5OTk5OTk5OTk5OTk5OTk5OTk5OTkifQ%3D%3D"`
+            )
+            expect(mockedXHR.setRequestHeader).toHaveBeenCalledWith('Content-Type', 'application/x-www-form-urlencoded')
         })
     })
 

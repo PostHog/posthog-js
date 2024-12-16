@@ -1,3 +1,80 @@
+## 1.200.1 - 2024-12-13
+
+- fix: Make legacy property sturdier (#1602)
+
+## 1.200.0 - 2024-12-13
+
+- fix: Refactor decide loading (#1596)
+
+## 1.199.0 - 2024-12-12
+
+- chore(flags): Add new debugging property `$used_bootstrap_value`, `$feature_flag_bootstrapped_response` and `$feature_flag_bootstrapped_payload` to `$feature_flag_called` event (#1567)
+
+## 1.198.0 - 2024-12-12
+
+- feat: Allow users to customize `fetch` behavior (#1599)
+
+## 1.197.0 - 2024-12-12
+
+- feat: send snapshot library (#1587)
+
+## 1.196.1 - 2024-12-12
+
+- feat: Don't create person profile when setting properties for flags (#1586)
+
+## 1.196.0 - 2024-12-12
+
+- feat: include attribution with all web vitals (#1594)
+
+## 1.195.0 - 2024-12-10
+
+- Reduce type (#1590)
+
+## 1.194.6 - 2024-12-09
+
+- feat: Load site functions via RemoteConfig (#1580)
+
+## 1.194.5 - 2024-12-06
+
+- feat: Added better sub logging utils (#1581)
+
+## 1.194.4 - 2024-12-05
+
+- feat: RemoteConfig loader (#1577)
+
+## 1.194.3 - 2024-12-03
+
+- fix: parse Chrome instead of Android as browser (#1575)
+
+## 1.194.2 - 2024-12-02
+
+- fix: use previous site-app variables (#1574)
+
+## 1.194.1 - 2024-11-30
+
+- fix: Don't crash on bigints (#1573)
+- feat: Add customization to print events drop them (#1572)
+
+## 1.194.0 - 2024-11-29
+
+- feat: add $recording_status property (#1571)
+
+## 1.193.1 - 2024-11-28
+
+- fix: zone detection (#1570)
+
+## 1.193.0 - 2024-11-28
+
+- feat: allow decide to provide script name for recorder (#1509)
+
+## 1.192.1 - 2024-11-28
+
+
+
+## 1.192.0 - 2024-11-28
+
+- feat: Start tracking timezone offset and language prefix (#1568)
+
 ## 1.191.0 - 2024-11-28
 
 - feat: different default and max idle period (#1558)

@@ -1,4 +1,4 @@
-import { Decide } from '../decide'
+import { mockLogger } from './helpers/mock-logger'
 
 import { Info } from '../utils/event-utils'
 import { document, window } from '../utils/globals'
@@ -6,16 +6,12 @@ import { uuidv7 } from '../uuidv7'
 import * as globals from '../utils/globals'
 import { ENABLE_PERSON_PROCESSING, USER_STATE } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
-import { logger } from '../utils/logger'
-import { DecideResponse, PostHogConfig } from '../types'
+import { PostHogConfig, RemoteConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
 import { SessionRecording } from '../extensions/replay/sessionrecording'
-import { PostHogFeatureFlags } from '../posthog-featureflags'
-
-jest.mock('../decide')
 
 describe('posthog core', () => {
     const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
@@ -123,16 +119,14 @@ describe('posthog core', () => {
 
             const posthog = posthogWith(defaultConfig, defaultOverrides)
             posthog._addCaptureHook(hook)
-            jest.spyOn(logger, 'error').mockImplementation()
 
             expect(() => posthog.capture(undefined)).not.toThrow()
             expect(hook).not.toHaveBeenCalled()
-            expect(logger.error).toHaveBeenCalledWith('No event name provided to posthog.capture')
+            expect(mockLogger.error).toHaveBeenCalledWith('No event name provided to posthog.capture')
         })
 
         it('errors with object event name', () => {
             const hook = jest.fn()
-            jest.spyOn(logger, 'error').mockImplementation()
 
             const posthog = posthogWith(defaultConfig, defaultOverrides)
             posthog._addCaptureHook(hook)
@@ -140,7 +134,7 @@ describe('posthog core', () => {
             // @ts-expect-error - testing invalid input
             expect(() => posthog.capture({ event: 'object as name' })).not.toThrow()
             expect(hook).not.toHaveBeenCalled()
-            expect(logger.error).toHaveBeenCalledWith('No event name provided to posthog.capture')
+            expect(mockLogger.error).toHaveBeenCalledWith('No event name provided to posthog.capture')
         })
 
         it('respects opt_out_useragent_filter (default: false)', () => {
@@ -295,7 +289,7 @@ describe('posthog core', () => {
 
         it('sends payloads to alternative endpoint if given', () => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
-            posthog._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } } as DecideResponse)
+            posthog._onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
 
             posthog.capture('event-name', { foo: 'bar', length: 0 })
 
@@ -320,7 +314,7 @@ describe('posthog core', () => {
 
         it('sends payloads to overriden _url, even if alternative endpoint is set', () => {
             const posthog = posthogWith({ ...defaultConfig, request_batching: false }, defaultOverrides)
-            posthog._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } } as DecideResponse)
+            posthog._onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
 
             posthog.capture('event-name', { foo: 'bar', length: 0 }, { _url: 'https://app.posthog.com/s/' })
 
@@ -336,29 +330,29 @@ describe('posthog core', () => {
         it('enables compression from decide response', () => {
             const posthog = posthogWith({})
 
-            posthog._afterDecideResponse({ supportedCompression: ['gzip-js', 'base64'] } as DecideResponse)
+            posthog._onRemoteConfig({ supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig)
 
             expect(posthog.compression).toEqual('gzip-js')
         })
         it('uses defaultIdentifiedOnly from decide response', () => {
             const posthog = posthogWith({})
 
-            posthog._afterDecideResponse({ defaultIdentifiedOnly: true } as DecideResponse)
+            posthog._onRemoteConfig({ defaultIdentifiedOnly: true } as RemoteConfig)
             expect(posthog.config.person_profiles).toEqual('identified_only')
 
-            posthog._afterDecideResponse({ defaultIdentifiedOnly: false } as DecideResponse)
+            posthog._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
             expect(posthog.config.person_profiles).toEqual('always')
         })
         it('defaultIdentifiedOnly does not override person_profiles if already set', () => {
             const posthog = posthogWith({ person_profiles: 'always' })
-            posthog._afterDecideResponse({ defaultIdentifiedOnly: true } as DecideResponse)
+            posthog._onRemoteConfig({ defaultIdentifiedOnly: true } as RemoteConfig)
             expect(posthog.config.person_profiles).toEqual('always')
         })
 
         it('enables compression from decide response when only one received', () => {
             const posthog = posthogWith({})
 
-            posthog._afterDecideResponse({ supportedCompression: ['base64'] } as DecideResponse)
+            posthog._onRemoteConfig({ supportedCompression: ['base64'] } as RemoteConfig)
 
             expect(posthog.compression).toEqual('base64')
         })
@@ -366,7 +360,7 @@ describe('posthog core', () => {
         it('does not enable compression from decide response if compression is disabled', () => {
             const posthog = posthogWith({ disable_compression: true, persistence: 'memory' })
 
-            posthog._afterDecideResponse({ supportedCompression: ['gzip-js', 'base64'] } as DecideResponse)
+            posthog._onRemoteConfig({ supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig)
 
             expect(posthog.compression).toEqual(undefined)
         })
@@ -374,7 +368,7 @@ describe('posthog core', () => {
         it('defaults to /e if no endpoint is given', () => {
             const posthog = posthogWith({})
 
-            posthog._afterDecideResponse({} as DecideResponse)
+            posthog._onRemoteConfig({} as RemoteConfig)
 
             expect(posthog.analyticsDefaultEndpoint).toEqual('/e/')
         })
@@ -382,7 +376,7 @@ describe('posthog core', () => {
         it('uses the specified analytics endpoint if given', () => {
             const posthog = posthogWith({})
 
-            posthog._afterDecideResponse({ analytics: { endpoint: '/i/v0/e/' } } as DecideResponse)
+            posthog._onRemoteConfig({ analytics: { endpoint: '/i/v0/e/' } } as RemoteConfig)
 
             expect(posthog.analyticsDefaultEndpoint).toEqual('/i/v0/e/')
         })
@@ -437,6 +431,7 @@ describe('posthog core', () => {
                 $session_id: 'sessionId',
                 $is_identified: false,
                 $process_person_profile: false,
+                $recording_status: 'buffering',
             })
         })
 
@@ -459,6 +454,7 @@ describe('posthog core', () => {
                 $lib_custom_api_host: 'https://custom.posthog.com',
                 $is_identified: false,
                 $process_person_profile: false,
+                $recording_status: 'buffering',
             })
         })
 
@@ -748,8 +744,6 @@ describe('posthog core', () => {
         })
 
         it('does nothing when empty', () => {
-            jest.spyOn(logger, 'warn').mockImplementation()
-
             const posthog = posthogWith({
                 bootstrap: {},
                 persistence: 'memory',
@@ -758,7 +752,7 @@ describe('posthog core', () => {
             expect(posthog.get_distinct_id()).not.toBe('abcd')
             expect(posthog.get_distinct_id()).not.toEqual(undefined)
             expect(posthog.getFeatureFlag('multivariant')).toBe(undefined)
-            expect(logger.warn).toHaveBeenCalledWith(
+            expect(mockLogger.warn).toHaveBeenCalledWith(
                 expect.stringContaining('getFeatureFlag for key "multivariant" failed')
             )
             expect(posthog.getFeatureFlag('disabled')).toBe(undefined)
@@ -840,7 +834,7 @@ describe('posthog core', () => {
             expect(posthog.persistence.register).not.toHaveBeenCalled() // FFs are saved this way
 
             // Session recording
-            expect(posthog.sessionRecording.afterDecideResponse).not.toHaveBeenCalled()
+            expect(posthog.sessionRecording.onRemoteConfig).not.toHaveBeenCalled()
         })
 
         describe('device id behavior', () => {
@@ -904,11 +898,9 @@ describe('posthog core', () => {
 
     describe('skipped init()', () => {
         it('capture() does not throw', () => {
-            jest.spyOn(logger, 'error').mockImplementation()
-
             expect(() => defaultPostHog().capture('$pageview')).not.toThrow()
 
-            expect(logger.error).toHaveBeenCalledWith('You must initialize PostHog before calling posthog.capture')
+            expect(mockLogger.uninitializedWarning).toHaveBeenCalledWith('posthog.capture')
         })
     })
 
@@ -1095,18 +1087,7 @@ describe('posthog core', () => {
 
     describe('_loaded()', () => {
         it('calls loaded config option', () => {
-            const posthog = posthogWith(
-                { loaded: jest.fn() },
-                {
-                    capture: jest.fn(),
-                    featureFlags: {
-                        setReloadingPaused: jest.fn(),
-                        resetRequestQueue: jest.fn(),
-                        _startReloadTimer: jest.fn(),
-                    } as unknown as PostHogFeatureFlags,
-                    _start_queue_if_opted_in: jest.fn(),
-                }
-            )
+            const posthog = posthogWith({ loaded: jest.fn() })
 
             posthog._loaded()
 
@@ -1114,58 +1095,40 @@ describe('posthog core', () => {
         })
 
         it('handles loaded config option throwing gracefully', () => {
-            jest.spyOn(logger, 'critical').mockImplementation()
-
-            const posthog = posthogWith(
-                {
-                    loaded: () => {
-                        throw Error()
-                    },
+            const posthog = posthogWith({
+                loaded: () => {
+                    throw Error()
                 },
-                {
-                    capture: jest.fn(),
-                    featureFlags: {
-                        setReloadingPaused: jest.fn(),
-                        resetRequestQueue: jest.fn(),
-                        _startReloadTimer: jest.fn(),
-                    } as unknown as PostHogFeatureFlags,
-                    _start_queue_if_opted_in: jest.fn(),
-                }
-            )
+            })
 
             posthog._loaded()
 
-            expect(logger.critical).toHaveBeenCalledWith('`loaded` function failed', expect.anything())
+            expect(mockLogger.critical).toHaveBeenCalledWith('`loaded` function failed', expect.anything())
         })
 
         describe('/decide', () => {
-            beforeEach(() => {
-                const call = jest.fn()
-                ;(Decide as any).mockImplementation(() => ({ call }))
-            })
-
-            afterEach(() => {
-                ;(Decide as any).mockReset()
-            })
-
             it('is called by default', async () => {
-                const instance = await createPosthogInstance(uuidv7())
-                instance.featureFlags.setReloadingPaused = jest.fn()
-                instance._loaded()
+                const sendRequestMock = jest.fn()
+                await createPosthogInstance(uuidv7(), {
+                    loaded: (ph) => {
+                        ph._send_request = sendRequestMock
+                    },
+                })
 
-                expect(new Decide(instance).call).toHaveBeenCalled()
-                expect(instance.featureFlags.setReloadingPaused).toHaveBeenCalledWith(true)
+                expect(sendRequestMock.mock.calls[0][0]).toMatchObject({
+                    url: 'http://localhost/decide/?v=3',
+                })
             })
 
             it('does not call decide if disabled', async () => {
+                const sendRequestMock = jest.fn()
                 const instance = await createPosthogInstance(uuidv7(), {
                     advanced_disable_decide: true,
+                    loaded: (ph) => {
+                        ph._send_request = sendRequestMock
+                    },
                 })
-                instance.featureFlags.setReloadingPaused = jest.fn()
-                instance._loaded()
-
-                expect(new Decide(instance).call).not.toHaveBeenCalled()
-                expect(instance.featureFlags.setReloadingPaused).not.toHaveBeenCalled()
+                expect(instance._send_request).not.toHaveBeenCalled()
             })
         })
     })

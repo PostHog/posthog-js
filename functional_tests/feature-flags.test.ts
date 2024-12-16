@@ -1,3 +1,5 @@
+import '../src/__tests__/helpers/mock-logger'
+
 import { createPosthogInstance } from '../src/__tests__/helpers/posthog-instance'
 import { waitFor } from '@testing-library/dom'
 import { getRequests, resetRequests } from './mock-server'
@@ -176,7 +178,7 @@ describe('FunctionalTests / Feature Flags', () => {
             expect(getRequests(token)['/decide/']).toEqual([
                 // This is the initial call to the decide endpoint on PostHog init, with all info added from `loaded`.
                 {
-                    // $anon_distinct_id: 'anon-id', // no anonymous ID is sent because this was overridden on load
+                    $anon_distinct_id: 'anon-id',
                     distinct_id: 'test-id',
                     groups: { playlist: 'id:77' },
                     person_properties: {

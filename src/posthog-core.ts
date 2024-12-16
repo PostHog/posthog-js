@@ -21,7 +21,7 @@ import {
     ENABLE_PERSON_PROCESSING,
 } from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
-import { Decide } from './decide'
+import { RemoteConfigLoader } from './remote-config'
 import { Toolbar } from './extensions/toolbar'
 import { localStore } from './storage'
 import { RequestQueue } from './request-queue'
@@ -32,7 +32,6 @@ import {
     CaptureOptions,
     CaptureResult,
     Compression,
-    DecideResponse,
     EarlyAccessFeatureCallback,
     EventName,
     IsFeatureEnabledOptions,
@@ -41,6 +40,7 @@ import {
     Properties,
     Property,
     QueuedRequestOptions,
+    RemoteConfig,
     RequestCallback,
     SessionIdChangedCallback,
     SnippetArrayItem,
@@ -275,7 +275,6 @@ export class PostHog {
     _triggered_notifs: any
     compression?: Compression
     __request_queue: QueuedRequestOptions[]
-    decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
     version = Config.LIB_VERSION
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
@@ -284,6 +283,11 @@ export class PostHog {
     sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
 
     private _internalEventEmitter = new SimpleEventEmitter()
+
+    // Legacy property to support existing usage - this isn't technically correct but it's what it has always been - a proxy for flags being loaded
+    public get decideEndpointWasHit(): boolean {
+        return this.featureFlags?.hasLoadedFlags ?? false
+    }
 
     /** DEPRECATED: We keep this to support existing usage but now one should just call .setPersonProperties */
     people: {
@@ -294,7 +298,6 @@ export class PostHog {
     constructor() {
         this.config = defaultConfig()
 
-        this.decideEndpointWasHit = false
         this.SentryIntegration = SentryIntegration
         this.sentryIntegration = (options?: SentryIntegrationOptions) => sentryIntegration(this, options)
         this.__request_queue = []
@@ -410,7 +413,7 @@ export class PostHog {
         )
 
         if (this.config.on_xhr_error) {
-            logger.error('[posthog] on_xhr_error is deprecated. Use on_request_error instead')
+            logger.error('on_xhr_error is deprecated. Use on_request_error instead')
         }
 
         this.compression = config.disable_compression ? undefined : Compression.GZipJS
@@ -544,48 +547,47 @@ export class PostHog {
         return this
     }
 
-    // Private methods
-    _afterDecideResponse(response: DecideResponse) {
+    _onRemoteConfig(config: RemoteConfig) {
+        if (!(document && document.body)) {
+            logger.info('document not ready yet, trying again in 500 milliseconds...')
+            setTimeout(() => {
+                this._onRemoteConfig(config)
+            }, 500)
+            return
+        }
+
         this.compression = undefined
-        if (response.supportedCompression && !this.config.disable_compression) {
-            this.compression = includes(response['supportedCompression'], Compression.GZipJS)
+        if (config.supportedCompression && !this.config.disable_compression) {
+            this.compression = includes(config['supportedCompression'], Compression.GZipJS)
                 ? Compression.GZipJS
-                : includes(response['supportedCompression'], Compression.Base64)
+                : includes(config['supportedCompression'], Compression.Base64)
                 ? Compression.Base64
                 : undefined
         }
 
-        if (response.analytics?.endpoint) {
-            this.analyticsDefaultEndpoint = response.analytics.endpoint
+        if (config.analytics?.endpoint) {
+            this.analyticsDefaultEndpoint = config.analytics.endpoint
         }
 
         this.set_config({
             person_profiles: this._initialPersonProfilesConfig
                 ? this._initialPersonProfilesConfig
-                : response['defaultIdentifiedOnly']
+                : config['defaultIdentifiedOnly']
                 ? 'identified_only'
                 : 'always',
         })
 
-        this.siteApps?.afterDecideResponse(response)
-        this.sessionRecording?.afterDecideResponse(response)
-        this.autocapture?.afterDecideResponse(response)
-        this.heatmaps?.afterDecideResponse(response)
-        this.experiments?.afterDecideResponse(response)
-        this.surveys?.afterDecideResponse(response)
-        this.webVitalsAutocapture?.afterDecideResponse(response)
-        this.exceptionObserver?.afterDecideResponse(response)
-        this.deadClicksAutocapture?.afterDecideResponse(response)
+        this.siteApps?.onRemoteConfig(config)
+        this.sessionRecording?.onRemoteConfig(config)
+        this.autocapture?.onRemoteConfig(config)
+        this.heatmaps?.onRemoteConfig(config)
+        this.surveys?.onRemoteConfig(config)
+        this.webVitalsAutocapture?.onRemoteConfig(config)
+        this.exceptionObserver?.onRemoteConfig(config)
+        this.deadClicksAutocapture?.onRemoteConfig(config)
     }
 
     _loaded(): void {
-        // Pause `reloadFeatureFlags` calls in config.loaded callback.
-        // These feature flags are loaded in the decide call made right after
-        const disableDecide = this.config.advanced_disable_decide
-        if (!disableDecide) {
-            this.featureFlags.setReloadingPaused(true)
-        }
-
         try {
             this.config.loaded(this)
         } catch (err) {
@@ -605,16 +607,8 @@ export class PostHog {
             }, 1)
         }
 
-        // Call decide to get what features are enabled and other settings.
-        // As a reminder, if the /decide endpoint is disabled, feature flags, toolbar, session recording, autocapture,
-        // and compression will not be available.
-        if (!disableDecide) {
-            new Decide(this).call()
-
-            // TRICKY: Reset any decide reloads queued during config.loaded because they'll be
-            // covered by the decide call right above.
-            this.featureFlags.resetRequestQueue()
-        }
+        new RemoteConfigLoader(this).load()
+        this.featureFlags.decide()
     }
 
     _start_queue_if_opted_in(): void {
@@ -673,6 +667,10 @@ export class PostHog {
             ...this.config.request_headers,
         }
         options.compression = options.compression === 'best-available' ? this.compression : options.compression
+
+        // Specially useful if you're doing SSR with NextJS
+        // Users must be careful when tweaking `cache` because they might get out-of-date feature flags
+        options.fetchOptions = options.fetchOptions || this.config.fetch_options
 
         request({
             ...options,
@@ -945,6 +943,10 @@ export class PostHog {
             const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
             properties['$session_id'] = sessionId
             properties['$window_id'] = windowId
+        }
+
+        if (this.sessionRecording) {
+            properties['$recording_status'] = this.sessionRecording.status
         }
 
         if (this.requestRouter.region === RequestRouterRegion.CUSTOM) {
@@ -1498,9 +1500,6 @@ export class PostHog {
      * to update user properties.
      */
     setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
-        if (!this._requirePersonProcessing('posthog.setPersonPropertiesForFlags')) {
-            return
-        }
         this.featureFlags.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
     }
 
