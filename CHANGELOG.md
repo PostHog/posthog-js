@@ -1,3 +1,7 @@
+## 1.200.2 - 2024-12-16
+
+- feat(web-analytics): Add flag to send server hash instead of distinct id (#1490)
+
 ## 1.200.1 - 2024-12-13
 
 - fix: Make legacy property sturdier (#1602)
