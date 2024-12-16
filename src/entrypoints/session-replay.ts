@@ -9,7 +9,7 @@ import {
     SESSION_RECORDING_SAMPLE_RATE,
     SESSION_RECORDING_SCRIPT_CONFIG,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
-} from '../../constants'
+} from '../constants'
 import {
     estimateSize,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
@@ -17,8 +17,8 @@ import {
     rrwebRecord,
     splitBuffer,
     truncateLargeConsoleLogs,
-} from './sessionrecording-utils'
-import { PostHog } from '../../posthog-core'
+} from '../extensions/replay/sessionrecording-utils'
+import { PostHog } from '../posthog-core'
 import {
     CaptureResult,
     FlagVariant,
@@ -26,8 +26,12 @@ import {
     NetworkRequest,
     Properties,
     RemoteConfig,
+    SessionRecordingStatus,
     SessionRecordingUrlTrigger,
-} from '../../types'
+    SessionStartReason,
+    SnapshotBuffer,
+    TriggerType,
+} from '../types'
 import {
     customEvent,
     EventType,
@@ -37,29 +41,24 @@ import {
     RecordPlugin,
 } from '@rrweb/types'
 
-import { isBoolean, isFunction, isNullish, isNumber, isObject, isString, isUndefined } from '../../utils/type-utils'
-import { createLogger } from '../../utils/logger'
-import { assignableWindow, document, PostHogExtensionKind, window } from '../../utils/globals'
-import { buildNetworkRequestOptions } from './config'
-import { isLocalhost } from '../../utils/request-utils'
-import { MutationRateLimiter } from './mutation-rate-limiter'
+import { isBoolean, isFunction, isNullish, isNumber, isObject, isString, isUndefined } from '../utils/type-utils'
+import { createLogger } from '../utils/logger'
+import {
+    assignableWindow,
+    document,
+    LazyLoadedSessionRecordingInterface,
+    PostHogExtensionKind,
+    window,
+} from '../utils/globals'
+import { buildNetworkRequestOptions } from '../extensions/replay/config'
+import { isLocalhost } from '../utils/request-utils'
+import { MutationRateLimiter } from '../extensions/replay/mutation-rate-limiter'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
-import { clampToRange } from '../../utils/number-utils'
-import { includes } from '../../utils'
-import Config from '../../config'
+import { clampToRange } from '../utils/number-utils'
+import { includes } from '../utils'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
-
-type SessionStartReason =
-    | 'sampling_overridden'
-    | 'recording_initialized'
-    | 'linked_flag_matched'
-    | 'linked_flag_overridden'
-    | 'sampled'
-    | 'session_id_changed'
-    | 'url_trigger_matched'
-    | 'event_trigger_matched'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -84,23 +83,7 @@ const ACTIVE_SOURCES = [
     IncrementalSource.Drag,
 ]
 
-export type TriggerType = 'url' | 'event'
 type TriggerStatus = 'trigger_activated' | 'trigger_pending' | 'trigger_disabled'
-
-/**
- * Session recording starts in buffering mode while waiting for decide response
- * Once the response is received it might be disabled, active or sampled
- * When sampled that means a sample rate is set and the last time the session id was rotated
- * the sample rate determined this session should be sent to the server.
- */
-type SessionRecordingStatus = 'disabled' | 'sampled' | 'active' | 'buffering' | 'paused'
-
-export interface SnapshotBuffer {
-    size: number
-    data: any[]
-    sessionId: string
-    windowId: string
-}
 
 interface QueuedRRWebEvent {
     rrwebMethod: () => void
@@ -236,7 +219,7 @@ function isRecordingPausedEvent(e: eventWithTime) {
     return e.type === EventType.Custom && e.data.tag === 'recording paused'
 }
 
-export class SessionRecording {
+export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInterface {
     private _endpoint: string
     private flushBufferTimer?: any
 
@@ -450,9 +433,6 @@ export class SessionRecording {
             logger.error('started without valid sessionManager')
             throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
         }
-        if (this.instance.config.__preview_experimental_cookieless_mode) {
-            throw new Error(LOGGER_PREFIX + ' cannot be used with __preview_experimental_cookieless_mode.')
-        }
 
         // we know there's a sessionManager, so don't need to start without a session id
         const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
@@ -487,18 +467,8 @@ export class SessionRecording {
         }
     }
 
-    startIfEnabledOrStop(startReason?: SessionStartReason) {
+    start(startReason?: SessionStartReason) {
         if (this.isRecordingEnabled) {
-            if (
-                isUndefined(this.instance.config.session_recording._forceAllowLocalhostNetworkCapture) &&
-                this._forceAllowLocalhostNetworkCapture === true
-            ) {
-                logger.warn(
-                    '`_forceAllowLocalhostNetworkCapture` has moved to `session_recording` config. Copying your setting over.'
-                )
-                this.instance.config.session_recording._forceAllowLocalhostNetworkCapture = true
-            }
-
             this._startCapture(startReason)
 
             // calling addEventListener multiple times is safe and will not add duplicates
@@ -546,11 +516,11 @@ export class SessionRecording {
                 })
             }
         } else {
-            this.stopRecording()
+            this.stop()
         }
     }
 
-    stopRecording() {
+    stop() {
         if (this._captureStarted && this.stopRrweb) {
             this.stopRrweb()
             this.stopRrweb = undefined
@@ -670,7 +640,7 @@ export class SessionRecording {
         }
 
         this.receivedDecide = true
-        this.startIfEnabledOrStop()
+        this.start()
     }
 
     /**
@@ -723,7 +693,7 @@ export class SessionRecording {
     }
 
     log(message: string, level: 'log' | 'warn' | 'error' = 'log') {
-        this.instance.sessionRecording?.onRRwebEmit({
+        this.onRRwebEmit({
             type: 6,
             data: {
                 plugin: 'rrweb/console@1',
@@ -861,8 +831,8 @@ export class SessionRecording {
         this.sessionId = sessionId
 
         if (sessionIdChanged || windowIdChanged) {
-            this.stopRecording()
-            this.startIfEnabledOrStop('session_id_changed')
+            this.stop()
+            this.start('session_id_changed')
         } else if (returningFromIdle) {
             this._scheduleFullSnapshot()
         }
@@ -1011,8 +981,7 @@ export class SessionRecording {
 
         const networkPlugin = assignableWindow.__PosthogExtensions__?.rrwebPlugins?.getRecordNetworkPlugin
         if (this.networkPayloadCapture && isFunction(networkPlugin)) {
-            const canRecordNetwork =
-                !isLocalhost() || this.instance.config.session_recording._forceAllowLocalhostNetworkCapture
+            const canRecordNetwork = !isLocalhost() || this._forceAllowLocalhostNetworkCapture
 
             if (canRecordNetwork) {
                 plugins.push(
@@ -1200,8 +1169,6 @@ export class SessionRecording {
                     $snapshot_data: snapshotBuffer.data,
                     $session_id: snapshotBuffer.sessionId,
                     $window_id: snapshotBuffer.windowId,
-                    $lib: 'web',
-                    $lib_version: Config.LIB_VERSION,
                 })
             })
         }
@@ -1368,8 +1335,13 @@ export class SessionRecording {
             $session_recording_start_reason: startReason,
         })
         logger.info(startReason.replace('_', ' '), tagPayload)
-        if (!includes(['recording_initialized', 'session_id_changed'], startReason)) {
+        if (!includes(['session_id_changed'], startReason)) {
             this._tryAddCustomEvent(startReason, tagPayload)
         }
     }
 }
+
+assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
+assignableWindow.__PosthogExtensions__.initSessionRecording = (ph) => new LazyLoadedSessionRecording(ph)
+
+export default LazyLoadedSessionRecording

@@ -84,6 +84,7 @@ import { WebExperiments } from './web-experiments'
 import { PostHogExceptions } from './posthog-exceptions'
 import { SiteApps } from './site-apps'
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
+import { isSessionReplayEnabled, SessionReplayLoader } from './extensions/replay/session-replay-loader'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -271,6 +272,7 @@ export class PostHog {
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
     sessionRecording?: SessionRecording
+    sessionReplayLoader?: SessionReplayLoader
     webPerformance = new DeprecatedWebPerformanceObserver()
 
     _initialPageviewCaptured: boolean
@@ -447,6 +449,9 @@ export class PostHog {
         if (!this.config.__preview_experimental_cookieless_mode) {
             this.sessionRecording = new SessionRecording(this)
             this.sessionRecording.startIfEnabledOrStop()
+
+            this.sessionReplayLoader = new SessionReplayLoader(this, isSessionReplayEnabled)
+            this.sessionReplayLoader.startIfEnabled()
         }
 
         if (!this.config.disable_scroll_properties) {
@@ -575,8 +580,8 @@ export class PostHog {
             this.compression = includes(config['supportedCompression'], Compression.GZipJS)
                 ? Compression.GZipJS
                 : includes(config['supportedCompression'], Compression.Base64)
-                ? Compression.Base64
-                : undefined
+                  ? Compression.Base64
+                  : undefined
         }
 
         if (config.analytics?.endpoint) {
@@ -587,8 +592,8 @@ export class PostHog {
             person_profiles: this._initialPersonProfilesConfig
                 ? this._initialPersonProfilesConfig
                 : config['defaultIdentifiedOnly']
-                ? 'identified_only'
-                : 'always',
+                  ? 'identified_only'
+                  : 'always',
         })
 
         this.siteApps?.onRemoteConfig(config)

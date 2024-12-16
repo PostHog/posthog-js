@@ -400,10 +400,14 @@ export interface SessionRecordingOptions {
     maskNetworkRequestFn?: ((data: NetworkRequest) => NetworkRequest | null | undefined) | null
     /** Modify the network request before it is captured. Returning null or undefined stops it being captured */
     maskCapturedNetworkRequestFn?: ((data: CapturedNetworkRequest) => CapturedNetworkRequest | null | undefined) | null
-    // our settings here only support a subset of those proposed for rrweb's network capture plugin
+    /*
+     our settings here only support a subset of those proposed for rrweb's network capture plugin
+    */
     recordHeaders?: boolean
     recordBody?: boolean
-    // ADVANCED: while a user is active we take a full snapshot of the browser every interval. For very few sites playback performance might be better with different interval. Set to 0 to disable
+    /*
+     ADVANCED: while a user is active we take a full snapshot of the browser every interval. For very few sites playback performance might be better with different interval. Set to 0 to disable
+    */
     full_snapshot_interval_millis?: number
     /*
      ADVANCED: whether to partially compress rrweb events before sending them to the server,
@@ -417,6 +421,13 @@ export interface SessionRecordingOptions {
      Default is 5 minutes.
     */
     session_idle_threshold_ms?: number
+    /**
+     * ADVANCED: allow capture of network performance and payload data when running on localhost
+     * (still requires other config to enable). This is disabled by default for performance reasons.
+     * Normally only useful for debugging and development. But can be necessary for some frameworks
+     * such as capacitor that run on localhost.
+     */
+    _forceAllowLocalhostNetworkCapture?: boolean
     /*
      ADVANCED: alters the refill rate for the token bucket mutation throttling
      Normally only altered alongside posthog support guidance.
@@ -438,6 +449,33 @@ export type SessionIdChangedCallback = (
     windowId: string | null | undefined,
     changeReason?: { noSessionId: boolean; activityTimeout: boolean; sessionPastMaximumLength: boolean }
 ) => void
+
+export type SessionStartReason =
+    | 'recording_initialized'
+    | 'sampling_overridden'
+    | 'linked_flag_matched'
+    | 'linked_flag_overridden'
+    | 'sampled'
+    | 'session_id_changed'
+    | 'url_trigger_matched'
+    | 'event_trigger_matched'
+
+/**
+ * Session recording starts in buffering mode while waiting for decide response
+ * Once the response is received it might be disabled, active or sampled
+ * When sampled that means a sample rate is set and the last time the session id was rotated
+ * the sample rate determined this session should be sent to the server.
+ */
+export type SessionRecordingStatus = 'disabled' | 'sampled' | 'active' | 'buffering' | 'paused'
+
+export type TriggerType = 'url' | 'event'
+
+export interface SnapshotBuffer {
+    size: number
+    data: any[]
+    sessionId: string
+    windowId: string
+}
 
 export enum Compression {
     GZipJS = 'gzip-js',
@@ -758,7 +796,7 @@ export type ErrorEventArgs = [
     source?: string | undefined,
     lineno?: number | undefined,
     colno?: number | undefined,
-    error?: Error | undefined
+    error?: Error | undefined,
 ]
 
 export type ErrorMetadata = {

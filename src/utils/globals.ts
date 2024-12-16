@@ -7,7 +7,10 @@ import {
     ErrorMetadata,
     Properties,
     RemoteConfig,
+    SessionRecordingStatus,
+    SessionStartReason,
     SiteAppLoader,
+    TriggerType,
 } from '../types'
 
 /*
@@ -40,6 +43,7 @@ export type PostHogExtensionKind =
     | 'toolbar'
     | 'exception-autocapture'
     | 'web-vitals'
+    | 'session-replay'
     | 'recorder'
     | 'tracing-headers'
     | 'surveys'
@@ -49,6 +53,17 @@ export type PostHogExtensionKind =
 export interface LazyLoadedDeadClicksAutocaptureInterface {
     start: (observerTarget: Node) => void
     stop: () => void
+}
+
+export interface LazyLoadedSessionRecordingInterface {
+    start: (startReason?: SessionStartReason) => void
+    stop: () => void
+    onRemoteConfig(response: RemoteConfig): void
+    get status(): SessionRecordingStatus
+    overrideTrigger: (triggerType: TriggerType) => void
+    overrideSampling: () => void
+    overrideLinkedFlag: () => void
+    get started(): boolean
 }
 
 interface PostHogExtensions {
@@ -86,6 +101,7 @@ interface PostHogExtensions {
         ph: PostHog,
         config: DeadClicksAutoCaptureConfig
     ) => LazyLoadedDeadClicksAutocaptureInterface
+    initSessionRecording?: (ph: PostHog) => LazyLoadedSessionRecordingInterface
 }
 
 const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win
