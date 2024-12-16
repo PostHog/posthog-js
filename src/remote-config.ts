@@ -4,7 +4,7 @@ import { RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
 import { assignableWindow } from './utils/globals'
 
-const logger = createLogger('[Decide]')
+const logger = createLogger('[RemoteConfig]')
 
 export class RemoteConfigLoader {
     constructor(private readonly instance: PostHog) {}
@@ -15,7 +15,7 @@ export class RemoteConfigLoader {
                 return cb(assignableWindow._POSTHOG_CONFIG)
             })
         } else {
-            logger.error('PostHog Extensions not found. Cannot load remote config.')
+            logger.info('PostHog Extensions not found. Cannot load remote config.')
             cb()
         }
     }
@@ -31,14 +31,6 @@ export class RemoteConfigLoader {
     }
 
     load(): void {
-        // Call decide to get what features are enabled and other settings.
-        // As a reminder, if the /decide endpoint is disabled, feature flags, toolbar, session recording, autocapture,
-        // and compression will not be available.
-
-        if (!this.instance.config.__preview_remote_config) {
-            return
-        }
-
         // Attempt 1 - use the pre-loaded config if it came as part of the token-specific array.js
         if (assignableWindow._POSTHOG_CONFIG) {
             logger.info('Using preloaded remote config', assignableWindow._POSTHOG_CONFIG)
@@ -73,10 +65,10 @@ export class RemoteConfigLoader {
             logger.error('Failed to fetch remote config from PostHog.')
             return
         }
+
         this.instance._onRemoteConfig(config)
 
-        // We only need to reload if we haven't already loaded the flags or if the request is in flight
-        if (config.hasFeatureFlags !== false) {
+        if (config.hasFeatureFlags && !this.instance.config.advanced_disable_feature_flags_on_first_load) {
             // If the config has feature flags, we need to call decide to get the feature flags
             // This completely separates it from the config logic which is good in terms of separation of concerns
             this.instance.featureFlags.ensureFlagsLoaded()

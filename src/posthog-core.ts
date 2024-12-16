@@ -622,7 +622,6 @@ export class PostHog {
         }
 
         new RemoteConfigLoader(this).load()
-        this.featureFlags.decide()
     }
 
     _start_queue_if_opted_in(): void {

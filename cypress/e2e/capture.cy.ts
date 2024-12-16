@@ -180,7 +180,7 @@ describe('Event capture', () => {
                 },
                 advanced_disable_feature_flags: true,
             },
-            waitForDecide: false,
+            waitForFeatureFlags: false,
         })
 
         cy.intercept(
@@ -240,13 +240,17 @@ describe('Event capture', () => {
     it('makes a single decide request', () => {
         start({})
 
-        cy.get('@decide.all').then((calls) => {
+        cy.get('@remote-config.all').then((calls) => {
+            expect(calls.length).to.equal(1)
+        })
+
+        cy.get('@feature-flags.all').then((calls) => {
             expect(calls.length).to.equal(1)
         })
 
         cy.phCaptures().should('include', '$pageview')
         // @ts-expect-error - TS is wrong that get returns HTMLElement here
-        cy.get('@decide').should(({ request }) => {
+        cy.get('@feature-flags').should(({ request }) => {
             const payload = getBase64EncodedPayload(request)
             expect(payload.token).to.equal('test_token')
             expect(payload.groups).to.deep.equal({})
@@ -255,7 +259,7 @@ describe('Event capture', () => {
 
     describe('when disabled', () => {
         it('captures pageviews, custom events when autocapture disabled', () => {
-            start({ options: { autocapture: false }, waitForDecide: false })
+            start({ options: { autocapture: false }, waitForRemoteConfig: false })
 
             cy.wait(50)
             cy.get('[data-cy-custom-event-button]').click()
@@ -328,7 +332,7 @@ describe('Event capture', () => {
 
     describe('advanced_disable_decide config', () => {
         it('does not autocapture anything when /decide is disabled', () => {
-            start({ options: { autocapture: false, advanced_disable_decide: true }, waitForDecide: false })
+            start({ options: { autocapture: false, advanced_disable_decide: true }, waitForFeatureFlags: false })
 
             cy.get('body').click(100, 100)
             cy.get('body').click(98, 102)
@@ -342,7 +346,11 @@ describe('Event capture', () => {
         })
 
         it('does not capture session recordings', () => {
-            start({ options: { advanced_disable_decide: true }, waitForDecide: false })
+            start({
+                options: { advanced_disable_decide: true },
+                waitForRemoteConfig: false,
+                waitForFeatureFlags: false,
+            })
 
             cy.get('[data-cy-custom-event-button]').click()
             cy.wait('@capture')

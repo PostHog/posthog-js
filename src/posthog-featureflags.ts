@@ -90,29 +90,10 @@ export class PostHogFeatureFlags {
     private _reloadingDisabled: boolean = false
     private _additionalReloadRequested: boolean = false
     private _reloadDebouncer?: any
-    private _decideCalled: boolean = false
     private _flagsLoadedFromRemote: boolean = false
 
     constructor(private instance: PostHog) {
         this.featureFlagEventHandlers = []
-    }
-
-    decide(): void {
-        if (this.instance.config.__preview_remote_config) {
-            // If remote config is enabled we don't call decide and we mark it as called so that we don't simulate it
-            this._decideCalled = true
-            return
-        }
-
-        // TRICKY: We want to disable flags if we don't have a queued reload, and one of the settings exist for disabling on first load
-        const disableFlags =
-            !this._reloadDebouncer &&
-            (this.instance.config.advanced_disable_feature_flags ||
-                this.instance.config.advanced_disable_feature_flags_on_first_load)
-
-        this._callDecideEndpoint({
-            disableFlags,
-        })
     }
 
     get hasLoadedFlags(): boolean {
@@ -247,11 +228,6 @@ export class PostHogFeatureFlags {
                 }
 
                 this._requestInFlight = false
-
-                if (!this._decideCalled) {
-                    this._decideCalled = true
-                    this.instance._onRemoteConfig(response.json ?? {})
-                }
 
                 if (data.disable_flags) {
                     // If flags are disabled then there is no need to call decide again (flags are the only thing that may change)

@@ -9,6 +9,7 @@ describe('identify()', () => {
 
     beforeEach(() => {
         beforeSendMock = jest.fn().mockImplementation((e) => e)
+
         const posthog = defaultPostHog().init(
             uuidv7(),
             {

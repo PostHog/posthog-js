@@ -3,7 +3,7 @@ import { start } from '../support/setup'
 describe('Exception capture', () => {
     it('manual exception capture', () => {
         start({
-            decideResponseOverrides: {
+            remoteConfigOverrides: {
                 autocaptureExceptions: false,
             },
             url: './playground/cypress',
@@ -33,7 +33,7 @@ describe('Exception capture', () => {
             })
 
             start({
-                decideResponseOverrides: {
+                remoteConfigOverrides: {
                     autocaptureExceptions: true,
                 },
                 url: './playground/cypress',
