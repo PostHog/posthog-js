@@ -38,7 +38,9 @@ describe('loaded() with flags', () => {
                 },
             })
 
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            jest.runOnlyPendingTimers() // Remote config load
+
+            expect(instance.featureFlags._callDecideEndpoint).toHaveBeenCalledTimes(1)
 
             expect(instance._send_request.mock.calls[0][0]).toMatchObject({
                 url: 'https://us.i.posthog.com/decide/?v=3',
@@ -60,10 +62,12 @@ describe('loaded() with flags', () => {
                     }, 100)
                 },
             })
-            expect(instance.featureFlags._callDecideEndpoint).toHaveBeenCalledTimes(1)
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
 
-            expect(instance._send_request.mock.calls[0][0]).toMatchObject({
+            jest.runOnlyPendingTimers() // Remote config load
+
+            expect(instance.featureFlags._callDecideEndpoint).toHaveBeenCalledTimes(1)
+
+            expect(instance._send_request.mock.calls[1][0]).toMatchObject({
                 url: 'https://us.i.posthog.com/decide/?v=3',
                 data: {
                     groups: { org: 'bazinga' },
@@ -74,9 +78,8 @@ describe('loaded() with flags', () => {
             jest.runOnlyPendingTimers() // Once for potential debounce
 
             expect(instance.featureFlags._callDecideEndpoint).toHaveBeenCalledTimes(2)
-            expect(instance._send_request).toHaveBeenCalledTimes(2)
 
-            expect(instance._send_request.mock.calls[1][0]).toMatchObject({
+            expect(instance._send_request.mock.calls[2][0]).toMatchObject({
                 url: 'https://us.i.posthog.com/decide/?v=3',
                 data: {
                     groups: { org: 'bazinga2' },
@@ -94,16 +97,17 @@ describe('loaded() with flags', () => {
 
             expect(instance.config.advanced_disable_feature_flags_on_first_load).toBe(true)
 
-            expect(instance.featureFlags._callDecideEndpoint).toHaveBeenCalledTimes(1)
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            jest.runOnlyPendingTimers() // Once for remote-config callback
+            jest.runOnlyPendingTimers() // Once for potential debounce
 
-            expect(instance._send_request.mock.calls[0][0].data.disable_flags).toEqual(undefined)
+            expect(instance.featureFlags._callDecideEndpoint).toHaveBeenCalledTimes(1)
+
+            expect(instance._send_request.mock.calls[1][0].data.disable_flags).toEqual(undefined)
 
             jest.runOnlyPendingTimers() // Once for callback
             jest.runOnlyPendingTimers() // Once for potential debounce
 
             expect(instance.featureFlags._callDecideEndpoint).toHaveBeenCalledTimes(1)
-            expect(instance._send_request).toHaveBeenCalledTimes(1)
         })
     })
 })

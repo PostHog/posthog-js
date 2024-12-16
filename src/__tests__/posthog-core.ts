@@ -29,8 +29,6 @@ describe('posthog core', () => {
     }
 
     beforeEach(() => {
-        // NOTE: Temporary change whilst testing remote config
-        globals.assignableWindow._POSTHOG_CONFIG = {} as any
         jest.useFakeTimers().setSystemTime(baseUTCDateTime)
     })
 
@@ -1108,17 +1106,17 @@ describe('posthog core', () => {
             expect(mockLogger.critical).toHaveBeenCalledWith('`loaded` function failed', expect.anything())
         })
 
-        describe('/decide', () => {
+        describe('remote-config', () => {
             it('is called by default', async () => {
                 const sendRequestMock = jest.fn()
-                await createPosthogInstance(uuidv7(), {
+                await createPosthogInstance('testtoken', {
                     loaded: (ph) => {
                         ph._send_request = sendRequestMock
                     },
                 })
 
                 expect(sendRequestMock.mock.calls[0][0]).toMatchObject({
-                    url: 'http://localhost/decide/?v=3',
+                    url: 'http://localhost/array/testtoken/config',
                 })
             })
 

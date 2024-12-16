@@ -91,7 +91,7 @@ describe('RemoteConfigLoader', () => {
         it.each([
             [true, true],
             [false, false],
-            [undefined, true],
+            [undefined, false],
         ])('conditionally reloads feature flags - hasFlags: %s, shouldReload: %s', (hasFeatureFlags, shouldReload) => {
             assignableWindow._POSTHOG_CONFIG = { hasFeatureFlags } as RemoteConfig
             new RemoteConfigLoader(posthog).load()
