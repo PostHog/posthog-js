@@ -29,6 +29,8 @@ describe('posthog core', () => {
     }
 
     beforeEach(() => {
+        // NOTE: Temporary change whilst testing remote config
+        globals.assignableWindow._POSTHOG_CONFIG = {} as any
         jest.useFakeTimers().setSystemTime(baseUTCDateTime)
     })
 

@@ -31,14 +31,6 @@ export class RemoteConfigLoader {
     }
 
     load(): void {
-        // Call decide to get what features are enabled and other settings.
-        // As a reminder, if the /decide endpoint is disabled, feature flags, toolbar, session recording, autocapture,
-        // and compression will not be available.
-
-        if (!this.instance.config.__preview_remote_config) {
-            return
-        }
-
         // Attempt 1 - use the pre-loaded config if it came as part of the token-specific array.js
         if (assignableWindow._POSTHOG_CONFIG) {
             logger.info('Using preloaded remote config', assignableWindow._POSTHOG_CONFIG)
@@ -73,6 +65,12 @@ export class RemoteConfigLoader {
             logger.error('Failed to fetch remote config from PostHog.')
             return
         }
+
+        if (!this.instance.config.__preview_remote_config) {
+            logger.info('__preview_remote_config is disabled. Logging config instead', config)
+            return
+        }
+
         this.instance._onRemoteConfig(config)
 
         // We only need to reload if we haven't already loaded the flags or if the request is in flight

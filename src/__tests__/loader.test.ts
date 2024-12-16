@@ -9,12 +9,15 @@ import { PostHog } from '../posthog-core'
 import { defaultPostHog } from './helpers/posthog-instance'
 
 import sinon from 'sinon'
-import { window } from '../utils/globals'
+import { assignableWindow, window } from '../utils/globals'
 
 describe(`Module-based loader in Node env`, () => {
     const posthog = defaultPostHog()
 
     beforeEach(() => {
+        // NOTE: Temporary change whilst testing remote config
+        assignableWindow._POSTHOG_CONFIG = {} as any
+
         jest.useFakeTimers()
         jest.spyOn(posthog, '_send_request').mockReturnValue()
         jest.spyOn(window!.console, 'log').mockImplementation()
