@@ -33,6 +33,13 @@ export default function App({ Component, pageProps }: AppProps) {
         }
     }, [])
 
+    useEffect(() => {
+        // make sure we initialize the WebSocket server
+        // we don't need to support IE11 here
+        // eslint-disable-next-line compat/compat
+        fetch('/api/socket')
+    }, [])
+
     const localhostDomain = process.env.NEXT_PUBLIC_CROSSDOMAIN
         ? 'https://localhost:8000'
         : process.env.NEXT_PUBLIC_POSTHOG_HOST
