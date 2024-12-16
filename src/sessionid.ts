@@ -33,6 +33,9 @@ export class SessionIdManager {
     private _sessionIdChangedHandlers: SessionIdChangedCallback[] = []
     private readonly _sessionTimeoutMs: number
 
+    // we track activity so we can end the session proactively when it has passed the idle timeout
+    private _enforceIdleTimeout: ReturnType<typeof setTimeout> | undefined
+
     constructor(instance: PostHog, sessionIdGenerator?: () => string, windowIdGenerator?: () => string) {
         if (!instance.persistence) {
             throw new Error('SessionIdManager requires a PostHogPersistence instance')
@@ -63,6 +66,7 @@ export class SessionIdManager {
             ) * 1000
 
         instance.register({ $configured_session_timeout_ms: this._sessionTimeoutMs })
+        this.resetIdleTimer()
 
         this._window_id_storage_key = 'ph_' + persistenceName + '_window_id'
         this._primary_window_exists_storage_key = 'ph_' + persistenceName + '_primary_window_exists'
@@ -171,14 +175,14 @@ export class SessionIdManager {
         if (this._sessionId && this._sessionActivityTimestamp && this._sessionStartTimestamp) {
             return [this._sessionActivityTimestamp, this._sessionId, this._sessionStartTimestamp]
         }
-        const sessionId = this.persistence.props[SESSION_ID]
+        const sessionIdInfo = this.persistence.props[SESSION_ID]
 
-        if (isArray(sessionId) && sessionId.length === 2) {
+        if (isArray(sessionIdInfo) && sessionIdInfo.length === 2) {
             // Storage does not yet have a session start time. Add the last activity timestamp as the start time
-            sessionId.push(sessionId[0])
+            sessionIdInfo.push(sessionIdInfo[0])
         }
 
-        return sessionId || [0, null, 0]
+        return sessionIdInfo || [0, null, 0]
     }
 
     // Resets the session id by setting it to null. On the subsequent call to checkAndGetSessionAndWindowId,
@@ -226,7 +230,7 @@ export class SessionIdManager {
         const timestamp = _timestamp || new Date().getTime()
 
         // eslint-disable-next-line prefer-const
-        let [lastTimestamp, sessionId, startTimestamp] = this._getSessionId()
+        let [lastActivityTimestamp, sessionId, startTimestamp] = this._getSessionId()
         let windowId = this._getWindowId()
 
         const sessionPastMaximumLength =
@@ -236,7 +240,7 @@ export class SessionIdManager {
 
         let valuesChanged = false
         const noSessionId = !sessionId
-        const activityTimeout = !readOnly && Math.abs(timestamp - lastTimestamp) > this.sessionTimeoutMs
+        const activityTimeout = !readOnly && Math.abs(timestamp - lastActivityTimestamp) > this.sessionTimeoutMs
         if (noSessionId || activityTimeout || sessionPastMaximumLength) {
             sessionId = this._sessionIdGenerator()
             windowId = this._windowIdGenerator()
@@ -252,11 +256,16 @@ export class SessionIdManager {
             valuesChanged = true
         }
 
-        const newTimestamp = lastTimestamp === 0 || !readOnly || sessionPastMaximumLength ? timestamp : lastTimestamp
+        const newActivityTimestamp =
+            lastActivityTimestamp === 0 || !readOnly || sessionPastMaximumLength ? timestamp : lastActivityTimestamp
         const sessionStartTimestamp = startTimestamp === 0 ? new Date().getTime() : startTimestamp
 
         this._setWindowId(windowId)
-        this._setSessionId(sessionId, newTimestamp, sessionStartTimestamp)
+        this._setSessionId(sessionId, newActivityTimestamp, sessionStartTimestamp)
+
+        if (!readOnly) {
+            this.resetIdleTimer()
+        }
 
         if (valuesChanged) {
             this._sessionIdChangedHandlers.forEach((handler) =>
@@ -273,7 +282,15 @@ export class SessionIdManager {
             windowId,
             sessionStartTimestamp,
             changeReason: valuesChanged ? { noSessionId, activityTimeout, sessionPastMaximumLength } : undefined,
-            lastActivityTimestamp: lastTimestamp,
+            lastActivityTimestamp: lastActivityTimestamp,
         }
+    }
+
+    private resetIdleTimer() {
+        clearTimeout(this._enforceIdleTimeout)
+        this._enforceIdleTimeout = setTimeout(() => {
+            // enforce idle timeout a little after the session timeout to ensure the session is reset even without activity
+            this.resetSessionId()
+        }, this.sessionTimeoutMs * 1.1)
     }
 }

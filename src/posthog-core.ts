@@ -575,8 +575,8 @@ export class PostHog {
             this.compression = includes(config['supportedCompression'], Compression.GZipJS)
                 ? Compression.GZipJS
                 : includes(config['supportedCompression'], Compression.Base64)
-                ? Compression.Base64
-                : undefined
+                  ? Compression.Base64
+                  : undefined
         }
 
         if (config.analytics?.endpoint) {
@@ -587,8 +587,8 @@ export class PostHog {
             person_profiles: this._initialPersonProfilesConfig
                 ? this._initialPersonProfilesConfig
                 : config['defaultIdentifiedOnly']
-                ? 'identified_only'
-                : 'always',
+                  ? 'identified_only'
+                  : 'always',
         })
 
         this.siteApps?.onRemoteConfig(config)

@@ -1081,7 +1081,7 @@ export class SessionRecording {
         }
 
         const eventToSend =
-            this.instance.config.session_recording.compress_events ?? true ? compressEvent(event) : event
+            (this.instance.config.session_recording.compress_events ?? true) ? compressEvent(event) : event
         const size = estimateSize(eventToSend)
 
         const properties = {

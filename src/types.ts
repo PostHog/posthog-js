@@ -31,7 +31,7 @@ export const knownUnsafeEditableEvent = [
  *
  * Some features of PostHog rely on receiving 100% of these events
  */
-export type KnownUnsafeEditableEvent = typeof knownUnsafeEditableEvent[number]
+export type KnownUnsafeEditableEvent = (typeof knownUnsafeEditableEvent)[number]
 
 /**
  * These are known events PostHog events that can be processed by the `beforeCapture` function
@@ -755,7 +755,7 @@ export type ErrorEventArgs = [
     source?: string | undefined,
     lineno?: number | undefined,
     colno?: number | undefined,
-    error?: Error | undefined
+    error?: Error | undefined,
 ]
 
 export type ErrorMetadata = {
@@ -772,7 +772,7 @@ export type ErrorMetadata = {
 // and to avoid relying on a frequently changing @sentry/types dependency
 // but provided as an array of literal types, so we can constrain the level below
 export const severityLevels = ['fatal', 'error', 'warning', 'log', 'info', 'debug'] as const
-export declare type SeverityLevel = typeof severityLevels[number]
+export declare type SeverityLevel = (typeof severityLevels)[number]
 
 export interface ErrorProperties {
     $exception_type: string
