@@ -1,24 +1,37 @@
-import { DecideResponse, PostHogConfig } from '../../src/types'
+import { Compression, DecideResponse, PostHogConfig, RemoteConfig } from '../../src/types'
 
 import { EventEmitter } from 'events'
 
+export const interceptRemoteConfig = (remoteConfigOverrides: Partial<RemoteConfig>) => {
+    cy.intercept('GET', '/array/*/config*', remoteConfigOverrides).as('remote-config')
+    // We force the config.js to be a 404 as we don't want to test it
+    cy.intercept('GET', '/array/*/config.js', { statusCode: 404 })
+}
+
+export const interceptFeatureFlags = (featureFlagsOverrides: Partial<DecideResponse>) => {
+    cy.intercept('POST', '/decide/*', featureFlagsOverrides).as('feature-flags')
+}
+
 export const start = ({
-    waitForDecide = true,
+    waitForRemoteConfig = true,
+    waitForFeatureFlags = true,
     initPosthog = true,
     resetOnInit = false,
     options = {},
-    decideResponseOverrides = {
+    remoteConfigOverrides = {
         sessionRecording: undefined,
-        isAuthenticated: false,
         capturePerformance: true,
     },
+    featureFlagsOverrides = {},
     url = './playground/cypress-full',
 }: {
-    waitForDecide?: boolean
+    waitForRemoteConfig?: boolean
+    waitForFeatureFlags?: boolean
     initPosthog?: boolean
     resetOnInit?: boolean
     options?: Partial<PostHogConfig>
-    decideResponseOverrides?: Partial<DecideResponse>
+    featureFlagsOverrides?: Partial<DecideResponse>
+    remoteConfigOverrides?: Partial<RemoteConfig>
     url?: string
 }) => {
     // sometimes we have too many listeners in this test environment
@@ -26,15 +39,20 @@ export const start = ({
     // we don't see the error in production, so it's fine to increase the limit here
     EventEmitter.prototype.setMaxListeners(100)
 
-    const decideResponse = {
-        editorParams: {},
-        featureFlags: ['session-recording-player'],
-        supportedCompression: ['gzip-js'],
-        excludedDomains: [],
+    const remoteConfigResponse: Partial<RemoteConfig> = {
+        supportedCompression: [Compression.GZipJS],
         autocaptureExceptions: false,
-        ...decideResponseOverrides,
+        hasFeatureFlags: true,
+        ...remoteConfigOverrides,
     }
-    cy.intercept('POST', '/decide/*', decideResponse).as('decide')
+
+    const featureFlagsResponse: Partial<DecideResponse> = {
+        featureFlags: { 'session-recording-player': true },
+        ...featureFlagsOverrides,
+    }
+
+    interceptFeatureFlags(featureFlagsResponse)
+    interceptRemoteConfig(remoteConfigResponse)
 
     cy.visit(url)
 
@@ -49,7 +67,11 @@ export const start = ({
         cy.posthog().invoke('reset', true)
     }
 
-    if (waitForDecide) {
-        cy.wait('@decide')
+    if (waitForRemoteConfig) {
+        cy.wait('@remote-config')
+    }
+
+    if (waitForFeatureFlags) {
+        cy.wait('@feature-flags')
     }
 }

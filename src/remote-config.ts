@@ -4,7 +4,7 @@ import { RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
 import { assignableWindow } from './utils/globals'
 
-const logger = createLogger('[Decide]')
+const logger = createLogger('[RemoteConfig]')
 
 export class RemoteConfigLoader {
     constructor(private readonly instance: PostHog) {}

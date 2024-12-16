@@ -1,7 +1,7 @@
 /// <reference types="cypress" />
 
 import { isNull } from '../../src/utils/type-utils'
-import { start } from '../support/setup'
+import { interceptRemoteConfig, start } from '../support/setup'
 import { assertWhetherPostHogRequestsWereCalled, pollPhCaptures } from '../support/assertions'
 
 interface RRWebCustomEvent {
@@ -117,8 +117,7 @@ describe('Session recording', () => {
                 options: {
                     session_recording: {},
                 },
-                decideResponseOverrides: {
-                    isAuthenticated: false,
+                remoteConfigOverrides: {
                     sessionRecording: {
                         endpoint: '/ses/',
                     },
@@ -179,8 +178,7 @@ describe('Session recording', () => {
                 })
 
                 start({
-                    decideResponseOverrides: {
-                        isAuthenticated: false,
+                    remoteConfigOverrides: {
                         sessionRecording: {
                             endpoint: '/ses/',
                             networkPayloadCapture: { recordBody: true },
@@ -345,8 +343,7 @@ describe('Session recording', () => {
                 options: {
                     session_recording: {},
                 },
-                decideResponseOverrides: {
-                    isAuthenticated: false,
+                remoteConfigOverrides: {
                     sessionRecording: {
                         endpoint: '/ses/',
                     },
@@ -482,7 +479,7 @@ describe('Session recording', () => {
             cy.posthogInit({
                 session_recording: {},
             })
-            cy.wait('@decide')
+            cy.wait('@remote-config')
             cy.wait('@recorder-script')
 
             cy.get('body')
@@ -651,8 +648,7 @@ describe('Session recording', () => {
                 options: {
                     session_recording: {},
                 },
-                decideResponseOverrides: {
-                    isAuthenticated: false,
+                remoteConfigOverrides: {
                     sessionRecording: {
                         endpoint: '/ses/',
                         sampleRate: '0',
@@ -679,20 +675,18 @@ describe('Session recording', () => {
         })
 
         it('can override sampling when starting session recording', () => {
-            cy.intercept('POST', '/decide/*', {
+            interceptRemoteConfig({
                 autocapture_opt_out: true,
-                editorParams: {},
-                isAuthenticated: false,
                 sessionRecording: {
                     endpoint: '/ses/',
                     // will never record a session with rate of 0
                     sampleRate: '0',
                 },
-            }).as('decide')
+            })
 
             assertWhetherPostHogRequestsWereCalled({
                 '@recorder-script': true,
-                '@decide': true,
+                '@remote-config': true,
                 '@session-recording': false,
             })
 
@@ -704,7 +698,7 @@ describe('Session recording', () => {
 
             assertWhetherPostHogRequestsWereCalled({
                 '@recorder-script': true,
-                '@decide': true,
+                '@remote-config': true,
                 // no call to session-recording yet
             })
 
@@ -729,8 +723,7 @@ describe('Session recording', () => {
             cy.resetPhCaptures()
             cy.reload(true).then(() => {
                 start({
-                    decideResponseOverrides: {
-                        isAuthenticated: false,
+                    remoteConfigOverrides: {
                         sessionRecording: {
                             endpoint: '/ses/',
                             sampleRate: '0',

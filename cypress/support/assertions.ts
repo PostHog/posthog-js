@@ -18,7 +18,7 @@ export function pollPhCaptures(event, wait = 200, attempts = 0, maxAttempts = 50
 
 /**
  * Receives an object with keys as the name of the route and values as whether the route should have been called.
- * e.g. { '@recorder': true, '@decide': false }
+ * e.g. { '@recorder': true, '@remote-config': false }
  * the keys must match a `cy.intercept` alias
  **/
 export function assertWhetherPostHogRequestsWereCalled(expectedCalls: Record<string, boolean>): Chainable<undefined> {

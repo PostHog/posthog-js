@@ -1,6 +1,7 @@
 /// <reference types="cypress" />
 import { getPayload } from '../support/compression'
 import 'cypress-localstorage-commands'
+import { interceptRemoteConfig } from '../support/setup'
 
 function onPageLoad(options = {}) {
     cy.posthog().then((ph) => {
@@ -8,7 +9,7 @@ function onPageLoad(options = {}) {
     })
 
     cy.posthogInit(options)
-    cy.wait('@decide')
+    cy.wait('@remote-config')
     cy.wait('@surveys')
 }
 
@@ -63,12 +64,10 @@ describe('Surveys', () => {
     }
 
     beforeEach(() => {
-        cy.intercept('POST', '**/decide/*', {
-            editorParams: {},
-            surveys: true,
-            isAuthenticated: false,
+        interceptRemoteConfig({
+            surveys: [],
             autocapture_opt_out: true,
-        }).as('decide')
+        })
     })
 
     describe('Core display logic', () => {

@@ -10,7 +10,8 @@ Cypress.on('window:before:load', (win) => {
 })
 
 beforeEach(() => {
-    cy.intercept('POST', '/decide/*').as('decide')
+    cy.intercept('GET', '/array/*/config*').as('remote-config')
+    cy.intercept('POST', '/decide/*').as('feature-flags')
     cy.intercept('POST', '/e/*', { status: 1 }).as('capture')
     cy.intercept('POST', '/ses/*', { status: 1 }).as('session-recording')
     cy.intercept('GET', '/surveys/*').as('surveys')

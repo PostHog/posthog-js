@@ -1,5 +1,5 @@
 import { assertWhetherPostHogRequestsWereCalled, pollPhCaptures } from '../support/assertions'
-import { start } from '../support/setup'
+import { interceptRemoteConfig, start } from '../support/setup'
 
 function assertThatRecordingStarted() {
     cy.phCaptures({ full: true }).then((captures) => {
@@ -15,16 +15,13 @@ function assertThatRecordingStarted() {
 describe('opting out', () => {
     describe('session recording', () => {
         beforeEach(() => {
-            cy.intercept('POST', '/decide/*', {
-                editorParams: {},
-                featureFlags: ['session-recording-player'],
-                isAuthenticated: false,
+            interceptRemoteConfig({
                 sessionRecording: {
                     endpoint: '/ses/',
                 },
-                capture_performance: true,
+                capturePerformance: true,
                 autocapture_opt_out: true,
-            }).as('decide')
+            })
 
             cy.visit('./playground/cypress')
         })
@@ -34,7 +31,7 @@ describe('opting out', () => {
 
             assertWhetherPostHogRequestsWereCalled({
                 '@recorder-script': false,
-                '@decide': false,
+                '@remote-config': false,
                 '@session-recording': false,
             })
 
@@ -52,7 +49,7 @@ describe('opting out', () => {
 
             assertWhetherPostHogRequestsWereCalled({
                 '@recorder-script': false,
-                '@decide': true,
+                '@remote-config': true,
                 '@session-recording': false,
             })
 
@@ -70,7 +67,7 @@ describe('opting out', () => {
 
             assertWhetherPostHogRequestsWereCalled({
                 '@recorder-script': false,
-                '@decide': true,
+                '@remote-config': true,
                 '@session-recording': false,
             })
 
@@ -88,7 +85,7 @@ describe('opting out', () => {
 
             assertWhetherPostHogRequestsWereCalled({
                 '@recorder-script': false,
-                '@decide': true,
+                '@remote-config': true,
                 '@session-recording': false,
             })
 
@@ -102,7 +99,7 @@ describe('opting out', () => {
 
             assertWhetherPostHogRequestsWereCalled({
                 '@recorder-script': true,
-                '@decide': true,
+                '@remote-config': true,
                 // no call to session-recording yet
             })
 
@@ -118,7 +115,7 @@ describe('opting out', () => {
 
             assertWhetherPostHogRequestsWereCalled({
                 '@recorder-script': false,
-                '@decide': true,
+                '@remote-config': true,
                 '@session-recording': false,
             })
 
@@ -135,7 +132,7 @@ describe('opting out', () => {
 
             assertWhetherPostHogRequestsWereCalled({
                 '@recorder-script': true,
-                '@decide': true,
+                '@remote-config': true,
                 // no call to session-recording yet
             })
 
@@ -147,16 +144,14 @@ describe('opting out', () => {
         })
 
         it('can override sampling when starting session recording', () => {
-            cy.intercept('POST', '/decide/*', {
-                autocapture_opt_out: true,
-                editorParams: {},
-                isAuthenticated: false,
+            interceptRemoteConfig({
                 sessionRecording: {
                     endpoint: '/ses/',
                     // will never record a session with rate of 0
                     sampleRate: '0',
                 },
-            }).as('decide')
+                autocapture_opt_out: true,
+            })
 
             cy.posthogInit({
                 opt_out_capturing_by_default: true,
@@ -164,7 +159,7 @@ describe('opting out', () => {
 
             assertWhetherPostHogRequestsWereCalled({
                 '@recorder-script': false,
-                '@decide': true,
+                '@remote-config': true,
                 '@session-recording': false,
             })
 
@@ -178,7 +173,7 @@ describe('opting out', () => {
 
             assertWhetherPostHogRequestsWereCalled({
                 '@recorder-script': true,
-                '@decide': true,
+                '@remote-config': true,
                 // no call to session-recording yet
             })
 
@@ -190,16 +185,14 @@ describe('opting out', () => {
         })
 
         it('can override linked_flags when starting session recording', () => {
-            cy.intercept('POST', '/decide/*', {
-                autocapture_opt_out: true,
-                editorParams: {},
-                isAuthenticated: false,
+            interceptRemoteConfig({
                 sessionRecording: {
                     endpoint: '/ses/',
                     // a flag that doesn't exist, can never be recorded
                     linkedFlag: 'i am a flag that does not exist',
                 },
-            }).as('decide')
+                autocapture_opt_out: true,
+            })
 
             cy.posthogInit({
                 opt_out_capturing_by_default: true,
@@ -207,7 +200,7 @@ describe('opting out', () => {
 
             assertWhetherPostHogRequestsWereCalled({
                 '@recorder-script': false,
-                '@decide': true,
+                '@remote-config': true,
                 '@session-recording': false,
             })
 
@@ -221,7 +214,7 @@ describe('opting out', () => {
 
             assertWhetherPostHogRequestsWereCalled({
                 '@recorder-script': true,
-                '@decide': true,
+                '@remote-config': true,
                 // no call to session-recording yet
             })
 
@@ -244,10 +237,8 @@ describe('opting out', () => {
         })
 
         it('respects sampling when overriding linked_flags when starting session recording', () => {
-            cy.intercept('POST', '/decide/*', {
+            interceptRemoteConfig({
                 autocapture_opt_out: true,
-                editorParams: {},
-                isAuthenticated: false,
                 sessionRecording: {
                     endpoint: '/ses/',
                     // a flag that doesn't exist, can never be recorded
@@ -255,7 +246,7 @@ describe('opting out', () => {
                     // will never record a session with rate of 0
                     sampleRate: '0',
                 },
-            }).as('decide')
+            })
 
             cy.posthogInit({
                 opt_out_capturing_by_default: true,
@@ -263,7 +254,7 @@ describe('opting out', () => {
 
             assertWhetherPostHogRequestsWereCalled({
                 '@recorder-script': false,
-                '@decide': true,
+                '@remote-config': true,
                 '@session-recording': false,
             })
 
@@ -277,7 +268,7 @@ describe('opting out', () => {
 
             assertWhetherPostHogRequestsWereCalled({
                 '@recorder-script': true,
-                '@decide': true,
+                '@remote-config': true,
                 // no call to session-recording yet
             })
 
@@ -305,10 +296,8 @@ describe('opting out', () => {
         })
 
         it('can override all ingestion controls when starting session recording', () => {
-            cy.intercept('POST', '/decide/*', {
+            interceptRemoteConfig({
                 autocapture_opt_out: true,
-                editorParams: {},
-                isAuthenticated: false,
                 sessionRecording: {
                     endpoint: '/ses/',
                     // a flag that doesn't exist, can never be recorded
@@ -316,7 +305,7 @@ describe('opting out', () => {
                     // will never record a session with rate of 0
                     sampleRate: '0',
                 },
-            }).as('decide')
+            })
 
             cy.posthogInit({
                 opt_out_capturing_by_default: true,
@@ -324,7 +313,7 @@ describe('opting out', () => {
 
             assertWhetherPostHogRequestsWereCalled({
                 '@recorder-script': false,
-                '@decide': true,
+                '@remote-config': true,
                 '@session-recording': false,
             })
 
@@ -338,7 +327,7 @@ describe('opting out', () => {
 
             assertWhetherPostHogRequestsWereCalled({
                 '@recorder-script': true,
-                '@decide': true,
+                '@remote-config': true,
                 // no call to session-recording yet
             })
 
@@ -361,16 +350,14 @@ describe('opting out', () => {
         })
 
         it('sends a $pageview event when opting in', () => {
-            cy.intercept('POST', '/decide/*', {
+            interceptRemoteConfig({
                 autocapture_opt_out: true,
-                editorParams: {},
-                isAuthenticated: false,
                 sessionRecording: {
                     endpoint: '/ses/',
                     // will never record a session with rate of 0
                     sampleRate: '0',
                 },
-            }).as('decide')
+            })
 
             cy.posthogInit({
                 opt_out_capturing_by_default: true,
@@ -389,16 +376,14 @@ describe('opting out', () => {
         })
 
         it('does not send a duplicate $pageview event when opting in', () => {
-            cy.intercept('POST', '/decide/*', {
+            interceptRemoteConfig({
                 autocapture_opt_out: true,
-                editorParams: {},
-                isAuthenticated: false,
                 sessionRecording: {
                     endpoint: '/ses/',
                     // will never record a session with rate of 0
                     sampleRate: '0',
                 },
-            }).as('decide')
+            })
 
             cy.posthogInit({})
             // Wait for the pageview timeout
