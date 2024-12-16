@@ -21,7 +21,7 @@ describe('heatmaps', () => {
             clientX: 10,
             clientY: 20,
             ...props,
-        } as unknown as MouseEvent)
+        }) as unknown as MouseEvent
 
     beforeEach(async () => {
         beforeSendMock = beforeSendMock.mockClear()

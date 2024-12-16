@@ -247,7 +247,7 @@ export const buildNetworkRequestOptions = (
         ? (data) => {
               const cleanedRequest = enforcedCleaningFn(data)
               return cleanedRequest
-                  ? instanceConfig.session_recording.maskCapturedNetworkRequestFn?.(cleanedRequest) ?? undefined
+                  ? (instanceConfig.session_recording.maskCapturedNetworkRequestFn?.(cleanedRequest) ?? undefined)
                   : undefined
           }
         : (data) => scrubPayloads(enforcedCleaningFn(data))
