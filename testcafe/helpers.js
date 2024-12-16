@@ -35,6 +35,8 @@ export const staticFilesMock = RequestMock()
         // eslint-disable-next-line no-undef
         const ENV_BROWSER = process.env.BROWSER
         const fileToRead = ENV_BROWSER === 'browserstack:ie' ? '../dist/array.full.es5.js' : '../dist/array.full.js'
+        // eslint-disable-next-line no-console
+        console.log('browser env is:', ENV_BROWSER, 'so reading file:', fileToRead)
         // eslint-disable-next-line no-undef
         const arrayjs = fs.readFileSync(path.resolve(__dirname, fileToRead))
         res.setBody(arrayjs)
