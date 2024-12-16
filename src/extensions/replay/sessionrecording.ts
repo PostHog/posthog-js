@@ -450,6 +450,9 @@ export class SessionRecording {
             logger.error('started without valid sessionManager')
             throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
         }
+        if (this.instance.config.__preview_experimental_cookieless_mode) {
+            throw new Error(LOGGER_PREFIX + ' cannot be used with __preview_experimental_cookieless_mode.')
+        }
 
         // we know there's a sessionManager, so don't need to start without a session id
         const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()

@@ -353,6 +353,12 @@ export interface PostHogConfig {
      * enables the new RemoteConfig approach to loading config instead of decide
      * */
     __preview_remote_config?: boolean
+
+    /**
+     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+     * whether to send a sentinel value for distinct id, device id, and session id, which will be replaced server-side by a cookieless hash
+     * */
+    __preview_experimental_cookieless_mode?: boolean
 }
 
 export interface OptInOutCapturingOptions {

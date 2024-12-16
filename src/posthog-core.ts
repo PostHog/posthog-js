@@ -19,6 +19,8 @@ import {
     PEOPLE_DISTINCT_ID_KEY,
     USER_STATE,
     ENABLE_PERSON_PROCESSING,
+    COOKIELESS_SENTINEL_VALUE,
+    COOKIELESS_MODE_FLAG_PROPERTY,
 } from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { RemoteConfigLoader } from './remote-config'
@@ -432,16 +434,20 @@ export class PostHog {
         this._retryQueue = new RetryQueue(this)
         this.__request_queue = []
 
-        this.sessionManager = new SessionIdManager(this)
-        this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
+        if (!this.config.__preview_experimental_cookieless_mode) {
+            this.sessionManager = new SessionIdManager(this)
+            this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
+        }
 
         new TracingHeaders(this).startIfEnabledOrStop()
 
         this.siteApps = new SiteApps(this)
         this.siteApps?.init()
 
-        this.sessionRecording = new SessionRecording(this)
-        this.sessionRecording.startIfEnabledOrStop()
+        if (!this.config.__preview_experimental_cookieless_mode) {
+            this.sessionRecording = new SessionRecording(this)
+            this.sessionRecording.startIfEnabledOrStop()
+        }
 
         if (!this.config.disable_scroll_properties) {
             this.scrollManager.startMeasuringScrollPosition()
@@ -510,10 +516,18 @@ export class PostHog {
             this.featureFlags.receivedFeatureFlags({ featureFlags: activeFlags, featureFlagPayloads })
         }
 
-        if (!this.get_distinct_id()) {
+        if (this.config.__preview_experimental_cookieless_mode) {
+            this.register_once(
+                {
+                    distinct_id: COOKIELESS_SENTINEL_VALUE,
+                    $device_id: null,
+                },
+                ''
+            )
+        } else if (!this.get_distinct_id()) {
             // There is no need to set the distinct id
             // or the device id if something was already stored
-            // in the persitence
+            // in the persistence
             const uuid = this.config.get_device_id(uuidv7())
 
             this.register_once(
@@ -923,6 +937,11 @@ export class PostHog {
         const startTimestamp = this.persistence.remove_event_timer(event_name)
         let properties = { ...event_properties }
         properties['token'] = this.config.token
+
+        if (this.config.__preview_experimental_cookieless_mode) {
+            // Set a flag to tell the plugin server to use cookieless server hash mode
+            properties[COOKIELESS_MODE_FLAG_PROPERTY] = true
+        }
 
         if (event_name === '$snapshot') {
             const persistenceProps = { ...this.persistence.properties(), ...this.sessionPersistence.properties() }
@@ -1542,14 +1561,24 @@ export class PostHog {
         this.surveys?.reset()
         this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()
-        const uuid = this.config.get_device_id(uuidv7())
-        this.register_once(
-            {
-                distinct_id: uuid,
-                $device_id: reset_device_id ? uuid : device_id,
-            },
-            ''
-        )
+        if (this.config.__preview_experimental_cookieless_mode) {
+            this.register_once(
+                {
+                    distinct_id: COOKIELESS_SENTINEL_VALUE,
+                    $device_id: null,
+                },
+                ''
+            )
+        } else {
+            const uuid = this.config.get_device_id(uuidv7())
+            this.register_once(
+                {
+                    distinct_id: uuid,
+                    $device_id: reset_device_id ? uuid : device_id,
+                },
+                ''
+            )
+        }
     }
 
     /**
