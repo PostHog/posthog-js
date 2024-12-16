@@ -180,8 +180,8 @@ export const Info = {
             initial_referrer == null
                 ? undefined
                 : initial_referrer == '$direct'
-                ? '$direct'
-                : convertToURL(initial_referrer)?.host
+                  ? '$direct'
+                  : convertToURL(initial_referrer)?.host
 
         const props: Record<string, string | undefined> = {
             $initial_referrer: initial_referrer,

@@ -68,7 +68,7 @@ const createMetaSnapshot = (event = {}): metaEvent =>
             href: 'https://has-to-be-present-or-invalid.com',
         },
         ...event,
-    } as metaEvent)
+    }) as metaEvent
 
 const createStyleSnapshot = (event = {}): incrementalSnapshotEvent =>
     ({
@@ -77,14 +77,14 @@ const createStyleSnapshot = (event = {}): incrementalSnapshotEvent =>
             source: IncrementalSource.StyleDeclaration,
         },
         ...event,
-    } as incrementalSnapshotEvent)
+    }) as incrementalSnapshotEvent
 
 const createFullSnapshot = (event = {}): fullSnapshotEvent =>
     ({
         type: FULL_SNAPSHOT_EVENT_TYPE,
         data: {},
         ...event,
-    } as fullSnapshotEvent)
+    }) as fullSnapshotEvent
 
 const createIncrementalSnapshot = (event = {}): incrementalSnapshotEvent => ({
     type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,

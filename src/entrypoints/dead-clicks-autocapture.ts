@@ -53,7 +53,10 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         }
     }
 
-    constructor(readonly instance: PostHog, config?: DeadClicksAutoCaptureConfig) {
+    constructor(
+        readonly instance: PostHog,
+        config?: DeadClicksAutoCaptureConfig
+    ) {
         this._config = this.asRequiredConfig(config)
         this._onCapture = this._config.__onCapture
     }

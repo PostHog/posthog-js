@@ -447,11 +447,16 @@ export class PostHog {
         this.siteApps?.init()
 
         if (!this.config.__preview_experimental_cookieless_mode) {
-            this.sessionRecording = new SessionRecording(this)
-            this.sessionRecording.startIfEnabledOrStop()
+            if (this.config.session_recording.__preview_lazy_loaded_session_recording) {
+                this.sessionReplayLoader = new SessionReplayLoader(this, isSessionReplayEnabled)
+                this.sessionReplayLoader.startIfEnabled()
 
-            this.sessionReplayLoader = new SessionReplayLoader(this, isSessionReplayEnabled)
-            this.sessionReplayLoader.startIfEnabled()
+                // if preview is enabled we can smush the lazy loaded session recorder in here
+                this.sessionRecording = this.sessionReplayLoader.lazyLoaded as unknown as SessionRecording
+            } else {
+                this.sessionRecording = new SessionRecording(this)
+                this.sessionRecording.startIfEnabledOrStop()
+            }
         }
 
         if (!this.config.disable_scroll_properties) {

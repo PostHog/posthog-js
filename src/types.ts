@@ -442,6 +442,7 @@ export interface SessionRecordingOptions {
      Default is 100.
     */
     __mutationRateLimiterBucketSize?: number
+    __preview_lazy_loaded_session_recording?: boolean
 }
 
 export type SessionIdChangedCallback = (
