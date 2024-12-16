@@ -6,6 +6,13 @@
 For information on using this library in your app, [see PostHog Docs](https://posthog.com/docs/libraries/js).  
 This README is intended for developing the library itself.
 
+## dependencies
+
+we use pnpm.
+
+it's best to install using `npm install -g pnpm@latest-8`
+and then `pnpm` commands as usual
+
 ## Testing
 
 Unit tests: run `pnpm test`.
