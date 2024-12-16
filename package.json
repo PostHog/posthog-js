@@ -123,7 +123,12 @@
         ]
     },
     "browserslist": [
-        "> 0.5%, last 2 versions, Firefox ESR, not dead, IE 11"
+        "> 0.5%, last 2 versions, Firefox ESR, not dead",
+        "chrome > 62",
+        "firefox > 59",
+        "ios_saf >= 10.3",
+        "opera > 50",
+        "safari > 12"
     ],
     "pnpm": {
         "patchedDependencies": {
