@@ -65,7 +65,7 @@ describe('loaded() with flags', () => {
 
             jest.runOnlyPendingTimers() // Remote config load
 
-            expect(instance.featureFlags._callDecideEndpoint).toHaveBeenCalledTimes(1)
+            expect(instance.featureFlags._callDecideEndpoint).toHaveBeenCalledTimes(2)
 
             expect(instance._send_request.mock.calls[1][0]).toMatchObject({
                 url: 'https://us.i.posthog.com/decide/?v=3',
