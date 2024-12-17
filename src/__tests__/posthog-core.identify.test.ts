@@ -2,6 +2,7 @@ import { USER_STATE } from '../constants'
 import { uuidv7 } from '../uuidv7'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { PostHog } from '../posthog-core'
+import { assignableWindow } from '../utils/globals'
 
 describe('identify()', () => {
     let instance: PostHog
@@ -9,6 +10,9 @@ describe('identify()', () => {
 
     beforeEach(() => {
         beforeSendMock = jest.fn().mockImplementation((e) => e)
+        // NOTE: Temporary change whilst testing remote config
+        assignableWindow._POSTHOG_CONFIG = {} as any
+
         const posthog = defaultPostHog().init(
             uuidv7(),
             {

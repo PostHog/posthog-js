@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals'
 import { PostHog } from '../posthog-core'
 import { SegmentContext, SegmentPlugin } from '../extensions/segment-integration'
 import { USER_STATE } from '../constants'
+import { assignableWindow } from '../utils/globals'
 
 describe(`Segment integration`, () => {
     let segment: any
@@ -21,6 +22,8 @@ describe(`Segment integration`, () => {
     jest.setTimeout(500)
 
     beforeEach(() => {
+        assignableWindow._POSTHOG_CONFIG = {} as any
+
         // Create something that looks like the Segment Analytics 2.0 API. We
         // could use the actual client, but it's a little more tricky and we'd
         // want to mock out the network requests, for which we don't have a good
