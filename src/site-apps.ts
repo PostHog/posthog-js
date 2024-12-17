@@ -146,7 +146,7 @@ export class SiteApps {
     }
 
     onRemoteConfig(response: RemoteConfig): void {
-        if (this.siteAppLoaders) {
+        if (this.siteAppLoaders?.length) {
             if (!this.isEnabled) {
                 logger.error(`PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.`)
                 return
@@ -156,12 +156,8 @@ export class SiteApps {
                 this.setupSiteApp(app)
             }
 
-            if (!this.siteAppLoaders.length) {
-                this.stopBuffering?.()
-            } else {
-                // NOTE: We could improve this to only fire if we actually have listeners for the event
-                this.instance.on('eventCaptured', (event) => this.onCapturedEvent(event))
-            }
+            // NOTE: We could improve this to only fire if we actually have listeners for the event
+            this.instance.on('eventCaptured', (event) => this.onCapturedEvent(event))
 
             return
         }

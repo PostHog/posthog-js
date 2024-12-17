@@ -254,7 +254,16 @@ describe('SiteApps', () => {
             assignableWindow._POSTHOG_REMOTE_CONFIG = {
                 [token]: {
                     config: {},
-                    siteApps: [],
+                    siteApps: [
+                        {
+                            id: '1',
+                            init: jest.fn(() => {
+                                return {
+                                    processEvent: jest.fn(),
+                                }
+                            }),
+                        },
+                    ],
                 },
             } as any
             siteAppsInstance.onRemoteConfig({
