@@ -118,7 +118,6 @@ export class PostHogSurveys {
                     `/api/surveys/?token=${this.instance.config.token}`
                 ),
                 method: 'GET',
-                transport: 'fetch',
                 callback: (response) => {
                     if (response.statusCode !== 200 || !response.json) {
                         return callback([])
