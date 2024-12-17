@@ -250,7 +250,7 @@ export const request = (_options: RequestOptions) => {
         compression: options.compression,
     })
 
-    const transport = options.transport ?? 'XHR'
+    const transport = options.transport ?? 'fetch'
 
     const transportMethod =
         find(AVAILABLE_TRANSPORTS, (t) => t.transport === transport)?.method ?? AVAILABLE_TRANSPORTS[0].method
