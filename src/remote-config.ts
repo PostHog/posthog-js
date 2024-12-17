@@ -4,15 +4,19 @@ import { RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
 import { assignableWindow } from './utils/globals'
 
-const logger = createLogger('[Decide]')
+const logger = createLogger('[RemoteConfig]')
 
 export class RemoteConfigLoader {
     constructor(private readonly instance: PostHog) {}
 
+    get remoteConfig(): RemoteConfig | undefined {
+        return assignableWindow._POSTHOG_REMOTE_CONFIG?.[this.instance.config.token]?.config
+    }
+
     private _loadRemoteConfigJs(cb: (config?: RemoteConfig) => void): void {
         if (assignableWindow.__PosthogExtensions__?.loadExternalDependency) {
             assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'remote-config', () => {
-                return cb(assignableWindow._POSTHOG_CONFIG)
+                return cb(this.remoteConfig)
             })
         } else {
             logger.error('PostHog Extensions not found. Cannot load remote config.')
@@ -33,9 +37,9 @@ export class RemoteConfigLoader {
     load(): void {
         try {
             // Attempt 1 - use the pre-loaded config if it came as part of the token-specific array.js
-            if (assignableWindow._POSTHOG_CONFIG) {
-                logger.info('Using preloaded remote config', assignableWindow._POSTHOG_CONFIG)
-                this.onRemoteConfig(assignableWindow._POSTHOG_CONFIG)
+            if (this.remoteConfig) {
+                logger.info('Using preloaded remote config', this.remoteConfig)
+                this.onRemoteConfig(this.remoteConfig)
                 return
             }
 

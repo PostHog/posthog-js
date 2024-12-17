@@ -15,8 +15,10 @@ describe('SiteApps', () => {
     let emitCaptureEvent: ((eventName: string, eventPayload: CaptureResult) => void) | undefined
     let removeCaptureHook = jest.fn()
 
+    const token = 'testtoken'
+
     const defaultConfig: Partial<PostHogConfig> = {
-        token: 'testtoken',
+        token: token,
         api_host: 'https://test.com',
         persistence: 'memory',
     }
@@ -40,7 +42,7 @@ describe('SiteApps', () => {
             }),
         }
 
-        delete assignableWindow._POSTHOG_JS_APPS
+        delete assignableWindow._POSTHOG_REMOTE_CONFIG
         delete assignableWindow.POSTHOG_DEBUG
 
         removeCaptureHook = jest.fn()
@@ -249,7 +251,21 @@ describe('SiteApps', () => {
         })
 
         it('does not load site apps if new global loader exists', () => {
-            assignableWindow._POSTHOG_JS_APPS = []
+            assignableWindow._POSTHOG_REMOTE_CONFIG = {
+                [token]: {
+                    config: {},
+                    siteApps: [
+                        {
+                            id: '1',
+                            init: jest.fn(() => {
+                                return {
+                                    processEvent: jest.fn(),
+                                }
+                            }),
+                        },
+                    ],
+                },
+            } as any
             siteAppsInstance.onRemoteConfig({
                 siteApps: [{ id: '1', url: '/site_app/1' }],
             } as RemoteConfig)
@@ -289,26 +305,31 @@ describe('SiteApps', () => {
 
         beforeEach(() => {
             appConfigs = []
-            assignableWindow._POSTHOG_JS_APPS = [
-                {
-                    id: '1',
-                    init: jest.fn((config) => {
-                        appConfigs.push(config)
-                        return {
-                            processEvent: jest.fn(),
-                        }
-                    }),
+            assignableWindow._POSTHOG_REMOTE_CONFIG = {
+                [token]: {
+                    config: {},
+                    siteApps: [
+                        {
+                            id: '1',
+                            init: jest.fn((config) => {
+                                appConfigs.push(config)
+                                return {
+                                    processEvent: jest.fn(),
+                                }
+                            }),
+                        },
+                        {
+                            id: '2',
+                            init: jest.fn((config) => {
+                                appConfigs.push(config)
+                                return {
+                                    processEvent: jest.fn(),
+                                }
+                            }),
+                        },
+                    ],
                 },
-                {
-                    id: '2',
-                    init: jest.fn((config) => {
-                        appConfigs.push(config)
-                        return {
-                            processEvent: jest.fn(),
-                        }
-                    }),
-                },
-            ]
+            } as any
 
             siteAppsInstance.init()
         })
@@ -319,7 +340,12 @@ describe('SiteApps', () => {
         })
 
         it('does not sets up the eventCaptured listener if no site apps', () => {
-            assignableWindow._POSTHOG_JS_APPS = []
+            assignableWindow._POSTHOG_REMOTE_CONFIG = {
+                [token]: {
+                    config: {},
+                    siteApps: [],
+                },
+            } as any
             siteAppsInstance.onRemoteConfig({} as RemoteConfig)
             expect(posthog.on).not.toHaveBeenCalled()
         })

@@ -10,16 +10,22 @@ describe('identify()', () => {
 
     beforeEach(() => {
         beforeSendMock = jest.fn().mockImplementation((e) => e)
+        const token = uuidv7()
         // NOTE: Temporary change whilst testing remote config
-        assignableWindow._POSTHOG_CONFIG = {} as any
+        assignableWindow._POSTHOG_REMOTE_CONFIG = {
+            [token]: {
+                config: {},
+                siteApps: [],
+            },
+        } as any
 
         const posthog = defaultPostHog().init(
-            uuidv7(),
+            token,
             {
                 api_host: 'https://test.com',
                 before_send: beforeSendMock,
             },
-            uuidv7()
+            token
         )
 
         instance = Object.assign(posthog, {

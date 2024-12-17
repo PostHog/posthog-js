@@ -27,8 +27,14 @@ export type AssignableWindow = Window &
     typeof globalThis &
     Record<string, any> & {
         __PosthogExtensions__?: PostHogExtensions
-        _POSTHOG_CONFIG?: RemoteConfig
-        _POSTHOG_JS_APPS?: SiteAppLoader[]
+
+        _POSTHOG_REMOTE_CONFIG?: Record<
+            string,
+            {
+                config: RemoteConfig
+                siteApps: SiteAppLoader[]
+            }
+        >
     }
 
 /**

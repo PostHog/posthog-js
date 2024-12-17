@@ -35,12 +35,16 @@ describe('RemoteConfigLoader', () => {
 
         beforeEach(() => {
             posthog.config.__preview_remote_config = true
-            assignableWindow._POSTHOG_CONFIG = undefined
+            assignableWindow._POSTHOG_REMOTE_CONFIG = undefined
             assignableWindow.POSTHOG_DEBUG = true
 
             assignableWindow.__PosthogExtensions__.loadExternalDependency = jest.fn(
                 (_ph: PostHog, _name: string, cb: (err?: any) => void) => {
-                    assignableWindow._POSTHOG_CONFIG = config as RemoteConfig
+                    assignableWindow._POSTHOG_REMOTE_CONFIG = {}
+                    assignableWindow._POSTHOG_REMOTE_CONFIG[_ph.config.token] = {
+                        config,
+                        siteApps: [],
+                    }
                     cb()
                 }
             )
@@ -49,7 +53,12 @@ describe('RemoteConfigLoader', () => {
         })
 
         it('properly pulls from the window and uses it if set', () => {
-            assignableWindow._POSTHOG_CONFIG = config as RemoteConfig
+            assignableWindow._POSTHOG_REMOTE_CONFIG = {
+                [posthog.config.token]: {
+                    config,
+                    siteApps: [],
+                },
+            }
             new RemoteConfigLoader(posthog).load()
 
             expect(assignableWindow.__PosthogExtensions__.loadExternalDependency).not.toHaveBeenCalled()
@@ -93,7 +102,13 @@ describe('RemoteConfigLoader', () => {
             [false, false],
             [undefined, true],
         ])('conditionally reloads feature flags - hasFlags: %s, shouldReload: %s', (hasFeatureFlags, shouldReload) => {
-            assignableWindow._POSTHOG_CONFIG = { hasFeatureFlags } as RemoteConfig
+            assignableWindow._POSTHOG_REMOTE_CONFIG = {
+                [posthog.config.token]: {
+                    config: { ...config, hasFeatureFlags },
+                    siteApps: [],
+                },
+            }
+
             new RemoteConfigLoader(posthog).load()
 
             if (shouldReload) {
