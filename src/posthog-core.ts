@@ -1717,7 +1717,7 @@ export class PostHog {
      *       // or any way to know the result of the request. PostHog
      *       // capturing via sendBeacon will not support any event-
      *       // batching or retry mechanisms.
-     *       api_transport: 'XHR'
+     *       api_transport: 'fetch'
      *
      *       // super properties cookie expiration (in days)
      *       cookie_expiration: 365
