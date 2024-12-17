@@ -10,21 +10,28 @@ const Chat = () => {
     const [socket, setSocket] = useState<Socket<DefaultEventsMap, DefaultEventsMap> | null>(null)
 
     useEffect(() => {
+        // make sure we initialize the WebSocket server
+        // we don't need to support IE11 here
+        // eslint-disable-next-line compat/compat
+        fetch('/api/socket')
+
+        // Clean up the socket connection on unmount
+        return () => {
+            socket?.disconnect()
+        }
+    }, [])
+
+    const connect = () => {
         // Create a socket connection
         const createdSocket = io()
-
+        console.log('connecting', createdSocket)
         // Listen for incoming messages
         createdSocket.on('message', (message) => {
             setMessages((prevMessages) => [...prevMessages, message])
         })
 
         setSocket(createdSocket)
-
-        // Clean up the socket connection on unmount
-        return () => {
-            createdSocket.disconnect()
-        }
-    }, [])
+    }
 
     const sendMessage = () => {
         if (!socket) {
@@ -39,6 +46,13 @@ const Chat = () => {
 
     return (
         <div className={'w-full min-h-96 flex-col space-y-2'}>
+            <button
+                disabled={!!socket}
+                onClick={connect}
+                className={'disabled:cursor-not-allowed bg-amber-400 disabled:bg-gray-600'}
+            >
+                Connect chat
+            </button>
             <div className="flex flex-row justify-between items-center border border-gray-300 rounded p-2 space-x-2">
                 <input
                     className={'flex-1 border rounded px-2 py-1'}
@@ -47,7 +61,13 @@ const Chat = () => {
                     onChange={(e) => setCurrentMessage(e.target.value)}
                 />
 
-                <button onClick={sendMessage}>Send</button>
+                <button
+                    disabled={!socket}
+                    onClick={sendMessage}
+                    className={'disabled:cursor-not-allowed bg-amber-400 disabled:bg-gray-600'}
+                >
+                    Send
+                </button>
             </div>
 
             <div className="flex flex-col border rounded px-2 py-1">

@@ -1012,6 +1012,11 @@ export class SessionRecording {
             }
         }
 
+        if (assignableWindow.__PosthogExtensions__?.rrwebPlugins?.getRecordWebSocketPlugin) {
+            const webSocketPlugin = assignableWindow.__PosthogExtensions__?.rrwebPlugins?.getRecordWebSocketPlugin
+            plugins.push(webSocketPlugin())
+        }
+
         return plugins
     }
 

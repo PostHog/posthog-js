@@ -30,8 +30,8 @@ dependencies:
     specifier: 14.2.20
     version: 14.2.20(react-dom@18.3.1)(react@18.3.1)
   posthog-js:
-    specifier: 1.200.1
-    version: 1.200.1
+    specifier: file:.yalc/posthog-js
+    version: file:.yalc/posthog-js
   react:
     specifier: 18.3.1
     version: 18.3.1
@@ -1393,17 +1393,8 @@ packages:
       source-map-js: 1.2.1
     dev: true
 
-  /posthog-js@1.200.1:
-    resolution: {integrity: sha512-Ktm2Fa6La67imiZXNwXvFnhkoFae3KhGvjI2TUnElxWF3Sr5mvi5/IMT2fLc5pns89cKsCr+n52Q5E6OxpqBxw==}
-    dependencies:
-      core-js: 3.39.0
-      fflate: 0.4.8
-      preact: 10.24.1
-      web-vitals: 4.2.3
-    dev: false
-
-  /preact@10.24.1:
-    resolution: {integrity: sha512-PnBAwFI3Yjxxcxw75n6VId/5TFxNW/81zexzWD9jn1+eSrOP84NdsS38H5IkF/UH3frqRPT+MvuCoVHjTDTnDw==}
+  /preact@10.25.2:
+    resolution: {integrity: sha512-GEts1EH3oMnqdOIeXhlbBSddZ9nrINd070WBOiPO2ous1orrKGUM4SMDbwyjSWD1iMS2dBvaDjAa5qUhz3TXqw==}
     dev: false
 
   /prelude-ls@1.2.1:
@@ -1752,8 +1743,8 @@ packages:
     engines: {node: '>= 0.8'}
     dev: false
 
-  /web-vitals@4.2.3:
-    resolution: {integrity: sha512-/CFAm1mNxSmOj6i0Co+iGFJ58OS4NRGVP+AWS/l509uIK5a1bSoIVaHz/ZumpHTfHSZBpgrJ+wjfpAOrTHok5Q==}
+  /web-vitals@4.2.4:
+    resolution: {integrity: sha512-r4DIlprAGwJ7YM11VZp4R884m0Vmgr6EAKe3P+kO0PPj3Unqyvv59rczf6UiGcb9Z8QxZVcqKNwv/g0WNdWwsw==}
     dev: false
 
   /which@2.0.2:
@@ -1815,3 +1806,13 @@ packages:
   /yocto-queue@0.1.0:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
+
+  file:.yalc/posthog-js:
+    resolution: {directory: .yalc/posthog-js, type: directory}
+    name: posthog-js
+    dependencies:
+      core-js: 3.39.0
+      fflate: 0.4.8
+      preact: 10.25.2
+      web-vitals: 4.2.4
+    dev: false

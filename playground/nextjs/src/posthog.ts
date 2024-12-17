@@ -63,7 +63,7 @@ if (typeof window !== 'undefined') {
         person_profiles: PERSON_PROCESSING_MODE === 'never' ? 'identified_only' : PERSON_PROCESSING_MODE,
         persistence_name: `${process.env.NEXT_PUBLIC_POSTHOG_KEY}_nextjs`,
         opt_in_site_apps: true,
-        __preview_remote_config: true,
+        __preview_remote_config: false,
         ...configForConsent(),
     })
     // Help with debugging
