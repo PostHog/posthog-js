@@ -475,7 +475,7 @@ describe('featureflags', () => {
             expect(instance._send_request).toHaveBeenCalledWith({
                 url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
                 method: 'GET',
-                transport: 'XHR',
+                transport: 'fetch',
                 callback: expect.any(Function),
             })
             expect(instance._send_request).toHaveBeenCalledTimes(1)
@@ -507,7 +507,7 @@ describe('featureflags', () => {
                 url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
                 method: 'GET',
                 callback: expect.any(Function),
-                transport: 'XHR',
+                transport: 'fetch',
             })
             expect(instance._send_request).toHaveBeenCalledTimes(1)
 
