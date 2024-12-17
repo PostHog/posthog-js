@@ -1,3 +1,8 @@
+## 1.202.2 - 2024-12-17
+
+- fix: specify transport in fewer places to let config control (#1614)
+- chore: update rollup, bc y not (#1615)
+
 ## 1.202.1 - 2024-12-17
 
 - feat: Use token scoped remote config (#1611)
