@@ -433,7 +433,6 @@ export class PostHogFeatureFlags {
 
         if (!existing_early_access_features || force_reload) {
             this.instance._send_request({
-                transport: 'fetch',
                 url: this.instance.requestRouter.endpointFor(
                     'api',
                     `/api/early_access_features/?token=${this.instance.config.token}`
