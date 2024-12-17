@@ -22,7 +22,12 @@ describe(`Segment integration`, () => {
     jest.setTimeout(500)
 
     beforeEach(() => {
-        assignableWindow._POSTHOG_CONFIG = {} as any
+        assignableWindow._POSTHOG_REMOTE_CONFIG = {
+            'test-token': {
+                config: {},
+                siteApps: [],
+            },
+        } as any
 
         // Create something that looks like the Segment Analytics 2.0 API. We
         // could use the actual client, but it's a little more tricky and we'd

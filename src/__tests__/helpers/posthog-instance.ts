@@ -16,7 +16,12 @@ export const createPosthogInstance = async (
     const posthog = new PostHog()
 
     // NOTE: Temporary change whilst testing remote config
-    assignableWindow._POSTHOG_CONFIG = {} as any
+    assignableWindow._POSTHOG_REMOTE_CONFIG = {
+        [token]: {
+            config: {},
+            siteApps: [],
+        },
+    } as any
 
     // eslint-disable-next-line compat/compat
     return await new Promise<PostHog>((resolve) =>
