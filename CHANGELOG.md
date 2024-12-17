@@ -1,3 +1,7 @@
+## 1.202.0 - 2024-12-17
+
+- fix: Change default transport to fetch (#1612)
+
 ## 1.201.1 - 2024-12-17
 
 - fix: Load RemoteConfig by default but don't use it (#1607)
