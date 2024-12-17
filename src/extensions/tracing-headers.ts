@@ -1,9 +1,9 @@
 import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
-import { logger } from '../utils/logger'
+import { createLogger } from '../utils/logger'
 import { isUndefined } from '../utils/type-utils'
 
-const LOGGER_PREFIX = '[TRACING-HEADERS]'
+const logger = createLogger('[TracingHeaders]')
 
 export class TracingHeaders {
     private _restoreXHRPatch: (() => void) | undefined = undefined
@@ -19,7 +19,7 @@ export class TracingHeaders {
 
         assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'tracing-headers', (err) => {
             if (err) {
-                return logger.error(LOGGER_PREFIX + ' failed to load script', err)
+                return logger.error('failed to load script', err)
             }
             cb()
         })
@@ -37,12 +37,11 @@ export class TracingHeaders {
     }
 
     private _startCapturing = () => {
-        // NB: we can assert sessionManager is present only because we've checked previously
         if (isUndefined(this._restoreXHRPatch)) {
-            assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchXHR(this.instance.sessionManager!)
+            assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchXHR(this.instance.sessionManager)
         }
         if (isUndefined(this._restoreFetchPatch)) {
-            assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchFetch(this.instance.sessionManager!)
+            assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchFetch(this.instance.sessionManager)
         }
     }
 }

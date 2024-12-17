@@ -157,7 +157,50 @@ describe('Event capture', () => {
 
         cy.get('[data-cy-feature-flag-button]').click()
 
-        cy.phCaptures().should('include', '$feature_flag_called')
+        cy.phCaptures({ full: true }).then((captures) => {
+            const flagCallEvents = captures.filter((capture) => capture.event === '$feature_flag_called')
+            expect(flagCallEvents.length).to.eq(1)
+            const flagCallEvent = flagCallEvents[0]
+            expect(flagCallEvent.properties.$feature_flag_bootstrapped_response).to.not.exist
+            expect(flagCallEvent.properties.$feature_flag_bootstrapped_payload).to.not.exist
+            expect(flagCallEvent.properties.$used_bootstrap_value).to.equal(false)
+        })
+    })
+
+    it('captures $feature_flag_called with bootstrapped value properties', () => {
+        start({
+            options: {
+                bootstrap: {
+                    featureFlags: {
+                        'some-feature': 'some-value',
+                    },
+                    featureFlagPayloads: {
+                        'some-feature': 'some-payload',
+                    },
+                },
+                advanced_disable_feature_flags: true,
+            },
+            waitForDecide: false,
+        })
+
+        cy.intercept(
+            '/decide/*',
+            { times: 1 },
+            {
+                forceNetworkError: true,
+            }
+        )
+
+        cy.get('[data-cy-feature-flag-button]').click()
+
+        cy.phCaptures({ full: true }).then((captures) => {
+            const flagCallEvents = captures.filter((capture) => capture.event === '$feature_flag_called')
+            expect(flagCallEvents.length).to.eq(1)
+            const flagCallEvent = flagCallEvents[0]
+            expect(flagCallEvent.properties.$feature_flag_bootstrapped_response).to.equal('some-value')
+            expect(flagCallEvent.properties.$feature_flag_bootstrapped_payload).to.equal('some-payload')
+            expect(flagCallEvent.properties.$used_bootstrap_value).to.equal(true)
+        })
     })
 
     it('captures rage clicks', () => {
@@ -339,6 +382,7 @@ describe('Event capture', () => {
                     token: 'test_token',
                     distinct_id: 'new-id',
                     person_properties: {},
+                    $anon_distinct_id: payload.$anon_distinct_id,
                     groups: {
                         company: 'id:5',
                         playlist: 'id:77',

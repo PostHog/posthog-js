@@ -113,10 +113,10 @@ export const detectBrowser = function (user_agent: string, vendor: string | unde
         return CHROME_IOS // why not just Chrome?
     } else if (includes(user_agent, 'CrMo')) {
         return CHROME
-    } else if (includes(user_agent, ANDROID) && includes(user_agent, SAFARI)) {
-        return ANDROID_MOBILE
     } else if (includes(user_agent, CHROME)) {
         return CHROME
+    } else if (includes(user_agent, ANDROID) && includes(user_agent, SAFARI)) {
+        return ANDROID_MOBILE
     } else if (includes(user_agent, 'FxiOS')) {
         return FIREFOX_IOS
     } else if (includes(user_agent.toLowerCase(), KONQUEROR.toLowerCase())) {
@@ -183,7 +183,7 @@ export const detectBrowserVersion = function (userAgent: string, vendor: string 
 // the first regex that matches uses its matcher function to return the result
 const osMatchers: [
     RegExp,
-    [string, string] | ((match: RegExpMatchArray | null, user_agent: string) => [string, string])
+    [string, string] | ((match: RegExpMatchArray | null, user_agent: string) => [string, string]),
 ][] = [
     [
         new RegExp(XBOX + '; ' + XBOX + ' (.*?)[);]', 'i'),

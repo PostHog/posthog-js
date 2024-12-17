@@ -143,12 +143,12 @@ function errorPropertiesFromString(candidate: string, metadata?: ErrorMetadata):
 
     const exceptionType = metadata?.overrideExceptionType
         ? metadata.overrideExceptionType
-        : metadata?.defaultExceptionType ?? 'Error'
+        : (metadata?.defaultExceptionType ?? 'Error')
     const exceptionMessage = metadata?.overrideExceptionMessage
         ? metadata.overrideExceptionMessage
         : candidate
-        ? candidate
-        : metadata?.defaultExceptionMessage
+          ? candidate
+          : metadata?.defaultExceptionMessage
 
     const exception: Exception = {
         type: exceptionType,
@@ -213,8 +213,8 @@ function errorPropertiesFromObject(candidate: Record<string, unknown>, metadata?
     const exceptionType = metadata?.overrideExceptionType
         ? metadata.overrideExceptionType
         : isEvent(candidate)
-        ? candidate.constructor.name
-        : 'Error'
+          ? candidate.constructor.name
+          : 'Error'
     const exceptionMessage = metadata?.overrideExceptionMessage
         ? metadata.overrideExceptionMessage
         : `Non-Error ${'exception'} captured with keys: ${extractExceptionKeysForMessage(candidate)}`

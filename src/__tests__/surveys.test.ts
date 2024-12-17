@@ -236,7 +236,7 @@ describe('surveys', () => {
         expect(instance._send_request).toHaveBeenCalledWith({
             url: 'https://us.i.posthog.com/api/surveys/?token=testtoken',
             method: 'GET',
-            transport: 'XHR',
+            transport: 'fetch',
             callback: expect.any(Function),
         })
         expect(instance._send_request).toHaveBeenCalledTimes(1)
@@ -281,7 +281,7 @@ describe('surveys', () => {
         expect(instance._send_request).toHaveBeenCalledWith({
             url: 'https://us.i.posthog.com/api/surveys/?token=testtoken',
             method: 'GET',
-            transport: 'XHR',
+            transport: 'fetch',
             callback: expect.any(Function),
         })
         expect(instance._send_request).toHaveBeenCalledTimes(1)

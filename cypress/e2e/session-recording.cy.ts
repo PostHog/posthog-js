@@ -249,7 +249,7 @@ describe('Session recording', () => {
                         [/http:\/\/localhost:\d+\/static\/array.js/, 'script'],
                         [
                             /http:\/\/localhost:\d+\/decide\/\?v=3&ip=1&_=\d+&ver=1\.\d\d\d\.\d+&compression=base64/,
-                            'xmlhttprequest',
+                            'fetch',
                         ],
                         [/http:\/\/localhost:\d+\/static\/recorder.js\?v=1\.\d\d\d\.\d+/, 'script'],
                         [/https:\/\/example.com/, 'fetch'],
@@ -304,7 +304,7 @@ describe('Session recording', () => {
                         [/http:\/\/localhost:\d+\/static\/array.js/, 'script'],
                         [
                             /http:\/\/localhost:\d+\/decide\/\?v=3&ip=1&_=\d+&ver=1\.\d\d\d\.\d+&compression=base64/,
-                            'xmlhttprequest',
+                            'fetch',
                         ],
                         [/http:\/\/localhost:\d+\/static\/recorder.js\?v=1\.\d\d\d\.\d+/, 'script'],
                         [/https:\/\/example.com/, 'xmlhttprequest'],

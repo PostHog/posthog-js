@@ -20,7 +20,9 @@ import {
 } from './constants'
 
 import { isArray } from './utils/type-utils'
-import { logger } from './utils/logger'
+import { createLogger } from './utils/logger'
+
+const logger = createLogger('[FeatureFlags]')
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
@@ -80,20 +82,41 @@ export const parseFeatureFlagDecideResponse = (
 }
 
 export class PostHogFeatureFlags {
-    instance: PostHog
-    _override_warning: boolean
+    _override_warning: boolean = false
     featureFlagEventHandlers: FeatureFlagsCallback[]
-    reloadFeatureFlagsQueued: boolean
-    reloadFeatureFlagsInAction: boolean
     $anon_distinct_id: string | undefined
+    private _hasLoadedFlags: boolean = false
+    private _requestInFlight: boolean = false
+    private _reloadingDisabled: boolean = false
+    private _additionalReloadRequested: boolean = false
+    private _reloadDebouncer?: any
+    private _decideCalled: boolean = false
+    private _flagsLoadedFromRemote: boolean = false
 
-    constructor(instance: PostHog) {
-        this.instance = instance
-        this._override_warning = false
+    constructor(private instance: PostHog) {
         this.featureFlagEventHandlers = []
+    }
 
-        this.reloadFeatureFlagsQueued = false
-        this.reloadFeatureFlagsInAction = false
+    decide(): void {
+        if (this.instance.config.__preview_remote_config) {
+            // If remote config is enabled we don't call decide and we mark it as called so that we don't simulate it
+            this._decideCalled = true
+            return
+        }
+
+        // TRICKY: We want to disable flags if we don't have a queued reload, and one of the settings exist for disabling on first load
+        const disableFlags =
+            !this._reloadDebouncer &&
+            (this.instance.config.advanced_disable_feature_flags ||
+                this.instance.config.advanced_disable_feature_flags_on_first_load)
+
+        this._callDecideEndpoint({
+            disableFlags,
+        })
+    }
+
+    get hasLoadedFlags(): boolean {
+        return this._hasLoadedFlags
     }
 
     getFlags(): string[] {
@@ -135,13 +158,37 @@ export class PostHogFeatureFlags {
      *
      * 1. Avoid parallel requests
      * 2. Delay a few milliseconds after each reloadFeatureFlags call to batch subsequent changes together
-     * 3. Don't call this during initial load (as /decide will be called instead), see posthog-core.js
      */
     reloadFeatureFlags(): void {
-        if (!this.reloadFeatureFlagsQueued) {
-            this.reloadFeatureFlagsQueued = true
-            this._startReloadTimer()
+        if (this._reloadingDisabled || this.instance.config.advanced_disable_feature_flags) {
+            // If reloading has been explicitly disabled then we don't want to do anything
+            // Or if feature flags are disabled
+            return
         }
+
+        if (this._reloadDebouncer) {
+            // If we're already in a debounce then we don't want to do anything
+            return
+        }
+
+        // Debounce multiple calls on the same tick
+        this._reloadDebouncer = setTimeout(() => {
+            this._callDecideEndpoint()
+        }, 5)
+    }
+
+    private clearDebouncer(): void {
+        clearTimeout(this._reloadDebouncer)
+        this._reloadDebouncer = undefined
+    }
+
+    ensureFlagsLoaded(): void {
+        if (this._hasLoadedFlags || this._requestInFlight || this._reloadDebouncer) {
+            // If we are or have already loaded the flags then we don't want to do anything
+            return
+        }
+
+        this.reloadFeatureFlags()
     }
 
     setAnonymousDistinctId(anon_distinct_id: string): void {
@@ -149,52 +196,46 @@ export class PostHogFeatureFlags {
     }
 
     setReloadingPaused(isPaused: boolean): void {
-        this.reloadFeatureFlagsInAction = isPaused
+        this._reloadingDisabled = isPaused
     }
 
-    resetRequestQueue(): void {
-        this.reloadFeatureFlagsQueued = false
-    }
-
-    _startReloadTimer(): void {
-        if (this.reloadFeatureFlagsQueued && !this.reloadFeatureFlagsInAction) {
-            setTimeout(() => {
-                if (!this.reloadFeatureFlagsInAction && this.reloadFeatureFlagsQueued) {
-                    this.reloadFeatureFlagsQueued = false
-                    this._reloadFeatureFlagsRequest()
-                }
-            }, 5)
-        }
-    }
-
-    _reloadFeatureFlagsRequest(): void {
-        if (this.instance.config.advanced_disable_feature_flags) {
+    /**
+     * NOTE: This is used both for flags and remote config. Once the RemoteConfig is fully released this will essentially only
+     * be for flags and can eventually be replaced with the new flags endpoint
+     */
+    _callDecideEndpoint(options?: { disableFlags?: boolean }): void {
+        // Ensure we don't have double queued decide requests
+        this.clearDebouncer()
+        if (this.instance.config.advanced_disable_decide) {
+            // The way this is documented is essentially used to refuse to ever call the decide endpoint.
             return
         }
-
-        this.setReloadingPaused(true)
+        if (this._requestInFlight) {
+            this._additionalReloadRequested = true
+            return
+        }
         const token = this.instance.config.token
-        const personProperties = this.instance.get_property(STORED_PERSON_PROPERTIES_KEY)
-        const groupProperties = this.instance.get_property(STORED_GROUP_PROPERTIES_KEY)
-        const json_data = {
+        const data: Record<string, any> = {
             token: token,
             distinct_id: this.instance.get_distinct_id(),
             groups: this.instance.getGroups(),
             $anon_distinct_id: this.$anon_distinct_id,
-            person_properties: personProperties,
-            group_properties: groupProperties,
-            disable_flags: this.instance.config.advanced_disable_feature_flags || undefined,
+            person_properties: this.instance.get_property(STORED_PERSON_PROPERTIES_KEY),
+            group_properties: this.instance.get_property(STORED_GROUP_PROPERTIES_KEY),
         }
 
+        if (options?.disableFlags || this.instance.config.advanced_disable_feature_flags) {
+            data.disable_flags = true
+        }
+
+        this._requestInFlight = true
         this.instance._send_request({
             method: 'POST',
             url: this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
-            data: json_data,
+            data,
             compression: this.instance.config.disable_compression ? undefined : Compression.Base64,
             timeout: this.instance.config.feature_flag_request_timeout_ms,
             callback: (response) => {
-                this.setReloadingPaused(false)
-
                 let errorsLoading = true
 
                 if (response.statusCode === 200) {
@@ -204,14 +245,26 @@ export class PostHogFeatureFlags {
                     this.$anon_distinct_id = undefined
                     errorsLoading = false
                 }
-                // :TRICKY: We want to fire the callback even if the request fails
-                // and return existing flags if they exist
-                // This is because we don't want to block clients waiting for flags to load.
-                // It's possible they're waiting for the callback to render the UI, but it never occurs.
+
+                this._requestInFlight = false
+
+                if (!this._decideCalled) {
+                    this._decideCalled = true
+                    this.instance._onRemoteConfig(response.json ?? {})
+                }
+
+                if (data.disable_flags) {
+                    // If flags are disabled then there is no need to call decide again (flags are the only thing that may change)
+                    return
+                }
+
+                this._flagsLoadedFromRemote = !errorsLoading
                 this.receivedFeatureFlags(response.json ?? {}, errorsLoading)
 
-                // :TRICKY: Reload - start another request if queued!
-                this._startReloadTimer()
+                if (this._additionalReloadRequested) {
+                    this._additionalReloadRequested = false
+                    this._callDecideEndpoint()
+                }
             },
         })
     }
@@ -227,7 +280,7 @@ export class PostHogFeatureFlags {
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
     getFeatureFlag(key: string, options: { send_event?: boolean } = {}): boolean | string | undefined {
-        if (!this.instance.decideEndpointWasHit && !(this.getFlags() && this.getFlags().length > 0)) {
+        if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
             logger.warn('getFeatureFlag for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
         }
@@ -244,7 +297,16 @@ export class PostHogFeatureFlags {
                 }
                 this.instance.persistence?.register({ [FLAG_CALL_REPORTED]: flagCallReported })
 
-                this.instance.capture('$feature_flag_called', { $feature_flag: key, $feature_flag_response: flagValue })
+                this.instance.capture('$feature_flag_called', {
+                    $feature_flag: key,
+                    $feature_flag_response: flagValue,
+                    $feature_flag_payload: this.getFeatureFlagPayload(key) || null,
+                    $feature_flag_bootstrapped_response: this.instance.config.bootstrap?.featureFlags?.[key] || null,
+                    $feature_flag_bootstrapped_payload:
+                        this.instance.config.bootstrap?.featureFlagPayloads?.[key] || null,
+                    // If we haven't yet received a response from the /decide endpoint, we must have used the bootstrapped value
+                    $used_bootstrap_value: !this._flagsLoadedFromRemote,
+                })
             }
         }
         return flagValue
@@ -266,7 +328,7 @@ export class PostHogFeatureFlags {
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
     isFeatureEnabled(key: string, options: { send_event?: boolean } = {}): boolean | undefined {
-        if (!this.instance.decideEndpointWasHit && !(this.getFlags() && this.getFlags().length > 0)) {
+        if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
             logger.warn('isFeatureEnabled for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
         }
@@ -285,7 +347,8 @@ export class PostHogFeatureFlags {
         if (!this.instance.persistence) {
             return
         }
-        this.instance.decideEndpointWasHit = true
+        this._hasLoadedFlags = true
+
         const currentFlags = this.getFlagVariants()
         const currentFlagPayloads = this.getFlagPayloads()
         parseFeatureFlagDecideResponse(response, this.instance.persistence, currentFlags, currentFlagPayloads)
@@ -339,7 +402,7 @@ export class PostHogFeatureFlags {
      */
     onFeatureFlags(callback: FeatureFlagsCallback): () => void {
         this.addFeatureFlagsHandler(callback)
-        if (this.instance.decideEndpointWasHit) {
+        if (this._hasLoadedFlags) {
             const { flags, flagVariants } = this._prepareFeatureFlagsForCallbacks()
             callback(flags, flagVariants)
         }
@@ -370,7 +433,7 @@ export class PostHogFeatureFlags {
 
         if (!existing_early_access_features || force_reload) {
             this.instance._send_request({
-                transport: 'XHR',
+                transport: 'fetch',
                 url: this.instance.requestRouter.endpointFor(
                     'api',
                     `/api/early_access_features/?token=${this.instance.config.token}`

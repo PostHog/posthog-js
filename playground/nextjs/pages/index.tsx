@@ -43,6 +43,9 @@ export default function Home() {
                 <a className="Button" data-attr="autocapture-button" href="#">
                     <span>Autocapture a &gt; span</span>
                 </a>
+                <a className="Button" data-attr="chat-button" href="/chat">
+                    <span>REAL TIME CHAT OMG</span>
+                </a>
                 <button
                     onClick={() => {
                         console.log(posthog.persistence?.props[STORED_PERSON_PROPERTIES_KEY])

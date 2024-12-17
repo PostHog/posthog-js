@@ -6,6 +6,7 @@ import { shouldCaptureValue } from '../../autocapture-utils'
 import { each } from '../../utils'
 
 const LOGGER_PREFIX = '[SessionRecording]'
+
 const REDACTED = 'redacted'
 
 export const defaultNetworkOptions: Required<NetworkRecordOptions> = {
@@ -246,7 +247,7 @@ export const buildNetworkRequestOptions = (
         ? (data) => {
               const cleanedRequest = enforcedCleaningFn(data)
               return cleanedRequest
-                  ? instanceConfig.session_recording.maskCapturedNetworkRequestFn?.(cleanedRequest) ?? undefined
+                  ? (instanceConfig.session_recording.maskCapturedNetworkRequestFn?.(cleanedRequest) ?? undefined)
                   : undefined
           }
         : (data) => scrubPayloads(enforcedCleaningFn(data))

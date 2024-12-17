@@ -1,3 +1,5 @@
+import './helpers/mock-logger'
+
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 import { PostHog } from '../posthog-core'
@@ -7,7 +9,6 @@ import { beforeEach, expect } from '@jest/globals'
 import { HEATMAPS_ENABLED_SERVER_SIDE } from '../constants'
 import { Heatmaps } from '../heatmaps'
 
-jest.mock('../utils/logger')
 jest.useFakeTimers()
 
 describe('heatmaps', () => {
@@ -20,7 +21,7 @@ describe('heatmaps', () => {
             clientX: 10,
             clientY: 20,
             ...props,
-        } as unknown as MouseEvent)
+        }) as unknown as MouseEvent
 
     beforeEach(async () => {
         beforeSendMock = beforeSendMock.mockClear()
@@ -217,7 +218,7 @@ describe('heatmaps', () => {
             (deprecatedclientSideOptIn, clientSideOptIn, serverSideOptIn, expected) => {
                 posthog.config.enable_heatmaps = deprecatedclientSideOptIn
                 posthog.config.capture_heatmaps = clientSideOptIn
-                posthog.heatmaps!.afterDecideResponse({
+                posthog.heatmaps!.onRemoteConfig({
                     heatmaps: serverSideOptIn,
                 } as DecideResponse)
                 expect(posthog.heatmaps!.isEnabled).toBe(expected)

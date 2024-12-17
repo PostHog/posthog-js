@@ -15,15 +15,17 @@ import {
     splitClassString,
 } from './autocapture-utils'
 import RageClick from './extensions/rageclick'
-import { AutocaptureConfig, COPY_AUTOCAPTURE_EVENT, DecideResponse, EventName, Properties } from './types'
+import { AutocaptureConfig, COPY_AUTOCAPTURE_EVENT, EventName, Properties, RemoteConfig } from './types'
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
 import { isBoolean, isFunction, isNull, isObject } from './utils/type-utils'
-import { logger } from './utils/logger'
+import { createLogger } from './utils/logger'
 import { document, window } from './utils/globals'
 import { convertToURL } from './utils/request-utils'
 import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
+
+const logger = createLogger('[AutoCapture]')
 
 function limitText(length: number, text: string): string {
     if (text.length > length) {
@@ -286,7 +288,7 @@ export class Autocapture {
         }
     }
 
-    public afterDecideResponse(response: DecideResponse) {
+    public onRemoteConfig(response: RemoteConfig) {
         if (response.elementsChainAsString) {
             this._elementsChainAsString = response.elementsChainAsString
         }

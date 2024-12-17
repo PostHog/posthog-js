@@ -30,7 +30,7 @@ export const knownUnsafeEditableEvent = [
  *
  * Some features of PostHog rely on receiving 100% of these events
  */
-export type KnownUnsafeEditableEvent = typeof knownUnsafeEditableEvent[number]
+export type KnownUnsafeEditableEvent = (typeof knownUnsafeEditableEvent)[number]
 
 /**
  * These are known events PostHog events that can be processed by the `beforeCapture` function
@@ -333,11 +333,32 @@ export interface PostHogConfig {
         events_burst_limit?: number
     }
 
+    /** Used when sending data via `fetch`, use with care, this is intentionally meant to be used with NextJS `fetch`
+     *  Incorrect usage may cause out-of-date data for feature flags, actions tracking, etc.
+     *  See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
+     */
+    fetch_options?: {
+        cache?: RequestInit['cache']
+        next_options?: NextOptions
+    }
+
     /**
      * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
      * whether to wrap fetch and add tracing headers to the request
      * */
     __add_tracing_headers?: boolean
+
+    /**
+     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+     * enables the new RemoteConfig approach to loading config instead of decide
+     * */
+    __preview_remote_config?: boolean
+
+    /**
+     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+     * whether to send a sentinel value for distinct id, device id, and session id, which will be replaced server-side by a cookieless hash
+     * */
+    __preview_experimental_cookieless_mode?: boolean
 }
 
 export interface OptInOutCapturingOptions {
@@ -434,6 +455,9 @@ export interface RequestResponse {
 
 export type RequestCallback = (response: RequestResponse) => void
 
+// See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
+type NextOptions = { revalidate: false | 0 | number; tags: string[] }
+
 export interface RequestOptions {
     url: string
     // Data can be a single object or an array of objects when batched
@@ -446,6 +470,10 @@ export interface RequestOptions {
     timeout?: number
     noRetries?: boolean
     compression?: Compression | 'best-available'
+    fetchOptions?: {
+        cache?: RequestInit['cache']
+        next?: NextOptions
+    }
 }
 
 // Queued request types - the same as a request but with additional queueing information
@@ -480,11 +508,8 @@ export type SessionRecordingCanvasOptions = {
     canvasQuality?: string | null
 }
 
-export interface DecideResponse {
+export interface RemoteConfig {
     supportedCompression: Compression[]
-    featureFlags: Record<string, string | boolean>
-    featureFlagPayloads: Record<string, JsonType>
-    errorsWhileComputingFlags: boolean
     autocapture_opt_out?: boolean
     /**
      *     originally capturePerformance was replay only and so boolean true
@@ -528,6 +553,42 @@ export interface DecideResponse {
     heatmaps?: boolean
     defaultIdentifiedOnly?: boolean
     captureDeadClicks?: boolean
+    hasFeatureFlags?: boolean // Indicates if the team has any flags enabled (if not we don't need to load them)
+}
+
+export interface DecideResponse extends RemoteConfig {
+    featureFlags: Record<string, string | boolean>
+    featureFlagPayloads: Record<string, JsonType>
+    errorsWhileComputingFlags: boolean
+}
+
+export type SiteAppGlobals = {
+    event: {
+        uuid: string
+        event: EventName
+        properties: Properties
+        timestamp?: Date
+        elements_chain?: string
+        distinct_id?: string
+    }
+    person: {
+        properties: Properties
+    }
+    groups: Record<string, { id: string; type: string; properties: Properties }>
+}
+
+export type SiteAppLoader = {
+    id: string
+    init: (config: { posthog: PostHog; callback: (success: boolean) => void }) => {
+        processEvent?: (globals: SiteAppGlobals) => void
+    }
+}
+
+export type SiteApp = {
+    id: string
+    loaded: boolean
+    errored: boolean
+    processEvent?: (globals: SiteAppGlobals) => void
 }
 
 export type FeatureFlagsCallback = (
@@ -697,7 +758,7 @@ export type ErrorEventArgs = [
     source?: string | undefined,
     lineno?: number | undefined,
     colno?: number | undefined,
-    error?: Error | undefined
+    error?: Error | undefined,
 ]
 
 export type ErrorMetadata = {
@@ -714,7 +775,7 @@ export type ErrorMetadata = {
 // and to avoid relying on a frequently changing @sentry/types dependency
 // but provided as an array of literal types, so we can constrain the level below
 export const severityLevels = ['fatal', 'error', 'warning', 'log', 'info', 'debug'] as const
-export declare type SeverityLevel = typeof severityLevels[number]
+export declare type SeverityLevel = (typeof severityLevels)[number]
 
 export interface ErrorProperties {
     $exception_type: string
