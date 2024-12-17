@@ -1,3 +1,7 @@
+## 1.202.1 - 2024-12-17
+
+- feat: Use token scoped remote config (#1611)
+
 ## 1.202.0 - 2024-12-17
 
 - fix: Change default transport to fetch (#1612)
