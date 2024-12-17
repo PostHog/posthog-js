@@ -1,3 +1,8 @@
+## 1.201.1 - 2024-12-17
+
+- fix: Load RemoteConfig by default but don't use it (#1607)
+- chore: add websockets example to nextjs playground (#1605)
+
 ## 1.201.0 - 2024-12-16
 
 - fix: rotate session id proactively (#1512)
