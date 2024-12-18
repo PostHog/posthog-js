@@ -255,7 +255,7 @@ describe('Session recording', () => {
                         [/https:\/\/example.com/, 'fetch'],
                     ]
 
-                    // yay, includes expected type 6 network data
+                    // yay, includes expected network data
                     expect(capturedRequests.length).to.equal(expectedCaptureds.length)
                     expectedCaptureds.forEach(([url, initiatorType], index) => {
                         expect(capturedRequests[index].name).to.match(url)
@@ -281,7 +281,7 @@ describe('Session recording', () => {
                 })
             })
 
-            it('it captures XHR method correctly', () => {
+            it('it captures XHR/fetch methods correctly', () => {
                 cy.get('[data-cy-xhr-call-button]').click()
                 cy.wait('@example.com')
                 cy.wait('@session-recording')
@@ -310,11 +310,13 @@ describe('Session recording', () => {
                         [/https:\/\/example.com/, 'xmlhttprequest'],
                     ]
 
-                    // yay, includes expected type 6 network data
+                    // yay, includes expected network data
                     expect(capturedRequests.length).to.equal(expectedCaptureds.length)
                     expectedCaptureds.forEach(([url, initiatorType], index) => {
-                        expect(capturedRequests[index].name).to.match(url)
-                        expect(capturedRequests[index].initiatorType).to.equal(initiatorType)
+                        const capturedRequest = capturedRequests[index]
+
+                        expect(capturedRequest.name).to.match(url)
+                        expect(capturedRequest.initiatorType).to.equal(initiatorType)
                     })
 
                     // the HTML file that cypress is operating on (playground/cypress/index.html)
