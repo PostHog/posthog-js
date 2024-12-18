@@ -1,8 +1,9 @@
 import { PostHog } from './posthog-core'
-import { find, includes } from './utils'
+import { find } from './utils'
 import { assignableWindow, navigator } from './utils/globals'
 import { cookieStore, localStore } from './storage'
 import { PersistentStore } from './types'
+import { includes } from './utils/string-utils'
 
 const OPT_OUT_PREFIX = '__ph_opt_in_out_'
 

@@ -1,4 +1,4 @@
-import { _base64Encode, each, find } from './utils'
+import { each, find } from './utils'
 import Config from './config'
 import { Compression, RequestOptions, RequestResponse } from './types'
 import { formDataToQuery } from './utils/request-utils'
@@ -6,6 +6,8 @@ import { formDataToQuery } from './utils/request-utils'
 import { logger } from './utils/logger'
 import { AbortController, fetch, navigator, XMLHttpRequest } from './utils/globals'
 import { gzipSync, strToU8 } from 'fflate'
+
+import { _base64Encode } from './utils/encode-utils'
 
 // eslint-disable-next-line compat/compat
 export const SUPPORTS_REQUEST = !!XMLHttpRequest || !!fetch

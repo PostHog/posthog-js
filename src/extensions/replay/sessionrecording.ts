@@ -45,8 +45,8 @@ import { isLocalhost } from '../../utils/request-utils'
 import { MutationRateLimiter } from './mutation-rate-limiter'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
 import { clampToRange } from '../../utils/number-utils'
-import { includes } from '../../utils'
 import Config from '../../config'
+import { includes } from '../../utils/string-utils'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)

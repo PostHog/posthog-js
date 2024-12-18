@@ -7,10 +7,12 @@
  * currently not supported in the browser lib).
  */
 
-import { _copyAndTruncateStrings, isCrossDomainCookie, _base64Encode } from '../utils'
+import { _copyAndTruncateStrings, isCrossDomainCookie } from '../utils'
 import { Info } from '../utils/event-utils'
 import { isLikelyBot, DEFAULT_BLOCKED_UA_STRS, isBlockedUA, NavigatorUAData } from '../utils/blocked-uas'
 import { expect } from '@jest/globals'
+
+import { _base64Encode } from '../utils/encode-utils'
 
 function userAgentFor(botString: string) {
     const randOne = (Math.random() + 1).toString(36).substring(7)

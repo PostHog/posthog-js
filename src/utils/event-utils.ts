@@ -2,9 +2,10 @@ import { getQueryParam, convertToURL } from './request-utils'
 import { isNull } from './type-utils'
 import { Properties } from '../types'
 import Config from '../config'
-import { each, extend, stripEmptyProperties, stripLeadingDollar } from './index'
+import { each, extend, stripEmptyProperties } from './index'
 import { document, location, userAgent, window } from './globals'
 import { detectBrowser, detectBrowserVersion, detectDevice, detectDeviceType, detectOS } from './user-agent-utils'
+import { stripLeadingDollar } from './string-utils'
 
 const URL_REGEX_PREFIX = 'https?://(.*)'
 

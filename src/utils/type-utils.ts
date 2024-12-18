@@ -1,6 +1,6 @@
-import { includes } from '.'
 import { window } from './globals'
 import { knownUnsafeEditableEvent, KnownUnsafeEditableEvent } from '../types'
+import { includes } from './string-utils'
 
 // eslint-disable-next-line posthog-js/no-direct-array-check
 const nativeIsArray = Array.isArray
