@@ -1,3 +1,8 @@
+## 1.202.3 - 2024-12-18
+
+- chore(): Small tweaks to make fetch default (#1610)
+- chore: remove circular dependencies (#1618)
+
 ## 1.202.2 - 2024-12-17
 
 - fix: specify transport in fewer places to let config control (#1614)
