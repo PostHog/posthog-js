@@ -202,7 +202,7 @@ export class SiteApps {
     onRemoteConfig(response: RemoteConfig): void {
         this._decideServerSiteAppsResponse = response['siteApps']
         // NOTE: We could improve this to only fire if we actually have listeners for the event
-        this.instance.on('eventCaptured', (event) => this.onCapturedEvent(event))
+        if (this.siteAppLoaders?.length) this.instance.on('eventCaptured', (event) => this.onCapturedEvent(event))
         this.loadIfEnabled()
     }
 }
