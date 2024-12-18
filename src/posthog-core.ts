@@ -574,8 +574,8 @@ export class PostHog {
             this.compression = includes(config['supportedCompression'], Compression.GZipJS)
                 ? Compression.GZipJS
                 : includes(config['supportedCompression'], Compression.Base64)
-                  ? Compression.Base64
-                  : undefined
+                ? Compression.Base64
+                : undefined
         }
 
         if (config.analytics?.endpoint) {
@@ -586,8 +586,8 @@ export class PostHog {
             person_profiles: this._initialPersonProfilesConfig
                 ? this._initialPersonProfilesConfig
                 : config['defaultIdentifiedOnly']
-                  ? 'identified_only'
-                  : 'always',
+                ? 'identified_only'
+                : 'always',
         })
 
         this.siteApps?.onRemoteConfig(config)
@@ -1709,7 +1709,7 @@ export class PostHog {
      *       // Capture rage clicks
      *       rageclick: true
      *
-     *       // transport for sending requests ('XHR' or 'sendBeacon')
+     *       // transport for sending requests ('XHR' | 'fetch' | 'sendBeacon')
      *       // NB: sendBeacon should only be used for scenarios such as
      *       // page unload where a "best-effort" attempt to send is
      *       // acceptable; the sendBeacon API does not support callbacks

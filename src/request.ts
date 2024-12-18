@@ -218,18 +218,17 @@ const _sendBeacon = (options: RequestOptions) => {
 const AVAILABLE_TRANSPORTS: { transport: RequestOptions['transport']; method: (options: RequestOptions) => void }[] = []
 
 // We add the transports in order of preference
+if (fetch) {
+    AVAILABLE_TRANSPORTS.push({
+        transport: 'fetch',
+        method: _fetch,
+    })
+}
 
 if (XMLHttpRequest) {
     AVAILABLE_TRANSPORTS.push({
         transport: 'XHR',
         method: xhr,
-    })
-}
-
-if (fetch) {
-    AVAILABLE_TRANSPORTS.push({
-        transport: 'fetch',
-        method: _fetch,
     })
 }
 
