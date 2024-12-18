@@ -1,4 +1,4 @@
-import { includes, registerEvent } from './utils'
+import { registerEvent } from './utils'
 import RageClick from './extensions/rageclick'
 import { DeadClickCandidate, Properties, RemoteConfig } from './types'
 import { PostHog } from './posthog-core'
@@ -10,6 +10,7 @@ import { isEmptyObject, isObject, isUndefined } from './utils/type-utils'
 import { createLogger } from './utils/logger'
 import { isElementInToolbar, isElementNode, isTag } from './utils/element-utils'
 import { DeadClicksAutocapture, isDeadClicksEnabledForHeatmaps } from './extensions/dead-clicks-autocapture'
+import { includes } from './utils/string-utils'
 
 const DEFAULT_FLUSH_INTERVAL = 5000
 

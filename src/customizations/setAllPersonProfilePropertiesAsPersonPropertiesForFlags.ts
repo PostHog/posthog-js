@@ -1,6 +1,7 @@
 import { PostHog } from '../posthog-core'
 import { CAMPAIGN_PARAMS, EVENT_TO_PERSON_PROPERTIES, Info } from '../utils/event-utils'
-import { each, extend, includes } from '../utils'
+import { each, extend } from '../utils'
+import { includes } from '../utils/string-utils'
 
 export const setAllPersonProfilePropertiesAsPersonPropertiesForFlags = (posthog: PostHog): void => {
     const allProperties = extend({}, Info.properties(), Info.campaignParams(), Info.referrerInfo())

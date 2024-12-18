@@ -1,7 +1,7 @@
 import { clampToRange } from '../utils/number-utils'
 import { BeforeSendFn, CaptureResult, KnownEventName } from '../types'
-import { includes } from '../utils'
 import { isArray, isUndefined } from '../utils/type-utils'
+import { includes } from '../utils/string-utils'
 
 function appendArray(currentValue: string[] | undefined, sampleType: string | string[]): string[] {
     return [...(currentValue ? currentValue : []), ...(isArray(sampleType) ? sampleType : [sampleType])]

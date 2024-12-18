@@ -4,11 +4,9 @@ import {
     each,
     eachArray,
     extend,
-    includes,
     registerEvent,
     safewrapClass,
     isCrossDomainCookie,
-    isDistinctIdStringLike,
 } from './utils'
 import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
 import { PostHogFeatureFlags } from './posthog-featureflags'
@@ -84,6 +82,7 @@ import { WebExperiments } from './web-experiments'
 import { PostHogExceptions } from './posthog-exceptions'
 import { SiteApps } from './site-apps'
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
+import { includes, isDistinctIdStringLike } from './utils/string-utils'
 
 /*
 SIMPLE STYLE GUIDE:
