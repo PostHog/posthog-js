@@ -165,8 +165,8 @@ export class SiteApps {
                 // if consent isn't given, skip site destinations
                 if (this.instance.consent.isOptedOut() && app.type === 'site_destination') continue
                 // if the site app is already loaded, skip it
-                if (!isUndefined(assignableWindow[`__$$ph_site_app_${app.id}_loaded`])) continue
-                assignableWindow[`__$$ph_site_app_${app.id}_loaded`] = 'true'
+                if (!isUndefined(assignableWindow[`__$$ph_site_app_${app.id}`])) continue
+                assignableWindow[`__$$ph_site_app_${app.id}`] = this.instance
                 this.setupSiteApp(app)
             }
             return
