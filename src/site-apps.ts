@@ -1,7 +1,16 @@
 import { PostHog } from './posthog-core'
-import { CaptureResult, Properties, RemoteConfig, SiteApp, SiteAppGlobals, SiteAppLoader } from './types'
+import {
+    CaptureResult,
+    DecideResponse,
+    Properties,
+    RemoteConfig,
+    SiteApp,
+    SiteAppGlobals,
+    SiteAppLoader,
+} from './types'
 import { assignableWindow } from './utils/globals'
 import { createLogger } from './utils/logger'
+import { isUndefined } from './utils/type-utils'
 
 const logger = createLogger('[SiteApps]')
 
@@ -10,6 +19,7 @@ export class SiteApps {
 
     private stopBuffering?: () => void
     private bufferedInvocations: SiteAppGlobals[]
+    private _decideServerSiteAppsResponse?: DecideResponse['siteApps']
 
     constructor(private instance: PostHog) {
         // events captured between loading posthog-js and the site app; up to 1000 events
@@ -144,7 +154,7 @@ export class SiteApps {
         }
     }
 
-    onRemoteConfig(response: RemoteConfig): void {
+    loadIfEnabled(): void {
         if (this.siteAppLoaders?.length) {
             if (!this.isEnabled) {
                 logger.error(`PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.`)
@@ -152,12 +162,13 @@ export class SiteApps {
             }
 
             for (const app of this.siteAppLoaders) {
+                // if consent isn't given, skip site destinations
+                if (this.instance.consent.isOptedOut() && app.type === 'site_destination') continue
+                // if the site app is already loaded, skip it
+                if (!isUndefined(assignableWindow[`__$$ph_site_app_${app.id}_loaded`])) continue
+                assignableWindow[`__$$ph_site_app_${app.id}_loaded`] = 'true'
                 this.setupSiteApp(app)
             }
-
-            // NOTE: We could improve this to only fire if we actually have listeners for the event
-            this.instance.on('eventCaptured', (event) => this.onCapturedEvent(event))
-
             return
         }
 
@@ -165,7 +176,7 @@ export class SiteApps {
 
         this.stopBuffering?.()
 
-        if (!response['siteApps']?.length) {
+        if (!this._decideServerSiteAppsResponse?.length) {
             return
         }
 
@@ -174,7 +185,11 @@ export class SiteApps {
             return
         }
 
-        for (const { id, url } of response['siteApps']) {
+        for (const { id, type, url } of this._decideServerSiteAppsResponse) {
+            // if consent isn't given, skip site destinations
+            if (this.instance.consent.isOptedOut() && type === 'site_destination') continue
+            // if the site app is already loaded, skip it
+            if (!isUndefined(assignableWindow[`__$$ph_site_app_${id}`])) continue
             assignableWindow[`__$$ph_site_app_${id}`] = this.instance
             assignableWindow.__PosthogExtensions__?.loadSiteApp?.(this.instance, url, (err) => {
                 if (err) {
@@ -182,5 +197,12 @@ export class SiteApps {
                 }
             })
         }
+    }
+
+    onRemoteConfig(response: RemoteConfig): void {
+        this._decideServerSiteAppsResponse = response['siteApps']
+        // NOTE: We could improve this to only fire if we actually have listeners for the event
+        this.instance.on('eventCaptured', (event) => this.onCapturedEvent(event))
+        this.loadIfEnabled()
     }
 }

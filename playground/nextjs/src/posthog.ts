@@ -43,8 +43,10 @@ export const configForConsent = (): Partial<PostHogConfig> => {
 export const updatePostHogConsent = (consentGiven: boolean) => {
     if (consentGiven) {
         localStorage.setItem('cookie_consent', 'true')
+        posthog.opt_in_capturing()
     } else {
         localStorage.removeItem('cookie_consent')
+        posthog.opt_out_capturing()
     }
 
     posthog.set_config(configForConsent())

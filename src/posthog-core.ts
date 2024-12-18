@@ -312,6 +312,7 @@ export class PostHog {
         this.scrollManager = new ScrollManager(this)
         this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
+        this.siteApps = new SiteApps(this)
         this.experiments = new WebExperiments(this)
         this.exceptions = new PostHogExceptions(this)
         this.rateLimiter = new RateLimiter(this)
@@ -440,8 +441,8 @@ export class PostHog {
 
         new TracingHeaders(this).startIfEnabledOrStop()
 
-        this.siteApps = new SiteApps(this)
         this.siteApps?.init()
+        this.siteApps?.loadIfEnabled()
 
         if (!this.config.__preview_experimental_cookieless_mode) {
             this.sessionRecording = new SessionRecording(this)
@@ -819,6 +820,19 @@ export class PostHog {
             return
         }
 
+        // The initial campaign/referrer props need to be stored in the regular persistence, as they are there to mimic
+        // the person-initial props. The non-initial versions are stored in the sessionPersistence, as they are sent
+        // with every event and used by the session table to create session-initial props.
+        if (this.config.store_google) {
+            this.sessionPersistence.update_campaign_params()
+        }
+        if (this.config.save_referrer) {
+            this.sessionPersistence.update_referrer_info()
+        }
+        if (this.config.store_google || this.config.save_referrer) {
+            this.persistence.set_initial_person_info()
+        }
+
         if (this.consent.isOptedOut()) {
             return
         }
@@ -844,19 +858,6 @@ export class PostHog {
 
         // update persistence
         this.sessionPersistence.update_search_keyword()
-
-        // The initial campaign/referrer props need to be stored in the regular persistence, as they are there to mimic
-        // the person-initial props. The non-initial versions are stored in the sessionPersistence, as they are sent
-        // with every event and used by the session table to create session-initial props.
-        if (this.config.store_google) {
-            this.sessionPersistence.update_campaign_params()
-        }
-        if (this.config.save_referrer) {
-            this.sessionPersistence.update_referrer_info()
-        }
-        if (this.config.store_google || this.config.save_referrer) {
-            this.persistence.set_initial_person_info()
-        }
 
         const systemTime = new Date()
         const timestamp = options?.timestamp || systemTime
@@ -1854,6 +1855,8 @@ export class PostHog {
             this.sessionRecording?.startIfEnabledOrStop()
             this.autocapture?.startIfEnabled()
             this.heatmaps?.startIfEnabled()
+            this.surveys.loadIfEnabled()
+            this.siteApps?.loadIfEnabled()
             this.surveys.loadIfEnabled()
             this._sync_opt_out_with_persistence()
         }

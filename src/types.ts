@@ -549,7 +549,7 @@ export interface RemoteConfig {
     editorParams?: ToolbarParams /** @deprecated, renamed to toolbarParams, still present on older API responses */
     toolbarVersion: 'toolbar' /** @deprecated, moved to toolbarParams */
     isAuthenticated: boolean
-    siteApps: { id: string; url: string }[]
+    siteApps: { id: string; type: string; url: string }[]
     heatmaps?: boolean
     defaultIdentifiedOnly?: boolean
     captureDeadClicks?: boolean
@@ -579,6 +579,7 @@ export type SiteAppGlobals = {
 
 export type SiteAppLoader = {
     id: string
+    type: string
     init: (config: { posthog: PostHog; callback: (success: boolean) => void }) => {
         processEvent?: (globals: SiteAppGlobals) => void
     }
