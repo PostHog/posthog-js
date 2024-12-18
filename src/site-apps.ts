@@ -2,7 +2,6 @@ import { PostHog } from './posthog-core'
 import { CaptureResult, Properties, RemoteConfig, SiteApp, SiteAppGlobals, SiteAppLoader } from './types'
 import { assignableWindow } from './utils/globals'
 import { createLogger } from './utils/logger'
-import { isArray } from './utils/type-utils'
 
 const logger = createLogger('[SiteApps]')
 
@@ -31,6 +30,10 @@ export class SiteApps {
         if (this.bufferedInvocations.length > 1000) {
             this.bufferedInvocations = this.bufferedInvocations.slice(10)
         }
+    }
+
+    get siteAppLoaders(): SiteAppLoader[] | undefined {
+        return assignableWindow._POSTHOG_REMOTE_CONFIG?.[this.instance.config.token]?.siteApps
     }
 
     init() {
@@ -142,22 +145,18 @@ export class SiteApps {
     }
 
     onRemoteConfig(response: RemoteConfig): void {
-        if (isArray(assignableWindow._POSTHOG_JS_APPS)) {
+        if (this.siteAppLoaders?.length) {
             if (!this.isEnabled) {
                 logger.error(`PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.`)
                 return
             }
 
-            for (const app of assignableWindow._POSTHOG_JS_APPS) {
+            for (const app of this.siteAppLoaders) {
                 this.setupSiteApp(app)
             }
 
-            if (!assignableWindow._POSTHOG_JS_APPS.length) {
-                this.stopBuffering?.()
-            } else {
-                // NOTE: We could improve this to only fire if we actually have listeners for the event
-                this.instance.on('eventCaptured', (event) => this.onCapturedEvent(event))
-            }
+            // NOTE: We could improve this to only fire if we actually have listeners for the event
+            this.instance.on('eventCaptured', (event) => this.onCapturedEvent(event))
 
             return
         }

@@ -24,7 +24,15 @@ describe('posthog core', () => {
     }
 
     const posthogWith = (config: Partial<PostHogConfig>, overrides?: Partial<PostHog>): PostHog => {
-        const posthog = defaultPostHog().init('testtoken', config, uuidv7())
+        // NOTE: Temporary change whilst testing remote config
+        const token = config.token || 'testtoken'
+        globals.assignableWindow._POSTHOG_REMOTE_CONFIG = {
+            [token]: {
+                config: {},
+                siteApps: [],
+            },
+        } as any
+        const posthog = defaultPostHog().init(token, config, uuidv7())
         return Object.assign(posthog, overrides || {})
     }
 

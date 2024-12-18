@@ -151,7 +151,6 @@ export class WebExperiments {
                 `/api/web_experiments/?token=${this.instance.config.token}`
             ),
             method: 'GET',
-            transport: 'XHR',
             callback: (response) => {
                 if (response.statusCode !== 200 || !response.json) {
                     return callback([])

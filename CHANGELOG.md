@@ -1,3 +1,21 @@
+## 1.202.2 - 2024-12-17
+
+- fix: specify transport in fewer places to let config control (#1614)
+- chore: update rollup, bc y not (#1615)
+
+## 1.202.1 - 2024-12-17
+
+- feat: Use token scoped remote config (#1611)
+
+## 1.202.0 - 2024-12-17
+
+- fix: Change default transport to fetch (#1612)
+
+## 1.201.1 - 2024-12-17
+
+- fix: Load RemoteConfig by default but don't use it (#1607)
+- chore: add websockets example to nextjs playground (#1605)
+
 ## 1.201.0 - 2024-12-16
 
 - fix: rotate session id proactively (#1512)

@@ -9,12 +9,20 @@ import { PostHog } from '../posthog-core'
 import { defaultPostHog } from './helpers/posthog-instance'
 
 import sinon from 'sinon'
-import { window } from '../utils/globals'
+import { assignableWindow, window } from '../utils/globals'
 
 describe(`Module-based loader in Node env`, () => {
     const posthog = defaultPostHog()
 
     beforeEach(() => {
+        // NOTE: Temporary change whilst testing remote config
+        assignableWindow._POSTHOG_REMOTE_CONFIG = {
+            'test-token': {
+                config: {},
+                siteApps: [],
+            },
+        } as any
+
         jest.useFakeTimers()
         jest.spyOn(posthog, '_send_request').mockReturnValue()
         jest.spyOn(window!.console, 'log').mockImplementation()
@@ -58,7 +66,7 @@ describe(`Module-based loader in Node env`, () => {
         console.warn = jest.fn()
         expect(posthog.init(`my-test`, undefined, 'sdk-1')).toBeInstanceOf(PostHog)
         expect(posthog.init(``, undefined, 'sdk-2')).toBeInstanceOf(PostHog)
-        expect(console.error).toHaveBeenCalledTimes(1)
+        expect(console.error).toHaveBeenCalledTimes(2)
         expect(console.error).toHaveBeenCalledWith(
             '[PostHog.js]',
             'PostHog was initialized without a token. This likely indicates a misconfiguration. Please check the first argument passed to posthog.init()'
