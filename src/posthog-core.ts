@@ -1857,7 +1857,6 @@ export class PostHog {
             this.heatmaps?.startIfEnabled()
             this.surveys.loadIfEnabled()
             this.siteApps?.loadIfEnabled()
-            this.surveys.loadIfEnabled()
             this._sync_opt_out_with_persistence()
         }
     }
