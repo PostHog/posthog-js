@@ -25,5 +25,5 @@ jobs:
                 cache: 'pnpm'
             - run: pnpm install
             #Override TypeScript version
-            - run: npm install typescript@${{ matrix.typescript-version }}
+            - run: pnpm install typescript@${{ matrix.typescript-version }}
             - run: pnpm tsc -b
