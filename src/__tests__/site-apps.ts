@@ -1,13 +1,14 @@
 import { mockLogger } from './helpers/mock-logger'
 
 import { SiteApps } from '../site-apps'
-import { PostHogPersistence } from '../posthog-persistence'
-import { RequestRouter } from '../utils/request-router'
 import { PostHog } from '../posthog-core'
-import { PostHogConfig, Properties, CaptureResult, RemoteConfig } from '../types'
+import { PostHogConfig, CaptureResult, RemoteConfig } from '../types'
 import { assignableWindow } from '../utils/globals'
 import '../entrypoints/external-scripts-loader'
 import { isFunction } from '../utils/type-utils'
+import { uuidv7 } from '../uuidv7'
+import { logger } from '../utils/logger'
+import { defaultPostHog } from './helpers/posthog-instance'
 
 describe('SiteApps', () => {
     let posthog: PostHog
@@ -21,6 +22,8 @@ describe('SiteApps', () => {
         token: token,
         api_host: 'https://test.com',
         persistence: 'memory',
+        opt_in_site_apps: true,
+        opt_out_capturing_by_default: false,
     }
 
     beforeEach(() => {
@@ -49,31 +52,21 @@ describe('SiteApps', () => {
 
         removeCaptureHook = jest.fn()
 
-        posthog = {
-            config: { ...defaultConfig, opt_in_site_apps: true },
-            persistence: new PostHogPersistence(defaultConfig as PostHogConfig),
-            register: (props: Properties) => posthog.persistence!.register(props),
-            unregister: (key: string) => posthog.persistence!.unregister(key),
-            get_property: (key: string) => posthog.persistence!.props[key],
-            capture: jest.fn(),
-            _addCaptureHook: jest.fn((cb) => {
-                emitCaptureEvent = cb
-                return removeCaptureHook
-            }),
-            consent: { isOptedOut: jest.fn().mockReturnValue(false) },
-            _afterDecideResponse: jest.fn(),
-            get_distinct_id: jest.fn().mockImplementation(() => 'distinctid'),
-            _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
-            featureFlags: {
-                receivedFeatureFlags: jest.fn(),
-                setReloadingPaused: jest.fn(),
-                _startReloadTimer: jest.fn(),
-            },
-            requestRouter: new RequestRouter({ config: defaultConfig } as unknown as PostHog),
-            _hasBootstrappedFeatureFlags: jest.fn(),
-            getGroups: () => ({ organization: '5' }),
-            on: jest.fn(),
-        } as unknown as PostHog
+        const createPostHog = (config: Partial<PostHogConfig> = {}) => {
+            const posthog = defaultPostHog().init('testtoken', { ...config }, uuidv7())!
+            posthog.debug()
+            return posthog
+        }
+
+        posthog = createPostHog(defaultConfig)
+        ;(posthog._addCaptureHook = jest.fn((cb) => {
+            emitCaptureEvent = cb
+            return removeCaptureHook
+        })),
+            (posthog.on = jest.fn())
+        posthog.capture = jest.fn()
+        posthog._send_request = jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} }))
+        logger.error = jest.fn()
 
         siteAppsInstance = new SiteApps(posthog)
     })
@@ -315,7 +308,7 @@ describe('SiteApps', () => {
                     siteApps: [
                         {
                             id: '1',
-                            type: 'site_destination',
+                            type: 'site_app',
                             init: jest.fn((config) => {
                                 appConfigs.push(config)
                                 return {
@@ -430,6 +423,38 @@ describe('SiteApps', () => {
                 'PostHog site apps are disabled. Enable the "opt_in_site_apps" config to proceed.'
             )
             expect(siteAppsInstance.apps).toEqual({})
+        })
+
+        it('does not load site destinations if consent is not given', () => {
+            posthog.opt_out_capturing()
+
+            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+
+            expect(appConfigs[0]).toBeDefined()
+            expect(appConfigs[1]).toBeUndefined()
+
+            expect(typeof assignableWindow['__$$ph_site_app_1']).toBe('object')
+            expect(typeof assignableWindow['__$$ph_site_app_2']).toBe('undefined')
+        })
+
+        it('load site destinations if consent is given at a later time', () => {
+            posthog.opt_out_capturing()
+
+            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+
+            expect(appConfigs[0]).toBeDefined()
+            expect(appConfigs[1]).toBeUndefined()
+
+            expect(typeof assignableWindow['__$$ph_site_app_1']).toBe('object')
+            expect(typeof assignableWindow['__$$ph_site_app_2']).toBe('undefined')
+
+            posthog.opt_in_capturing()
+
+            expect(appConfigs[0]).toBeDefined()
+            expect(appConfigs[1]).toBeDefined()
+
+            expect(typeof assignableWindow['__$$ph_site_app_1']).toBe('object')
+            expect(typeof assignableWindow['__$$ph_site_app_2']).toBe('object')
         })
     })
 })

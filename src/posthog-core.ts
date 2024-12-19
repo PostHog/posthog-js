@@ -2126,6 +2126,8 @@ export class PostHog {
         if (this.config.capture_pageview) {
             this._captureInitialPageview()
         }
+
+        this.set_config({})
     }
 
     /**
