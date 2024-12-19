@@ -59,11 +59,11 @@ describe('SiteApps', () => {
         }
 
         posthog = createPostHog(defaultConfig)
-        ;(posthog._addCaptureHook = jest.fn((cb) => {
+        posthog._addCaptureHook = jest.fn((cb) => {
             emitCaptureEvent = cb
             return removeCaptureHook
-        })),
-            (posthog.on = jest.fn())
+        })
+        posthog.on = jest.fn()
         posthog.capture = jest.fn()
         posthog._send_request = jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} }))
         logger.error = jest.fn()
