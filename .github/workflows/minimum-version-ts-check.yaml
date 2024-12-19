@@ -12,8 +12,8 @@ jobs:
         runs-on: ubuntu-latest
         strategy:
           matrix:
-            node-version: [ 16, 18, 20 ]
-            typescript-version: [ '4.7.3', '5.5.4' ]
+            node-version: [ 18, 20 ]
+            typescript-version: [ '5.5.4' ]
         steps:
             - name: Checkout repository
               uses: actions/checkout@v4
