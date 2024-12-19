@@ -94,20 +94,7 @@ describe('heatmaps', () => {
 
         jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
-        expect(beforeSendMock).toBeCalledTimes(1)
-        expect(beforeSendMock.mock.lastCall[0]).toMatchObject({
-            event: '$$heatmap',
-            properties: {
-                $heatmap_data: {
-                    'http://replaced/': [
-                        {
-                            target_fixed: false,
-                            type: 'mousemove',
-                        },
-                    ],
-                },
-            },
-        })
+        expect(beforeSendMock).toBeCalledTimes(0)
     })
 
     it('should send rageclick events in the same area', async () => {

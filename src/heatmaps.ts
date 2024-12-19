@@ -6,7 +6,7 @@ import { PostHog } from './posthog-core'
 import { document, window } from './utils/globals'
 import { getEventTarget, getParentElement } from './autocapture-utils'
 import { HEATMAPS_ENABLED_SERVER_SIDE } from './constants'
-import { isEmptyObject, isObject, isUndefined } from './utils/type-utils'
+import { isEmptyObject, isNumber, isObject, isUndefined } from './utils/type-utils'
 import { createLogger } from './utils/logger'
 import { isElementInToolbar, isElementNode, isTag } from './utils/element-utils'
 import { DeadClicksAutocapture, isDeadClicksEnabledForHeatmaps } from './extensions/dead-clicks-autocapture'
@@ -38,6 +38,10 @@ function elementOrParentPositionMatches(el: Element | null, matches: string[], b
     }
 
     return false
+}
+
+function isValidMouseEvent(e: unknown): e is MouseEvent {
+    return isObject(e) && 'clientX' in e && 'clientY' in e && isNumber(e.clientX) && isNumber(e.clientY)
 }
 
 export class Heatmaps {
@@ -161,9 +165,10 @@ export class Heatmaps {
     }
 
     private _onClick(e: MouseEvent, type: string = 'click'): void {
-        if (isElementInToolbar(e.target as Element)) {
+        if (isElementInToolbar(e.target) || !isValidMouseEvent(e)) {
             return
         }
+
         const properties = this._getProperties(e, type)
 
         if (this.rageclicks?.isRageClick(e.clientX, e.clientY, new Date().getTime())) {
@@ -177,9 +182,10 @@ export class Heatmaps {
     }
 
     private _onMouseMove(e: Event): void {
-        if (isElementInToolbar(e.target)) {
+        if (isElementInToolbar(e.target) || !isValidMouseEvent(e)) {
             return
         }
+
         clearTimeout(this._mouseMoveTimeout)
 
         this._mouseMoveTimeout = setTimeout(() => {
