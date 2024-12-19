@@ -144,16 +144,24 @@ describe('heatmaps', () => {
     })
 
     it('should ignore clicks if they come from the toolbar', async () => {
+        const testElementToolbar = document.createElement('div')
+        testElementToolbar.id = '__POSTHOG_TOOLBAR__'
+
         posthog.heatmaps?.['_onClick']?.(
             createMockMouseEvent({
-                target: { id: '__POSTHOG_TOOLBAR__' } as Element,
+                target: testElementToolbar,
             })
         )
         expect(posthog.heatmaps?.['buffer']).toEqual(undefined)
 
+        const testElementClosest = document.createElement('div')
+        testElementClosest.closest = () => {
+            return {}
+        }
+
         posthog.heatmaps?.['_onClick']?.(
             createMockMouseEvent({
-                target: { closest: () => ({}) } as unknown as Element,
+                target: testElementClosest,
             })
         )
         expect(posthog.heatmaps?.['buffer']).toEqual(undefined)
