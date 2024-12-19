@@ -89,6 +89,27 @@ describe('heatmaps', () => {
         expect(posthog.heatmaps!.getAndClearBuffer()).toBeDefined()
     })
 
+    it('should handle empty mouse moves', async () => {
+        posthog.heatmaps?.['_onMouseMove']?.(new Event('mousemove'))
+
+        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+
+        expect(beforeSendMock).toBeCalledTimes(1)
+        expect(beforeSendMock.mock.lastCall[0]).toMatchObject({
+            event: '$$heatmap',
+            properties: {
+                $heatmap_data: {
+                    'http://replaced/': [
+                        {
+                            target_fixed: false,
+                            type: 'mousemove',
+                        },
+                    ],
+                },
+            },
+        })
+    })
+
     it('should send rageclick events in the same area', async () => {
         posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
         posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
@@ -123,16 +144,24 @@ describe('heatmaps', () => {
     })
 
     it('should ignore clicks if they come from the toolbar', async () => {
+        const testElementToolbar = document.createElement('div')
+        testElementToolbar.id = '__POSTHOG_TOOLBAR__'
+
         posthog.heatmaps?.['_onClick']?.(
             createMockMouseEvent({
-                target: { id: '__POSTHOG_TOOLBAR__' } as Element,
+                target: testElementToolbar,
             })
         )
         expect(posthog.heatmaps?.['buffer']).toEqual(undefined)
 
+        const testElementClosest = document.createElement('div')
+        testElementClosest.closest = () => {
+            return {}
+        }
+
         posthog.heatmaps?.['_onClick']?.(
             createMockMouseEvent({
-                target: { closest: () => ({}) } as unknown as Element,
+                target: testElementClosest,
             })
         )
         expect(posthog.heatmaps?.['buffer']).toEqual(undefined)
