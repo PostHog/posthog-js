@@ -89,6 +89,27 @@ describe('heatmaps', () => {
         expect(posthog.heatmaps!.getAndClearBuffer()).toBeDefined()
     })
 
+    it('should handle empty mouse moves', async () => {
+        posthog.heatmaps?.['_onMouseMove']?.(new Event('mousemove'))
+
+        jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
+
+        expect(beforeSendMock).toBeCalledTimes(1)
+        expect(beforeSendMock.mock.lastCall[0]).toMatchObject({
+            event: '$$heatmap',
+            properties: {
+                $heatmap_data: {
+                    'http://replaced/': [
+                        {
+                            target_fixed: false,
+                            type: 'mousemove',
+                        },
+                    ],
+                },
+            },
+        })
+    })
+
     it('should send rageclick events in the same area', async () => {
         posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
         posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
