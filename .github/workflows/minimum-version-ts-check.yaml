@@ -13,7 +13,7 @@ jobs:
         strategy:
           matrix:
             node-version: [ 18, 20 ]
-            typescript-version: [ '4.7.2', '5.5.4' ]
+            typescript-version: ['4.5.2', '4.7.2', '5.5.4' ]
         steps:
             - name: Checkout repository
               uses: actions/checkout@v4
