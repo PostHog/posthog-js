@@ -13,7 +13,7 @@ jobs:
         strategy:
           matrix:
             node-version: [ 16, 18, 20 ]
-            typescript-version: [ '4.7.2', '5.5.4' ]
+            typescript-version: [ '4.7.3', '5.5.4' ]
         steps:
             - uses: actions/checkout@v4
             - uses: pnpm/action-setup@v4
