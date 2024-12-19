@@ -13,7 +13,7 @@ jobs:
         strategy:
           matrix:
             node-version: [ 18, 20 ]
-            typescript-version: [ '5.5.4' ]
+            typescript-version: [ '4.7.2', '5.5.4' ]
         steps:
             - name: Checkout repository
               uses: actions/checkout@v4
@@ -32,11 +32,12 @@ jobs:
             - name: Install dependencies
               run: pnpm install
 
-            - name: Override TypeScript version
-              run: pnpm add typescript@${{ matrix.typescript-version }} --save-dev
-
             - name: Build project
               run: pnpm run build
+
+            # once its built we can see if we can use it on the forced version
+            - name: Override TypeScript version
+              run: pnpm add typescript@${{ matrix.typescript-version }} --save-dev
 
             - name: Test TypeScript Import
               run: |
