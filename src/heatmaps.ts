@@ -177,7 +177,7 @@ export class Heatmaps {
     }
 
     private _onMouseMove(e: Event): void {
-        if (isElementInToolbar(e.target as Element)) {
+        if (isElementInToolbar(e.target)) {
             return
         }
         clearTimeout(this._mouseMoveTimeout)
