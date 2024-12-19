@@ -44,6 +44,8 @@ describe('SiteApps', () => {
 
         delete assignableWindow._POSTHOG_REMOTE_CONFIG
         delete assignableWindow.POSTHOG_DEBUG
+        delete assignableWindow[`__$$ph_site_app_1`]
+        delete assignableWindow[`__$$ph_site_app_2`]
 
         removeCaptureHook = jest.fn()
 
@@ -58,6 +60,7 @@ describe('SiteApps', () => {
                 emitCaptureEvent = cb
                 return removeCaptureHook
             }),
+            consent: { isOptedOut: jest.fn().mockReturnValue(false) },
             _afterDecideResponse: jest.fn(),
             get_distinct_id: jest.fn().mockImplementation(() => 'distinctid'),
             _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
@@ -240,8 +243,8 @@ describe('SiteApps', () => {
             posthog.config.opt_in_site_apps = false
             siteAppsInstance.onRemoteConfig({
                 siteApps: [
-                    { id: '1', url: '/site_app/1' },
-                    { id: '2', url: '/site_app/2' },
+                    { id: '1', type: 'site_destination', url: '/site_app/1' },
+                    { id: '2', type: 'site_destination', url: '/site_app/2' },
                 ],
             } as RemoteConfig)
 
@@ -257,6 +260,7 @@ describe('SiteApps', () => {
                     siteApps: [
                         {
                             id: '1',
+                            type: 'site_destination',
                             init: jest.fn(() => {
                                 return {
                                     processEvent: jest.fn(),
@@ -267,7 +271,7 @@ describe('SiteApps', () => {
                 },
             } as any
             siteAppsInstance.onRemoteConfig({
-                siteApps: [{ id: '1', url: '/site_app/1' }],
+                siteApps: [{ id: '1', type: 'site_destination', url: '/site_app/1' }],
             } as RemoteConfig)
 
             expect(assignableWindow.__PosthogExtensions__?.loadSiteApp).not.toHaveBeenCalled()
@@ -311,6 +315,7 @@ describe('SiteApps', () => {
                     siteApps: [
                         {
                             id: '1',
+                            type: 'site_destination',
                             init: jest.fn((config) => {
                                 appConfigs.push(config)
                                 return {
@@ -320,6 +325,7 @@ describe('SiteApps', () => {
                         },
                         {
                             id: '2',
+                            type: 'site_destination',
                             init: jest.fn((config) => {
                                 appConfigs.push(config)
                                 return {
