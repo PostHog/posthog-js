@@ -1,15 +1,17 @@
 ## 1.202.5 - 2024-12-19
 
-
+- chore: lint a file that needs it (#1622)
 
 ## 1.202.4 - 2024-12-19
 
-
+- fix: do not even send heatmap with no x or y (#1621)
+- fix: type error accessing null object and added test case (#1620)
+- chore: Small tweaks to make fetch default (#1610)
+- chore: remove circular dependencies (#1618)
 
 ## 1.202.3 - 2024-12-18
 
-- chore(): Small tweaks to make fetch default (#1610)
-- chore: remove circular dependencies (#1618)
+ > NB an error meant this version was never published to NPM
 
 ## 1.202.2 - 2024-12-17
 
