@@ -621,6 +621,7 @@ export class SessionRecording {
     }
 
     onRemoteConfig(response: RemoteConfig) {
+        this._tryAddCustomEvent('$remote_config_received', response)
         this._persistRemoteConfig(response)
 
         this._linkedFlag = response.sessionRecording?.linkedFlag || null
