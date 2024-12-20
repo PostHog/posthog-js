@@ -145,7 +145,7 @@ export const defaultConfig = (): PostHogConfig => ({
     disable_persistence: false,
     disable_web_experiments: true, // disabled in beta.
     disable_surveys: false,
-    disable_survey_partial_response: false,
+    disable_survey_partial_response: true,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
     ip: true,
