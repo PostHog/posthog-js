@@ -1,3 +1,10 @@
+## 1.203.0 - 2024-12-20
+
+- chore: add feature name prop to event (#1624)
+- fix: payload host deny list (#1627)
+- chore: build against lowest and current version of TS (#1625)
+- chore: fix changelog after automation error (#1623)
+
 ## 1.202.5 - 2024-12-19
 
 - chore: lint a file that needs it (#1622)
