@@ -28,31 +28,28 @@ function expectPageViewCustomEvent(snapshot: RRWebCustomEvent) {
     expect(snapshot.data.tag).to.equal('$pageview')
 }
 
-function expectSessionIdChangedCustomEvent(snapshot: RRWebCustomEvent) {
+function expectCustomEvent(snapshot: RRWebCustomEvent, tag: string) {
     expect(snapshot.type).to.equal(5)
-    expect(snapshot.data.tag).to.equal('$session_id_change')
-    expect(snapshot.data.payload.changeReason).to.deep.equal({
-        noSessionId: true,
-        activityTimeout: true,
-        sessionPastMaximumLength: false,
-    })
+    expect(snapshot.data.tag).to.equal(tag)
+}
+
+function expectRemoteConfigCustomEvent(snapshot: RRWebCustomEvent) {
+    expectCustomEvent(snapshot, '$remote_config_received')
 }
 
 function expectPostHogConfigCustomEvent(snapshot: RRWebCustomEvent) {
-    expect(snapshot.type).to.equal(5)
-    expect(snapshot.data.tag).to.equal('$posthog_config')
+    expectCustomEvent(snapshot, '$posthog_config')
 }
 
 function expectSessionOptionsCustomEvent(snapshot: RRWebCustomEvent) {
-    expect(snapshot.type).to.equal(5)
-    expect(snapshot.data.tag).to.equal('$session_options')
+    expectCustomEvent(snapshot, '$session_options')
 }
 
 function sortByTag(snapshots: RRWebCustomEvent[]) {
     return snapshots.sort((a, b) => a.data.tag?.localeCompare(b.data.tag))
 }
 
-function ensureActivitySendsSnapshots(initial = true) {
+function ensureActivitySendsSnapshots(expectedCustomTags: string[] = []) {
     cy.resetPhCaptures()
 
     cy.get('[data-cy-input]')
@@ -63,23 +60,30 @@ function ensureActivitySendsSnapshots(initial = true) {
                 const capturedSnapshot = captures.find((e) => e.event === '$snapshot')
                 expect(capturedSnapshot).not.to.be.undefined
 
-                expect(capturedSnapshot['properties']['$snapshot_data']).to.have.length.above(14).and.below(40)
-                // a meta and then a full snapshot
-                expect(capturedSnapshot['properties']['$snapshot_data'][0].type).to.equal(4) // meta
-                expect(capturedSnapshot['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
+                const capturedSnapshotData = capturedSnapshot['properties']['$snapshot_data']
+                expect(capturedSnapshotData).to.have.length.above(14).and.below(40)
 
-                if (initial) {
-                    expectSessionOptionsCustomEvent(capturedSnapshot['properties']['$snapshot_data'][2])
-                    expectPostHogConfigCustomEvent(capturedSnapshot['properties']['$snapshot_data'][3])
-                } else {
-                    expectSessionOptionsCustomEvent(capturedSnapshot['properties']['$snapshot_data'][2])
-                    expectPostHogConfigCustomEvent(capturedSnapshot['properties']['$snapshot_data'][3])
-                    expectSessionIdChangedCustomEvent(capturedSnapshot['properties']['$snapshot_data'][4])
+                // first a meta and then a full snapshot
+                expect(capturedSnapshotData.shift().type).to.equal(4)
+                expect(capturedSnapshotData.shift().type).to.equal(2)
+
+                // now the list should be all custom events until it is incremental
+                // and then only incremental snapshots
+                const customEvents = []
+                let seenIncremental = false
+                for (const snapshot of capturedSnapshotData) {
+                    if (snapshot.type === 5) {
+                        expect(seenIncremental).to.be.false
+                        customEvents.push(snapshot)
+                    } else if (snapshot.type === 3) {
+                        seenIncremental = true
+                    } else {
+                        throw new Error(`Unexpected snapshot type: ${snapshot.type}`)
+                    }
                 }
-
-                // Making a set from the rest should all be 3 - incremental snapshots
-                const remainder = capturedSnapshot['properties']['$snapshot_data'].slice(initial ? 4 : 5)
-                expect(Array.from(new Set(remainder.map((s) => s.type)))).to.deep.equal([3])
+                const customEventTags = customEvents.map((s) => s.data.tag)
+                cy.log('checked custom event tags', { customEventTags, expectedCustomTags })
+                expect(customEventTags).to.eql(expectedCustomTags)
             })
         })
 }
@@ -145,10 +149,11 @@ describe('Session recording', () => {
                         // a meta and then a full snapshot
                         expect(captures[1]['properties']['$snapshot_data'][0].type).to.equal(4) // meta
                         expect(captures[1]['properties']['$snapshot_data'][1].type).to.equal(2) // full_snapshot
-                        expect(captures[1]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with options
-                        expect(captures[1]['properties']['$snapshot_data'][3].type).to.equal(5) // custom event with posthog config
+                        expect(captures[1]['properties']['$snapshot_data'][2].type).to.equal(5) // custom event with remote config
+                        expect(captures[1]['properties']['$snapshot_data'][3].type).to.equal(5) // custom event with options
+                        expect(captures[1]['properties']['$snapshot_data'][4].type).to.equal(5) // custom event with posthog config
                         // Making a set from the rest should all be 3 - incremental snapshots
-                        const incrementalSnapshots = captures[1]['properties']['$snapshot_data'].slice(4)
+                        const incrementalSnapshots = captures[1]['properties']['$snapshot_data'].slice(5)
                         expect(Array.from(new Set(incrementalSnapshots.map((s) => s.type)))).to.deep.eq([3])
 
                         expect(captures[2]['properties']['$session_recording_start_reason']).to.equal(
@@ -374,7 +379,7 @@ describe('Session recording', () => {
 
             cy.get('[data-cy-input]').type('hello world! ')
             cy.wait(500)
-            ensureActivitySendsSnapshots()
+            ensureActivitySendsSnapshots(['$remote_config_received', '$session_options', '$posthog_config'])
             cy.posthog().then((ph) => {
                 ph.stopSessionRecording()
             })
@@ -385,7 +390,7 @@ describe('Session recording', () => {
             cy.posthog().then((ph) => {
                 ph.startSessionRecording()
             })
-            ensureActivitySendsSnapshots()
+            ensureActivitySendsSnapshots(['$session_options', '$posthog_config'])
 
             // the session id is not rotated by stopping and starting the recording
             cy.posthog().then((ph) => {
@@ -524,14 +529,16 @@ describe('Session recording', () => {
                         capturedSnapshot['properties']['$snapshot_data'][2],
                         capturedSnapshot['properties']['$snapshot_data'][3],
                         capturedSnapshot['properties']['$snapshot_data'][4],
+                        capturedSnapshot['properties']['$snapshot_data'][5],
                     ])
 
                     expectPageViewCustomEvent(customEvents[0])
                     expectPostHogConfigCustomEvent(customEvents[1])
-                    expectSessionOptionsCustomEvent(customEvents[2])
+                    expectRemoteConfigCustomEvent(customEvents[2])
+                    expectSessionOptionsCustomEvent(customEvents[3])
 
                     const xPositions = []
-                    for (let i = 5; i < capturedSnapshot['properties']['$snapshot_data'].length; i++) {
+                    for (let i = 6; i < capturedSnapshot['properties']['$snapshot_data'].length; i++) {
                         expect(capturedSnapshot['properties']['$snapshot_data'][i].type).to.equal(3)
                         expect(capturedSnapshot['properties']['$snapshot_data'][i].data.source).to.equal(
                             6,
@@ -628,14 +635,14 @@ describe('Session recording', () => {
                 startingSessionId = ph.get_session_id()
             })
 
-            ensureActivitySendsSnapshots()
+            ensureActivitySendsSnapshots(['$remote_config_received', '$session_options', '$posthog_config'])
 
             cy.posthog().then((ph) => {
                 cy.log('resetting posthog')
                 ph.reset()
             })
 
-            ensureActivitySendsSnapshots(false)
+            ensureActivitySendsSnapshots(['$session_options', '$posthog_config', '$session_id_change'])
 
             // the session id is rotated after reset is called
             cy.posthog().then((ph) => {
