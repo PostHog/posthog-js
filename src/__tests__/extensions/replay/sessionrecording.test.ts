@@ -1982,21 +1982,26 @@ describe('SessionRecording', () => {
             })
             sessionRecording = new SessionRecording(posthog)
 
-            sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
-            sessionRecording.startIfEnabledOrStop()
-            expect(loadScriptMock).toHaveBeenCalled()
-
             expect(sessionRecording['queuedRRWebEvents']).toHaveLength(0)
 
-            sessionRecording['_tryAddCustomEvent']('test', { test: 'test' })
+            sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(1)
+
+            sessionRecording.startIfEnabledOrStop()
+            expect(loadScriptMock).toHaveBeenCalled()
         })
 
         it('queues events', () => {
-            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(1)
+            sessionRecording['_tryAddCustomEvent']('test', { test: 'test' })
+
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(2)
         })
 
         it('limits the queue of events', () => {
-            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(1)
+            sessionRecording['_tryAddCustomEvent']('test', { test: 'test' })
+
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(2)
 
             for (let i = 0; i < 100; i++) {
                 sessionRecording['_tryAddCustomEvent']('test', { test: 'test' })
