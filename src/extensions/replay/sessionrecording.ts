@@ -1175,7 +1175,7 @@ export class SessionRecording {
         const isBelowMinimumDuration =
             isNumber(minimumDuration) && isPositiveSessionDuration && sessionDuration < minimumDuration
 
-        if (this.status === 'buffering' || isBelowMinimumDuration) {
+        if (this.status === 'buffering' || this.status === 'paused' || isBelowMinimumDuration) {
             this.flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)
@@ -1270,16 +1270,14 @@ export class SessionRecording {
             return
         }
 
+        // we can't flush the buffer here since someone might be starting on a blocked page,
+        // and we need to be sure that we don't record that page
+        // so we might not get the below custom event but events will report the paused status
+        // which will allow debugging of sessions that start on blocked pages
         this._urlBlocked = true
-        document?.body?.classList?.add('ph-no-capture')
 
         // Clear the snapshot timer since we don't want new snapshots while paused
         clearInterval(this._fullSnapshotTimer)
-
-        // Running this in a timeout to ensure we can
-        setTimeout(() => {
-            this._flushBuffer()
-        }, 100)
 
         logger.info('recording paused due to URL blocker')
         this._tryAddCustomEvent('recording paused', { reason: 'url blocker' })
@@ -1291,7 +1289,6 @@ export class SessionRecording {
         }
 
         this._urlBlocked = false
-        document?.body?.classList?.remove('ph-no-capture')
 
         this._tryTakeFullSnapshot()
         this._scheduleFullSnapshot()

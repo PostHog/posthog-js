@@ -47,7 +47,6 @@ import {
 } from '@rrweb/types'
 import Mock = jest.Mock
 import { ConsentManager } from '../../../consent'
-import { waitFor } from '@testing-library/preact'
 import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
 
 // Type and source defined here designate a non-user-generated recording event
@@ -2317,38 +2316,34 @@ describe('SessionRecording', () => {
             )
         })
 
-        it('flushes buffer and includes pause event when hitting blocked URL', async () => {
+        it('does not flush buffer and includes pause event when hitting blocked URL', async () => {
             // Emit some events before hitting blocked URL
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
             _emit(createIncrementalSnapshot({ data: { source: 2 } }))
 
             // Simulate URL change to blocked URL
             fakeNavigateTo('https://test.com/blocked')
-            _emit(createIncrementalSnapshot({ data: { source: 3 } }))
-            expect(document.body).toHaveClass('ph-no-capture')
 
-            await waitFor(() => {
-                // Verify the buffer was flushed with all events including pause
-                expect(posthog.capture).toHaveBeenCalledWith(
-                    '$snapshot',
-                    {
-                        $session_id: sessionId,
-                        $window_id: 'windowId',
-                        $snapshot_bytes: expect.any(Number),
-                        $snapshot_data: [
-                            { type: 3, data: { source: 1 } },
-                            { type: 3, data: { source: 2 } },
-                        ],
-                        $lib: 'web',
-                        $lib_version: '0.0.1',
-                    },
-                    expect.any(Object)
-                )
-            })
+            expect(posthog.capture).not.toHaveBeenCalled()
 
             // Verify subsequent events are not captured while on blocked URL
+            _emit(createIncrementalSnapshot({ data: { source: 3 } }))
             _emit(createIncrementalSnapshot({ data: { source: 4 } }))
-            expect(sessionRecording['buffer'].data).toHaveLength(0)
+
+            expect(sessionRecording['buffer'].data).toEqual([
+                {
+                    data: {
+                        source: 1,
+                    },
+                    type: 3,
+                },
+                {
+                    data: {
+                        source: 2,
+                    },
+                    type: 3,
+                },
+            ])
 
             // Simulate URL change to allowed URL
             fakeNavigateTo('https://test.com/allowed')
@@ -2356,9 +2351,20 @@ describe('SessionRecording', () => {
             // Verify recording resumes with resume event
             _emit(createIncrementalSnapshot({ data: { source: 5 } }))
 
-            expect(document.body).not.toHaveClass('ph-no-capture')
-
             expect(sessionRecording['buffer'].data).toStrictEqual([
+                {
+                    data: {
+                        source: 1,
+                    },
+                    type: 3,
+                },
+                {
+                    data: {
+                        source: 2,
+                    },
+                    type: 3,
+                },
+                // restarts with a snapshot
                 expect.objectContaining({
                     type: 2,
                 }),
