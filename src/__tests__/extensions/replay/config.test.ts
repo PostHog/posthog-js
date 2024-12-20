@@ -210,13 +210,26 @@ describe('config', () => {
         describe('payloadHostDenyList', () => {
             it('uses a default when none provided', () => {
                 const networkOptions = buildNetworkRequestOptions(defaultConfig(), {})
-                expect(networkOptions.payloadHostDenyList).toEqual(['.lr-ingest.io', '.ingest.sentry.io'])
+                expect(networkOptions.payloadHostDenyList).toEqual([
+                    '.lr-ingest.io',
+                    '.ingest.sentry.io',
+                    '.clarity.ms',
+                    'analytics.google.com',
+                ])
             })
+
             it('adds to the default when deny list is provided', () => {
                 const networkOptions = buildNetworkRequestOptions(defaultConfig(), {
                     payloadHostDenyList: ['wat', 'huh'],
                 })
-                expect(networkOptions.payloadHostDenyList).toEqual(['wat', 'huh', '.lr-ingest.io', '.ingest.sentry.io'])
+                expect(networkOptions.payloadHostDenyList).toEqual([
+                    'wat',
+                    'huh',
+                    '.lr-ingest.io',
+                    '.ingest.sentry.io',
+                    '.clarity.ms',
+                    'analytics.google.com',
+                ])
             })
         })
     })

@@ -48,7 +48,13 @@ export const defaultNetworkOptions: Required<NetworkRecordOptions> = {
         'resource',
     ],
     payloadSizeLimitBytes: 1000000,
-    payloadHostDenyList: ['.lr-ingest.io', '.ingest.sentry.io'],
+    payloadHostDenyList: [
+        '.lr-ingest.io',
+        '.ingest.sentry.io',
+        '.clarity.ms',
+        // NB no leading dot here
+        'analytics.google.com',
+    ],
 }
 
 const HEADER_DENY_LIST = [
