@@ -365,7 +365,7 @@ export class PostHogFeatureFlags {
         }
 
         if (feature) {
-            properties['$name'] = feature.name
+            properties['$early_access_feature_name'] = feature.name
         }
 
         this.instance.capture('$feature_enrollment_update', properties)
