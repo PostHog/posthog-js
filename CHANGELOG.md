@@ -1,3 +1,8 @@
+## 1.203.1 - 2024-12-20
+
+- fix: recordings that are paused for their whole duration (#1626)
+- feat: custom event with remote config (#1628)
+
 ## 1.203.0 - 2024-12-20
 
 - chore: add feature name prop to event (#1624)
