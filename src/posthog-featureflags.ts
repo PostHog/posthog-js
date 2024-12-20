@@ -8,6 +8,7 @@ import {
     Properties,
     JsonType,
     Compression,
+    EarlyAccessFeature,
 } from './types'
 import { PostHogPersistence } from './posthog-persistence'
 
@@ -410,14 +411,25 @@ export class PostHogFeatureFlags {
     }
 
     updateEarlyAccessFeatureEnrollment(key: string, isEnrolled: boolean): void {
+        const existing_early_access_features: EarlyAccessFeature[] =
+            this.instance.get_property(PERSISTENCE_EARLY_ACCESS_FEATURES) || []
+        const feature = existing_early_access_features.find((f) => f.flagKey === key)
+
         const enrollmentPersonProp = {
             [`$feature_enrollment/${key}`]: isEnrolled,
         }
-        this.instance.capture('$feature_enrollment_update', {
+
+        const properties: Properties = {
             $feature_flag: key,
             $feature_enrollment: isEnrolled,
             $set: enrollmentPersonProp,
-        })
+        }
+
+        if (feature) {
+            properties['$early_access_feature_name'] = feature.name
+        }
+
+        this.instance.capture('$feature_enrollment_update', properties)
         this.setPersonPropertiesForFlags(enrollmentPersonProp, false)
 
         const newFlags = { ...this.getFlagVariants(), [key]: isEnrolled }
