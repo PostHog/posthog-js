@@ -709,6 +709,8 @@ export class SessionRecording {
             // in case we see multiple decide responses, we should only listen with the response from the most recent one
             this._persistDecideOnSessionListener?.()
             this._persistDecideOnSessionListener = this.sessionManager.onSessionId(persistResponse)
+
+            this._tryAddCustomEvent('$remote_config_received', response)
         }
     }
 
