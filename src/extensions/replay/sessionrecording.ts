@@ -621,6 +621,7 @@ export class SessionRecording {
     }
 
     onRemoteConfig(response: RemoteConfig) {
+        this._tryAddCustomEvent('$remote_config_received', response)
         this._persistRemoteConfig(response)
 
         this._linkedFlag = response.sessionRecording?.linkedFlag || null
@@ -709,8 +710,6 @@ export class SessionRecording {
             // in case we see multiple decide responses, we should only listen with the response from the most recent one
             this._persistDecideOnSessionListener?.()
             this._persistDecideOnSessionListener = this.sessionManager.onSessionId(persistResponse)
-
-            this._tryAddCustomEvent('$remote_config_received', response)
         }
     }
 
