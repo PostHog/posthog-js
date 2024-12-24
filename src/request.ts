@@ -1,4 +1,4 @@
-import { _base64Encode, each, find } from './utils'
+import { each, find } from './utils'
 import Config from './config'
 import { Compression, RequestOptions, RequestResponse } from './types'
 import { formDataToQuery } from './utils/request-utils'
@@ -6,6 +6,8 @@ import { formDataToQuery } from './utils/request-utils'
 import { logger } from './utils/logger'
 import { AbortController, fetch, navigator, XMLHttpRequest } from './utils/globals'
 import { gzipSync, strToU8 } from 'fflate'
+
+import { _base64Encode } from './utils/encode-utils'
 
 // eslint-disable-next-line compat/compat
 export const SUPPORTS_REQUEST = !!XMLHttpRequest || !!fetch
@@ -216,18 +218,17 @@ const _sendBeacon = (options: RequestOptions) => {
 const AVAILABLE_TRANSPORTS: { transport: RequestOptions['transport']; method: (options: RequestOptions) => void }[] = []
 
 // We add the transports in order of preference
+if (fetch) {
+    AVAILABLE_TRANSPORTS.push({
+        transport: 'fetch',
+        method: _fetch,
+    })
+}
 
 if (XMLHttpRequest) {
     AVAILABLE_TRANSPORTS.push({
         transport: 'XHR',
         method: xhr,
-    })
-}
-
-if (fetch) {
-    AVAILABLE_TRANSPORTS.push({
-        transport: 'fetch',
-        method: _fetch,
     })
 }
 
@@ -250,7 +251,7 @@ export const request = (_options: RequestOptions) => {
         compression: options.compression,
     })
 
-    const transport = options.transport ?? 'XHR'
+    const transport = options.transport ?? 'fetch'
 
     const transportMethod =
         find(AVAILABLE_TRANSPORTS, (t) => t.transport === transport)?.method ?? AVAILABLE_TRANSPORTS[0].method

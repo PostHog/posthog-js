@@ -1,4 +1,4 @@
-import { each, extend, includes, registerEvent } from './utils'
+import { each, extend, registerEvent } from './utils'
 import {
     autocaptureCompatibleElements,
     getClassNames,
@@ -24,6 +24,7 @@ import { createLogger } from './utils/logger'
 import { document, window } from './utils/globals'
 import { convertToURL } from './utils/request-utils'
 import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
+import { includes } from './utils/string-utils'
 
 const logger = createLogger('[AutoCapture]')
 

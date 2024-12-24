@@ -2,6 +2,7 @@ import { USER_STATE } from '../constants'
 import { uuidv7 } from '../uuidv7'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { PostHog } from '../posthog-core'
+import { assignableWindow } from '../utils/globals'
 
 describe('identify()', () => {
     let instance: PostHog
@@ -9,13 +10,22 @@ describe('identify()', () => {
 
     beforeEach(() => {
         beforeSendMock = jest.fn().mockImplementation((e) => e)
+        const token = uuidv7()
+        // NOTE: Temporary change whilst testing remote config
+        assignableWindow._POSTHOG_REMOTE_CONFIG = {
+            [token]: {
+                config: {},
+                siteApps: [],
+            },
+        } as any
+
         const posthog = defaultPostHog().init(
-            uuidv7(),
+            token,
             {
                 api_host: 'https://test.com',
                 before_send: beforeSendMock,
             },
-            uuidv7()
+            token
         )
 
         instance = Object.assign(posthog, {

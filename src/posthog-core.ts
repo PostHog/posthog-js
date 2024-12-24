@@ -4,11 +4,9 @@ import {
     each,
     eachArray,
     extend,
-    includes,
     registerEvent,
     safewrapClass,
     isCrossDomainCookie,
-    isDistinctIdStringLike,
 } from './utils'
 import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
 import { PostHogFeatureFlags } from './posthog-featureflags'
@@ -84,6 +82,7 @@ import { WebExperiments } from './web-experiments'
 import { PostHogExceptions } from './posthog-exceptions'
 import { SiteApps } from './site-apps'
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
+import { includes, isDistinctIdStringLike } from './utils/string-utils'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -575,8 +574,8 @@ export class PostHog {
             this.compression = includes(config['supportedCompression'], Compression.GZipJS)
                 ? Compression.GZipJS
                 : includes(config['supportedCompression'], Compression.Base64)
-                ? Compression.Base64
-                : undefined
+                  ? Compression.Base64
+                  : undefined
         }
 
         if (config.analytics?.endpoint) {
@@ -587,8 +586,8 @@ export class PostHog {
             person_profiles: this._initialPersonProfilesConfig
                 ? this._initialPersonProfilesConfig
                 : config['defaultIdentifiedOnly']
-                ? 'identified_only'
-                : 'always',
+                  ? 'identified_only'
+                  : 'always',
         })
 
         this.siteApps?.onRemoteConfig(config)
@@ -1710,14 +1709,14 @@ export class PostHog {
      *       // Capture rage clicks
      *       rageclick: true
      *
-     *       // transport for sending requests ('XHR' or 'sendBeacon')
+     *       // transport for sending requests ('XHR' | 'fetch' | 'sendBeacon')
      *       // NB: sendBeacon should only be used for scenarios such as
      *       // page unload where a "best-effort" attempt to send is
      *       // acceptable; the sendBeacon API does not support callbacks
      *       // or any way to know the result of the request. PostHog
      *       // capturing via sendBeacon will not support any event-
      *       // batching or retry mechanisms.
-     *       api_transport: 'XHR'
+     *       api_transport: 'fetch'
      *
      *       // super properties cookie expiration (in days)
      *       cookie_expiration: 365

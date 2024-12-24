@@ -7,6 +7,14 @@ Cypress.on('window:before:load', (win) => {
     cy.spy(win.console, 'warn')
     cy.spy(win.console, 'log')
     cy.spy(win.console, 'debug')
+
+    // NOTE: Temporary change whilst testing remote config
+    ;(win as any)._POSTHOG_REMOTE_CONFIG = {
+        test_token: {
+            config: {},
+            siteApps: [],
+        },
+    }
 })
 
 beforeEach(() => {

@@ -2,9 +2,10 @@ import { getQueryParam, convertToURL } from './request-utils'
 import { isNull } from './type-utils'
 import { Properties } from '../types'
 import Config from '../config'
-import { each, extend, stripEmptyProperties, stripLeadingDollar } from './index'
+import { each, extend, stripEmptyProperties } from './index'
 import { document, location, userAgent, window } from './globals'
 import { detectBrowser, detectBrowserVersion, detectDevice, detectDeviceType, detectOS } from './user-agent-utils'
+import { stripLeadingDollar } from './string-utils'
 
 const URL_REGEX_PREFIX = 'https?://(.*)'
 
@@ -180,8 +181,8 @@ export const Info = {
             initial_referrer == null
                 ? undefined
                 : initial_referrer == '$direct'
-                ? '$direct'
-                : convertToURL(initial_referrer)?.host
+                  ? '$direct'
+                  : convertToURL(initial_referrer)?.host
 
         const props: Record<string, string | undefined> = {
             $initial_referrer: initial_referrer,

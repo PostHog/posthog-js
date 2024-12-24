@@ -1,3 +1,48 @@
+## 1.203.1 - 2024-12-20
+
+- fix: recordings that are paused for their whole duration (#1626)
+- feat: custom event with remote config (#1628)
+
+## 1.203.0 - 2024-12-20
+
+- chore: add feature name prop to event (#1624)
+- fix: payload host deny list (#1627)
+- chore: build against lowest and current version of TS (#1625)
+- chore: fix changelog after automation error (#1623)
+
+## 1.202.5 - 2024-12-19
+
+- chore: lint a file that needs it (#1622)
+
+## 1.202.4 - 2024-12-19
+
+- fix: do not even send heatmap with no x or y (#1621)
+- fix: type error accessing null object and added test case (#1620)
+- chore: Small tweaks to make fetch default (#1610)
+- chore: remove circular dependencies (#1618)
+
+## 1.202.3 - 2024-12-18
+
+ > NB an error meant this version was never published to NPM
+
+## 1.202.2 - 2024-12-17
+
+- fix: specify transport in fewer places to let config control (#1614)
+- chore: update rollup, bc y not (#1615)
+
+## 1.202.1 - 2024-12-17
+
+- feat: Use token scoped remote config (#1611)
+
+## 1.202.0 - 2024-12-17
+
+- fix: Change default transport to fetch (#1612)
+
+## 1.201.1 - 2024-12-17
+
+- fix: Load RemoteConfig by default but don't use it (#1607)
+- chore: add websockets example to nextjs playground (#1605)
+
 ## 1.201.0 - 2024-12-16
 
 - fix: rotate session id proactively (#1512)

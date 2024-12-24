@@ -1,5 +1,5 @@
-import { includes } from './index'
 import { isFunction, isUndefined } from './type-utils'
+import { includes } from './string-utils'
 
 /**
  * this device detection code is (at time of writing) about 3% of the size of the entire library
@@ -183,7 +183,7 @@ export const detectBrowserVersion = function (userAgent: string, vendor: string 
 // the first regex that matches uses its matcher function to return the result
 const osMatchers: [
     RegExp,
-    [string, string] | ((match: RegExpMatchArray | null, user_agent: string) => [string, string])
+    [string, string] | ((match: RegExpMatchArray | null, user_agent: string) => [string, string]),
 ][] = [
     [
         new RegExp(XBOX + '; ' + XBOX + ' (.*?)[);]', 'i'),
