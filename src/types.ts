@@ -251,6 +251,7 @@ export interface PostHogConfig {
     disable_web_experiments: boolean
     /** If set, posthog-js will never load external scripts such as those needed for Session Replay or Surveys. */
     disable_external_dependency_loading?: boolean
+    prepare_external_dependency_script?: (script: HTMLScriptElement) => HTMLScriptElement | null
     enable_recording_console_log?: boolean
     secure_cookie: boolean
     ip: boolean
