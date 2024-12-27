@@ -185,10 +185,54 @@ test.describe('Session recording', () => {
             expect(capturedMouseMoves[1].data.positions[0].x).toBeGreaterThan(200)
         })
 
-        test.fixme('continues capturing to the same session when the page reloads', () => {})
+        test('continues capturing to the same session when the page reloads', async ({ page }) => {
+            const responsePromise = page.waitForResponse('**/ses/*')
+            await page.locator('[data-cy-input]').fill('hello posthog!')
+            await responsePromise
+
+            const firstSessionId = await page.evaluate(() => {
+                const ph = (window as WindowWithPostHog).posthog
+                return ph?.get_session_id()
+            })
+            expect(new Set(fullCaptures.map((c) => c['properties']['$session_id']))).toEqual(new Set([firstSessionId]))
+
+            await start(
+                {
+                    type: 'reload',
+                    decideResponseOverrides: {
+                        sessionRecording: {
+                            endpoint: '/ses/',
+                        },
+                        capturePerformance: true,
+                    },
+                },
+                page,
+                page.context()
+            )
+            resetCaptures()
+            await page.waitForResponse('**/recorder.js*')
+
+            await page.evaluate(() => {
+                const ph = (window as WindowWithPostHog).posthog
+                ph?.capture('some_custom_event')
+            })
+            expect(captures).toEqual(['$pageview', 'some_custom_event'])
+            expect(fullCaptures[1]['properties']['$session_id']).toEqual(firstSessionId)
+            expect(fullCaptures[1]['properties']['$session_recording_start_reason']).toEqual('recording_initialized')
+            expect(fullCaptures[1]['properties']['$recording_status']).toEqual('active')
+
+            resetCaptures()
+
+            const moreResponsePromise = page.waitForResponse('**/ses/*')
+            await page.locator('[data-cy-input]').type('hello posthog!')
+            await moreResponsePromise
+
+            expect(captures).toEqual(['$snapshot'])
+            expect(fullCaptures[0]['properties']['$session_id']).toEqual(firstSessionId)
+        })
+
         test.fixme('starts a new recording after calling reset', () => {})
         test('rotates sessions after 24 hours', async ({ page }) => {
-            await page.locator('[data-cy-input]').fill('hello world! ')
             const responsePromise = page.waitForResponse('**/ses/*')
             await page.locator('[data-cy-input]').fill('hello posthog!')
             await responsePromise

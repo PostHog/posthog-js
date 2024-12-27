@@ -1,6 +1,5 @@
 import { Page, BrowserContext } from '@playwright/test'
 import { CaptureResult, Compression, DecideResponse, PostHogConfig } from '../../src/types'
-import { EventEmitter } from 'events'
 import { PostHog } from '../../src/posthog-core'
 import path from 'path'
 
@@ -21,6 +20,7 @@ export async function start(
         waitForDecide = true,
         initPosthog = true,
         resetOnInit = false,
+        type = 'navigate',
         options = {},
         decideResponseOverrides = {
             sessionRecording: undefined,
@@ -32,6 +32,7 @@ export async function start(
         waitForDecide?: boolean
         initPosthog?: boolean
         resetOnInit?: boolean
+        type?: 'navigate' | 'reload'
         options?: Partial<PostHogConfig>
         decideResponseOverrides?: Partial<DecideResponse>
         url?: string
@@ -39,8 +40,6 @@ export async function start(
     page: Page,
     context: BrowserContext
 ) {
-    // Increase the max listeners for the EventEmitter to avoid warnings in a test environment.
-    EventEmitter.prototype.setMaxListeners(100)
     options.opt_out_useragent_filter = true
 
     // Prepare the mocked Decide API response
@@ -71,20 +70,31 @@ export async function start(
         })
     })
 
-    // Visit the specified URL
-    if (url.startsWith('./')) {
-        const filePath = path.resolve(process.cwd(), url)
-        // starts with a single slash since otherwise we get three
-        url = `file://${filePath}`
+    if (type === 'reload') {
+        await page.reload()
+    } else {
+        // Visit the specified URL
+        if (url.startsWith('./')) {
+            const filePath = path.resolve(process.cwd(), url)
+            // starts with a single slash since otherwise we get three
+            url = `file://${filePath}`
+        }
+        await page.goto(url)
     }
-    await page.goto(url)
 
     // Initialize PostHog if required
     if (initPosthog) {
-        await page.exposeFunction('addToFullCaptures', (event: any) => {
-            captures.push(event.event)
-            fullCaptures.push(event)
+        // not safe to exposeFunction twice, so check if it's already there
+        const hasFunctionAlready = await page.evaluate(() => {
+            // eslint-disable-next-line posthog-js/no-direct-undefined-check
+            return (window as any).addToFullCaptures !== undefined
         })
+        if (!hasFunctionAlready) {
+            await page.exposeFunction('addToFullCaptures', (event: any) => {
+                captures.push(event.event)
+                fullCaptures.push(event)
+            })
+        }
 
         await page.evaluate(
             // TS very unhappy with passing PostHogConfig here, so just pass an object
