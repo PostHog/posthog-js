@@ -1,4 +1,4 @@
-import { DecideResponse, PostHogConfig } from '../../src/types'
+import { Compression, DecideResponse, PostHogConfig } from '../../src/types'
 
 import { EventEmitter } from 'events'
 
@@ -26,11 +26,16 @@ export const start = ({
     // we don't see the error in production, so it's fine to increase the limit here
     EventEmitter.prototype.setMaxListeners(100)
 
-    const decideResponse = {
+    const decideResponse: DecideResponse = {
         editorParams: {},
-        featureFlags: ['session-recording-player'],
-        supportedCompression: ['gzip-js'],
-        excludedDomains: [],
+        featureFlags: { 'session-recording-player': true },
+        featureFlagPayloads: {},
+        errorsWhileComputingFlags: false,
+        toolbarParams: {},
+        toolbarVersion: 'toolbar',
+        isAuthenticated: false,
+        siteApps: [],
+        supportedCompression: [Compression.GZipJS],
         autocaptureExceptions: false,
         ...decideResponseOverrides,
     }
