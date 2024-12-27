@@ -1,3 +1,7 @@
+## 1.203.2 - 2024-12-27
+
+- Adds option for nonce support (#1630)
+
 ## 1.203.1 - 2024-12-20
 
 - fix: recordings that are paused for their whole duration (#1626)
