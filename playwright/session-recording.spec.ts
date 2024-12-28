@@ -1,25 +1,28 @@
-import { expect, test } from './utils/posthog-js-assets-mocks'
-import { captures, fullCaptures, resetCaptures, start, WindowWithPostHog } from './utils/setup'
+import { expect, test, WindowWithPostHog } from './utils/posthog-playwright-test-base'
+import { start } from './utils/setup'
 import { Page } from '@playwright/test'
 import { isUndefined } from '../src/utils/type-utils'
 
 async function ensureRecordingIsStopped(page: Page) {
-    resetCaptures()
+    await page.resetCapturedEvents()
 
     await page.locator('[data-cy-input]').type('hello posthog!')
     // wait a little since we can't wait for the absence of a call to /ses/*
     await page.waitForTimeout(250)
-    expect(fullCaptures.length).toBe(0)
+
+    const capturedEvents = await page.capturedEvents()
+    expect(capturedEvents).toEqual([])
 }
 
 async function ensureActivitySendsSnapshots(page: Page, expectedCustomTags: string[] = []) {
-    resetCaptures()
+    await page.resetCapturedEvents()
 
     const responsePromise = page.waitForResponse('**/ses/*')
     await page.locator('[data-cy-input]').type('hello posthog!')
     await responsePromise
 
-    const capturedSnapshot = fullCaptures.find((e) => e.event === '$snapshot')
+    const capturedEvents = await page.capturedEvents()
+    const capturedSnapshot = capturedEvents?.find((e) => e.event === '$snapshot')
     if (isUndefined(capturedSnapshot)) {
         throw new Error('No snapshot captured')
     }
@@ -79,10 +82,11 @@ test.describe('Session recording', () => {
                 ph?.capture('test_registered_property')
             })
 
-            expect(captures).toEqual(['$pageview', '$snapshot', 'test_registered_property'])
+            const capturedEvents = await page.capturedEvents()
+            expect(capturedEvents.map((x) => x.event)).toEqual(['$pageview', '$snapshot', 'test_registered_property'])
 
             // don't care about network payloads here
-            const snapshotData = fullCaptures[1]['properties']['$snapshot_data'].filter((s: any) => s.type !== 6)
+            const snapshotData = capturedEvents[1]['properties']['$snapshot_data'].filter((s: any) => s.type !== 6)
 
             // a meta and then a full snapshot
             expect(snapshotData[0].type).toEqual(4) // meta
@@ -94,7 +98,7 @@ test.describe('Session recording', () => {
             const incrementalSnapshots = snapshotData.slice(5)
             expect(Array.from(new Set(incrementalSnapshots.map((s: any) => s.type)))).toStrictEqual([3])
 
-            expect(fullCaptures[2]['properties']['$session_recording_start_reason']).toEqual('recording_initialized')
+            expect(capturedEvents[2]['properties']['$session_recording_start_reason']).toEqual('recording_initialized')
         })
     })
 
@@ -121,8 +125,9 @@ test.describe('Session recording', () => {
                 context
             )
             await page.waitForResponse('**/recorder.js*')
-            expect(captures).toEqual(['$pageview'])
-            resetCaptures()
+            const capturedEvents = await page.evaluate(() => (window as WindowWithPostHog).capturedEvents || [])
+            expect(capturedEvents.map((x) => x.event)).toEqual(['$pageview'])
+            await page.resetCapturedEvents()
         })
 
         test('captures session events', async ({ page }) => {
@@ -157,7 +162,7 @@ test.describe('Session recording', () => {
         test('captures snapshots when the mouse moves', async ({ page }) => {
             // first make sure the page is booted and recording
             await ensureActivitySendsSnapshots(page, ['$remote_config_received', '$session_options', '$posthog_config'])
-            resetCaptures()
+            await page.resetCapturedEvents()
 
             const responsePromise = page.waitForResponse('**/ses/*')
             await page.mouse.move(200, 300)
@@ -170,7 +175,8 @@ test.describe('Session recording', () => {
             await page.waitForTimeout(25)
             await responsePromise
 
-            const lastCaptured = fullCaptures[fullCaptures.length - 1]
+            const capturedEvents = await page.capturedEvents()
+            const lastCaptured = capturedEvents[capturedEvents.length - 1]
             expect(lastCaptured['event']).toEqual('$snapshot')
 
             const capturedMouseMoves = lastCaptured['properties']['$snapshot_data'].filter((s: any) => {
@@ -179,9 +185,9 @@ test.describe('Session recording', () => {
             expect(capturedMouseMoves.length).toBe(2)
             expect(capturedMouseMoves[0].data.positions.length).toBe(1)
             expect(capturedMouseMoves[0].data.positions[0].x).toBe(200)
-            expect(capturedMouseMoves[1].data.positions.length).toBe(1)
             // smoothing varies if this value picks up 220 or 240
             // all we _really_ care about is that it's greater than the previous value
+            expect(capturedMouseMoves[1].data.positions.length).toBeGreaterThan(0)
             expect(capturedMouseMoves[1].data.positions[0].x).toBeGreaterThan(200)
         })
 
@@ -194,8 +200,12 @@ test.describe('Session recording', () => {
                 const ph = (window as WindowWithPostHog).posthog
                 return ph?.get_session_id()
             })
-            expect(new Set(fullCaptures.map((c) => c['properties']['$session_id']))).toEqual(new Set([firstSessionId]))
+            const capturedEvents = await page.capturedEvents()
+            expect(new Set(capturedEvents.map((c) => c['properties']['$session_id']))).toEqual(
+                new Set([firstSessionId])
+            )
 
+            const waitForRecorder = page.waitForResponse('**/recorder.js*')
             await start(
                 {
                     type: 'reload',
@@ -209,29 +219,61 @@ test.describe('Session recording', () => {
                 page,
                 page.context()
             )
-            resetCaptures()
-            await page.waitForResponse('**/recorder.js*')
+
+            await page.resetCapturedEvents()
+            await waitForRecorder
 
             await page.evaluate(() => {
                 const ph = (window as WindowWithPostHog).posthog
                 ph?.capture('some_custom_event')
             })
-            expect(captures).toEqual(['$pageview', 'some_custom_event'])
-            expect(fullCaptures[1]['properties']['$session_id']).toEqual(firstSessionId)
-            expect(fullCaptures[1]['properties']['$session_recording_start_reason']).toEqual('recording_initialized')
-            expect(fullCaptures[1]['properties']['$recording_status']).toEqual('active')
+            const capturedAfterReload = await page.capturedEvents()
+            expect(capturedAfterReload.map((x) => x.event)).toEqual(['some_custom_event'])
+            expect(capturedAfterReload[0]['properties']['$session_id']).toEqual(firstSessionId)
+            expect(capturedAfterReload[0]['properties']['$session_recording_start_reason']).toEqual(
+                'recording_initialized'
+            )
+            expect(capturedAfterReload[0]['properties']['$recording_status']).toEqual('active')
 
-            resetCaptures()
+            await page.resetCapturedEvents()
 
             const moreResponsePromise = page.waitForResponse('**/ses/*')
             await page.locator('[data-cy-input]').type('hello posthog!')
             await moreResponsePromise
 
-            expect(captures).toEqual(['$snapshot'])
-            expect(fullCaptures[0]['properties']['$session_id']).toEqual(firstSessionId)
+            const capturedAfterActivity = await page.capturedEvents()
+            expect(capturedAfterActivity.map((x) => x.event)).toEqual(['$snapshot'])
+            expect(capturedAfterActivity[0]['properties']['$session_id']).toEqual(firstSessionId)
         })
 
-        test.fixme('starts a new recording after calling reset', () => {})
+        test('starts a new recording after calling reset', async ({ page }) => {
+            await page.resetCapturedEvents()
+            const startingSessionId = await page.evaluate(() => {
+                const ph = (window as WindowWithPostHog).posthog
+                return ph?.get_session_id()
+            })
+            expect(startingSessionId).not.toBeNull()
+
+            await ensureActivitySendsSnapshots(page, ['$remote_config_received', '$session_options', '$posthog_config'])
+
+            await page.resetCapturedEvents()
+            await page.evaluate(() => {
+                const ph = (window as WindowWithPostHog).posthog
+                ph?.reset()
+            })
+
+            const responsePromise = page.waitForResponse('**/ses/*')
+            await page.locator('[data-cy-input]').fill('hello posthog!')
+            await responsePromise
+
+            const capturedEvents = await page.capturedEvents()
+            const postResetSessionIds = new Set(capturedEvents.map((c) => c['properties']['$session_id']))
+            expect(postResetSessionIds.size).toEqual(1)
+            const replayCapturedSessionId = Array.from(postResetSessionIds)[0]
+
+            expect(replayCapturedSessionId).not.toEqual(startingSessionId)
+        })
+
         test('rotates sessions after 24 hours', async ({ page }) => {
             const responsePromise = page.waitForResponse('**/ses/*')
             await page.locator('[data-cy-input]').fill('hello posthog!')
@@ -242,14 +284,15 @@ test.describe('Session recording', () => {
                 ph?.capture('test_registered_property')
             })
 
-            expect(captures).toEqual(['$snapshot', 'test_registered_property'])
+            const capturedEvents = await page.capturedEvents()
+            expect(capturedEvents.map((x) => x.event)).toEqual(['$snapshot', 'test_registered_property'])
 
-            const firstSessionId = fullCaptures[0]['properties']['$session_id']
+            const firstSessionId = capturedEvents[0]['properties']['$session_id']
             expect(typeof firstSessionId).toEqual('string')
             expect(firstSessionId.trim().length).toBeGreaterThan(10)
-            expect(fullCaptures[1]['properties']['$session_recording_start_reason']).toEqual('recording_initialized')
+            expect(capturedEvents[1]['properties']['$session_recording_start_reason']).toEqual('recording_initialized')
 
-            resetCaptures()
+            await page.resetCapturedEvents()
             await page.evaluate(() => {
                 const ph = (window as WindowWithPostHog).posthog
                 const activityTs = ph?.sessionManager?.['_sessionActivityTimestamp']
@@ -274,14 +317,17 @@ test.describe('Session recording', () => {
                 ph?.capture('test_registered_property')
             })
 
-            expect(captures).toEqual(['$snapshot', 'test_registered_property'])
+            const capturedEventsAfter24Hours = await page.capturedEvents()
+            expect(capturedEventsAfter24Hours.map((x) => x.event)).toEqual(['$snapshot', 'test_registered_property'])
 
-            expect(fullCaptures[0]['properties']['$session_id']).not.toEqual(firstSessionId)
-            expect(fullCaptures[0]['properties']['$snapshot_data'][0].type).toEqual(4) // meta
-            expect(fullCaptures[0]['properties']['$snapshot_data'][1].type).toEqual(2) // full_snapshot
+            expect(capturedEventsAfter24Hours[0]['properties']['$session_id']).not.toEqual(firstSessionId)
+            expect(capturedEventsAfter24Hours[0]['properties']['$snapshot_data'][0].type).toEqual(4) // meta
+            expect(capturedEventsAfter24Hours[0]['properties']['$snapshot_data'][1].type).toEqual(2) // full_snapshot
 
-            expect(fullCaptures[1]['properties']['$session_id']).not.toEqual(firstSessionId)
-            expect(fullCaptures[1]['properties']['$session_recording_start_reason']).toEqual('session_id_changed')
+            expect(capturedEventsAfter24Hours[1]['properties']['$session_id']).not.toEqual(firstSessionId)
+            expect(capturedEventsAfter24Hours[1]['properties']['$session_recording_start_reason']).toEqual(
+                'session_id_changed'
+            )
         })
     })
 

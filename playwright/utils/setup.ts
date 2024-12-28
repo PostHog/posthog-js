@@ -1,19 +1,7 @@
 import { Page, BrowserContext } from '@playwright/test'
-import { CaptureResult, Compression, DecideResponse, PostHogConfig } from '../../src/types'
-import { PostHog } from '../../src/posthog-core'
+import { Compression, DecideResponse, PostHogConfig } from '../../src/types'
 import path from 'path'
-
-export const captures: string[] = []
-export const fullCaptures: CaptureResult[] = []
-
-export const resetCaptures = () => {
-    captures.length = 0
-    fullCaptures.length = 0
-}
-
-export type WindowWithPostHog = typeof globalThis & {
-    posthog?: PostHog
-}
+import { WindowWithPostHog } from './posthog-js-assets-mocks'
 
 export async function start(
     {
@@ -84,18 +72,6 @@ export async function start(
 
     // Initialize PostHog if required
     if (initPosthog) {
-        // not safe to exposeFunction twice, so check if it's already there
-        const hasFunctionAlready = await page.evaluate(() => {
-            // eslint-disable-next-line posthog-js/no-direct-undefined-check
-            return (window as any).addToFullCaptures !== undefined
-        })
-        if (!hasFunctionAlready) {
-            await page.exposeFunction('addToFullCaptures', (event: any) => {
-                captures.push(event.event)
-                fullCaptures.push(event)
-            })
-        }
-
         await page.evaluate(
             // TS very unhappy with passing PostHogConfig here, so just pass an object
             (posthogOptions: Record<string, any>) => {
@@ -104,7 +80,9 @@ export async function start(
                     debug: true,
                     before_send: (event) => {
                         if (event) {
-                            ;(window as any).addToFullCaptures(event)
+                            const win = window as WindowWithPostHog
+                            win.capturedEvents = win.capturedEvents || []
+                            win.capturedEvents.push(event)
                         }
                         return event
                     },
