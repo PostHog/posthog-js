@@ -1,13 +1,15 @@
 import { Page, BrowserContext } from '@playwright/test'
 import { Compression, DecideResponse, PostHogConfig } from '../../src/types'
 import path from 'path'
-import { WindowWithPostHog } from './posthog-js-assets-mocks'
+import { WindowWithPostHog } from './posthog-playwright-test-base'
 
 export async function start(
     {
         waitForDecide = true,
         initPosthog = true,
         resetOnInit = false,
+        runBeforePostHogInit = () => {},
+        runAfterPostHogInit = () => {},
         type = 'navigate',
         options = {},
         decideResponseOverrides = {
@@ -20,6 +22,8 @@ export async function start(
         waitForDecide?: boolean
         initPosthog?: boolean
         resetOnInit?: boolean
+        runBeforePostHogInit?: (pg: Page) => void
+        runAfterPostHogInit?: (pg: Page) => void
         type?: 'navigate' | 'reload'
         options?: Partial<PostHogConfig>
         decideResponseOverrides?: Partial<DecideResponse>
@@ -70,6 +74,8 @@ export async function start(
         await page.goto(url)
     }
 
+    runBeforePostHogInit(page)
+
     // Initialize PostHog if required
     if (initPosthog) {
         await page.evaluate(
@@ -86,6 +92,11 @@ export async function start(
                         }
                         return event
                     },
+                    loaded: (ph) => {
+                        if (ph.sessionRecording) {
+                            ph.sessionRecording._forceAllowLocalhostNetworkCapture = true
+                        }
+                    },
                     opt_out_useragent_filter: true,
                     ...posthogOptions,
                 }
@@ -96,6 +107,8 @@ export async function start(
             options as Record<string, any>
         )
     }
+
+    runAfterPostHogInit(page)
 
     // Reset PostHog if required
     if (resetOnInit) {
