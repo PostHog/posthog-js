@@ -1,5 +1,5 @@
-import { test, expect } from './utils/posthog-playwright-test-base'
-import { start } from './utils/setup'
+import { test, expect } from '../utils/posthog-playwright-test-base'
+import { start } from '../utils/setup'
 import { Page } from '@playwright/test'
 
 test.beforeEach(async ({ context }) => {

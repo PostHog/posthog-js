@@ -1,5 +1,5 @@
-import { expect, test, WindowWithPostHog } from './utils/posthog-playwright-test-base'
-import { start } from './utils/setup'
+import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
+import { start } from '../utils/setup'
 
 const startOptions = {
     options: {
