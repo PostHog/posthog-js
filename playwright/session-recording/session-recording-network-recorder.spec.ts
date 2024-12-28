@@ -97,7 +97,7 @@ test.beforeEach(async ({ context }) => {
             })
         })
         ;['fetch', 'xhr'].forEach((networkType) => {
-            test('it captures ' + networkType, async ({ page }) => {
+            test('it captures ' + networkType, async ({ page, browserName }) => {
                 const exampleComResponse = page.waitForResponse('https://example.com/')
                 const sessionRecordingDataSent = page.waitForResponse('**/ses/*')
                 await page.click(`[data-cy-${networkType}-call-button]`)
@@ -120,7 +120,8 @@ test.beforeEach(async ({ context }) => {
 
                 const expectedInitiatorType = networkType === 'fetch' ? 'fetch' : 'xmlhttprequest'
                 const expectedCaptureds: [RegExp, string][] = [
-                    [/file:\/\/.*\/playground\/cypress\//, 'navigation'],
+                    // firefox doesn't expose the file path presumably for security reasons
+                    [browserName === 'firefox' ? /^document$/ : /file:\/\/.*\/playground\/cypress\//, 'navigation'],
                     [/https:\/\/localhost:\d+\/static\/array.js/, 'script'],
                     [/https:\/\/localhost:\d+\/array\/test%20token\/config.js/, 'script'],
                     [
@@ -134,6 +135,7 @@ test.beforeEach(async ({ context }) => {
 
                 // yay, includes expected network data
                 expect(capturedRequests.length).toEqual(expectedCaptureds.length)
+                console.log('cr', capturedRequests)
                 expectedCaptureds.forEach(([url, initiatorType], index) => {
                     expect(capturedRequests[index].name).toMatch(url)
                     expect(capturedRequests[index].initiatorType).toEqual(initiatorType)
