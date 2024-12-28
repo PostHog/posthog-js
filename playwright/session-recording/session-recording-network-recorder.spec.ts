@@ -136,6 +136,10 @@ test.beforeEach(async ({ context }) => {
                               [/https:\/\/example.com/, expectedInitiatorType],
                               // webkit is duplicating this, it is picked up in the initial performance observer records
                               // and in the post-wrapped fetch records
+                              // other than having `isInitial: true` on the previous one
+                              // and a few milliseconds difference in timestamp on the previous one,
+                              // they are identical but processed separately during capture
+                              // so need to be de-duplicated during playback
                               [/file:\/\/.*\/playground\/cypress\//, 'navigation'],
                           ]
                         : [
