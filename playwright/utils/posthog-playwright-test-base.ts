@@ -1,4 +1,3 @@
-import * as fs from 'fs'
 import { test as base, Page } from '@playwright/test'
 import path from 'path'
 import { PostHog } from '../../src/posthog-core'
@@ -71,22 +70,16 @@ export const test = base.extend<{ mockStaticAssets: void; page: Page }>({
 
             lazyLoadedJSFiles.forEach((key: string) => {
                 const jsFilePath = path.resolve(process.cwd(), `dist/${key}.js`)
-                const fileBody = fs.readFileSync(jsFilePath, 'utf8')
                 void context.route(new RegExp(`^.*/static/${key}\\.js(\\?.*)?$`), (route) => {
                     route.fulfill({
-                        status: 200,
-                        contentType: 'application/json',
-                        body: fileBody,
+                        path: jsFilePath,
                     })
                 })
 
                 const jsMapFilePath = path.resolve(process.cwd(), `dist/${key}.js.map`)
-                const mapFileBody = fs.readFileSync(jsMapFilePath, 'utf8')
                 void context.route(`**/static/${key}.js.map`, (route) => {
                     route.fulfill({
-                        status: 200,
-                        contentType: 'application/json',
-                        body: mapFileBody,
+                        path: jsMapFilePath,
                     })
                 })
             })
