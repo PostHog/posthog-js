@@ -21,6 +21,12 @@ export type WindowWithPostHog = typeof globalThis & {
 }
 
 declare module '@playwright/test' {
+    /*
+     to support tests running in parallel
+     we keep captured events in the window object
+     for a page with custom methods added
+     to the Playwright Page object
+    */
     interface Page {
         resetCapturedEvents(): Promise<void>
         capturedEvents(): Promise<CaptureResult[]>
