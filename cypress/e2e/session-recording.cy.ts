@@ -1,7 +1,6 @@
 /// <reference types="cypress" />
 
 import { start } from '../support/setup'
-import { assertWhetherPostHogRequestsWereCalled, pollPhCaptures } from '../support/assertions'
 
 function wrapFetchInCypress({
     originalFetch,
@@ -208,114 +207,6 @@ describe('Session recording', () => {
                             message: 'This is a JSON response',
                         })
                     )
-                })
-            })
-        })
-    })
-
-    describe('with sampling', () => {
-        beforeEach(() => {
-            start({
-                options: {
-                    session_recording: {},
-                },
-                decideResponseOverrides: {
-                    isAuthenticated: false,
-                    sessionRecording: {
-                        endpoint: '/ses/',
-                        sampleRate: '0',
-                    },
-                    capturePerformance: true,
-                    autocapture_opt_out: true,
-                },
-                url: './playground/cypress',
-            })
-            cy.wait('@recorder-script')
-        })
-
-        it('does not capture when sampling is set to 0', () => {
-            cy.get('[data-cy-input]').type('hello world! ')
-            cy.wait(500)
-            cy.get('[data-cy-input]')
-                .type('hello posthog!')
-                .wait(200) // can't wait on call to session recording, it's not going to happen
-                .then(() => {
-                    cy.phCaptures({ full: true }).then((captures) => {
-                        expect(captures.map((c) => c.event)).to.deep.equal(['$pageview'])
-                    })
-                })
-        })
-
-        it('can override sampling when starting session recording', () => {
-            cy.intercept('POST', '/decide/*', {
-                autocapture_opt_out: true,
-                editorParams: {},
-                isAuthenticated: false,
-                sessionRecording: {
-                    endpoint: '/ses/',
-                    // will never record a session with rate of 0
-                    sampleRate: '0',
-                },
-            }).as('decide')
-
-            assertWhetherPostHogRequestsWereCalled({
-                '@recorder-script': true,
-                '@decide': true,
-                '@session-recording': false,
-            })
-
-            cy.phCaptures({ full: true }).then((captures) => {
-                expect((captures || []).map((c) => c.event)).to.deep.equal(['$pageview'])
-            })
-
-            cy.posthog().invoke('startSessionRecording', { sampling: true })
-
-            assertWhetherPostHogRequestsWereCalled({
-                '@recorder-script': true,
-                '@decide': true,
-                // no call to session-recording yet
-            })
-
-            cy.posthog().invoke('capture', 'test_registered_property')
-            cy.phCaptures({ full: true }).then((captures) => {
-                expect((captures || []).map((c) => c.event)).to.deep.equal(['$pageview', 'test_registered_property'])
-                expect(captures[1]['properties']['$session_recording_start_reason']).to.equal('sampling_overridden')
-            })
-
-            cy.resetPhCaptures()
-
-            cy.get('[data-cy-input]').type('hello posthog!')
-
-            pollPhCaptures('$snapshot').then(() => {
-                cy.phCaptures({ full: true }).then((captures) => {
-                    expect(captures.map((c) => c.event)).to.deep.equal(['$snapshot'])
-                })
-            })
-
-            // sampling override survives a page refresh
-            cy.log('refreshing page')
-            cy.resetPhCaptures()
-            cy.reload(true).then(() => {
-                start({
-                    decideResponseOverrides: {
-                        isAuthenticated: false,
-                        sessionRecording: {
-                            endpoint: '/ses/',
-                            sampleRate: '0',
-                        },
-                        capturePerformance: true,
-                        autocapture_opt_out: true,
-                    },
-                    url: './playground/cypress',
-                })
-                cy.wait('@recorder-script')
-
-                cy.get('[data-cy-input]').type('hello posthog!')
-
-                pollPhCaptures('$snapshot').then(() => {
-                    cy.phCaptures({ full: true }).then((captures) => {
-                        expect((captures || []).map((c) => c.event)).to.deep.equal(['$pageview', '$snapshot'])
-                    })
                 })
             })
         })

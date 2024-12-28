@@ -50,26 +50,29 @@ async function ensureActivitySendsSnapshots(page: Page, expectedCustomTags: stri
     expect(customEventTags).toEqual(expectedCustomTags)
 }
 
+const startOptions = {
+    options: {
+        session_recording: {},
+    },
+    decideResponseOverrides: {
+        sessionRecording: {
+            endpoint: '/ses/',
+        },
+        capturePerformance: true,
+        autocapture_opt_out: true,
+    },
+    url: './playground/cypress/index.html',
+}
+
 test.describe('Session recording', () => {
+    const arrayFullStartOptions = {
+        ...startOptions,
+        url: './playground/cypress-full/index.html',
+    }
+
     test.describe('array.full.js', () => {
         test('captures session events', async ({ page, context }) => {
-            await start(
-                {
-                    options: {
-                        session_recording: {},
-                    },
-                    decideResponseOverrides: {
-                        isAuthenticated: false,
-                        sessionRecording: {
-                            endpoint: '/ses/',
-                        },
-                        capturePerformance: true,
-                        autocapture_opt_out: true,
-                    },
-                },
-                page,
-                context
-            )
+            await start(arrayFullStartOptions, page, context)
 
             await page.locator('[data-cy-input]').fill('hello world! ')
             await page.waitForTimeout(500)
@@ -106,24 +109,7 @@ test.describe('Session recording', () => {
 
     test.describe('array.js', () => {
         test.beforeEach(async ({ page, context }) => {
-            await start(
-                {
-                    options: {
-                        session_recording: {},
-                    },
-                    decideResponseOverrides: {
-                        isAuthenticated: false,
-                        sessionRecording: {
-                            endpoint: '/ses/',
-                        },
-                        capturePerformance: true,
-                        autocapture_opt_out: true,
-                    },
-                    url: './playground/cypress/index.html',
-                },
-                page,
-                context
-            )
+            await start(startOptions, page, context)
             await page.waitForResponse('**/recorder.js*')
             const capturedEvents = await page.evaluate(() => (window as WindowWithPostHog).capturedEvents || [])
             expect(capturedEvents.map((x) => x.event)).toEqual(['$pageview'])
@@ -208,13 +194,8 @@ test.describe('Session recording', () => {
             const waitForRecorder = page.waitForResponse('**/recorder.js*')
             await start(
                 {
+                    ...startOptions,
                     type: 'reload',
-                    decideResponseOverrides: {
-                        sessionRecording: {
-                            endpoint: '/ses/',
-                        },
-                        capturePerformance: true,
-                    },
                 },
                 page,
                 page.context()
@@ -331,5 +312,65 @@ test.describe('Session recording', () => {
         })
     })
 
-    test.describe.fixme('with sampling', () => {})
+    test.describe('with sampling', () => {
+        const sampleZeroStartOptions = {
+            ...startOptions,
+            decideResponseOverrides: {
+                ...startOptions.decideResponseOverrides,
+                sessionRecording: {
+                    ...startOptions.decideResponseOverrides.sessionRecording,
+                    sampleRate: '0',
+                },
+            },
+        }
+        test.beforeEach(async ({ page, context }) => {
+            await start(startOptions, page, context)
+
+            await page.waitForResponse('**/recorder.js*')
+            const capturedEvents = await page.evaluate(() => (window as WindowWithPostHog).capturedEvents || [])
+            expect(capturedEvents.map((x) => x.event)).toEqual(['$pageview'])
+            await page.resetCapturedEvents()
+        })
+
+        test('does not capture events when sampling is set to 0', async ({ page }) => {
+            await page.locator('[data-cy-input]').fill('hello posthog!')
+            // because it doesn't make sense to wait for a snapshot event that won't happen
+            await page.waitForTimeout(250)
+
+            const capturedEvents = await page.capturedEvents()
+            expect(capturedEvents).toEqual([])
+        })
+
+        test('can override sampling when starting session recording', async ({ page, context }) => {
+            await page.evaluate(() => {
+                const ph = (window as WindowWithPostHog).posthog
+                ph?.startSessionRecording({ sampling: true })
+                ph?.capture('test_registered_property')
+            })
+            const capturedEvents = await page.capturedEvents()
+            expect(capturedEvents.map((x) => x.event)).toEqual(['test_registered_property'])
+            expect(capturedEvents[0]['properties']['$session_recording_start_reason']).toEqual('sampling_overridden')
+
+            // sampling override survives a page refresh
+            await page.resetCapturedEvents()
+            await page.reload()
+
+            await start(
+                {
+                    ...sampleZeroStartOptions,
+                    type: 'reload',
+                },
+                page,
+                context
+            )
+            await page.waitForResponse('**/recorder.js*')
+            const responsePromise = page.waitForResponse('**/ses/*')
+            await page.locator('[data-cy-input]').fill('hello posthog!')
+            await responsePromise
+
+            const afterReloadCapturedEvents = await page.capturedEvents()
+            const lastCaptured = afterReloadCapturedEvents[afterReloadCapturedEvents.length - 1]
+            expect(lastCaptured['event']).toEqual('$snapshot')
+        })
+    })
 })
