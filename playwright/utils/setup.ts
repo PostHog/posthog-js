@@ -22,7 +22,11 @@ export async function start(
         waitForDecide?: boolean
         initPosthog?: boolean
         resetOnInit?: boolean
+        // playwright is stricter than cypress on access to the window object
+        // sometimes you need to pass functions here that will run on window in the correct page
         runBeforePostHogInit?: (pg: Page) => void
+        // playwright is stricter than cypress on access to the window object
+        // sometimes you need to pass functions here that will run on window in the correct page
         runAfterPostHogInit?: (pg: Page) => void
         type?: 'navigate' | 'reload'
         options?: Partial<PostHogConfig>
