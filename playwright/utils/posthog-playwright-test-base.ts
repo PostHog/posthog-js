@@ -1,5 +1,4 @@
 import { test as base, Page } from '@playwright/test'
-import path from 'path'
 import { PostHog } from '../../src/posthog-core'
 import { CaptureResult } from '../../src/types'
 
@@ -69,17 +68,17 @@ export const test = base.extend<{ mockStaticAssets: void; page: Page }>({
             })
 
             lazyLoadedJSFiles.forEach((key: string) => {
-                const jsFilePath = path.resolve(process.cwd(), `dist/${key}.js`)
                 void context.route(new RegExp(`^.*/static/${key}\\.js(\\?.*)?$`), (route) => {
                     route.fulfill({
-                        path: jsFilePath,
+                        headers: { loaded: 'using relative path by playwright' },
+                        path: `./dist/${key}.js`,
                     })
                 })
 
-                const jsMapFilePath = path.resolve(process.cwd(), `dist/${key}.js.map`)
                 void context.route(`**/static/${key}.js.map`, (route) => {
                     route.fulfill({
-                        path: jsMapFilePath,
+                        headers: { loaded: 'using relative path by playwright' },
+                        path: `./dist/${key}.js.map`,
                     })
                 })
             })
