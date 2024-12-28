@@ -124,17 +124,18 @@ test.beforeEach(async ({ context }) => {
                         ? [
                               [/file:\/\/.*\/playground\/cypress\//, 'navigation'],
                               [/https:\/\/localhost:\d+\/static\/array.js/, 'script'],
-                              // TODO why isn't webkit reporting this failed request... it's in the console
+                              // webkit isn't capturing this failed request in the pre-wrapped fetch performance observer records
                               // [/https:\/\/localhost:\d+\/array\/test%20token\/config.js/, 'script'],
                               [
                                   /https:\/\/localhost:\d+\/decide\/\?v=3&ip=1&_=\d+&ver=1\.\d\d\d\.\d+&compression=base64/,
                                   'fetch',
                               ],
-                              // TODO why isn't webkit reporting this failed request... it's in the console
+                              // webkit isn't capturing this failed request in the pre-wrapped fetch performance observer records
                               // [/https:\/\/localhost:\d+\/array\/test%20token\/config\?ip=1&_=\d+&ver=1\.\d\d\d\.\d+/, 'fetch'],
                               [/https:\/\/localhost:\d+\/static\/recorder.js\?v=1\.\d\d\d\.\d+/, 'script'],
                               [/https:\/\/example.com/, expectedInitiatorType],
-                              // TODO webkit is duplicating this
+                              // webkit is duplicating this, it is picked up in the initial performance observer records
+                              // and in the post-wrapped fetch records
                               [/file:\/\/.*\/playground\/cypress\//, 'navigation'],
                           ]
                         : [
