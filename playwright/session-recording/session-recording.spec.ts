@@ -109,13 +109,13 @@ test.describe('Session recording - array.js', () => {
 
         const responsePromise = page.waitForResponse('**/ses/*')
         await page.mouse.move(200, 300)
-        await page.waitForTimeout(25)
+        await page.waitForTimeout(5)
         await page.mouse.move(210, 300)
-        await page.waitForTimeout(25)
+        await page.waitForTimeout(5)
         await page.mouse.move(220, 300)
-        await page.waitForTimeout(25)
+        await page.waitForTimeout(5)
         await page.mouse.move(240, 300)
-        await page.waitForTimeout(25)
+        await page.waitForTimeout(5)
         await responsePromise
 
         const capturedEvents = await page.capturedEvents()
@@ -159,18 +159,6 @@ test.describe('Session recording - array.js', () => {
         await page.resetCapturedEvents()
         await waitForRecorder
 
-        await page.evaluate(() => {
-            const ph = (window as WindowWithPostHog).posthog
-            ph?.capture('some_custom_event')
-        })
-        const capturedAfterReload = await page.capturedEvents()
-        expect(capturedAfterReload.map((x) => x.event)).toEqual(['some_custom_event'])
-        expect(capturedAfterReload[0]['properties']['$session_id']).toEqual(firstSessionId)
-        expect(capturedAfterReload[0]['properties']['$session_recording_start_reason']).toEqual('recording_initialized')
-        expect(capturedAfterReload[0]['properties']['$recording_status']).toEqual('active')
-
-        await page.resetCapturedEvents()
-
         const moreResponsePromise = page.waitForResponse('**/ses/*')
         await page.locator('[data-cy-input]').type('hello posthog!')
         await moreResponsePromise
@@ -178,6 +166,16 @@ test.describe('Session recording - array.js', () => {
         const capturedAfterActivity = await page.capturedEvents()
         expect(capturedAfterActivity.map((x) => x.event)).toEqual(['$snapshot'])
         expect(capturedAfterActivity[0]['properties']['$session_id']).toEqual(firstSessionId)
+
+        await page.evaluate(() => {
+            const ph = (window as WindowWithPostHog).posthog
+            ph?.capture('some_custom_event')
+        })
+        const capturedAfterReload = await page.capturedEvents()
+        expect(capturedAfterReload.map((x) => x.event)).toEqual(['$snapshot', 'some_custom_event'])
+        expect(capturedAfterReload[1]['properties']['$session_id']).toEqual(firstSessionId)
+        expect(capturedAfterReload[1]['properties']['$session_recording_start_reason']).toEqual('recording_initialized')
+        expect(capturedAfterReload[1]['properties']['$recording_status']).toEqual('active')
     })
 
     test('starts a new recording after calling reset', async ({ page }) => {
