@@ -27,9 +27,10 @@ test.describe('Session recording - sampling', () => {
         },
     }
     test.beforeEach(async ({ page, context }) => {
-        await start(startOptions, page, context)
+        await page.waitingForNetworkCausedBy(['**/recorder.js*'], async () => {
+            await start(startOptions, page, context)
+        })
 
-        await page.waitForResponse('**/recorder.js*')
         const capturedEvents = await page.evaluate(() => (window as WindowWithPostHog).capturedEvents || [])
         expect(capturedEvents.map((x) => x.event)).toEqual(['$pageview'])
         await page.resetCapturedEvents()
@@ -58,18 +59,19 @@ test.describe('Session recording - sampling', () => {
         await page.resetCapturedEvents()
         await page.reload()
 
-        await start(
-            {
-                ...sampleZeroStartOptions,
-                type: 'reload',
-            },
-            page,
-            context
-        )
-        await page.waitForResponse('**/recorder.js*')
-        const responsePromise = page.waitForResponse('**/ses/*')
-        await page.locator('[data-cy-input]').fill('hello posthog!')
-        await responsePromise
+        await page.waitingForNetworkCausedBy(['**/recorder.js*'], async () => {
+            await start(
+                {
+                    ...sampleZeroStartOptions,
+                    type: 'reload',
+                },
+                page,
+                context
+            )
+        })
+        await page.waitingForNetworkCausedBy(['**/ses/*'], async () => {
+            await page.locator('[data-cy-input]').fill('hello posthog!')
+        })
 
         const afterReloadCapturedEvents = await page.capturedEvents()
         const lastCaptured = afterReloadCapturedEvents[afterReloadCapturedEvents.length - 1]

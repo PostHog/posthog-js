@@ -27,7 +27,10 @@ declare module '@playwright/test' {
     */
     interface Page {
         resetCapturedEvents(): Promise<void>
+
         capturedEvents(): Promise<CaptureResult[]>
+
+        waitingForNetworkCausedBy: (urlPatterns: (string | RegExp)[], action: () => Promise<void>) => Promise<void>
     }
 }
 
@@ -43,6 +46,19 @@ export const test = base.extend<{ mockStaticAssets: void; page: Page }>({
             return this.evaluate(() => {
                 return (window as WindowWithPostHog).capturedEvents || []
             })
+        }
+        page.waitingForNetworkCausedBy = async function (
+            urlPatterns: (string | RegExp)[],
+            action: () => Promise<void>
+        ) {
+            const responsePromises = urlPatterns.map((urlPattern) => {
+                return this.waitForResponse(urlPattern)
+            })
+
+            await action()
+
+            // eslint-disable-next-line compat/compat
+            await Promise.allSettled(responsePromises)
         }
 
         // Pass the extended page to the test

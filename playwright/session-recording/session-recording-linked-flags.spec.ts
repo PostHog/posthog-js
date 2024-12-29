@@ -29,14 +29,14 @@ test.describe('Session recording - linked flags', () => {
     })
 
     test('can opt in and override linked flag', async ({ page }) => {
-        const loadRecorder = page.waitForResponse('**/recorder.js*')
-        await page.evaluate(() => {
-            const ph = (window as WindowWithPostHog).posthog
-            ph?.opt_in_capturing()
-            // starting does not begin recording because of the linked flag
-            ph?.startSessionRecording()
+        await page.waitingForNetworkCausedBy(['**/recorder.js*'], async () => {
+            await page.evaluate(() => {
+                const ph = (window as WindowWithPostHog).posthog
+                ph?.opt_in_capturing()
+                // starting does not begin recording because of the linked flag
+                ph?.startSessionRecording()
+            })
         })
-        await loadRecorder
         expect((await page.capturedEvents()).map((x) => x.event)).toEqual(['$opt_in', '$pageview'])
 
         await page.resetCapturedEvents()

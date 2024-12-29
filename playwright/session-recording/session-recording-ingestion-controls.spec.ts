@@ -31,14 +31,14 @@ test.describe('Session recording - multiple ingestion controls', () => {
     })
 
     test('respects sampling when overriding linked flag', async ({ page }) => {
-        const loadRecorder = page.waitForResponse('**/recorder.js*')
-        await page.evaluate(() => {
-            const ph = (window as WindowWithPostHog).posthog
-            ph?.opt_in_capturing()
-            // this won't start recording because of the linked flag and sample rate
-            ph?.startSessionRecording()
+        await page.waitingForNetworkCausedBy(['**/recorder.js*'], async () => {
+            await page.evaluate(() => {
+                const ph = (window as WindowWithPostHog).posthog
+                ph?.opt_in_capturing()
+                // this won't start recording because of the linked flag and sample rate
+                ph?.startSessionRecording()
+            })
         })
-        await loadRecorder
 
         expect((await page.capturedEvents()).map((x) => x.event)).toEqual(['$opt_in', '$pageview'])
 

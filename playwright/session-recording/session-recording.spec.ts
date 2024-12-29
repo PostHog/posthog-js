@@ -146,22 +146,22 @@ test.describe('Session recording - array.js', () => {
         const capturedEvents = await page.capturedEvents()
         expect(new Set(capturedEvents.map((c) => c['properties']['$session_id']))).toEqual(new Set([firstSessionId]))
 
-        const waitForRecorder = page.waitForResponse('**/recorder.js*')
-        await start(
-            {
-                ...startOptions,
-                type: 'reload',
-            },
-            page,
-            page.context()
-        )
+        await page.waitingForNetworkCausedBy(['**/recorder.js*'], async () => {
+            await start(
+                {
+                    ...startOptions,
+                    type: 'reload',
+                },
+                page,
+                page.context()
+            )
 
-        await page.resetCapturedEvents()
-        await waitForRecorder
+            await page.resetCapturedEvents()
+        })
 
-        const moreResponsePromise = page.waitForResponse('**/ses/*')
-        await page.locator('[data-cy-input]').type('hello posthog!')
-        await moreResponsePromise
+        await page.waitingForNetworkCausedBy(['**/ses/*'], async () => {
+            await page.locator('[data-cy-input]').type('hello posthog!')
+        })
 
         const capturedAfterActivity = await page.capturedEvents()
         expect(capturedAfterActivity.map((x) => x.event)).toEqual(['$snapshot'])
@@ -194,9 +194,9 @@ test.describe('Session recording - array.js', () => {
             ph?.reset()
         })
 
-        const responsePromise = page.waitForResponse('**/ses/*')
-        await page.locator('[data-cy-input]').fill('hello posthog!')
-        await responsePromise
+        await page.waitingForNetworkCausedBy(['**/ses/*'], async () => {
+            await page.locator('[data-cy-input]').fill('hello posthog!')
+        })
 
         const capturedEvents = await page.capturedEvents()
         const postResetSessionIds = new Set(capturedEvents.map((c) => c['properties']['$session_id']))
@@ -207,9 +207,9 @@ test.describe('Session recording - array.js', () => {
     })
 
     test('rotates sessions after 24 hours', async ({ page }) => {
-        const responsePromise = page.waitForResponse('**/ses/*')
-        await page.locator('[data-cy-input]').fill('hello posthog!')
-        await responsePromise
+        await page.waitingForNetworkCausedBy(['**/ses/*'], async () => {
+            await page.locator('[data-cy-input]').fill('hello posthog!')
+        })
 
         await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
@@ -239,10 +239,10 @@ test.describe('Session recording - array.js', () => {
             ph.sessionManager['_sessionStartTimestamp'] = startTs - timeout - 1000
         })
 
-        const anotherResponsePromise = page.waitForResponse('**/ses/*')
-        // using fill here means the session id doesn't rotate, must need some kind of user interaction
-        await page.locator('[data-cy-input]').type('hello posthog!')
-        await anotherResponsePromise
+        await page.waitingForNetworkCausedBy(['**/ses/*'], async () => {
+            // using fill here means the session id doesn't rotate, must need some kind of user interaction
+            await page.locator('[data-cy-input]').type('hello posthog!')
+        })
 
         await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog

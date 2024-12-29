@@ -19,9 +19,9 @@ test.describe('session recording in array.full.js', () => {
     test('captures session events', async ({ page, context }) => {
         await start(startOptions, page, context)
 
-        const responsePromise = page.waitForResponse('**/ses/*')
-        await page.locator('[data-cy-input]').fill('hello posthog!')
-        await responsePromise
+        await page.waitingForNetworkCausedBy(['**/ses/*'], async () => {
+            await page.locator('[data-cy-input]').fill('hello posthog!')
+        })
 
         await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
