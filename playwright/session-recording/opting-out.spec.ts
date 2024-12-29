@@ -38,8 +38,7 @@ test.describe('Session Recording - opting out', () => {
 
         await page.locator('[data-cy-input]').type('hello posthog!')
         await page.waitForTimeout(250) // short delay since there's no snapshot to wait for
-        const capturedEvents = await page.capturedEvents()
-        expect(capturedEvents).toEqual([])
+        await page.expectCapturedEventsToBe([])
     })
 
     test('does not capture recordings when config disables session recording', async ({ page, context }) => {
@@ -51,8 +50,7 @@ test.describe('Session Recording - opting out', () => {
 
         await page.locator('[data-cy-input]').type('hello posthog!')
         await page.waitForTimeout(250) // short delay since there's no snapshot to wait for
-        const capturedEvents = await page.capturedEvents()
-        expect(capturedEvents.map((x) => x.event)).toEqual(['$pageview'])
+        await page.expectCapturedEventsToBe(['$pageview'])
     })
 
     test('can start recording after starting opted out', async ({ page, context }) => {
@@ -66,7 +64,7 @@ test.describe('Session Recording - opting out', () => {
             })
         })
 
-        expect((await page.capturedEvents()).map((x) => x.event)).toEqual(['$opt_in', '$pageview'])
+        await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
 
         await page.resetCapturedEvents()
 

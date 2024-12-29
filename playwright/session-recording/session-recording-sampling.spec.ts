@@ -31,8 +31,7 @@ test.describe('Session recording - sampling', () => {
             await start(startOptions, page, context)
         })
 
-        const capturedEvents = await page.evaluate(() => (window as WindowWithPostHog).capturedEvents || [])
-        expect(capturedEvents.map((x) => x.event)).toEqual(['$pageview'])
+        await page.expectCapturedEventsToBe(['$pageview'])
         await page.resetCapturedEvents()
     })
 
@@ -41,8 +40,7 @@ test.describe('Session recording - sampling', () => {
         // because it doesn't make sense to wait for a snapshot event that won't happen
         await page.waitForTimeout(250)
 
-        const capturedEvents = await page.capturedEvents()
-        expect(capturedEvents).toEqual([])
+        await page.expectCapturedEventsToBe([])
     })
 
     test('can override sampling when starting session recording', async ({ page, context }) => {
@@ -51,9 +49,10 @@ test.describe('Session recording - sampling', () => {
             ph?.startSessionRecording({ sampling: true })
             ph?.capture('test_registered_property')
         })
-        const capturedEvents = await page.capturedEvents()
-        expect(capturedEvents.map((x) => x.event)).toEqual(['test_registered_property'])
-        expect(capturedEvents[0]['properties']['$session_recording_start_reason']).toEqual('sampling_overridden')
+        await page.expectCapturedEventsToBe(['test_registered_property'])
+        expect((await page.capturedEvents())[0]['properties']['$session_recording_start_reason']).toEqual(
+            'sampling_overridden'
+        )
 
         // sampling override survives a page refresh
         await page.resetCapturedEvents()

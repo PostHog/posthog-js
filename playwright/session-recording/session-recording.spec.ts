@@ -66,10 +66,10 @@ const startOptions = {
 
 test.describe('Session recording - array.js', () => {
     test.beforeEach(async ({ page, context }) => {
-        await start(startOptions, page, context)
-        await page.waitForResponse('**/recorder.js*')
-        const capturedEvents = await page.evaluate(() => (window as WindowWithPostHog).capturedEvents || [])
-        expect(capturedEvents.map((x) => x.event)).toEqual(['$pageview'])
+        await page.waitingForNetworkCausedBy(['**/recorder.js*'], async () => {
+            await start(startOptions, page, context)
+        })
+        await page.expectCapturedEventsToBe(['$pageview'])
         await page.resetCapturedEvents()
     })
 
@@ -135,9 +135,9 @@ test.describe('Session recording - array.js', () => {
     })
 
     test('continues capturing to the same session when the page reloads', async ({ page }) => {
-        const responsePromise = page.waitForResponse('**/ses/*')
-        await page.locator('[data-cy-input]').fill('hello posthog!')
-        await responsePromise
+        await page.waitingForNetworkCausedBy(['**/ses/*'], async () => {
+            await page.locator('[data-cy-input]').fill('hello posthog!')
+        })
 
         const firstSessionId = await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
@@ -171,8 +171,8 @@ test.describe('Session recording - array.js', () => {
             const ph = (window as WindowWithPostHog).posthog
             ph?.capture('some_custom_event')
         })
+        await page.expectCapturedEventsToBe(['$snapshot', 'some_custom_event'])
         const capturedAfterReload = await page.capturedEvents()
-        expect(capturedAfterReload.map((x) => x.event)).toEqual(['$snapshot', 'some_custom_event'])
         expect(capturedAfterReload[1]['properties']['$session_id']).toEqual(firstSessionId)
         expect(capturedAfterReload[1]['properties']['$session_recording_start_reason']).toEqual('recording_initialized')
         expect(capturedAfterReload[1]['properties']['$recording_status']).toEqual('active')
@@ -216,8 +216,8 @@ test.describe('Session recording - array.js', () => {
             ph?.capture('test_registered_property')
         })
 
+        await page.expectCapturedEventsToBe(['$snapshot', 'test_registered_property'])
         const capturedEvents = await page.capturedEvents()
-        expect(capturedEvents.map((x) => x.event)).toEqual(['$snapshot', 'test_registered_property'])
 
         const firstSessionId = capturedEvents[0]['properties']['$session_id']
         expect(typeof firstSessionId).toEqual('string')
@@ -249,8 +249,8 @@ test.describe('Session recording - array.js', () => {
             ph?.capture('test_registered_property')
         })
 
+        await page.expectCapturedEventsToBe(['$snapshot', 'test_registered_property'])
         const capturedEventsAfter24Hours = await page.capturedEvents()
-        expect(capturedEventsAfter24Hours.map((x) => x.event)).toEqual(['$snapshot', 'test_registered_property'])
 
         expect(capturedEventsAfter24Hours[0]['properties']['$session_id']).not.toEqual(firstSessionId)
         expect(capturedEventsAfter24Hours[0]['properties']['$snapshot_data'][0].type).toEqual(4) // meta

@@ -28,8 +28,8 @@ test.describe('session recording in array.full.js', () => {
             ph?.capture('test_registered_property')
         })
 
+        await page.expectCapturedEventsToBe(['$pageview', '$snapshot', 'test_registered_property'])
         const capturedEvents = await page.capturedEvents()
-        expect(capturedEvents.map((x) => x.event)).toEqual(['$pageview', '$snapshot', 'test_registered_property'])
 
         // don't care about network payloads here
         const snapshotData = capturedEvents[1]['properties']['$snapshot_data'].filter((s: any) => s.type !== 6)

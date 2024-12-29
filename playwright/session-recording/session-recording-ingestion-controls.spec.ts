@@ -1,4 +1,4 @@
-import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
+import { test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
 import { assertThatRecordingStarted, pollUntilEventCaptured } from '../utils/event-capture-utils'
 
@@ -24,9 +24,7 @@ const startOptions = {
 test.describe('Session recording - multiple ingestion controls', () => {
     test.beforeEach(async ({ page, context }) => {
         await start(startOptions, page, context)
-
-        const capturedEvents = await page.evaluate(() => (window as WindowWithPostHog).capturedEvents || [])
-        expect(capturedEvents.map((x) => x.event)).toEqual([])
+        await page.expectCapturedEventsToBe([])
         await page.resetCapturedEvents()
     })
 
@@ -40,7 +38,7 @@ test.describe('Session recording - multiple ingestion controls', () => {
             })
         })
 
-        expect((await page.capturedEvents()).map((x) => x.event)).toEqual(['$opt_in', '$pageview'])
+        await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
 
         await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
@@ -50,7 +48,7 @@ test.describe('Session recording - multiple ingestion controls', () => {
         // there's nothing to wait for... so, just wait a bit
         await page.waitForTimeout(250)
         // no new events
-        expect((await page.capturedEvents()).map((x) => x.event)).toEqual(['$opt_in', '$pageview'])
+        await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
         await page.resetCapturedEvents()
 
         await page.evaluate(() => {

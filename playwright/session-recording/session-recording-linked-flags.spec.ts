@@ -1,4 +1,4 @@
-import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
+import { test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
 import { assertThatRecordingStarted, pollUntilEventCaptured } from '../utils/event-capture-utils'
 
@@ -22,9 +22,7 @@ const startOptions = {
 test.describe('Session recording - linked flags', () => {
     test.beforeEach(async ({ page, context }) => {
         await start(startOptions, page, context)
-
-        const capturedEvents = await page.evaluate(() => (window as WindowWithPostHog).capturedEvents || [])
-        expect(capturedEvents.map((x) => x.event)).toEqual([])
+        await page.expectCapturedEventsToBe([])
         await page.resetCapturedEvents()
     })
 
@@ -37,7 +35,7 @@ test.describe('Session recording - linked flags', () => {
                 ph?.startSessionRecording()
             })
         })
-        expect((await page.capturedEvents()).map((x) => x.event)).toEqual(['$opt_in', '$pageview'])
+        await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
 
         await page.resetCapturedEvents()
 

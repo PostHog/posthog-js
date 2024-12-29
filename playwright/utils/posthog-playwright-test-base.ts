@@ -1,4 +1,4 @@
-import { test as base, Page } from '@playwright/test'
+import { test as base, Page, expect } from '@playwright/test'
 import { PostHog } from '../../src/posthog-core'
 import { CaptureResult } from '../../src/types'
 
@@ -31,6 +31,8 @@ declare module '@playwright/test' {
         capturedEvents(): Promise<CaptureResult[]>
 
         waitingForNetworkCausedBy: (urlPatterns: (string | RegExp)[], action: () => Promise<void>) => Promise<void>
+
+        expectCapturedEventsToBe(expectedEvents: string[]): Promise<void>
     }
 }
 
@@ -59,6 +61,10 @@ export const test = base.extend<{ mockStaticAssets: void; page: Page }>({
 
             // eslint-disable-next-line compat/compat
             await Promise.allSettled(responsePromises)
+        }
+        page.expectCapturedEventsToBe = async function (expectedEvents: string[]) {
+            const capturedEvents = await this.capturedEvents()
+            expect(capturedEvents.map((x) => x.event)).toEqual(expectedEvents)
         }
 
         // Pass the extended page to the test
