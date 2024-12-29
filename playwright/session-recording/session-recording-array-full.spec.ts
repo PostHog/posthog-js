@@ -1,4 +1,4 @@
-import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
+import { expect, test } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
 
 const startOptions = {
@@ -23,9 +23,9 @@ test.describe('session recording in array.full.js', () => {
             await page.locator('[data-cy-input]').fill('hello posthog!')
         })
 
-        await page.evaluate(() => {
-            const ph = (window as WindowWithPostHog).posthog
-            ph?.capture('test_registered_property')
+        await page.evaluate(async () => {
+            const ph = await page.posthog()
+            ph.capture('test_registered_property')
         })
 
         await page.expectCapturedEventsToBe(['$pageview', '$snapshot', 'test_registered_property'])

@@ -1,4 +1,4 @@
-import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
+import { expect, test } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
 import { BrowserContext, Page } from '@playwright/test'
 import { PostHogConfig } from '../../src/types'
@@ -57,10 +57,10 @@ test.describe('Session Recording - opting out', () => {
         await startWith({ opt_out_capturing_by_default: true }, page, context)
 
         await page.waitingForNetworkCausedBy(['**/recorder.js*'], async () => {
-            await page.evaluate(() => {
-                const ph = (window as WindowWithPostHog).posthog
-                ph?.opt_in_capturing()
-                ph?.startSessionRecording()
+            await page.evaluate(async () => {
+                const ph = await page.posthog()
+                ph.opt_in_capturing()
+                ph.startSessionRecording()
             })
         })
 
@@ -78,9 +78,9 @@ test.describe('Session Recording - opting out', () => {
 
         await page.waitingForNetworkCausedBy(['**/recorder.js*'], async () => {
             await page.resetCapturedEvents()
-            await page.evaluate(() => {
-                const ph = (window as WindowWithPostHog).posthog
-                ph?.startSessionRecording()
+            await page.evaluate(async () => {
+                const ph = await page.posthog()
+                ph.startSessionRecording()
             })
         })
 

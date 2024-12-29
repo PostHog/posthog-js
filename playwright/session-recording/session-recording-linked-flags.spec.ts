@@ -1,4 +1,4 @@
-import { test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
+import { test } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
 import { assertThatRecordingStarted, pollUntilEventCaptured } from '../utils/event-capture-utils'
 
@@ -28,20 +28,20 @@ test.describe('Session recording - linked flags', () => {
 
     test('can opt in and override linked flag', async ({ page }) => {
         await page.waitingForNetworkCausedBy(['**/recorder.js*'], async () => {
-            await page.evaluate(() => {
-                const ph = (window as WindowWithPostHog).posthog
-                ph?.opt_in_capturing()
+            await page.evaluate(async () => {
+                const ph = await page.posthog()
+                ph.opt_in_capturing()
                 // starting does not begin recording because of the linked flag
-                ph?.startSessionRecording()
+                ph.startSessionRecording()
             })
         })
         await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
 
         await page.resetCapturedEvents()
 
-        await page.evaluate(() => {
-            const ph = (window as WindowWithPostHog).posthog
-            ph?.startSessionRecording({ linked_flag: true })
+        await page.evaluate(async () => {
+            const ph = await page.posthog()
+            ph.startSessionRecording({ linked_flag: true })
         })
         await page.locator('[data-cy-input]').type('hello posthog!')
         await pollUntilEventCaptured(page, '$snapshot')

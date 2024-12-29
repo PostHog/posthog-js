@@ -33,12 +33,22 @@ declare module '@playwright/test' {
         waitingForNetworkCausedBy: (urlPatterns: (string | RegExp)[], action: () => Promise<void>) => Promise<void>
 
         expectCapturedEventsToBe(expectedEvents: string[]): Promise<void>
+
+        posthog(): Promise<PostHog>
     }
 }
 
 export const test = base.extend<{ mockStaticAssets: void; page: Page }>({
     page: async ({ page }, use) => {
-        // Add custom methods to the page object
+        page.posthog = async function () {
+            const currentPosthog = await this.evaluate(() => {
+                return (window as WindowWithPostHog).posthog
+            })
+            if (!currentPosthog) {
+                throw new Error('PostHog not found on the page')
+            }
+            return currentPosthog
+        }
         page.resetCapturedEvents = async function () {
             await this.evaluate(() => {
                 ;(window as WindowWithPostHog).capturedEvents = []
