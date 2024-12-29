@@ -109,13 +109,13 @@ test.describe('Session recording - array.js', () => {
 
         const responsePromise = page.waitForResponse('**/ses/*')
         await page.mouse.move(200, 300)
-        await page.waitForTimeout(5)
+        await page.waitForTimeout(10)
         await page.mouse.move(210, 300)
-        await page.waitForTimeout(5)
+        await page.waitForTimeout(10)
         await page.mouse.move(220, 300)
-        await page.waitForTimeout(5)
+        await page.waitForTimeout(10)
         await page.mouse.move(240, 300)
-        await page.waitForTimeout(5)
+        await page.waitForTimeout(10)
         await responsePromise
 
         const capturedEvents = await page.capturedEvents()
