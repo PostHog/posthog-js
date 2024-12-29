@@ -1,4 +1,4 @@
-import { expect, test } from '../utils/posthog-playwright-test-base'
+import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
 import { Page } from '@playwright/test'
 import { isUndefined } from '../../src/utils/type-utils'
@@ -74,30 +74,30 @@ test.describe('Session recording - array.js', () => {
     })
 
     test('captures session events', async ({ page }) => {
-        const startingSessionId = await page.evaluate(async () => {
-            const ph = await page.posthog()
-            return ph.get_session_id()
+        const startingSessionId = await page.evaluate(() => {
+            const ph = (window as WindowWithPostHog).posthog
+            return ph?.get_session_id()
         })
         await ensureActivitySendsSnapshots(page, ['$remote_config_received', '$session_options', '$posthog_config'])
 
-        await page.evaluate(async () => {
-            const ph = await page.posthog()
-            ph.stopSessionRecording()
+        await page.evaluate(() => {
+            const ph = (window as WindowWithPostHog).posthog
+            ph?.stopSessionRecording()
         })
 
         await ensureRecordingIsStopped(page)
 
-        await page.evaluate(async () => {
-            const ph = await page.posthog()
-            ph.startSessionRecording()
+        await page.evaluate(() => {
+            const ph = (window as WindowWithPostHog).posthog
+            ph?.startSessionRecording()
         })
 
         await ensureActivitySendsSnapshots(page, ['$session_options', '$posthog_config'])
 
         // the session id is not rotated by stopping and starting the recording
-        const finishingSessionId = await page.evaluate(async () => {
-            const ph = await page.posthog()
-            return ph.get_session_id()
+        const finishingSessionId = await page.evaluate(() => {
+            const ph = (window as WindowWithPostHog).posthog
+            return ph?.get_session_id()
         })
         expect(startingSessionId).toEqual(finishingSessionId)
     })
@@ -139,9 +139,9 @@ test.describe('Session recording - array.js', () => {
             await page.locator('[data-cy-input]').fill('hello posthog!')
         })
 
-        const firstSessionId = await page.evaluate(async () => {
-            const ph = await page.posthog()
-            return ph.get_session_id()
+        const firstSessionId = await page.evaluate(() => {
+            const ph = (window as WindowWithPostHog).posthog
+            return ph?.get_session_id()
         })
         const capturedEvents = await page.capturedEvents()
         expect(new Set(capturedEvents.map((c) => c['properties']['$session_id']))).toEqual(new Set([firstSessionId]))
@@ -167,9 +167,9 @@ test.describe('Session recording - array.js', () => {
         expect(capturedAfterActivity.map((x) => x.event)).toEqual(['$snapshot'])
         expect(capturedAfterActivity[0]['properties']['$session_id']).toEqual(firstSessionId)
 
-        await page.evaluate(async () => {
-            const ph = await page.posthog()
-            ph.capture('some_custom_event')
+        await page.evaluate(() => {
+            const ph = (window as WindowWithPostHog).posthog
+            ph?.capture('some_custom_event')
         })
         await page.expectCapturedEventsToBe(['$snapshot', 'some_custom_event'])
         const capturedAfterReload = await page.capturedEvents()
@@ -180,18 +180,18 @@ test.describe('Session recording - array.js', () => {
 
     test('starts a new recording after calling reset', async ({ page }) => {
         await page.resetCapturedEvents()
-        const startingSessionId = await page.evaluate(async () => {
-            const ph = await page.posthog()
-            return ph.get_session_id()
+        const startingSessionId = await page.evaluate(() => {
+            const ph = (window as WindowWithPostHog).posthog
+            return ph?.get_session_id()
         })
         expect(startingSessionId).not.toBeNull()
 
         await ensureActivitySendsSnapshots(page, ['$remote_config_received', '$session_options', '$posthog_config'])
 
         await page.resetCapturedEvents()
-        await page.evaluate(async () => {
-            const ph = await page.posthog()
-            ph.reset()
+        await page.evaluate(() => {
+            const ph = (window as WindowWithPostHog).posthog
+            ph?.reset()
         })
 
         await page.waitingForNetworkCausedBy(['**/ses/*'], async () => {
@@ -211,9 +211,9 @@ test.describe('Session recording - array.js', () => {
             await page.locator('[data-cy-input]').fill('hello posthog!')
         })
 
-        await page.evaluate(async () => {
-            const ph = await page.posthog()
-            ph.capture('test_registered_property')
+        await page.evaluate(() => {
+            const ph = (window as WindowWithPostHog).posthog
+            ph?.capture('test_registered_property')
         })
 
         await page.expectCapturedEventsToBe(['$snapshot', 'test_registered_property'])
@@ -225,11 +225,11 @@ test.describe('Session recording - array.js', () => {
         expect(capturedEvents[1]['properties']['$session_recording_start_reason']).toEqual('recording_initialized')
 
         await page.resetCapturedEvents()
-        await page.evaluate(async () => {
-            const ph = await page.posthog()
-            const activityTs = ph.sessionManager?.['_sessionActivityTimestamp']
-            const startTs = ph.sessionManager?.['_sessionStartTimestamp']
-            const timeout = ph.sessionManager?.['_sessionTimeoutMs']
+        await page.evaluate(() => {
+            const ph = (window as WindowWithPostHog).posthog
+            const activityTs = ph?.sessionManager?.['_sessionActivityTimestamp']
+            const startTs = ph?.sessionManager?.['_sessionStartTimestamp']
+            const timeout = ph?.sessionManager?.['_sessionTimeoutMs']
 
             // move the session values back,
             // so that the next event appears to be greater than timeout since those values
@@ -244,9 +244,9 @@ test.describe('Session recording - array.js', () => {
             await page.locator('[data-cy-input]').type('hello posthog!')
         })
 
-        await page.evaluate(async () => {
-            const ph = await page.posthog()
-            ph.capture('test_registered_property')
+        await page.evaluate(() => {
+            const ph = (window as WindowWithPostHog).posthog
+            ph?.capture('test_registered_property')
         })
 
         await page.expectCapturedEventsToBe(['$snapshot', 'test_registered_property'])

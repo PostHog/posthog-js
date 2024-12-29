@@ -1,4 +1,4 @@
-import { test } from '../utils/posthog-playwright-test-base'
+import { test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
 import { assertThatRecordingStarted, pollUntilEventCaptured } from '../utils/event-capture-utils'
 
@@ -30,19 +30,19 @@ test.describe('Session recording - multiple ingestion controls', () => {
 
     test('respects sampling when overriding linked flag', async ({ page }) => {
         await page.waitingForNetworkCausedBy(['**/recorder.js*'], async () => {
-            await page.evaluate(async () => {
-                const ph = await page.posthog()
-                ph.opt_in_capturing()
+            await page.evaluate(() => {
+                const ph = (window as WindowWithPostHog).posthog
+                ph?.opt_in_capturing()
                 // this won't start recording because of the linked flag and sample rate
-                ph.startSessionRecording()
+                ph?.startSessionRecording()
             })
         })
 
         await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
 
-        await page.evaluate(async () => {
-            const ph = await page.posthog()
-            ph.startSessionRecording({ linked_flag: true })
+        await page.evaluate(() => {
+            const ph = (window as WindowWithPostHog).posthog
+            ph?.startSessionRecording({ linked_flag: true })
         })
         await page.locator('[data-cy-input]').type('hello posthog!')
         // there's nothing to wait for... so, just wait a bit
@@ -51,10 +51,10 @@ test.describe('Session recording - multiple ingestion controls', () => {
         await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
         await page.resetCapturedEvents()
 
-        await page.evaluate(async () => {
-            const ph = await page.posthog()
+        await page.evaluate(() => {
+            const ph = (window as WindowWithPostHog).posthog
             // override all controls
-            ph.startSessionRecording(true)
+            ph?.startSessionRecording(true)
         })
         await page.locator('[data-cy-input]').type('hello posthog!')
         await pollUntilEventCaptured(page, '$snapshot')

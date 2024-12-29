@@ -1,4 +1,4 @@
-import { expect, test } from '../utils/posthog-playwright-test-base'
+import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
 
 const startOptions = {
@@ -44,10 +44,10 @@ test.describe('Session recording - sampling', () => {
     })
 
     test('can override sampling when starting session recording', async ({ page, context }) => {
-        await page.evaluate(async () => {
-            const ph = await page.posthog()
-            ph.startSessionRecording({ sampling: true })
-            ph.capture('test_registered_property')
+        await page.evaluate(() => {
+            const ph = (window as WindowWithPostHog).posthog
+            ph?.startSessionRecording({ sampling: true })
+            ph?.capture('test_registered_property')
         })
         await page.expectCapturedEventsToBe(['test_registered_property'])
         expect((await page.capturedEvents())[0]['properties']['$session_recording_start_reason']).toEqual(
