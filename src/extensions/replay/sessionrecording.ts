@@ -1323,6 +1323,7 @@ export class SessionRecording {
      * */
     public overrideLinkedFlag() {
         this._linkedFlagSeen = true
+        this._tryTakeFullSnapshot()
         this._reportStarted('linked_flag_overridden')
     }
 
@@ -1337,6 +1338,7 @@ export class SessionRecording {
             // short-circuits the `makeSamplingDecision` function in the session recording module
             [SESSION_RECORDING_IS_SAMPLED]: true,
         })
+        this._tryTakeFullSnapshot()
         this._reportStarted('sampling_overridden')
     }
 

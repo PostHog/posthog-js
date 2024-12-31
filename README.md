@@ -17,8 +17,9 @@ and then `pnpm` commands as usual
 
 ## Testing
 
-Unit tests: run `pnpm test`.
-Cypress: run `pnpm start` to have a test server running and separately `pnpm cypress` to launch Cypress test engine.
+* Unit tests: run `pnpm test`.
+* Cypress: run `pnpm start` to have a test server running and separately `pnpm cypress` to launch Cypress test engine.
+* Playwright: run e.g. `pnpm exec playwright test --ui --project webkit --project firefox` to run with UI and in webkit and firefox
 
 ### Running TestCafe E2E tests with BrowserStack
 
@@ -56,7 +57,7 @@ You can use the create react app setup in `playground/nextjs` to test posthog-js
 ### Tiers of testing
 
 1. Unit tests - this verifies the behavior of the library in bite-sized chunks. Keep this coverage close to 100%, test corner cases and internal behavior here
-2. Cypress tests - integrates with a real chrome browser and is capable of testing timing, browser requests, etc. Useful for testing high-level library behavior, ordering and verifying requests. We shouldn't aim for 100% coverage here as it's impossible to test all possible combinations.
+2. Browser tests - run in real browsers and so capable of testing timing, browser requests, etc. Useful for testing high-level library behavior, ordering and verifying requests. We shouldn't aim for 100% coverage here as it's impossible to test all possible combinations.
 3. TestCafe E2E tests - integrates with a real posthog instance sends data to it. Hardest to write and maintain - keep these very high level
 
 ## Developing together with another project

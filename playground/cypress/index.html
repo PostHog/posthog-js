@@ -15,8 +15,8 @@
         Send custom event
     </button>
 
-        <button data-cy-network-call-button onclick="fetch('https://example.com', {body: 'i am the fetch body', method: 'POST'})">
-        Make network call
+        <button data-cy-fetch-call-button onclick="makeFetchNetworkPost()">
+        Make fetch post network call
     </button>
 
     <button data-cy-xhr-call-button onclick="makeXHRNetworkPOST()">
@@ -24,6 +24,16 @@
 </button>
 
 <script>
+    function makeFetchNetworkPost() {
+        fetch('https://example.com', {
+            body: 'i am the fetch body',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+    }
+
     function makeXHRNetworkPOST() {
         const xhr = new XMLHttpRequest();
         xhr.open('POST', 'https://example.com');
