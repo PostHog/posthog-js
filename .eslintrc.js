@@ -108,6 +108,14 @@ module.exports = {
                 __dirname: true,
             },
         },
+        {
+            files: ['playwright/**/*.ts'],
+            rules: {
+                'posthog-js/no-direct-array-check': 'off',
+                'posthog-js/no-direct-undefined-check': 'off',
+                'compat/compat': 'off',
+            },
+        },
     ],
     root: true,
 }
