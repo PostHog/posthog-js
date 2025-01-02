@@ -24,8 +24,8 @@ export async function start(
         waitForDecide = true,
         initPosthog = true,
         resetOnInit = false,
-        runBeforePostHogInit = () => {},
-        runAfterPostHogInit = () => {},
+        runBeforePostHogInit = undefined,
+        runAfterPostHogInit = undefined,
         type = 'navigate',
         options = {},
         decideResponseOverrides = {
@@ -82,13 +82,14 @@ export async function start(
         })
     })
 
+    const existingCaptures = await page.capturedEvents()
     if (type === 'reload') {
         await page.reload()
     } else {
         await gotoPage(page, url)
     }
 
-    runBeforePostHogInit(page)
+    runBeforePostHogInit?.(page)
 
     // Initialize PostHog if required
     if (initPosthog) {
@@ -110,6 +111,10 @@ export async function start(
                         if (ph.sessionRecording) {
                             ph.sessionRecording._forceAllowLocalhostNetworkCapture = true
                         }
+                        // playwright can't serialize functions to pass around from the playwright to browser context
+                        // if we want to run custom code in the loaded function we need to pass it on the page's window,
+                        // but it's a new window so we have to create it in the `before_posthog_init` option
+                        ;(window as any).__ph_loaded?.(ph)
                     },
                     opt_out_useragent_filter: true,
                     ...posthogOptions,
@@ -120,9 +125,18 @@ export async function start(
             },
             options as Record<string, any>
         )
+        if (existingCaptures.length) {
+            // if we reload the page and don't carry over existing events
+            // we can't test for e.g. for $pageleave as they're wiped on reload
+            await page.evaluate((capturesPassedIn) => {
+                const win = window as WindowWithPostHog
+                win.capturedEvents = win.capturedEvents || []
+                win.capturedEvents.unshift(...capturesPassedIn)
+            }, existingCaptures)
+        }
     }
 
-    runAfterPostHogInit(page)
+    runAfterPostHogInit?.(page)
 
     // Reset PostHog if required
     if (resetOnInit) {
