@@ -3,6 +3,22 @@ import { Compression, DecideResponse, PostHogConfig } from '../../src/types'
 import path from 'path'
 import { WindowWithPostHog } from './posthog-playwright-test-base'
 
+/**
+ * uses the standard playwright page.goto
+ * but if the URL starts with './'
+ * treats it as a relative file path
+ *
+ */
+export async function gotoPage(page: Page, url: string) {
+    // Visit the specified URL
+    if (url.startsWith('./')) {
+        const filePath = path.resolve(process.cwd(), url)
+        // starts with a single slash since otherwise we get three
+        url = `file://${filePath}`
+    }
+    await page.goto(url)
+}
+
 export async function start(
     {
         waitForDecide = true,
@@ -69,13 +85,7 @@ export async function start(
     if (type === 'reload') {
         await page.reload()
     } else {
-        // Visit the specified URL
-        if (url.startsWith('./')) {
-            const filePath = path.resolve(process.cwd(), url)
-            // starts with a single slash since otherwise we get three
-            url = `file://${filePath}`
-        }
-        await page.goto(url)
+        await gotoPage(page, url)
     }
 
     runBeforePostHogInit(page)
