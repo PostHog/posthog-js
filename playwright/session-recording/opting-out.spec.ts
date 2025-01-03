@@ -88,4 +88,23 @@ test.describe('Session Recording - opting out', () => {
         await pollUntilEventCaptured(page, '$snapshot')
         await assertThatRecordingStarted(page)
     })
+
+    test('does not capture session recordings when decide is disabled', async ({ page, context }) => {
+        await start({ options: { advanced_disable_decide: true }, waitForDecide: false }, page, context)
+
+        await page.locator('[data-cy-custom-event-button]').click()
+
+        const callsToSessionRecording = page.waitForResponse('**/ses/')
+
+        await page.locator('[data-cy-input]').type('hello posthog!')
+
+        void callsToSessionRecording.then(() => {
+            throw new Error('Session recording call was made and should not have been')
+        })
+        await page.waitForTimeout(200)
+
+        const capturedEvents = await page.capturedEvents()
+        // no snapshot events sent
+        expect(capturedEvents.map((x) => x.event)).toEqual(['$pageview', 'custom-event'])
+    })
 })

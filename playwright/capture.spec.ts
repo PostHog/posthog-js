@@ -7,6 +7,7 @@ import { decompressSync, strFromU8 } from 'fflate'
 function getGzipEncodedPayloady(req: Request): Record<string, any> {
     const data = req.postDataBuffer()
     if (!data) {
+        //console.log('wat', req.postData())
         throw new Error('Expected body to be present')
     }
     const decoded = strFromU8(decompressSync(data))
