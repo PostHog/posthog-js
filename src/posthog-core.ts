@@ -2245,6 +2245,10 @@ export class PostHog {
         }
         return beforeSendResult
     }
+
+    public getPageViewId(): string | undefined {
+        return this.pageViewManager._currentPageview?.pageViewId
+    }
 }
 
 safewrapClass(PostHog, ['identify'])
