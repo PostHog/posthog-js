@@ -986,17 +986,15 @@ export class PostHog {
             properties = extend(properties, sessionProps)
         }
 
-        if (!this.config.disable_scroll_properties) {
-            let performanceProperties: Record<string, any> = {}
-            if (event_name === '$pageview') {
-                performanceProperties = this.pageViewManager.doPageView(timestamp, uuid)
-            } else if (event_name === '$pageleave') {
-                performanceProperties = this.pageViewManager.doPageLeave(timestamp)
-            } else {
-                performanceProperties = this.pageViewManager.doEvent()
-            }
-            properties = extend(properties, performanceProperties)
+        let pageviewProperties: Record<string, any>
+        if (event_name === '$pageview') {
+            pageviewProperties = this.pageViewManager.doPageView(timestamp, uuid)
+        } else if (event_name === '$pageleave') {
+            pageviewProperties = this.pageViewManager.doPageLeave(timestamp)
+        } else {
+            pageviewProperties = this.pageViewManager.doEvent()
         }
+        properties = extend(properties, pageviewProperties)
 
         if (event_name === '$pageview' && document) {
             properties['title'] = document.title
