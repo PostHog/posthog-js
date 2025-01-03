@@ -19,6 +19,15 @@ interface PageViewEventProperties {
     $prev_pageview_max_content_percentage?: number
 }
 
+// This keeps track of the PageView state (such as the previous PageView's path, timestamp, id, and scroll properties).
+// We store the state in memory, which means that for non-SPA sites, the state will be lost on page reload. This means
+// that non-SPA sites should always send a $pageleave event on any navigation, before the page unloads. For SPA sites,
+// they only need to send a $pageleave event when the user navigates away from the site, as the information is not lost
+// on an internal navigation, and is included as the $prev_pageview_ properties in the next $pageview event.
+
+// Practically, this means that to find the scroll properties for a given pageview, you need to find the event where
+// event name is $pageview or $pageleave and where $prev_pageview_id matches the original pageview event's id.
+
 export class PageViewManager {
     _currentPageview?: { timestamp: Date; pageViewId: string | undefined; pathname: string | undefined }
     _instance: PostHog
