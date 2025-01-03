@@ -120,7 +120,8 @@
         "*.js": "eslint --cache --fix",
         "*.{ts,tsx}": [
             "eslint src --fix",
-            "eslint cypress --fix"
+            "eslint cypress --fix",
+            "eslint playwright --fix"
         ]
     },
     "browserslist": [
