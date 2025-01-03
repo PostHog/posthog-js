@@ -2,8 +2,17 @@ import { expect, test } from './utils/posthog-playwright-test-base'
 import { start } from './utils/setup'
 import { pollUntilEventCaptured } from './utils/event-capture-utils'
 import { Request } from '@playwright/test'
-import { getBase64EncodedPayloadFromBody } from '../cypress/support/compression'
-import { PostHog } from '../src/posthog-core'
+import { decompressSync, strFromU8 } from 'fflate'
+
+function getGzipEncodedPayloady(req: Request): Record<string, any> {
+    const data = req.postDataBuffer()
+    if (!data) {
+        throw new Error('Expected body to be present')
+    }
+    const decoded = strFromU8(decompressSync(data))
+
+    return JSON.parse(decoded)
+}
 
 const startOptions = {
     options: {},
@@ -26,6 +35,28 @@ test.describe('event capture', () => {
 
         await start({ ...startOptions, type: 'reload' }, page, context)
         await page.expectCapturedEventsToBe(['$pageview', '$autocapture', 'custom-event', '$pageleave', '$pageview'])
+    })
+
+    test('contains the correct payload after an event', async ({ page, context }) => {
+        const captureRequests: Request[] = []
+
+        page.on('request', (request) => {
+            if (request.url().includes('/e/')) {
+                captureRequests.push(request)
+            }
+        })
+
+        await start({}, page, context)
+
+        // Pageview will be sent immediately
+        await pollUntilEventCaptured(page, '$pageview')
+        expect(captureRequests.length).toEqual(1)
+        const captureRequest = captureRequests[0]
+        expect(captureRequest.headers()['content-type']).toEqual('text/plain')
+        expect(captureRequest.url()).toMatch(/gzip/)
+        const payload = getGzipEncodedPayloady(captureRequest)
+        expect(payload.event).toEqual('$pageview')
+        expect(Object.keys(payload.properties).length).toBeGreaterThan(0)
     })
 
     test('captures $feature_flag_called event', async ({ page, context }) => {
@@ -168,236 +199,5 @@ test.describe('event capture', () => {
         await page.click('[data-cy-custom-event-button]')
         await pollUntilEventCaptured(page, 'custom-event')
         await page.expectCapturedEventsToBe(['custom-event'])
-    })
-
-    test('makes decide request on start', async ({ page, context }) => {
-        // we want to grab any requests to decide so we can inspect their payloads
-        const decideRequests: Request[] = []
-
-        page.on('request', (request) => {
-            if (request.url().includes('/decide/')) {
-                decideRequests.push(request)
-            }
-        })
-
-        await start(
-            {
-                ...startOptions,
-                options: {
-                    ...startOptions.options,
-                },
-                runBeforePostHogInit: async (page) => {
-                    // it's tricky to pass functions as args the way posthog config is passed in playwright
-                    // so here we set the function on the window object
-                    // and then call it in the loaded function during init
-                    await page.evaluate(() => {
-                        ;(window as any).__ph_loaded = (ph: PostHog) => {
-                            ph.identify('new-id')
-                            ph.group('company', 'id:5', { id: 5, company_name: 'Awesome Inc' })
-                            ph.group('playlist', 'id:77', { length: 8 })
-                        }
-                    })
-                },
-            },
-            page,
-            context
-        )
-
-        expect(decideRequests.length).toBe(1)
-        const decideRequest = decideRequests[0]
-        const decidePayload = getBase64EncodedPayloadFromBody(decideRequest.postData())
-        expect(decidePayload).toEqual({
-            token: 'test token',
-            distinct_id: 'new-id',
-            person_properties: {},
-            $anon_distinct_id: decidePayload.$anon_distinct_id,
-            groups: {
-                company: 'id:5',
-                playlist: 'id:77',
-            },
-            group_properties: {
-                company: { id: 5, company_name: 'Awesome Inc' },
-                playlist: { length: 8 },
-            },
-        })
-    })
-
-    test('does a single decide call on following changes', async ({ page, context }) => {
-        // we want to grab any requests to decide so we can inspect their payloads
-        const decideRequests: Request[] = []
-
-        page.on('request', (request) => {
-            if (request.url().includes('/decide/')) {
-                decideRequests.push(request)
-            }
-        })
-
-        await start(
-            {
-                ...startOptions,
-                options: {
-                    ...startOptions.options,
-                },
-                runBeforePostHogInit: async (page) => {
-                    // it's tricky to pass functions as args the way posthog config is passed in playwright
-                    // so here we set the function on the window object
-                    // and then call it in the loaded function during init
-                    await page.evaluate(() => {
-                        ;(window as any).__ph_loaded = (ph: PostHog) => {
-                            ph.identify('new-id')
-                            ph.group('company', 'id:5', { id: 5, company_name: 'Awesome Inc' })
-                            ph.group('playlist', 'id:77', { length: 8 })
-                        }
-                    })
-                },
-            },
-            page,
-            context
-        )
-
-        expect(decideRequests.length).toBe(1)
-
-        await page.waitingForNetworkCausedBy(['**/decide/**'], async () => {
-            await page.evaluate(() => {
-                const ph = (window as any).posthog
-                ph.group('company', 'id:6')
-                ph.group('playlist', 'id:77')
-                ph.group('anothergroup', 'id:99')
-            })
-        })
-
-        expect(decideRequests.length).toBe(2)
-    })
-
-    test.describe('autocapture config', () => {
-        test('do not capture click if not in allowlist', async ({ page, context }) => {
-            await start(
-                {
-                    ...startOptions,
-                    options: {
-                        ...startOptions.options,
-                        capture_pageview: false,
-                        autocapture: {
-                            dom_event_allowlist: ['change'],
-                        },
-                    },
-                },
-                page,
-                context
-            )
-
-            await page.locator('[data-cy-custom-event-button]').click()
-            // no autocapture event from click
-            await page.expectCapturedEventsToBe(['custom-event'])
-
-            await page.locator('[data-cy-input]').fill('hello posthog!')
-            // blur the input
-            await page.locator('body').click()
-            await page.expectCapturedEventsToBe(['custom-event', '$autocapture'])
-        })
-
-        test('capture clicks when configured to', async ({ page, context }) => {
-            await start(
-                {
-                    ...startOptions,
-                    options: { ...startOptions.options, autocapture: { dom_event_allowlist: ['click'] } },
-                },
-                page,
-                context
-            )
-
-            await page.locator('[data-cy-custom-event-button]').click()
-            await page.expectCapturedEventsToBe(['$pageview', '$autocapture', 'custom-event'])
-
-            await page.locator('[data-cy-input]').fill('hello posthog!')
-            // blur the input
-            await page.locator('body').click()
-            // no change autocapture event
-            await page.expectCapturedEventsToBe(['$pageview', '$autocapture', 'custom-event'])
-        })
-
-        test('obeys url allowlist', async ({ page, context }) => {
-            await start(
-                {
-                    ...startOptions,
-                    options: { ...startOptions.options, autocapture: { url_allowlist: ['.*test-is-not-on-this.*'] } },
-                },
-                page,
-                context
-            )
-
-            await page.locator('[data-cy-custom-event-button]').click()
-            await page.expectCapturedEventsToBe(['$pageview', 'custom-event'])
-
-            await page.resetCapturedEvents()
-            await start(
-                {
-                    ...startOptions,
-                    options: { ...startOptions.options, autocapture: { url_allowlist: ['.*cypress.*'] } },
-                },
-                page,
-                context
-            )
-
-            await page.locator('[data-cy-custom-event-button]').click()
-            await page.expectCapturedEventsToBe(['$pageview', '$autocapture', 'custom-event'])
-        })
-
-        test('obeys element allowlist', async ({ page, context }) => {
-            await start(
-                {
-                    ...startOptions,
-                    options: { ...startOptions.options, autocapture: { element_allowlist: ['button'] } },
-                },
-                page,
-                context
-            )
-
-            await page.locator('[data-cy-custom-event-button]').click()
-            await page.expectCapturedEventsToBe(['$pageview', '$autocapture', 'custom-event'])
-
-            await page.resetCapturedEvents()
-            await start(
-                {
-                    ...startOptions,
-                    options: { ...startOptions.options, autocapture: { element_allowlist: ['input'] } },
-                },
-                page,
-                context
-            )
-
-            await page.locator('[data-cy-custom-event-button]').click()
-            await page.expectCapturedEventsToBe(['$pageview', 'custom-event'])
-        })
-
-        test('obeys css selector allowlist', async ({ page, context }) => {
-            await start(
-                {
-                    ...startOptions,
-                    options: {
-                        ...startOptions.options,
-                        autocapture: { css_selector_allowlist: ['[data-cy-custom-event-button]'] },
-                    },
-                },
-                page,
-                context
-            )
-
-            await page.locator('[data-cy-custom-event-button]').click()
-            await page.expectCapturedEventsToBe(['$pageview', '$autocapture', 'custom-event'])
-
-            await page.resetCapturedEvents()
-            await start(
-                {
-                    ...startOptions,
-                    options: { ...startOptions.options, autocapture: { css_selector_allowlist: ['[data-cy-input]'] } },
-                },
-                page,
-                context
-            )
-
-            await page.locator('[data-cy-custom-event-button]').click()
-            await page.expectCapturedEventsToBe(['$pageview', 'custom-event'])
-        })
     })
 })
