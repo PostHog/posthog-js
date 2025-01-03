@@ -1,3 +1,9 @@
+## 1.203.3 - 2025-01-03
+
+- feat: Add pageview and prev pageview tracking (#1634)
+- fix: safer toolbar function (#1637)
+- chore: playwright tests (#1631)
+
 ## 1.203.2 - 2024-12-27
 
 - Adds option for nonce support (#1630)
