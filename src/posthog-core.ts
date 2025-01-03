@@ -861,10 +861,11 @@ export class PostHog {
         const systemTime = new Date()
         const timestamp = options?.timestamp || systemTime
 
+        const uuid = uuidv7()
         let data: CaptureResult = {
-            uuid: uuidv7(),
+            uuid,
             event: event_name,
-            properties: this._calculate_event_properties(event_name, properties || {}, timestamp),
+            properties: this._calculate_event_properties(event_name, properties || {}, timestamp, uuid),
         }
 
         if (clientRateLimitContext) {
@@ -926,7 +927,12 @@ export class PostHog {
         return this.on('eventCaptured', (data) => callback(data.event, data))
     }
 
-    _calculate_event_properties(event_name: string, event_properties: Properties, timestamp?: Date): Properties {
+    _calculate_event_properties(
+        event_name: string,
+        event_properties: Properties,
+        timestamp?: Date,
+        uuid?: string
+    ): Properties {
         timestamp = timestamp || new Date()
         if (!this.persistence || !this.sessionPersistence) {
             return event_properties
@@ -980,15 +986,15 @@ export class PostHog {
             properties = extend(properties, sessionProps)
         }
 
-        if (!this.config.disable_scroll_properties) {
-            let performanceProperties: Record<string, any> = {}
-            if (event_name === '$pageview') {
-                performanceProperties = this.pageViewManager.doPageView(timestamp)
-            } else if (event_name === '$pageleave') {
-                performanceProperties = this.pageViewManager.doPageLeave(timestamp)
-            }
-            properties = extend(properties, performanceProperties)
+        let pageviewProperties: Record<string, any>
+        if (event_name === '$pageview') {
+            pageviewProperties = this.pageViewManager.doPageView(timestamp, uuid)
+        } else if (event_name === '$pageleave') {
+            pageviewProperties = this.pageViewManager.doPageLeave(timestamp)
+        } else {
+            pageviewProperties = this.pageViewManager.doEvent()
         }
+        properties = extend(properties, pageviewProperties)
 
         if (event_name === '$pageview' && document) {
             properties['title'] = document.title
@@ -2236,6 +2242,10 @@ export class PostHog {
             }
         }
         return beforeSendResult
+    }
+
+    public getPageViewId(): string | undefined {
+        return this.pageViewManager._currentPageview?.pageViewId
     }
 }
 
