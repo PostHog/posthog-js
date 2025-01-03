@@ -118,9 +118,11 @@ test.describe('event capture', () => {
             page,
             context
         )
-        await page.locator('body').click({ position: { x: 100, y: 100 } })
-        await page.locator('body').click({ position: { x: 98, y: 102 } })
-        await page.locator('body').click({ position: { x: 101, y: 103 } })
+
+        const button = page.locator('[data-cy-custom-event-button]')
+        await button.click()
+        await button.click()
+        await button.click()
 
         await pollUntilEventCaptured(page, '$rageclick')
     })
@@ -138,13 +140,15 @@ test.describe('event capture', () => {
             page,
             context
         )
-        await page.locator('body').click({ position: { x: 100, y: 100 } })
-        await page.locator('body').click({ position: { x: 98, y: 102 } })
-        await page.locator('body').click({ position: { x: 101, y: 103 } })
+
+        const button = page.locator('[data-cy-custom-event-button]')
+        await button.click()
+        await button.click()
+        await button.click()
 
         // no rageclick event to wait for so just wait a little
         await page.waitForTimeout(250)
-        await page.expectCapturedEventsToBe(['$pageview'])
+        await page.expectCapturedEventsToBe(['$pageview', 'custom-event', 'custom-event', 'custom-event'])
     })
 
     test('captures pageviews and custom events when autocapture disabled', async ({ page, context }) => {
