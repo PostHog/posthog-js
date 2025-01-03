@@ -52,16 +52,27 @@ export function each(obj: any, iterator: (value: any, key: any) => void | Breake
     }
 }
 
-export const extend = function (obj: Record<string, any>, ...args: Record<string, any>[]): Record<string, any> {
+export const extend = function <T extends Record<string, any>, U extends Record<string, any>[]>(
+    obj: T,
+    ...args: U
+): ExtendTypeHelper<T, U> {
     eachArray(args, function (source) {
         for (const prop in source) {
             if (source[prop] !== void 0) {
+                // @ts-expect-error we're being a bit too clever in exchange for having a simple type for this function
                 obj[prop] = source[prop]
             }
         }
     })
-    return obj
+    return obj as ExtendTypeHelper<T, U>
 }
+
+// overwrite the keys in an object, always taking the latest value
+type ExtendTypeHelper<T, U extends any[]> = U extends [infer First, ...infer Rest]
+    ? Rest extends Record<string, any>[]
+        ? ExtendTypeHelper<Omit<T, keyof First> & First, Rest>
+        : T
+    : T
 
 export const include = function (
     obj: null | string | Array<any> | Record<string, any>,
