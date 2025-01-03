@@ -20,49 +20,45 @@ interface PageViewEventProperties {
 }
 
 export class PageViewManager {
-    _currentPath?: string
-    _currentPageviewId?: string
-    _prevPageviewTimestamp?: Date
+    _currentPageview?: { timestamp: Date; pageViewId: string | undefined; pathname: string | undefined }
     _instance: PostHog
 
     constructor(instance: PostHog) {
         this._instance = instance
     }
 
-    doPageView(timestamp: Date, pageviewId?: string): PageViewEventProperties {
-        const response = this._previousPageViewProperties(timestamp, pageviewId)
+    doPageView(timestamp: Date, pageViewId?: string): PageViewEventProperties {
+        const response = this._previousPageViewProperties(timestamp, pageViewId)
 
         // On a pageview we reset the contexts
-        this._currentPath = window?.location.pathname ?? ''
+        this._currentPageview = { pathname: window?.location.pathname ?? '', pageViewId, timestamp }
         this._instance.scrollManager.resetContext()
-        this._prevPageviewTimestamp = timestamp
-        this._currentPageviewId = pageviewId
 
         return response
     }
 
     doPageLeave(timestamp: Date): PageViewEventProperties {
-        return this._previousPageViewProperties(timestamp, this._currentPageviewId)
+        return this._previousPageViewProperties(timestamp, this._currentPageview?.pageViewId)
     }
 
     doEvent(): PageViewEventProperties {
-        return { $pageview_id: this._currentPageviewId }
+        return { $pageview_id: this._currentPageview?.pageViewId }
     }
 
     private _previousPageViewProperties(timestamp: Date, pageviewId: string | undefined): PageViewEventProperties {
-        const previousPath = this._currentPath
-        const previousTimestamp = this._prevPageviewTimestamp
-        const scrollContext = this._instance.scrollManager.getContext()
+        const previousPageView = this._currentPageview
 
-        if (!previousTimestamp) {
-            // this means there was no previous pageview
+        if (!previousPageView) {
             return { $pageview_id: pageviewId }
         }
 
         let properties: PageViewEventProperties = {
             $pageview_id: pageviewId,
-            $prev_pageview_id: this._currentPageviewId,
+            $prev_pageview_id: previousPageView.pageViewId,
         }
+
+        const scrollContext = this._instance.scrollManager.getContext()
+
         if (scrollContext) {
             let { maxScrollHeight, lastScrollY, maxScrollY, maxContentHeight, lastContentY, maxContentY } =
                 scrollContext
@@ -105,12 +101,12 @@ export class PageViewManager {
             }
         }
 
-        if (previousPath) {
-            properties.$prev_pageview_pathname = previousPath
+        if (previousPageView.pathname) {
+            properties.$prev_pageview_pathname = previousPageView.pathname
         }
-        if (previousTimestamp) {
+        if (previousPageView.timestamp) {
             // Use seconds, for consistency with our other duration-related properties like $duration
-            properties.$prev_pageview_duration = (timestamp.getTime() - previousTimestamp.getTime()) / 1000
+            properties.$prev_pageview_duration = (timestamp.getTime() - previousPageView.timestamp.getTime()) / 1000
         }
 
         return properties
