@@ -7,7 +7,6 @@ import { decompressSync, strFromU8 } from 'fflate'
 function getGzipEncodedPayloady(req: Request): Record<string, any> {
     const data = req.postDataBuffer()
     if (!data) {
-        //console.log('wat', req.postData())
         throw new Error('Expected body to be present')
     }
     const decoded = strFromU8(decompressSync(data))
@@ -38,11 +37,11 @@ test.describe('event capture', () => {
         await page.expectCapturedEventsToBe(['$pageview', '$autocapture', 'custom-event', '$pageleave', '$pageview'])
     })
 
-    test('contains the correct payload after an event', async ({ page, context }) => {
+    test('contains the correct payload after an event', async ({ page, context, browserName }) => {
         const captureRequests: Request[] = []
 
         page.on('request', (request) => {
-            if (request.url().includes('/e/')) {
+            if (request.url().includes('/e/') && request.method() === 'POST') {
                 captureRequests.push(request)
             }
         })
@@ -55,9 +54,13 @@ test.describe('event capture', () => {
         const captureRequest = captureRequests[0]
         expect(captureRequest.headers()['content-type']).toEqual('text/plain')
         expect(captureRequest.url()).toMatch(/gzip/)
-        const payload = getGzipEncodedPayloady(captureRequest)
-        expect(payload.event).toEqual('$pageview')
-        expect(Object.keys(payload.properties).length).toBeGreaterThan(0)
+        // webkit doesn't allow us to read the body for some reason
+        // see e.g. https://github.com/microsoft/playwright/issues/6479
+        if (browserName !== 'webkit') {
+            const payload = getGzipEncodedPayloady(captureRequest)
+            expect(payload.event).toEqual('$pageview')
+            expect(Object.keys(payload.properties).length).toBeGreaterThan(0)
+        }
     })
 
     test('captures $feature_flag_called event', async ({ page, context }) => {

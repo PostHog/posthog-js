@@ -78,6 +78,11 @@ export const test = base.extend<{ mockStaticAssets: void; page: Page }>({
                     status: 200,
                     contentType: 'application/json',
                     body: JSON.stringify({ status: 1 }),
+                    headers: {
+                        'Access-Control-Allow-Headers': '*',
+                        'Access-Control-Allow-Origin': '*',
+                        'Access-Control-Allow-Credentials': 'true',
+                    },
                 })
             })
 
@@ -92,7 +97,9 @@ export const test = base.extend<{ mockStaticAssets: void; page: Page }>({
             lazyLoadedJSFiles.forEach((key: string) => {
                 void context.route(new RegExp(`^.*/static/${key}\\.js(\\?.*)?$`), (route) => {
                     route.fulfill({
-                        headers: { loaded: 'using relative path by playwright' },
+                        headers: {
+                            loaded: 'using relative path by playwright',
+                        },
                         path: `./dist/${key}.js`,
                     })
                 })
