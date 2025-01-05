@@ -34,19 +34,23 @@ test.describe('Dead clicks', () => {
 
         await page.resetCapturedEvents()
 
-        const locator = await page.locator('[data-cy-dead-click-text]')
+        const locator = page.locator('[data-cy-dead-click-text]')
+        const boundingBox = await locator.boundingBox()
+        if (!boundingBox) {
+            throw new Error('must get a bounding box')
+        }
+        const position = boundingBox.x + boundingBox.width / 2
+        const wordToSelectLength = 50
 
-        await locator.evaluate((el) => {
-            const selection = window.getSelection()!
-            const content = el.textContent!
-            const wordToSelect = content.split(' ')[1]
-            const range = document.createRange()
-            range.setStart(el.childNodes[0], content.indexOf(wordToSelect))
-            range.setEnd(el.childNodes[0], content.indexOf(wordToSelect) + wordToSelect.length)
-            // really i want to do this with the mouse maybe
-            selection.removeAllRanges()
-            selection.addRange(range)
-        })
+        await page.mouse.move(position, boundingBox.y)
+
+        await page.mouse.down()
+        await page.mouse.move(position + wordToSelectLength, boundingBox.y)
+        await page.mouse.up()
+        await page.mouse.dblclick(position, boundingBox.y)
+
+        const selection = await page.evaluate(() => window.getSelection()?.toString())
+        expect(selection?.trim().length).toBeGreaterThan(0)
 
         await page.waitForTimeout(1000)
         await page.expectCapturedEventsToBe([])
