@@ -3,13 +3,29 @@ import { Compression, DecideResponse, PostHogConfig } from '../../src/types'
 import path from 'path'
 import { WindowWithPostHog } from './posthog-playwright-test-base'
 
+/**
+ * uses the standard playwright page.goto
+ * but if the URL starts with './'
+ * treats it as a relative file path
+ *
+ */
+export async function gotoPage(page: Page, url: string) {
+    // Visit the specified URL
+    if (url.startsWith('./')) {
+        const filePath = path.resolve(process.cwd(), url)
+        // starts with a single slash since otherwise we get three
+        url = `file://${filePath}`
+    }
+    await page.goto(url)
+}
+
 export async function start(
     {
         waitForDecide = true,
         initPosthog = true,
         resetOnInit = false,
-        runBeforePostHogInit = () => {},
-        runAfterPostHogInit = () => {},
+        runBeforePostHogInit = undefined,
+        runAfterPostHogInit = undefined,
         type = 'navigate',
         options = {},
         decideResponseOverrides = {
@@ -69,16 +85,10 @@ export async function start(
     if (type === 'reload') {
         await page.reload()
     } else {
-        // Visit the specified URL
-        if (url.startsWith('./')) {
-            const filePath = path.resolve(process.cwd(), url)
-            // starts with a single slash since otherwise we get three
-            url = `file://${filePath}`
-        }
-        await page.goto(url)
+        await gotoPage(page, url)
     }
 
-    runBeforePostHogInit(page)
+    runBeforePostHogInit?.(page)
 
     // Initialize PostHog if required
     if (initPosthog) {
@@ -89,17 +99,23 @@ export async function start(
                     api_host: 'https://localhost:1234',
                     debug: true,
                     before_send: (event) => {
+                        const win = window as WindowWithPostHog
+                        win.capturedEvents = win.capturedEvents || []
+
                         if (event) {
-                            const win = window as WindowWithPostHog
-                            win.capturedEvents = win.capturedEvents || []
                             win.capturedEvents.push(event)
                         }
+
                         return event
                     },
                     loaded: (ph) => {
                         if (ph.sessionRecording) {
                             ph.sessionRecording._forceAllowLocalhostNetworkCapture = true
                         }
+                        // playwright can't serialize functions to pass around from the playwright to browser context
+                        // if we want to run custom code in the loaded function we need to pass it on the page's window,
+                        // but it's a new window so we have to create it in the `before_posthog_init` option
+                        ;(window as any).__ph_loaded?.(ph)
                     },
                     opt_out_useragent_filter: true,
                     ...posthogOptions,
@@ -112,7 +128,7 @@ export async function start(
         )
     }
 
-    runAfterPostHogInit(page)
+    runAfterPostHogInit?.(page)
 
     // Reset PostHog if required
     if (resetOnInit) {
