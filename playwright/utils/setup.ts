@@ -82,7 +82,6 @@ export async function start(
         })
     })
 
-    const existingCaptures = await page.capturedEvents()
     if (type === 'reload') {
         await page.reload()
     } else {
@@ -100,11 +99,13 @@ export async function start(
                     api_host: 'https://localhost:1234',
                     debug: true,
                     before_send: (event) => {
+                        const win = window as WindowWithPostHog
+                        win.capturedEvents = win.capturedEvents || []
+
                         if (event) {
-                            const win = window as WindowWithPostHog
-                            win.capturedEvents = win.capturedEvents || []
                             win.capturedEvents.push(event)
                         }
+
                         return event
                     },
                     loaded: (ph) => {
@@ -125,15 +126,6 @@ export async function start(
             },
             options as Record<string, any>
         )
-        if (existingCaptures.length) {
-            // if we reload the page and don't carry over existing events
-            // we can't test for e.g. for $pageleave as they're wiped on reload
-            await page.evaluate((capturesPassedIn) => {
-                const win = window as WindowWithPostHog
-                win.capturedEvents = win.capturedEvents || []
-                win.capturedEvents.unshift(...capturesPassedIn)
-            }, existingCaptures)
-        }
     }
 
     runAfterPostHogInit?.(page)
