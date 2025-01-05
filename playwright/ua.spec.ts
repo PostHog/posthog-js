@@ -15,7 +15,7 @@ const startOptions = {
 }
 
 test.describe('User Agent Blocking', () => {
-    test('should pick up that our automated cypress tests are indeed bot traffic', async ({ page, context }) => {
+    test('should pick up that our automated playwright tests are indeed bot traffic', async ({ page, context }) => {
         await start(startOptions, page, context)
 
         const isLikelyBot = await page.evaluate(() => {
