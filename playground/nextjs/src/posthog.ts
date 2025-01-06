@@ -56,6 +56,7 @@ if (typeof window !== 'undefined') {
         session_recording: {
             recordCrossOriginIframes: true,
         },
+        disable_survey_partial_response: false,
         debug: true,
         disable_web_experiments: false,
         scroll_root_selector: ['#scroll_element', 'html'],

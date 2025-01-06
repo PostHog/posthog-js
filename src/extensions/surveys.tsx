@@ -457,6 +457,11 @@ export function SurveyPopup({
     removeSurveyFromFocus: (id: string) => void
     isPopup?: boolean
 }) {
+    const surveyResponseInsertID = useMemo(
+        () => survey.id + Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10),
+        [survey.id]
+    )
+
     const isPreviewMode = Number.isInteger(previewPageIndex)
     // NB: The client-side code passes the millisecondDelay in seconds, but setTimeout expects milliseconds, so we multiply by 1000
     const surveyPopupDelayMilliseconds = survey.appearance?.surveyPopupDelaySeconds
@@ -494,6 +499,7 @@ export function SurveyPopup({
                     forceDisableHtml={!!forceDisableHtml}
                     posthog={posthog}
                     styleOverrides={style}
+                    surveyResponseInsertID={surveyResponseInsertID}
                 />
             ) : (
                 <ConfirmationMessage
@@ -521,6 +527,7 @@ export function Questions({
     survey: Survey
     forceDisableHtml: boolean
     posthog?: PostHog
+    surveyResponseInsertID?: string
     styleOverrides?: React.CSSProperties
 }) {
     const textColor = getContrastingTextColor(
@@ -557,18 +564,31 @@ export function Questions({
         // Old SDK, no branching
         if (!posthog.getNextSurveyStep) {
             const isLastDisplayedQuestion = displayQuestionIndex === survey.questions.length - 1
-            if (isLastDisplayedQuestion) {
-                sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
-            } else {
-                setCurrentQuestionIndex(displayQuestionIndex + 1)
-            }
+            logger.info(
+                `POSTHOG SURVEYS: Sending survey response with id : ${surveyResponseInsertID} `,
+                questionsResponses
+            )
+            sendSurveyEvent(
+                { ...questionsResponses, [responseKey]: res },
+                survey,
+                posthog,
+                isLastDisplayedQuestion,
+                surveyResponseInsertID
+            )
+            setCurrentQuestionIndex(displayQuestionIndex + 1)
             return
         }
 
         const nextStep = posthog.getNextSurveyStep(survey, displayQuestionIndex, res)
-        if (nextStep === SurveyQuestionBranchingType.End) {
-            sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
-        } else {
+        logger.info(`POSTHOG SURVEYS: Sending survey response  with id : ${surveyResponseInsertID}`, questionsResponses)
+        sendSurveyEvent(
+            { ...questionsResponses, [responseKey]: res },
+            survey,
+            posthog,
+            nextStep === SurveyQuestionBranchingType.End,
+            surveyResponseInsertID
+        )
+        if (nextStep !== SurveyQuestionBranchingType.End) {
             setCurrentQuestionIndex(nextStep)
         }
     }

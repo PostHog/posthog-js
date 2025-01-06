@@ -532,14 +532,24 @@ export const createShadow = (styleSheet: string, surveyId: string, element?: Ele
 export const sendSurveyEvent = (
     responses: Record<string, string | number | string[] | null> = {},
     survey: Survey,
-    posthog?: PostHog
+    posthog?: PostHog,
+    surveyCompleted?: boolean,
+    surveyResponseInsertID?: string
 ) => {
     if (!posthog) return
+
+    if (!surveyCompleted && posthog.config.disable_survey_partial_response) {
+        // do not send partial  responses
+        return
+    }
+
     localStorage.setItem(getSurveySeenKey(survey), 'true')
 
     posthog.capture('survey sent', {
         $survey_name: survey.name,
+        $survey_completed: surveyCompleted || false,
         $survey_id: survey.id,
+        $survey_response_id: surveyResponseInsertID,
         $survey_iteration: survey.current_iteration,
         $survey_iteration_start_date: survey.current_iteration_start_date,
         $survey_questions: survey.questions.map((question) => question.question),
@@ -549,7 +559,10 @@ export const sendSurveyEvent = (
             [getSurveyInteractionProperty(survey, 'responded')]: true,
         },
     })
-    window.dispatchEvent(new Event('PHSurveySent'))
+
+    if (surveyCompleted) {
+        window.dispatchEvent(new Event('PHSurveySent'))
+    }
 }
 
 export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {
