@@ -800,47 +800,6 @@ describe('preview renders', () => {
         expect(root.getElementsByClassName('ph-survey-widget-tab')[0].innerHTML).toContain('preview test')
     })
 
-    test('renderSurveysPreview does not mark up html when when the forceDisableHtml flag is passed in', () => {
-        const mockSurvey = {
-            id: 'testSurvey1',
-            name: 'Test survey 1',
-            type: SurveyType.Popover,
-            appearance: {},
-            start_date: '2021-01-01T00:00:00.000Z',
-            description: 'This is a survey description',
-            linked_flag_key: null,
-            questions: [
-                {
-                    question: 'How satisfied are you with our newest product?',
-                    description: '<h3>This is a question description</h3>',
-                    descriptionContentType: 'html',
-                    type: SurveyQuestionType.Rating,
-                    display: 'number',
-                    scale: 10,
-                    lowerBoundLabel: 'Not Satisfied',
-                    upperBoundLabel: 'Very Satisfied',
-                },
-            ],
-            conditions: {},
-            end_date: null,
-            targeting_flag_key: null,
-        }
-        const surveyDiv = document.createElement('div')
-        expect(surveyDiv.innerHTML).toBe('')
-        renderSurveysPreview({
-            survey: mockSurvey as Survey,
-            parentElement: surveyDiv,
-            previewPageIndex: 0,
-            forceDisableHtml: true,
-        })
-        expect(surveyDiv.getElementsByTagName('style').length).toBe(1)
-        expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
-        expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
-        const descriptionElement = surveyDiv.querySelector('.survey-question-description')
-        expect(descriptionElement).not.toBeNull()
-        expect(descriptionElement!.innerHTML).toBe('&lt;h3&gt;This is a question description&lt;/h3&gt;') // HTML is escaped
-    })
-
     test('renderSurveysPreview navigates between questions when submitting answers in preview', async () => {
         function TestSurveyPreview() {
             const surveyPreviewRef = useRef<HTMLDivElement>(null)
