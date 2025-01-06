@@ -1,3 +1,8 @@
+## 1.204.0 - 2025-01-06
+
+- feat: Deprecate `sanitize_properties` (#1632)
+- test(ci): move more of the browser tests to playwright (#1638)
+
 ## 1.203.3 - 2025-01-03
 
 - feat: Add pageview and prev pageview tracking (#1634)
