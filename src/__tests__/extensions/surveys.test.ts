@@ -1,17 +1,19 @@
+import { act, fireEvent, render, renderHook } from '@testing-library/preact'
 import {
     generateSurveys,
-    renderSurveysPreview,
     renderFeedbackWidgetPreview,
-    usePopupVisibility,
+    renderSurveysPreview,
     SurveyManager,
+    usePopupVisibility,
 } from '../../extensions/surveys'
 import { createShadow } from '../../extensions/surveys/surveys-utils'
 import { Survey, SurveyQuestionType, SurveyType } from '../../posthog-surveys-types'
-import { renderHook, act } from '@testing-library/preact'
 
-import '@testing-library/jest-dom'
-import { PostHog } from '../../posthog-core'
 import { beforeEach } from '@jest/globals'
+import '@testing-library/jest-dom'
+import { h } from 'preact'
+import { useEffect, useRef, useState } from 'preact/hooks'
+import { PostHog } from '../../posthog-core'
 import { DecideResponse } from '../../types'
 
 declare const global: any
@@ -59,6 +61,7 @@ describe('survey display logic', () => {
             end_date: null,
             current_iteration: null,
             current_iteration_start_date: null,
+            feature_flag_keys: [],
         },
     ]
 
@@ -301,6 +304,7 @@ describe('SurveyManager', () => {
                 end_date: null,
                 current_iteration: null,
                 current_iteration_start_date: null,
+                feature_flag_keys: [],
             },
         ]
     })
@@ -408,6 +412,7 @@ describe('SurveyManager', () => {
             end_date: null,
             current_iteration: null,
             current_iteration_start_date: null,
+            feature_flag_keys: [],
         }
         document.body.innerHTML = '<div class="widget-selector"></div>'
         const handleWidgetSelectorMock = jest
@@ -793,5 +798,135 @@ describe('preview renders', () => {
         expect(root.getElementsByTagName('style').length).toBe(1)
         expect(root.getElementsByClassName('ph-survey-widget-tab').length).toBe(1)
         expect(root.getElementsByClassName('ph-survey-widget-tab')[0].innerHTML).toContain('preview test')
+    })
+
+    test('renderSurveysPreview does not mark up html when when the forceDisableHtml flag is passed in', () => {
+        const mockSurvey = {
+            id: 'testSurvey1',
+            name: 'Test survey 1',
+            type: SurveyType.Popover,
+            appearance: {},
+            start_date: '2021-01-01T00:00:00.000Z',
+            description: 'This is a survey description',
+            linked_flag_key: null,
+            questions: [
+                {
+                    question: 'How satisfied are you with our newest product?',
+                    description: '<h3>This is a question description</h3>',
+                    descriptionContentType: 'html',
+                    type: SurveyQuestionType.Rating,
+                    display: 'number',
+                    scale: 10,
+                    lowerBoundLabel: 'Not Satisfied',
+                    upperBoundLabel: 'Very Satisfied',
+                },
+            ],
+            conditions: {},
+            end_date: null,
+            targeting_flag_key: null,
+        }
+        const surveyDiv = document.createElement('div')
+        expect(surveyDiv.innerHTML).toBe('')
+        renderSurveysPreview({
+            survey: mockSurvey as Survey,
+            parentElement: surveyDiv,
+            previewPageIndex: 0,
+            forceDisableHtml: true,
+        })
+        expect(surveyDiv.getElementsByTagName('style').length).toBe(1)
+        expect(surveyDiv.getElementsByClassName('survey-form').length).toBe(1)
+        expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
+        const descriptionElement = surveyDiv.querySelector('.survey-question-description')
+        expect(descriptionElement).not.toBeNull()
+        expect(descriptionElement!.innerHTML).toBe('&lt;h3&gt;This is a question description&lt;/h3&gt;') // HTML is escaped
+    })
+
+    test('renderSurveysPreview navigates between questions when submitting answers in preview', async () => {
+        function TestSurveyPreview() {
+            const surveyPreviewRef = useRef<HTMLDivElement>(null)
+            const [currentPageIndex, setCurrentPageIndex] = useState(0)
+
+            console.log('Current page index:', currentPageIndex)
+
+            const survey = {
+                id: 'test-survey',
+                name: 'Test Survey',
+                description: 'Test Survey Description',
+                type: SurveyType.Popover,
+                questions: [
+                    {
+                        type: SurveyQuestionType.Open,
+                        question: 'Question 1',
+                        description: 'Description 1',
+                        descriptionContentType: 'text',
+                        originalQuestionIndex: 0,
+                    },
+                    {
+                        type: SurveyQuestionType.Open,
+                        question: 'Question 2',
+                        description: 'Description 2',
+                        descriptionContentType: 'text',
+                        originalQuestionIndex: 1,
+                    },
+                ],
+                appearance: {
+                    backgroundColor: '#ffffff',
+                    submitButtonText: 'Next',
+                },
+                start_date: '2024-01-01T00:00:00.000Z',
+                end_date: null,
+                targeting_flag_key: null,
+                linked_flag_key: null,
+                conditions: {},
+                feature_flag_keys: null, // Added this to fix type error
+            } as Survey
+
+            useEffect(() => {
+                console.log('Render effect triggered with page index:', currentPageIndex)
+                if (surveyPreviewRef.current) {
+                    renderSurveysPreview({
+                        survey,
+                        parentElement: surveyPreviewRef.current,
+                        previewPageIndex: currentPageIndex,
+                        onPreviewSubmit: () => {
+                            setCurrentPageIndex((prev) => {
+                                console.log('Setting page index from', prev, 'to', prev + 1)
+                                return prev + 1
+                            })
+                        },
+                    })
+                }
+            }, [currentPageIndex])
+
+            return h('div', { ref: surveyPreviewRef })
+        }
+
+        // Render the test component
+        const { container } = render(h(TestSurveyPreview, {}))
+
+        // Check if we're on the first question
+        expect(container.textContent).toContain('Question 1')
+        expect(container.textContent).not.toContain('Question 2')
+
+        // Find and fill the textarea
+        const textarea = container.querySelector('textarea')
+        console.log('Found textarea:', !!textarea)
+
+        await act(async () => {
+            fireEvent.change(textarea!, { target: { value: 'Test answer' } })
+        })
+
+        // Find and click the submit button (using button type="button" instead of form-submit class)
+        const submitButton = container.querySelector('button[type="button"]')
+        console.log('Found submit button:', !!submitButton)
+        console.log('Submit button text:', submitButton?.textContent)
+
+        await act(async () => {
+            fireEvent.click(submitButton!)
+        })
+
+        // Check if we're on the second question
+        expect(container.textContent).toContain('Question 2')
+        expect(container.textContent).not.toContain('Question 1')
     })
 })
