@@ -1042,6 +1042,7 @@ export class PostHog {
 
         const sanitize_properties = this.config.sanitize_properties
         if (sanitize_properties) {
+            logger.error('sanitize_properties is deprecated. Use before_send instead')
             properties = sanitize_properties(properties, event_name)
         }
 
@@ -1064,6 +1065,7 @@ export class PostHog {
         let setOnceProperties = extend({}, this.persistence.get_initial_props(), dataSetOnce || {})
         const sanitize_properties = this.config.sanitize_properties
         if (sanitize_properties) {
+            logger.error('sanitize_properties is deprecated. Use before_send instead')
             setOnceProperties = sanitize_properties(setOnceProperties, '$set_once')
         }
         if (isEmptyObject(setOnceProperties)) {

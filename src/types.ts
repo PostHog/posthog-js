@@ -278,7 +278,6 @@ export interface PostHogConfig {
     inapp_protocol: string
     inapp_link_new_window: boolean
     request_batching: boolean
-    sanitize_properties: ((properties: Properties, event_name: string) => Properties) | null
     properties_string_max_length: number
     session_recording: SessionRecordingOptions
     session_idle_timeout_seconds: number
@@ -291,6 +290,13 @@ export interface PostHogConfig {
     feature_flag_request_timeout_ms: number
     get_device_id: (uuid: string) => string
     name: string
+
+    /**
+     * This function is called when collecting properties for an event.
+     * It allows you to edit data before it is sent
+     * @deprecated - use `before_send` instead
+     */
+    sanitize_properties: ((properties: Properties, event_name: string) => Properties) | null
     /**
      * this is a read-only function that can be used to react to event capture
      * @deprecated - use `before_send` instead - NB before_send is not read only
@@ -527,11 +533,7 @@ export interface RemoteConfig {
     }
     elementsChainAsString?: boolean
     // this is currently in development and may have breaking changes without a major version bump
-    autocaptureExceptions?:
-        | boolean
-        | {
-              endpoint?: string
-          }
+    autocaptureExceptions?: boolean | { endpoint?: string }
     sessionRecording?: SessionRecordingCanvasOptions & {
         endpoint?: string
         consoleLogRecordingEnabled?: boolean
