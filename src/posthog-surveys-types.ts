@@ -34,6 +34,7 @@ export interface SurveyAppearance {
     widgetSelector?: string
     widgetLabel?: string
     widgetColor?: string
+    fontFamily?: string
     // questionable: Not in frontend/src/types.ts -> SurveyAppearance, but used in site app
     maxWidth?: string
     zIndex?: string
