@@ -1,3 +1,7 @@
+## 1.205.0 - 2025-01-07
+
+- feat: Add a onPreviewSubmit callback to preview surveys (#1641)
+
 ## 1.204.0 - 2025-01-06
 
 - feat: Deprecate `sanitize_properties` (#1632)
