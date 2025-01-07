@@ -805,8 +805,6 @@ describe('preview renders', () => {
             const surveyPreviewRef = useRef<HTMLDivElement>(null)
             const [currentPageIndex, setCurrentPageIndex] = useState(0)
 
-            console.log('Current page index:', currentPageIndex)
-
             const survey = {
                 id: 'test-survey',
                 name: 'Test Survey',

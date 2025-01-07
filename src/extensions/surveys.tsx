@@ -627,7 +627,7 @@ export function Questions({
                                         originalQuestionIndex,
                                         displayQuestionIndex,
                                     }),
-                                onPreviewSubmit: (res) => onPreviewSubmit(res),
+                                onPreviewSubmit,
                             })}
                         </div>
                     )
