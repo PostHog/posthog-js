@@ -1,7 +1,7 @@
-import { PostHog } from '../../posthog-core'
-import { Survey, SurveyAppearance, MultipleSurveyQuestion, SurveyQuestion } from '../../posthog-surveys-types'
-import { window as _window, document as _document } from '../../utils/globals'
 import { VNode, cloneElement, createContext } from 'preact'
+import { PostHog } from '../../posthog-core'
+import { MultipleSurveyQuestion, Survey, SurveyAppearance, SurveyQuestion } from '../../posthog-surveys-types'
+import { document as _document, window as _window } from '../../utils/globals'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
@@ -36,7 +36,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               border-top-right-radius: 10px;
               box-shadow: -6px 0 16px -8px rgb(0 0 0 / 8%), -9px 0 28px 0 rgb(0 0 0 / 5%), -12px 0 48px 16px rgb(0 0 0 / 3%);
           }
-          
+
           .survey-box, .thank-you-message-container {
               padding: 20px 25px 10px;
               display: flex;
@@ -677,16 +677,20 @@ const getSurveyInteractionProperty = (survey: Survey, action: string): string =>
     return surveyProperty
 }
 
-export const SurveyContext = createContext<{
+interface SurveyContextProps {
     isPreviewMode: boolean
     previewPageIndex: number | undefined
     handleCloseSurveyPopup: () => void
     isPopup: boolean
-}>({
+    onPreviewSubmit: (res: string | string[] | number | null) => void
+}
+
+export const SurveyContext = createContext<SurveyContextProps>({
     isPreviewMode: false,
     previewPageIndex: 0,
     handleCloseSurveyPopup: () => {},
     isPopup: true,
+    onPreviewSubmit: () => {},
 })
 
 interface RenderProps {
