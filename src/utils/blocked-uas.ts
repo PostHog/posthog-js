@@ -3,6 +3,7 @@ export const DEFAULT_BLOCKED_UA_STRS = [
     'ahrefssiteaudit',
     'applebot',
     'baiduspider',
+    'better uptime bot',
     'bingbot',
     'bingpreview',
     'bot.htm',
