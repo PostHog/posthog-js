@@ -677,16 +677,20 @@ const getSurveyInteractionProperty = (survey: Survey, action: string): string =>
     return surveyProperty
 }
 
-export const SurveyContext = createContext<{
+interface SurveyContextProps {
     isPreviewMode: boolean
     previewPageIndex: number | undefined
     handleCloseSurveyPopup: () => void
     isPopup: boolean
-}>({
+    onPreviewSubmit: (res: string | string[] | number | null) => void
+}
+
+export const SurveyContext = createContext<SurveyContextProps>({
     isPreviewMode: false,
     previewPageIndex: 0,
     handleCloseSurveyPopup: () => {},
     isPopup: true,
+    onPreviewSubmit: () => {},
 })
 
 interface RenderProps {
