@@ -15,6 +15,7 @@ const openTextQuestion = {
     question: 'What feedback do you have for us?',
     description: 'plain text description',
 }
+
 const linkQuestionWithHTMLContentType = {
     type: 'link',
     question: 'Book an interview with us',
@@ -22,12 +23,14 @@ const linkQuestionWithHTMLContentType = {
     description: '<h2>html description</h2>',
     descriptionContentType: 'html',
 }
+
 const linkQuestionWithNoContentType = {
     type: 'link',
     question: 'Book an interview with us',
     link: 'https://posthog.com',
     description: '<h2>html description</h2>',
 }
+
 const linkQuestionWithTextContentType = {
     type: 'link',
     question: 'Book an interview with us',
@@ -35,24 +38,7 @@ const linkQuestionWithTextContentType = {
     description: '<h2>html description</h2>',
     descriptionContentType: 'text',
 }
-const npsRatingQuestion = { type: 'rating', display: 'number', scale: 10, question: 'Would you recommend surveys?' }
-const emojiRatingQuestion = {
-    type: 'rating',
-    display: 'emoji',
-    scale: 5,
-    question: 'How happy are you with your purchase?',
-    optional: true,
-}
-const multipleChoiceQuestion = {
-    type: 'multiple_choice',
-    question: 'Which types of content would you like to see more of?',
-    choices: ['Tutorials', 'Product Updates', 'Events', 'Other'],
-}
-const singleChoiceQuestion = {
-    type: 'single_choice',
-    question: 'What is your occupation?',
-    choices: ['Product Manager', 'Engineer', 'Designer', 'Other'],
-}
+
 const appearanceWithThanks = {
     displayThankYouMessage: true,
     thankyouMessageHeader: 'Thanks!',
