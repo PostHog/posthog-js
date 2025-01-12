@@ -113,6 +113,7 @@ module.exports = {
             rules: {
                 'posthog-js/no-direct-array-check': 'off',
                 'posthog-js/no-direct-undefined-check': 'off',
+                'posthog-js/no-direct-null-check': 'off',
                 'compat/compat': 'off',
             },
         },
