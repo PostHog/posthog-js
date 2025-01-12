@@ -233,7 +233,10 @@ test.describe('surveys - customization', () => {
         await pollUntilEventCaptured(page, 'survey sent')
     })
 
-    test('does not render html customization for question descriptions if the question.survey-question-descriptionContentType does not permit it', async ({ page, context }) => {
+    test('does not render html customization for question descriptions if the question.survey-question-descriptionContentType does not permit it', async ({
+        page,
+        context,
+    }) => {
         const surveysAPICall = page.route('**/surveys/**', async (route) => {
             await route.fulfill({
                 json: {
@@ -263,7 +266,10 @@ test.describe('surveys - customization', () => {
         )
     })
 
-    test('does not render html customization for thank you message body if the appearance.thankYouMessageDescriptionContentType does not permit it', async ({ page, context }) => {
+    test('does not render html customization for thank you message body if the appearance.thankYouMessageDescriptionContentType does not permit it', async ({
+        page,
+        context,
+    }) => {
         const surveysAPICall = page.route('**/surveys/**', async (route) => {
             await route.fulfill({
                 json: {
@@ -274,11 +280,11 @@ test.describe('surveys - customization', () => {
                             type: 'popover',
                             start_date: '2021-01-01T00:00:00Z',
                             questions: [openTextQuestion],
-                        appearance: {
-                            ...appearanceWithThanks,
-                            thankYouMessageDescription: '<h3>html thank you message!</h3>',
-                            thankYouMessageDescriptionContentType: 'text',
-                        },
+                            appearance: {
+                                ...appearanceWithThanks,
+                                thankYouMessageDescription: '<h3>html thank you message!</h3>',
+                                thankYouMessageDescriptionContentType: 'text',
+                            },
                         },
                     ],
                 },
