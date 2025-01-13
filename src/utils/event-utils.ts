@@ -30,6 +30,8 @@ export const CAMPAIGN_PARAMS = [
     'igshid', // instagram
     'ttclid', // tiktok
     'rdt_cid', // reddit
+    'irclid', // impact
+    '_kx', // klaviyo
 ]
 
 export const EVENT_TO_PERSON_PROPERTIES = [
