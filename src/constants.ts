@@ -53,8 +53,8 @@ export const TOOLBAR_CONTAINER_CLASS = 'toolbar-global-fade-container'
  * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
  * Sentinel value for distinct id, device id, session id. Signals that the server should generate the value
  * */
-export const COOKIELESS_SENTINEL_VALUE = '$posthog_cklsh'
-export const COOKIELESS_MODE_FLAG_PROPERTY = '$cklsh_mode'
+export const COOKIELESS_SENTINEL_VALUE = '$posthog_cookieless'
+export const COOKIELESS_MODE_FLAG_PROPERTY = '$cookieless_mode'
 
 export const WEB_EXPERIMENTS = '$web_experiments'
 
