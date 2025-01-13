@@ -2,7 +2,15 @@ import { expect, test } from './utils/posthog-playwright-test-base'
 import { Request } from '@playwright/test'
 import { start } from './utils/setup'
 import { PostHog } from '../src/posthog-core'
-import { getBase64EncodedPayloadFromBody } from '../cypress/support/compression'
+
+function getBase64EncodedPayloadFromBody(body: unknown): Record<string, any> {
+    if (typeof body !== 'string') {
+        throw new Error('Expected body to be a string')
+    }
+    const dataElement = body.match(/data=(.*)/)?.[1]
+    const data = decodeURIComponent(dataElement!)
+    return JSON.parse(Buffer.from(data, 'base64').toString())
+}
 
 const startOptions = {
     options: {},
