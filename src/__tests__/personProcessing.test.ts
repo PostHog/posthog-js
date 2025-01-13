@@ -7,6 +7,7 @@ import { RemoteConfig } from '../types'
 
 const INITIAL_CAMPAIGN_PARAMS_NULL = {
     $initial_current_url: null,
+    $initial__kx: null,
     $initial_dclid: null,
     $initial_fbclid: null,
     $initial_gad_source: null,
@@ -15,6 +16,7 @@ const INITIAL_CAMPAIGN_PARAMS_NULL = {
     $initial_gclsrc: null,
     $initial_host: null,
     $initial_igshid: null,
+    $initial_irclid: null,
     $initial_li_fat_id: null,
     $initial_mc_cid: null,
     $initial_msclkid: null,
