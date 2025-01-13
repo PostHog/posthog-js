@@ -24,12 +24,12 @@ describe('cookieless', () => {
         posthog.capture(eventName, eventProperties)
         expect(beforeSendMock).toBeCalledTimes(1)
         let event = beforeSendMock.mock.calls[0][0]
-        expect(event.properties.distinct_id).toBe('$posthog_cklsh')
+        expect(event.properties.distinct_id).toBe('$posthog_cookieless')
         expect(event.properties.$anon_distinct_id).toBe(undefined)
         expect(event.properties.$device_id).toBe(null)
         expect(event.properties.$session_id).toBe(undefined)
         expect(event.properties.$window_id).toBe(undefined)
-        expect(event.properties.$cklsh_mode).toEqual(true)
+        expect(event.properties.$cookieless_mode).toEqual(true)
         expect(document.cookie).toBe('')
 
         // simulate user giving cookie consent
@@ -39,12 +39,12 @@ describe('cookieless', () => {
         posthog.capture(eventName, eventProperties)
         expect(beforeSendMock).toBeCalledTimes(2)
         event = beforeSendMock.mock.calls[1][0]
-        expect(event.properties.distinct_id).toBe('$posthog_cklsh')
+        expect(event.properties.distinct_id).toBe('$posthog_cookieless')
         expect(event.properties.$anon_distinct_id).toBe(undefined)
         expect(event.properties.$device_id).toBe(null)
         expect(event.properties.$session_id).toBe(undefined)
         expect(event.properties.$window_id).toBe(undefined)
-        expect(event.properties.$cklsh_mode).toEqual(true)
+        expect(event.properties.$cookieless_mode).toEqual(true)
         expect(document.cookie).not.toBe('')
 
         // a user identifying
@@ -52,11 +52,11 @@ describe('cookieless', () => {
         expect(beforeSendMock).toBeCalledTimes(3)
         event = beforeSendMock.mock.calls[2][0]
         expect(event.properties.distinct_id).toBe(identifiedDistinctId)
-        expect(event.properties.$anon_distinct_id).toBe('$posthog_cklsh')
+        expect(event.properties.$anon_distinct_id).toBe('$posthog_cookieless')
         expect(event.properties.$device_id).toBe(null)
         expect(event.properties.$session_id).toBe(undefined)
         expect(event.properties.$window_id).toBe(undefined)
-        expect(event.properties.$cklsh_mode).toEqual(true)
+        expect(event.properties.$cookieless_mode).toEqual(true)
 
         // an event after identifying
         posthog.capture(eventName, eventProperties)
@@ -67,7 +67,7 @@ describe('cookieless', () => {
         expect(event.properties.$device_id).toBe(null)
         expect(event.properties.$session_id).toBe(undefined)
         expect(event.properties.$window_id).toBe(undefined)
-        expect(event.properties.$cklsh_mode).toEqual(true)
+        expect(event.properties.$cookieless_mode).toEqual(true)
 
         // reset
         posthog.reset()
@@ -77,12 +77,12 @@ describe('cookieless', () => {
         posthog.capture(eventName, eventProperties)
         expect(beforeSendMock).toBeCalledTimes(5)
         event = beforeSendMock.mock.calls[4][0]
-        expect(event.properties.distinct_id).toBe('$posthog_cklsh')
+        expect(event.properties.distinct_id).toBe('$posthog_cookieless')
         expect(event.properties.$anon_distinct_id).toBe(undefined)
         expect(event.properties.$device_id).toBe(null)
         expect(event.properties.$session_id).toBe(undefined)
         expect(event.properties.$window_id).toBe(undefined)
-        expect(event.properties.$cklsh_mode).toEqual(true)
+        expect(event.properties.$cookieless_mode).toEqual(true)
         expect(document.cookie).toBe('')
     })
 })
