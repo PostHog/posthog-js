@@ -1,3 +1,9 @@
+## 1.205.1 - 2025-01-13
+
+- feat: custom webfont selection on surveys (#1643)
+- chore(ci): final move from cypress to playwright (#1646)
+- feat: add Better Uptime string to blocked UA (#1644)
+
 ## 1.205.0 - 2025-01-07
 
 - feat: Add a onPreviewSubmit callback to preview surveys (#1641)
