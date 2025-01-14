@@ -1,3 +1,8 @@
+## 1.206.0 - 2025-01-14
+
+- feat: add irclid and _kx as campaign parameters (#1648)
+- chore: Rename cklsh constants to cookieless (#1647)
+
 ## 1.205.1 - 2025-01-13
 
 - feat: custom webfont selection on surveys (#1643)
