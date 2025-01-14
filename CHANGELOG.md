@@ -1,3 +1,7 @@
+## 1.206.1 - 2025-01-14
+
+- fix: survey previews should never have the submit button disabled (#1650)
+
 ## 1.206.0 - 2025-01-14
 
 - feat: add irclid and _kx as campaign parameters (#1648)
