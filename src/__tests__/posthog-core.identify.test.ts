@@ -208,6 +208,22 @@ describe('identify()', () => {
             )
             expect(instance.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
         })
+
+        it('does not call $set when duplicate properties are passed', () => {
+            instance.identify('a-new-id', { email: 'john@example.com' }, { howOftenAmISet: 'once!' })
+            instance.identify('a-new-id', { email: 'john@example.com' }, { howOftenAmISet: 'once!' })
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(1)
+            expect(instance.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
+        })
+
+        it('calls $set when different properties are passed with the same distinct_id', () => {
+            instance.identify('a-new-id', { email: 'john@example.com' }, { howOftenAmISet: 'once!' })
+            instance.identify('a-new-id', { email: 'john@example.com' }, { howOftenAmISet: 'twice!' })
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(2)
+            expect(instance.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
+        })
     })
 
     describe('invalid id passed', () => {

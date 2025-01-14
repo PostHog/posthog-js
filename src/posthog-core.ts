@@ -69,7 +69,7 @@ import { Info } from './utils/event-utils'
 import { logger } from './utils/logger'
 import { SessionPropsManager } from './session-props'
 import { isLikelyBot } from './utils/blocked-uas'
-import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
+import { extendURLParams, jsonStringify, request, SUPPORTS_REQUEST } from './request'
 import { Heatmaps } from './heatmaps'
 import { ScrollManager } from './scroll-manager'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
@@ -279,6 +279,7 @@ export class PostHog {
     analyticsDefaultEndpoint: string
     version = Config.LIB_VERSION
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
+    _cachedIdentify: string | null
 
     SentryIntegration: typeof SentryIntegration
     sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
@@ -306,7 +307,7 @@ export class PostHog {
         this.analyticsDefaultEndpoint = '/e/'
         this._initialPageviewCaptured = false
         this._initialPersonProfilesConfig = null
-
+        this._cachedIdentify = null
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
         this.scrollManager = new ScrollManager(this)
@@ -1431,8 +1432,19 @@ export class PostHog {
             // for flag consistency
             this.featureFlags.setAnonymousDistinctId(previous_distinct_id)
         } else if (userPropertiesToSet || userPropertiesToSetOnce) {
-            // If the distinct_id is not changing, but we have user properties to set, we can go for a $set event
-            this.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce)
+            if (
+                this._cachedIdentify !==
+                PostHog._getIdentifyHash(new_distinct_id, userPropertiesToSet, userPropertiesToSetOnce)
+            ) {
+                // If the distinct_id is not changing, but we have user properties to set, we can go for a $set event
+                this.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce)
+
+                this._cachedIdentify = PostHog._getIdentifyHash(
+                    new_distinct_id,
+                    userPropertiesToSet,
+                    userPropertiesToSetOnce
+                )
+            }
         }
 
         // Reload active feature flags if the user identity changes.
@@ -1442,6 +1454,14 @@ export class PostHog {
             // also clear any stored flag calls
             this.unregister(FLAG_CALL_REPORTED)
         }
+    }
+
+    private static _getIdentifyHash(
+        distinct_id: string,
+        userPropertiesToSet?: Properties,
+        userPropertiesToSetOnce?: Properties
+    ): string {
+        return jsonStringify({ distinct_id, userPropertiesToSet, userPropertiesToSetOnce })
     }
 
     /**
@@ -1463,6 +1483,8 @@ export class PostHog {
 
         // Update current user properties
         this.setPersonPropertiesForFlags(userPropertiesToSet || {})
+
+        // if exactly this $set call has been sent before, don't send it again - determine based on hash of properties
 
         this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
     }
@@ -1568,6 +1590,7 @@ export class PostHog {
         this.surveys?.reset()
         this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()
+        this._cachedIdentify = null
         if (this.config.__preview_experimental_cookieless_mode) {
             this.register_once(
                 {
