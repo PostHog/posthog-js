@@ -30,7 +30,7 @@ export function BottomSection({
             <div className="buttons">
                 <button
                     className="form-submit"
-                    disabled={submitDisabled}
+                    disabled={submitDisabled && !isPreviewMode}
                     type="button"
                     style={isPopup ? { color: textColor } : {}}
                     onClick={() => {
