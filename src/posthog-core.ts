@@ -1431,6 +1431,12 @@ export class PostHog {
             // let the reload feature flag request know to send this previous distinct id
             // for flag consistency
             this.featureFlags.setAnonymousDistinctId(previous_distinct_id)
+
+            this._cachedIdentify = PostHog._getIdentifyHash(
+                new_distinct_id,
+                userPropertiesToSet,
+                userPropertiesToSetOnce
+            )
         } else if (userPropertiesToSet || userPropertiesToSetOnce) {
             if (
                 this._cachedIdentify !==
