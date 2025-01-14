@@ -69,7 +69,7 @@ import { Info } from './utils/event-utils'
 import { logger } from './utils/logger'
 import { SessionPropsManager } from './session-props'
 import { isLikelyBot } from './utils/blocked-uas'
-import { extendURLParams, jsonStringify, request, SUPPORTS_REQUEST } from './request'
+import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
 import { Heatmaps } from './heatmaps'
 import { ScrollManager } from './scroll-manager'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
@@ -83,6 +83,7 @@ import { PostHogExceptions } from './posthog-exceptions'
 import { SiteApps } from './site-apps'
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { includes, isDistinctIdStringLike } from './utils/string-utils'
+import { getIdentifyHash } from './utils/identify-utils'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -1432,24 +1433,19 @@ export class PostHog {
             // for flag consistency
             this.featureFlags.setAnonymousDistinctId(previous_distinct_id)
 
-            this._cachedIdentify = PostHog._getIdentifyHash(
-                new_distinct_id,
-                userPropertiesToSet,
-                userPropertiesToSetOnce
-            )
+            this._cachedIdentify = getIdentifyHash(new_distinct_id, userPropertiesToSet, userPropertiesToSetOnce)
         } else if (userPropertiesToSet || userPropertiesToSetOnce) {
+            // If the distinct_id is not changing, but we have user properties to set, we can check if they have changed
+            // and if so, send a $set event
+
             if (
-                this._cachedIdentify !==
-                PostHog._getIdentifyHash(new_distinct_id, userPropertiesToSet, userPropertiesToSetOnce)
+                this._cachedIdentify !== getIdentifyHash(new_distinct_id, userPropertiesToSet, userPropertiesToSetOnce)
             ) {
-                // If the distinct_id is not changing, but we have user properties to set, we can go for a $set event
                 this.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce)
 
-                this._cachedIdentify = PostHog._getIdentifyHash(
-                    new_distinct_id,
-                    userPropertiesToSet,
-                    userPropertiesToSetOnce
-                )
+                this._cachedIdentify = getIdentifyHash(new_distinct_id, userPropertiesToSet, userPropertiesToSetOnce)
+            } else {
+                logger.info('A duplicate posthog.identify call was made with the same properties. It has been ignored.')
             }
         }
 
@@ -1460,14 +1456,6 @@ export class PostHog {
             // also clear any stored flag calls
             this.unregister(FLAG_CALL_REPORTED)
         }
-    }
-
-    private static _getIdentifyHash(
-        distinct_id: string,
-        userPropertiesToSet?: Properties,
-        userPropertiesToSetOnce?: Properties
-    ): string {
-        return jsonStringify({ distinct_id, userPropertiesToSet, userPropertiesToSetOnce })
     }
 
     /**
