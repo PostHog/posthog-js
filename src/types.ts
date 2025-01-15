@@ -1,6 +1,7 @@
 import { PostHog } from './posthog-core'
 import type { SegmentAnalytics } from './extensions/segment-integration'
 import { recordOptions } from './extensions/replay/sessionrecording-utils'
+import { Survey } from './posthog-surveys-types'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -547,7 +548,7 @@ export interface RemoteConfig {
         urlBlocklist?: SessionRecordingUrlTrigger[]
         eventTriggers?: string[]
     }
-    surveys?: boolean
+    surveys?: boolean | Survey[]
     toolbarParams: ToolbarParams
     editorParams?: ToolbarParams /** @deprecated, renamed to toolbarParams, still present on older API responses */
     toolbarVersion: 'toolbar' /** @deprecated, moved to toolbarParams */
@@ -559,7 +560,7 @@ export interface RemoteConfig {
     hasFeatureFlags?: boolean // Indicates if the team has any flags enabled (if not we don't need to load them)
 }
 
-export interface DecideResponse extends RemoteConfig {
+export interface DecideResponse extends Omit<RemoteConfig, 'surveys'> {
     featureFlags: Record<string, string | boolean>
     featureFlagPayloads: Record<string, JsonType>
     errorsWhileComputingFlags: boolean

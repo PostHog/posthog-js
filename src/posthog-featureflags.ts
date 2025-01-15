@@ -251,7 +251,7 @@ export class PostHogFeatureFlags {
 
                 if (!this._decideCalled) {
                     this._decideCalled = true
-                    this.instance._onRemoteConfig(response.json ?? {})
+                    this.instance._onRemoteConfig((response.json as DecideResponse) ?? {})
                 }
 
                 if (data.disable_flags) {

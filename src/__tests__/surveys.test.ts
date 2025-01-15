@@ -265,7 +265,7 @@ describe('surveys', () => {
             expect(data).toEqual(surveysWithEvents)
         }, true)
 
-        const registry = surveys._surveyEventReceiver?.getEventToSurveys()
+        const registry = surveys['_surveyEventReceiver']?.getEventToSurveys()
         expect(registry.has('user_subscribed')).toBeTruthy()
         expect(registry.get('user_subscribed')).toEqual(['first-survey', 'third-survey'])
 
@@ -666,7 +666,7 @@ describe('surveys', () => {
             surveysResponse = {
                 surveys: [surveyWithEnabledInternalFlag, surveyWithEvents],
             }
-            ;(surveys._surveyEventReceiver as any)?.on('user_subscribed')
+            ;(surveys['_surveyEventReceiver'] as any)?.on('user_subscribed')
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithEnabledInternalFlag])
             })
