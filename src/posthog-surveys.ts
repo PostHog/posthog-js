@@ -62,7 +62,7 @@ export class PostHogSurveys {
     private _surveysEnabledRemotely?: boolean
     private _surveyEventReceiver: SurveyEventReceiver
     private _surveyManager: any
-    private _loadedSurveys: Survey[] = []
+    private _loadedSurveys?: Survey[]
 
     constructor(private readonly instance: PostHog) {
         this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
@@ -111,6 +111,7 @@ export class PostHogSurveys {
                 if (response.statusCode !== 200 || !response.json) {
                     return callback([])
                 }
+
                 const surveys = response.json.surveys || []
 
                 this.onSurveys(surveys)
@@ -148,7 +149,8 @@ export class PostHogSurveys {
             return callback([])
         }
 
-        const existingSurveys: Survey[] = this._loadedSurveys ?? (this.instance.get_property(SURVEYS) as Survey[]) ?? []
+        const existingSurveys: Survey[] | undefined =
+            this._loadedSurveys ?? (this.instance.get_property(SURVEYS) as Survey[]) ?? undefined
 
         if (!existingSurveys) {
             return this.reloadSurveys(callback)
