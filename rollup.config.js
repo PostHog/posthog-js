@@ -57,7 +57,8 @@ const plugins = (es5) => [
     }),
 ]
 
-const entrypoints = fs.readdirSync('./src/entrypoints')
+// const entrypoints = fs.readdirSync('./src/entrypoints')
+const entrypoints = ['array.ts', 'array.full.ts', 'module.es.ts', 'surveys.ts']
 
 const entrypointTargets = entrypoints.map((file) => {
     const fileParts = file.split('.')

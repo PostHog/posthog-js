@@ -1285,13 +1285,13 @@ export class PostHog {
     }
 
     /** Get list of all surveys. */
-    getSurveys(callback: SurveyCallback, forceReload = false): void {
-        this.surveys.getSurveys(callback, forceReload)
+    getSurveys(callback: SurveyCallback): void {
+        this.surveys.getSurveys(callback)
     }
 
     /** Get surveys that should be enabled for the current user. */
-    getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false): void {
-        this.surveys.getActiveMatchingSurveys(callback, forceReload)
+    getActiveMatchingSurveys(callback: SurveyCallback): void {
+        this.surveys.getActiveMatchingSurveys(callback)
     }
 
     /** Render a survey on a specific element. */

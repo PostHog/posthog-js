@@ -211,7 +211,7 @@ export class SurveyManager {
         )
     }
 
-    public callSurveysAndEvaluateDisplayLogic = (forceReload: boolean = false): void => {
+    public callSurveysAndEvaluateDisplayLogic = (): void => {
         this.posthog?.getActiveMatchingSurveys((surveys) => {
             const nonAPISurveys = surveys.filter((survey) => survey.type !== 'api')
 
@@ -240,7 +240,7 @@ export class SurveyManager {
                     this.handlePopoverSurvey(survey)
                 }
             })
-        }, forceReload)
+        })
     }
 
     private addSurveyToFocus = (id: string): void => {
@@ -353,11 +353,12 @@ export function generateSurveys(posthog: PostHog) {
     }
 
     const surveyManager = new SurveyManager(posthog)
-    surveyManager.callSurveysAndEvaluateDisplayLogic(true)
+    surveyManager.callSurveysAndEvaluateDisplayLogic()
+    console.log('generateSurveys', surveyManager)
 
     // recalculate surveys every second to check if URL or selectors have changed
     setInterval(() => {
-        surveyManager.callSurveysAndEvaluateDisplayLogic(false)
+        surveyManager.callSurveysAndEvaluateDisplayLogic()
     }, 1000)
     return surveyManager
 }
