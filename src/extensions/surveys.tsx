@@ -354,7 +354,6 @@ export function generateSurveys(posthog: PostHog) {
 
     const surveyManager = new SurveyManager(posthog)
     surveyManager.callSurveysAndEvaluateDisplayLogic()
-    console.log('generateSurveys', surveyManager)
 
     // recalculate surveys every second to check if URL or selectors have changed
     setInterval(() => {
