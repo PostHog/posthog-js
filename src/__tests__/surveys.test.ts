@@ -50,20 +50,6 @@ describe('surveys', () => {
         } as unknown as Survey,
     ]
 
-    const secondSurveys: Survey[] = [
-        {
-            name: 'first survey',
-            description: 'first survey description',
-            type: SurveyType.Popover,
-            questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
-        } as unknown as Survey,
-        {
-            name: 'second survey',
-            description: 'second survey description',
-            type: SurveyType.Popover,
-            questions: [{ type: SurveyQuestionType.Open, question: 'what is a moblin?' }],
-        } as unknown as Survey,
-    ]
     const surveysWithEvents: Survey[] = [
         {
             name: 'first survey',
