@@ -2633,7 +2633,7 @@ Manual addition of version 1.66.0 because CI failed to automatically bump the ve
 - Update outdated releasing instructions (#224)
 - changelog for 1.10.0 (#223)
 - 1.10.0 (#222)
-- Refactor /decide enpoint & allow recording without autocapture (#212)
+- Refactor /decide endpoint & allow recording without autocapture (#212)
 - Add missing `disable_session_recording` property in Config interface (#221)
 - Update types, add missing reloadFeatureFlags (#219)
 - Fix in-progress check for utils/deepCircularCopy (#216)
