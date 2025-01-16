@@ -106,13 +106,13 @@ describe('request utils', () => {
                 'https://www.example.com/?foo=1#query=2',
             ],
             [
-                "does not add a hash when the isn't one",
+                "does not add a hash when there isn't one",
                 'https://www.example.com/?foo=1',
                 ['query'],
                 'https://www.example.com/?foo=1',
             ],
             [
-                "does not add a query when the isn't one",
+                "does not add a query when there isn't one",
                 'https://www.example.com',
                 ['query'],
                 'https://www.example.com',
