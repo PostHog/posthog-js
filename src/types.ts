@@ -283,6 +283,8 @@ export interface PostHogConfig {
     session_idle_timeout_seconds: number
     mask_all_element_attributes: boolean
     mask_all_text: boolean
+    mask_personal_data_properties: boolean
+    custom_personal_data_properties: string[]
     advanced_disable_decide: boolean
     advanced_disable_feature_flags: boolean
     advanced_disable_feature_flags_on_first_load: boolean

@@ -1,4 +1,4 @@
-import { getQueryParam, formDataToQuery, isUrlMatchingRegex } from '../utils/request-utils'
+import { getQueryParam, formDataToQuery, isUrlMatchingRegex, maskQueryParams } from '../utils/request-utils'
 
 describe('request utils', () => {
     describe('_HTTPBuildQuery', () => {
@@ -45,6 +45,87 @@ describe('request utils', () => {
             ['gets param when no match and there are params with trailing slash', '/?test=123', 'name', ''],
         ])('%s', (_name, url, param, expected) => {
             expect(getQueryParam(`https://example.com${url}`, param)).toEqual(expected)
+        })
+    })
+
+    describe('maskQueryParams', () => {
+        test.each([
+            [
+                'passes through when no params to mask',
+                'https://www.example.com/?query=1#hash',
+                [],
+                'https://www.example.com/?query=1#hash',
+            ],
+            ['passes through empty string', '', [], ''],
+            [
+                'masks a query param',
+                'https://www.example.com/?query=1#hash',
+                ['query'],
+                'https://www.example.com/?query=<masked>#hash',
+            ],
+            [
+                'masks a query param with no value',
+                'https://www.example.com/?query=#hash',
+                ['query'],
+                'https://www.example.com/?query=<masked>#hash',
+            ],
+            [
+                'masks a query param with no value or equals',
+                'https://www.example.com/?query#hash',
+                ['query'],
+                'https://www.example.com/?query=<masked>#hash',
+            ],
+            [
+                'masks a query param multiple times',
+                'https://www.example.com/?query=1&query=2',
+                ['query'],
+                'https://www.example.com/?query=<masked>&query=<masked>',
+            ],
+            [
+                'does not mask other query params',
+                'https://www.example.com/?query=1&other=2#hash',
+                ['query'],
+                'https://www.example.com/?query=<masked>&other=2#hash',
+            ],
+            [
+                'does not mask in the pathname',
+                'https://www.example.com/query=1/?query=1#hash',
+                ['query'],
+                'https://www.example.com/query=1/?query=<masked>#hash',
+            ],
+            [
+                'does not modify malformed query params',
+                'https://www.example.com/?other%=%',
+                ['query'],
+                'https://www.example.com/?other%=%',
+            ],
+            [
+                'does not mask in the hash',
+                'https://www.example.com/?foo=1#query=2',
+                ['query'],
+                'https://www.example.com/?foo=1#query=2',
+            ],
+            [
+                "does not add a hash when there isn't one",
+                'https://www.example.com/?foo=1',
+                ['query'],
+                'https://www.example.com/?foo=1',
+            ],
+            [
+                "does not add a query when there isn't one",
+                'https://www.example.com',
+                ['query'],
+                'https://www.example.com',
+            ],
+            ['works without domain too', 'pathname/?query=1#hash', ['query'], 'pathname/?query=<masked>#hash'],
+            [
+                'can mask multiple query params',
+                'pathname/?gclid=1&fbclid=2',
+                ['gclid', 'fbclid'],
+                'pathname/?gclid=<masked>&fbclid=<masked>',
+            ],
+        ])('%s', (_name, url, params, expected) => {
+            expect(maskQueryParams(url, params, '<masked>')).toEqual(expected)
         })
     })
 

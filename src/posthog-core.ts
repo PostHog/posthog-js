@@ -166,6 +166,8 @@ export const defaultConfig = (): PostHogConfig => ({
     session_recording: {},
     mask_all_element_attributes: false,
     mask_all_text: false,
+    mask_personal_data_properties: false,
+    custom_personal_data_properties: [],
     advanced_disable_decide: false,
     advanced_disable_feature_flags: false,
     advanced_disable_feature_flags_on_first_load: false,
@@ -435,7 +437,7 @@ export class PostHog {
 
         if (!this.config.__preview_experimental_cookieless_mode) {
             this.sessionManager = new SessionIdManager(this)
-            this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
+            this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
         }
 
         new TracingHeaders(this).startIfEnabledOrStop()
@@ -961,7 +963,10 @@ export class PostHog {
             return properties
         }
 
-        const infoProperties = Info.properties()
+        const infoProperties = Info.properties({
+            maskPersonalDataProperties: this.config.mask_personal_data_properties,
+            customPersonalDataProperties: this.config.custom_personal_data_properties,
+        })
 
         if (this.sessionManager) {
             const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()

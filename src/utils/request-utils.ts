@@ -74,6 +74,51 @@ export const getQueryParam = function (url: string, param: string): string {
     }
 }
 
+// replace any query params in the url with the provided mask value. Tries to keep the URL as instant as possible,
+// including preserving malformed text in most cases
+export const maskQueryParams = function <T extends string | undefined>(
+    url: T,
+    maskedParams: string[] | undefined,
+    mask: string
+): T extends string ? string : undefined {
+    if (!url || !maskedParams || !maskedParams.length) {
+        return url as any
+    }
+
+    const splitHash = url.split('#')
+    const withoutHash: string = splitHash[0] || ''
+    const hash = splitHash[1]
+
+    const splitQuery: string[] = withoutHash.split('?')
+    const queryString: string = splitQuery[1]
+    const urlWithoutQueryAndHash: string = splitQuery[0]
+    const queryParts = (queryString || '').split('&')
+
+    // use an array of strings rather than an object to preserve ordering and duplicates
+    const paramStrings: string[] = []
+
+    for (let i = 0; i < queryParts.length; i++) {
+        const keyValuePair = queryParts[i].split('=')
+        if (!isArray(keyValuePair)) {
+            continue
+        } else if (maskedParams.includes(keyValuePair[0])) {
+            paramStrings.push(keyValuePair[0] + '=' + mask)
+        } else {
+            paramStrings.push(queryParts[i])
+        }
+    }
+
+    let result = urlWithoutQueryAndHash
+    if (queryString != null) {
+        result += '?' + paramStrings.join('&')
+    }
+    if (hash != null) {
+        result += '#' + hash
+    }
+
+    return result as any
+}
+
 export const _getHashParam = function (hash: string, param: string): string | null {
     const matches = hash.match(new RegExp(param + '=([^&]*)'))
     return matches ? matches[1] : null

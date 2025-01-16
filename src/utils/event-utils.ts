@@ -1,23 +1,21 @@
-import { getQueryParam, convertToURL } from './request-utils'
+import { getQueryParam, convertToURL, maskQueryParams } from './request-utils'
 import { isNull } from './type-utils'
 import { Properties } from '../types'
 import Config from '../config'
-import { each, extend, stripEmptyProperties } from './index'
+import { each, extend, extendArray, stripEmptyProperties } from './index'
 import { document, location, userAgent, window } from './globals'
 import { detectBrowser, detectBrowserVersion, detectDevice, detectDeviceType, detectOS } from './user-agent-utils'
 import { stripLeadingDollar } from './string-utils'
 
 const URL_REGEX_PREFIX = 'https?://(.*)'
 
-// Should be kept in sync with https://github.com/PostHog/posthog/blob/master/plugin-server/src/utils/db/utils.ts#L60
-export const CAMPAIGN_PARAMS = [
-    'utm_source',
-    'utm_medium',
-    'utm_campaign',
-    'utm_content',
-    'utm_term',
+// CAMPAIGN_PARAMS and EVENT_TO_PERSON_PROPERTIES should be kept in sync with
+// https://github.com/PostHog/posthog/blob/master/plugin-server/src/utils/db/utils.ts#L60
+
+// The list of campaign parameters that could be considered personal data under e.g. GDPR.
+// These can be masked in URLs and properties before being sent to posthog.
+export const PERSONAL_DATA_CAMPAIGN_PARAMS = [
     'gclid', // google ads
-    'gad_source', // google ads
     'gclsrc', // google ads 360
     'dclid', // google display ads
     'gbraid', // google ads, web to app
@@ -26,13 +24,25 @@ export const CAMPAIGN_PARAMS = [
     'msclkid', // microsoft
     'twclid', // twitter
     'li_fat_id', // linkedin
-    'mc_cid', // mailchimp campaign id
     'igshid', // instagram
     'ttclid', // tiktok
     'rdt_cid', // reddit
     'irclid', // impact
     '_kx', // klaviyo
 ]
+
+export const CAMPAIGN_PARAMS = extendArray(
+    [
+        'utm_source',
+        'utm_medium',
+        'utm_campaign',
+        'utm_content',
+        'utm_term',
+        'gad_source', // google ads source
+        'mc_cid', // mailchimp campaign id
+    ],
+    PERSONAL_DATA_CAMPAIGN_PARAMS
+)
 
 export const EVENT_TO_PERSON_PROPERTIES = [
     // mobile params
@@ -53,12 +63,27 @@ export const EVENT_TO_PERSON_PROPERTIES = [
     '$referrer',
 ]
 
+export const MASKED = '<masked>'
+
 export const Info = {
-    campaignParams: function (customParams?: string[]): Record<string, string> {
+    campaignParams: function ({
+        customTrackedParams,
+        maskPersonalDataProperties,
+        customPersonalDataProperties,
+    }: {
+        customTrackedParams?: string[]
+        maskPersonalDataProperties?: boolean
+        customPersonalDataProperties?: string[] | undefined
+    } = {}): Record<string, string> {
         if (!document) {
             return {}
         }
-        return this._campaignParamsFromUrl(document.URL, customParams)
+
+        const paramsToMask = maskPersonalDataProperties
+            ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
+            : []
+
+        return this._campaignParamsFromUrl(maskQueryParams(document.URL, paramsToMask, MASKED), customTrackedParams)
     },
 
     _campaignParamsFromUrl: function (url: string, customParams?: string[]): Record<string, string> {
@@ -225,10 +250,19 @@ export const Info = {
         }
     },
 
-    properties: function (): Properties {
+    properties: function ({
+        maskPersonalDataProperties,
+        customPersonalDataProperties,
+    }: {
+        maskPersonalDataProperties?: boolean
+        customPersonalDataProperties?: string[]
+    } = {}): Properties {
         if (!userAgent) {
             return {}
         }
+        const paramsToMask = maskPersonalDataProperties
+            ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
+            : []
         const [os_name, os_version] = Info.os(userAgent)
         return extend(
             stripEmptyProperties({
@@ -241,7 +275,7 @@ export const Info = {
                 $timezone_offset: Info.timezoneOffset(),
             }),
             {
-                $current_url: location?.href,
+                $current_url: maskQueryParams(location?.href, paramsToMask, MASKED),
                 $host: location?.host,
                 $pathname: location?.pathname,
                 $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,

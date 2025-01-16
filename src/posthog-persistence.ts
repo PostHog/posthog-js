@@ -222,7 +222,11 @@ export class PostHogPersistence {
 
     update_campaign_params(): void {
         if (!this.campaign_params_saved) {
-            const campaignParams = Info.campaignParams(this.config.custom_campaign_params)
+            const campaignParams = Info.campaignParams({
+                customTrackedParams: this.config.custom_campaign_params,
+                maskPersonalDataProperties: this.config.mask_personal_data_properties,
+                customPersonalDataProperties: this.config.custom_personal_data_properties,
+            })
             // only save campaign params if there were any
             if (!isEmptyObject(stripEmptyProperties(campaignParams))) {
                 this.register(campaignParams)
