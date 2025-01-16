@@ -118,6 +118,12 @@ describe('request utils', () => {
                 'https://www.example.com',
             ],
             ['works without domain too', 'pathname/?query=1#hash', ['query'], 'pathname/?query=<masked>#hash'],
+            [
+                'can mask multiple query params',
+                'pathname/?gclid=1&fbclid=2',
+                ['gclid', 'fbclid'],
+                'pathname/?gclid=<masked>&fbclid=<masked>',
+            ],
         ])('%s', (_name, url, params, expected) => {
             expect(maskQueryParams(url, params, '<masked>')).toEqual(expected)
         })
