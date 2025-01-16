@@ -64,11 +64,15 @@ export const EVENT_TO_PERSON_PROPERTIES = [
 export const MASKED = '<masked>'
 
 export const Info = {
-    campaignParams: function (
-        customTrackedParams?: string[],
-        maskPersonalDataProperties?: boolean,
+    campaignParams: function ({
+        customTrackedParams,
+        maskPersonalDataProperties,
+        customPersonalDataProperties,
+    }: {
+        customTrackedParams?: string[]
+        maskPersonalDataProperties?: boolean
         customPersonalDataProperties?: string[] | undefined
-    ): Record<string, string> {
+    } = {}): Record<string, string> {
         if (!document) {
             return {}
         }
@@ -244,10 +248,13 @@ export const Info = {
         }
     },
 
-    properties: function (
-        maskPersonalDataProperties: boolean,
-        customPersonalDataProperties: string[] | undefined
-    ): Properties {
+    properties: function ({
+        maskPersonalDataProperties,
+        customPersonalDataProperties,
+    }: {
+        maskPersonalDataProperties?: boolean
+        customPersonalDataProperties?: string[]
+    } = {}): Properties {
         if (!userAgent) {
             return {}
         }

@@ -33,11 +33,11 @@ const generateSessionSourceParams = (instance?: PostHog): SessionSourceProps => 
     return {
         initialPathName: location?.pathname || '',
         referringDomain: Info.referringDomain(),
-        ...Info.campaignParams(
-            config?.custom_campaign_params,
-            config?.mask_personal_data_properties,
-            config?.custom_personal_data_properties
-        ),
+        ...Info.campaignParams({
+            customTrackedParams: config?.custom_campaign_params,
+            maskPersonalDataProperties: config?.mask_personal_data_properties,
+            customPersonalDataProperties: config?.custom_personal_data_properties,
+        }),
     }
 }
 

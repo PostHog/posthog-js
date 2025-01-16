@@ -963,10 +963,10 @@ export class PostHog {
             return properties
         }
 
-        const infoProperties = Info.properties(
-            this.config.mask_personal_data_properties,
-            this.config.custom_personal_data_properties
-        )
+        const infoProperties = Info.properties({
+            maskPersonalDataProperties: this.config.mask_personal_data_properties,
+            customPersonalDataProperties: this.config.custom_personal_data_properties,
+        })
 
         if (this.sessionManager) {
             const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()

@@ -32,6 +32,23 @@ describe(`event-utils`, () => {
             expect(properties['$raw_user_agent'].length).toBe(1000)
             expect(properties['$raw_user_agent'].substring(995)).toBe('aa...')
         })
+
+        it('should mask out personal data from URL', () => {
+            // @ts-expect-error ok to set global in test
+            globals.location = { href: 'https://www.example.com/path?gclid=12345&other=true' }
+            const properties = Info.properties({ maskPersonalDataProperties: true })
+            expect(properties['$current_url']).toEqual('https://www.example.com/path?gclid=<masked>&other=true')
+        })
+
+        it('should mask out custom personal data', () => {
+            // @ts-expect-error ok to set global in test
+            globals.location = { href: 'https://www.example.com/path?gclid=12345&other=true' }
+            const properties = Info.properties({
+                maskPersonalDataProperties: true,
+                customPersonalDataProperties: ['other'],
+            })
+            expect(properties['$current_url']).toEqual('https://www.example.com/path?gclid=<masked>&other=<masked>')
+        })
     })
 
     describe('user agent', () => {
