@@ -83,6 +83,7 @@ import { PostHogExceptions } from './posthog-exceptions'
 import { SiteApps } from './site-apps'
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { includes, isDistinctIdStringLike } from './utils/string-utils'
+import { getIdentifyHash } from './utils/identify-utils'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -281,6 +282,7 @@ export class PostHog {
     analyticsDefaultEndpoint: string
     version = Config.LIB_VERSION
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
+    _cachedIdentify: string | null
 
     SentryIntegration: typeof SentryIntegration
     sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
@@ -308,7 +310,7 @@ export class PostHog {
         this.analyticsDefaultEndpoint = '/e/'
         this._initialPageviewCaptured = false
         this._initialPersonProfilesConfig = null
-
+        this._cachedIdentify = null
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
         this.scrollManager = new ScrollManager(this)
@@ -1435,9 +1437,21 @@ export class PostHog {
             // let the reload feature flag request know to send this previous distinct id
             // for flag consistency
             this.featureFlags.setAnonymousDistinctId(previous_distinct_id)
+
+            this._cachedIdentify = getIdentifyHash(new_distinct_id, userPropertiesToSet, userPropertiesToSetOnce)
         } else if (userPropertiesToSet || userPropertiesToSetOnce) {
-            // If the distinct_id is not changing, but we have user properties to set, we can go for a $set event
-            this.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce)
+            // If the distinct_id is not changing, but we have user properties to set, we can check if they have changed
+            // and if so, send a $set event
+
+            if (
+                this._cachedIdentify !== getIdentifyHash(new_distinct_id, userPropertiesToSet, userPropertiesToSetOnce)
+            ) {
+                this.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce)
+
+                this._cachedIdentify = getIdentifyHash(new_distinct_id, userPropertiesToSet, userPropertiesToSetOnce)
+            } else {
+                logger.info('A duplicate posthog.identify call was made with the same properties. It has been ignored.')
+            }
         }
 
         // Reload active feature flags if the user identity changes.
@@ -1468,6 +1482,8 @@ export class PostHog {
 
         // Update current user properties
         this.setPersonPropertiesForFlags(userPropertiesToSet || {})
+
+        // if exactly this $set call has been sent before, don't send it again - determine based on hash of properties
 
         this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
     }
@@ -1573,6 +1589,7 @@ export class PostHog {
         this.surveys?.reset()
         this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()
+        this._cachedIdentify = null
         if (this.config.__preview_experimental_cookieless_mode) {
             this.register_once(
                 {
