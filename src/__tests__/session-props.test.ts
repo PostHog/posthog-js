@@ -1,6 +1,7 @@
 import { SessionPropsManager } from '../session-props'
 import { SessionIdManager } from '../sessionid'
 import { PostHogPersistence } from '../posthog-persistence'
+import { PostHog } from '../posthog-core'
 
 describe('Session Props Manager', () => {
     const createSessionPropsManager = () => {
@@ -14,7 +15,13 @@ describe('Session Props Manager', () => {
             register: persistenceRegister,
             props: {},
         } as unknown as PostHogPersistence
-        const sessionPropsManager = new SessionPropsManager(sessionIdManager, persistence, generateProps)
+        const posthog = {
+            sessionManager: sessionIdManager,
+            persistence,
+            config: {},
+        } as unknown as PostHog
+
+        const sessionPropsManager = new SessionPropsManager(posthog, sessionIdManager, persistence, generateProps)
 
         return {
             onSessionId,
