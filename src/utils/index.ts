@@ -63,6 +63,15 @@ export const extend = function (obj: Record<string, any>, ...args: Record<string
     return obj
 }
 
+export const extendArray = function <T>(obj: T[], ...args: T[][]): T[] {
+    eachArray(args, function (source) {
+        eachArray(source, function (item) {
+            obj.push(item)
+        })
+    })
+    return obj
+}
+
 export const include = function (
     obj: null | string | Array<any> | Record<string, any>,
     target: any

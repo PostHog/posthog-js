@@ -1,8 +1,8 @@
-import { getQueryParam, convertToURL } from './request-utils'
+import { getQueryParam, convertToURL, maskQueryParams } from './request-utils'
 import { isNull } from './type-utils'
 import { Properties } from '../types'
 import Config from '../config'
-import { each, extend, stripEmptyProperties } from './index'
+import { each, extend, extendArray, stripEmptyProperties } from './index'
 import { document, location, userAgent, window } from './globals'
 import { detectBrowser, detectBrowserVersion, detectDevice, detectDeviceType, detectOS } from './user-agent-utils'
 import { stripLeadingDollar } from './string-utils'
@@ -61,12 +61,23 @@ export const EVENT_TO_PERSON_PROPERTIES = [
     '$referrer',
 ]
 
+export const MASKED = '<masked>'
+
 export const Info = {
-    campaignParams: function (customParams?: string[]): Record<string, string> {
+    campaignParams: function (
+        customTrackedParams?: string[],
+        maskPersonalDataProperties?: boolean,
+        customPersonalDataProperties?: string[] | undefined
+    ): Record<string, string> {
         if (!document) {
             return {}
         }
-        return this._campaignParamsFromUrl(document.URL, customParams)
+
+        const paramsToMask = maskPersonalDataProperties
+            ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
+            : []
+
+        return this._campaignParamsFromUrl(maskQueryParams(document.URL, paramsToMask, MASKED), customTrackedParams)
     },
 
     _campaignParamsFromUrl: function (url: string, customParams?: string[]): Record<string, string> {
@@ -233,10 +244,16 @@ export const Info = {
         }
     },
 
-    properties: function (): Properties {
+    properties: function (
+        maskPersonalDataProperties: boolean,
+        customPersonalDataProperties: string[] | undefined
+    ): Properties {
         if (!userAgent) {
             return {}
         }
+        const paramsToMask = maskPersonalDataProperties
+            ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
+            : []
         const [os_name, os_version] = Info.os(userAgent)
         return extend(
             stripEmptyProperties({
@@ -249,7 +266,7 @@ export const Info = {
                 $timezone_offset: Info.timezoneOffset(),
             }),
             {
-                $current_url: location?.href,
+                $current_url: maskQueryParams(location?.href, paramsToMask, MASKED),
                 $host: location?.host,
                 $pathname: location?.pathname,
                 $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,
