@@ -1,3 +1,10 @@
+## 1.207.0 - 2025-01-16
+
+- chore: deduplicate subsequent identify calls (#1649)
+- feat: Add the ability to mask some PII-containing URL parameters (#1654)
+- chore: Remove '$web_experiment_applied' event (#1653)
+- chore: Update pull_request_template.md (#1651)
+
 ## 1.206.1 - 2025-01-14
 
 - fix: survey previews should never have the submit button disabled (#1650)
