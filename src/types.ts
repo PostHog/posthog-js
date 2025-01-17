@@ -30,7 +30,7 @@ export const knownUnsafeEditableEvent = [
  *
  * Some features of PostHog rely on receiving 100% of these events
  */
-export type KnownUnsafeEditableEvent = typeof knownUnsafeEditableEvent[number]
+export type KnownUnsafeEditableEvent = (typeof knownUnsafeEditableEvent)[number]
 
 /**
  * These are known events PostHog events that can be processed by the `beforeCapture` function
@@ -251,6 +251,7 @@ export interface PostHogConfig {
     disable_web_experiments: boolean
     /** If set, posthog-js will never load external scripts such as those needed for Session Replay or Surveys. */
     disable_external_dependency_loading?: boolean
+    prepare_external_dependency_script?: (script: HTMLScriptElement) => HTMLScriptElement | null
     enable_recording_console_log?: boolean
     secure_cookie: boolean
     ip: boolean
@@ -277,12 +278,13 @@ export interface PostHogConfig {
     inapp_protocol: string
     inapp_link_new_window: boolean
     request_batching: boolean
-    sanitize_properties: ((properties: Properties, event_name: string) => Properties) | null
     properties_string_max_length: number
     session_recording: SessionRecordingOptions
     session_idle_timeout_seconds: number
     mask_all_element_attributes: boolean
     mask_all_text: boolean
+    mask_personal_data_properties: boolean
+    custom_personal_data_properties: string[]
     advanced_disable_decide: boolean
     advanced_disable_feature_flags: boolean
     advanced_disable_feature_flags_on_first_load: boolean
@@ -290,6 +292,13 @@ export interface PostHogConfig {
     feature_flag_request_timeout_ms: number
     get_device_id: (uuid: string) => string
     name: string
+
+    /**
+     * This function is called when collecting properties for an event.
+     * It allows you to edit data before it is sent
+     * @deprecated - use `before_send` instead
+     */
+    sanitize_properties: ((properties: Properties, event_name: string) => Properties) | null
     /**
      * this is a read-only function that can be used to react to event capture
      * @deprecated - use `before_send` instead - NB before_send is not read only
@@ -333,6 +342,15 @@ export interface PostHogConfig {
         events_burst_limit?: number
     }
 
+    /** Used when sending data via `fetch`, use with care, this is intentionally meant to be used with NextJS `fetch`
+     *  Incorrect usage may cause out-of-date data for feature flags, actions tracking, etc.
+     *  See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
+     */
+    fetch_options?: {
+        cache?: RequestInit['cache']
+        next_options?: NextOptions
+    }
+
     /**
      * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
      * whether to wrap fetch and add tracing headers to the request
@@ -344,6 +362,12 @@ export interface PostHogConfig {
      * enables the new RemoteConfig approach to loading config instead of decide
      * */
     __preview_remote_config?: boolean
+
+    /**
+     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+     * whether to send a sentinel value for distinct id, device id, and session id, which will be replaced server-side by a cookieless hash
+     * */
+    __preview_experimental_cookieless_mode?: boolean
 }
 
 export interface OptInOutCapturingOptions {
@@ -440,6 +464,9 @@ export interface RequestResponse {
 
 export type RequestCallback = (response: RequestResponse) => void
 
+// See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
+type NextOptions = { revalidate: false | 0 | number; tags: string[] }
+
 export interface RequestOptions {
     url: string
     // Data can be a single object or an array of objects when batched
@@ -452,6 +479,10 @@ export interface RequestOptions {
     timeout?: number
     noRetries?: boolean
     compression?: Compression | 'best-available'
+    fetchOptions?: {
+        cache?: RequestInit['cache']
+        next?: NextOptions
+    }
 }
 
 // Queued request types - the same as a request but with additional queueing information
@@ -504,11 +535,7 @@ export interface RemoteConfig {
     }
     elementsChainAsString?: boolean
     // this is currently in development and may have breaking changes without a major version bump
-    autocaptureExceptions?:
-        | boolean
-        | {
-              endpoint?: string
-          }
+    autocaptureExceptions?: boolean | { endpoint?: string }
     sessionRecording?: SessionRecordingCanvasOptions & {
         endpoint?: string
         consoleLogRecordingEnabled?: boolean
@@ -736,7 +763,7 @@ export type ErrorEventArgs = [
     source?: string | undefined,
     lineno?: number | undefined,
     colno?: number | undefined,
-    error?: Error | undefined
+    error?: Error | undefined,
 ]
 
 export type ErrorMetadata = {
@@ -753,7 +780,7 @@ export type ErrorMetadata = {
 // and to avoid relying on a frequently changing @sentry/types dependency
 // but provided as an array of literal types, so we can constrain the level below
 export const severityLevels = ['fatal', 'error', 'warning', 'log', 'info', 'debug'] as const
-export declare type SeverityLevel = typeof severityLevels[number]
+export declare type SeverityLevel = (typeof severityLevels)[number]
 
 export interface ErrorProperties {
     $exception_type: string

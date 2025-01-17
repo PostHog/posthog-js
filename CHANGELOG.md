@@ -1,3 +1,129 @@
+## 1.207.0 - 2025-01-16
+
+- chore: deduplicate subsequent identify calls (#1649)
+- feat: Add the ability to mask some PII-containing URL parameters (#1654)
+- chore: Remove '$web_experiment_applied' event (#1653)
+- chore: Update pull_request_template.md (#1651)
+
+## 1.206.1 - 2025-01-14
+
+- fix: survey previews should never have the submit button disabled (#1650)
+
+## 1.206.0 - 2025-01-14
+
+- feat: add irclid and _kx as campaign parameters (#1648)
+- chore: Rename cklsh constants to cookieless (#1647)
+
+## 1.205.1 - 2025-01-13
+
+- feat: custom webfont selection on surveys (#1643)
+- chore(ci): final move from cypress to playwright (#1646)
+- feat: add Better Uptime string to blocked UA (#1644)
+
+## 1.205.0 - 2025-01-07
+
+- feat: Add a onPreviewSubmit callback to preview surveys (#1641)
+
+## 1.204.0 - 2025-01-06
+
+- feat: Deprecate `sanitize_properties` (#1632)
+- test(ci): move more of the browser tests to playwright (#1638)
+
+## 1.203.3 - 2025-01-03
+
+- feat: Add pageview and prev pageview tracking (#1634)
+- fix: safer toolbar function (#1637)
+- chore: playwright tests (#1631)
+
+## 1.203.2 - 2024-12-27
+
+- Adds option for nonce support (#1630)
+
+## 1.203.1 - 2024-12-20
+
+- fix: recordings that are paused for their whole duration (#1626)
+- feat: custom event with remote config (#1628)
+
+## 1.203.0 - 2024-12-20
+
+- chore: add feature name prop to event (#1624)
+- fix: payload host deny list (#1627)
+- chore: build against lowest and current version of TS (#1625)
+- chore: fix changelog after automation error (#1623)
+
+## 1.202.5 - 2024-12-19
+
+- chore: lint a file that needs it (#1622)
+
+## 1.202.4 - 2024-12-19
+
+- fix: do not even send heatmap with no x or y (#1621)
+- fix: type error accessing null object and added test case (#1620)
+- chore: Small tweaks to make fetch default (#1610)
+- chore: remove circular dependencies (#1618)
+
+## 1.202.3 - 2024-12-18
+
+ > NB an error meant this version was never published to NPM
+
+## 1.202.2 - 2024-12-17
+
+- fix: specify transport in fewer places to let config control (#1614)
+- chore: update rollup, bc y not (#1615)
+
+## 1.202.1 - 2024-12-17
+
+- feat: Use token scoped remote config (#1611)
+
+## 1.202.0 - 2024-12-17
+
+- fix: Change default transport to fetch (#1612)
+
+## 1.201.1 - 2024-12-17
+
+- fix: Load RemoteConfig by default but don't use it (#1607)
+- chore: add websockets example to nextjs playground (#1605)
+
+## 1.201.0 - 2024-12-16
+
+- fix: rotate session id proactively (#1512)
+
+## 1.200.2 - 2024-12-16
+
+- feat(web-analytics): Add flag to send server hash instead of distinct id (#1490)
+
+## 1.200.1 - 2024-12-13
+
+- fix: Make legacy property sturdier (#1602)
+
+## 1.200.0 - 2024-12-13
+
+- fix: Refactor decide loading (#1596)
+
+## 1.199.0 - 2024-12-12
+
+- chore(flags): Add new debugging property `$used_bootstrap_value`, `$feature_flag_bootstrapped_response` and `$feature_flag_bootstrapped_payload` to `$feature_flag_called` event (#1567)
+
+## 1.198.0 - 2024-12-12
+
+- feat: Allow users to customize `fetch` behavior (#1599)
+
+## 1.197.0 - 2024-12-12
+
+- feat: send snapshot library (#1587)
+
+## 1.196.1 - 2024-12-12
+
+- feat: Don't create person profile when setting properties for flags (#1586)
+
+## 1.196.0 - 2024-12-12
+
+- feat: include attribution with all web vitals (#1594)
+
+## 1.195.0 - 2024-12-10
+
+- Reduce type (#1590)
+
 ## 1.194.6 - 2024-12-09
 
 - feat: Load site functions via RemoteConfig (#1580)

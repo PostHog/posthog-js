@@ -2,8 +2,7 @@ import { USER_STATE } from '../constants'
 import { uuidv7 } from '../uuidv7'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { PostHog } from '../posthog-core'
-
-jest.mock('../decide')
+import { assignableWindow } from '../utils/globals'
 
 describe('identify()', () => {
     let instance: PostHog
@@ -11,14 +10,24 @@ describe('identify()', () => {
 
     beforeEach(() => {
         beforeSendMock = jest.fn().mockImplementation((e) => e)
+        const token = uuidv7()
+        // NOTE: Temporary change whilst testing remote config
+        assignableWindow._POSTHOG_REMOTE_CONFIG = {
+            [token]: {
+                config: {},
+                siteApps: [],
+            },
+        } as any
+
         const posthog = defaultPostHog().init(
-            uuidv7(),
+            token,
             {
                 api_host: 'https://test.com',
                 before_send: beforeSendMock,
             },
-            uuidv7()
+            token
         )
+
         instance = Object.assign(posthog, {
             register: jest.fn(),
             featureFlags: {
@@ -197,6 +206,22 @@ describe('identify()', () => {
                     }),
                 })
             )
+            expect(instance.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
+        })
+
+        it('does not call $set when duplicate properties are passed', () => {
+            instance.identify('a-new-id', { email: 'john@example.com' }, { howOftenAmISet: 'once!' })
+            instance.identify('a-new-id', { email: 'john@example.com' }, { howOftenAmISet: 'once!' })
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(1)
+            expect(instance.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
+        })
+
+        it('calls $set when different properties are passed with the same distinct_id', () => {
+            instance.identify('a-new-id', { email: 'john@example.com' }, { howOftenAmISet: 'once!' })
+            instance.identify('a-new-id', { email: 'john@example.com' }, { howOftenAmISet: 'twice!' })
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(2)
             expect(instance.featureFlags.setAnonymousDistinctId).not.toHaveBeenCalled()
         })
     })

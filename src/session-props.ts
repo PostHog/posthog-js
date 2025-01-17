@@ -8,9 +8,10 @@
  */
 import { location } from './utils/globals'
 import { Info } from './utils/event-utils'
-import { SessionIdManager } from './sessionid'
-import { PostHogPersistence } from './posthog-persistence'
+import type { SessionIdManager } from './sessionid'
+import type { PostHogPersistence } from './posthog-persistence'
 import { CLIENT_SESSION_PROPS } from './constants'
+import type { PostHog } from './posthog-core'
 
 interface SessionSourceProps {
     initialPathName: string
@@ -27,24 +28,32 @@ interface StoredSessionSourceProps {
     props: SessionSourceProps
 }
 
-const generateSessionSourceParams = (): SessionSourceProps => {
+const generateSessionSourceParams = (instance?: PostHog): SessionSourceProps => {
+    const config = instance?.config
     return {
         initialPathName: location?.pathname || '',
         referringDomain: Info.referringDomain(),
-        ...Info.campaignParams(),
+        ...Info.campaignParams({
+            customTrackedParams: config?.custom_campaign_params,
+            maskPersonalDataProperties: config?.mask_personal_data_properties,
+            customPersonalDataProperties: config?.custom_personal_data_properties,
+        }),
     }
 }
 
 export class SessionPropsManager {
+    private readonly instance: PostHog
     private readonly _sessionIdManager: SessionIdManager
     private readonly _persistence: PostHogPersistence
-    private readonly _sessionSourceParamGenerator: () => SessionSourceProps
+    private readonly _sessionSourceParamGenerator: (instance?: PostHog) => SessionSourceProps
 
     constructor(
+        instance: PostHog,
         sessionIdManager: SessionIdManager,
         persistence: PostHogPersistence,
-        sessionSourceParamGenerator?: () => SessionSourceProps
+        sessionSourceParamGenerator?: (instance?: PostHog) => SessionSourceProps
     ) {
+        this.instance = instance
         this._sessionIdManager = sessionIdManager
         this._persistence = persistence
         this._sessionSourceParamGenerator = sessionSourceParamGenerator || generateSessionSourceParams
@@ -64,7 +73,7 @@ export class SessionPropsManager {
 
         const newProps: StoredSessionSourceProps = {
             sessionId,
-            props: this._sessionSourceParamGenerator(),
+            props: this._sessionSourceParamGenerator(this.instance),
         }
         this._persistence.register({ [CLIENT_SESSION_PROPS]: newProps })
     }

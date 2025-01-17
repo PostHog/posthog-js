@@ -2,8 +2,11 @@ import { window } from './utils/globals'
 import { PostHog } from './posthog-core'
 import { isUndefined } from './utils/type-utils'
 import { clampToRange } from './utils/number-utils'
+import { extend } from './utils'
 
 interface PageViewEventProperties {
+    $pageview_id?: string
+    $prev_pageview_id?: string
     $prev_pageview_pathname?: string
     $prev_pageview_duration?: number // seconds
     $prev_pageview_last_scroll?: number
@@ -16,42 +19,56 @@ interface PageViewEventProperties {
     $prev_pageview_max_content_percentage?: number
 }
 
+// This keeps track of the PageView state (such as the previous PageView's path, timestamp, id, and scroll properties).
+// We store the state in memory, which means that for non-SPA sites, the state will be lost on page reload. This means
+// that non-SPA sites should always send a $pageleave event on any navigation, before the page unloads. For SPA sites,
+// they only need to send a $pageleave event when the user navigates away from the site, as the information is not lost
+// on an internal navigation, and is included as the $prev_pageview_ properties in the next $pageview event.
+
+// Practically, this means that to find the scroll properties for a given pageview, you need to find the event where
+// event name is $pageview or $pageleave and where $prev_pageview_id matches the original pageview event's id.
+
 export class PageViewManager {
-    _currentPath?: string
-    _prevPageviewTimestamp?: Date
+    _currentPageview?: { timestamp: Date; pageViewId: string | undefined; pathname: string | undefined }
     _instance: PostHog
 
     constructor(instance: PostHog) {
         this._instance = instance
     }
 
-    doPageView(timestamp: Date): PageViewEventProperties {
-        const response = this._previousPageViewProperties(timestamp)
+    doPageView(timestamp: Date, pageViewId?: string): PageViewEventProperties {
+        const response = this._previousPageViewProperties(timestamp, pageViewId)
 
         // On a pageview we reset the contexts
-        this._currentPath = window?.location.pathname ?? ''
+        this._currentPageview = { pathname: window?.location.pathname ?? '', pageViewId, timestamp }
         this._instance.scrollManager.resetContext()
-        this._prevPageviewTimestamp = timestamp
 
         return response
     }
 
     doPageLeave(timestamp: Date): PageViewEventProperties {
-        return this._previousPageViewProperties(timestamp)
+        return this._previousPageViewProperties(timestamp, this._currentPageview?.pageViewId)
     }
 
-    private _previousPageViewProperties(timestamp: Date): PageViewEventProperties {
-        const previousPath = this._currentPath
-        const previousTimestamp = this._prevPageviewTimestamp
-        const scrollContext = this._instance.scrollManager.getContext()
+    doEvent(): PageViewEventProperties {
+        return { $pageview_id: this._currentPageview?.pageViewId }
+    }
 
-        if (!previousTimestamp) {
-            // this means there was no previous pageview
-            return {}
+    private _previousPageViewProperties(timestamp: Date, pageviewId: string | undefined): PageViewEventProperties {
+        const previousPageView = this._currentPageview
+
+        if (!previousPageView) {
+            return { $pageview_id: pageviewId }
         }
 
-        let properties: PageViewEventProperties = {}
-        if (scrollContext) {
+        let properties: PageViewEventProperties = {
+            $pageview_id: pageviewId,
+            $prev_pageview_id: previousPageView.pageViewId,
+        }
+
+        const scrollContext = this._instance.scrollManager.getContext()
+
+        if (scrollContext && !this._instance.config.disable_scroll_properties) {
             let { maxScrollHeight, lastScrollY, maxScrollY, maxContentHeight, lastContentY, maxContentY } =
                 scrollContext
 
@@ -80,7 +97,7 @@ export class PageViewManager {
                 const maxContentPercentage =
                     maxContentHeight <= 1 ? 1 : clampToRange(maxContentY / maxContentHeight, 0, 1)
 
-                properties = {
+                properties = extend(properties, {
                     $prev_pageview_last_scroll: lastScrollY,
                     $prev_pageview_last_scroll_percentage: lastScrollPercentage,
                     $prev_pageview_max_scroll: maxScrollY,
@@ -89,16 +106,16 @@ export class PageViewManager {
                     $prev_pageview_last_content_percentage: lastContentPercentage,
                     $prev_pageview_max_content: maxContentY,
                     $prev_pageview_max_content_percentage: maxContentPercentage,
-                }
+                })
             }
         }
 
-        if (previousPath) {
-            properties.$prev_pageview_pathname = previousPath
+        if (previousPageView.pathname) {
+            properties.$prev_pageview_pathname = previousPageView.pathname
         }
-        if (previousTimestamp) {
+        if (previousPageView.timestamp) {
             // Use seconds, for consistency with our other duration-related properties like $duration
-            properties.$prev_pageview_duration = (timestamp.getTime() - previousTimestamp.getTime()) / 1000
+            properties.$prev_pageview_duration = (timestamp.getTime() - previousPageView.timestamp.getTime()) / 1000
         }
 
         return properties

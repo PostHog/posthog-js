@@ -2,9 +2,10 @@ import { registerEvent, trySafe } from '../utils'
 import { PostHog } from '../posthog-core'
 import { ToolbarParams } from '../types'
 import { _getHashParam } from '../utils/request-utils'
-import { logger } from '../utils/logger'
+import { createLogger } from '../utils/logger'
 import { window, document, assignableWindow } from '../utils/globals'
 import { TOOLBAR_ID } from '../constants'
+import { isFunction, isNullish } from '../utils/type-utils'
 
 // TRICKY: Many web frameworks will modify the route on load, potentially before posthog is initialized.
 // To get ahead of this we grab it as soon as the posthog-js is parsed
@@ -13,6 +14,8 @@ const STATE_FROM_WINDOW = window?.location
     : null
 
 const LOCALSTORAGE_KEY = '_postHogToolbarParams'
+
+const logger = createLogger('[Toolbar]')
 
 enum ToolbarState {
     UNINITIALIZED = 0,
@@ -124,7 +127,12 @@ export class Toolbar {
     }
 
     private _callLoadToolbar(params: ToolbarParams) {
-        ;(assignableWindow['ph_load_toolbar'] || assignableWindow['ph_load_editor'])(params, this.instance)
+        const loadFn = assignableWindow['ph_load_toolbar'] || assignableWindow['ph_load_editor']
+        if (isNullish(loadFn) || !isFunction(loadFn)) {
+            logger.warn('No toolbar load function found')
+            return
+        }
+        loadFn(params, this.instance)
     }
 
     loadToolbar(params?: ToolbarParams): boolean {

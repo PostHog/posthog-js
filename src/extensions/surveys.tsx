@@ -9,31 +9,31 @@ import {
     SurveyType,
 } from '../posthog-surveys-types'
 
-import { window as _window, document as _document } from '../utils/globals'
+import * as Preact from 'preact'
+import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks'
+import { document as _document, window as _window } from '../utils/globals'
+import { createLogger } from '../utils/logger'
+import { isNull, isNumber } from '../utils/type-utils'
+import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
+import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
+import { Cancel } from './surveys/components/QuestionHeader'
 import {
-    style,
-    defaultSurveyAppearance,
-    sendSurveyEvent,
-    dismissedSurveyEvent,
+    LinkQuestion,
+    MultipleChoiceQuestion,
+    OpenTextQuestion,
+    RatingQuestion,
+} from './surveys/components/QuestionTypes'
+import {
     createShadow,
+    defaultSurveyAppearance,
+    dismissedSurveyEvent,
     getContrastingTextColor,
-    SurveyContext,
     getDisplayOrderQuestions,
     getSurveySeen,
+    sendSurveyEvent,
+    style,
+    SurveyContext,
 } from './surveys/surveys-utils'
-import * as Preact from 'preact'
-import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
-import { useState, useEffect, useRef, useContext, useMemo } from 'preact/hooks'
-import { isNull, isNumber } from '../utils/type-utils'
-import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
-import {
-    OpenTextQuestion,
-    LinkQuestion,
-    RatingQuestion,
-    MultipleChoiceQuestion,
-} from './surveys/components/QuestionTypes'
-import { Cancel } from './surveys/components/QuestionHeader'
-import { createLogger } from '../utils/logger'
 const logger = createLogger('[Surveys]')
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
@@ -277,11 +277,13 @@ export const renderSurveysPreview = ({
     parentElement,
     previewPageIndex,
     forceDisableHtml,
+    onPreviewSubmit,
 }: {
     survey: Survey
     parentElement: HTMLElement
     previewPageIndex: number
     forceDisableHtml?: boolean
+    onPreviewSubmit?: (res: string | string[] | number | null) => void
 }) => {
     const surveyStyleSheet = style(survey.appearance)
     const styleElement = Object.assign(document.createElement('style'), { innerText: surveyStyleSheet })
@@ -310,6 +312,7 @@ export const renderSurveysPreview = ({
                 borderRadius: 10,
                 color: textColor,
             }}
+            onPreviewSubmit={onPreviewSubmit}
             previewPageIndex={previewPageIndex}
             removeSurveyFromFocus={() => {}}
             isPopup={true}
@@ -440,6 +443,17 @@ export function usePopupVisibility(
     return { isPopupVisible, isSurveySent, setIsPopupVisible }
 }
 
+interface SurveyPopupProps {
+    survey: Survey
+    forceDisableHtml?: boolean
+    posthog?: PostHog
+    style?: React.CSSProperties
+    previewPageIndex?: number | undefined
+    removeSurveyFromFocus: (id: string) => void
+    isPopup?: boolean
+    onPreviewSubmit?: (res: string | string[] | number | null) => void
+}
+
 export function SurveyPopup({
     survey,
     forceDisableHtml,
@@ -448,15 +462,8 @@ export function SurveyPopup({
     previewPageIndex,
     removeSurveyFromFocus,
     isPopup,
-}: {
-    survey: Survey
-    forceDisableHtml?: boolean
-    posthog?: PostHog
-    style?: React.CSSProperties
-    previewPageIndex?: number | undefined
-    removeSurveyFromFocus: (id: string) => void
-    isPopup?: boolean
-}) {
+    onPreviewSubmit = () => {},
+}: SurveyPopupProps) {
     const isPreviewMode = Number.isInteger(previewPageIndex)
     // NB: The client-side code passes the millisecondDelay in seconds, but setTimeout expects milliseconds, so we multiply by 1000
     const surveyPopupDelayMilliseconds = survey.appearance?.surveyPopupDelaySeconds
@@ -486,6 +493,7 @@ export function SurveyPopup({
                 previewPageIndex: previewPageIndex,
                 handleCloseSurveyPopup: () => dismissedSurveyEvent(survey, posthog, isPreviewMode),
                 isPopup: isPopup || false,
+                onPreviewSubmit,
             }}
         >
             {!shouldShowConfirmation ? (
@@ -527,7 +535,8 @@ export function Questions({
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
     )
     const [questionsResponses, setQuestionsResponses] = useState({})
-    const { isPreviewMode, previewPageIndex, handleCloseSurveyPopup, isPopup } = useContext(SurveyContext)
+    const { isPreviewMode, previewPageIndex, handleCloseSurveyPopup, isPopup, onPreviewSubmit } =
+        useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
@@ -618,6 +627,7 @@ export function Questions({
                                         originalQuestionIndex,
                                         displayQuestionIndex,
                                     }),
+                                onPreviewSubmit,
                             })}
                         </div>
                     )
@@ -705,6 +715,7 @@ interface GetQuestionComponentProps {
     displayQuestionIndex: number
     appearance: SurveyAppearance
     onSubmit: (res: string | string[] | number | null) => void
+    onPreviewSubmit: (res: string | string[] | number | null) => void
 }
 
 const getQuestionComponent = ({
@@ -713,6 +724,7 @@ const getQuestionComponent = ({
     displayQuestionIndex,
     appearance,
     onSubmit,
+    onPreviewSubmit,
 }: GetQuestionComponentProps): JSX.Element => {
     const questionComponents = {
         [SurveyQuestionType.Open]: OpenTextQuestion,
@@ -726,7 +738,12 @@ const getQuestionComponent = ({
         question,
         forceDisableHtml,
         appearance,
-        onSubmit,
+        onPreviewSubmit: (res: string | string[] | number | null) => {
+            onPreviewSubmit(res)
+        },
+        onSubmit: (res: string | string[] | number | null) => {
+            onSubmit(res)
+        },
     }
 
     const additionalProps: Record<SurveyQuestionType, any> = {

@@ -4,7 +4,7 @@ import {
     SurveyType,
     SurveyQuestionType,
     Survey,
-    ActionType,
+    SurveyActionType,
     ActionStepStringMatching,
 } from '../../posthog-surveys-types'
 import { PostHogPersistence } from '../../posthog-persistence'
@@ -209,7 +209,7 @@ describe('survey-event-receiver', () => {
             eventName: string,
             currentUrl?: string,
             urlMatch?: ActionStepStringMatching
-        ): ActionType => {
+        ): SurveyActionType => {
             return {
                 id: id,
                 name: `${eventName || 'user defined '} action`,
@@ -238,7 +238,7 @@ describe('survey-event-receiver', () => {
             type: SurveyType.Popover,
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
             conditions: {
-                actions: [createAction(2, '$autocapture') as unknown as ActionType],
+                actions: [createAction(2, '$autocapture') as unknown as SurveyActionType],
             },
         } as unknown as Survey
 
@@ -249,7 +249,7 @@ describe('survey-event-receiver', () => {
             type: SurveyType.Popover,
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
             conditions: {
-                actions: [createAction(3, '$pageview') as unknown as ActionType],
+                actions: [createAction(3, '$pageview') as unknown as SurveyActionType],
             },
         } as unknown as Survey
 
@@ -262,7 +262,7 @@ describe('survey-event-receiver', () => {
                 questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
                 conditions: {
                     actions: {
-                        values: [createAction(3, '$mypageview') as unknown as ActionType],
+                        values: [createAction(3, '$mypageview') as unknown as SurveyActionType],
                     },
                 },
             } as unknown as Survey

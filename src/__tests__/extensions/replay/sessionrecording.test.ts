@@ -47,12 +47,11 @@ import {
 } from '@rrweb/types'
 import Mock = jest.Mock
 import { ConsentManager } from '../../../consent'
-import { waitFor } from '@testing-library/preact'
 import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
 
 // Type and source defined here designate a non-user-generated recording event
 
-jest.mock('../../../config', () => ({ LIB_VERSION: 'v0.0.1' }))
+jest.mock('../../../config', () => ({ LIB_VERSION: '0.0.1' }))
 
 const EMPTY_BUFFER = {
     data: [],
@@ -68,7 +67,7 @@ const createMetaSnapshot = (event = {}): metaEvent =>
             href: 'https://has-to-be-present-or-invalid.com',
         },
         ...event,
-    } as metaEvent)
+    }) as metaEvent
 
 const createStyleSnapshot = (event = {}): incrementalSnapshotEvent =>
     ({
@@ -77,14 +76,14 @@ const createStyleSnapshot = (event = {}): incrementalSnapshotEvent =>
             source: IncrementalSource.StyleDeclaration,
         },
         ...event,
-    } as incrementalSnapshotEvent)
+    }) as incrementalSnapshotEvent
 
 const createFullSnapshot = (event = {}): fullSnapshotEvent =>
     ({
         type: FULL_SNAPSHOT_EVENT_TYPE,
         data: {},
         ...event,
-    } as fullSnapshotEvent)
+    }) as fullSnapshotEvent
 
 const createIncrementalSnapshot = (event = {}): incrementalSnapshotEvent => ({
     type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
@@ -858,6 +857,8 @@ describe('SessionRecording', () => {
                     ],
                     $session_id: sessionId,
                     $window_id: 'windowId',
+                    $lib: 'web',
+                    $lib_version: '0.0.1',
                 },
                 {
                     _url: 'https://test.com/s/',
@@ -893,6 +894,8 @@ describe('SessionRecording', () => {
                         { type: 3, data: { source: 1 } },
                         { type: 3, data: { source: 2 } },
                     ],
+                    $lib: 'web',
+                    $lib_version: '0.0.1',
                 },
                 {
                     _url: 'https://test.com/s/',
@@ -973,6 +976,8 @@ describe('SessionRecording', () => {
                     $window_id: 'windowId',
                     $snapshot_data: [{ data: { source: 1 }, emit: 1, type: 3 }],
                     $snapshot_bytes: 39,
+                    $lib: 'web',
+                    $lib_version: '0.0.1',
                 },
                 {
                     _url: 'https://test.com/s/',
@@ -1580,6 +1585,8 @@ describe('SessionRecording', () => {
                     $session_id: firstSessionId,
                     $snapshot_bytes: 186,
                     $window_id: expect.any(String),
+                    $lib: 'web',
+                    $lib_version: '0.0.1',
                 },
                 {
                     _batchKey: 'recordings',
@@ -1670,6 +1677,8 @@ describe('SessionRecording', () => {
                     $session_id: firstSessionId,
                     $snapshot_bytes: 186,
                     $window_id: expect.any(String),
+                    $lib: 'web',
+                    $lib_version: '0.0.1',
                 },
                 {
                     _batchKey: 'recordings',
@@ -1696,6 +1705,8 @@ describe('SessionRecording', () => {
                     $session_id: firstSessionId,
                     $snapshot_bytes: 186,
                     $window_id: expect.any(String),
+                    $lib: 'web',
+                    $lib_version: '0.0.1',
                 },
                 {
                     _batchKey: 'recordings',
@@ -1970,21 +1981,26 @@ describe('SessionRecording', () => {
             })
             sessionRecording = new SessionRecording(posthog)
 
-            sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
-            sessionRecording.startIfEnabledOrStop()
-            expect(loadScriptMock).toHaveBeenCalled()
-
             expect(sessionRecording['queuedRRWebEvents']).toHaveLength(0)
 
-            sessionRecording['_tryAddCustomEvent']('test', { test: 'test' })
+            sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
+
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(1)
+
+            sessionRecording.startIfEnabledOrStop()
+            expect(loadScriptMock).toHaveBeenCalled()
         })
 
         it('queues events', () => {
-            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(1)
+            sessionRecording['_tryAddCustomEvent']('test', { test: 'test' })
+
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(2)
         })
 
         it('limits the queue of events', () => {
-            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(1)
+            sessionRecording['_tryAddCustomEvent']('test', { test: 'test' })
+
+            expect(sessionRecording['queuedRRWebEvents']).toHaveLength(2)
 
             for (let i = 0; i < 100; i++) {
                 sessionRecording['_tryAddCustomEvent']('test', { test: 'test' })
@@ -2116,6 +2132,8 @@ describe('SessionRecording', () => {
                     $session_id: sessionId,
                     $snapshot_bytes: expect.any(Number),
                     $window_id: 'windowId',
+                    $lib: 'web',
+                    $lib_version: '0.0.1',
                 },
                 captureOptions
             )
@@ -2137,6 +2155,8 @@ describe('SessionRecording', () => {
                     $session_id: sessionId,
                     $snapshot_bytes: expect.any(Number),
                     $window_id: 'windowId',
+                    $lib: 'web',
+                    $lib_version: '0.0.1',
                 },
                 captureOptions
             )
@@ -2166,6 +2186,8 @@ describe('SessionRecording', () => {
                     $session_id: sessionId,
                     $snapshot_bytes: expect.any(Number),
                     $window_id: 'windowId',
+                    $lib: 'web',
+                    $lib_version: '0.0.1',
                 },
                 captureOptions
             )
@@ -2196,6 +2218,8 @@ describe('SessionRecording', () => {
                     $session_id: sessionId,
                     $snapshot_bytes: expect.any(Number),
                     $window_id: 'windowId',
+                    $lib: 'web',
+                    $lib_version: '0.0.1',
                 },
                 captureOptions
             )
@@ -2215,6 +2239,8 @@ describe('SessionRecording', () => {
                     $session_id: sessionId,
                     $snapshot_bytes: 86,
                     $window_id: 'windowId',
+                    $lib: 'web',
+                    $lib_version: '0.0.1',
                 },
                 captureOptions
             )
@@ -2239,6 +2265,8 @@ describe('SessionRecording', () => {
                     $session_id: sessionId,
                     $snapshot_bytes: 58,
                     $window_id: 'windowId',
+                    $lib: 'web',
+                    $lib_version: '0.0.1',
                 },
                 captureOptions
             )
@@ -2262,6 +2290,8 @@ describe('SessionRecording', () => {
                     $session_id: sessionId,
                     $snapshot_bytes: 69,
                     $window_id: 'windowId',
+                    $lib: 'web',
+                    $lib_version: '0.0.1',
                 },
                 captureOptions
             )
@@ -2286,36 +2316,34 @@ describe('SessionRecording', () => {
             )
         })
 
-        it('flushes buffer and includes pause event when hitting blocked URL', async () => {
+        it('does not flush buffer and includes pause event when hitting blocked URL', async () => {
             // Emit some events before hitting blocked URL
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
             _emit(createIncrementalSnapshot({ data: { source: 2 } }))
 
             // Simulate URL change to blocked URL
             fakeNavigateTo('https://test.com/blocked')
-            _emit(createIncrementalSnapshot({ data: { source: 3 } }))
-            expect(document.body).toHaveClass('ph-no-capture')
 
-            await waitFor(() => {
-                // Verify the buffer was flushed with all events including pause
-                expect(posthog.capture).toHaveBeenCalledWith(
-                    '$snapshot',
-                    {
-                        $session_id: sessionId,
-                        $window_id: 'windowId',
-                        $snapshot_bytes: expect.any(Number),
-                        $snapshot_data: [
-                            { type: 3, data: { source: 1 } },
-                            { type: 3, data: { source: 2 } },
-                        ],
-                    },
-                    expect.any(Object)
-                )
-            })
+            expect(posthog.capture).not.toHaveBeenCalled()
 
             // Verify subsequent events are not captured while on blocked URL
+            _emit(createIncrementalSnapshot({ data: { source: 3 } }))
             _emit(createIncrementalSnapshot({ data: { source: 4 } }))
-            expect(sessionRecording['buffer'].data).toHaveLength(0)
+
+            expect(sessionRecording['buffer'].data).toEqual([
+                {
+                    data: {
+                        source: 1,
+                    },
+                    type: 3,
+                },
+                {
+                    data: {
+                        source: 2,
+                    },
+                    type: 3,
+                },
+            ])
 
             // Simulate URL change to allowed URL
             fakeNavigateTo('https://test.com/allowed')
@@ -2323,9 +2351,20 @@ describe('SessionRecording', () => {
             // Verify recording resumes with resume event
             _emit(createIncrementalSnapshot({ data: { source: 5 } }))
 
-            expect(document.body).not.toHaveClass('ph-no-capture')
-
             expect(sessionRecording['buffer'].data).toStrictEqual([
+                {
+                    data: {
+                        source: 1,
+                    },
+                    type: 3,
+                },
+                {
+                    data: {
+                        source: 2,
+                    },
+                    type: 3,
+                },
+                // restarts with a snapshot
                 expect.objectContaining({
                     type: 2,
                 }),

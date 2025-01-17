@@ -1,14 +1,14 @@
+import { RefObject } from 'preact'
+import { useMemo, useRef, useState } from 'preact/hooks'
 import {
     BasicSurveyQuestion,
-    SurveyAppearance,
     LinkSurveyQuestion,
-    RatingSurveyQuestion,
     MultipleSurveyQuestion,
+    RatingSurveyQuestion,
+    SurveyAppearance,
     SurveyQuestionType,
 } from '../../../posthog-surveys-types'
-import { RefObject } from 'preact'
-import { useRef, useState, useMemo } from 'preact/hooks'
-import { isNull, isArray } from '../../../utils/type-utils'
+import { isArray, isNull } from '../../../utils/type-utils'
 import { useContrastingTextColor } from '../hooks/useContrastingTextColor'
 import {
     checkSVG,
@@ -22,16 +22,21 @@ import { getDisplayOrderChoices } from '../surveys-utils'
 import { BottomSection } from './BottomSection'
 import { QuestionHeader } from './QuestionHeader'
 
+interface CommonProps {
+    forceDisableHtml: boolean
+    appearance: SurveyAppearance
+    onSubmit: (res: string | string[] | number | null) => void
+    onPreviewSubmit: (res: string | string[] | number | null) => void
+}
+
 export function OpenTextQuestion({
     question,
     forceDisableHtml,
     appearance,
     onSubmit,
-}: {
+    onPreviewSubmit,
+}: CommonProps & {
     question: BasicSurveyQuestion
-    forceDisableHtml: boolean
-    appearance: SurveyAppearance
-    onSubmit: (text: string) => void
 }) {
     const textRef = useRef(null)
     const [text, setText] = useState('')
@@ -51,6 +56,7 @@ export function OpenTextQuestion({
                 submitDisabled={!text && !question.optional}
                 appearance={appearance}
                 onSubmit={() => onSubmit(text)}
+                onPreviewSubmit={() => onPreviewSubmit(text)}
             />
         </div>
     )
@@ -61,11 +67,9 @@ export function LinkQuestion({
     forceDisableHtml,
     appearance,
     onSubmit,
-}: {
+    onPreviewSubmit,
+}: CommonProps & {
     question: LinkSurveyQuestion
-    forceDisableHtml: boolean
-    appearance: SurveyAppearance
-    onSubmit: (clicked: string) => void
 }) {
     return (
         <>
@@ -81,6 +85,7 @@ export function LinkQuestion({
                 link={question.link}
                 appearance={appearance}
                 onSubmit={() => onSubmit('link clicked')}
+                onPreviewSubmit={() => onPreviewSubmit('link clicked')}
             />
         </>
     )
@@ -92,12 +97,10 @@ export function RatingQuestion({
     displayQuestionIndex,
     appearance,
     onSubmit,
-}: {
+    onPreviewSubmit,
+}: CommonProps & {
     question: RatingSurveyQuestion
-    forceDisableHtml: boolean
     displayQuestionIndex: number
-    appearance: SurveyAppearance
-    onSubmit: (rating: number | null) => void
 }) {
     const scale = question.scale
     const starting = question.scale === 10 ? 0 : 1
@@ -175,6 +178,7 @@ export function RatingQuestion({
                 submitDisabled={isNull(rating) && !question.optional}
                 appearance={appearance}
                 onSubmit={() => onSubmit(rating)}
+                onPreviewSubmit={() => onPreviewSubmit(rating)}
             />
         </>
     )
@@ -221,12 +225,10 @@ export function MultipleChoiceQuestion({
     displayQuestionIndex,
     appearance,
     onSubmit,
-}: {
+    onPreviewSubmit,
+}: CommonProps & {
     question: MultipleSurveyQuestion
-    forceDisableHtml: boolean
     displayQuestionIndex: number
-    appearance: SurveyAppearance
-    onSubmit: (choices: string | string[] | null) => void
 }) {
     const textRef = useRef(null)
     const choices = useMemo(() => getDisplayOrderChoices(question), [question])
@@ -342,6 +344,15 @@ export function MultipleChoiceQuestion({
                         }
                     } else {
                         onSubmit(selectedChoices)
+                    }
+                }}
+                onPreviewSubmit={() => {
+                    if (openChoiceSelected && question.type === SurveyQuestionType.MultipleChoice) {
+                        if (isArray(selectedChoices)) {
+                            onPreviewSubmit([...selectedChoices, openEndedInput])
+                        }
+                    } else {
+                        onPreviewSubmit(selectedChoices)
                     }
                 }}
             />

@@ -1,6 +1,6 @@
 /* eslint camelcase: "off" */
 
-import { each, extend, include, stripEmptyProperties, stripLeadingDollar } from './utils'
+import { each, extend, include, stripEmptyProperties } from './utils'
 import { cookieStore, localPlusCookieStore, localStore, memoryStore, sessionStore } from './storage'
 import { PersistentStore, PostHogConfig, Properties } from './types'
 import {
@@ -15,6 +15,7 @@ import {
 import { isEmptyObject, isObject, isUndefined } from './utils/type-utils'
 import { Info } from './utils/event-utils'
 import { logger } from './utils/logger'
+import { stripLeadingDollar } from './utils/string-utils'
 
 const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['persistence']>[] = [
     'cookie',
@@ -221,7 +222,11 @@ export class PostHogPersistence {
 
     update_campaign_params(): void {
         if (!this.campaign_params_saved) {
-            const campaignParams = Info.campaignParams(this.config.custom_campaign_params)
+            const campaignParams = Info.campaignParams({
+                customTrackedParams: this.config.custom_campaign_params,
+                maskPersonalDataProperties: this.config.mask_personal_data_properties,
+                customPersonalDataProperties: this.config.custom_personal_data_properties,
+            })
             // only save campaign params if there were any
             if (!isEmptyObject(stripEmptyProperties(campaignParams))) {
                 this.register(campaignParams)

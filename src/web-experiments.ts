@@ -151,7 +151,6 @@ export class WebExperiments {
                 `/api/web_experiments/?token=${this.instance.config.token}`
             ),
             method: 'GET',
-            transport: 'XHR',
             callback: (response) => {
                 if (response.statusCode !== 200 || !response.json) {
                     return callback([])
@@ -171,8 +170,7 @@ export class WebExperiments {
             this.applyTransforms(
                 previewExperiments[0].name,
                 variant,
-                previewExperiments[0].variants[variant].transforms,
-                true
+                previewExperiments[0].variants[variant].transforms
             )
         }
     }
@@ -239,12 +237,7 @@ export class WebExperiments {
         logger.info(`[WebExperiments] ${msg}`, args)
     }
 
-    private applyTransforms(
-        experiment: string,
-        variant: string,
-        transforms: WebExperimentTransform[],
-        isPreview?: boolean
-    ) {
+    private applyTransforms(experiment: string, variant: string, transforms: WebExperimentTransform[]) {
         if (this._is_bot()) {
             WebExperiments.logInfo('Refusing to render web experiment since the viewer is a likely bot')
             return
@@ -252,16 +245,6 @@ export class WebExperiments {
 
         if (variant === 'control') {
             WebExperiments.logInfo('Control variants leave the page unmodified.')
-            if (this.instance && this.instance.capture) {
-                this.instance.capture('$web_experiment_applied', {
-                    $web_experiment_name: experiment,
-                    $web_experiment_preview: isPreview,
-                    $web_experiment_variant: variant,
-                    $web_experiment_document_url: WebExperiments.getWindowLocation()?.href,
-                    $web_experiment_elements_modified: 0,
-                })
-            }
-
             return
         }
 
@@ -272,12 +255,10 @@ export class WebExperiments {
                     transform
                 )
 
-                let elementsModified = 0
                 // eslint-disable-next-line no-restricted-globals
                 const elements = document?.querySelectorAll(transform.selector)
                 elements?.forEach((element) => {
                     const htmlElement = element as HTMLElement
-                    elementsModified += 1
                     if (transform.attributes) {
                         transform.attributes.forEach((attribute) => {
                             switch (attribute.name) {
@@ -315,16 +296,6 @@ export class WebExperiments {
                         htmlElement.setAttribute('style', transform.css)
                     }
                 })
-
-                if (this.instance && this.instance.capture) {
-                    this.instance.capture('$web_experiment_applied', {
-                        $web_experiment_name: experiment,
-                        $web_experiment_variant: variant,
-                        $web_experiment_preview: isPreview,
-                        $web_experiment_document_url: WebExperiments.getWindowLocation()?.href,
-                        $web_experiment_elements_modified: elementsModified,
-                    })
-                }
             }
         })
     }

@@ -15,8 +15,8 @@
         Send custom event
     </button>
 
-        <button data-cy-network-call-button onclick="fetch('https://example.com', {body: 'i am the fetch body', method: 'POST'})">
-        Make network call
+        <button data-cy-fetch-call-button onclick="makeFetchNetworkPost()">
+        Make fetch post network call
     </button>
 
     <button data-cy-xhr-call-button onclick="makeXHRNetworkPOST()">
@@ -24,6 +24,16 @@
 </button>
 
 <script>
+    function makeFetchNetworkPost() {
+        fetch('https://example.com', {
+            body: 'i am the fetch body',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+    }
+
     function makeXHRNetworkPOST() {
         const xhr = new XMLHttpRequest();
         xhr.open('POST', 'https://example.com');
@@ -80,7 +90,7 @@
 
     <div style="display: flex; flex-direction: column; gap: 0.5em;">
         <h3>my favourite takeaway has this order now not button in their hero image</h3>
-        <div>it's a great example of why you need dead click tracking</div>
+        <div data-cy-dead-click-text style="width: fit-content">it's a great example of why you need dead click tracking</div>
         <img data-cy-not-an-order-button width="400" height="200" alt="my favourite takeaway has this order now not button in their hero image" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAIAAADTED8xAAADMElEQVR4nOzVwQnAIBQFQYXff81RUkQCOyDj1YOPnbXWPmeTRef+/3O/OyBjzh3CD95BfqICMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMK0CMO0TAAD//2Anhf4QtqobAAAAAElFTkSuQmCC" />
     </div>
 

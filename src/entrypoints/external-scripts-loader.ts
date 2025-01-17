@@ -14,12 +14,20 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
         if (!document) {
             return callback('document not found')
         }
-        const scriptTag = document.createElement('script')
+        let scriptTag: HTMLScriptElement | null = document.createElement('script')
         scriptTag.type = 'text/javascript'
         scriptTag.crossOrigin = 'anonymous'
         scriptTag.src = url
         scriptTag.onload = (event) => callback(undefined, event)
         scriptTag.onerror = (error) => callback(error)
+
+        if (posthog.config.prepare_external_dependency_script) {
+            scriptTag = posthog.config.prepare_external_dependency_script(scriptTag)
+        }
+
+        if (!scriptTag) {
+            return callback('prepare_external_dependency_script returned null')
+        }
 
         const scripts = document.querySelectorAll('body > script')
         if (scripts.length > 0) {

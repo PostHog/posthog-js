@@ -286,13 +286,7 @@ describe('Web Experimentation', () => {
             }
 
             assertElementChanged('Signup', 'innerText', 'Sign me up')
-            expect(posthog.capture).toHaveBeenCalledWith('$web_experiment_applied', {
-                $web_experiment_document_url:
-                    'https://example.com/landing-page?utm_campaign=marketing&utm_medium=mobile',
-                $web_experiment_elements_modified: 1,
-                $web_experiment_name: 'Signup button test',
-                $web_experiment_variant: 'Signup',
-            })
+            expect(posthog.capture).not.toHaveBeenCalled()
         })
 
         it('makes no modifications if control variant', () => {
@@ -300,13 +294,7 @@ describe('Web Experimentation', () => {
                 experiments: [signupButtonWebExperimentWithFeatureFlag],
             }
             assertElementChanged('control', 'innerText', 'original')
-            expect(posthog.capture).toHaveBeenCalledWith('$web_experiment_applied', {
-                $web_experiment_document_url:
-                    'https://example.com/landing-page?utm_campaign=marketing&utm_medium=mobile',
-                $web_experiment_elements_modified: 0,
-                $web_experiment_name: 'Signup button test',
-                $web_experiment_variant: 'control',
-            })
+            expect(posthog.capture).not.toHaveBeenCalled()
         })
 
         it('can render previews based on URL params', () => {
@@ -327,14 +315,7 @@ describe('Web Experimentation', () => {
 
             WebExperiments.getWindowLocation = original
             expect(elParent.innerText).toEqual('Sign me up')
-            expect(posthog.capture).toHaveBeenCalledWith('$web_experiment_applied', {
-                $web_experiment_document_url:
-                    'https://example.com/landing-page?__experiment_id=3&__experiment_variant=Signup',
-                $web_experiment_elements_modified: 1,
-                $web_experiment_name: 'Signup button test',
-                $web_experiment_variant: 'Signup',
-                $web_experiment_preview: true,
-            })
+            expect(posthog.capture).not.toHaveBeenCalled()
         })
 
         it('can set css of Span Element', async () => {

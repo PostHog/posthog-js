@@ -4,11 +4,9 @@ import {
     each,
     eachArray,
     extend,
-    includes,
     registerEvent,
     safewrapClass,
     isCrossDomainCookie,
-    isDistinctIdStringLike,
 } from './utils'
 import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
 import { PostHogFeatureFlags } from './posthog-featureflags'
@@ -19,9 +17,11 @@ import {
     PEOPLE_DISTINCT_ID_KEY,
     USER_STATE,
     ENABLE_PERSON_PROCESSING,
+    COOKIELESS_SENTINEL_VALUE,
+    COOKIELESS_MODE_FLAG_PROPERTY,
 } from './constants'
 import { SessionRecording } from './extensions/replay/sessionrecording'
-import { Decide } from './decide'
+import { RemoteConfigLoader } from './remote-config'
 import { Toolbar } from './extensions/toolbar'
 import { localStore } from './storage'
 import { RequestQueue } from './request-queue'
@@ -82,6 +82,8 @@ import { WebExperiments } from './web-experiments'
 import { PostHogExceptions } from './posthog-exceptions'
 import { SiteApps } from './site-apps'
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
+import { includes, isDistinctIdStringLike } from './utils/string-utils'
+import { getIdentifyHash } from './utils/identify-utils'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -165,6 +167,8 @@ export const defaultConfig = (): PostHogConfig => ({
     session_recording: {},
     mask_all_element_attributes: false,
     mask_all_text: false,
+    mask_personal_data_properties: false,
+    custom_personal_data_properties: [],
     advanced_disable_decide: false,
     advanced_disable_feature_flags: false,
     advanced_disable_feature_flags_on_first_load: false,
@@ -275,15 +279,20 @@ export class PostHog {
     _triggered_notifs: any
     compression?: Compression
     __request_queue: QueuedRequestOptions[]
-    decideEndpointWasHit: boolean
     analyticsDefaultEndpoint: string
     version = Config.LIB_VERSION
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
+    _cachedIdentify: string | null
 
     SentryIntegration: typeof SentryIntegration
     sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
 
     private _internalEventEmitter = new SimpleEventEmitter()
+
+    // Legacy property to support existing usage - this isn't technically correct but it's what it has always been - a proxy for flags being loaded
+    public get decideEndpointWasHit(): boolean {
+        return this.featureFlags?.hasLoadedFlags ?? false
+    }
 
     /** DEPRECATED: We keep this to support existing usage but now one should just call .setPersonProperties */
     people: {
@@ -294,7 +303,6 @@ export class PostHog {
     constructor() {
         this.config = defaultConfig()
 
-        this.decideEndpointWasHit = false
         this.SentryIntegration = SentryIntegration
         this.sentryIntegration = (options?: SentryIntegrationOptions) => sentryIntegration(this, options)
         this.__request_queue = []
@@ -302,7 +310,7 @@ export class PostHog {
         this.analyticsDefaultEndpoint = '/e/'
         this._initialPageviewCaptured = false
         this._initialPersonProfilesConfig = null
-
+        this._cachedIdentify = null
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
         this.scrollManager = new ScrollManager(this)
@@ -429,16 +437,20 @@ export class PostHog {
         this._retryQueue = new RetryQueue(this)
         this.__request_queue = []
 
-        this.sessionManager = new SessionIdManager(this)
-        this.sessionPropsManager = new SessionPropsManager(this.sessionManager, this.persistence)
+        if (!this.config.__preview_experimental_cookieless_mode) {
+            this.sessionManager = new SessionIdManager(this)
+            this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
+        }
 
         new TracingHeaders(this).startIfEnabledOrStop()
 
         this.siteApps = new SiteApps(this)
         this.siteApps?.init()
 
-        this.sessionRecording = new SessionRecording(this)
-        this.sessionRecording.startIfEnabledOrStop()
+        if (!this.config.__preview_experimental_cookieless_mode) {
+            this.sessionRecording = new SessionRecording(this)
+            this.sessionRecording.startIfEnabledOrStop()
+        }
 
         if (!this.config.disable_scroll_properties) {
             this.scrollManager.startMeasuringScrollPosition()
@@ -507,10 +519,18 @@ export class PostHog {
             this.featureFlags.receivedFeatureFlags({ featureFlags: activeFlags, featureFlagPayloads })
         }
 
-        if (!this.get_distinct_id()) {
+        if (this.config.__preview_experimental_cookieless_mode) {
+            this.register_once(
+                {
+                    distinct_id: COOKIELESS_SENTINEL_VALUE,
+                    $device_id: null,
+                },
+                ''
+            )
+        } else if (!this.get_distinct_id()) {
             // There is no need to set the distinct id
             // or the device id if something was already stored
-            // in the persitence
+            // in the persistence
             const uuid = this.config.get_device_id(uuidv7())
 
             this.register_once(
@@ -545,13 +565,21 @@ export class PostHog {
     }
 
     _onRemoteConfig(config: RemoteConfig) {
+        if (!(document && document.body)) {
+            logger.info('document not ready yet, trying again in 500 milliseconds...')
+            setTimeout(() => {
+                this._onRemoteConfig(config)
+            }, 500)
+            return
+        }
+
         this.compression = undefined
         if (config.supportedCompression && !this.config.disable_compression) {
             this.compression = includes(config['supportedCompression'], Compression.GZipJS)
                 ? Compression.GZipJS
                 : includes(config['supportedCompression'], Compression.Base64)
-                ? Compression.Base64
-                : undefined
+                  ? Compression.Base64
+                  : undefined
         }
 
         if (config.analytics?.endpoint) {
@@ -562,8 +590,8 @@ export class PostHog {
             person_profiles: this._initialPersonProfilesConfig
                 ? this._initialPersonProfilesConfig
                 : config['defaultIdentifiedOnly']
-                ? 'identified_only'
-                : 'always',
+                  ? 'identified_only'
+                  : 'always',
         })
 
         this.siteApps?.onRemoteConfig(config)
@@ -577,13 +605,6 @@ export class PostHog {
     }
 
     _loaded(): void {
-        // Pause `reloadFeatureFlags` calls in config.loaded callback.
-        // These feature flags are loaded in the decide call made right after
-        const disableDecide = this.config.advanced_disable_decide
-        if (!disableDecide) {
-            this.featureFlags.setReloadingPaused(true)
-        }
-
         try {
             this.config.loaded(this)
         } catch (err) {
@@ -603,7 +624,8 @@ export class PostHog {
             }, 1)
         }
 
-        new Decide(this).call()
+        new RemoteConfigLoader(this).load()
+        this.featureFlags.decide()
     }
 
     _start_queue_if_opted_in(): void {
@@ -662,6 +684,10 @@ export class PostHog {
             ...this.config.request_headers,
         }
         options.compression = options.compression === 'best-available' ? this.compression : options.compression
+
+        // Specially useful if you're doing SSR with NextJS
+        // Users must be careful when tweaking `cache` because they might get out-of-date feature flags
+        options.fetchOptions = options.fetchOptions || this.config.fetch_options
 
         request({
             ...options,
@@ -839,10 +865,11 @@ export class PostHog {
         const systemTime = new Date()
         const timestamp = options?.timestamp || systemTime
 
+        const uuid = uuidv7()
         let data: CaptureResult = {
-            uuid: uuidv7(),
+            uuid,
             event: event_name,
-            properties: this._calculate_event_properties(event_name, properties || {}, timestamp),
+            properties: this._calculate_event_properties(event_name, properties || {}, timestamp, uuid),
         }
 
         if (clientRateLimitContext) {
@@ -904,7 +931,12 @@ export class PostHog {
         return this.on('eventCaptured', (data) => callback(data.event, data))
     }
 
-    _calculate_event_properties(event_name: string, event_properties: Properties, timestamp?: Date): Properties {
+    _calculate_event_properties(
+        event_name: string,
+        event_properties: Properties,
+        timestamp?: Date,
+        uuid?: string
+    ): Properties {
         timestamp = timestamp || new Date()
         if (!this.persistence || !this.sessionPersistence) {
             return event_properties
@@ -914,6 +946,11 @@ export class PostHog {
         const startTimestamp = this.persistence.remove_event_timer(event_name)
         let properties = { ...event_properties }
         properties['token'] = this.config.token
+
+        if (this.config.__preview_experimental_cookieless_mode) {
+            // Set a flag to tell the plugin server to use cookieless server hash mode
+            properties[COOKIELESS_MODE_FLAG_PROPERTY] = true
+        }
 
         if (event_name === '$snapshot') {
             const persistenceProps = { ...this.persistence.properties(), ...this.sessionPersistence.properties() }
@@ -928,7 +965,10 @@ export class PostHog {
             return properties
         }
 
-        const infoProperties = Info.properties()
+        const infoProperties = Info.properties({
+            maskPersonalDataProperties: this.config.mask_personal_data_properties,
+            customPersonalDataProperties: this.config.custom_personal_data_properties,
+        })
 
         if (this.sessionManager) {
             const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
@@ -953,15 +993,15 @@ export class PostHog {
             properties = extend(properties, sessionProps)
         }
 
-        if (!this.config.disable_scroll_properties) {
-            let performanceProperties: Record<string, any> = {}
-            if (event_name === '$pageview') {
-                performanceProperties = this.pageViewManager.doPageView(timestamp)
-            } else if (event_name === '$pageleave') {
-                performanceProperties = this.pageViewManager.doPageLeave(timestamp)
-            }
-            properties = extend(properties, performanceProperties)
+        let pageviewProperties: Record<string, any>
+        if (event_name === '$pageview') {
+            pageviewProperties = this.pageViewManager.doPageView(timestamp, uuid)
+        } else if (event_name === '$pageleave') {
+            pageviewProperties = this.pageViewManager.doPageLeave(timestamp)
+        } else {
+            pageviewProperties = this.pageViewManager.doEvent()
         }
+        properties = extend(properties, pageviewProperties)
 
         if (event_name === '$pageview' && document) {
             properties['title'] = document.title
@@ -1009,6 +1049,7 @@ export class PostHog {
 
         const sanitize_properties = this.config.sanitize_properties
         if (sanitize_properties) {
+            logger.error('sanitize_properties is deprecated. Use before_send instead')
             properties = sanitize_properties(properties, event_name)
         }
 
@@ -1031,6 +1072,7 @@ export class PostHog {
         let setOnceProperties = extend({}, this.persistence.get_initial_props(), dataSetOnce || {})
         const sanitize_properties = this.config.sanitize_properties
         if (sanitize_properties) {
+            logger.error('sanitize_properties is deprecated. Use before_send instead')
             setOnceProperties = sanitize_properties(setOnceProperties, '$set_once')
         }
         if (isEmptyObject(setOnceProperties)) {
@@ -1395,9 +1437,21 @@ export class PostHog {
             // let the reload feature flag request know to send this previous distinct id
             // for flag consistency
             this.featureFlags.setAnonymousDistinctId(previous_distinct_id)
+
+            this._cachedIdentify = getIdentifyHash(new_distinct_id, userPropertiesToSet, userPropertiesToSetOnce)
         } else if (userPropertiesToSet || userPropertiesToSetOnce) {
-            // If the distinct_id is not changing, but we have user properties to set, we can go for a $set event
-            this.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce)
+            // If the distinct_id is not changing, but we have user properties to set, we can check if they have changed
+            // and if so, send a $set event
+
+            if (
+                this._cachedIdentify !== getIdentifyHash(new_distinct_id, userPropertiesToSet, userPropertiesToSetOnce)
+            ) {
+                this.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce)
+
+                this._cachedIdentify = getIdentifyHash(new_distinct_id, userPropertiesToSet, userPropertiesToSetOnce)
+            } else {
+                logger.info('A duplicate posthog.identify call was made with the same properties. It has been ignored.')
+            }
         }
 
         // Reload active feature flags if the user identity changes.
@@ -1428,6 +1482,8 @@ export class PostHog {
 
         // Update current user properties
         this.setPersonPropertiesForFlags(userPropertiesToSet || {})
+
+        // if exactly this $set call has been sent before, don't send it again - determine based on hash of properties
 
         this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
     }
@@ -1491,9 +1547,6 @@ export class PostHog {
      * to update user properties.
      */
     setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
-        if (!this._requirePersonProcessing('posthog.setPersonPropertiesForFlags')) {
-            return
-        }
         this.featureFlags.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
     }
 
@@ -1536,14 +1589,25 @@ export class PostHog {
         this.surveys?.reset()
         this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()
-        const uuid = this.config.get_device_id(uuidv7())
-        this.register_once(
-            {
-                distinct_id: uuid,
-                $device_id: reset_device_id ? uuid : device_id,
-            },
-            ''
-        )
+        this._cachedIdentify = null
+        if (this.config.__preview_experimental_cookieless_mode) {
+            this.register_once(
+                {
+                    distinct_id: COOKIELESS_SENTINEL_VALUE,
+                    $device_id: null,
+                },
+                ''
+            )
+        } else {
+            const uuid = this.config.get_device_id(uuidv7())
+            this.register_once(
+                {
+                    distinct_id: uuid,
+                    $device_id: reset_device_id ? uuid : device_id,
+                },
+                ''
+            )
+        }
     }
 
     /**
@@ -1675,14 +1739,14 @@ export class PostHog {
      *       // Capture rage clicks
      *       rageclick: true
      *
-     *       // transport for sending requests ('XHR' or 'sendBeacon')
+     *       // transport for sending requests ('XHR' | 'fetch' | 'sendBeacon')
      *       // NB: sendBeacon should only be used for scenarios such as
      *       // page unload where a "best-effort" attempt to send is
      *       // acceptable; the sendBeacon API does not support callbacks
      *       // or any way to know the result of the request. PostHog
      *       // capturing via sendBeacon will not support any event-
      *       // batching or retry mechanisms.
-     *       api_transport: 'XHR'
+     *       api_transport: 'fetch'
      *
      *       // super properties cookie expiration (in days)
      *       cookie_expiration: 365
@@ -2202,6 +2266,10 @@ export class PostHog {
             }
         }
         return beforeSendResult
+    }
+
+    public getPageViewId(): string | undefined {
+        return this.pageViewManager._currentPageview?.pageViewId
     }
 }
 

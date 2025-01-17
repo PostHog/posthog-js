@@ -30,3 +30,7 @@ stats.html
 bundle-stats*.html
 .eslintcache
 cypress/downloads/downloads.html
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

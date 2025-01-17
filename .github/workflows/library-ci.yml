@@ -24,7 +24,7 @@ jobs:
             - run: pnpm test:unit
 
     integration:
-        name: Cypress
+        name: Playwright E2E tests
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
@@ -34,28 +34,18 @@ jobs:
             - uses: actions/setup-node@v4
               with:
                 node-version: '18'
-            - name: Get pnpm cache directory path
-              id: pnpm-cache-dir
-              run: echo "PNPM_STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
-
-            - name: Get cypress cache directory path
-              id: cypress-cache-dir
-              run: echo "CYPRESS_BIN_PATH=$(npx cypress cache path)" >> $GITHUB_OUTPUT
-
-            - uses: actions/cache@v3
-              id: pnpm-cache
-              with:
-                  path: |
-                      ${{ steps.pnpm-cache-dir.outputs.PNPM_STORE_PATH }}
-                      ${{ steps.cypress-cache-dir.outputs.CYPRESS_BIN_PATH }}
-                  key: ${{ runner.os }}-pnpm-cypress-${{ hashFiles('**/pnpm-lock.yaml') }}
-                  restore-keys: |
-                      ${{ runner.os }}-pnpm-cypress-
-            - name: Install package.json dependencies with pnpm
-              run: pnpm install --frozen-lockfile
+            - run: pnpm install
             - run: pnpm build
-            - name: Cypress run
-              uses: cypress-io/github-action@v6
+            - name: Install Playwright Browsers
+              run: pnpm exec playwright install --with-deps
+            - name: Run Playwright tests
+              run: pnpm exec playwright test
+            - uses: actions/upload-artifact@v4
+              if: ${{ !cancelled() }}
+              with:
+                name: playwright-report
+                path: playwright-report/
+                retention-days: 30
 
     functional:
         name: Functional tests

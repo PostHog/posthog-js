@@ -33,7 +33,16 @@ export default function App({ Component, pageProps }: AppProps) {
         }
     }, [])
 
-    const localhostDomain = process.env.NEXT_PUBLIC_CROSSDOMAIN ? 'https://localhost:8000' : 'http://localhost:8000'
+    useEffect(() => {
+        // make sure we initialize the WebSocket server
+        // we don't need to support IE11 here
+        // eslint-disable-next-line compat/compat
+        fetch('/api/socket')
+    }, [])
+
+    const localhostDomain = process.env.NEXT_PUBLIC_CROSSDOMAIN
+        ? 'https://localhost:8000'
+        : process.env.NEXT_PUBLIC_POSTHOG_HOST
 
     return (
         <PostHogProvider client={posthog}>
@@ -42,7 +51,7 @@ export default function App({ Component, pageProps }: AppProps) {
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
                 {/* CSP - useful for testing our documented recommendations. NOTE: Unsafe is only needed for nextjs pre-loading */}
                 <meta
-                    http-equiv="Content-Security-Policy"
+                    httpEquiv="Content-Security-Policy"
                     content={`
                     default-src 'self';
                     connect-src 'self' ${localhostDomain} https://*.posthog.com https://lottie.host;

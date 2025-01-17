@@ -12,7 +12,6 @@ import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
 import { SessionRecording } from '../extensions/replay/sessionrecording'
-import { PostHogFeatureFlags } from '../posthog-featureflags'
 
 describe('posthog core', () => {
     const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
@@ -25,7 +24,15 @@ describe('posthog core', () => {
     }
 
     const posthogWith = (config: Partial<PostHogConfig>, overrides?: Partial<PostHog>): PostHog => {
-        const posthog = defaultPostHog().init('testtoken', config, uuidv7())
+        // NOTE: Temporary change whilst testing remote config
+        const token = config.token || 'testtoken'
+        globals.assignableWindow._POSTHOG_REMOTE_CONFIG = {
+            [token]: {
+                config: {},
+                siteApps: [],
+            },
+        } as any
+        const posthog = defaultPostHog().init(token, config, uuidv7())
         return Object.assign(posthog, overrides || {})
     }
 
@@ -385,6 +392,7 @@ describe('posthog core', () => {
 
     describe('_calculate_event_properties()', () => {
         let posthog: PostHog
+        const uuid = 'uuid'
 
         const overrides: Partial<PostHog> = {
             persistence: {
@@ -422,7 +430,7 @@ describe('posthog core', () => {
         })
 
         it('returns calculated properties', () => {
-            expect(posthog._calculate_event_properties('custom_event', { event: 'prop' }, new Date())).toEqual({
+            expect(posthog._calculate_event_properties('custom_event', { event: 'prop' }, new Date(), uuid)).toEqual({
                 token: 'testtoken',
                 event: 'prop',
                 $lib: 'web',
@@ -444,7 +452,7 @@ describe('posthog core', () => {
                 overrides
             )
 
-            expect(posthog._calculate_event_properties('custom_event', { event: 'prop' }, new Date())).toEqual({
+            expect(posthog._calculate_event_properties('custom_event', { event: 'prop' }, new Date(), uuid)).toEqual({
                 token: 'testtoken',
                 event: 'prop',
                 $lib: 'web',
@@ -470,7 +478,7 @@ describe('posthog core', () => {
             )
 
             expect(
-                posthog._calculate_event_properties('custom_event', { event: 'prop' }, new Date())[
+                posthog._calculate_event_properties('custom_event', { event: 'prop' }, new Date(), uuid)[
                     '$process_person_profile'
                 ]
             ).toEqual(false)
@@ -484,7 +492,7 @@ describe('posthog core', () => {
                 overrides
             )
 
-            expect(posthog._calculate_event_properties('$snapshot', { event: 'prop' }, new Date())).toEqual({
+            expect(posthog._calculate_event_properties('$snapshot', { event: 'prop' }, new Date(), uuid)).toEqual({
                 token: 'testtoken',
                 event: 'prop',
                 distinct_id: 'abc',
@@ -501,7 +509,7 @@ describe('posthog core', () => {
                 overrides
             )
 
-            expect(posthog._calculate_event_properties('custom_event', { event: 'prop' }, new Date())).toEqual({
+            expect(posthog._calculate_event_properties('custom_event', { event: 'prop' }, new Date(), uuid)).toEqual({
                 event_name: 'custom_event',
                 token: 'testtoken',
                 $process_person_profile: false,
@@ -530,7 +538,7 @@ describe('posthog core', () => {
         it('saves $snapshot data and token for $snapshot events', () => {
             posthog = posthogWith({}, overrides)
 
-            expect(posthog._calculate_event_properties('$snapshot', { $snapshot_data: {} }, new Date())).toEqual({
+            expect(posthog._calculate_event_properties('$snapshot', { $snapshot_data: {} }, new Date(), uuid)).toEqual({
                 token: 'testtoken',
                 $snapshot_data: {},
                 distinct_id: 'abc',
@@ -540,7 +548,7 @@ describe('posthog core', () => {
         it("doesn't modify properties passed into it", () => {
             const properties = { prop1: 'val1', prop2: 'val2' }
 
-            posthog._calculate_event_properties('custom_event', properties, new Date())
+            posthog._calculate_event_properties('custom_event', properties, new Date(), uuid)
 
             expect(Object.keys(properties)).toEqual(['prop1', 'prop2'])
         })
@@ -548,9 +556,43 @@ describe('posthog core', () => {
         it('adds page title to $pageview', () => {
             document!.title = 'test'
 
-            expect(posthog._calculate_event_properties('$pageview', {}, new Date())).toEqual(
+            expect(posthog._calculate_event_properties('$pageview', {}, new Date(), uuid)).toEqual(
                 expect.objectContaining({ title: 'test' })
             )
+        })
+
+        it('includes pageview id from previous pageview', () => {
+            const pageview1Properties = posthog._calculate_event_properties(
+                '$pageview',
+                {},
+                new Date(),
+                'pageview-id-1'
+            )
+            expect(pageview1Properties.$pageview_id).toEqual('pageview-id-1')
+
+            const event1Properties = posthog._calculate_event_properties('custom event', {}, new Date(), 'event-id-1')
+            expect(event1Properties.$pageview_id).toEqual('pageview-id-1')
+
+            const pageview2Properties = posthog._calculate_event_properties(
+                '$pageview',
+                {},
+                new Date(),
+                'pageview-id-2'
+            )
+            expect(pageview2Properties.$pageview_id).toEqual('pageview-id-2')
+            expect(pageview2Properties.$prev_pageview_id).toEqual('pageview-id-1')
+
+            const event2Properties = posthog._calculate_event_properties('custom event', {}, new Date(), 'event-id-2')
+            expect(event2Properties.$pageview_id).toEqual('pageview-id-2')
+
+            const pageleaveProperties = posthog._calculate_event_properties(
+                '$pageleave',
+                {},
+                new Date(),
+                'pageleave-id'
+            )
+            expect(pageleaveProperties.$pageview_id).toEqual('pageview-id-2')
+            expect(pageleaveProperties.$prev_pageview_id).toEqual('pageview-id-2')
         })
     })
 
@@ -1088,18 +1130,7 @@ describe('posthog core', () => {
 
     describe('_loaded()', () => {
         it('calls loaded config option', () => {
-            const posthog = posthogWith(
-                { loaded: jest.fn() },
-                {
-                    capture: jest.fn(),
-                    featureFlags: {
-                        setReloadingPaused: jest.fn(),
-                        resetRequestQueue: jest.fn(),
-                        _startReloadTimer: jest.fn(),
-                    } as unknown as PostHogFeatureFlags,
-                    _start_queue_if_opted_in: jest.fn(),
-                }
-            )
+            const posthog = posthogWith({ loaded: jest.fn() })
 
             posthog._loaded()
 
@@ -1107,22 +1138,11 @@ describe('posthog core', () => {
         })
 
         it('handles loaded config option throwing gracefully', () => {
-            const posthog = posthogWith(
-                {
-                    loaded: () => {
-                        throw Error()
-                    },
+            const posthog = posthogWith({
+                loaded: () => {
+                    throw Error()
                 },
-                {
-                    capture: jest.fn(),
-                    featureFlags: {
-                        setReloadingPaused: jest.fn(),
-                        resetRequestQueue: jest.fn(),
-                        _startReloadTimer: jest.fn(),
-                    } as unknown as PostHogFeatureFlags,
-                    _start_queue_if_opted_in: jest.fn(),
-                }
-            )
+            })
 
             posthog._loaded()
 
@@ -1131,27 +1151,27 @@ describe('posthog core', () => {
 
         describe('/decide', () => {
             it('is called by default', async () => {
-                const instance = await createPosthogInstance(uuidv7())
-                instance.featureFlags.setReloadingPaused = jest.fn()
-                instance._send_request = jest.fn()
-                instance._loaded()
+                const sendRequestMock = jest.fn()
+                await createPosthogInstance(uuidv7(), {
+                    loaded: (ph) => {
+                        ph._send_request = sendRequestMock
+                    },
+                })
 
-                expect(instance._send_request.mock.calls[0][0]).toMatchObject({
+                expect(sendRequestMock.mock.calls[0][0]).toMatchObject({
                     url: 'http://localhost/decide/?v=3',
                 })
-                expect(instance.featureFlags.setReloadingPaused).toHaveBeenCalledWith(true)
             })
 
             it('does not call decide if disabled', async () => {
+                const sendRequestMock = jest.fn()
                 const instance = await createPosthogInstance(uuidv7(), {
                     advanced_disable_decide: true,
+                    loaded: (ph) => {
+                        ph._send_request = sendRequestMock
+                    },
                 })
-                instance.featureFlags.setReloadingPaused = jest.fn()
-                instance._send_request = jest.fn()
-                instance._loaded()
-
                 expect(instance._send_request).not.toHaveBeenCalled()
-                expect(instance.featureFlags.setReloadingPaused).not.toHaveBeenCalled()
             })
         })
     })
