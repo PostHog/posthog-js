@@ -2047,6 +2047,12 @@ export class PostHog {
     }
 
     _hasPersonProcessing(): boolean {
+        // If the SDK config is not set, we can't determine if we should process the person. Default to false
+        // as later events will have the config set and persons will be processed correctly.
+        if (!this.config || isEmptyObject(this.config)) {
+            return false
+        }
+
         return !(
             this.config.person_profiles === 'never' ||
             (this.config.person_profiles === 'identified_only' &&
