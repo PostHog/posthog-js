@@ -17,7 +17,7 @@ import {
 } from '../extensions/surveys/surveys-utils'
 import { PostHogPersistence } from '../posthog-persistence'
 import { PostHog } from '../posthog-core'
-import { DecideResponse, PostHogConfig, Properties } from '../types'
+import { DecideResponse, PostHogConfig, Properties, RemoteConfig } from '../types'
 import { window } from '../utils/globals'
 import { RequestRouter } from '../utils/request-router'
 import { assignableWindow } from '../utils/globals'
@@ -27,7 +27,6 @@ describe('surveys', () => {
     let config: PostHogConfig
     let instance: PostHog
     let surveys: PostHogSurveys
-    let surveysResponse: { status?: number; surveys?: Survey[] }
     const originalWindowLocation = assignableWindow.location
 
     const decideResponse = {
@@ -51,20 +50,6 @@ describe('surveys', () => {
         } as unknown as Survey,
     ]
 
-    const secondSurveys: Survey[] = [
-        {
-            name: 'first survey',
-            description: 'first survey description',
-            type: SurveyType.Popover,
-            questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
-        } as unknown as Survey,
-        {
-            name: 'second survey',
-            description: 'second survey description',
-            type: SurveyType.Popover,
-            questions: [{ type: SurveyQuestionType.Open, question: 'what is a moblin?' }],
-        } as unknown as Survey,
-    ]
     const surveysWithEvents: Survey[] = [
         {
             name: 'first survey',
@@ -160,9 +145,17 @@ describe('surveys', () => {
         } as unknown as Survey,
     ]
 
-    beforeEach(() => {
-        surveysResponse = { surveys: firstSurveys }
+    const setSurveys = (_surveys: Survey[]) => {
+        instance.persistence?.clear()
+        instance._send_request = jest
+            .fn()
+            .mockImplementation(({ callback }) => callback({ statusCode: 200, json: { surveys: _surveys } }))
+        surveys.onRemoteConfig({
+            surveys: _surveys,
+        } as RemoteConfig)
+    }
 
+    beforeEach(() => {
         const loadScriptMock = jest.fn()
 
         loadScriptMock.mockImplementation((_ph, _path, callback) => {
@@ -189,7 +182,7 @@ describe('surveys', () => {
             get_property: (key: string) => instance.persistence?.props[key],
             _send_request: jest
                 .fn()
-                .mockImplementation(({ callback }) => callback({ statusCode: 200, json: surveysResponse })),
+                .mockImplementation(({ callback }) => callback({ statusCode: 200, json: { surveys: [] } })),
             featureFlags: {
                 _send_request: jest
                     .fn()
@@ -209,6 +202,8 @@ describe('surveys', () => {
         instance.surveys = surveys
         // all being squashed into a mock posthog so...
         instance.getActiveMatchingSurveys = instance.surveys.getActiveMatchingSurveys.bind(instance.surveys)
+
+        setSurveys(firstSurveys)
 
         Object.defineProperty(window, 'location', {
             configurable: true,
@@ -230,6 +225,10 @@ describe('surveys', () => {
     })
 
     it('getSurveys gets a list of surveys if not present already', () => {
+        // Clear RemoteConfig surveys
+        surveys['_loadedSurveys'] = undefined
+        instance.persistence?.clear()
+
         surveys.getSurveys((data) => {
             expect(data).toEqual(firstSurveys)
         })
@@ -241,7 +240,6 @@ describe('surveys', () => {
         expect(instance._send_request).toHaveBeenCalledTimes(1)
         expect(instance.persistence?.props.$surveys).toEqual(firstSurveys)
 
-        surveysResponse = { surveys: secondSurveys }
         surveys.getSurveys((data) => {
             expect(data).toEqual(firstSurveys)
         })
@@ -260,12 +258,12 @@ describe('surveys', () => {
     })
 
     it('getSurveys registers the survey event receiver if a survey has events', () => {
-        surveysResponse = { surveys: surveysWithEvents }
+        setSurveys(surveysWithEvents)
         surveys.getSurveys((data) => {
             expect(data).toEqual(surveysWithEvents)
-        }, true)
+        })
 
-        const registry = surveys._surveyEventReceiver?.getEventToSurveys()
+        const registry = surveys['_surveyEventReceiver']?.getEventToSurveys()
         expect(registry.has('user_subscribed')).toBeTruthy()
         expect(registry.get('user_subscribed')).toEqual(['first-survey', 'third-survey'])
 
@@ -273,29 +271,31 @@ describe('surveys', () => {
         expect(registry.get('address_changed')).toEqual(['third-survey'])
     })
 
-    it('getSurveys force reloads when called with true', () => {
-        surveys.getSurveys((data) => {
-            expect(data).toEqual(firstSurveys)
-        })
-        expect(instance._send_request).toHaveBeenCalledWith({
-            url: 'https://us.i.posthog.com/api/surveys/?token=testtoken',
-            method: 'GET',
-            callback: expect.any(Function),
-        })
-        expect(instance._send_request).toHaveBeenCalledTimes(1)
-        expect(instance.persistence?.props.$surveys).toEqual(firstSurveys)
+    // it('getSurveys force reloads when called with true', () => {
+    //     surveys.getSurveys((data) => {
+    //         expect(data).toEqual(firstSurveys)
+    //     })
+    //     expect(instance._send_request).toHaveBeenCalledWith({
+    //         url: 'https://us.i.posthog.com/api/surveys/?token=testtoken',
+    //         method: 'GET',
+    //         callback: expect.any(Function),
+    //     })
+    //     expect(instance._send_request).toHaveBeenCalledTimes(1)
+    //     expect(instance.persistence?.props.$surveys).toEqual(firstSurveys)
 
-        surveysResponse = { surveys: secondSurveys }
+    //     setSurveys(secondSurveys)
 
-        surveys.getSurveys((data) => {
-            expect(data).toEqual(secondSurveys)
-        }, true)
-        expect(instance.persistence?.props.$surveys).toEqual(secondSurveys)
-        expect(instance._send_request).toHaveBeenCalledTimes(2)
-    })
+    //     surveys.getSurveys((data) => {
+    //         expect(data).toEqual(secondSurveys)
+    //     })
+    //     expect(instance.persistence?.props.$surveys).toEqual(secondSurveys)
+    //     expect(instance._send_request).toHaveBeenCalledTimes(2)
+    // })
 
     it('getSurveys returns empty array if surveys are undefined', () => {
-        surveysResponse = { status: 0 }
+        instance.persistence?.clear()
+        surveys['_loadedSurveys'] = undefined
+        instance._send_request = jest.fn().mockImplementation(({ callback }) => callback({ statusCode: 0 }))
         surveys.getSurveys((data) => {
             expect(data).toEqual([])
         })
@@ -509,7 +509,7 @@ describe('surveys', () => {
         } as unknown as Survey
 
         it('returns surveys that are active', () => {
-            surveysResponse = { surveys: [draftSurvey, activeSurvey, completedSurvey] }
+            setSurveys([draftSurvey, activeSurvey, completedSurvey])
 
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([activeSurvey])
@@ -517,9 +517,7 @@ describe('surveys', () => {
         })
 
         it('returns surveys based on url and selector matching', () => {
-            surveysResponse = {
-                surveys: [surveyWithUrl, surveyWithSelector, surveyWithUrlAndSelector],
-            }
+            setSurveys([surveyWithUrl, surveyWithSelector, surveyWithUrlAndSelector])
             // eslint-disable-next-line compat/compat
             assignableWindow.location = new URL('https://posthog.com') as unknown as Location
             surveys.getActiveMatchingSurveys((data) => {
@@ -550,15 +548,13 @@ describe('surveys', () => {
         })
 
         it('returns surveys based on url with urlMatchType settings', () => {
-            surveysResponse = {
-                surveys: [
-                    surveyWithRegexUrl,
-                    surveyWithParamRegexUrl,
-                    surveyWithWildcardRouteUrl,
-                    surveyWithWildcardSubdomainUrl,
-                    surveyWithExactUrlMatch,
-                ],
-            }
+            setSurveys([
+                surveyWithRegexUrl,
+                surveyWithParamRegexUrl,
+                surveyWithWildcardRouteUrl,
+                surveyWithWildcardSubdomainUrl,
+                surveyWithExactUrlMatch,
+            ])
 
             const originalWindowLocation = assignableWindow.location
             // eslint-disable-next-line compat/compat
@@ -598,9 +594,7 @@ describe('surveys', () => {
         })
 
         it('returns surveys based on exclusion conditions', () => {
-            surveysResponse = {
-                surveys: [surveyWithUrlDoesNotContain, surveyWithIsNotUrlMatch, surveyWithUrlDoesNotContainRegex],
-            }
+            setSurveys([surveyWithUrlDoesNotContain, surveyWithIsNotUrlMatch, surveyWithUrlDoesNotContainRegex])
 
             // eslint-disable-next-line compat/compat
             assignableWindow.location = new URL('https://posthog.com') as unknown as Location
@@ -628,7 +622,7 @@ describe('surveys', () => {
         })
 
         it('returns surveys that match linked and targeting feature flags', () => {
-            surveysResponse = { surveys: [activeSurvey, surveyWithFlags, surveyWithEverything] }
+            setSurveys([activeSurvey, surveyWithFlags, surveyWithEverything])
             surveys.getActiveMatchingSurveys((data) => {
                 // active survey is returned because it has no flags aka there are no restrictions on flag enabled for it
                 expect(data).toEqual([activeSurvey, surveyWithFlags])
@@ -636,25 +630,21 @@ describe('surveys', () => {
         })
 
         it('does not return surveys that have flag keys but no matching flags', () => {
-            surveysResponse = { surveys: [surveyWithFlags, surveyWithUnmatchedFlags] }
+            setSurveys([surveyWithFlags, surveyWithUnmatchedFlags])
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithFlags])
             })
         })
 
         it('returns surveys that match internal feature flags', () => {
-            surveysResponse = {
-                surveys: [surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlag],
-            }
+            setSurveys([surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlag])
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithEnabledInternalFlag])
             })
         })
 
         it('does not return event based surveys that didnt observe an event', () => {
-            surveysResponse = {
-                surveys: [surveyWithEnabledInternalFlag, surveyWithEvents],
-            }
+            setSurveys([surveyWithEnabledInternalFlag, surveyWithEvents])
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithEnabledInternalFlag])
             })
@@ -662,17 +652,14 @@ describe('surveys', () => {
 
         it('returns event based surveys that observed an event', () => {
             // TODO this test fails when run in isolation
-
-            surveysResponse = {
-                surveys: [surveyWithEnabledInternalFlag, surveyWithEvents],
-            }
-            ;(surveys._surveyEventReceiver as any)?.on('user_subscribed')
+            setSurveys([surveyWithEnabledInternalFlag, surveyWithEvents])
+            ;(surveys['_surveyEventReceiver'] as any)?.onEvent('user_subscribed')
             surveys.getActiveMatchingSurveys((data) => {
-                expect(data).toEqual([surveyWithEnabledInternalFlag])
+                expect(data).toEqual([surveyWithEnabledInternalFlag, surveyWithEvents])
             })
         })
         it('does not return surveys that have internal flag keys but no matching internal flags', () => {
-            surveysResponse = { surveys: [surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlag] }
+            setSurveys([surveyWithEnabledInternalFlag, surveyWithDisabledInternalFlag])
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([surveyWithEnabledInternalFlag])
             })
@@ -682,7 +669,7 @@ describe('surveys', () => {
             // eslint-disable-next-line compat/compat
             assignableWindow.location = new URL('https://posthogapp.com') as unknown as Location
             document.body.appendChild(document.createElement('div')).className = 'test-selector'
-            surveysResponse = { surveys: [activeSurvey, surveyWithSelector, surveyWithEverything] }
+            setSurveys([activeSurvey, surveyWithSelector, surveyWithEverything])
             // activeSurvey returns because there are no restrictions on conditions or flags on it
             surveys.getActiveMatchingSurveys((data) => {
                 expect(data).toEqual([activeSurvey, surveyWithSelector, surveyWithEverything])
@@ -690,7 +677,7 @@ describe('surveys', () => {
         })
 
         it('returns only surveys with enabled feature flags', () => {
-            surveysResponse = { surveys: surveysWithFeatureFlagKeys }
+            setSurveys(surveysWithFeatureFlagKeys)
 
             surveys.getActiveMatchingSurveys((data) => {
                 // Should include:

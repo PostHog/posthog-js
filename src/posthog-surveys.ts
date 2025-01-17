@@ -12,7 +12,7 @@ import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import { assignableWindow, document, window } from './utils/globals'
 import { RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
-import { isNullish } from './utils/type-utils'
+import { isArray, isNullish } from './utils/type-utils'
 import { getSurveySeenStorageKeys } from './extensions/surveys/surveys-utils'
 
 const logger = createLogger('[Surveys]')
@@ -59,18 +59,21 @@ function getRatingBucketForResponseValue(responseValue: number, scale: number) {
 }
 
 export class PostHogSurveys {
-    private _decideServerResponse?: boolean
-    public _surveyEventReceiver: SurveyEventReceiver | null
+    private _surveysEnabledRemotely?: boolean
+    private _surveyEventReceiver: SurveyEventReceiver
     private _surveyManager: any
+    private _loadedSurveys?: Survey[]
 
     constructor(private readonly instance: PostHog) {
-        // we set this to undefined here because we need the persistence storage for this type
-        // but that's not initialized until loadIfEnabled is called.
-        this._surveyEventReceiver = null
+        this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
     }
 
     onRemoteConfig(response: RemoteConfig) {
-        this._decideServerResponse = !!response['surveys']
+        if (isArray(response.surveys)) {
+            this.onSurveys(response.surveys)
+        } else {
+            this._surveysEnabledRemotely = !!response['surveys']
+        }
         this.loadIfEnabled()
     }
 
@@ -83,76 +86,84 @@ export class PostHogSurveys {
     loadIfEnabled() {
         const surveysGenerator = assignableWindow?.__PosthogExtensions__?.generateSurveys
 
-        if (!this.instance.config.disable_surveys && this._decideServerResponse && !surveysGenerator) {
-            if (this._surveyEventReceiver == null) {
-                this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
-            }
-
+        if (!this.instance.config.disable_surveys && this._surveysEnabledRemotely && !surveysGenerator) {
             assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'surveys', (err) => {
                 if (err) {
                     return logger.error('Could not load surveys script', err)
                 }
+
+                logger.info('surveys loaded')
 
                 this._surveyManager = assignableWindow.__PosthogExtensions__?.generateSurveys?.(this.instance)
             })
         }
     }
 
-    getSurveys(callback: SurveyCallback, forceReload = false) {
+    private reloadSurveys(callback: SurveyCallback) {
+        logger.info('Reloading surveys')
+
+        // TODO: Move this to RemoteConfig loading instead (or just remove entirely)
+
+        this.instance._send_request({
+            url: this.instance.requestRouter.endpointFor('api', `/api/surveys/?token=${this.instance.config.token}`),
+            method: 'GET',
+            callback: (response) => {
+                if (response.statusCode !== 200 || !response.json) {
+                    return callback([])
+                }
+
+                const surveys = response.json.surveys || []
+
+                this.onSurveys(surveys)
+
+                return callback(surveys)
+            },
+        })
+    }
+
+    private onSurveys(surveys: Survey[]) {
+        this._loadedSurveys = surveys
+        this._surveysEnabledRemotely = surveys.length > 0
+
+        const eventOrActionBasedSurveys = surveys.filter(
+            (survey: Survey) =>
+                (survey.conditions?.events &&
+                    survey.conditions?.events?.values &&
+                    survey.conditions?.events?.values?.length > 0) ||
+                (survey.conditions?.actions &&
+                    survey.conditions?.actions?.values &&
+                    survey.conditions?.actions?.values?.length > 0)
+        )
+
+        if (eventOrActionBasedSurveys.length > 0) {
+            this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
+        }
+
+        this.instance.persistence?.register({ [SURVEYS]: surveys })
+    }
+
+    getSurveys(callback: SurveyCallback) {
         // In case we manage to load the surveys script, but config says not to load surveys
         // then we shouldn't return survey data
         if (this.instance.config.disable_surveys) {
             return callback([])
         }
 
-        if (this._surveyEventReceiver == null) {
-            this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
-        }
+        const existingSurveys: Survey[] | undefined =
+            this._loadedSurveys ?? (this.instance.get_property(SURVEYS) as Survey[]) ?? undefined
 
-        const existingSurveys = this.instance.get_property(SURVEYS)
-
-        if (!existingSurveys || forceReload) {
-            this.instance._send_request({
-                url: this.instance.requestRouter.endpointFor(
-                    'api',
-                    `/api/surveys/?token=${this.instance.config.token}`
-                ),
-                method: 'GET',
-                callback: (response) => {
-                    if (response.statusCode !== 200 || !response.json) {
-                        return callback([])
-                    }
-                    const surveys = response.json.surveys || []
-
-                    const eventOrActionBasedSurveys = surveys.filter(
-                        (survey: Survey) =>
-                            (survey.conditions?.events &&
-                                survey.conditions?.events?.values &&
-                                survey.conditions?.events?.values?.length > 0) ||
-                            (survey.conditions?.actions &&
-                                survey.conditions?.actions?.values &&
-                                survey.conditions?.actions?.values?.length > 0)
-                    )
-
-                    if (eventOrActionBasedSurveys.length > 0) {
-                        this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
-                    }
-
-                    this.instance.persistence?.register({ [SURVEYS]: surveys })
-                    return callback(surveys)
-                },
-            })
+        if (!existingSurveys) {
+            return this.reloadSurveys(callback)
         } else {
             return callback(existingSurveys)
         }
     }
 
-    getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false) {
+    getActiveMatchingSurveys(callback: SurveyCallback) {
         this.getSurveys((surveys) => {
             const activeSurveys = surveys.filter((survey) => {
                 return !!(survey.start_date && !survey.end_date)
             })
-
             const conditionMatchedSurveys = activeSurveys.filter((survey) => {
                 if (!survey.conditions) {
                     return true
@@ -214,7 +225,7 @@ export class PostHogSurveys {
             })
 
             return callback(targetingMatchedSurveys)
-        }, forceReload)
+        })
     }
 
     checkFlags(survey: Survey): boolean {
