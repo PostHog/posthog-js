@@ -1,11 +1,333 @@
-diff --git a/dist/rrweb-plugin-console-record.js b/dist/rrweb-plugin-console-record.js
-index 408935669bc688ed93e2ccee433b4f75ad28e8f7..f0296b84fb80c459c09b07b7a200902f550c0ec6 100644
---- a/dist/rrweb-plugin-console-record.js
-+++ b/dist/rrweb-plugin-console-record.js
-@@ -258,7080 +258,7 @@ function getAugmentedNamespace$1(n2) {
-   });
-   return a2;
+diff --git a/dist/record.js b/dist/record.js
+index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..f87cc088f3210eed0c38cc0544c1cb0d47e634b1 100644
+--- a/dist/record.js
++++ b/dist/record.js
+@@ -68,10 +68,10 @@ function getUntaintedPrototype$1(key) {
+     if (!win) return defaultObj.prototype;
+     const untaintedObject = win[key].prototype;
+     document.body.removeChild(iframeEl);
+-    if (!untaintedObject) return defaultPrototype;
++    if (!untaintedObject) return defaultObj.prototype;
+     return untaintedBasePrototype$1[key] = untaintedObject;
+   } catch {
+-    return defaultPrototype;
++    return defaultObj.prototype;
+   }
  }
+ const untaintedAccessorCache$1 = {};
+@@ -253,6 +253,9 @@ function isCSSImportRule(rule2) {
+ function isCSSStyleRule(rule2) {
+   return "selectorText" in rule2;
+ }
++function findStylesheet(doc, href) {
++  return Array.from(doc.styleSheets).find((s) => s.href === href);
++}
+ class Mirror {
+   constructor() {
+     __publicField$1(this, "idNodeMap", /* @__PURE__ */ new Map());
+@@ -841,9 +844,14 @@ function serializeElementNode(n2, options) {
+     }
+   }
+   if (tagName === "link" && inlineStylesheet) {
+-    const stylesheet = Array.from(doc.styleSheets).find((s2) => {
+-      return s2.href === n2.href;
+-    });
++    const href = n2.href;
++    let stylesheet = findStylesheet(doc, href);
++    if (!stylesheet && href.includes('.css')) {
++      const rootDomain = window.location.origin;
++      const stylesheetPath = href.replace(window.location.href, '');
++      const potentialStylesheetHref = rootDomain + '/' + stylesheetPath;
++      stylesheet = findStylesheet(doc, potentialStylesheetHref);
++    }
+     let cssText = null;
+     if (stylesheet) {
+       cssText = stringifyStylesheet(stylesheet);
+@@ -889,7 +897,15 @@ function serializeElementNode(n2, options) {
+     }
+   }
+   if (tagName === "dialog" && n2.open) {
+-    attributes.rr_open_mode = n2.matches("dialog:modal") ? "modal" : "non-modal";
++    try {
++      attributes.rr_open_mode = n2.matches("dialog:modal") ? "modal" : "non-modal";
++    } catch {
++      // likely this is safari not able to deal with the `:modal` selector
++      // we can't detect whether the dialog is modal or non-modal open, so have to guess
++      // hopefully this is only safari 15.4 and 15.5
++      attributes.rr_open_mode = "modal"
++      attributes.ph_rr_could_not_detect_modal = true
++    }
+   }
+   if (tagName === "canvas" && recordCanvas) {
+     if (n2.__context === "2d") {
+@@ -1112,7344 +1128,249 @@ function serializeNodeWithId(n2, options) {
+     return null;
+   }
+   if (onSerialize) {
+-    onSerialize(n2);
+-  }
+-  let recordChild = !skipChild;
+-  if (serializedNode.type === NodeType$3.Element) {
+-    recordChild = recordChild && !serializedNode.needBlock;
+-    delete serializedNode.needBlock;
+-    const shadowRootEl = index$1.shadowRoot(n2);
+-    if (shadowRootEl && isNativeShadowDom(shadowRootEl))
+-      serializedNode.isShadowHost = true;
+-  }
+-  if ((serializedNode.type === NodeType$3.Document || serializedNode.type === NodeType$3.Element) && recordChild) {
+-    if (slimDOMOptions.headWhitespace && serializedNode.type === NodeType$3.Element && serializedNode.tagName === "head") {
+-      preserveWhiteSpace = false;
+-    }
+-    const bypassOptions = {
+-      doc,
+-      mirror: mirror2,
+-      blockClass,
+-      blockSelector,
+-      needsMask,
+-      maskTextClass,
+-      maskTextSelector,
+-      skipChild,
+-      inlineStylesheet,
+-      maskInputOptions,
+-      maskTextFn,
+-      maskInputFn,
+-      slimDOMOptions,
+-      dataURLOptions,
+-      inlineImages,
+-      recordCanvas,
+-      preserveWhiteSpace,
+-      onSerialize,
+-      onIframeLoad,
+-      iframeLoadTimeout,
+-      onStylesheetLoad,
+-      stylesheetLoadTimeout,
+-      keepIframeSrcFn,
+-      cssCaptured: false
+-    };
+-    if (serializedNode.type === NodeType$3.Element && serializedNode.tagName === "textarea" && serializedNode.attributes.value !== void 0) ;
+-    else {
+-      if (serializedNode.type === NodeType$3.Element && serializedNode.attributes._cssText !== void 0 && typeof serializedNode.attributes._cssText === "string") {
+-        bypassOptions.cssCaptured = true;
+-      }
+-      for (const childN of Array.from(index$1.childNodes(n2))) {
+-        const serializedChildNode = serializeNodeWithId(childN, bypassOptions);
+-        if (serializedChildNode) {
+-          serializedNode.childNodes.push(serializedChildNode);
+-        }
+-      }
+-    }
+-    let shadowRootEl = null;
+-    if (isElement(n2) && (shadowRootEl = index$1.shadowRoot(n2))) {
+-      for (const childN of Array.from(index$1.childNodes(shadowRootEl))) {
+-        const serializedChildNode = serializeNodeWithId(childN, bypassOptions);
+-        if (serializedChildNode) {
+-          isNativeShadowDom(shadowRootEl) && (serializedChildNode.isShadow = true);
+-          serializedNode.childNodes.push(serializedChildNode);
+-        }
+-      }
+-    }
+-  }
+-  const parent = index$1.parentNode(n2);
+-  if (parent && isShadowRoot(parent) && isNativeShadowDom(parent)) {
+-    serializedNode.isShadow = true;
+-  }
+-  if (serializedNode.type === NodeType$3.Element && serializedNode.tagName === "iframe") {
+-    onceIframeLoaded(
+-      n2,
+-      () => {
+-        const iframeDoc = n2.contentDocument;
+-        if (iframeDoc && onIframeLoad) {
+-          const serializedIframeNode = serializeNodeWithId(iframeDoc, {
+-            doc: iframeDoc,
+-            mirror: mirror2,
+-            blockClass,
+-            blockSelector,
+-            needsMask,
+-            maskTextClass,
+-            maskTextSelector,
+-            skipChild: false,
+-            inlineStylesheet,
+-            maskInputOptions,
+-            maskTextFn,
+-            maskInputFn,
+-            slimDOMOptions,
+-            dataURLOptions,
+-            inlineImages,
+-            recordCanvas,
+-            preserveWhiteSpace,
+-            onSerialize,
+-            onIframeLoad,
+-            iframeLoadTimeout,
+-            onStylesheetLoad,
+-            stylesheetLoadTimeout,
+-            keepIframeSrcFn
+-          });
+-          if (serializedIframeNode) {
+-            onIframeLoad(
+-              n2,
+-              serializedIframeNode
+-            );
+-          }
+-        }
+-      },
+-      iframeLoadTimeout
+-    );
+-  }
+-  if (serializedNode.type === NodeType$3.Element && serializedNode.tagName === "link" && typeof serializedNode.attributes.rel === "string" && (serializedNode.attributes.rel === "stylesheet" || serializedNode.attributes.rel === "preload" && typeof serializedNode.attributes.href === "string" && extractFileExtension(serializedNode.attributes.href) === "css")) {
+-    onceStylesheetLoaded(
+-      n2,
+-      () => {
+-        if (onStylesheetLoad) {
+-          const serializedLinkNode = serializeNodeWithId(n2, {
+-            doc,
+-            mirror: mirror2,
+-            blockClass,
+-            blockSelector,
+-            needsMask,
+-            maskTextClass,
+-            maskTextSelector,
+-            skipChild: false,
+-            inlineStylesheet,
+-            maskInputOptions,
+-            maskTextFn,
+-            maskInputFn,
+-            slimDOMOptions,
+-            dataURLOptions,
+-            inlineImages,
+-            recordCanvas,
+-            preserveWhiteSpace,
+-            onSerialize,
+-            onIframeLoad,
+-            iframeLoadTimeout,
+-            onStylesheetLoad,
+-            stylesheetLoadTimeout,
+-            keepIframeSrcFn
+-          });
+-          if (serializedLinkNode) {
+-            onStylesheetLoad(
+-              n2,
+-              serializedLinkNode
+-            );
+-          }
+-        }
+-      },
+-      stylesheetLoadTimeout
+-    );
+-  }
+-  return serializedNode;
+-}
+-function snapshot(n2, options) {
+-  const {
+-    mirror: mirror2 = new Mirror(),
+-    blockClass = "rr-block",
+-    blockSelector = null,
+-    maskTextClass = "rr-mask",
+-    maskTextSelector = null,
+-    inlineStylesheet = true,
+-    inlineImages = false,
+-    recordCanvas = false,
+-    maskAllInputs = false,
+-    maskTextFn,
+-    maskInputFn,
+-    slimDOM = false,
+-    dataURLOptions,
+-    preserveWhiteSpace,
+-    onSerialize,
+-    onIframeLoad,
+-    iframeLoadTimeout,
+-    onStylesheetLoad,
+-    stylesheetLoadTimeout,
+-    keepIframeSrcFn = () => false
+-  } = options || {};
+-  const maskInputOptions = maskAllInputs === true ? {
+-    color: true,
+-    date: true,
+-    "datetime-local": true,
+-    email: true,
+-    month: true,
+-    number: true,
+-    range: true,
+-    search: true,
+-    tel: true,
+-    text: true,
+-    time: true,
+-    url: true,
+-    week: true,
+-    textarea: true,
+-    select: true,
+-    password: true
+-  } : maskAllInputs === false ? {
+-    password: true
+-  } : maskAllInputs;
+-  const slimDOMOptions = slimDOM === true || slimDOM === "all" ? (
+-    // if true: set of sensible options that should not throw away any information
+-    {
+-      script: true,
+-      comment: true,
+-      headFavicon: true,
+-      headWhitespace: true,
+-      headMetaDescKeywords: slimDOM === "all",
+-      // destructive
+-      headMetaSocial: true,
+-      headMetaRobots: true,
+-      headMetaHttpEquiv: true,
+-      headMetaAuthorship: true,
+-      headMetaVerification: true
+-    }
+-  ) : slimDOM === false ? {} : slimDOM;
+-  return serializeNodeWithId(n2, {
+-    doc: n2,
+-    mirror: mirror2,
+-    blockClass,
+-    blockSelector,
+-    maskTextClass,
+-    maskTextSelector,
+-    skipChild: false,
+-    inlineStylesheet,
+-    maskInputOptions,
+-    maskTextFn,
+-    maskInputFn,
+-    slimDOMOptions,
+-    dataURLOptions,
+-    inlineImages,
+-    recordCanvas,
+-    preserveWhiteSpace,
+-    onSerialize,
+-    onIframeLoad,
+-    iframeLoadTimeout,
+-    onStylesheetLoad,
+-    stylesheetLoadTimeout,
+-    keepIframeSrcFn,
+-    newlyAddedElement: false
+-  });
+-}
+-function getDefaultExportFromCjs$1(x2) {
+-  return x2 && x2.__esModule && Object.prototype.hasOwnProperty.call(x2, "default") ? x2["default"] : x2;
+-}
+-function getAugmentedNamespace$1(n2) {
+-  if (n2.__esModule) return n2;
+-  var f2 = n2.default;
+-  if (typeof f2 == "function") {
+-    var a2 = function a22() {
+-      if (this instanceof a22) {
+-        return Reflect.construct(f2, arguments, this.constructor);
+-      }
+-      return f2.apply(this, arguments);
+-    };
+-    a2.prototype = f2.prototype;
+-  } else a2 = {};
+-  Object.defineProperty(a2, "__esModule", { value: true });
+-  Object.keys(n2).forEach(function(k) {
+-    var d = Object.getOwnPropertyDescriptor(n2, k);
+-    Object.defineProperty(a2, k, d.get ? d : {
+-      enumerable: true,
+-      get: function() {
+-        return n2[k];
+-      }
+-    });
+-  });
+-  return a2;
+-}
 -var picocolors_browser$1 = { exports: {} };
 -var x$1 = String;
 -var create$1 = function() {
@@ -3528,9 +3850,9 @@ index 408935669bc688ed93e2ccee433b4f75ad28e8f7..f0296b84fb80c459c09b07b7a200902f
 -postcss$1$1.Rule;
 -postcss$1$1.Root;
 -postcss$1$1.Node;
--var __defProp22 = Object.defineProperty;
--var __defNormalProp22 = (obj, key, value) => key in obj ? __defProp22(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
--var __publicField22 = (obj, key, value) => __defNormalProp22(obj, typeof key !== "symbol" ? key + "" : key, value);
+-var __defProp2 = Object.defineProperty;
+-var __defNormalProp2 = (obj, key, value) => key in obj ? __defProp2(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+-var __publicField2 = (obj, key, value) => __defNormalProp2(obj, typeof key !== "symbol" ? key + "" : key, value);
 -function getDefaultExportFromCjs(x2) {
 -  return x2 && x2.__esModule && Object.prototype.hasOwnProperty.call(x2, "default") ? x2["default"] : x2;
 -}
@@ -6846,10 +7168,18 @@ index 408935669bc688ed93e2ccee433b4f75ad28e8f7..f0296b84fb80c459c09b07b7a200902f
 -  }
 -  get opts() {
 -    return this.result.opts;
--  }
++    onSerialize(n2);
+   }
 -  get processor() {
 -    return this.result.processor;
--  }
++  let recordChild = !skipChild;
++  if (serializedNode.type === NodeType$3.Element) {
++    recordChild = recordChild && !serializedNode.needBlock;
++    delete serializedNode.needBlock;
++    const shadowRootEl = index$1.shadowRoot(n2);
++    if (shadowRootEl && isNativeShadowDom(shadowRootEl))
++      serializedNode.isShadowHost = true;
+   }
 -  get root() {
 -    if (this._root) {
 -      return this._root;
@@ -6866,7 +7196,10 @@ index 408935669bc688ed93e2ccee433b4f75ad28e8f7..f0296b84fb80c459c09b07b7a200902f
 -    } else {
 -      this._root = root2;
 -      return root2;
--    }
++  if ((serializedNode.type === NodeType$3.Document || serializedNode.type === NodeType$3.Element) && recordChild) {
++    if (slimDOMOptions.headWhitespace && serializedNode.type === NodeType$3.Element && serializedNode.tagName === "head") {
++      preserveWhiteSpace = false;
+     }
 -  }
 -  get [Symbol.toStringTag]() {
 -    return "NoWorkResult";
@@ -6890,7 +7223,37 @@ index 408935669bc688ed93e2ccee433b4f75ad28e8f7..f0296b84fb80c459c09b07b7a200902f
 -        i2 = i2();
 -      } else if (i2.postcss) {
 -        i2 = i2.postcss;
--      }
++    const bypassOptions = {
++      doc,
++      mirror: mirror2,
++      blockClass,
++      blockSelector,
++      needsMask,
++      maskTextClass,
++      maskTextSelector,
++      skipChild,
++      inlineStylesheet,
++      maskInputOptions,
++      maskTextFn,
++      maskInputFn,
++      slimDOMOptions,
++      dataURLOptions,
++      inlineImages,
++      recordCanvas,
++      preserveWhiteSpace,
++      onSerialize,
++      onIframeLoad,
++      iframeLoadTimeout,
++      onStylesheetLoad,
++      stylesheetLoadTimeout,
++      keepIframeSrcFn,
++      cssCaptured: false
++    };
++    if (serializedNode.type === NodeType$3.Element && serializedNode.tagName === "textarea" && serializedNode.attributes.value !== void 0) ;
++    else {
++      if (serializedNode.type === NodeType$3.Element && serializedNode.attributes._cssText !== void 0 && typeof serializedNode.attributes._cssText === "string") {
++        bypassOptions.cssCaptured = true;
+       }
 -      if (typeof i2 === "object" && Array.isArray(i2.plugins)) {
 -        normalized = normalized.concat(i2.plugins);
 -      } else if (typeof i2 === "object" && i2.postcssPlugin) {
@@ -6902,11 +7265,15 @@ index 408935669bc688ed93e2ccee433b4f75ad28e8f7..f0296b84fb80c459c09b07b7a200902f
 -          throw new Error(
 -            "PostCSS syntaxes cannot be used as plugins. Instead, please use one of the syntax/parser/stringifier options as outlined in your PostCSS runner documentation."
 -          );
--        }
++      for (const childN of Array.from(index$1.childNodes(n2))) {
++        const serializedChildNode = serializeNodeWithId(childN, bypassOptions);
++        if (serializedChildNode) {
++          serializedNode.childNodes.push(serializedChildNode);
+         }
 -      } else {
 -        throw new Error(i2 + " is not a PostCSS plugin");
--      }
--    }
+       }
+     }
 -    return normalized;
 -  }
 -  process(css, opts = {}) {
@@ -6944,20 +7311,72 @@ index 408935669bc688ed93e2ccee433b4f75ad28e8f7..f0296b84fb80c459c09b07b7a200902f
 -          ...inputHydrated.map,
 -          __proto__: PreviousMap22.prototype
 -        };
--      }
++    let shadowRootEl = null;
++    if (isElement(n2) && (shadowRootEl = index$1.shadowRoot(n2))) {
++      for (const childN of Array.from(index$1.childNodes(shadowRootEl))) {
++        const serializedChildNode = serializeNodeWithId(childN, bypassOptions);
++        if (serializedChildNode) {
++          isNativeShadowDom(shadowRootEl) && (serializedChildNode.isShadow = true);
++          serializedNode.childNodes.push(serializedChildNode);
++        }
+       }
 -      inputs.push(inputHydrated);
--    }
--  }
+     }
+   }
 -  if (defaults.nodes) {
 -    defaults.nodes = json.nodes.map((n2) => fromJSON$1(n2, inputs));
--  }
++  const parent = index$1.parentNode(n2);
++  if (parent && isShadowRoot(parent) && isNativeShadowDom(parent)) {
++    serializedNode.isShadow = true;
+   }
 -  if (defaults.source) {
 -    let { inputId, ...source } = defaults.source;
 -    defaults.source = source;
 -    if (inputId != null) {
 -      defaults.source.input = inputs[inputId];
 -    }
--  }
++  if (serializedNode.type === NodeType$3.Element && serializedNode.tagName === "iframe") {
++    onceIframeLoaded(
++      n2,
++      () => {
++        const iframeDoc = n2.contentDocument;
++        if (iframeDoc && onIframeLoad) {
++          const serializedIframeNode = serializeNodeWithId(iframeDoc, {
++            doc: iframeDoc,
++            mirror: mirror2,
++            blockClass,
++            blockSelector,
++            needsMask,
++            maskTextClass,
++            maskTextSelector,
++            skipChild: false,
++            inlineStylesheet,
++            maskInputOptions,
++            maskTextFn,
++            maskInputFn,
++            slimDOMOptions,
++            dataURLOptions,
++            inlineImages,
++            recordCanvas,
++            preserveWhiteSpace,
++            onSerialize,
++            onIframeLoad,
++            iframeLoadTimeout,
++            onStylesheetLoad,
++            stylesheetLoadTimeout,
++            keepIframeSrcFn
++          });
++          if (serializedIframeNode) {
++            onIframeLoad(
++              n2,
++              serializedIframeNode
++            );
++          }
++        }
++      },
++      iframeLoadTimeout
++    );
+   }
 -  if (defaults.type === "root") {
 -    return new Root$1(defaults);
 -  } else if (defaults.type === "decl") {
@@ -6979,7 +7398,7 @@ index 408935669bc688ed93e2ccee433b4f75ad28e8f7..f0296b84fb80c459c09b07b7a200902f
 -let LazyResult22 = lazyResult;
 -let Container22 = container;
 -let Processor22 = processor;
--let stringify$6 = stringify_1;
+-let stringify = stringify_1;
 -let fromJSON = fromJSON_1;
 -let Document222 = document$1;
 -let Warning22 = warning;
@@ -7016,20 +7435,144 @@ index 408935669bc688ed93e2ccee433b4f75ad28e8f7..f0296b84fb80c459c09b07b7a200902f
 -    transformer.postcssPlugin = name;
 -    transformer.postcssVersion = new Processor22().version;
 -    return transformer;
--  }
++  if (serializedNode.type === NodeType$3.Element && serializedNode.tagName === "link" && typeof serializedNode.attributes.rel === "string" && (serializedNode.attributes.rel === "stylesheet" || serializedNode.attributes.rel === "preload" && typeof serializedNode.attributes.href === "string" && extractFileExtension(serializedNode.attributes.href) === "css")) {
++    onceStylesheetLoaded(
++      n2,
++      () => {
++        if (onStylesheetLoad) {
++          const serializedLinkNode = serializeNodeWithId(n2, {
++            doc,
++            mirror: mirror2,
++            blockClass,
++            blockSelector,
++            needsMask,
++            maskTextClass,
++            maskTextSelector,
++            skipChild: false,
++            inlineStylesheet,
++            maskInputOptions,
++            maskTextFn,
++            maskInputFn,
++            slimDOMOptions,
++            dataURLOptions,
++            inlineImages,
++            recordCanvas,
++            preserveWhiteSpace,
++            onSerialize,
++            onIframeLoad,
++            iframeLoadTimeout,
++            onStylesheetLoad,
++            stylesheetLoadTimeout,
++            keepIframeSrcFn
++          });
++          if (serializedLinkNode) {
++            onStylesheetLoad(
++              n2,
++              serializedLinkNode
++            );
++          }
++        }
++      },
++      stylesheetLoadTimeout
++    );
+   }
 -  let cache;
 -  Object.defineProperty(creator, "postcss", {
 -    get() {
 -      if (!cache) cache = creator();
 -      return cache;
--    }
--  });
++  return serializedNode;
++}
++function snapshot(n2, options) {
++  const {
++    mirror: mirror2 = new Mirror(),
++    blockClass = "rr-block",
++    blockSelector = null,
++    maskTextClass = "rr-mask",
++    maskTextSelector = null,
++    inlineStylesheet = true,
++    inlineImages = false,
++    recordCanvas = false,
++    maskAllInputs = false,
++    maskTextFn,
++    maskInputFn,
++    slimDOM = false,
++    dataURLOptions,
++    preserveWhiteSpace,
++    onSerialize,
++    onIframeLoad,
++    iframeLoadTimeout,
++    onStylesheetLoad,
++    stylesheetLoadTimeout,
++    keepIframeSrcFn = () => false
++  } = options || {};
++  const maskInputOptions = maskAllInputs === true ? {
++    color: true,
++    date: true,
++    "datetime-local": true,
++    email: true,
++    month: true,
++    number: true,
++    range: true,
++    search: true,
++    tel: true,
++    text: true,
++    time: true,
++    url: true,
++    week: true,
++    textarea: true,
++    select: true,
++    password: true
++  } : maskAllInputs === false ? {
++    password: true
++  } : maskAllInputs;
++  const slimDOMOptions = slimDOM === true || slimDOM === "all" ? (
++    // if true: set of sensible options that should not throw away any information
++    {
++      script: true,
++      comment: true,
++      headFavicon: true,
++      headWhitespace: true,
++      headMetaDescKeywords: slimDOM === "all",
++      // destructive
++      headMetaSocial: true,
++      headMetaRobots: true,
++      headMetaHttpEquiv: true,
++      headMetaAuthorship: true,
++      headMetaVerification: true
+     }
++  ) : slimDOM === false ? {} : slimDOM;
++  return serializeNodeWithId(n2, {
++    doc: n2,
++    mirror: mirror2,
++    blockClass,
++    blockSelector,
++    maskTextClass,
++    maskTextSelector,
++    skipChild: false,
++    inlineStylesheet,
++    maskInputOptions,
++    maskTextFn,
++    maskInputFn,
++    slimDOMOptions,
++    dataURLOptions,
++    inlineImages,
++    recordCanvas,
++    preserveWhiteSpace,
++    onSerialize,
++    onIframeLoad,
++    iframeLoadTimeout,
++    onStylesheetLoad,
++    stylesheetLoadTimeout,
++    keepIframeSrcFn,
++    newlyAddedElement: false
+   });
 -  creator.process = function(css, processOpts, pluginOpts) {
 -    return postcss([creator(pluginOpts)]).process(css, processOpts);
 -  };
 -  return creator;
 -};
--postcss.stringify = stringify$6;
+-postcss.stringify = stringify;
 -postcss.parse = parse;
 -postcss.fromJSON = fromJSON;
 -postcss.list = list;
@@ -7080,7 +7623,62 @@ index 408935669bc688ed93e2ccee433b4f75ad28e8f7..f0296b84fb80c459c09b07b7a200902f
 -postcss$1.Rule;
 -postcss$1.Root;
 -postcss$1.Node;
-+// Removed postcss here
++}
++
++
++
++// REMOVED POSTCSS
++
++
  class BaseRRNode {
    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
    constructor(..._args) {
+@@ -11451,11 +4372,19 @@ class CanvasManager {
+     let rafId;
+     const getCanvas = () => {
+       const matchedCanvas = [];
+-      win.document.querySelectorAll("canvas").forEach((canvas) => {
+-        if (!isBlocked(canvas, blockClass, blockSelector, true)) {
+-          matchedCanvas.push(canvas);
+-        }
+-      });
++      const searchCanvas = (root) => {
++        root.querySelectorAll("canvas").forEach((canvas) => {
++          if (!isBlocked(canvas, blockClass, blockSelector, true)) {
++            matchedCanvas.push(canvas);
++          }
++        });
++        root.querySelectorAll("*").forEach((elem) => {
++          if (elem.shadowRoot) {
++            searchCanvas(elem.shadowRoot);
++          }
++        });
++      };
++      searchCanvas(win.document);
+       return matchedCanvas;
+     };
+     const takeCanvasSnapshots = (timestamp) => {
+@@ -11476,13 +4405,20 @@ class CanvasManager {
+             context.clear(context.COLOR_BUFFER_BIT);
+           }
+         }
+-        const bitmap = await createImageBitmap(canvas);
++        // createImageBitmap throws if resizing to 0
++        // Fallback to intrinsic size if canvas has not yet rendered
++        const width = canvas.clientWidth || canvas.width;
++        const height = canvas.clientHeight || canvas.height;
++        const bitmap = await createImageBitmap(canvas, {
++          resizeWidth: width,
++          resizeHeight: height
++        });
+         worker.postMessage(
+           {
+             id,
+             bitmap,
+-            width: canvas.width,
+-            height: canvas.height,
++            width: width,
++            height: height,
+             dataURLOptions: options.dataURLOptions
+           },
+           [bitmap]
