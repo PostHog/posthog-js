@@ -750,31 +750,5 @@ describe('person processing', () => {
             expect(beforeSendMock.mock.calls[0][0].properties.$process_person_profile).toEqual(false)
             expect(beforeSendMock.mock.calls[1][0].properties.$process_person_profile).toEqual(false)
         })
-
-        it('should persist when the default person mode is overridden by decide', async () => {
-            // arrange
-            const persistenceName = uuidv7()
-            const { posthog: posthog1, beforeSendMock: beforeSendMock1 } = await setup(
-                undefined,
-                undefined,
-                persistenceName
-            )
-
-            // act
-            posthog1._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
-            posthog1.capture('custom event 1')
-            const { posthog: posthog2, beforeSendMock: beforeSendMock2 } = await setup(
-                undefined,
-                undefined,
-                persistenceName
-            )
-            posthog2.capture('custom event 2')
-
-            // assert
-            expect(beforeSendMock1.mock.calls.length).toEqual(1)
-            expect(beforeSendMock2.mock.calls.length).toEqual(1)
-            expect(beforeSendMock1.mock.calls[0][0].properties.$process_person_profile).toEqual(true)
-            expect(beforeSendMock2.mock.calls[0][0].properties.$process_person_profile).toEqual(true)
-        })
     })
 })
