@@ -1,21 +1,112 @@
-diff --git a/dist/record.js b/dist/record.js
-index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..f87cc088f3210eed0c38cc0544c1cb0d47e634b1 100644
---- a/dist/record.js
-+++ b/dist/record.js
-@@ -68,10 +68,10 @@ function getUntaintedPrototype$1(key) {
-     if (!win) return defaultObj.prototype;
-     const untaintedObject = win[key].prototype;
-     document.body.removeChild(iframeEl);
+diff --git a/dist/record.cjs b/dist/record.cjs
+index 7eee53897eb037a92e57e07c09c33d0075595cce..81777885d8b72098010804c0d8a71c9388335e39 100644
+--- a/dist/record.cjs
++++ b/dist/record.cjs
+@@ -59,22 +59,34 @@ function getUntaintedPrototype$1(key) {
+       }
+     )
+   );
+-  if (isUntaintedAccessors && isUntaintedMethods && !isAngularZonePresent$1()) {
+-    untaintedBasePrototype$1[key] = defaultObj.prototype;
+-    return defaultObj.prototype;
+-  }
+-  try {
+-    const iframeEl = document.createElement("iframe");
+-    document.body.appendChild(iframeEl);
+-    const win = iframeEl.contentWindow;
+-    if (!win) return defaultObj.prototype;
+-    const untaintedObject = win[key].prototype;
+-    document.body.removeChild(iframeEl);
 -    if (!untaintedObject) return defaultPrototype;
-+    if (!untaintedObject) return defaultObj.prototype;
-     return untaintedBasePrototype$1[key] = untaintedObject;
-   } catch {
+-    return untaintedBasePrototype$1[key] = untaintedObject;
+-  } catch {
 -    return defaultPrototype;
-+    return defaultObj.prototype;
++  const isUntainted =
++    isUntaintedAccessors && isUntaintedMethods && !isAngularZonePresent();
++  // we're going to default to what we do have
++  let impl = defaultObj.prototype;
++  // but if it is tainted
++  if (!isUntainted) {
++    // try to load a fresh copy from a sandbox iframe
++    let iframeEl = undefined;
++    try {
++      iframeEl = document.createElement('iframe');
++      iframeEl.hidden = true;
++      document.head.appendChild(iframeEl);
++      const win = iframeEl.contentWindow;
++      if (win) {
++        const candidate = (win)[key].prototype;
++        if (candidate) {
++          impl = candidate;
++        }
++      }
++    } finally {
++      if (iframeEl) {
++        document.head.removeChild(iframeEl);
++      }
++    }
    }
++
++  untaintedBasePrototype[key] = impl;
++  return impl;
  }
  const untaintedAccessorCache$1 = {};
-@@ -253,6 +253,9 @@ function isCSSImportRule(rule2) {
+ function getUntaintedAccessor$1(key, instance, accessor) {
+diff --git a/dist/record.js b/dist/record.js
+index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..df7802b6b3df4ecdee6e9db1df0761dc3724f73f 100644
+--- a/dist/record.js
++++ b/dist/record.js
+@@ -57,22 +57,34 @@ function getUntaintedPrototype$1(key) {
+       }
+     )
+   );
+-  if (isUntaintedAccessors && isUntaintedMethods && !isAngularZonePresent$1()) {
+-    untaintedBasePrototype$1[key] = defaultObj.prototype;
+-    return defaultObj.prototype;
+-  }
+-  try {
+-    const iframeEl = document.createElement("iframe");
+-    document.body.appendChild(iframeEl);
+-    const win = iframeEl.contentWindow;
+-    if (!win) return defaultObj.prototype;
+-    const untaintedObject = win[key].prototype;
+-    document.body.removeChild(iframeEl);
+-    if (!untaintedObject) return defaultPrototype;
+-    return untaintedBasePrototype$1[key] = untaintedObject;
+-  } catch {
+-    return defaultPrototype;
++  const isUntainted =
++    isUntaintedAccessors && isUntaintedMethods && !isAngularZonePresent();
++  // we're going to default to what we do have
++  let impl = defaultObj.prototype;
++  // but if it is tainted
++  if (!isUntainted) {
++    // try to load a fresh copy from a sandbox iframe
++    let iframeEl = undefined;
++    try {
++      iframeEl = document.createElement('iframe');
++      iframeEl.hidden = true;
++      document.head.appendChild(iframeEl);
++      const win = iframeEl.contentWindow;
++      if (win) {
++        const candidate = (win)[key].prototype;
++        if (candidate) {
++          impl = candidate;
++        }
++      }
++    } finally {
++      if (iframeEl) {
++        document.head.removeChild(iframeEl);
++      }
++    }
+   }
++
++  untaintedBasePrototype[key] = impl;
++  return impl;
+ }
+ const untaintedAccessorCache$1 = {};
+ function getUntaintedAccessor$1(key, instance, accessor) {
+@@ -253,6 +265,9 @@ function isCSSImportRule(rule2) {
  function isCSSStyleRule(rule2) {
    return "selectorText" in rule2;
  }
@@ -25,7 +116,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..f87cc088f3210eed0c38cc0544c1cb0d
  class Mirror {
    constructor() {
      __publicField$1(this, "idNodeMap", /* @__PURE__ */ new Map());
-@@ -841,9 +844,14 @@ function serializeElementNode(n2, options) {
+@@ -841,9 +856,14 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "link" && inlineStylesheet) {
@@ -43,7 +134,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..f87cc088f3210eed0c38cc0544c1cb0d
      let cssText = null;
      if (stylesheet) {
        cssText = stringifyStylesheet(stylesheet);
-@@ -889,7 +897,15 @@ function serializeElementNode(n2, options) {
+@@ -889,7 +909,15 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "dialog" && n2.open) {
@@ -60,7 +151,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..f87cc088f3210eed0c38cc0544c1cb0d
    }
    if (tagName === "canvas" && recordCanvas) {
      if (n2.__context === "2d") {
-@@ -1112,7344 +1128,249 @@ function serializeNodeWithId(n2, options) {
+@@ -1112,7344 +1140,249 @@ function serializeNodeWithId(n2, options) {
      return null;
    }
    if (onSerialize) {
@@ -7633,7 +7724,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..f87cc088f3210eed0c38cc0544c1cb0d
  class BaseRRNode {
    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
    constructor(..._args) {
-@@ -11451,11 +4372,19 @@ class CanvasManager {
+@@ -11451,11 +4384,19 @@ class CanvasManager {
      let rafId;
      const getCanvas = () => {
        const matchedCanvas = [];
@@ -7658,7 +7749,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..f87cc088f3210eed0c38cc0544c1cb0d
        return matchedCanvas;
      };
      const takeCanvasSnapshots = (timestamp) => {
-@@ -11476,13 +4405,20 @@ class CanvasManager {
+@@ -11476,13 +4417,20 @@ class CanvasManager {
              context.clear(context.COLOR_BUFFER_BIT);
            }
          }
@@ -7682,3 +7773,54 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..f87cc088f3210eed0c38cc0544c1cb0d
              dataURLOptions: options.dataURLOptions
            },
            [bitmap]
+diff --git a/dist/record.umd.cjs b/dist/record.umd.cjs
+index 902c5eca13b2c3e69af25afa682d2e7300372bfc..2c73192048ab1e7bcb6c8a1ac86344e1dc781633 100644
+--- a/dist/record.umd.cjs
++++ b/dist/record.umd.cjs
+@@ -103,22 +103,30 @@ function getUntaintedPrototype$1(key) {
+       }
+     )
+   );
+-  if (isUntaintedAccessors && isUntaintedMethods && !isAngularZonePresent$1()) {
+-    untaintedBasePrototype$1[key] = defaultObj.prototype;
+-    return defaultObj.prototype;
+-  }
+-  try {
+-    const iframeEl = document.createElement("iframe");
+-    document.body.appendChild(iframeEl);
+-    const win = iframeEl.contentWindow;
+-    if (!win) return defaultObj.prototype;
+-    const untaintedObject = win[key].prototype;
+-    document.body.removeChild(iframeEl);
+-    if (!untaintedObject) return defaultPrototype;
+-    return untaintedBasePrototype$1[key] = untaintedObject;
+-  } catch (e) {
+-    return defaultPrototype;
+-  }
++  const isUntainted =
++    isUntaintedAccessors && isUntaintedMethods && !isAngularZonePresent();
++  // we're going to default to what we do have
++  let impl = defaultObj.prototype;
++  // but if it is tainted
++  if (!isUntainted) {
++    // try to load a fresh copy from a sandbox iframe
++    let iframeEl = undefined;
++    try {
++      iframeEl = document.createElement('iframe');
++      iframeEl.hidden = true;
++      document.head.appendChild(iframeEl);
++      const win = iframeEl.contentWindow;
++      if (win) {
++        const candidate = (win)[key].prototype;
++        if (candidate) {
++          impl = candidate;
++        }
++      }
++    } finally {
++      if (iframeEl) {
++        document.head.removeChild(iframeEl);
++      }
++    }
+ }
+ const untaintedAccessorCache$1 = {};
+ function getUntaintedAccessor$1(key, instance, accessor) {
