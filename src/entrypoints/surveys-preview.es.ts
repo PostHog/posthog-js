@@ -1,1 +1,2 @@
-export { renderSurveysPreview, renderFeedbackWidgetPreview } from '../extensions/surveys'
+export { renderFeedbackWidgetPreview, renderSurveysPreview } from '../extensions/surveys'
+export { getNextSurveyStep } from '../posthog-surveys'
