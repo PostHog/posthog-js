@@ -721,19 +721,19 @@ describe('person processing', () => {
     })
 
     describe('decide', () => {
-        it('should change the person mode from default when decide response is handled', async () => {
+        it('should default the person mode to identified_only when an incomplete decide response is handled', async () => {
             // arrange
             const { posthog, beforeSendMock } = await setup(undefined)
             posthog.capture('startup page view')
 
             // act
-            posthog._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
+            posthog._onRemoteConfig({} as RemoteConfig)
             posthog.capture('custom event')
 
             // assert
             expect(beforeSendMock.mock.calls.length).toEqual(2)
             expect(beforeSendMock.mock.calls[0][0].properties.$process_person_profile).toEqual(false)
-            expect(beforeSendMock.mock.calls[1][0].properties.$process_person_profile).toEqual(true)
+            expect(beforeSendMock.mock.calls[1][0].properties.$process_person_profile).toEqual(false)
         })
 
         it('should NOT change the person mode from user-defined when decide response is handled', async () => {
@@ -749,32 +749,6 @@ describe('person processing', () => {
             expect(beforeSendMock.mock.calls.length).toEqual(2)
             expect(beforeSendMock.mock.calls[0][0].properties.$process_person_profile).toEqual(false)
             expect(beforeSendMock.mock.calls[1][0].properties.$process_person_profile).toEqual(false)
-        })
-
-        it('should persist when the default person mode is overridden by decide', async () => {
-            // arrange
-            const persistenceName = uuidv7()
-            const { posthog: posthog1, beforeSendMock: beforeSendMock1 } = await setup(
-                undefined,
-                undefined,
-                persistenceName
-            )
-
-            // act
-            posthog1._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
-            posthog1.capture('custom event 1')
-            const { posthog: posthog2, beforeSendMock: beforeSendMock2 } = await setup(
-                undefined,
-                undefined,
-                persistenceName
-            )
-            posthog2.capture('custom event 2')
-
-            // assert
-            expect(beforeSendMock1.mock.calls.length).toEqual(1)
-            expect(beforeSendMock2.mock.calls.length).toEqual(1)
-            expect(beforeSendMock1.mock.calls[0][0].properties.$process_person_profile).toEqual(true)
-            expect(beforeSendMock2.mock.calls[0][0].properties.$process_person_profile).toEqual(true)
         })
     })
 })

@@ -342,14 +342,17 @@ describe('posthog core', () => {
 
             expect(posthog.compression).toEqual('gzip-js')
         })
-        it('uses defaultIdentifiedOnly from decide response', () => {
+        it('ignores legacy field defaultIdentifiedOnly from decide response', () => {
             const posthog = posthogWith({})
 
             posthog._onRemoteConfig({ defaultIdentifiedOnly: true } as RemoteConfig)
             expect(posthog.config.person_profiles).toEqual('identified_only')
 
             posthog._onRemoteConfig({ defaultIdentifiedOnly: false } as RemoteConfig)
-            expect(posthog.config.person_profiles).toEqual('always')
+            expect(posthog.config.person_profiles).toEqual('identified_only')
+
+            posthog._onRemoteConfig({} as RemoteConfig)
+            expect(posthog.config.person_profiles).toEqual('identified_only')
         })
         it('defaultIdentifiedOnly does not override person_profiles if already set', () => {
             const posthog = posthogWith({ person_profiles: 'always' })
