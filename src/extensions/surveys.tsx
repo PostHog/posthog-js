@@ -375,6 +375,7 @@ export function usePopupVisibility(
     useEffect(() => {
         if (!posthog) {
             logger.error('usePopupVisibility hook called without a PostHog instance.')
+            return
         }
         if (isPreviewMode) {
             return
@@ -661,6 +662,7 @@ export function FeedbackWidget({
     useEffect(() => {
         if (!posthog) {
             logger.error('FeedbackWidget called without a PostHog instance.')
+            return
         }
         if (readOnly) {
             return
