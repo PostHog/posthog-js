@@ -1,27 +1,26 @@
 /// <reference lib="dom" />
 
-import { PostHogSurveys } from '../posthog-surveys'
-import {
-    SurveyType,
-    SurveyQuestionType,
-    Survey,
-    MultipleSurveyQuestion,
-    SurveyQuestionBranchingType,
-    SurveyQuestion,
-    RatingSurveyQuestion,
-} from '../posthog-surveys-types'
+import { generateSurveys, getNextSurveyStep } from '../extensions/surveys'
 import {
     canActivateRepeatedly,
     getDisplayOrderChoices,
     getDisplayOrderQuestions,
 } from '../extensions/surveys/surveys-utils'
-import { PostHogPersistence } from '../posthog-persistence'
 import { PostHog } from '../posthog-core'
+import { PostHogPersistence } from '../posthog-persistence'
+import { PostHogSurveys } from '../posthog-surveys'
+import {
+    MultipleSurveyQuestion,
+    RatingSurveyQuestion,
+    Survey,
+    SurveyQuestion,
+    SurveyQuestionBranchingType,
+    SurveyQuestionType,
+    SurveyType,
+} from '../posthog-surveys-types'
 import { DecideResponse, PostHogConfig, Properties } from '../types'
-import { window } from '../utils/globals'
+import { assignableWindow, window } from '../utils/globals'
 import { RequestRouter } from '../utils/request-router'
-import { assignableWindow } from '../utils/globals'
-import { generateSurveys } from '../extensions/surveys'
 
 describe('surveys', () => {
     let config: PostHogConfig
@@ -844,6 +843,9 @@ describe('surveys', () => {
     })
 
     describe('branching logic', () => {
+        beforeEach(() => {
+            surveys.getNextSurveyStep = getNextSurveyStep
+        })
         const survey: Survey = {
             name: 'My survey',
             description: '',
