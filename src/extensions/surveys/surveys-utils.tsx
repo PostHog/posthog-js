@@ -538,7 +538,6 @@ export const sendSurveyEvent = (
     survey: Survey,
     posthog?: PostHog
 ) => {
-    // TODO: does it need readOnly like dismissedSurveyEvent?
     if (!posthog) {
         logger.error('[survey sent] event not captured, PostHog instance not found.')
         return
