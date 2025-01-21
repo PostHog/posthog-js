@@ -192,7 +192,6 @@ export class PostHogSurveys {
                     }
 
                     this._surveyManager = phExtensions.generateSurveys?.(this.instance)
-                    return
                 })
             } else {
                 logger.error('PostHog loadExternalDependency extension not found. Cannot load remote config.')
