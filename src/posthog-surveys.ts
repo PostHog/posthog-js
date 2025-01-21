@@ -1,5 +1,4 @@
 import { SURVEYS } from './constants'
-import { getNextSurveyStep } from './extensions/surveys'
 import { getSurveySeenStorageKeys } from './extensions/surveys/surveys-utils'
 import { PostHog } from './posthog-core'
 import { Survey, SurveyCallback, SurveyUrlMatchType } from './posthog-surveys-types'
@@ -194,7 +193,13 @@ export class PostHogSurveys {
             return this.instance.featureFlags.isFeatureEnabled(value)
         })
     }
-    getNextSurveyStep = getNextSurveyStep
+    getNextSurveyStep(survey: Survey, currentQuestionIndex: number, response: string | string[] | number | null) {
+        if (isNullish(assignableWindow.__PosthogExtensions__?.getNextSurveyStep)) {
+            logger.warn('init was not called')
+            return 0
+        }
+        return assignableWindow.__PosthogExtensions__.getNextSurveyStep(survey, currentQuestionIndex, response)
+    }
 
     // this method is lazily loaded onto the window to avoid loading preact and other dependencies if surveys is not enabled
     private _canActivateRepeatedly(survey: Survey) {

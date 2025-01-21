@@ -1,5 +1,6 @@
 import { ErrorProperties } from '../extensions/exception-autocapture/error-conversion'
 import type { PostHog } from '../posthog-core'
+import { SurveyQuestionBranchingType } from '../posthog-surveys-types'
 import { SessionIdManager } from '../sessionid'
 import {
     DeadClicksAutoCaptureConfig,
@@ -78,6 +79,11 @@ interface PostHogExtensions {
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
     canActivateRepeatedly?: (survey: any) => boolean
     generateSurveys?: (posthog: PostHog) => any | undefined
+    getNextSurveyStep?: (
+        survey: any,
+        currentQuestionIndex: number,
+        response: string | string[] | number | null
+    ) => number | SurveyQuestionBranchingType.End
     postHogWebVitalsCallbacks?: {
         onLCP: (metric: any) => void
         onCLS: (metric: any) => void
