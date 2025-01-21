@@ -163,7 +163,7 @@ export class PostHogSurveys {
             return
         }
 
-        const surveysGenerator = phExtensions.generateSurveys
+        const generateSurveys = phExtensions.generateSurveys
 
         const disableSurveys = this.instance.config.disable_surveys
 
@@ -177,25 +177,28 @@ export class PostHogSurveys {
             return
         }
 
-        if (!surveysGenerator) {
-            if (this._surveyEventReceiver == null) {
-                this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
-            }
+        if (this._surveyEventReceiver == null) {
+            this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
+        }
 
+        if (!generateSurveys) {
             const loadExternalDependency = phExtensions.loadExternalDependency
+
             if (loadExternalDependency) {
                 loadExternalDependency(this.instance, 'surveys', (err) => {
                     if (err) {
-                        return logger.error('Could not load surveys script', err)
+                        logger.error('Could not load surveys script', err)
+                        return
                     }
 
                     this._surveyManager = phExtensions.generateSurveys?.(this.instance)
+                    return
                 })
             } else {
                 logger.error('PostHog loadExternalDependency extension not found. Cannot load remote config.')
             }
         } else {
-            logger.info('Surveys generator found. Loading surveys.')
+            this._surveyManager = generateSurveys(this.instance)
         }
     }
 
