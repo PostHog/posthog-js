@@ -373,7 +373,10 @@ export function usePopupVisibility(
     const [isSurveySent, setIsSurveySent] = useState(false)
 
     useEffect(() => {
-        if (isPreviewMode || !posthog) {
+        if (!posthog) {
+            logger.error('usePopupVisibility hook called without a PostHog instance.')
+        }
+        if (isPreviewMode) {
             return
         }
 
@@ -555,6 +558,7 @@ export function Questions({
         displayQuestionIndex: number
     }) => {
         if (!posthog) {
+            logger.error('onNextButtonClick called without a PostHog instance.')
             return
         }
 
@@ -655,7 +659,10 @@ export function FeedbackWidget({
     const widgetRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
-        if (readOnly || !posthog) {
+        if (!posthog) {
+            logger.error('FeedbackWidget called without a PostHog instance.')
+        }
+        if (readOnly) {
             return
         }
 
