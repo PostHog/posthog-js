@@ -1,3 +1,8 @@
+## 1.207.1 - 2025-01-21
+
+- fix: expose getNextSurveyStep to use in posthog (#1661)
+- chore: upgrade rrweb to alpha.18 (#1592)
+
 ## 1.207.0 - 2025-01-16
 
 - chore: deduplicate subsequent identify calls (#1649)
