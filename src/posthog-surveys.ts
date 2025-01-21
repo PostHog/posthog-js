@@ -156,6 +156,11 @@ export class PostHogSurveys {
     }
 
     loadIfEnabled() {
+        if (this._surveyManager) {
+            logger.info('Surveys already loaded.')
+            return
+        }
+
         const phExtensions = assignableWindow?.__PosthogExtensions__
 
         if (!phExtensions) {
