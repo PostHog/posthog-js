@@ -5,11 +5,15 @@ import { USER_STATE } from '../constants'
 
 describe('reset()', () => {
     let instance: PostHog
+    let beforeSendMock: jest.Mock
 
     beforeEach(async () => {
+        beforeSendMock = jest.fn().mockImplementation((e) => e)
+
         instance = await createPosthogInstance(uuidv7(), {
             api_host: 'https://test.com',
             token: 'testtoken',
+            before_send: beforeSendMock,
         })
     })
 
@@ -47,6 +51,30 @@ describe('reset()', () => {
 
         const nextDeviceId = instance.get_property('$device_id')
         expect(initialDeviceId).toEqual(nextDeviceId)
+    })
+
+    it('sets last reset date', () => {
+        instance.capture('probe 1')
+        expect(beforeSendMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                event: 'probe 1',
+                properties: expect.not.objectContaining({
+                    $last_posthog_reset: expect.any(String),
+                }),
+            })
+        )
+
+        instance.reset()
+
+        instance.capture('probe 2')
+        expect(beforeSendMock).toHaveBeenLastCalledWith(
+            expect.objectContaining({
+                event: 'probe 2',
+                properties: expect.objectContaining({
+                    $last_posthog_reset: expect.any(String),
+                }),
+            })
+        )
     })
 
     describe('when calling reset(true)', () => {
