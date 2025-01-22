@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 import posthogJs, { PostHogConfig } from 'posthog-js'
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import { PostHog, PostHogContext } from './PostHogContext'
 
 type WithOptionalChildren<T> = T & { children?: React.ReactNode | undefined }
@@ -28,6 +28,10 @@ type PostHogProviderProps =
  * but not both simultaneously.
  */
 export function PostHogProvider({ children, client, apiKey, options }: WithOptionalChildren<PostHogProviderProps>) {
+    // Used to detect if the client was already initialized
+    // This is used to prevent double initialization when running under React.StrictMode
+    const [alreadyInitialized, setAlreadyInitialized] = useState(false)
+
     const posthog = useMemo(() => {
         if (client) {
             if (apiKey) {
@@ -50,11 +54,27 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
         }
 
         if (apiKey) {
+            // If the client was already initialized, return the existing instance
+            // This is likely to occur when someone is developing locally under `React.StrictMode`
+            //
+            // There's no built-in way to detect React.StrictMode, so we set a flag to check if the client was already initialized
+            // and return the existing instance if it was.
+            if (alreadyInitialized) {
+                return posthogJs
+            }
+
+            // If it's the first time running this, but it has been loaded elsewhere, warn the user about it.
             if (posthogJs.__loaded) {
                 console.warn('[PostHog.js] `posthog` was already loaded elsewhere. This may cause issues.')
             }
 
+            // Init global client
             posthogJs.init(apiKey, options)
+
+            // Keep track of whether the client was already initialized
+            // This is used to prevent double initialization when running under React.StrictMode
+            setAlreadyInitialized(true)
+
             return posthogJs
         }
 
