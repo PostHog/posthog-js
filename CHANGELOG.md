@@ -1,3 +1,7 @@
+## 1.207.4 - 2025-01-22
+
+- fix: sentry integration fields (#1669)
+
 ## 1.207.3 - 2025-01-22
 
 - fix: patch for css parsing performance (#1670)
