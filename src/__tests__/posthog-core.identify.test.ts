@@ -1,8 +1,8 @@
 import { USER_STATE } from '../constants'
-import { uuidv7 } from '../uuidv7'
-import { defaultPostHog } from './helpers/posthog-instance'
 import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
+import { uuidv7 } from '../uuidv7'
+import { defaultPostHog } from './helpers/posthog-instance'
 
 describe('identify()', () => {
     let instance: PostHog
@@ -24,6 +24,7 @@ describe('identify()', () => {
             {
                 api_host: 'https://test.com',
                 before_send: beforeSendMock,
+                disable_surveys: true,
             },
             token
         )

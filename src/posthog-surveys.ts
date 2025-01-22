@@ -144,6 +144,8 @@ export class PostHogSurveys {
 
     onRemoteConfig(response: RemoteConfig) {
         this._decideServerResponse = !!response['surveys']
+        logger.info(`decideServerResponse set to ${this._decideServerResponse}`)
+
         this.loadIfEnabled()
     }
 
@@ -154,20 +156,53 @@ export class PostHogSurveys {
     }
 
     loadIfEnabled() {
-        const surveysGenerator = assignableWindow?.__PosthogExtensions__?.generateSurveys
+        if (this._surveyManager) {
+            logger.info('Surveys already loaded.')
+            return
+        }
 
-        if (!this.instance.config.disable_surveys && this._decideServerResponse && !surveysGenerator) {
-            if (this._surveyEventReceiver == null) {
-                this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
+        const disableSurveys = this.instance.config.disable_surveys
+
+        if (disableSurveys) {
+            logger.info('Disabled. Not loading surveys.')
+            return
+        }
+
+        const phExtensions = assignableWindow?.__PosthogExtensions__
+
+        if (!phExtensions) {
+            logger.error('PostHog Extensions not found.')
+            return
+        }
+
+        const generateSurveys = phExtensions.generateSurveys
+
+        if (!this._decideServerResponse) {
+            logger.warn('Decide not loaded yet. Not loading surveys.')
+            return
+        }
+
+        if (this._surveyEventReceiver == null) {
+            this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
+        }
+
+        if (!generateSurveys) {
+            const loadExternalDependency = phExtensions.loadExternalDependency
+
+            if (loadExternalDependency) {
+                loadExternalDependency(this.instance, 'surveys', (err) => {
+                    if (err) {
+                        logger.error('Could not load surveys script', err)
+                        return
+                    }
+
+                    this._surveyManager = phExtensions.generateSurveys?.(this.instance)
+                })
+            } else {
+                logger.error('PostHog loadExternalDependency extension not found. Cannot load remote config.')
             }
-
-            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'surveys', (err) => {
-                if (err) {
-                    return logger.error('Could not load surveys script', err)
-                }
-
-                this._surveyManager = assignableWindow.__PosthogExtensions__?.generateSurveys?.(this.instance)
-            })
+        } else {
+            this._surveyManager = generateSurveys(this.instance)
         }
     }
 
@@ -175,6 +210,8 @@ export class PostHogSurveys {
         // In case we manage to load the surveys script, but config says not to load surveys
         // then we shouldn't return survey data
         if (this.instance.config.disable_surveys) {
+            logger.info('Disabled. Not loading surveys.')
+
             return callback([])
         }
 
@@ -192,7 +229,9 @@ export class PostHogSurveys {
                 ),
                 method: 'GET',
                 callback: (response) => {
-                    if (response.statusCode !== 200 || !response.json) {
+                    const statusCode = response.statusCode
+                    if (statusCode !== 200 || !response.json) {
+                        logger.error(`Surveys API could not be loaded, status: ${statusCode}`)
                         return callback([])
                     }
                     const surveys = response.json.surveys || []
@@ -216,6 +255,7 @@ export class PostHogSurveys {
                 },
             })
         } else {
+            logger.info('Surveys already loaded.')
             return callback(existingSurveys)
         }
     }

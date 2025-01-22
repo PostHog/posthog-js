@@ -594,7 +594,7 @@ export class PostHog {
         this.sessionRecording?.onRemoteConfig(config)
         this.autocapture?.onRemoteConfig(config)
         this.heatmaps?.onRemoteConfig(config)
-        this.surveys?.onRemoteConfig(config)
+        this.surveys.onRemoteConfig(config)
         this.webVitalsAutocapture?.onRemoteConfig(config)
         this.exceptionObserver?.onRemoteConfig(config)
         this.deadClicksAutocapture?.onRemoteConfig(config)
@@ -1582,7 +1582,7 @@ export class PostHog {
         this.consent.reset()
         this.persistence?.clear()
         this.sessionPersistence?.clear()
-        this.surveys?.reset()
+        this.surveys.reset()
         this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()
         this._cachedIdentify = null

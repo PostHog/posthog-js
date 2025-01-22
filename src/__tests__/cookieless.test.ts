@@ -1,6 +1,6 @@
-import { defaultPostHog } from './helpers/posthog-instance'
 import type { PostHogConfig } from '../types'
 import { uuidv7 } from '../uuidv7'
+import { defaultPostHog } from './helpers/posthog-instance'
 
 describe('cookieless', () => {
     const eventName = 'custom_event'
@@ -19,6 +19,7 @@ describe('cookieless', () => {
         const { posthog, beforeSendMock } = setup({
             persistence: 'memory',
             __preview_experimental_cookieless_mode: true,
+            disable_surveys: true,
         })
 
         posthog.capture(eventName, eventProperties)

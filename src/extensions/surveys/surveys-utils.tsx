@@ -2,10 +2,14 @@ import { VNode, cloneElement, createContext } from 'preact'
 import { PostHog } from '../../posthog-core'
 import { MultipleSurveyQuestion, Survey, SurveyAppearance, SurveyQuestion } from '../../posthog-surveys-types'
 import { document as _document, window as _window } from '../../utils/globals'
+import { createLogger } from '../../utils/logger'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 const SurveySeenPrefix = 'seenSurvey_'
+
+const logger = createLogger('[Surveys]')
+
 export const style = (appearance: SurveyAppearance | null) => {
     const positions = {
         left: 'left: 30px;',
@@ -534,7 +538,10 @@ export const sendSurveyEvent = (
     survey: Survey,
     posthog?: PostHog
 ) => {
-    if (!posthog) return
+    if (!posthog) {
+        logger.error('[survey sent] event not captured, PostHog instance not found.')
+        return
+    }
     localStorage.setItem(getSurveySeenKey(survey), 'true')
 
     posthog.capture('survey sent', {
@@ -554,7 +561,11 @@ export const sendSurveyEvent = (
 
 export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {
     // TODO: state management and unit tests for this would be nice
-    if (readOnly || !posthog) {
+    if (!posthog) {
+        logger.error('[survey dismissed] event not captured, PostHog instance not found.')
+        return
+    }
+    if (readOnly) {
         return
     }
     posthog.capture('survey dismissed', {
