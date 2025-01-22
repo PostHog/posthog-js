@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { render } from '@testing-library/react'
-import { PostHogProvider, PostHogContext } from '..'
+import { PostHogProvider } from '..'
 
 describe('PostHogProvider component', () => {
     given(
