@@ -1,5 +1,5 @@
 diff --git a/dist/record.js b/dist/record.js
-index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..f87cc088f3210eed0c38cc0544c1cb0d47e634b1 100644
+index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..472c9f1359baf685279614c47426648102479efb 100644
 --- a/dist/record.js
 +++ b/dist/record.js
 @@ -68,10 +68,10 @@ function getUntaintedPrototype$1(key) {
@@ -25,7 +25,110 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..f87cc088f3210eed0c38cc0544c1cb0d
  class Mirror {
    constructor() {
      __publicField$1(this, "idNodeMap", /* @__PURE__ */ new Map());
-@@ -841,9 +844,14 @@ function serializeElementNode(n2, options) {
+@@ -426,23 +429,81 @@ function absolutifyURLs(cssText, href) {
+ function normalizeCssString(cssText) {
+   return cssText.replace(/(\/\*[^*]*\*\/)|[\s;]/g, "");
+ }
+-function splitCssText(cssText, style) {
+-  const childNodes2 = Array.from(style.childNodes);
++/**
++ * Maps the output of stringifyStylesheet to individual text nodes of a <style> element
++ * which occurs when javascript is used to append to the style element
++ * and may also occur when browsers opt to break up large text nodes
++ * performance needs to be considered, see e.g. #1603
++ */
++export function splitCssText(
++  cssText,
++  style,
++) {
++  const childNodes = Array.from(style.childNodes);
+   const splits = [];
+-  if (childNodes2.length > 1 && cssText && typeof cssText === "string") {
+-    const cssTextNorm = normalizeCssString(cssText);
+-    for (let i2 = 1; i2 < childNodes2.length; i2++) {
+-      if (childNodes2[i2].textContent && typeof childNodes2[i2].textContent === "string") {
+-        const textContentNorm = normalizeCssString(childNodes2[i2].textContent);
+-        for (let j = 3; j < textContentNorm.length; j++) {
++  let iterLimit = 0;
++  if (childNodes.length > 1 && cssText && typeof cssText === 'string') {
++    let cssTextNorm = normalizeCssString(cssText);
++    const normFactor = cssTextNorm.length / cssText.length;
++    for (let i = 1; i < childNodes.length; i++) {
++      if (
++        childNodes[i].textContent &&
++        typeof childNodes[i].textContent === 'string'
++      ) {
++        const textContentNorm = normalizeCssString(childNodes[i].textContent);
++        let j = 3;
++        for (; j < textContentNorm.length; j++) {
++          if (
++            // keep consuming css identifiers (to get a decent chunk more quickly)
++            textContentNorm[j].match(/[a-zA-Z0-9]/) ||
++            // substring needs to be unique to this section
++            textContentNorm.indexOf(textContentNorm.substring(0, j), 1) !== -1
++          ) {
++            continue;
++          }
++          break;
++        }
++        for (; j < textContentNorm.length; j++) {
+           const bit = textContentNorm.substring(0, j);
+-          if (cssTextNorm.split(bit).length === 2) {
+-            const splitNorm = cssTextNorm.indexOf(bit);
+-            for (let k = splitNorm; k < cssText.length; k++) {
+-              if (normalizeCssString(cssText.substring(0, k)).length === splitNorm) {
++          // this substring should appears only once in overall text too
++          const bits = cssTextNorm.split(bit);
++          let splitNorm = -1;
++          if (bits.length === 2) {
++            splitNorm = cssTextNorm.indexOf(bit);
++          } else if (
++            bits.length > 2 &&
++            bits[0] === '' &&
++            childNodes[i - 1].textContent !== ''
++          ) {
++            // this childNode has same starting content as previous
++            splitNorm = cssTextNorm.indexOf(bit, 1);
++          }
++          if (splitNorm !== -1) {
++            // find the split point in the original text
++            let k = Math.floor(splitNorm / normFactor);
++            for (; k > 0 && k < cssText.length; ) {
++              iterLimit += 1;
++              if (iterLimit > 50 * childNodes.length) {
++                // quit for performance purposes
++                splits.push(cssText);
++                return splits;
++              }
++              const normPart = normalizeCssString(cssText.substring(0, k));
++              if (normPart.length === splitNorm) {
+                 splits.push(cssText.substring(0, k));
+                 cssText = cssText.substring(k);
++                cssTextNorm = cssTextNorm.substring(splitNorm);
+                 break;
++              } else if (normPart.length < splitNorm) {
++                k += Math.max(
++                  1,
++                  Math.floor((splitNorm - normPart.length) / normFactor),
++                );
++              } else {
++                k -= Math.max(
++                  1,
++                  Math.floor((normPart.length - splitNorm) * normFactor),
++                );
+               }
+             }
+             break;
+@@ -451,7 +512,7 @@ function splitCssText(cssText, style) {
+       }
+     }
+   }
+-  splits.push(cssText);
++  splits.push(cssText); // either the full thing if no splits were found, or the last split
+   return splits;
+ }
+ function markCssSplits(cssText, style) {
+@@ -841,9 +902,14 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "link" && inlineStylesheet) {
@@ -43,7 +146,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..f87cc088f3210eed0c38cc0544c1cb0d
      let cssText = null;
      if (stylesheet) {
        cssText = stringifyStylesheet(stylesheet);
-@@ -889,7 +897,15 @@ function serializeElementNode(n2, options) {
+@@ -889,7 +955,15 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "dialog" && n2.open) {
@@ -60,7 +163,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..f87cc088f3210eed0c38cc0544c1cb0d
    }
    if (tagName === "canvas" && recordCanvas) {
      if (n2.__context === "2d") {
-@@ -1112,7344 +1128,249 @@ function serializeNodeWithId(n2, options) {
+@@ -1112,7344 +1186,249 @@ function serializeNodeWithId(n2, options) {
      return null;
    }
    if (onSerialize) {
@@ -7633,7 +7736,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..f87cc088f3210eed0c38cc0544c1cb0d
  class BaseRRNode {
    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
    constructor(..._args) {
-@@ -11451,11 +4372,19 @@ class CanvasManager {
+@@ -11451,11 +4430,19 @@ class CanvasManager {
      let rafId;
      const getCanvas = () => {
        const matchedCanvas = [];
@@ -7658,7 +7761,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..f87cc088f3210eed0c38cc0544c1cb0d
        return matchedCanvas;
      };
      const takeCanvasSnapshots = (timestamp) => {
-@@ -11476,13 +4405,20 @@ class CanvasManager {
+@@ -11476,13 +4463,20 @@ class CanvasManager {
              context.clear(context.COLOR_BUFFER_BIT);
            }
          }
@@ -7682,3 +7785,110 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..f87cc088f3210eed0c38cc0544c1cb0d
              dataURLOptions: options.dataURLOptions
            },
            [bitmap]
+diff --git a/dist/record.umd.cjs b/dist/record.umd.cjs
+index 902c5eca13b2c3e69af25afa682d2e7300372bfc..4da3d8a172b53199f91880229ec5d665bb7d0fd4 100644
+--- a/dist/record.umd.cjs
++++ b/dist/record.umd.cjs
+@@ -473,23 +473,81 @@ function absolutifyURLs(cssText, href) {
+ function normalizeCssString(cssText) {
+   return cssText.replace(/(\/\*[^*]*\*\/)|[\s;]/g, "");
+ }
+-function splitCssText(cssText, style) {
+-  const childNodes2 = Array.from(style.childNodes);
++/**
++ * Maps the output of stringifyStylesheet to individual text nodes of a <style> element
++ * which occurs when javascript is used to append to the style element
++ * and may also occur when browsers opt to break up large text nodes
++ * performance needs to be considered, see e.g. #1603
++ */
++export function splitCssText(
++  cssText,
++  style,
++) {
++  const childNodes = Array.from(style.childNodes);
+   const splits = [];
+-  if (childNodes2.length > 1 && cssText && typeof cssText === "string") {
+-    const cssTextNorm = normalizeCssString(cssText);
+-    for (let i2 = 1; i2 < childNodes2.length; i2++) {
+-      if (childNodes2[i2].textContent && typeof childNodes2[i2].textContent === "string") {
+-        const textContentNorm = normalizeCssString(childNodes2[i2].textContent);
+-        for (let j = 3; j < textContentNorm.length; j++) {
++  let iterLimit = 0;
++  if (childNodes.length > 1 && cssText && typeof cssText === 'string') {
++    let cssTextNorm = normalizeCssString(cssText);
++    const normFactor = cssTextNorm.length / cssText.length;
++    for (let i = 1; i < childNodes.length; i++) {
++      if (
++        childNodes[i].textContent &&
++        typeof childNodes[i].textContent === 'string'
++      ) {
++        const textContentNorm = normalizeCssString(childNodes[i].textContent);
++        let j = 3;
++        for (; j < textContentNorm.length; j++) {
++          if (
++            // keep consuming css identifiers (to get a decent chunk more quickly)
++            textContentNorm[j].match(/[a-zA-Z0-9]/) ||
++            // substring needs to be unique to this section
++            textContentNorm.indexOf(textContentNorm.substring(0, j), 1) !== -1
++          ) {
++            continue;
++          }
++          break;
++        }
++        for (; j < textContentNorm.length; j++) {
+           const bit = textContentNorm.substring(0, j);
+-          if (cssTextNorm.split(bit).length === 2) {
+-            const splitNorm = cssTextNorm.indexOf(bit);
+-            for (let k = splitNorm; k < cssText.length; k++) {
+-              if (normalizeCssString(cssText.substring(0, k)).length === splitNorm) {
++          // this substring should appears only once in overall text too
++          const bits = cssTextNorm.split(bit);
++          let splitNorm = -1;
++          if (bits.length === 2) {
++            splitNorm = cssTextNorm.indexOf(bit);
++          } else if (
++            bits.length > 2 &&
++            bits[0] === '' &&
++            childNodes[i - 1].textContent !== ''
++          ) {
++            // this childNode has same starting content as previous
++            splitNorm = cssTextNorm.indexOf(bit, 1);
++          }
++          if (splitNorm !== -1) {
++            // find the split point in the original text
++            let k = Math.floor(splitNorm / normFactor);
++            for (; k > 0 && k < cssText.length; ) {
++              iterLimit += 1;
++              if (iterLimit > 50 * childNodes.length) {
++                // quit for performance purposes
++                splits.push(cssText);
++                return splits;
++              }
++              const normPart = normalizeCssString(cssText.substring(0, k));
++              if (normPart.length === splitNorm) {
+                 splits.push(cssText.substring(0, k));
+                 cssText = cssText.substring(k);
++                cssTextNorm = cssTextNorm.substring(splitNorm);
+                 break;
++              } else if (normPart.length < splitNorm) {
++                k += Math.max(
++                  1,
++                  Math.floor((splitNorm - normPart.length) / normFactor),
++                );
++              } else {
++                k -= Math.max(
++                  1,
++                  Math.floor((normPart.length - splitNorm) * normFactor),
++                );
+               }
+             }
+             break;
+@@ -498,7 +556,7 @@ function splitCssText(cssText, style) {
+       }
+     }
+   }
+-  splits.push(cssText);
++  splits.push(cssText); // either the full thing if no splits were found, or the last split
+   return splits;
+ }
+ function markCssSplits(cssText, style) {

@@ -1,3 +1,15 @@
+## 1.207.5 - 2025-01-22
+
+- fix: set last reset date as event super property (#1671)
+
+## 1.207.4 - 2025-01-22
+
+- fix: sentry integration fields (#1669)
+
+## 1.207.3 - 2025-01-22
+
+- fix: patch for css parsing performance (#1670)
+
 ## 1.207.2 - 2025-01-21
 
 - fix(): prevent person processing if /decide fails to fetch remote config (#1658)
