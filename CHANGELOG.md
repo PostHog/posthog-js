@@ -1,3 +1,7 @@
+## 1.207.8 - 2025-01-22
+
+- fix: missing href on link (#1678)
+
 ## 1.207.7 - 2025-01-22
 
 - fix: cache nested loops (#1677)
