@@ -1948,13 +1948,16 @@ export class PostHog {
     captureException(error: Error, additionalProperties?: Properties): void {
         const syntheticException = new Error('PostHog syntheticException')
         const properties: Properties = isFunction(assignableWindow.__PosthogExtensions__?.parseErrorAsProperties)
-            ? assignableWindow.__PosthogExtensions__.parseErrorAsProperties(
-                  [error.message, undefined, undefined, undefined, error],
-                  // create synthetic error to get stack in cases where user input does not contain one
-                  // creating the exceptionas soon into our code as possible means we should only have to
-                  // remove a single frame (this 'captureException' method) from the resultant stack
-                  { syntheticException }
-              )
+            ? {
+                  ...assignableWindow.__PosthogExtensions__.parseErrorAsProperties(
+                      [error.message, undefined, undefined, undefined, error],
+                      // create synthetic error to get stack in cases where user input does not contain one
+                      // creating the exceptions soon into our code as possible means we should only have to
+                      // remove a single frame (this 'captureException' method) from the resultant stack
+                      { syntheticException }
+                  ),
+                  ...additionalProperties,
+              }
             : {
                   $exception_level: 'error',
                   $exception_list: [
