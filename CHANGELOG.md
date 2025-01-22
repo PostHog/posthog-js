@@ -1,3 +1,7 @@
+## 1.207.7 - 2025-01-22
+
+- fix: cache nested loops (#1677)
+
 ## 1.207.6 - 2025-01-22
 
 - chore: better logging for surveys loaders (#1663)
