@@ -1604,6 +1604,13 @@ export class PostHog {
                 ''
             )
         }
+
+        this.register(
+            {
+                $last_posthog_reset: new Date().toISOString(),
+            },
+            1
+        )
     }
 
     /**
