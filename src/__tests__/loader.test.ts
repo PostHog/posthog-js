@@ -22,6 +22,7 @@ describe(`Module-based loader in Node env`, () => {
                 siteApps: [],
             },
         } as any
+        // assignableWindow.__PosthogExtensions__ = {}
 
         jest.useFakeTimers()
         jest.spyOn(posthog, '_send_request').mockReturnValue()
@@ -34,6 +35,7 @@ describe(`Module-based loader in Node env`, () => {
         const _originalCapture = posthog.capture
         posthog.capture = sandbox.spy()
         posthog.init(`test-token`, {
+            disable_surveys: true,
             debug: true,
             persistence: `localStorage`,
             api_host: `https://test.com`,
@@ -64,15 +66,15 @@ describe(`Module-based loader in Node env`, () => {
     it(`always returns posthog from init`, () => {
         console.error = jest.fn()
         console.warn = jest.fn()
-        expect(posthog.init(`my-test`, undefined, 'sdk-1')).toBeInstanceOf(PostHog)
-        expect(posthog.init(``, undefined, 'sdk-2')).toBeInstanceOf(PostHog)
+        expect(posthog.init(`my-test`, { disable_surveys: true }, 'sdk-1')).toBeInstanceOf(PostHog)
+        expect(posthog.init(``, { disable_surveys: true }, 'sdk-2')).toBeInstanceOf(PostHog)
         expect(console.error).toHaveBeenCalledTimes(2)
         expect(console.error).toHaveBeenCalledWith(
             '[PostHog.js]',
             'PostHog was initialized without a token. This likely indicates a misconfiguration. Please check the first argument passed to posthog.init()'
         )
         // Already loaded
-        expect(posthog.init(`my-test`, undefined, 'sdk-1')).toBeInstanceOf(PostHog)
+        expect(posthog.init(`my-test`, { disable_surveys: true }, 'sdk-1')).toBeInstanceOf(PostHog)
         expect(console.warn).toHaveBeenCalledWith(
             '[PostHog.js]',
             'You have already initialized PostHog! Re-initializing is a no-op'
