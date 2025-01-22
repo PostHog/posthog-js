@@ -161,6 +161,13 @@ export class PostHogSurveys {
             return
         }
 
+        const disableSurveys = this.instance.config.disable_surveys
+
+        if (disableSurveys) {
+            logger.info('Disabled. Not loading surveys.')
+            return
+        }
+
         const phExtensions = assignableWindow?.__PosthogExtensions__
 
         if (!phExtensions) {
@@ -169,13 +176,6 @@ export class PostHogSurveys {
         }
 
         const generateSurveys = phExtensions.generateSurveys
-
-        const disableSurveys = this.instance.config.disable_surveys
-
-        if (disableSurveys) {
-            logger.info('Disabled. Not loading surveys.')
-            return
-        }
 
         if (!this._decideServerResponse) {
             logger.warn('Decide not loaded yet. Not loading surveys.')
