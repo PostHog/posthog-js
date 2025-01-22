@@ -1,3 +1,7 @@
+## 1.207.3 - 2025-01-22
+
+- fix: patch for css parsing performance (#1670)
+
 ## 1.207.2 - 2025-01-21
 
 - fix(): prevent person processing if /decide fails to fetch remote config (#1658)
