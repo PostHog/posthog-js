@@ -1096,7 +1096,7 @@ export class PostHog {
      *     // Display the properties
      *     console.log(posthog.persistence.properties())
      *
-     * @param {Object} properties An associative array of properties to store about the user
+     * @param {Object} properties properties to store about the user
      * @param {Number} [days] How many days since the user's last visit to store the super properties
      */
     register(properties: Properties, days?: number): void {
@@ -1604,6 +1604,13 @@ export class PostHog {
                 ''
             )
         }
+
+        this.register(
+            {
+                $last_posthog_reset: new Date().toISOString(),
+            },
+            1
+        )
     }
 
     /**
