@@ -6,7 +6,7 @@ settings:
 
 patchedDependencies:
   '@rrweb/record@2.0.0-alpha.18':
-    hash: wbich7ix2ke4ynry4xbenxe4tm
+    hash: y73roj45fovzdp3b5jit2jdwie
     path: patches/@rrweb__record@2.0.0-alpha.18.patch
   '@rrweb/rrweb-plugin-console-record@2.0.0-alpha.18':
     hash: xqev6zvgnatibyueo4tkcc7s5q
@@ -74,7 +74,7 @@ devDependencies:
     version: 12.1.2(rollup@4.28.1)(tslib@2.5.0)(typescript@5.5.4)
   '@rrweb/record':
     specifier: 2.0.0-alpha.18
-    version: 2.0.0-alpha.18(patch_hash=wbich7ix2ke4ynry4xbenxe4tm)
+    version: 2.0.0-alpha.18(patch_hash=y73roj45fovzdp3b5jit2jdwie)
   '@rrweb/rrweb-plugin-console-record':
     specifier: 2.0.0-alpha.18
     version: 2.0.0-alpha.18(patch_hash=xqev6zvgnatibyueo4tkcc7s5q)(rrweb@2.0.0-alpha.18)
@@ -2857,7 +2857,7 @@ packages:
     dev: true
     optional: true
 
-  /@rrweb/record@2.0.0-alpha.18(patch_hash=wbich7ix2ke4ynry4xbenxe4tm):
+  /@rrweb/record@2.0.0-alpha.18(patch_hash=y73roj45fovzdp3b5jit2jdwie):
     resolution: {integrity: sha512-WbzcybTEqT+cKkOnzYiyaAYvNzAIxTK9f8qNLNOG9lOqWsmi+qu/W7CEdxHmfjlfgXGw/f7bxGZggAWVaizKqg==}
     dependencies:
       '@rrweb/types': 2.0.0-alpha.18
