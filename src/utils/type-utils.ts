@@ -35,7 +35,7 @@ export const isObject = (x: unknown): x is Record<string, any> => {
     // eslint-disable-next-line posthog-js/no-direct-object-check
     return x === Object(x) && !isArray(x)
 }
-export const isEmptyObject = (x: unknown): x is Record<string, any> => {
+export const isEmptyObject = (x: unknown) => {
     if (isObject(x)) {
         for (const key in x) {
             if (hasOwnProperty.call(x, key)) {
