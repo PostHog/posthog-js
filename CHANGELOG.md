@@ -1,3 +1,7 @@
+## 1.207.2 - 2025-01-21
+
+- fix(): prevent person processing if /decide fails to fetch remote config (#1658)
+
 ## 1.207.1 - 2025-01-21
 
 - fix: expose getNextSurveyStep to use in posthog (#1661)
