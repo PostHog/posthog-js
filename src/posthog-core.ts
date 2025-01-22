@@ -587,11 +587,7 @@ export class PostHog {
         }
 
         this.set_config({
-            person_profiles: this._initialPersonProfilesConfig
-                ? this._initialPersonProfilesConfig
-                : config['defaultIdentifiedOnly']
-                  ? 'identified_only'
-                  : 'always',
+            person_profiles: this._initialPersonProfilesConfig ? this._initialPersonProfilesConfig : 'identified_only',
         })
 
         this.siteApps?.onRemoteConfig(config)
