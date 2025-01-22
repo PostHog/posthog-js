@@ -1,5 +1,5 @@
 diff --git a/dist/record.js b/dist/record.js
-index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..ff1783439be7fdd6ad947b805324e4c7f8f70851 100644
+index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..62e51b1a9df6df14115b31e21a7360b25591e249 100644
 --- a/dist/record.js
 +++ b/dist/record.js
 @@ -68,10 +68,10 @@ function getUntaintedPrototype$1(key) {
@@ -146,25 +146,43 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..ff1783439be7fdd6ad947b805324e4c7
    return splits;
  }
  function markCssSplits(cssText, style) {
-@@ -841,9 +915,14 @@ function serializeElementNode(n2, options) {
+@@ -841,17 +915,24 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "link" && inlineStylesheet) {
 -    const stylesheet = Array.from(doc.styleSheets).find((s2) => {
 -      return s2.href === n2.href;
 -    });
+-    let cssText = null;
+-    if (stylesheet) {
+-      cssText = stringifyStylesheet(stylesheet);
+-    }
+-    if (cssText) {
+-      delete attributes.rel;
+-      delete attributes.href;
+-      attributes._cssText = cssText;
 +    const href = n2.href;
-+    let stylesheet = findStylesheet(doc, href);
-+    if (!stylesheet && href.includes('.css')) {
-+      const rootDomain = window.location.origin;
-+      const stylesheetPath = href.replace(window.location.href, '');
-+      const potentialStylesheetHref = rootDomain + '/' + stylesheetPath;
-+      stylesheet = findStylesheet(doc, potentialStylesheetHref);
-+    }
-     let cssText = null;
-     if (stylesheet) {
-       cssText = stringifyStylesheet(stylesheet);
-@@ -889,7 +968,15 @@ function serializeElementNode(n2, options) {
++    if (href) {
++      let stylesheet = findStylesheet(doc, href);
++      if (!stylesheet && href.includes('.css')) {
++        const rootDomain = window.location.origin;
++        const stylesheetPath = href.replace(window.location.href, '');
++        const potentialStylesheetHref = rootDomain + '/' + stylesheetPath;
++        stylesheet = findStylesheet(doc, potentialStylesheetHref);
++      }
++      let cssText = null;
++      if (stylesheet) {
++        cssText = stringifyStylesheet(stylesheet);
++      }
++      if (cssText) {
++        delete attributes.rel;
++        delete attributes.href;
++        attributes._cssText = cssText;
++      }
+     }
+   }
+   if (tagName === "style" && n2.sheet) {
+@@ -889,7 +970,15 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "dialog" && n2.open) {
@@ -181,7 +199,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..ff1783439be7fdd6ad947b805324e4c7
    }
    if (tagName === "canvas" && recordCanvas) {
      if (n2.__context === "2d") {
-@@ -1112,7344 +1199,249 @@ function serializeNodeWithId(n2, options) {
+@@ -1112,7344 +1201,249 @@ function serializeNodeWithId(n2, options) {
      return null;
    }
    if (onSerialize) {
@@ -7754,7 +7772,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..ff1783439be7fdd6ad947b805324e4c7
  class BaseRRNode {
    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
    constructor(..._args) {
-@@ -11451,11 +4443,19 @@ class CanvasManager {
+@@ -11451,11 +4445,19 @@ class CanvasManager {
      let rafId;
      const getCanvas = () => {
        const matchedCanvas = [];
@@ -7779,7 +7797,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..ff1783439be7fdd6ad947b805324e4c7
        return matchedCanvas;
      };
      const takeCanvasSnapshots = (timestamp) => {
-@@ -11476,13 +4476,20 @@ class CanvasManager {
+@@ -11476,13 +4478,20 @@ class CanvasManager {
              context.clear(context.COLOR_BUFFER_BIT);
            }
          }
