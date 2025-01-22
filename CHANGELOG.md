@@ -1,3 +1,7 @@
+## 1.207.6 - 2025-01-22
+
+- chore: better logging for surveys loaders (#1663)
+
 ## 1.207.5 - 2025-01-22
 
 - fix: set last reset date as event super property (#1671)
