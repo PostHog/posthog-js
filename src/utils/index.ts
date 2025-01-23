@@ -311,7 +311,7 @@ export function isCrossDomainCookie(documentLocation: Location | undefined) {
     const lastTwoParts = hostname.split('.').slice(-2).join('.')
 
     for (const excluded of EXCLUDED_FROM_CROSS_SUBDOMAIN_COOKIE) {
-        if (lastTwoParts.includes(excluded)) {
+        if (lastTwoParts === excluded) {
             return false
         }
     }

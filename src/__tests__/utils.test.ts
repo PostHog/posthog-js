@@ -220,18 +220,39 @@ describe('utils', () => {
 
     describe('check for cross domain cookies', () => {
         it.each([
+            // Known subdomains are detected
             [false, 'https://test.herokuapp.com'],
             [false, 'test.herokuapp.com'],
             [false, 'herokuapp.com'],
-            [false, undefined],
-            // ensure it isn't matching herokuapp anywhere in the domain
+            [false, 'https://test.vercel.app'],
+            [false, 'test.vercel.app'],
+            [false, 'vercel.app'],
+            [false, 'https://test.netlify.app'],
+            [false, 'test.netlify.app'],
+            [false, 'netlify.app'],
+
+            // ensure it isn't matching known subdomains anywhere in the domain
             [true, 'https://test.herokuapp.com.impersonator.io'],
             [true, 'mysite-herokuapp.com'],
+            [true, 'https://test.vercel.app.impersonator.io'],
+            [true, 'vercel.app.impersonator.io'],
+            [true, 'mysite-vercel.app'],
+            [true, 'https://test.netlify.app.impersonator.io'],
+            [true, 'mysite-netlify.app'],
+
+            // Base check
+            [false, undefined],
+
+            // Basic domain matching for random website
             [true, 'https://bbc.co.uk'],
             [true, 'bbc.co.uk'],
             [true, 'www.bbc.co.uk'],
         ])('should return %s when hostname is %s', (expectedResult, hostname) => {
-            expect(isCrossDomainCookie({ hostname } as unknown as Location)).toEqual(expectedResult)
+            // Array is here to make tests more readable
+            expect([hostname, isCrossDomainCookie({ hostname } as unknown as Location)]).toEqual([
+                hostname,
+                expectedResult,
+            ])
         })
     })
 
