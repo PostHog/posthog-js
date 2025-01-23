@@ -121,7 +121,7 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
             '[PostHog.js] No `apiKey` or `client` were provided to `PostHogProvider`. Using default global `window.posthog` instance. You must initialize it manually. This is not recommended behavior.'
         )
         return posthogJs
-    }, [client, apiKey])
+    }, [client, apiKey, JSON.stringify(options)]) // Stringify options to be a stable reference
 
     return <PostHogContext.Provider value={{ client: posthog }}>{children}</PostHogContext.Provider>
 }
