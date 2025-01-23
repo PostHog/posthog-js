@@ -1,3 +1,7 @@
+## 1.209.0 - 2025-01-23
+
+- feat: Enhance PostHogProvider to prevent double initialization on `React.StrictMode` (#1676)
+
 ## 1.208.1 - 2025-01-23
 
 - fix: correctly cache split css (#1682)
