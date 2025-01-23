@@ -56,13 +56,17 @@ export class ScrollManager {
         this.context.maxContentHeight = Math.max(contentHeight, this.context.maxContentHeight ?? 0)
     }
 
+    // `capture: true` is required to get scroll events for other scrollable elements
+    // on the page, not just the window
+    // see https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener#usecapture
+    //
+    // `passive: true` is used to tell the browser that the scroll event handler will not call `preventDefault()`
+    // This allows the browser to optimize scrolling performance by not waiting for our handling of the scroll event
+    // see https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener#passive
     startMeasuringScrollPosition() {
-        // setting the third argument to `true` means that we will receive scroll events for other scrollable elements
-        // on the page, not just the window
-        // see https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener#usecapture
-        window?.addEventListener('scroll', this._updateScrollData, true)
-        window?.addEventListener('scrollend', this._updateScrollData, true)
-        window?.addEventListener('resize', this._updateScrollData)
+        window?.addEventListener('scroll', this._updateScrollData, { capture: true, passive: true })
+        window?.addEventListener('scrollend', this._updateScrollData, { capture: true, passive: true })
+        window?.addEventListener('resize', this._updateScrollData, { passive: true })
     }
 
     public scrollElement(): Element | undefined {

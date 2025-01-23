@@ -87,7 +87,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         this._mutationObserver?.disconnect()
         this._mutationObserver = undefined
         assignableWindow.removeEventListener('click', this._onClick)
-        assignableWindow.removeEventListener('scroll', this._onScroll, true)
+        assignableWindow.removeEventListener('scroll', this._onScroll, { capture: true })
         assignableWindow.removeEventListener('selectionchange', this._onSelectionChange)
     }
 
@@ -114,11 +114,15 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         }
     }
 
+    // `capture: true` is required to get scroll events for other scrollable elements
+    // on the page, not just the window
+    // see https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener#usecapture
+    //
+    // `passive: true` is used to tell the browser that the scroll event handler will not call `preventDefault()`
+    // This allows the browser to optimize scrolling performance by not waiting for our handling of the scroll event
+    // see https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener#passive
     private _startScrollObserver() {
-        // setting the third argument to `true` means that we will receive scroll events for other scrollable elements
-        // on the page, not just the window
-        // see https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener#usecapture
-        assignableWindow.addEventListener('scroll', this._onScroll, true)
+        assignableWindow.addEventListener('scroll', this._onScroll, { capture: true, passive: true })
     }
 
     private _onScroll = (): void => {
