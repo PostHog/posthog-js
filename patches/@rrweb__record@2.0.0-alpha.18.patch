@@ -1,5 +1,5 @@
 diff --git a/dist/record.js b/dist/record.js
-index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..62e51b1a9df6df14115b31e21a7360b25591e249 100644
+index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..1932f81f2e330cc904e8349a74911e6b3c12669a 100644
 --- a/dist/record.js
 +++ b/dist/record.js
 @@ -68,10 +68,10 @@ function getUntaintedPrototype$1(key) {
@@ -25,7 +25,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..62e51b1a9df6df14115b31e21a7360b2
  class Mirror {
    constructor() {
      __publicField$1(this, "idNodeMap", /* @__PURE__ */ new Map());
-@@ -423,26 +426,96 @@ function absolutifyURLs(cssText, href) {
+@@ -423,26 +426,98 @@ function absolutifyURLs(cssText, href) {
      }
    );
  }
@@ -68,6 +68,8 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..62e51b1a9df6df14115b31e21a7360b2
 +      // we know there's a result
 +      return splitCache.get(cssText)
 +    }
++    // cssText is mutated so we keep the original for when we cache the result
++    const og = cssText
 +    let cssTextNorm = normalizeCssString(cssText);
 +    const normFactor = cssTextNorm.length / cssText.length;
 +    for (let i = 1; i < childNodes.length; i++) {
@@ -136,17 +138,17 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..62e51b1a9df6df14115b31e21a7360b2
                }
              }
              break;
-@@ -451,7 +524,8 @@ function splitCssText(cssText, style) {
+@@ -451,7 +526,8 @@ function splitCssText(cssText, style) {
        }
      }
    }
 -  splits.push(cssText);
 +  splits.push(cssText); // either the full thing if no splits were found, or the last split
-+  splitCache.set(cssText, splits);
++  splitCache.set(og, splits);
    return splits;
  }
  function markCssSplits(cssText, style) {
-@@ -841,17 +915,24 @@ function serializeElementNode(n2, options) {
+@@ -841,17 +917,24 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "link" && inlineStylesheet) {
@@ -182,7 +184,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..62e51b1a9df6df14115b31e21a7360b2
      }
    }
    if (tagName === "style" && n2.sheet) {
-@@ -889,7 +970,15 @@ function serializeElementNode(n2, options) {
+@@ -889,7 +972,15 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "dialog" && n2.open) {
@@ -199,7 +201,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..62e51b1a9df6df14115b31e21a7360b2
    }
    if (tagName === "canvas" && recordCanvas) {
      if (n2.__context === "2d") {
-@@ -1112,7344 +1201,249 @@ function serializeNodeWithId(n2, options) {
+@@ -1112,7344 +1203,249 @@ function serializeNodeWithId(n2, options) {
      return null;
    }
    if (onSerialize) {
@@ -7772,7 +7774,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..62e51b1a9df6df14115b31e21a7360b2
  class BaseRRNode {
    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
    constructor(..._args) {
-@@ -11451,11 +4445,19 @@ class CanvasManager {
+@@ -11451,11 +4447,19 @@ class CanvasManager {
      let rafId;
      const getCanvas = () => {
        const matchedCanvas = [];
@@ -7797,7 +7799,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..62e51b1a9df6df14115b31e21a7360b2
        return matchedCanvas;
      };
      const takeCanvasSnapshots = (timestamp) => {
-@@ -11476,13 +4478,20 @@ class CanvasManager {
+@@ -11476,13 +4480,20 @@ class CanvasManager {
              context.clear(context.COLOR_BUFFER_BIT);
            }
          }
@@ -7822,10 +7824,10 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..62e51b1a9df6df14115b31e21a7360b2
            },
            [bitmap]
 diff --git a/dist/record.umd.cjs b/dist/record.umd.cjs
-index 902c5eca13b2c3e69af25afa682d2e7300372bfc..23fc9fffa6b815da448311dd31cec52c3abeb44f 100644
+index 902c5eca13b2c3e69af25afa682d2e7300372bfc..4246d630b0a1b5b3a5ab9b2986a955c846c69708 100644
 --- a/dist/record.umd.cjs
 +++ b/dist/record.umd.cjs
-@@ -470,26 +470,96 @@ function absolutifyURLs(cssText, href) {
+@@ -470,26 +470,98 @@ function absolutifyURLs(cssText, href) {
      }
    );
  }
@@ -7868,6 +7870,8 @@ index 902c5eca13b2c3e69af25afa682d2e7300372bfc..23fc9fffa6b815da448311dd31cec52c
 +      // we know there's a result
 +      return splitCache.get(cssText)
 +    }
++    // cssText is mutated so we keep the original for when we cache the result
++    const og = cssText
 +    let cssTextNorm = normalizeCssString(cssText);
 +    const normFactor = cssTextNorm.length / cssText.length;
 +    for (let i = 1; i < childNodes.length; i++) {
@@ -7936,13 +7940,13 @@ index 902c5eca13b2c3e69af25afa682d2e7300372bfc..23fc9fffa6b815da448311dd31cec52c
                }
              }
              break;
-@@ -498,7 +568,8 @@ function splitCssText(cssText, style) {
+@@ -498,7 +570,8 @@ function splitCssText(cssText, style) {
        }
      }
    }
 -  splits.push(cssText);
 +  splits.push(cssText); // either the full thing if no splits were found, or the last split
-+  splitCache.set(cssText, splits);
++  splitCache.set(og, splits);
    return splits;
  }
  function markCssSplits(cssText, style) {
