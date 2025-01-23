@@ -1,8 +1,16 @@
 /* eslint-disable no-console */
 import posthogJs, { PostHogConfig } from 'posthog-js'
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import { PostHog, PostHogContext } from './PostHogContext'
+import { isDeepStrictEqual } from 'util'
+
+type AlreadyInitialized =
+    | {
+          previousAPIKey: string
+          previousOptions: Partial<PostHogConfig>
+      }
+    | false
 
 type WithOptionalChildren<T> = T & { children?: React.ReactNode | undefined }
 
@@ -28,6 +36,12 @@ type PostHogProviderProps =
  * but not both simultaneously.
  */
 export function PostHogProvider({ children, client, apiKey, options }: WithOptionalChildren<PostHogProviderProps>) {
+    // Used to detect if the client was already initialized
+    // This is used to prevent double initialization when running under React.StrictMode
+    // We're not storing a simple boolean here because we want to be able to detect if the
+    // apiKey or options have changed.
+    const [alreadyInitialized, setAlreadyInitialized] = useState<AlreadyInitialized>(false)
+
     const posthog = useMemo(() => {
         if (client) {
             if (apiKey) {
@@ -50,11 +64,56 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
         }
 
         if (apiKey) {
+            // If the client was already initialized, we'll attempt to return the existing instance
+            // This is likely to occur when someone is developing locally under `React.StrictMode`
+            //
+            // There's no built-in way to detect React.StrictMode, so we set a flag to check if the client was already initialized
+            // and return the existing instance if it was.
+            //
+            // This might also be triggered if someone attempts to change their `apiKey` or
+            // set a different set of `options`. This is handled separately below.
+            if (alreadyInitialized !== false) {
+                // Changing the apiKey isn't well supported and we'll simply log a message suggesting them
+                // to take control of the `client` initialization themselves. This is tricky to handle
+                // ourselves because we wouldn't know if we should call `.reset()` or not, for example.
+                if (apiKey !== alreadyInitialized.previousAPIKey) {
+                    console.warn(
+                        "[PostHog.js] You have provided a different `apiKey` to `PostHogProvider` than the one that was already initialized. This is not supported by our provider and we'll keep using the previous key. If you need to toggle between API Keys you need to control the `client` yourself and pass it in as a prop rather than an `apiKey` prop."
+                    )
+                }
+
+                // Changing options is better supported because we can just call `posthogJs.set_config(options)`
+                // and they'll be good to go with their new config. The SDK will know how to handle the changes.
+                if (options && !isDeepStrictEqual(options, alreadyInitialized.previousOptions)) {
+                    posthogJs.set_config(options)
+                }
+
+                // Keep track of the possibly-new set of apiKey and options
+                setAlreadyInitialized({
+                    previousAPIKey: apiKey,
+                    previousOptions: options ?? {},
+                })
+
+                // Return the same already-initialized global client
+                return posthogJs
+            }
+
+            // If it's the first time running this, but it has been loaded elsewhere, warn the user about it.
             if (posthogJs.__loaded) {
                 console.warn('[PostHog.js] `posthog` was already loaded elsewhere. This may cause issues.')
             }
 
+            // Init global client
             posthogJs.init(apiKey, options)
+
+            // Keep track of whether the client was already initialized
+            // This is used to prevent double initialization when running under React.StrictMode
+            setAlreadyInitialized({
+                previousAPIKey: apiKey,
+                previousOptions: options ?? {},
+            })
+
+            // Return global client
             return posthogJs
         }
 
@@ -62,7 +121,7 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
             '[PostHog.js] No `apiKey` or `client` were provided to `PostHogProvider`. Using default global `window.posthog` instance. You must initialize it manually. This is not recommended behavior.'
         )
         return posthogJs
-    }, [client, apiKey])
+    }, [client, apiKey, JSON.stringify(options)]) // Stringify options to be a stable reference
 
     return <PostHogContext.Provider value={{ client: posthog }}>{children}</PostHogContext.Provider>
 }
