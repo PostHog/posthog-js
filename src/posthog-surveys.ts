@@ -157,7 +157,7 @@ export class PostHogSurveys {
 
     loadIfEnabled() {
         if (this._surveyManager) {
-            logger.info('Surveys already loaded.')
+            // Surveys already loaded.
             return
         }
 
@@ -255,7 +255,7 @@ export class PostHogSurveys {
                 },
             })
         } else {
-            logger.info('Surveys already loaded.')
+            logger.info('Surveys already loaded, using existing data.')
             return callback(existingSurveys)
         }
     }
