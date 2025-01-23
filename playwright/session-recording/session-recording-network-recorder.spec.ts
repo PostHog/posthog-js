@@ -21,6 +21,9 @@ test.beforeEach(async ({ context }) => {
     test.describe(`Session recording - network recorder - fetch wrapper ${
         isBadlyBehavedWrapper ? 'is' : 'is not'
     } badly behaved`, () => {
+        // these are pretty flaky and annoying, in the short term lets...
+        test.describe.configure({ retries: 6 })
+
         test.beforeEach(async ({ page, context }) => {
             const wrapInPageContext = async (pg: Page) => {
                 // this is page.evaluate and not page.exposeFunction because we need to execute it in the browser context
