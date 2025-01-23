@@ -1,3 +1,7 @@
+## 1.207.9 - 2025-01-23
+
+- fix: silence noisy surveys logging (#1679)
+
 ## 1.207.8 - 2025-01-22
 
 - fix: missing href on link (#1678)
