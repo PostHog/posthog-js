@@ -1,3 +1,8 @@
+## 1.209.1 - 2025-01-24
+
+- fix: angular detection can be less blunt (#1687)
+- fix: Fix CI check name (#1673)
+
 ## 1.209.0 - 2025-01-23
 
 - feat: Enhance PostHogProvider to prevent double initialization on `React.StrictMode` (#1676)
