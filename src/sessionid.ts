@@ -198,6 +198,8 @@ export class SessionIdManager {
      * We conditionally check the primaryWindowExists value in the constructor to decide if the window id in the last session storage should be carried over.
      */
     private _listenToReloadWindow(): void {
+        // Not making it passive to try and force the browser to handle this before the page is unloaded
+        // eslint-disable-next-line posthog-js/passive-event-listeners
         window?.addEventListener('beforeunload', () => {
             if (this._canUseSessionStorage()) {
                 sessionStore.remove(this._primary_window_exists_storage_key)

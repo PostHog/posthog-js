@@ -545,6 +545,9 @@ export class PostHog {
         }
         // Set up event handler for pageleave
         // Use `onpagehide` if available, see https://calendar.perfplanet.com/2020/beaconing-in-practice/#beaconing-reliability-avoiding-abandons
+        //
+        // Not making it passive to try and force the browser to handle this before the page is unloaded
+        // eslint-disable-next-line posthog-js/passive-event-listeners
         window?.addEventListener?.('onpagehide' in self ? 'pagehide' : 'unload', this._handle_unload.bind(this))
 
         this.toolbar.maybeLoadToolbar()
@@ -2305,7 +2308,7 @@ const add_dom_loaded_handler = function () {
             // 'loaded' is an IE thing
             dom_loaded_handler()
         } else {
-            document.addEventListener('DOMContentLoaded', dom_loaded_handler, false)
+            document.addEventListener('DOMContentLoaded', dom_loaded_handler, { capture: false, passive: true })
         }
     }
 

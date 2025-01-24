@@ -45,13 +45,23 @@ export class RetryQueue {
 
         if (!isUndefined(window) && 'onLine' in window.navigator) {
             this.areWeOnline = window.navigator.onLine
-            window.addEventListener('online', () => {
-                this.areWeOnline = true
-                this.flush()
-            })
-            window.addEventListener('offline', () => {
-                this.areWeOnline = false
-            })
+
+            window.addEventListener(
+                'online',
+                () => {
+                    this.areWeOnline = true
+                    this.flush()
+                },
+                { passive: true }
+            )
+
+            window.addEventListener(
+                'offline',
+                () => {
+                    this.areWeOnline = false
+                },
+                { passive: true }
+            )
         }
     }
 

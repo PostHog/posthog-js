@@ -41,7 +41,7 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
     if (document?.body) {
         addScript()
     } else {
-        document?.addEventListener('DOMContentLoaded', addScript)
+        document?.addEventListener('DOMContentLoaded', addScript, { passive: true })
     }
 }
 

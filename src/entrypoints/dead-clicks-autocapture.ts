@@ -98,7 +98,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _startClickObserver() {
-        assignableWindow.addEventListener('click', this._onClick)
+        assignableWindow.addEventListener('click', this._onClick, { passive: true })
     }
 
     private _onClick = (event: MouseEvent): void => {
@@ -141,7 +141,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _startSelectionChangedObserver() {
-        assignableWindow.addEventListener('selectionchange', this._onSelectionChange)
+        assignableWindow.addEventListener('selectionchange', this._onSelectionChange, { passive: true })
     }
 
     private _onSelectionChange = (): void => {

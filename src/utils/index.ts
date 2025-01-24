@@ -236,7 +236,7 @@ export const registerEvent = (function () {
         }
 
         if (element.addEventListener && !oldSchool) {
-            element.addEventListener(type, handler, !!useCapture)
+            element.addEventListener(type, handler, { capture: !!useCapture, passive: true })
         } else {
             const ontype = 'on' + type
             const old_handler = (element as any)[ontype] // can be undefined

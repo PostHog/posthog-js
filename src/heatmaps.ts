@@ -60,9 +60,7 @@ export class Heatmaps {
         this.instance = instance
         this._enabledServerSide = !!this.instance.persistence?.props[HEATMAPS_ENABLED_SERVER_SIDE]
 
-        window?.addEventListener('beforeunload', () => {
-            this.flush()
-        })
+        window?.addEventListener('beforeunload', this.flush, { passive: true })
     }
 
     public get flushIntervalMilliseconds(): number {

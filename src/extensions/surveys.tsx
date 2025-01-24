@@ -120,15 +120,24 @@ export class SurveyManager {
                     const surveyPopup = document
                         .querySelector(`.PostHogWidget${survey.id}`)
                         ?.shadowRoot?.querySelector(`.survey-form`) as HTMLFormElement
-                    selectorOnPage.addEventListener('click', () => {
-                        if (surveyPopup) {
-                            surveyPopup.style.display = surveyPopup.style.display === 'none' ? 'block' : 'none'
-                            surveyPopup.addEventListener('PHSurveyClosed', () => {
-                                this.removeSurveyFromFocus(survey.id)
-                                surveyPopup.style.display = 'none'
-                            })
-                        }
-                    })
+
+                    selectorOnPage.addEventListener(
+                        'click',
+                        () => {
+                            if (surveyPopup) {
+                                surveyPopup.style.display = surveyPopup.style.display === 'none' ? 'block' : 'none'
+                                surveyPopup.addEventListener(
+                                    'PHSurveyClosed',
+                                    () => {
+                                        this.removeSurveyFromFocus(survey.id)
+                                        surveyPopup.style.display = 'none'
+                                    },
+                                    { passive: true }
+                                )
+                            }
+                        },
+                        { passive: true }
+                    )
                     selectorOnPage.setAttribute('PHWidgetSurveyClickListener', 'true')
                 }
             }
@@ -434,8 +443,8 @@ export function usePopupVisibility(
             }
         }
 
-        window.addEventListener('PHSurveyClosed', handleSurveyClosed)
-        window.addEventListener('PHSurveySent', handleSurveySent)
+        window.addEventListener('PHSurveyClosed', handleSurveyClosed, { passive: true })
+        window.addEventListener('PHSurveySent', handleSurveySent, { passive: true })
 
         if (millisecondDelay > 0) {
             return handleShowSurveyWithDelay()
@@ -519,9 +528,7 @@ export function SurveyPopup({
                 />
             )}
         </SurveyContext.Provider>
-    ) : (
-        <></>
-    )
+    ) : null
 }
 
 export function Questions({
@@ -683,9 +690,14 @@ export function FeedbackWidget({
         }
         if (survey.appearance?.widgetType === 'selector') {
             const widget = document.querySelector(survey.appearance.widgetSelector || '')
-            widget?.addEventListener('click', () => {
-                setShowSurvey(!showSurvey)
-            })
+
+            widget?.addEventListener(
+                'click',
+                () => {
+                    setShowSurvey(!showSurvey)
+                },
+                { passive: true }
+            )
             widget?.setAttribute('PHWidgetSurveyClickListener', 'true')
         }
     }, [])

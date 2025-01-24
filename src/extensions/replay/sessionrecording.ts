@@ -492,10 +492,10 @@ export class SessionRecording {
             this._startCapture(startReason)
 
             // calling addEventListener multiple times is safe and will not add duplicates
-            window?.addEventListener('beforeunload', this._onBeforeUnload)
-            window?.addEventListener('offline', this._onOffline)
-            window?.addEventListener('online', this._onOnline)
-            window?.addEventListener('visibilitychange', this._onVisibilityChange)
+            window?.addEventListener('beforeunload', this._onBeforeUnload, { passive: true })
+            window?.addEventListener('offline', this._onOffline, { passive: true })
+            window?.addEventListener('online', this._onOnline, { passive: true })
+            window?.addEventListener('visibilitychange', this._onVisibilityChange, { passive: true })
 
             // on reload there might be an already sampled session that should be continued before decide response,
             // so we call this here _and_ in the decide response
