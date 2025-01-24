@@ -1,8 +1,55 @@
 diff --git a/dist/record.js b/dist/record.js
-index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..1932f81f2e330cc904e8349a74911e6b3c12669a 100644
+index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..5d583e81bb7b7e49b7a091ca0c217a37116861b1 100644
 --- a/dist/record.js
 +++ b/dist/record.js
-@@ -68,10 +68,10 @@ function getUntaintedPrototype$1(key) {
+@@ -26,14 +26,33 @@ const testableMethods$1 = {
+   Element: [],
+   MutationObserver: ["constructor"]
+ };
++/*
++Angular zone patches many things and can pass the untainted checks below, causing performance issues
++Angular zone, puts the unpatched originals on the window, and the names for hose on the zone object.
++So, we get the unpatched versions from the window object if they exist.
++You can rename Zone, but this is a good enough proxy to avoid going to an iframe to get the untainted versions.
++see: https://github.com/angular/angular/issues/26948
++*/
++function angularZoneUnpatchedAlternative$1(key) {
++  const angularUnpatchedVersionSymbol = (
++    globalThis
++  )?.Zone?.__symbol__?.(key);
++  if (
++    angularUnpatchedVersionSymbol &&
++    (globalThis)[angularUnpatchedVersionSymbol]
++  ) {
++    return (globalThis)[
++      angularUnpatchedVersionSymbol
++    ];
++  } else {
++    return undefined;
++  }
++}
+ const untaintedBasePrototype$1 = {};
+-const isAngularZonePresent$1 = () => {
+-  return !!globalThis.Zone;
+-};
+ function getUntaintedPrototype$1(key) {
+   if (untaintedBasePrototype$1[key])
+     return untaintedBasePrototype$1[key];
+-  const defaultObj = globalThis[key];
++  const defaultObj = angularZoneUnpatchedAlternative$1(key) || globalThis[key];
+   const defaultPrototype = defaultObj.prototype;
+   const accessorNames = key in testableAccessors$1 ? testableAccessors$1[key] : void 0;
+   const isUntaintedAccessors = Boolean(
+@@ -57,7 +76,7 @@ function getUntaintedPrototype$1(key) {
+       }
+     )
+   );
+-  if (isUntaintedAccessors && isUntaintedMethods && !isAngularZonePresent$1()) {
++  if (isUntaintedAccessors && isUntaintedMethods) {
+     untaintedBasePrototype$1[key] = defaultObj.prototype;
+     return defaultObj.prototype;
+   }
+@@ -68,10 +87,10 @@ function getUntaintedPrototype$1(key) {
      if (!win) return defaultObj.prototype;
      const untaintedObject = win[key].prototype;
      document.body.removeChild(iframeEl);
@@ -15,7 +62,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..1932f81f2e330cc904e8349a74911e6b
    }
  }
  const untaintedAccessorCache$1 = {};
-@@ -253,6 +253,9 @@ function isCSSImportRule(rule2) {
+@@ -253,6 +272,9 @@ function isCSSImportRule(rule2) {
  function isCSSStyleRule(rule2) {
    return "selectorText" in rule2;
  }
@@ -25,7 +72,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..1932f81f2e330cc904e8349a74911e6b
  class Mirror {
    constructor() {
      __publicField$1(this, "idNodeMap", /* @__PURE__ */ new Map());
-@@ -423,26 +426,98 @@ function absolutifyURLs(cssText, href) {
+@@ -423,26 +445,98 @@ function absolutifyURLs(cssText, href) {
      }
    );
  }
@@ -138,7 +185,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..1932f81f2e330cc904e8349a74911e6b
                }
              }
              break;
-@@ -451,7 +526,8 @@ function splitCssText(cssText, style) {
+@@ -451,7 +545,8 @@ function splitCssText(cssText, style) {
        }
      }
    }
@@ -148,7 +195,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..1932f81f2e330cc904e8349a74911e6b
    return splits;
  }
  function markCssSplits(cssText, style) {
-@@ -841,17 +917,24 @@ function serializeElementNode(n2, options) {
+@@ -841,17 +936,24 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "link" && inlineStylesheet) {
@@ -184,7 +231,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..1932f81f2e330cc904e8349a74911e6b
      }
    }
    if (tagName === "style" && n2.sheet) {
-@@ -889,7 +972,15 @@ function serializeElementNode(n2, options) {
+@@ -889,7 +991,15 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "dialog" && n2.open) {
@@ -201,7 +248,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..1932f81f2e330cc904e8349a74911e6b
    }
    if (tagName === "canvas" && recordCanvas) {
      if (n2.__context === "2d") {
-@@ -1112,7344 +1203,249 @@ function serializeNodeWithId(n2, options) {
+@@ -1112,7344 +1222,249 @@ function serializeNodeWithId(n2, options) {
      return null;
    }
    if (onSerialize) {
@@ -7309,18 +7356,10 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..1932f81f2e330cc904e8349a74911e6b
 -  }
 -  get opts() {
 -    return this.result.opts;
-+    onSerialize(n2);
-   }
+-  }
 -  get processor() {
 -    return this.result.processor;
-+  let recordChild = !skipChild;
-+  if (serializedNode.type === NodeType$3.Element) {
-+    recordChild = recordChild && !serializedNode.needBlock;
-+    delete serializedNode.needBlock;
-+    const shadowRootEl = index$1.shadowRoot(n2);
-+    if (shadowRootEl && isNativeShadowDom(shadowRootEl))
-+      serializedNode.isShadowHost = true;
-   }
+-  }
 -  get root() {
 -    if (this._root) {
 -      return this._root;
@@ -7337,14 +7376,19 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..1932f81f2e330cc904e8349a74911e6b
 -    } else {
 -      this._root = root2;
 -      return root2;
-+  if ((serializedNode.type === NodeType$3.Document || serializedNode.type === NodeType$3.Element) && recordChild) {
-+    if (slimDOMOptions.headWhitespace && serializedNode.type === NodeType$3.Element && serializedNode.tagName === "head") {
-+      preserveWhiteSpace = false;
-     }
--  }
+-    }
++    onSerialize(n2);
+   }
 -  get [Symbol.toStringTag]() {
 -    return "NoWorkResult";
--  }
++  let recordChild = !skipChild;
++  if (serializedNode.type === NodeType$3.Element) {
++    recordChild = recordChild && !serializedNode.needBlock;
++    delete serializedNode.needBlock;
++    const shadowRootEl = index$1.shadowRoot(n2);
++    if (shadowRootEl && isNativeShadowDom(shadowRootEl))
++      serializedNode.isShadowHost = true;
+   }
 -};
 -var noWorkResult = NoWorkResult$1;
 -NoWorkResult$1.default = NoWorkResult$1;
@@ -7364,6 +7408,10 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..1932f81f2e330cc904e8349a74911e6b
 -        i2 = i2();
 -      } else if (i2.postcss) {
 -        i2 = i2.postcss;
++  if ((serializedNode.type === NodeType$3.Document || serializedNode.type === NodeType$3.Element) && recordChild) {
++    if (slimDOMOptions.headWhitespace && serializedNode.type === NodeType$3.Element && serializedNode.tagName === "head") {
++      preserveWhiteSpace = false;
++    }
 +    const bypassOptions = {
 +      doc,
 +      mirror: mirror2,
@@ -7774,7 +7822,55 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..1932f81f2e330cc904e8349a74911e6b
  class BaseRRNode {
    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
    constructor(..._args) {
-@@ -11451,11 +4447,19 @@ class CanvasManager {
+@@ -8520,13 +1535,34 @@ const testableMethods = {
+   MutationObserver: ["constructor"]
+ };
+ const untaintedBasePrototype = {};
+-const isAngularZonePresent = () => {
+-  return !!globalThis.Zone;
+-};
++
++/*
++Angular zone patches many things and can pass the untainted checks below, causing performance issues
++Angular zone, puts the unpatched originals on the window, and the names for hose on the zone object.
++So, we get the unpatched versions from the window object if they exist.
++You can rename Zone, but this is a good enough proxy to avoid going to an iframe to get the untainted versions.
++see: https://github.com/angular/angular/issues/26948
++*/
++function angularZoneUnpatchedAlternative(key) {
++  const angularUnpatchedVersionSymbol = (
++    globalThis
++  )?.Zone?.__symbol__?.(key);
++  if (
++    angularUnpatchedVersionSymbol &&
++    (globalThis)[angularUnpatchedVersionSymbol]
++  ) {
++    return (globalThis)[
++      angularUnpatchedVersionSymbol
++    ];
++  } else {
++    return undefined;
++  }
++}
++
+ function getUntaintedPrototype(key) {
+   if (untaintedBasePrototype[key])
+     return untaintedBasePrototype[key];
+-  const defaultObj = globalThis[key];
++  const defaultObj = angularZoneUnpatchedAlternative(key) || globalThis[key];
+   const defaultPrototype = defaultObj.prototype;
+   const accessorNames = key in testableAccessors ? testableAccessors[key] : void 0;
+   const isUntaintedAccessors = Boolean(
+@@ -8550,7 +1586,7 @@ function getUntaintedPrototype(key) {
+       }
+     )
+   );
+-  if (isUntaintedAccessors && isUntaintedMethods && !isAngularZonePresent()) {
++  if (isUntaintedAccessors && isUntaintedMethods) {
+     untaintedBasePrototype[key] = defaultObj.prototype;
+     return defaultObj.prototype;
+   }
+@@ -11451,11 +4487,19 @@ class CanvasManager {
      let rafId;
      const getCanvas = () => {
        const matchedCanvas = [];
@@ -7799,7 +7895,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..1932f81f2e330cc904e8349a74911e6b
        return matchedCanvas;
      };
      const takeCanvasSnapshots = (timestamp) => {
-@@ -11476,13 +4480,20 @@ class CanvasManager {
+@@ -11476,13 +4520,20 @@ class CanvasManager {
              context.clear(context.COLOR_BUFFER_BIT);
            }
          }
