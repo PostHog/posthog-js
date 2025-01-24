@@ -30,7 +30,8 @@ describe('object-utils', () => {
             [true, [1, 2, 3], [1, 2, 3]],
             [false, [1, 2, 3], [1, 2, 4]],
             [true, { a: circularArray1 }, { a: circularArray1 }],
-            // [false, { a: circularArray1 }, { a: circularArray2 }], // TODO
+            [true, { a: circularArray1 }, { a: circularArray2 }],
+            [true, circularArray1, [circularArray1]],
             [true, f1, f1],
             [false, f1, f2],
         ])('returns %s for %s and %s', (expected, obj1, obj2) => {
