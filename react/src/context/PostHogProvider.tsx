@@ -3,7 +3,7 @@ import posthogJs, { PostHogConfig } from 'posthog-js'
 
 import React, { useMemo, useState } from 'react'
 import { PostHog, PostHogContext } from './PostHogContext'
-import { isDeepStrictEqual } from 'util'
+import { isDeepEqual } from '../utils/object-utils'
 
 type AlreadyInitialized =
     | {
@@ -34,6 +34,11 @@ type PostHogProviderProps =
  *
  * These initialization methods are mutually exclusive - you must use one or the other,
  * but not both simultaneously.
+ *
+ * We strongly suggest you memoize the `options` object to ensure that you don't
+ * accidentally trigger unnecessary re-renders. We'll properly detect if the options
+ * have changed and only call `posthogJs.set_config` if they have, but it's better to
+ * avoid unnecessary re-renders in the first place.
  */
 export function PostHogProvider({ children, client, apiKey, options }: WithOptionalChildren<PostHogProviderProps>) {
     // Used to detect if the client was already initialized
@@ -84,7 +89,7 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
 
                 // Changing options is better supported because we can just call `posthogJs.set_config(options)`
                 // and they'll be good to go with their new config. The SDK will know how to handle the changes.
-                if (options && !isDeepStrictEqual(options, alreadyInitialized.previousOptions)) {
+                if (options && !isDeepEqual(options, alreadyInitialized.previousOptions)) {
                     posthogJs.set_config(options)
                 }
 

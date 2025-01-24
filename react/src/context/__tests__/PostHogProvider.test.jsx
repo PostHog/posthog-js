@@ -56,6 +56,30 @@ describe('PostHogProvider component', () => {
             expect(posthogJs.set_config).toHaveBeenCalledWith(updatedOptions)
         })
 
+        it('should NOT call set_config when we pass new options that are the same as the previous options', () => {
+            const { rerender } = render(
+                <PostHogProvider apiKey={apiKey} options={initialOptions}>
+                    <div>Test</div>
+                </PostHogProvider>
+            )
+
+            // First render should initialize
+            expect(posthogJs.init).toHaveBeenCalledWith(apiKey, initialOptions)
+
+            // Rerender with new options
+            const sameOptionsButDifferentReference = { ...initialOptions }
+            act(() => {
+                rerender(
+                    <PostHogProvider apiKey={apiKey} options={sameOptionsButDifferentReference}>
+                        <div>Test</div>
+                    </PostHogProvider>
+                )
+            })
+
+            // Should NOT call set_config
+            expect(posthogJs.set_config).not.toHaveBeenCalled()
+        })
+
         it('should warn when attempting to change apiKey', () => {
             const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
             const newApiKey = 'different-api-key'
