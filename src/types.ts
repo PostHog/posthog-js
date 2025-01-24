@@ -103,10 +103,11 @@ export interface AutocaptureConfig {
     /**
      * List of DOM elements to allow autocapture on
      * e.g. ['a', 'button', 'form', 'input', 'select', 'textarea', 'label']
-     * we consider the tree of elements from the root to the target element of the click event
-     * so for the tree div > div > button > svg
-     * if the allowlist has button then we allow the capture when the button or the svg is the click target
-     * but not if either of the divs are detected as the click target
+     *
+     * We consider the tree of elements from the root to the target element of the click event
+     * so for the tree `div > div > button > svg`
+     * if the allowlist has `button` then we allow the capture when the `button` or the `svg` is the click target
+     * but not if either of the `div`s are detected as the click target
      */
     element_allowlist?: AutocaptureCompatibleElement[]
 
@@ -117,6 +118,8 @@ export interface AutocaptureConfig {
      * so for the tree div > div > button > svg
      * and allow list config `['[id]']`
      * we will capture the click if the click-target or its parents has any id
+     *
+     * Everything is allowed when there's no allowlist
      */
     css_selector_allowlist?: string[]
 
@@ -126,6 +129,9 @@ export interface AutocaptureConfig {
      */
     element_attribute_ignorelist?: string[]
 
+    /**
+     * When set to true, autocapture will capture the text of any element that is cut or copied.
+     */
     capture_copied_text?: boolean
 }
 
@@ -201,28 +207,45 @@ export interface DeadClickCandidate {
 }
 
 export type DeadClicksAutoCaptureConfig = {
-    // by default if a click is followed by a sroll within 100ms it is not a dead click
+    /**
+     * We'll not consider a click to be a dead click, if it's followed by a scroll within `scroll_threshold_ms` milliseconds
+     *
+     * @default 100
+     */
     scroll_threshold_ms?: number
-    // by default if a click is followed by a selection change within 100ms it is not a dead click
+
+    /**
+     * We'll not consider a click to be a dead click, if it's followed by a selection change within `selection_change_threshold_ms` milliseconds
+     *
+     * @default 100
+     */
     selection_change_threshold_ms?: number
-    // by default if a click is followed by a mutation within 2500ms it is not a dead click
+
+    /**
+     * We'll not consider a click to be a dead click, if it's followed by a mutation within `mutation_threshold_ms` milliseconds
+     *
+     * @default 2500
+     */
     mutation_threshold_ms?: number
+
     /**
      * Allows setting behavior for when a dead click is captured.
      * For e.g. to support capture to heatmaps
      *
      * If not provided the default behavior is to auto-capture dead click events
      *
-     * Only intended to be provided by the SDK
+     * Only intended to be provided by our own SDK
      */
     __onCapture?: ((click: DeadClickCandidate, properties: Properties) => void) | undefined
 } & Pick<AutocaptureConfig, 'element_attribute_ignorelist'>
 
 export interface HeatmapConfig {
-    /*
-     * how often to send batched data in $$heatmap_data events
-     * if set to 0 or not set, sends using the default interval of 1 second
-     * */
+    /**
+     * How often to send batched data in `$heatmap_data` events
+     * If set to 0 or not set, sends using the default interval of 1 second
+     *
+     * @default 1000
+     */
     flush_interval_milliseconds: number
 }
 
@@ -272,12 +295,14 @@ export interface PostHogConfig {
     /**
      * Determines whether PostHog should autocapture events.
      * This setting does not affect capturing pageview events (see `capture_pageview`).
+     *
      * @default true
      */
     autocapture: boolean | AutocaptureConfig
 
     /**
      * Determines whether PostHog should capture rage clicks.
+     *
      * @default true
      */
     rageclick: boolean
@@ -289,20 +314,22 @@ export interface PostHogConfig {
      *
      * NOTE: It will be set to `false` if we detect that the domain is a subdomain of a platform that is excluded from cross-subdomain cookie setting.
      * The current list of excluded platforms is `herokuapp.com`, `vercel.app`, and `netlify.app`.
-     * @see `isCrossDomainCookie`
      *
+     * @see `isCrossDomainCookie`
      * @default true
      */
     cross_subdomain_cookie: boolean
 
     /**
      * Determines how PostHog stores information about the user. See [persistence](https://posthog.com/docs/libraries/js#persistence) for details.
+     *
      * @default 'localStorage+cookie'
      */
     persistence: 'localStorage' | 'cookie' | 'memory' | 'localStorage+cookie' | 'sessionStorage'
 
     /**
      * The name for the super properties persistent store
+     *
      * @default ''
      */
     persistence_name: string
@@ -312,12 +339,14 @@ export interface PostHogConfig {
 
     /**
      * A function to be called once the PostHog scripts have loaded successfully.
+     *
      * @param posthog_instance - The PostHog instance that has been loaded.
      */
     loaded: (posthog_instance: PostHog) => void
 
     /**
      * Determines whether PostHog should save referrer information.
+     *
      * @default true
      */
     save_referrer: boolean
@@ -336,6 +365,7 @@ export interface PostHogConfig {
 
     /**
      * Used to extend the list of campaign parameters that are saved by default.
+     *
      * @see {CAMPAIGN_PARAMS} from './utils/event-utils' - Default campaign parameters like utm_source, utm_medium, etc.
      * @default []
      */
@@ -343,6 +373,7 @@ export interface PostHogConfig {
 
     /**
      * Used to extend the list of user agents that are blocked by default.
+     *
      * @see {DEFAULT_BLOCKED_UA_STRS} from './utils/blocked-uas' - Default list of blocked user agents.
      * @default []
      */
@@ -354,6 +385,7 @@ export interface PostHogConfig {
      *
      * You can also enable this on your website by appending `?__posthog_debug=true` at the end of your URL
      * You can also call `posthog.debug()` in your code to enable debug mode
+     *
      * @default false
      */
     debug: boolean
@@ -363,6 +395,7 @@ export interface PostHogConfig {
 
     /**
      * Determines whether PostHog should capture pageview events automatically.
+     *
      * @default true
      */
     capture_pageview: boolean
@@ -371,12 +404,14 @@ export interface PostHogConfig {
      * Determines whether PostHog should capture pageleave events.
      * If set to `true`, it will capture pageleave events for all pages.
      * If set to `'if_capture_pageview'`, it will only capture pageleave events if `capture_pageview` is also set to `true`.
+     *
      * @default 'if_capture_pageview'
      */
     capture_pageleave: boolean | 'if_capture_pageview'
 
     /**
      * Determines the number of days to store cookies for.
+     *
      * @default 365
      */
     cookie_expiration: number
@@ -385,12 +420,14 @@ export interface PostHogConfig {
      * Determines whether PostHog should upgrade old cookies.
      * If set to `true`, the library will check for a cookie from our old js library and import super properties from it, then the old cookie is deleted.
      * This option only works in the initialization, so make sure you set it when you create the library.
+     *
      * @default false
      */
     upgrade: boolean
 
     /**
      * Determines whether PostHog should disable session recording.
+     *
      * @default false
      */
     disable_session_recording: boolean
@@ -398,6 +435,7 @@ export interface PostHogConfig {
     /**
      * Determines whether PostHog should disable persistence.
      * If set to `true`, the library will not save any data to the browser. It will also delete any data previously saved to the browser.
+     *
      * @default false
      */
     disable_persistence: boolean
@@ -407,6 +445,7 @@ export interface PostHogConfig {
 
     /**
      * Determines whether PostHog should disable surveys.
+     *
      * @default false
      */
     disable_surveys: boolean
@@ -415,6 +454,7 @@ export interface PostHogConfig {
      * Determines whether PostHog should disable web experiments.
      *
      * Currently disabled while we're in BETA. It will be toggled to `true` in a future release.
+     *
      * @default true
      */
     disable_web_experiments: boolean
@@ -422,7 +462,7 @@ export interface PostHogConfig {
     /**
      * Determines whether PostHog should disable any external dependency loading.
      * This will prevent PostHog from requesting any external scripts such as those needed for Session Replay, Surveys or Site Apps.
-     * T
+     *
      * @default false
      */
     disable_external_dependency_loading: boolean
@@ -745,6 +785,8 @@ export interface PostHogConfig {
     /**
      * Determines whether to disable scroll properties.
      * These allow you to keep track of how far down someone scrolled in your website.
+     *
+     * @default false
      */
     disable_scroll_properties?: boolean
 
@@ -819,7 +861,7 @@ export interface PostHogConfig {
      * */
     __preview_experimental_cookieless_mode?: boolean
 
-    // ------- RETIRED CONFIGS -------
+    // ------- RETIRED CONFIGS - NO REPLACEMENT OR USAGE -------
 
     /** @deprecated - NOT USED ANYMORE, kept here for backwards compatibility reasons */
     api_method?: string
