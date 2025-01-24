@@ -13,7 +13,6 @@ export const DEFAULT_BLOCKED_UA_STRS = [
     'duckduckbot',
     'facebookexternal',
     'facebookcatalog',
-    'gptbot',
     'http://yandex.com/bots',
     'hubspot',
     'ia_archiver',
@@ -34,6 +33,11 @@ export const DEFAULT_BLOCKED_UA_STRS = [
     'vercelbot',
     'yahoo! slurp',
     'yandexbot',
+
+    // OpenAI Crawlers
+    'gptbot',
+    'oai-searchbot',
+    'chatgpt-user',
 
     // headless browsers
     'headlesschrome',
@@ -64,6 +68,7 @@ export const isBlockedUA = function (ua: string, customBlockedUserAgents: string
     if (!ua) {
         return false
     }
+
     const uaLower = ua.toLowerCase()
     return DEFAULT_BLOCKED_UA_STRS.concat(customBlockedUserAgents || []).some((blockedUA) => {
         const blockedUaLower = blockedUA.toLowerCase()
