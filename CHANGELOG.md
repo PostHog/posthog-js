@@ -1,3 +1,7 @@
+## 1.209.3 - 2025-01-24
+
+- fix: Fix hitting call stack limit when deep comparing circular objects (#1688)
+
 ## 1.209.2 - 2025-01-24
 
 - fix: Implement `isDeepEqual` manually (#1686)
