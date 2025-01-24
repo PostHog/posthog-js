@@ -1,5 +1,5 @@
 diff --git a/dist/record.js b/dist/record.js
-index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..d43fabe4d92be3a17c4ee8012d8a9d91d30b09fd 100644
+index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..30dbe05ea243ef79f6f7f2b6b5474cd7599dcb43 100644
 --- a/dist/record.js
 +++ b/dist/record.js
 @@ -26,14 +26,33 @@ const testableMethods$1 = {
@@ -110,13 +110,13 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..d43fabe4d92be3a17c4ee8012d8a9d91
 -        const textContentNorm = normalizeCssString(childNodes2[i2].textContent);
 -        for (let j = 3; j < textContentNorm.length; j++) {
 +  let iterLimit = 0;
++  // cssText is mutated so we keep the original for when we cache the result
++  const og = cssText
 +  if (childNodes.length > 1 && cssText && typeof cssText === 'string') {
 +    if (splitCache.has(cssText)) {
 +      // we know there's a result
 +      return splitCache.get(cssText)
 +    }
-+    // cssText is mutated so we keep the original for when we cache the result
-+    const og = cssText
 +    let cssTextNorm = normalizeCssString(cssText);
 +    const normFactor = cssTextNorm.length / cssText.length;
 +    for (let i = 1; i < childNodes.length; i++) {
@@ -7922,7 +7922,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..d43fabe4d92be3a17c4ee8012d8a9d91
            },
            [bitmap]
 diff --git a/dist/record.umd.cjs b/dist/record.umd.cjs
-index 902c5eca13b2c3e69af25afa682d2e7300372bfc..4246d630b0a1b5b3a5ab9b2986a955c846c69708 100644
+index 902c5eca13b2c3e69af25afa682d2e7300372bfc..5e09da575b4f192dfe03ca0de6e3c58b75d829f2 100644
 --- a/dist/record.umd.cjs
 +++ b/dist/record.umd.cjs
 @@ -470,26 +470,98 @@ function absolutifyURLs(cssText, href) {
@@ -7963,13 +7963,13 @@ index 902c5eca13b2c3e69af25afa682d2e7300372bfc..4246d630b0a1b5b3a5ab9b2986a955c8
 -        const textContentNorm = normalizeCssString(childNodes2[i2].textContent);
 -        for (let j = 3; j < textContentNorm.length; j++) {
 +  let iterLimit = 0;
++  // cssText is mutated so we keep the original for when we cache the result
++  const og = cssText
 +  if (childNodes.length > 1 && cssText && typeof cssText === 'string') {
 +    if (splitCache.has(cssText)) {
 +      // we know there's a result
 +      return splitCache.get(cssText)
 +    }
-+    // cssText is mutated so we keep the original for when we cache the result
-+    const og = cssText
 +    let cssTextNorm = normalizeCssString(cssText);
 +    const normFactor = cssTextNorm.length / cssText.length;
 +    for (let i = 1; i < childNodes.length; i++) {
@@ -8038,13 +8038,15 @@ index 902c5eca13b2c3e69af25afa682d2e7300372bfc..4246d630b0a1b5b3a5ab9b2986a955c8
                }
              }
              break;
-@@ -498,7 +570,8 @@ function splitCssText(cssText, style) {
+@@ -498,7 +570,10 @@ function splitCssText(cssText, style) {
        }
      }
    }
 -  splits.push(cssText);
 +  splits.push(cssText); // either the full thing if no splits were found, or the last split
-+  splitCache.set(og, splits);
++  if (og) {
++    splitCache.set(og, splits);
++  }
    return splits;
  }
  function markCssSplits(cssText, style) {
