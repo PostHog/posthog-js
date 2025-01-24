@@ -1,3 +1,7 @@
+## 1.210.2 - 2025-01-24
+
+- fix: rrweb patch fix take 2 (#1691)
+
 ## 1.210.1 - 2025-01-24
 
 - fix: bad rrweb patch (#1690)
