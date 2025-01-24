@@ -1,3 +1,8 @@
+## 1.209.4 - 2025-01-24
+
+- feat: Annotate our `scroll` events as `passive` (#1684)
+- fix: Exclude more domains from cross subdomain tracking by default (#1680)
+
 ## 1.209.3 - 2025-01-24
 
 - fix: Fix hitting call stack limit when deep comparing circular objects (#1688)
