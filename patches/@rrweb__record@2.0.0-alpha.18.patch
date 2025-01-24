@@ -1,5 +1,5 @@
 diff --git a/dist/record.js b/dist/record.js
-index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..5d583e81bb7b7e49b7a091ca0c217a37116861b1 100644
+index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..d43fabe4d92be3a17c4ee8012d8a9d91d30b09fd 100644
 --- a/dist/record.js
 +++ b/dist/record.js
 @@ -26,14 +26,33 @@ const testableMethods$1 = {
@@ -185,17 +185,19 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..5d583e81bb7b7e49b7a091ca0c217a37
                }
              }
              break;
-@@ -451,7 +545,8 @@ function splitCssText(cssText, style) {
+@@ -451,7 +545,10 @@ function splitCssText(cssText, style) {
        }
      }
    }
 -  splits.push(cssText);
 +  splits.push(cssText); // either the full thing if no splits were found, or the last split
-+  splitCache.set(og, splits);
++  if (og) {
++    splitCache.set(og, splits);
++  }
    return splits;
  }
  function markCssSplits(cssText, style) {
-@@ -841,17 +936,24 @@ function serializeElementNode(n2, options) {
+@@ -841,17 +938,24 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "link" && inlineStylesheet) {
@@ -231,7 +233,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..5d583e81bb7b7e49b7a091ca0c217a37
      }
    }
    if (tagName === "style" && n2.sheet) {
-@@ -889,7 +991,15 @@ function serializeElementNode(n2, options) {
+@@ -889,7 +993,15 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "dialog" && n2.open) {
@@ -248,7 +250,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..5d583e81bb7b7e49b7a091ca0c217a37
    }
    if (tagName === "canvas" && recordCanvas) {
      if (n2.__context === "2d") {
-@@ -1112,7344 +1222,249 @@ function serializeNodeWithId(n2, options) {
+@@ -1112,7344 +1224,249 @@ function serializeNodeWithId(n2, options) {
      return null;
    }
    if (onSerialize) {
@@ -7822,7 +7824,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..5d583e81bb7b7e49b7a091ca0c217a37
  class BaseRRNode {
    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
    constructor(..._args) {
-@@ -8520,13 +1535,34 @@ const testableMethods = {
+@@ -8520,13 +1537,34 @@ const testableMethods = {
    MutationObserver: ["constructor"]
  };
  const untaintedBasePrototype = {};
@@ -7861,7 +7863,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..5d583e81bb7b7e49b7a091ca0c217a37
    const defaultPrototype = defaultObj.prototype;
    const accessorNames = key in testableAccessors ? testableAccessors[key] : void 0;
    const isUntaintedAccessors = Boolean(
-@@ -8550,7 +1586,7 @@ function getUntaintedPrototype(key) {
+@@ -8550,7 +1588,7 @@ function getUntaintedPrototype(key) {
        }
      )
    );
@@ -7870,7 +7872,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..5d583e81bb7b7e49b7a091ca0c217a37
      untaintedBasePrototype[key] = defaultObj.prototype;
      return defaultObj.prototype;
    }
-@@ -11451,11 +4487,19 @@ class CanvasManager {
+@@ -11451,11 +4489,19 @@ class CanvasManager {
      let rafId;
      const getCanvas = () => {
        const matchedCanvas = [];
@@ -7895,7 +7897,7 @@ index d9c57625633fb87da27fc5948c1b15a7c4e4caa5..5d583e81bb7b7e49b7a091ca0c217a37
        return matchedCanvas;
      };
      const takeCanvasSnapshots = (timestamp) => {
-@@ -11476,13 +4520,20 @@ class CanvasManager {
+@@ -11476,13 +4522,20 @@ class CanvasManager {
              context.clear(context.COLOR_BUFFER_BIT);
            }
          }
