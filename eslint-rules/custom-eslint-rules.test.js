@@ -7,10 +7,19 @@ const noDirectStringCheck = require('./no-direct-string-check')
 const noDirectDateCheck = require('./no-direct-date-check')
 const noDirectNumberCheck = require('./no-direct-number-check')
 const noDirectBooleanCheck = require('./no-direct-boolean-check')
+const passiveEventListeners = require('./passive-event-listeners')
 
 const { RuleTester } = require('eslint')
 
-const ruleTester = new RuleTester()
+const ruleTester = new RuleTester({
+    parserOptions: {
+        ecmaVersion: 2015,
+        sourceType: 'module',
+    },
+    env: {
+        browser: true,
+    },
+})
 
 ruleTester.run('no-direct-null-check', noDirectNullCheck, {
     valid: [{ code: `isNull(x)` }],
@@ -119,6 +128,40 @@ ruleTester.run('no-direct-boolean-check', noDirectBooleanCheck, {
         {
             code: `typeof x === 'boolean'`,
             errors: [{ message: 'Use isBoolean instead of direct boolean checks.' }],
+        },
+    ],
+})
+
+ruleTester.run('passive-event-listeners', passiveEventListeners, {
+    valid: [
+        { code: "document.addEventListener('click', () => {}, { passive: true })" },
+        { code: "document.addEventListener('scroll', () => {}, { capture: true, passive: true })" },
+    ],
+    invalid: [
+        {
+            code: "document.addEventListener('mouseleave', () => {})",
+            errors: [{ message: 'addEventListener should include { passive: true } as the third argument' }],
+            output: "document.addEventListener('mouseleave', () => {}, { passive: true })",
+        },
+        {
+            code: "document.addEventListener('click', () => {}, true)",
+            errors: [{ message: 'addEventListener should use an options object including { passive: true }' }],
+            output: "document.addEventListener('click', () => {}, { capture: true, passive: true })",
+        },
+        {
+            code: "document.addEventListener('click', () => {}, {})",
+            errors: [{ message: 'addEventListener should have { passive: true } in its options' }],
+            output: "document.addEventListener('click', () => {}, { passive: true })",
+        },
+        {
+            code: "document.addEventListener('pageleave', () => {}, { capture: true })",
+            errors: [{ message: 'addEventListener should have { passive: true } in its options' }],
+            output: "document.addEventListener('pageleave', () => {}, { capture: true, passive: true })",
+        },
+        {
+            code: "document.addEventListener('pageleave', () => {}, { capture: false })",
+            errors: [{ message: 'addEventListener should have { passive: true } in its options' }],
+            output: "document.addEventListener('pageleave', () => {}, { capture: false, passive: true })",
         },
     ],
 })
