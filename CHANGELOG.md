@@ -1,3 +1,7 @@
+## 1.209.2 - 2025-01-24
+
+- fix: Implement `isDeepEqual` manually (#1686)
+
 ## 1.209.1 - 2025-01-24
 
 - fix: angular detection can be less blunt (#1687)
