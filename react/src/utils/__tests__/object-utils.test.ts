@@ -26,7 +26,7 @@ describe('object-utils', () => {
             [true, [1, 2, 3], [1, 2, 3]],
             [false, [1, 2, 3], [1, 2, 4]],
             [true, { a: circularArray1 }, { a: circularArray1 }],
-            [false, { a: circularArray1 }, { b: circularArray2 }],
+            [false, { a: circularArray1 }, { a: circularArray2 }],
         ])('returns %s for %s and %s', (expected, obj1, obj2) => {
             expect(isDeepEqual(obj1, obj2)).toBe(expected)
             expect(isDeepEqual(obj2, obj1)).toBe(expected)
