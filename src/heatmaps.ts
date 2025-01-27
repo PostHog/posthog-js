@@ -1,4 +1,3 @@
-import { registerEvent } from './utils'
 import RageClick from './extensions/rageclick'
 import { DeadClickCandidate, Properties, RemoteConfig } from './types'
 import { PostHog } from './posthog-core'
@@ -130,8 +129,15 @@ export class Heatmaps {
             return
         }
 
-        registerEvent(document, 'click', (e) => this._onClick((e || window?.event) as MouseEvent), false, true)
-        registerEvent(document, 'mousemove', (e) => this._onMouseMove((e || window?.event) as MouseEvent), false, true)
+        document.addEventListener('click', (e) => this._onClick((e || window?.event) as MouseEvent), {
+            capture: true,
+            passive: true,
+        })
+
+        document.addEventListener('mousemove', (e) => this._onMouseMove((e || window?.event) as MouseEvent), {
+            capture: true,
+            passive: true,
+        })
 
         this.deadClicksCapture = new DeadClicksAutocapture(
             this.instance,

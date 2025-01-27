@@ -1,13 +1,5 @@
 import Config from './config'
-import {
-    _copyAndTruncateStrings,
-    each,
-    eachArray,
-    extend,
-    registerEvent,
-    safewrapClass,
-    isCrossDomainCookie,
-} from './utils'
+import { _copyAndTruncateStrings, each, eachArray, extend, safewrapClass, isCrossDomainCookie } from './utils'
 import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
@@ -2310,11 +2302,15 @@ const add_dom_loaded_handler = function () {
         } else {
             document.addEventListener('DOMContentLoaded', dom_loaded_handler, { capture: false, passive: true })
         }
+
+        return
     }
 
-    // fallback handler, always will work
+    // Only IE6-8 don't support `document.addEventListener` and we don't support them
+    // so let's simply log an error stating PostHog couldn't be initialized
+    // We're checking for `window` to avoid erroring out on a SSR context
     if (window) {
-        registerEvent(window, 'load', dom_loaded_handler, true)
+        logger.error("Browser doesn't support `document.addEventListener` so PostHog couldn't be initialized")
     }
 }
 
