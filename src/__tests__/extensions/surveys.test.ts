@@ -1,13 +1,16 @@
+/* eslint-disable compat/compat */
 import { act, fireEvent, render, renderHook } from '@testing-library/preact'
 import {
     generateSurveys,
     renderFeedbackWidgetPreview,
     renderSurveysPreview,
     SurveyManager,
+    SurveyPopup,
     usePopupVisibility,
 } from '../../extensions/surveys'
 import { createShadow } from '../../extensions/surveys/surveys-utils'
 import { Survey, SurveyQuestionType, SurveyType } from '../../posthog-surveys-types'
+import { CaptureResult } from '../../types'
 
 import { beforeEach } from '@jest/globals'
 import '@testing-library/jest-dom'
@@ -15,6 +18,7 @@ import { h } from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse } from '../../types'
+import { isArray } from '../../utils/type-utils'
 
 declare const global: any
 
@@ -112,6 +116,7 @@ describe('usePopupVisibility', () => {
         end_date: null,
         current_iteration: null,
         current_iteration_start_date: null,
+        feature_flag_keys: null,
     }
     const mockPostHog = {
         getActiveMatchingSurveys: jest.fn().mockImplementation((callback) => callback([mockSurvey])),
@@ -582,6 +587,268 @@ describe('SurveyManager', () => {
                 'internal targeting feature flag internal_targeting_flag_key is false'
             )
         })
+    })
+})
+
+describe('SurveyPopup URL change handling', () => {
+    let posthog: PostHog
+    let mockRemoveSurveyFromFocus: jest.Mock
+    let originalLocationHref: string
+
+    const createTestEvent = (event: string): CaptureResult => ({
+        event,
+        properties: {},
+        timestamp: new Date(),
+        uuid: 'test-uuid',
+    })
+
+    const createTestSurvey = (urlCondition?: { url: string; urlMatchType?: string }): Survey =>
+        ({
+            id: 'test-survey',
+            name: 'Test Survey',
+            description: 'Test Survey Description',
+            type: SurveyType.Popover,
+            questions: [
+                {
+                    type: SurveyQuestionType.Open,
+                    question: 'What do you think?',
+                },
+            ],
+            conditions: urlCondition ? { url: urlCondition.url, urlMatchType: urlCondition.urlMatchType } : undefined,
+            start_date: new Date().toISOString(),
+            end_date: null,
+            feature_flag_keys: null,
+            linked_flag_key: null,
+            targeting_flag_key: null,
+            appearance: {},
+        }) as Survey
+
+    beforeEach(() => {
+        // Mock PostHog instance
+        posthog = {
+            config: {
+                before_send: undefined,
+            },
+            capture: jest.fn(),
+        } as unknown as PostHog
+
+        mockRemoveSurveyFromFocus = jest.fn()
+
+        // Store original location and set initial location
+        originalLocationHref = window.location.href
+        Object.defineProperty(window, 'location', {
+            value: new URL('https://example.com'),
+            writable: true,
+        })
+    })
+
+    afterEach(() => {
+        // Restore original location
+        Object.defineProperty(window, 'location', {
+            value: new URL(originalLocationHref),
+            writable: true,
+        })
+    })
+
+    it('should not hide survey when URL matches - exact match', () => {
+        const survey = createTestSurvey({ url: 'https://example.com/', urlMatchType: 'exact' })
+
+        render(
+            h(SurveyPopup, {
+                survey,
+                posthog,
+                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
+                isPopup: true,
+            })
+        )
+
+        // Simulate pageview event - should not hide survey since URLs match
+        act(() => {
+            const beforeSend = posthog.config.before_send
+            if (isArray(beforeSend)) {
+                beforeSend.forEach((fn) => fn(createTestEvent('$pageview')))
+            } else if (beforeSend) {
+                beforeSend(createTestEvent('$pageview'))
+            }
+        })
+
+        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
+    })
+
+    it('should hide survey when URL changes to non-matching - exact match', () => {
+        const survey = createTestSurvey({ url: 'https://example.com/', urlMatchType: 'exact' })
+
+        render(
+            h(SurveyPopup, {
+                survey,
+                posthog,
+                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
+                isPopup: true,
+            })
+        )
+
+        // Change URL to non-matching
+        Object.defineProperty(window, 'location', {
+            value: new URL('https://example.com/other'),
+            writable: true,
+        })
+
+        // Simulate URL change through before_send
+        act(() => {
+            const beforeSend = posthog.config.before_send
+            if (isArray(beforeSend)) {
+                beforeSend.forEach((fn) => fn(createTestEvent('$pageview')))
+            } else if (beforeSend) {
+                beforeSend(createTestEvent('$pageview'))
+            }
+        })
+
+        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledTimes(1)
+        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
+    })
+
+    it('should not hide survey when URL matches - contains', () => {
+        const survey = createTestSurvey({ url: 'example', urlMatchType: 'icontains' })
+
+        render(
+            h(SurveyPopup, {
+                survey,
+                posthog,
+                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
+                isPopup: true,
+            })
+        )
+
+        // Simulate pageview event - should not hide survey since URLs match
+        act(() => {
+            const beforeSend = posthog.config.before_send
+            if (isArray(beforeSend)) {
+                beforeSend.forEach((fn) => fn(createTestEvent('$pageview')))
+            } else if (beforeSend) {
+                beforeSend(createTestEvent('$pageview'))
+            }
+        })
+
+        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
+    })
+
+    it('should hide survey when URL changes to non-matching - contains', () => {
+        const survey = createTestSurvey({ url: 'example', urlMatchType: 'icontains' })
+
+        render(
+            h(SurveyPopup, {
+                survey,
+                posthog,
+                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
+                isPopup: true,
+            })
+        )
+
+        // Change URL to non-matching
+        Object.defineProperty(window, 'location', {
+            value: new URL('https://othersite.com'),
+            writable: true,
+        })
+
+        // Simulate URL change through before_send
+        act(() => {
+            const beforeSend = posthog.config.before_send
+            if (isArray(beforeSend)) {
+                beforeSend.forEach((fn) => fn(createTestEvent('$pageview')))
+            } else if (beforeSend) {
+                beforeSend(createTestEvent('$pageview'))
+            }
+        })
+
+        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledTimes(1)
+        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
+    })
+
+    it('should preserve customer before_send handlers', () => {
+        const customerBeforeSend = jest.fn((data) => data)
+        posthog.config.before_send = customerBeforeSend
+
+        const survey = createTestSurvey({ url: 'example', urlMatchType: 'icontains' })
+
+        render(
+            h(SurveyPopup, {
+                survey,
+                posthog,
+                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
+                isPopup: true,
+            })
+        )
+
+        // Simulate event
+        const eventData = createTestEvent('$pageview')
+
+        act(() => {
+            const beforeSend = posthog.config.before_send
+            if (isArray(beforeSend)) {
+                beforeSend.forEach((fn) => fn(eventData))
+            } else if (beforeSend) {
+                beforeSend(eventData)
+            }
+        })
+
+        expect(customerBeforeSend).toHaveBeenCalledWith(eventData)
+        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
+    })
+
+    it('should handle multiple before_send handlers correctly', () => {
+        const customerBeforeSend1 = jest.fn((data) => ({ ...data, modified1: true }) as CaptureResult)
+        const customerBeforeSend2 = jest.fn((data) => ({ ...data, modified2: true }) as CaptureResult)
+        posthog.config.before_send = [customerBeforeSend1, customerBeforeSend2]
+
+        const survey = createTestSurvey({ url: 'example', urlMatchType: 'icontains' })
+
+        render(
+            h(SurveyPopup, {
+                survey,
+                posthog,
+                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
+                isPopup: true,
+            })
+        )
+
+        // Simulate event
+        const eventData = createTestEvent('$pageview')
+
+        let result
+        act(() => {
+            const beforeSend = posthog.config.before_send
+            if (isArray(beforeSend)) {
+                result = beforeSend.reduce((acc, fn) => (acc ? fn(acc) : null), eventData)
+            } else if (beforeSend) {
+                result = beforeSend(eventData)
+            }
+        })
+
+        expect(customerBeforeSend1).toHaveBeenCalled()
+        expect(customerBeforeSend2).toHaveBeenCalled()
+        expect(result).toHaveProperty('modified1', true)
+        expect(result).toHaveProperty('modified2', true)
+        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
+    })
+
+    it('should clean up before_send handlers on unmount', () => {
+        const customerBeforeSend = jest.fn((data) => data)
+        posthog.config.before_send = customerBeforeSend
+
+        const survey = createTestSurvey({ url: 'example', urlMatchType: 'icontains' })
+
+        const { unmount } = render(
+            h(SurveyPopup, {
+                survey,
+                posthog,
+                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
+                isPopup: true,
+            })
+        )
+
+        unmount()
+
+        expect(posthog.config.before_send).toBe(customerBeforeSend)
     })
 })
 
