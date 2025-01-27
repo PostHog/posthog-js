@@ -252,7 +252,8 @@ export function addEventListener(
 ): void {
     const { capture = false, passive = true } = options ?? {}
 
-    // TODO: Remove need for this by asserting that `passive` is being passed/used
-    // eslint-disable-next-line posthog-js/passive-event-listeners
+    // This is the only place where we are allowed to call this function
+    // because the whole idea is that we should be calling this instead of the built-in one
+    // eslint-disable-next-line posthog-js/no-add-event-listener
     element?.addEventListener(event, callback, { capture, passive })
 }
