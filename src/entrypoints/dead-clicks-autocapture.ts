@@ -99,15 +99,11 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _startClickObserver() {
-        const clickHandler = (event: Event) => {
-            this._onClick(event as MouseEvent)
-        }
-
-        addEventListener(assignableWindow, 'click', clickHandler)
+        addEventListener(assignableWindow, 'click', this._onClick)
     }
 
-    private _onClick = (event: MouseEvent): void => {
-        const click = asClick(event)
+    private _onClick = (event: Event): void => {
+        const click = asClick(event as MouseEvent)
         if (!isNull(click) && !this._ignoreClick(click)) {
             this._clicks.push(click)
         }
