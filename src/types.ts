@@ -230,17 +230,24 @@ export interface PostHogConfig {
     /** @deprecated - Use 'persistence_name' instead */
     cookie_name?: string
     loaded: (posthog_instance: PostHog) => void
-    store_google: boolean
+
+    /** @deprecated - Use `save_campaign_params` instead */
+    store_google?: boolean
+    save_campaign_params: boolean
+
     custom_campaign_params: string[]
     // a list of strings to be tested against navigator.userAgent to determine if the source is a bot
     // this is **added to** the default list of bots that we check
     // defaults to the empty array
     custom_blocked_useragents: string[]
     save_referrer: boolean
-    verbose: boolean
     capture_pageview: boolean
     capture_pageleave: boolean | 'if_capture_pageview'
+
+    /** @deprecated Use `debug` instead */
+    verbose?: boolean
     debug: boolean
+
     cookie_expiration: number
     upgrade: boolean
     disable_session_recording: boolean
@@ -275,8 +282,6 @@ export interface PostHogConfig {
     xhr_headers?: { [header_name: string]: string }
     /** @deprecated - use `on_request_error` instead  */
     on_xhr_error?: (failedRequest: XMLHttpRequest) => void
-    inapp_protocol: string
-    inapp_link_new_window: boolean
     request_batching: boolean
     properties_string_max_length: number
     session_recording: SessionRecordingOptions
@@ -316,7 +321,6 @@ export interface PostHogConfig {
     disable_compression: boolean
     bootstrap: BootstrapConfig
     segment?: SegmentAnalytics
-    __preview_send_client_session_params?: boolean
     /* @deprecated - use `capture_heatmaps` instead */
     enable_heatmaps?: boolean
     capture_heatmaps?: boolean | HeatmapConfig
@@ -368,6 +372,14 @@ export interface PostHogConfig {
      * whether to send a sentinel value for distinct id, device id, and session id, which will be replaced server-side by a cookieless hash
      * */
     __preview_experimental_cookieless_mode?: boolean
+
+    // ------- RETIRED CONFIGS -------
+
+    /** @deprecated - NOT USED ANYMORE, kept here for backwards compatibility reasons */
+    inapp_protocol?: string
+
+    /** @deprecated - NOT USED ANYMORE, kept here for backwards compatibility reasons */
+    inapp_link_new_window?: boolean
 }
 
 export interface OptInOutCapturingOptions {
@@ -381,10 +393,6 @@ export interface OptInOutCapturingOptions {
     cookie_expiration: number
     cross_subdomain_cookie: boolean
     secure_cookie: boolean
-}
-
-export interface IsFeatureEnabledOptions {
-    send_event: boolean
 }
 
 export interface SessionRecordingOptions {
