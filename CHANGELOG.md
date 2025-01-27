@@ -1,3 +1,7 @@
+## 1.211.0 - 2025-01-27
+
+- refactor: Remove/deprecate/rename old options (#1694)
+
 ## 1.210.2 - 2025-01-24
 
 - fix: rrweb patch fix take 2 (#1691)
