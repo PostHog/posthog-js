@@ -1,4 +1,4 @@
-import { each, extend } from './utils'
+import { addEventListener, each, extend } from './utils'
 import {
     autocaptureCompatibleElements,
     getClassNames,
@@ -268,9 +268,9 @@ export class Autocapture {
             }
         }
 
-        document.addEventListener('submit', handler, { capture: true, passive: true })
-        document.addEventListener('change', handler, { capture: true, passive: true })
-        document.addEventListener('click', handler, { capture: true, passive: true })
+        addEventListener(document, 'submit', handler, { capture: true })
+        addEventListener(document, 'change', handler, { capture: true })
+        addEventListener(document, 'click', handler, { capture: true })
 
         if (this.config.capture_copied_text) {
             const copiedTextHandler = (e: Event) => {
@@ -278,8 +278,8 @@ export class Autocapture {
                 this._captureEvent(e, COPY_AUTOCAPTURE_EVENT)
             }
 
-            document.addEventListener('copy', copiedTextHandler, { capture: true, passive: true })
-            document.addEventListener('cut', copiedTextHandler, { capture: true, passive: true })
+            addEventListener(document, 'copy', copiedTextHandler, { capture: true })
+            addEventListener(document, 'cut', copiedTextHandler, { capture: true })
         }
     }
 

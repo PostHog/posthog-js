@@ -1,6 +1,7 @@
 import { window } from './utils/globals'
 import { PostHog } from './posthog-core'
 import { isArray } from './utils/type-utils'
+import { addEventListener } from './utils'
 
 export interface ScrollContext {
     // scroll is how far down the page the user has scrolled,
@@ -59,14 +60,10 @@ export class ScrollManager {
     // `capture: true` is required to get scroll events for other scrollable elements
     // on the page, not just the window
     // see https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener#usecapture
-    //
-    // `passive: true` is used to tell the browser that the scroll event handler will not call `preventDefault()`
-    // This allows the browser to optimize scrolling performance by not waiting for our handling of the scroll event
-    // see https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener#passive
     startMeasuringScrollPosition() {
-        window?.addEventListener('scroll', this._updateScrollData, { capture: true, passive: true })
-        window?.addEventListener('scrollend', this._updateScrollData, { capture: true, passive: true })
-        window?.addEventListener('resize', this._updateScrollData, { passive: true })
+        addEventListener(window, 'scroll', this._updateScrollData, { capture: true })
+        addEventListener(window, 'scrollend', this._updateScrollData, { capture: true })
+        addEventListener(window, 'resize', this._updateScrollData)
     }
 
     public scrollElement(): Element | undefined {

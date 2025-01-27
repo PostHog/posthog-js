@@ -1,5 +1,13 @@
 import Config from './config'
-import { _copyAndTruncateStrings, each, eachArray, extend, safewrapClass, isCrossDomainCookie } from './utils'
+import {
+    _copyAndTruncateStrings,
+    each,
+    eachArray,
+    extend,
+    safewrapClass,
+    isCrossDomainCookie,
+    addEventListener,
+} from './utils'
 import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
@@ -539,8 +547,9 @@ export class PostHog {
         // Use `onpagehide` if available, see https://calendar.perfplanet.com/2020/beaconing-in-practice/#beaconing-reliability-avoiding-abandons
         //
         // Not making it passive to try and force the browser to handle this before the page is unloaded
-        // eslint-disable-next-line posthog-js/passive-event-listeners
-        window?.addEventListener?.('onpagehide' in self ? 'pagehide' : 'unload', this._handle_unload.bind(this))
+        addEventListener(window, 'onpagehide' in self ? 'pagehide' : 'unload', this._handle_unload.bind(this), {
+            passive: false,
+        })
 
         this.toolbar.maybeLoadToolbar()
 
@@ -2300,7 +2309,7 @@ const add_dom_loaded_handler = function () {
             // 'loaded' is an IE thing
             dom_loaded_handler()
         } else {
-            document.addEventListener('DOMContentLoaded', dom_loaded_handler, { capture: false, passive: true })
+            addEventListener(document, 'DOMContentLoaded', dom_loaded_handler, { capture: false })
         }
 
         return

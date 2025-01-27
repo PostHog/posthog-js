@@ -1,4 +1,5 @@
 import type { PostHog } from '../posthog-core'
+import { addEventListener } from '../utils'
 import { assignableWindow, document, PostHogExtensionKind } from '../utils/globals'
 import { createLogger } from '../utils/logger'
 
@@ -41,7 +42,7 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
     if (document?.body) {
         addScript()
     } else {
-        document?.addEventListener('DOMContentLoaded', addScript, { passive: true })
+        addEventListener(document, 'DOMContentLoaded', addScript)
     }
 }
 

@@ -5,6 +5,7 @@ import { logger } from './utils/logger'
 import { window } from './utils/globals'
 import { PostHog } from './posthog-core'
 import { extendURLParams } from './request'
+import { addEventListener } from './utils'
 
 const thirtyMinutes = 30 * 60 * 1000
 
@@ -46,22 +47,14 @@ export class RetryQueue {
         if (!isUndefined(window) && 'onLine' in window.navigator) {
             this.areWeOnline = window.navigator.onLine
 
-            window.addEventListener(
-                'online',
-                () => {
-                    this.areWeOnline = true
-                    this.flush()
-                },
-                { passive: true }
-            )
+            addEventListener(window, 'online', () => {
+                this.areWeOnline = true
+                this.flush()
+            })
 
-            window.addEventListener(
-                'offline',
-                () => {
-                    this.areWeOnline = false
-                },
-                { passive: true }
-            )
+            addEventListener(window, 'offline', () => {
+                this.areWeOnline = false
+            })
         }
     }
 

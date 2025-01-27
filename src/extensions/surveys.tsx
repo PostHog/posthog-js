@@ -34,6 +34,7 @@ import {
     style,
     SurveyContext,
 } from './surveys/surveys-utils'
+import { addEventListener } from '../utils'
 const logger = createLogger('[Surveys]')
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
@@ -121,23 +122,16 @@ export class SurveyManager {
                         .querySelector(`.PostHogWidget${survey.id}`)
                         ?.shadowRoot?.querySelector(`.survey-form`) as HTMLFormElement
 
-                    selectorOnPage.addEventListener(
-                        'click',
-                        () => {
-                            if (surveyPopup) {
-                                surveyPopup.style.display = surveyPopup.style.display === 'none' ? 'block' : 'none'
-                                surveyPopup.addEventListener(
-                                    'PHSurveyClosed',
-                                    () => {
-                                        this.removeSurveyFromFocus(survey.id)
-                                        surveyPopup.style.display = 'none'
-                                    },
-                                    { passive: true }
-                                )
-                            }
-                        },
-                        { passive: true }
-                    )
+                    addEventListener(selectorOnPage, 'click', () => {
+                        if (surveyPopup) {
+                            surveyPopup.style.display = surveyPopup.style.display === 'none' ? 'block' : 'none'
+                            addEventListener(surveyPopup, 'PHSurveyClosed', () => {
+                                this.removeSurveyFromFocus(survey.id)
+                                surveyPopup.style.display = 'none'
+                            })
+                        }
+                    })
+
                     selectorOnPage.setAttribute('PHWidgetSurveyClickListener', 'true')
                 }
             }
@@ -443,8 +437,8 @@ export function usePopupVisibility(
             }
         }
 
-        window.addEventListener('PHSurveyClosed', handleSurveyClosed, { passive: true })
-        window.addEventListener('PHSurveySent', handleSurveySent, { passive: true })
+        addEventListener(window, 'PHSurveyClosed', handleSurveyClosed)
+        addEventListener(window, 'PHSurveySent', handleSurveySent)
 
         if (millisecondDelay > 0) {
             return handleShowSurveyWithDelay()
@@ -689,15 +683,12 @@ export function FeedbackWidget({
             }
         }
         if (survey.appearance?.widgetType === 'selector') {
-            const widget = document.querySelector(survey.appearance.widgetSelector || '')
+            const widget = document.querySelector(survey.appearance.widgetSelector || '') ?? undefined
 
-            widget?.addEventListener(
-                'click',
-                () => {
-                    setShowSurvey(!showSurvey)
-                },
-                { passive: true }
-            )
+            addEventListener(widget, 'click', () => {
+                setShowSurvey(!showSurvey)
+            })
+
             widget?.setAttribute('PHWidgetSurveyClickListener', 'true')
         }
     }, [])

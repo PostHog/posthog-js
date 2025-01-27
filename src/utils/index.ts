@@ -241,3 +241,18 @@ export function find<T>(value: T[], predicate: (value: T) => boolean): T | undef
     }
     return undefined
 }
+
+// Use this instead of element.addEventListener to avoid eslint errors
+// this properly implements the default options for passive event listeners
+export function addEventListener(
+    element: Window | Document | Element | undefined,
+    event: string,
+    callback: EventListener,
+    options?: AddEventListenerOptions
+): void {
+    const { capture = false, passive = true } = options ?? {}
+
+    // TODO: Remove need for this by asserting that `passive` is being passed/used
+    // eslint-disable-next-line posthog-js/passive-event-listeners
+    element?.addEventListener(event, callback, { capture, passive })
+}
