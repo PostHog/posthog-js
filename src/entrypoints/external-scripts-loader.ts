@@ -1,5 +1,4 @@
 import type { PostHog } from '../posthog-core'
-import { addEventListener } from '../utils'
 import { assignableWindow, document, PostHogExtensionKind } from '../utils/globals'
 import { createLogger } from '../utils/logger'
 
@@ -42,7 +41,10 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
     if (document?.body) {
         addScript()
     } else {
-        addEventListener(document, 'DOMContentLoaded', addScript)
+        // Inlining this because we don't care about `passive: true` here
+        // and this saves us ~3% of the bundle size
+        // eslint-disable-next-line posthog-js/no-add-event-listener
+        document?.addEventListener('DOMContentLoaded', addScript)
     }
 }
 
