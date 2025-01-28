@@ -137,6 +137,10 @@ export function getNextSurveyStep(
     return nextQuestionIndex
 }
 
+function defaultMatchType(matchType?: SurveyMatchType): SurveyMatchType {
+    return matchType ?? 'icontains'
+}
+
 // use urlMatchType to validate url condition, fallback to contains for backwards compatibility
 export function doesSurveyUrlMatch(survey: Survey): boolean {
     if (!survey.conditions?.url) {
@@ -144,7 +148,7 @@ export function doesSurveyUrlMatch(survey: Survey): boolean {
     }
 
     const targets = [survey.conditions.url]
-    return surveyValidationMap[survey.conditions?.urlMatchType ?? 'icontains'](
+    return surveyValidationMap[defaultMatchType(survey.conditions?.urlMatchType)](
         targets,
         assignableWindow?.location?.href
     )
@@ -160,7 +164,7 @@ export function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
     }
 
     const deviceType = Info.deviceType(userAgent)
-    return surveyValidationMap[survey.conditions?.urlMatchType ?? 'icontains'](
+    return surveyValidationMap[defaultMatchType(survey.conditions?.deviceTypesMatchType)](
         survey.conditions.deviceTypes,
         deviceType
     )
