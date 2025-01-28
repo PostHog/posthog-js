@@ -1,5 +1,5 @@
 import { PostHog } from '../posthog-core'
-import { surveyUrlValidationMap } from '../posthog-surveys'
+import { doesSurveyUrlMatch } from '../posthog-surveys'
 import {
     Survey,
     SurveyAppearance,
@@ -452,20 +452,17 @@ export function usePopupVisibility(
         }
 
         const checkUrlMatch = () => {
-            const urlMatchType = survey.conditions?.urlMatchType ?? 'icontains'
-            const url = survey.conditions?.url
-            if (!url) {
-                return
-            }
-            const urlCheck = surveyUrlValidationMap[urlMatchType](url)
+            const urlCheck = doesSurveyUrlMatch(survey)
             if (!urlCheck) {
                 setIsPopupVisible(false)
                 removeSurveyFromFocus(survey.id)
             }
         }
 
-        // Listen for browser back/forward and hash changes (for hash-based routing)
+        // Listen for browser back/forward browser history changes
         window.addEventListener('popstate', checkUrlMatch)
+        // Listen for hash changes, for SPA frameworks that use hash-based routing
+        // The hashchange event is fired when the fragment identifier of the URL has changed (the part of the URL beginning with and following the # symbol).
         window.addEventListener('hashchange', checkUrlMatch)
 
         // Listen for SPA navigation
