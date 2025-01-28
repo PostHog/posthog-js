@@ -9,13 +9,12 @@ import {
     SurveyRenderReason,
     SurveyType,
 } from '../posthog-surveys-types'
-import { CaptureResult } from '../types'
 
 import * as Preact from 'preact'
 import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { document as _document, window as _window } from '../utils/globals'
 import { createLogger } from '../utils/logger'
-import { isArray, isNull, isNumber } from '../utils/type-utils'
+import { isNull, isNumber } from '../utils/type-utils'
 import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import { Cancel } from './surveys/components/QuestionHeader'
@@ -446,6 +445,51 @@ export function usePopupVisibility(
         }
     }, [])
 
+    // Add URL change listener to hide survey when URL no longer matches
+    useEffect(() => {
+        if (isPreviewMode || !survey.conditions?.url || !posthog) {
+            return
+        }
+
+        const checkUrlMatch = () => {
+            const urlMatchType = survey.conditions?.urlMatchType ?? 'icontains'
+            const url = survey.conditions?.url
+            if (!url) {
+                return
+            }
+            const urlCheck = surveyUrlValidationMap[urlMatchType](url)
+            if (!urlCheck) {
+                setIsPopupVisible(false)
+                removeSurveyFromFocus(survey.id)
+            }
+        }
+
+        // Listen for browser back/forward and hash changes (for hash-based routing)
+        window.addEventListener('popstate', checkUrlMatch)
+        window.addEventListener('hashchange', checkUrlMatch)
+
+        // Listen for SPA navigation
+        const originalPushState = window.history.pushState
+        const originalReplaceState = window.history.replaceState
+
+        window.history.pushState = function (...args) {
+            originalPushState.apply(this, args)
+            checkUrlMatch()
+        }
+
+        window.history.replaceState = function (...args) {
+            originalReplaceState.apply(this, args)
+            checkUrlMatch()
+        }
+
+        return () => {
+            window.removeEventListener('popstate', checkUrlMatch)
+            window.removeEventListener('hashchange', checkUrlMatch)
+            window.history.pushState = originalPushState
+            window.history.replaceState = originalReplaceState
+        }
+    }, [isPreviewMode, survey, removeSurveyFromFocus, posthog])
+
     return { isPopupVisible, isSurveySent, setIsPopupVisible }
 }
 
@@ -484,70 +528,6 @@ export function SurveyPopup({
     )
     const shouldShowConfirmation = isSurveySent || previewPageIndex === survey.questions.length
     const confirmationBoxLeftStyle = style?.left && isNumber(style?.left) ? { left: style.left - 40 } : {}
-
-    // Add URL change listener to hide survey when URL no longer matches
-    useEffect(() => {
-        if (isPreviewMode || !survey.conditions?.url || !posthog) {
-            return
-        }
-
-        const checkUrlMatch = () => {
-            const urlMatchType = survey.conditions?.urlMatchType ?? 'icontains'
-            const url = survey.conditions?.url
-            if (!url) {
-                return
-            }
-            const urlCheck = surveyUrlValidationMap[urlMatchType](url)
-            if (!urlCheck) {
-                setIsPopupVisible(false)
-                removeSurveyFromFocus(survey.id)
-            }
-        }
-
-        // Listen for navigation events
-        const handleUrlChange = () => {
-            checkUrlMatch()
-        }
-
-        // Listen for browser back/forward
-        window.addEventListener('popstate', handleUrlChange)
-
-        // Create our before_send handler
-        const surveyBeforeSend = (eventData: CaptureResult | null) => {
-            if (eventData?.event === '$pageview' || eventData?.event === '$pageleave') {
-                handleUrlChange()
-            }
-            return eventData
-        }
-
-        // Add our handler to the existing before_send configuration
-        const originalBeforeSend = posthog.config.before_send
-        if (isArray(originalBeforeSend)) {
-            posthog.config.before_send = [...originalBeforeSend, surveyBeforeSend]
-        } else if (originalBeforeSend) {
-            posthog.config.before_send = [originalBeforeSend, surveyBeforeSend]
-        } else {
-            posthog.config.before_send = surveyBeforeSend
-        }
-
-        return () => {
-            window.removeEventListener('popstate', handleUrlChange)
-            // Remove our handler from the before_send configuration
-            if (isArray(posthog.config.before_send)) {
-                posthog.config.before_send = posthog.config.before_send.filter((fn) => fn !== surveyBeforeSend)
-                // If there's only one handler left, convert back to a single function
-                if (posthog.config.before_send.length === 1) {
-                    posthog.config.before_send = posthog.config.before_send[0]
-                }
-                // If there are no handlers left, restore to original state
-                else if (posthog.config.before_send.length === 0) {
-                    posthog.config.before_send = undefined
-                }
-            } else if (posthog.config.before_send === surveyBeforeSend) {
-                posthog.config.before_send = undefined
-            }
-        }
-    }, [isPreviewMode, survey, removeSurveyFromFocus, posthog])
 
     if (isPreviewMode) {
         style = style || {}

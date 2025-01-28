@@ -5,12 +5,10 @@ import {
     renderFeedbackWidgetPreview,
     renderSurveysPreview,
     SurveyManager,
-    SurveyPopup,
     usePopupVisibility,
 } from '../../extensions/surveys'
 import { createShadow } from '../../extensions/surveys/surveys-utils'
 import { Survey, SurveyQuestionType, SurveyType } from '../../posthog-surveys-types'
-import { CaptureResult } from '../../types'
 
 import { beforeEach } from '@jest/globals'
 import '@testing-library/jest-dom'
@@ -18,7 +16,6 @@ import { h } from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse } from '../../types'
-import { isArray } from '../../utils/type-utils'
 
 declare const global: any
 
@@ -590,17 +587,12 @@ describe('SurveyManager', () => {
     })
 })
 
-describe('SurveyPopup URL change handling', () => {
+describe('usePopupVisibility URL changes should hide surveys accordingly', () => {
     let posthog: PostHog
     let mockRemoveSurveyFromFocus: jest.Mock
     let originalLocationHref: string
-
-    const createTestEvent = (event: string): CaptureResult => ({
-        event,
-        properties: {},
-        timestamp: new Date(),
-        uuid: 'test-uuid',
-    })
+    let originalPushState: typeof window.history.pushState
+    let originalReplaceState: typeof window.history.replaceState
 
     const createTestSurvey = (urlCondition?: { url: string; urlMatchType?: string }): Survey =>
         ({
@@ -626,13 +618,15 @@ describe('SurveyPopup URL change handling', () => {
     beforeEach(() => {
         // Mock PostHog instance
         posthog = {
-            config: {
-                before_send: undefined,
-            },
             capture: jest.fn(),
+            get_session_replay_url: jest.fn(),
         } as unknown as PostHog
 
         mockRemoveSurveyFromFocus = jest.fn()
+
+        // Store original history methods
+        originalPushState = window.history.pushState
+        originalReplaceState = window.history.replaceState
 
         // Store original location and set initial location
         originalLocationHref = window.location.href
@@ -643,6 +637,10 @@ describe('SurveyPopup URL change handling', () => {
     })
 
     afterEach(() => {
+        // Restore original history methods
+        window.history.pushState = originalPushState
+        window.history.replaceState = originalReplaceState
+
         // Restore original location
         Object.defineProperty(window, 'location', {
             value: new URL(originalLocationHref),
@@ -651,204 +649,108 @@ describe('SurveyPopup URL change handling', () => {
     })
 
     it('should not hide survey when URL matches - exact match', () => {
-        const survey = createTestSurvey({ url: 'https://example.com/', urlMatchType: 'exact' })
+        const survey = createTestSurvey({ url: 'https://example.com/path1', urlMatchType: 'exact' })
+        Object.defineProperty(window, 'location', {
+            value: new URL('https://example.com/path1'),
+            writable: true,
+        })
+        const { result } = renderHook(() => usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus))
 
-        render(
-            h(SurveyPopup, {
-                survey,
-                posthog,
-                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
-                isPopup: true,
-            })
-        )
-
-        // Simulate pageview event - should not hide survey since URLs match
         act(() => {
-            const beforeSend = posthog.config.before_send
-            if (isArray(beforeSend)) {
-                beforeSend.forEach((fn) => fn(createTestEvent('$pageview')))
-            } else if (beforeSend) {
-                beforeSend(createTestEvent('$pageview'))
-            }
+            window.history.pushState({}, '', '/path1')
         })
 
         expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
+        expect(result.current.isPopupVisible).toBe(true)
     })
 
     it('should hide survey when URL changes to non-matching - exact match', () => {
-        const survey = createTestSurvey({ url: 'https://example.com/', urlMatchType: 'exact' })
+        const survey = createTestSurvey({ url: '/path1', urlMatchType: 'exact' })
+        const { result } = renderHook(() => usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus))
 
-        render(
-            h(SurveyPopup, {
-                survey,
-                posthog,
-                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
-                isPopup: true,
-            })
-        )
-
-        // Change URL to non-matching
-        Object.defineProperty(window, 'location', {
-            value: new URL('https://example.com/other'),
-            writable: true,
-        })
-
-        // Simulate URL change through before_send
         act(() => {
-            const beforeSend = posthog.config.before_send
-            if (isArray(beforeSend)) {
-                beforeSend.forEach((fn) => fn(createTestEvent('$pageview')))
-            } else if (beforeSend) {
-                beforeSend(createTestEvent('$pageview'))
-            }
+            window.history.pushState({}, '', '/path2')
         })
 
         expect(mockRemoveSurveyFromFocus).toHaveBeenCalledTimes(1)
         expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
+        expect(result.current.isPopupVisible).toBe(false)
     })
 
     it('should not hide survey when URL matches - contains', () => {
-        const survey = createTestSurvey({ url: 'example', urlMatchType: 'icontains' })
+        const survey = createTestSurvey({ url: 'path', urlMatchType: 'icontains' })
 
-        render(
-            h(SurveyPopup, {
-                survey,
-                posthog,
-                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
-                isPopup: true,
-            })
-        )
-
-        // Simulate pageview event - should not hide survey since URLs match
-        act(() => {
-            const beforeSend = posthog.config.before_send
-            if (isArray(beforeSend)) {
-                beforeSend.forEach((fn) => fn(createTestEvent('$pageview')))
-            } else if (beforeSend) {
-                beforeSend(createTestEvent('$pageview'))
-            }
-        })
-
-        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
-    })
-
-    it('should hide survey when URL changes to non-matching - contains', () => {
-        const survey = createTestSurvey({ url: 'example', urlMatchType: 'icontains' })
-
-        render(
-            h(SurveyPopup, {
-                survey,
-                posthog,
-                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
-                isPopup: true,
-            })
-        )
-
-        // Change URL to non-matching
+        // Set initial URL to a matching path before rendering the hook
         Object.defineProperty(window, 'location', {
-            value: new URL('https://othersite.com'),
+            value: new URL('https://example.com/path'),
             writable: true,
         })
 
-        // Simulate URL change through before_send
+        const { result } = renderHook(() => usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus))
+
         act(() => {
-            const beforeSend = posthog.config.before_send
-            if (isArray(beforeSend)) {
-                beforeSend.forEach((fn) => fn(createTestEvent('$pageview')))
-            } else if (beforeSend) {
-                beforeSend(createTestEvent('$pageview'))
-            }
+            window.history.pushState({}, '', '/path/subpage')
+        })
+
+        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
+        expect(result.current.isPopupVisible).toBe(true)
+    })
+
+    it('should handle replaceState URL changes', () => {
+        const survey = createTestSurvey({ url: 'path', urlMatchType: 'icontains' })
+        const { result } = renderHook(() => usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus))
+
+        act(() => {
+            window.history.replaceState({}, '', '/other/page')
+        })
+
+        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
+        expect(result.current.isPopupVisible).toBe(false)
+    })
+
+    it('should handle browser back/forward navigation', () => {
+        const survey = createTestSurvey({ url: 'path', urlMatchType: 'icontains' })
+        const { result } = renderHook(() => usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus))
+
+        act(() => {
+            Object.defineProperty(window, 'location', {
+                value: new URL('https://example.com/other/page'),
+                writable: true,
+            })
+            window.dispatchEvent(new Event('popstate'))
         })
 
         expect(mockRemoveSurveyFromFocus).toHaveBeenCalledTimes(1)
         expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
+        expect(result.current.isPopupVisible).toBe(false)
     })
 
-    it('should preserve customer before_send handlers', () => {
-        const customerBeforeSend = jest.fn((data) => data)
-        posthog.config.before_send = customerBeforeSend
-
-        const survey = createTestSurvey({ url: 'example', urlMatchType: 'icontains' })
-
-        render(
-            h(SurveyPopup, {
-                survey,
-                posthog,
-                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
-                isPopup: true,
-            })
-        )
-
-        // Simulate event
-        const eventData = createTestEvent('$pageview')
+    it('should handle hash-based navigation', () => {
+        const survey = createTestSurvey({ url: 'path', urlMatchType: 'icontains' })
+        const { result } = renderHook(() => usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus))
 
         act(() => {
-            const beforeSend = posthog.config.before_send
-            if (isArray(beforeSend)) {
-                beforeSend.forEach((fn) => fn(eventData))
-            } else if (beforeSend) {
-                beforeSend(eventData)
-            }
+            Object.defineProperty(window, 'location', {
+                value: new URL('https://example.com/other/page#/hash'),
+                writable: true,
+            })
+            window.dispatchEvent(new Event('hashchange'))
         })
 
-        expect(customerBeforeSend).toHaveBeenCalledWith(eventData)
-        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
+        // expect mockremoveSurvey to have been called only once
+        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledTimes(1)
+        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
+        expect(result.current.isPopupVisible).toBe(false)
     })
 
-    it('should handle multiple before_send handlers correctly', () => {
-        const customerBeforeSend1 = jest.fn((data) => ({ ...data, modified1: true }) as CaptureResult)
-        const customerBeforeSend2 = jest.fn((data) => ({ ...data, modified2: true }) as CaptureResult)
-        posthog.config.before_send = [customerBeforeSend1, customerBeforeSend2]
-
-        const survey = createTestSurvey({ url: 'example', urlMatchType: 'icontains' })
-
-        render(
-            h(SurveyPopup, {
-                survey,
-                posthog,
-                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
-                isPopup: true,
-            })
-        )
-
-        // Simulate event
-        const eventData = createTestEvent('$pageview')
-
-        let result
-        act(() => {
-            const beforeSend = posthog.config.before_send
-            if (isArray(beforeSend)) {
-                result = beforeSend.reduce((acc, fn) => (acc ? fn(acc) : null), eventData)
-            } else if (beforeSend) {
-                result = beforeSend(eventData)
-            }
-        })
-
-        expect(customerBeforeSend1).toHaveBeenCalled()
-        expect(customerBeforeSend2).toHaveBeenCalled()
-        expect(result).toHaveProperty('modified1', true)
-        expect(result).toHaveProperty('modified2', true)
-        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
-    })
-
-    it('should clean up before_send handlers on unmount', () => {
-        const customerBeforeSend = jest.fn((data) => data)
-        posthog.config.before_send = customerBeforeSend
-
-        const survey = createTestSurvey({ url: 'example', urlMatchType: 'icontains' })
-
-        const { unmount } = render(
-            h(SurveyPopup, {
-                survey,
-                posthog,
-                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
-                isPopup: true,
-            })
-        )
+    it('should restore original history methods on unmount', () => {
+        const survey = createTestSurvey({ url: 'path', urlMatchType: 'icontains' })
+        const { unmount } = renderHook(() => usePopupVisibility(survey, posthog, 0, false, mockRemoveSurveyFromFocus))
 
         unmount()
 
-        expect(posthog.config.before_send).toBe(customerBeforeSend)
+        expect(window.history.pushState).toBe(originalPushState)
+        expect(window.history.replaceState).toBe(originalReplaceState)
     })
 })
 
