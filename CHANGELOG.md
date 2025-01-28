@@ -1,3 +1,8 @@
+## 1.211.1 - 2025-01-28
+
+- revert: "chore: upgrade rrweb to alpha.18" (#1659)
+- chore: codeowners for recorder file (#1693)
+
 ## 1.211.0 - 2025-01-27
 
 - refactor: Remove/deprecate/rename old options (#1694)
