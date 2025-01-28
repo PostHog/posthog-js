@@ -382,7 +382,8 @@ export class PostHogFeatureFlags {
      * @param {Object|Array|String} flags Flags to override with.
      * @param {boolean} [suppressWarning=false] Optional parameter to suppress the override warning.
      * @param {Object} [payloads] Optional parameter to override the payloads for the feature flags.
-     * @param {boolean} [triggerFlagEvent=true] Optional parameter to trigger the _fireFeatureFlagsCallbacks() event.
+     * @param {boolean} [triggerFlagEvent] Optional parameter to trigger the _fireFeatureFlagsCallbacks() event.
+     * If set to true, calling `override` will trigger the callback, which is useful for triggering things like the `useFeatureFlagEnabled` hook.
      */
     override(
         flags: boolean | string[] | Record<string, string | boolean>,
