@@ -1,0 +1,2 @@
+# the recorder file can have unexpected impact on users' sites
+src/entrypoints/recorder.ts @team-replay
