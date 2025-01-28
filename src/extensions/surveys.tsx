@@ -447,7 +447,7 @@ export function usePopupVisibility(
 
     // Add URL change listener to hide survey when URL no longer matches
     useEffect(() => {
-        if (isPreviewMode || !survey.conditions?.url || !posthog) {
+        if (isPreviewMode || !survey.conditions?.url) {
             return
         }
 
@@ -485,7 +485,7 @@ export function usePopupVisibility(
             window.history.pushState = originalPushState
             window.history.replaceState = originalReplaceState
         }
-    }, [isPreviewMode, survey, removeSurveyFromFocus, posthog])
+    }, [isPreviewMode, survey, removeSurveyFromFocus])
 
     return { isPopupVisible, isSurveySent, setIsPopupVisible }
 }
