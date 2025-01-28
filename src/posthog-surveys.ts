@@ -131,6 +131,15 @@ export function getNextSurveyStep(
     return nextQuestionIndex
 }
 
+// use urlMatchType to validate url condition, fallback to contains for backwards compatibility
+export function doesSurveyUrlMatch(survey: Survey): boolean {
+    if (!survey.conditions?.url) {
+        return true
+    }
+
+    return surveyUrlValidationMap[survey.conditions?.urlMatchType ?? 'icontains'](survey.conditions.url)
+}
+
 export class PostHogSurveys {
     private _decideServerResponse?: boolean
     public _surveyEventReceiver: SurveyEventReceiver | null
@@ -271,10 +280,7 @@ export class PostHogSurveys {
                     return true
                 }
 
-                // use urlMatchType to validate url condition, fallback to contains for backwards compatibility
-                const urlCheck = survey.conditions?.url
-                    ? surveyUrlValidationMap[survey.conditions?.urlMatchType ?? 'icontains'](survey.conditions.url)
-                    : true
+                const urlCheck = doesSurveyUrlMatch(survey)
                 const selectorCheck = survey.conditions?.selector
                     ? document?.querySelector(survey.conditions.selector)
                     : true
