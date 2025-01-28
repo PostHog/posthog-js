@@ -1,32 +1,45 @@
 diff --git a/dist/record.js b/dist/record.js
-index 46ec389fefb698243008b39db65470dbdf0a3857..a18724d8b6ba43a30935daf257127fbb0c898541 100644
+index 46ec389fefb698243008b39db65470dbdf0a3857..9867f616d83f368cd3121174411bb148b61883ee 100644
 --- a/dist/record.js
 +++ b/dist/record.js
-@@ -26,6 +26,14 @@ const testableMethods$1 = {
+@@ -26,11 +26,35 @@ const testableMethods$1 = {
    Element: [],
    MutationObserver: ["constructor"]
  };
 +
-+const isAngularZonePresent = () => {
-+  try {
-+    return !!globalThis.Zone
-+  } catch {
-+    return false
++/*
++Angular zone patches many things and can pass the untainted checks below, causing performance issues
++Angular zone, puts the unpatched originals on the window, and the names for hose on the zone object.
++So, we get the unpatched versions from the window object if they exist.
++You can rename Zone, but this is a good enough proxy to avoid going to an iframe to get the untainted versions.
++see: https://github.com/angular/angular/issues/26948
++*/
++function angularZoneUnpatchedAlternative(key) {
++  const angularUnpatchedVersionSymbol = (
++    globalThis
++  )?.Zone?.__symbol__?.(key);
++  if (
++    angularUnpatchedVersionSymbol &&
++    (globalThis)[angularUnpatchedVersionSymbol]
++  ) {
++    return (globalThis)[
++      angularUnpatchedVersionSymbol
++    ];
++  } else {
++    return undefined;
 +  }
 +}
++
  const untaintedBasePrototype$1 = {};
  function getUntaintedPrototype$1(key) {
    if (untaintedBasePrototype$1[key])
-@@ -54,7 +62,7 @@ function getUntaintedPrototype$1(key) {
-       }
-     )
-   );
--  if (isUntaintedAccessors && isUntaintedMethods) {
-+  if (isUntaintedAccessors && isUntaintedMethods && !isAngularZonePresent()) {
-     untaintedBasePrototype$1[key] = defaultObj.prototype;
-     return defaultObj.prototype;
-   }
-@@ -65,10 +73,10 @@ function getUntaintedPrototype$1(key) {
+     return untaintedBasePrototype$1[key];
+-  const defaultObj = globalThis[key];
++  const defaultObj = angularZoneUnpatchedAlternative(key) || globalThis[key];
+   const defaultPrototype = defaultObj.prototype;
+   const accessorNames = key in testableAccessors$1 ? testableAccessors$1[key] : void 0;
+   const isUntaintedAccessors = Boolean(
+@@ -65,10 +89,10 @@ function getUntaintedPrototype$1(key) {
      if (!win) return defaultObj.prototype;
      const untaintedObject = win[key].prototype;
      document.body.removeChild(iframeEl);
@@ -39,7 +52,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..a18724d8b6ba43a30935daf257127fbb
    }
  }
  const untaintedAccessorCache$1 = {};
-@@ -246,6 +254,9 @@ function isCSSImportRule(rule2) {
+@@ -246,6 +270,9 @@ function isCSSImportRule(rule2) {
  function isCSSStyleRule(rule2) {
    return "selectorText" in rule2;
  }
@@ -49,25 +62,63 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..a18724d8b6ba43a30935daf257127fbb
  class Mirror {
    constructor() {
      __publicField$1(this, "idNodeMap", /* @__PURE__ */ new Map());
-@@ -809,9 +820,14 @@ function serializeElementNode(n2, options) {
+@@ -778,6 +805,19 @@ function serializeTextNode(n2, options) {
+     rootId
+   };
+ }
++
++/**
++ * in production, we've seen elements like
++ * `<link type="text/css" rel="stylesheet" id="dark-mode-custom-link"></link>`
++ * while HTMLLinkElement suggests an href is always present
++ * the w3c spec is less specific
++ * and regardless we've seen at least one instance of this in the wild
++ * let's be defensive and make sure this is typed as possibly undefined
++ */
++function hrefFrom(n) {
++  return n?.href;
++}
++
+ function serializeElementNode(n2, options) {
+   const {
+     doc,
+@@ -809,17 +849,24 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "link" && inlineStylesheet) {
 -    const stylesheet = Array.from(doc.styleSheets).find((s2) => {
 -      return s2.href === n2.href;
 -    });
-+    const href = n2.href;
-+    let stylesheet = findStylesheet(doc, href);
-+    if (!stylesheet && href.includes('.css')) {
-+      const rootDomain = window.location.origin;
-+      const stylesheetPath = href.replace(window.location.href, '');
-+      const potentialStylesheetHref = rootDomain + '/' + stylesheetPath;
-+      stylesheet = findStylesheet(doc, potentialStylesheetHref);
-+    }
-     let cssText = null;
-     if (stylesheet) {
-       cssText = stringifyStylesheet(stylesheet);
-@@ -855,7 +871,15 @@ function serializeElementNode(n2, options) {
+-    let cssText = null;
+-    if (stylesheet) {
+-      cssText = stringifyStylesheet(stylesheet);
+-    }
+-    if (cssText) {
+-      delete attributes.rel;
+-      delete attributes.href;
+-      attributes._cssText = cssText;
++    const href = hrefFrom(n2);
++    if (href) {
++      let stylesheet = findStylesheet(doc, href);
++      if (!stylesheet && href.includes('.css')) {
++        const rootDomain = window.location.origin;
++        const stylesheetPath = href.replace(window.location.href, '');
++        const potentialStylesheetHref = rootDomain + '/' + stylesheetPath;
++        stylesheet = findStylesheet(doc, potentialStylesheetHref);
++      }
++      let cssText = null;
++      if (stylesheet) {
++        cssText = stringifyStylesheet(stylesheet);
++      }
++      if (cssText) {
++        delete attributes.rel;
++        delete attributes.href;
++        attributes._cssText = cssText;
++      }
+     }
+   }
+   if (tagName === "style" && n2.sheet && // TODO: Currently we only try to get dynamic stylesheet when it is an empty style element
+@@ -855,7 +902,15 @@ function serializeElementNode(n2, options) {
      }
    }
    if (tagName === "dialog" && n2.open) {
@@ -84,15 +135,10 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..a18724d8b6ba43a30935daf257127fbb
    }
    if (tagName === "canvas" && recordCanvas) {
      if (n2.__context === "2d") {
-@@ -1116,7300 +1140,227 @@ function serializeNodeWithId(n2, options) {
-       keepIframeSrcFn
-     };
-     if (serializedNode.type === NodeType$2.Element && serializedNode.tagName === "textarea" && serializedNode.attributes.value !== void 0) ;
--    else {
--      for (const childN of Array.from(index$1.childNodes(n2))) {
--        const serializedChildNode = serializeNodeWithId(childN, bypassOptions);
--        if (serializedChildNode) {
--          serializedNode.childNodes.push(serializedChildNode);
+@@ -1121,7295 +1176,222 @@ function serializeNodeWithId(n2, options) {
+         const serializedChildNode = serializeNodeWithId(childN, bypassOptions);
+         if (serializedChildNode) {
+           serializedNode.childNodes.push(serializedChildNode);
 -        }
 -      }
 -    }
@@ -7124,11 +7170,6 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..a18724d8b6ba43a30935daf257127fbb
 -        warnOnce22(
 -          "Without `from` option PostCSS could generate wrong source map and will not find Browserslist config. Set it to CSS file path or to `undefined` to prevent this warning."
 -        );
-+    else {
-+      for (const childN of Array.from(index$1.childNodes(n2))) {
-+        const serializedChildNode = serializeNodeWithId(childN, bypassOptions);
-+        if (serializedChildNode) {
-+          serializedNode.childNodes.push(serializedChildNode);
 +        }
        }
      }
@@ -7594,16 +7635,43 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..a18724d8b6ba43a30935daf257127fbb
  class BaseRRNode {
    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
    constructor(..._args) {
-@@ -8507,7 +1458,7 @@ function getUntaintedPrototype(key) {
-       }
-     )
-   );
--  if (isUntaintedAccessors && isUntaintedMethods) {
-+  if (isUntaintedAccessors && isUntaintedMethods && !isAngularZonePresent()) {
-     untaintedBasePrototype[key] = defaultObj.prototype;
-     return defaultObj.prototype;
-   }
-@@ -11382,11 +4333,19 @@ class CanvasManager {
+@@ -8479,11 +1461,34 @@ const testableMethods = {
+   Element: [],
+   MutationObserver: ["constructor"]
+ };
++/*
++Angular zone patches many things and can pass the untainted checks below, causing performance issues
++Angular zone, puts the unpatched originals on the window, and the names for hose on the zone object.
++So, we get the unpatched versions from the window object if they exist.
++You can rename Zone, but this is a good enough proxy to avoid going to an iframe to get the untainted versions.
++see: https://github.com/angular/angular/issues/26948
++*/
++function angularZoneUnpatchedAlternative$1(key) {
++  const angularUnpatchedVersionSymbol = (
++    globalThis
++  )?.Zone?.__symbol__?.(key);
++  if (
++    angularUnpatchedVersionSymbol &&
++    (globalThis)[angularUnpatchedVersionSymbol]
++  ) {
++    return (globalThis)[
++      angularUnpatchedVersionSymbol
++    ];
++  } else {
++    return undefined;
++  }
++}
++
+ const untaintedBasePrototype = {};
+ function getUntaintedPrototype(key) {
+   if (untaintedBasePrototype[key])
+     return untaintedBasePrototype[key];
+-  const defaultObj = globalThis[key];
++  const defaultObj = angularZoneUnpatchedAlternative$1(key) ||globalThis[key];
+   const defaultPrototype = defaultObj.prototype;
+   const accessorNames = key in testableAccessors ? testableAccessors[key] : void 0;
+   const isUntaintedAccessors = Boolean(
+@@ -11382,11 +4387,19 @@ class CanvasManager {
      let rafId;
      const getCanvas = () => {
        const matchedCanvas = [];
@@ -7628,7 +7696,7 @@ index 46ec389fefb698243008b39db65470dbdf0a3857..a18724d8b6ba43a30935daf257127fbb
        return matchedCanvas;
      };
      const takeCanvasSnapshots = (timestamp) => {
-@@ -11407,13 +4366,20 @@ class CanvasManager {
+@@ -11407,13 +4420,20 @@ class CanvasManager {
              context.clear(context.COLOR_BUFFER_BIT);
            }
          }
