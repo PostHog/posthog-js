@@ -382,14 +382,11 @@ export class PostHogFeatureFlags {
      * @param {Object|Array|String} flags Flags to override with.
      * @param {boolean} [suppressWarning=false] Optional parameter to suppress the override warning.
      * @param {Object} [payloads] Optional parameter to override the payloads for the feature flags.
-     * @param {boolean} [triggerFlagEvent] Optional parameter to trigger the _fireFeatureFlagsCallbacks() event.
-     * If set to true, calling `override` will trigger the callback, which is useful for triggering things like the `useFeatureFlagEnabled` hook.
      */
     override(
         flags: boolean | string[] | Record<string, string | boolean>,
         suppressWarning: boolean = false,
-        payloads?: Record<string, JsonType>,
-        triggerFlagEvent?: boolean
+        payloads?: Record<string, JsonType>
     ): void {
         if (!this.instance.__loaded || !this.instance.persistence) {
             return logger.uninitializedWarning('posthog.feature_flags.override')
@@ -416,9 +413,8 @@ export class PostHogFeatureFlags {
             }
         }
 
-        if (triggerFlagEvent) {
-            this._fireFeatureFlagsCallbacks()
-        }
+        // Always trigger the callback, even if the flags are disabled, because the override may have changed.
+        this._fireFeatureFlagsCallbacks()
     }
     /*
      * Register an event listener that runs when feature flags become available or when they change.

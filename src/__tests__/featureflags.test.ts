@@ -201,80 +201,10 @@ describe('featureflags', () => {
         expect(instance.capture).not.toHaveBeenCalled()
     })
 
-    it('supports overrides', () => {
-        instance.persistence.props = {
-            $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
-            $enabled_feature_flags: {
-                'beta-feature': true,
-                'alpha-feature-2': true,
-                'multivariate-flag': 'variant-1',
-            },
-            $override_feature_flags: {
-                'beta-feature': false,
-                'alpha-feature-2': 'as-a-variant',
-            },
-        }
-
-        // should return both true and false flags
-        expect(featureFlags.getFlags()).toEqual(['beta-feature', 'alpha-feature-2', 'multivariate-flag'])
-        expect(featureFlags.getFlagVariants()).toEqual({
-            'alpha-feature-2': 'as-a-variant',
-            'multivariate-flag': 'variant-1',
-            'beta-feature': false,
-        })
-    })
-
-    it('supports suppressing override warnings', () => {
-        // Setup the initial state
-        instance.persistence.props = {
-            $active_feature_flags: ['beta-feature', 'alpha-feature-2'],
-            $enabled_feature_flags: {
-                'beta-feature': true,
-                'alpha-feature-2': true,
-            },
-        }
-        // Mark the instance as loaded
-        instance.__loaded = true
-
-        // Test without suppressing warning (default behavior)
-        featureFlags.override({
-            'beta-feature': false,
-        })
-
-        // Verify that the override took effect
-        expect(featureFlags.getFlagVariants()).toEqual({
-            'beta-feature': false,
-            'alpha-feature-2': true,
-        })
-        expect(window.console.warn).toHaveBeenCalledWith(
-            '[PostHog.js] [FeatureFlags]',
-            ' Overriding feature flags!',
-            expect.any(Object)
-        )
-
-        // Clear the mock to reset call count
-        mockWarn.mockClear()
-
-        // Test with suppressing warning (new behavior)
-        featureFlags.override(
-            {
-                'alpha-feature-2': false,
-            },
-            true
-        )
-
-        expect(window.console.warn).not.toHaveBeenCalled()
-
-        // Verify that the override took effect even with no logs
-        expect(featureFlags.getFlagVariants()).toEqual({
-            'beta-feature': true,
-            'alpha-feature-2': false,
-        })
-    })
-
     describe('override', () => {
-        it('supports overriding feature flag payloads', () => {
-            // Setup the initial state
+        beforeEach(() => {
+            // Common setup used across multiple tests
+            instance.__loaded = true
             instance.persistence.props = {
                 $active_feature_flags: ['beta-feature', 'alpha-feature-2'],
                 $enabled_feature_flags: {
@@ -286,119 +216,112 @@ describe('featureflags', () => {
                     'alpha-feature-2': 123,
                 },
             }
-            instance.__loaded = true
+        })
 
-            // Override with new payloads
+        it('supports basic flag overrides with warning behavior', () => {
+            // Test default warning behavior
+            featureFlags.override({
+                'beta-feature': false,
+            })
+
+            expect(featureFlags.getFlagVariants()).toEqual({
+                'beta-feature': false,
+                'alpha-feature-2': true,
+            })
+            expect(window.console.warn).toHaveBeenCalledWith(
+                '[PostHog.js] [FeatureFlags]',
+                ' Overriding feature flags!',
+                expect.any(Object)
+            )
+
+            // Test suppressed warning behavior
+            mockWarn.mockClear()
             featureFlags.override(
                 {
-                    'beta-feature': true,
-                    'alpha-feature-2': true,
+                    'alpha-feature-2': false,
                 },
-                true,
-                {
+                true
+            )
+
+            expect(window.console.warn).not.toHaveBeenCalled()
+            expect(featureFlags.getFlagVariants()).toEqual({
+                'beta-feature': true,
+                'alpha-feature-2': false,
+            })
+        })
+
+        describe('payload handling', () => {
+            it('supports overriding and clearing payloads', () => {
+                // Test overriding payloads
+                featureFlags.override(
+                    {
+                        'beta-feature': true,
+                        'alpha-feature-2': true,
+                    },
+                    true,
+                    {
+                        'beta-feature': { overridden: 'payload' },
+                        'alpha-feature-2': 456,
+                    }
+                )
+
+                expect(featureFlags.getFlagPayloads()).toEqual({
                     'beta-feature': { overridden: 'payload' },
                     'alpha-feature-2': 456,
-                }
-            )
+                })
 
-            // Verify that the payloads were overridden
-            expect(featureFlags.getFlagPayloads()).toEqual({
-                'beta-feature': { overridden: 'payload' },
-                'alpha-feature-2': 456,
-            })
-        })
-
-        it('clears payload overrides when override is called with false', () => {
-            // Setup the initial state with overrides
-            instance.persistence.props = {
-                $active_feature_flags: ['beta-feature'],
-                $enabled_feature_flags: {
-                    'beta-feature': true,
-                },
-                $feature_flag_payloads: {
-                    'beta-feature': { original: 'payload' },
-                },
-                $override_feature_flag_payloads: {
+                // Test clearing overrides
+                instance.persistence.props.$override_feature_flag_payloads = {
                     'beta-feature': { overridden: 'payload' },
-                },
-            }
-            instance.__loaded = true
+                }
+                featureFlags.override(false)
 
-            // Clear all overrides
-            featureFlags.override(false)
-
-            // Verify that the payloads are back to original
-            expect(featureFlags.getFlagPayloads()).toEqual({
-                'beta-feature': { original: 'payload' },
+                expect(featureFlags.getFlagPayloads()).toEqual({
+                    'beta-feature': { original: 'payload' },
+                    'alpha-feature-2': 123,
+                })
             })
-        })
 
-        it('combines original and override payloads correctly', () => {
-            // Setup the initial state
-            instance.persistence.props = {
-                $active_feature_flags: ['flag-1', 'flag-2', 'flag-3'],
-                $enabled_feature_flags: {
-                    'flag-1': true,
-                    'flag-2': true,
-                    'flag-3': true,
-                },
-                $feature_flag_payloads: {
-                    'flag-1': { data: 'original' },
-                    'flag-2': 123,
+            it('correctly merges partial payload overrides', () => {
+                instance.persistence.props.$active_feature_flags.push('flag-3')
+                instance.persistence.props.$enabled_feature_flags['flag-3'] = true
+                instance.persistence.props.$feature_flag_payloads['flag-3'] = 'test'
+
+                featureFlags.override(
+                    {
+                        'beta-feature': true,
+                        'alpha-feature-2': true,
+                    },
+                    true,
+                    {
+                        'beta-feature': { data: 'overridden' },
+                        'alpha-feature-2': 456,
+                    }
+                )
+
+                expect(featureFlags.getFlagPayloads()).toEqual({
+                    'beta-feature': { data: 'overridden' },
+                    'alpha-feature-2': 456,
                     'flag-3': 'test',
-                },
-            }
-            instance.__loaded = true
-
-            // Override only some payloads
-            featureFlags.override(
-                {
-                    'flag-1': true,
-                    'flag-2': true,
-                },
-                true,
-                {
-                    'flag-1': { data: 'overridden' },
-                    'flag-2': 456,
-                }
-            )
-
-            // Verify that overridden payloads are merged with original ones
-            expect(featureFlags.getFlagPayloads()).toEqual({
-                'flag-1': { data: 'overridden' },
-                'flag-2': 456,
-                'flag-3': 'test',
+                })
             })
-        })
 
-        it('includes payload in feature flag called event', () => {
-            // Setup the initial state with overrides
-            instance.persistence.props = {
-                $active_feature_flags: ['beta-feature'],
-                $enabled_feature_flags: {
-                    'beta-feature': true,
-                },
-                $feature_flag_payloads: {
-                    'beta-feature': { original: 'payload' },
-                },
-                $override_feature_flag_payloads: {
+            it('includes overridden payload in feature flag called event', () => {
+                instance.persistence.props.$override_feature_flag_payloads = {
                     'beta-feature': { overridden: 'payload' },
-                },
-            }
-            instance.__loaded = true
-            featureFlags._hasLoadedFlags = true
+                }
+                featureFlags._hasLoadedFlags = true
 
-            // Get feature flag (which triggers the capture)
-            featureFlags.getFeatureFlag('beta-feature')
+                featureFlags.getFeatureFlag('beta-feature')
 
-            // Verify that the capture included the overridden payload
-            expect(instance.capture).toHaveBeenCalledWith('$feature_flag_called', {
-                $feature_flag: 'beta-feature',
-                $feature_flag_response: true,
-                $feature_flag_payload: { overridden: 'payload' },
-                $feature_flag_bootstrapped_response: null,
-                $feature_flag_bootstrapped_payload: null,
-                $used_bootstrap_value: true, // because we're testing the override
+                expect(instance.capture).toHaveBeenCalledWith('$feature_flag_called', {
+                    $feature_flag: 'beta-feature',
+                    $feature_flag_response: true,
+                    $feature_flag_payload: { overridden: 'payload' },
+                    $feature_flag_bootstrapped_response: null,
+                    $feature_flag_bootstrapped_payload: null,
+                    $used_bootstrap_value: true,
+                })
             })
         })
 
@@ -407,91 +330,41 @@ describe('featureflags', () => {
 
             beforeEach(() => {
                 callbackSpy = jest.fn()
-                instance.__loaded = true
-                instance.persistence.props = {
-                    $active_feature_flags: ['flag-1', 'flag-2'],
-                    $enabled_feature_flags: {
-                        'flag-1': true,
-                        'flag-2': true,
-                    },
-                    $feature_flag_payloads: {
-                        'flag-1': { data: 'original' },
-                        'flag-2': 123,
-                    },
-                }
                 featureFlags.onFeatureFlags(callbackSpy)
             })
 
-            it('does not trigger callback by default when overriding flags', () => {
+            it('triggers callback on every override call', () => {
+                // Override single flag
                 featureFlags.override({
-                    'flag-1': false,
-                    'flag-2': 'variant-1',
+                    'beta-feature': false,
                 })
-
-                expect(callbackSpy).not.toHaveBeenCalled()
-            })
-
-            it('triggers callback when triggerFlagEvent is true', () => {
-                featureFlags.override(
-                    {
-                        'flag-1': false,
-                        'flag-2': 'variant-1',
-                    },
-                    false, // suppressWarning
-                    undefined, // no payloads
-                    true // triggerFlagEvent
-                )
-
-                expect(callbackSpy).toHaveBeenCalledTimes(1)
                 expect(callbackSpy).toHaveBeenCalledWith(
-                    ['flag-2'], // only flag-2 is truthy
-                    { 'flag-2': 'variant-1' },
+                    ['alpha-feature-2'], // 'alpha-feature-2' is the only enabled flag
+                    { 'alpha-feature-2': true },
                     expect.any(Object)
                 )
-            })
 
-            it('triggers callback with overridden payloads when triggerFlagEvent is true', () => {
-                featureFlags.override(
-                    {
-                        'flag-1': true,
-                        'flag-2': 'variant-1',
-                    },
-                    false,
-                    {
-                        'flag-1': { data: 'overridden' },
-                        'flag-2': 456,
-                    },
-                    true
-                )
-
-                expect(callbackSpy).toHaveBeenCalledTimes(1)
-                expect(callbackSpy).toHaveBeenCalledWith(
-                    ['flag-1', 'flag-2'],
-                    { 'flag-1': true, 'flag-2': 'variant-1' },
-                    expect.any(Object)
-                )
-            })
-
-            it('triggers callback when clearing overrides with triggerFlagEvent', () => {
-                // First set some overrides
-                featureFlags.override(
-                    {
-                        'flag-1': false,
-                        'flag-2': 'variant-1',
-                    },
-                    true
-                )
-
-                // Clear mock to start fresh
                 callbackSpy.mockClear()
 
-                // Clear overrides with triggerFlagEvent
-                featureFlags.override(false, false, undefined, true)
+                // Override multiple flags
+                featureFlags.override({
+                    'beta-feature': false,
+                    'alpha-feature-2': 'variant-1',
+                })
 
-                expect(callbackSpy).toHaveBeenCalledTimes(1)
                 expect(callbackSpy).toHaveBeenCalledWith(
-                    ['flag-1', 'flag-2'],
-                    { 'flag-1': true, 'flag-2': true },
+                    ['alpha-feature-2'],
+                    { 'alpha-feature-2': 'variant-1' },
+                    expect.any(Object)
+                )
+
+                // Clear overrides
+                callbackSpy.mockClear()
+                featureFlags.override(false)
+
+                expect(callbackSpy).toHaveBeenCalledWith(
+                    ['beta-feature', 'alpha-feature-2'],
+                    { 'beta-feature': true, 'alpha-feature-2': true },
                     expect.any(Object)
                 )
             })
