@@ -1,3 +1,7 @@
+## 1.211.2 - 2025-01-28
+
+- fix: survey URL targeting should re-evaluate after the URL changes (#1695)
+
 ## 1.211.1 - 2025-01-28
 
 - revert: "chore: upgrade rrweb to alpha.18" (#1659)
