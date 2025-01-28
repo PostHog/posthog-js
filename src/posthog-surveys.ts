@@ -18,20 +18,18 @@ import { isNullish } from './utils/type-utils'
 
 const logger = createLogger('[Surveys]')
 
-export const surveyValidationMap: Record<SurveyMatchType, (targets: string[], value?: string | null) => boolean> = {
-    icontains: (targets, value) =>
-        !!value && targets.some((target) => value.toLowerCase().includes(target.toLowerCase())),
+export const surveyValidationMap: Record<SurveyMatchType, (targets: string[], value: string) => boolean> = {
+    icontains: (targets, value) => targets.some((target) => value.toLowerCase().includes(target.toLowerCase())),
 
-    not_icontains: (targets, value) =>
-        !!value && targets.every((target) => !value.toLowerCase().includes(target.toLowerCase())),
+    not_icontains: (targets, value) => targets.every((target) => !value.toLowerCase().includes(target.toLowerCase())),
 
-    regex: (targets, value) => !!value && targets.some((target) => isMatchingRegex(value, target)),
+    regex: (targets, value) => targets.some((target) => isMatchingRegex(value, target)),
 
-    not_regex: (targets, value) => !!value && targets.every((target) => !isMatchingRegex(value, target)),
+    not_regex: (targets, value) => targets.every((target) => !isMatchingRegex(value, target)),
 
-    exact: (targets, value) => !!value && targets.some((target) => value === target),
+    exact: (targets, value) => targets.some((target) => value === target),
 
-    is_not: (targets, value) => !!value && targets.every((target) => value !== target),
+    is_not: (targets, value) => targets.every((target) => value !== target),
 }
 
 function getRatingBucketForResponseValue(responseValue: number, scale: number) {
@@ -146,12 +144,14 @@ export function doesSurveyUrlMatch(survey: Survey): boolean {
     if (!survey.conditions?.url) {
         return true
     }
+    // if we dont know the url, assume it is not a match
+    const href = assignableWindow?.location?.href
+    if (!href) {
+        return false
+    }
 
     const targets = [survey.conditions.url]
-    return surveyValidationMap[defaultMatchType(survey.conditions?.urlMatchType)](
-        targets,
-        assignableWindow?.location?.href
-    )
+    return surveyValidationMap[defaultMatchType(survey.conditions?.urlMatchType)](targets, href)
 }
 
 export function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
