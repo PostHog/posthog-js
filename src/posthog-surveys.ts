@@ -131,6 +131,7 @@ export function getNextSurveyStep(
     return nextQuestionIndex
 }
 
+// use urlMatchType to validate url condition, fallback to contains for backwards compatibility
 export function doesSurveyUrlMatch(survey: Survey): boolean {
     if (!survey.conditions?.url) {
         return true
