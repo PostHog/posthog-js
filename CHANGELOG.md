@@ -1,3 +1,86 @@
+## 1.211.0 - 2025-01-27
+
+- refactor: Remove/deprecate/rename old options (#1694)
+
+## 1.210.2 - 2025-01-24
+
+- fix: rrweb patch fix take 2 (#1691)
+
+## 1.210.1 - 2025-01-24
+
+- fix: bad rrweb patch (#1690)
+
+## 1.210.0 - 2025-01-24
+
+
+
+## 1.209.4 - 2025-01-24
+
+- feat: Annotate our `scroll` events as `passive` (#1684)
+- fix: Exclude more domains from cross subdomain tracking by default (#1680)
+
+## 1.209.3 - 2025-01-24
+
+- fix: Fix hitting call stack limit when deep comparing circular objects (#1688)
+
+## 1.209.2 - 2025-01-24
+
+- fix: Implement `isDeepEqual` manually (#1686)
+
+## 1.209.1 - 2025-01-24
+
+- fix: angular detection can be less blunt (#1687)
+- fix: Fix CI check name (#1673)
+
+## 1.209.0 - 2025-01-23
+
+- feat: Enhance PostHogProvider to prevent double initialization on `React.StrictMode` (#1676)
+
+## 1.208.1 - 2025-01-23
+
+- fix: correctly cache split css (#1682)
+
+## 1.208.0 - 2025-01-23
+
+
+
+## 1.207.9 - 2025-01-23
+
+- fix: silence noisy surveys logging (#1679)
+
+## 1.207.8 - 2025-01-22
+
+- fix: missing href on link (#1678)
+
+## 1.207.7 - 2025-01-22
+
+- fix: cache nested loops (#1677)
+
+## 1.207.6 - 2025-01-22
+
+- chore: better logging for surveys loaders (#1663)
+
+## 1.207.5 - 2025-01-22
+
+- fix: set last reset date as event super property (#1671)
+
+## 1.207.4 - 2025-01-22
+
+- fix: sentry integration fields (#1669)
+
+## 1.207.3 - 2025-01-22
+
+- fix: patch for css parsing performance (#1670)
+
+## 1.207.2 - 2025-01-21
+
+- fix(): prevent person processing if /decide fails to fetch remote config (#1658)
+
+## 1.207.1 - 2025-01-21
+
+- fix: expose getNextSurveyStep to use in posthog (#1661)
+- chore: upgrade rrweb to alpha.18 (#1592)
+
 ## 1.207.0 - 2025-01-16
 
 - chore: deduplicate subsequent identify calls (#1649)

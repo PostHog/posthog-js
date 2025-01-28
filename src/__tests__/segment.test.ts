@@ -9,9 +9,9 @@
 
 import { beforeEach, describe, expect, it, jest } from '@jest/globals'
 
-import { PostHog } from '../posthog-core'
-import { SegmentContext, SegmentPlugin } from '../extensions/segment-integration'
 import { USER_STATE } from '../constants'
+import { SegmentContext, SegmentPlugin } from '../extensions/segment-integration'
+import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
 
 describe(`Segment integration`, () => {
@@ -66,6 +66,7 @@ describe(`Segment integration`, () => {
                     api_host: `https://test.com`,
                     segment: segment,
                     loaded: resolve,
+                    disable_surveys: true,
                 },
                 posthogName
             )
@@ -85,6 +86,7 @@ describe(`Segment integration`, () => {
                     api_host: `https://test.com`,
                     segment: segment,
                     loaded: resolve,
+                    disable_surveys: true,
                 },
                 posthogName
             )
@@ -110,6 +112,7 @@ describe(`Segment integration`, () => {
                     api_host: `https://test.com`,
                     segment: segment,
                     loaded: resolve,
+                    disable_surveys: true,
                 },
                 posthogName
             )
@@ -134,6 +137,7 @@ describe(`Segment integration`, () => {
                     api_host: `https://test.com`,
                     segment: segment,
                     loaded: resolve,
+                    disable_surveys: true,
                 },
                 posthogName
             )

@@ -1,12 +1,12 @@
 import '../src/__tests__/helpers/mock-logger'
 
-import 'regenerator-runtime/runtime'
 import { waitFor } from '@testing-library/dom'
-import { getRequests } from './mock-server'
+import 'regenerator-runtime/runtime'
 import { createPosthogInstance } from '../src/__tests__/helpers/posthog-instance'
+import { PostHog } from '../src/posthog-core'
 import { logger } from '../src/utils/logger'
 import { uuidv7 } from '../src/uuidv7'
-import { PostHog } from '../src/posthog-core'
+import { getRequests } from './mock-server'
 
 describe('FunctionalTests / Identify', () => {
     let token: string
@@ -15,7 +15,7 @@ describe('FunctionalTests / Identify', () => {
 
     beforeEach(async () => {
         token = uuidv7()
-        posthog = await createPosthogInstance(token)
+        posthog = await createPosthogInstance(token, { disable_surveys: true })
         anonymousId = posthog.get_distinct_id()
     })
 

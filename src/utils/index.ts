@@ -294,6 +294,11 @@ export const registerEvent = (function () {
     return register_event
 })()
 
+// NOTE: Update PostHogConfig docs if you change this list
+// We will not try to catch all bullets here, but we should make an effort to catch the most common ones
+// You should be highly against adding more to this list, because ultimately customers can configure
+// their `cross_subdomain_cookie` setting to anything they want.
+const EXCLUDED_FROM_CROSS_SUBDOMAIN_COOKIE = ['herokuapp.com', 'vercel.app', 'netlify.app']
 export function isCrossDomainCookie(documentLocation: Location | undefined) {
     const hostname = documentLocation?.hostname
 
@@ -303,7 +308,15 @@ export function isCrossDomainCookie(documentLocation: Location | undefined) {
     // split and slice isn't a great way to match arbitrary domains,
     // but it's good enough for ensuring we only match herokuapp.com when it is the TLD
     // for the hostname
-    return hostname.split('.').slice(-2).join('.') !== 'herokuapp.com'
+    const lastTwoParts = hostname.split('.').slice(-2).join('.')
+
+    for (const excluded of EXCLUDED_FROM_CROSS_SUBDOMAIN_COOKIE) {
+        if (lastTwoParts === excluded) {
+            return false
+        }
+    }
+
+    return true
 }
 
 export function find<T>(value: T[], predicate: (value: T) => boolean): T | undefined {

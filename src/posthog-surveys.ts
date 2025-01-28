@@ -1,5 +1,6 @@
-import { PostHog } from './posthog-core'
 import { SURVEYS } from './constants'
+import { getSurveySeenStorageKeys } from './extensions/surveys/surveys-utils'
+import { PostHog } from './posthog-core'
 import {
     Survey,
     SurveyCallback,
@@ -7,13 +8,12 @@ import {
     SurveyQuestionType,
     SurveyUrlMatchType,
 } from './posthog-surveys-types'
+import { RemoteConfig } from './types'
+import { assignableWindow, document, window } from './utils/globals'
+import { createLogger } from './utils/logger'
 import { isUrlMatchingRegex } from './utils/request-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
-import { assignableWindow, document, window } from './utils/globals'
-import { RemoteConfig } from './types'
-import { createLogger } from './utils/logger'
 import { isNullish } from './utils/type-utils'
-import { getSurveySeenStorageKeys } from './extensions/surveys/surveys-utils'
 
 const logger = createLogger('[Surveys]')
 
@@ -58,6 +58,79 @@ function getRatingBucketForResponseValue(responseValue: number, scale: number) {
     throw new Error('The scale must be one of: 3, 5, 7, 10')
 }
 
+export function getNextSurveyStep(
+    survey: Survey,
+    currentQuestionIndex: number,
+    response: string | string[] | number | null
+) {
+    const question = survey.questions[currentQuestionIndex]
+    const nextQuestionIndex = currentQuestionIndex + 1
+
+    if (!question.branching?.type) {
+        if (currentQuestionIndex === survey.questions.length - 1) {
+            return SurveyQuestionBranchingType.End
+        }
+
+        return nextQuestionIndex
+    }
+
+    if (question.branching.type === SurveyQuestionBranchingType.End) {
+        return SurveyQuestionBranchingType.End
+    } else if (question.branching.type === SurveyQuestionBranchingType.SpecificQuestion) {
+        if (Number.isInteger(question.branching.index)) {
+            return question.branching.index
+        }
+    } else if (question.branching.type === SurveyQuestionBranchingType.ResponseBased) {
+        // Single choice
+        if (question.type === SurveyQuestionType.SingleChoice) {
+            // :KLUDGE: for now, look up the choiceIndex based on the response
+            // TODO: once QuestionTypes.MultipleChoiceQuestion is refactored, pass the selected choiceIndex into this method
+            const selectedChoiceIndex = question.choices.indexOf(`${response}`)
+
+            if (question.branching?.responseValues?.hasOwnProperty(selectedChoiceIndex)) {
+                const nextStep = question.branching.responseValues[selectedChoiceIndex]
+
+                // Specific question
+                if (Number.isInteger(nextStep)) {
+                    return nextStep
+                }
+
+                if (nextStep === SurveyQuestionBranchingType.End) {
+                    return SurveyQuestionBranchingType.End
+                }
+
+                return nextQuestionIndex
+            }
+        } else if (question.type === SurveyQuestionType.Rating) {
+            if (typeof response !== 'number' || !Number.isInteger(response)) {
+                throw new Error('The response type must be an integer')
+            }
+
+            const ratingBucket = getRatingBucketForResponseValue(response, question.scale)
+
+            if (question.branching?.responseValues?.hasOwnProperty(ratingBucket)) {
+                const nextStep = question.branching.responseValues[ratingBucket]
+
+                // Specific question
+                if (Number.isInteger(nextStep)) {
+                    return nextStep
+                }
+
+                if (nextStep === SurveyQuestionBranchingType.End) {
+                    return SurveyQuestionBranchingType.End
+                }
+
+                return nextQuestionIndex
+            }
+        }
+
+        return nextQuestionIndex
+    }
+
+    logger.warn('Falling back to next question index due to unexpected branching type')
+    return nextQuestionIndex
+}
+
 export class PostHogSurveys {
     private _decideServerResponse?: boolean
     public _surveyEventReceiver: SurveyEventReceiver | null
@@ -71,6 +144,8 @@ export class PostHogSurveys {
 
     onRemoteConfig(response: RemoteConfig) {
         this._decideServerResponse = !!response['surveys']
+        logger.info(`decideServerResponse set to ${this._decideServerResponse}`)
+
         this.loadIfEnabled()
     }
 
@@ -81,20 +156,53 @@ export class PostHogSurveys {
     }
 
     loadIfEnabled() {
-        const surveysGenerator = assignableWindow?.__PosthogExtensions__?.generateSurveys
+        if (this._surveyManager) {
+            // Surveys already loaded.
+            return
+        }
 
-        if (!this.instance.config.disable_surveys && this._decideServerResponse && !surveysGenerator) {
-            if (this._surveyEventReceiver == null) {
-                this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
+        const disableSurveys = this.instance.config.disable_surveys
+
+        if (disableSurveys) {
+            logger.info('Disabled. Not loading surveys.')
+            return
+        }
+
+        const phExtensions = assignableWindow?.__PosthogExtensions__
+
+        if (!phExtensions) {
+            logger.error('PostHog Extensions not found.')
+            return
+        }
+
+        const generateSurveys = phExtensions.generateSurveys
+
+        if (!this._decideServerResponse) {
+            logger.warn('Decide not loaded yet. Not loading surveys.')
+            return
+        }
+
+        if (this._surveyEventReceiver == null) {
+            this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
+        }
+
+        if (!generateSurveys) {
+            const loadExternalDependency = phExtensions.loadExternalDependency
+
+            if (loadExternalDependency) {
+                loadExternalDependency(this.instance, 'surveys', (err) => {
+                    if (err) {
+                        logger.error('Could not load surveys script', err)
+                        return
+                    }
+
+                    this._surveyManager = phExtensions.generateSurveys?.(this.instance)
+                })
+            } else {
+                logger.error('PostHog loadExternalDependency extension not found. Cannot load remote config.')
             }
-
-            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'surveys', (err) => {
-                if (err) {
-                    return logger.error('Could not load surveys script', err)
-                }
-
-                this._surveyManager = assignableWindow.__PosthogExtensions__?.generateSurveys?.(this.instance)
-            })
+        } else {
+            this._surveyManager = generateSurveys(this.instance)
         }
     }
 
@@ -102,6 +210,8 @@ export class PostHogSurveys {
         // In case we manage to load the surveys script, but config says not to load surveys
         // then we shouldn't return survey data
         if (this.instance.config.disable_surveys) {
+            logger.info('Disabled. Not loading surveys.')
+
             return callback([])
         }
 
@@ -119,7 +229,9 @@ export class PostHogSurveys {
                 ),
                 method: 'GET',
                 callback: (response) => {
-                    if (response.statusCode !== 200 || !response.json) {
+                    const statusCode = response.statusCode
+                    if (statusCode !== 200 || !response.json) {
+                        logger.error(`Surveys API could not be loaded, status: ${statusCode}`)
                         return callback([])
                     }
                     const surveys = response.json.surveys || []
@@ -143,6 +255,7 @@ export class PostHogSurveys {
                 },
             })
         } else {
+            logger.info('Surveys already loaded, using existing data.')
             return callback(existingSurveys)
         }
     }
@@ -229,74 +342,7 @@ export class PostHogSurveys {
             return this.instance.featureFlags.isFeatureEnabled(value)
         })
     }
-    getNextSurveyStep(survey: Survey, currentQuestionIndex: number, response: string | string[] | number | null) {
-        const question = survey.questions[currentQuestionIndex]
-        const nextQuestionIndex = currentQuestionIndex + 1
-
-        if (!question.branching?.type) {
-            if (currentQuestionIndex === survey.questions.length - 1) {
-                return SurveyQuestionBranchingType.End
-            }
-
-            return nextQuestionIndex
-        }
-
-        if (question.branching.type === SurveyQuestionBranchingType.End) {
-            return SurveyQuestionBranchingType.End
-        } else if (question.branching.type === SurveyQuestionBranchingType.SpecificQuestion) {
-            if (Number.isInteger(question.branching.index)) {
-                return question.branching.index
-            }
-        } else if (question.branching.type === SurveyQuestionBranchingType.ResponseBased) {
-            // Single choice
-            if (question.type === SurveyQuestionType.SingleChoice) {
-                // :KLUDGE: for now, look up the choiceIndex based on the response
-                // TODO: once QuestionTypes.MultipleChoiceQuestion is refactored, pass the selected choiceIndex into this method
-                const selectedChoiceIndex = question.choices.indexOf(`${response}`)
-
-                if (question.branching?.responseValues?.hasOwnProperty(selectedChoiceIndex)) {
-                    const nextStep = question.branching.responseValues[selectedChoiceIndex]
-
-                    // Specific question
-                    if (Number.isInteger(nextStep)) {
-                        return nextStep
-                    }
-
-                    if (nextStep === SurveyQuestionBranchingType.End) {
-                        return SurveyQuestionBranchingType.End
-                    }
-
-                    return nextQuestionIndex
-                }
-            } else if (question.type === SurveyQuestionType.Rating) {
-                if (typeof response !== 'number' || !Number.isInteger(response)) {
-                    throw new Error('The response type must be an integer')
-                }
-
-                const ratingBucket = getRatingBucketForResponseValue(response, question.scale)
-
-                if (question.branching?.responseValues?.hasOwnProperty(ratingBucket)) {
-                    const nextStep = question.branching.responseValues[ratingBucket]
-
-                    // Specific question
-                    if (Number.isInteger(nextStep)) {
-                        return nextStep
-                    }
-
-                    if (nextStep === SurveyQuestionBranchingType.End) {
-                        return SurveyQuestionBranchingType.End
-                    }
-
-                    return nextQuestionIndex
-                }
-            }
-
-            return nextQuestionIndex
-        }
-
-        logger.warn('Falling back to next question index due to unexpected branching type')
-        return nextQuestionIndex
-    }
+    getNextSurveyStep = getNextSurveyStep
 
     // this method is lazily loaded onto the window to avoid loading preact and other dependencies if surveys is not enabled
     private _canActivateRepeatedly(survey: Survey) {

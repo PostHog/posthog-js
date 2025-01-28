@@ -59,6 +59,8 @@ describe('PostHogFeature component', () => {
             unobserve: () => null,
             disconnect: () => null,
         })
+
+        // eslint-disable-next-line compat/compat
         window.IntersectionObserver = mockIntersectionObserver
     })
 

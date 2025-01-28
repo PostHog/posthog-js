@@ -117,6 +117,12 @@ module.exports = {
                 'compat/compat': 'off',
             },
         },
+        {
+            files: ['react/**/*.ts'],
+            rules: {
+                'posthog-js/no-direct-null-check': 'off',
+            },
+        },
     ],
     root: true,
 }

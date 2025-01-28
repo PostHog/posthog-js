@@ -34,7 +34,6 @@ import {
     Compression,
     EarlyAccessFeatureCallback,
     EventName,
-    IsFeatureEnabledOptions,
     JsonType,
     PostHogConfig,
     Properties,
@@ -133,20 +132,20 @@ export const defaultConfig = (): PostHogConfig => ({
     persistence: 'localStorage+cookie', // up to 1.92.0 this was 'cookie'. It's easy to migrate as 'localStorage+cookie' will migrate data from cookie storage
     persistence_name: '',
     loaded: __NOOP,
-    store_google: true,
+    save_campaign_params: true,
     custom_campaign_params: [],
     custom_blocked_useragents: [],
     save_referrer: true,
     capture_pageview: true,
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
-    verbose: false,
     cookie_expiration: 365,
     upgrade: false,
     disable_session_recording: false,
     disable_persistence: false,
     disable_web_experiments: true, // disabled in beta.
     disable_surveys: false,
+    disable_external_dependency_loading: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
     ip: true,
@@ -160,8 +159,6 @@ export const defaultConfig = (): PostHogConfig => ({
     respect_dnt: false,
     sanitize_properties: null,
     request_headers: {}, // { header: value, header2: value }
-    inapp_protocol: '//',
-    inapp_link_new_window: false,
     request_batching: true,
     properties_string_max_length: 65535,
     session_recording: {},
@@ -179,16 +176,16 @@ export const defaultConfig = (): PostHogConfig => ({
         logger.error(error)
     },
     get_device_id: (uuid) => uuid,
-    // Used for internal testing
-    _onCapture: __NOOP,
     capture_performance: undefined,
     name: 'posthog',
     bootstrap: {},
     disable_compression: false,
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
     person_profiles: 'identified_only',
-    __add_tracing_headers: false,
     before_send: undefined,
+
+    // Used for internal testing
+    _onCapture: __NOOP,
 })
 
 export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostHogConfig> => {
@@ -204,6 +201,12 @@ export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostH
     }
     if (!isUndefined(origConfig.disable_cookie)) {
         renames.disable_persistence = origConfig.disable_cookie
+    }
+    if (!isUndefined(origConfig.store_google)) {
+        renames.save_campaign_params = origConfig.store_google
+    }
+    if (!isUndefined(origConfig.verbose)) {
+        renames.debug = origConfig.verbose
     }
     // on_xhr_error is not present, as the type is different to on_request_error
 
@@ -369,6 +372,7 @@ export class PostHog {
             const namedPosthog = instances[name] ?? new PostHog()
             namedPosthog._init(token, config, name)
             instances[name] = namedPosthog
+
             // Add as a property to the primary instance (this isn't type-safe but its how it was always done)
             ;(instances[PRIMARY_INSTANCE_NAME] as any)[name] = namedPosthog
 
@@ -587,18 +591,14 @@ export class PostHog {
         }
 
         this.set_config({
-            person_profiles: this._initialPersonProfilesConfig
-                ? this._initialPersonProfilesConfig
-                : config['defaultIdentifiedOnly']
-                  ? 'identified_only'
-                  : 'always',
+            person_profiles: this._initialPersonProfilesConfig ? this._initialPersonProfilesConfig : 'identified_only',
         })
 
         this.siteApps?.onRemoteConfig(config)
         this.sessionRecording?.onRemoteConfig(config)
         this.autocapture?.onRemoteConfig(config)
         this.heatmaps?.onRemoteConfig(config)
-        this.surveys?.onRemoteConfig(config)
+        this.surveys.onRemoteConfig(config)
         this.webVitalsAutocapture?.onRemoteConfig(config)
         this.exceptionObserver?.onRemoteConfig(config)
         this.deadClicksAutocapture?.onRemoteConfig(config)
@@ -852,13 +852,14 @@ export class PostHog {
         // The initial campaign/referrer props need to be stored in the regular persistence, as they are there to mimic
         // the person-initial props. The non-initial versions are stored in the sessionPersistence, as they are sent
         // with every event and used by the session table to create session-initial props.
-        if (this.config.store_google) {
+        if (this.config.save_campaign_params) {
             this.sessionPersistence.update_campaign_params()
         }
         if (this.config.save_referrer) {
             this.sessionPersistence.update_referrer_info()
         }
-        if (this.config.store_google || this.config.save_referrer) {
+
+        if (this.config.save_campaign_params || this.config.save_referrer) {
             this.persistence.set_initial_person_info()
         }
 
@@ -984,15 +985,6 @@ export class PostHog {
             properties['$lib_custom_api_host'] = this.config.api_host
         }
 
-        if (
-            this.sessionPropsManager &&
-            this.config.__preview_send_client_session_params &&
-            (event_name === '$pageview' || event_name === '$pageleave' || event_name === '$autocapture')
-        ) {
-            const sessionProps = this.sessionPropsManager.getSessionProps()
-            properties = extend(properties, sessionProps)
-        }
-
         let pageviewProperties: Record<string, any>
         if (event_name === '$pageview') {
             pageviewProperties = this.pageViewManager.doPageView(timestamp, uuid)
@@ -1100,7 +1092,7 @@ export class PostHog {
      *     // Display the properties
      *     console.log(posthog.persistence.properties())
      *
-     * @param {Object} properties An associative array of properties to store about the user
+     * @param {Object} properties properties to store about the user
      * @param {Number} [days] How many days since the user's last visit to store the super properties
      */
     register(properties: Properties, days?: number): void {
@@ -1228,7 +1220,7 @@ export class PostHog {
      * @param {Object|String} prop Key of the feature flag.
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
-    isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined {
+    isFeatureEnabled(key: string, options?: { send_event: boolean }): boolean | undefined {
         return this.featureFlags.isFeatureEnabled(key, options)
     }
 
@@ -1586,7 +1578,7 @@ export class PostHog {
         this.consent.reset()
         this.persistence?.clear()
         this.sessionPersistence?.clear()
-        this.surveys?.reset()
+        this.surveys.reset()
         this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()
         this._cachedIdentify = null
@@ -1608,6 +1600,13 @@ export class PostHog {
                 ''
             )
         }
+
+        this.register(
+            {
+                $last_posthog_reset: new Date().toISOString(),
+            },
+            1
+        )
     }
 
     /**
@@ -1952,13 +1951,16 @@ export class PostHog {
     captureException(error: Error, additionalProperties?: Properties): void {
         const syntheticException = new Error('PostHog syntheticException')
         const properties: Properties = isFunction(assignableWindow.__PosthogExtensions__?.parseErrorAsProperties)
-            ? assignableWindow.__PosthogExtensions__.parseErrorAsProperties(
-                  [error.message, undefined, undefined, undefined, error],
-                  // create synthetic error to get stack in cases where user input does not contain one
-                  // creating the exceptionas soon into our code as possible means we should only have to
-                  // remove a single frame (this 'captureException' method) from the resultant stack
-                  { syntheticException }
-              )
+            ? {
+                  ...assignableWindow.__PosthogExtensions__.parseErrorAsProperties(
+                      [error.message, undefined, undefined, undefined, error],
+                      // create synthetic error to get stack in cases where user input does not contain one
+                      // creating the exceptions soon into our code as possible means we should only have to
+                      // remove a single frame (this 'captureException' method) from the resultant stack
+                      { syntheticException }
+                  ),
+                  ...additionalProperties,
+              }
             : {
                   $exception_level: 'error',
                   $exception_list: [

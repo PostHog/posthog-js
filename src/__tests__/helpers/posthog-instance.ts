@@ -32,6 +32,7 @@ export const createPosthogInstance = async (
             {
                 request_batching: false,
                 api_host: 'http://localhost',
+                disable_surveys: true,
                 ...config,
                 loaded: (p) => {
                     config.loaded?.(p)

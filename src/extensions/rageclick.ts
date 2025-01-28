@@ -1,4 +1,4 @@
-// Naive rage click implementation: If mouse has not moved than RAGE_CLICK_THRESHOLD_PX
+// Naive rage click implementation: If mouse has not moved further than RAGE_CLICK_THRESHOLD_PX
 // over RAGE_CLICK_CLICK_COUNT clicks with max RAGE_CLICK_TIMEOUT_MS between clicks, it's
 // counted as a rage click
 

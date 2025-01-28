@@ -1,4 +1,4 @@
-name: Library checks
+name: Minimum TypeScript version check
 
 on:
     pull_request:
