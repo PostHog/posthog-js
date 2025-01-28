@@ -6,26 +6,32 @@ import {
     SurveyCallback,
     SurveyQuestionBranchingType,
     SurveyQuestionType,
-    SurveyUrlMatchType,
+    SurveyMatchType,
 } from './posthog-surveys-types'
 import { RemoteConfig } from './types'
-import { assignableWindow, document, window } from './utils/globals'
+import { Info } from './utils/event-utils'
+import { assignableWindow, document, userAgent } from './utils/globals'
 import { createLogger } from './utils/logger'
-import { isUrlMatchingRegex } from './utils/request-utils'
+import { isMatchingRegex } from './utils/request-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import { isNullish } from './utils/type-utils'
 
 const logger = createLogger('[Surveys]')
 
-export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: string) => boolean> = {
-    icontains: (conditionsUrl) =>
-        !!window && window.location.href.toLowerCase().indexOf(conditionsUrl.toLowerCase()) > -1,
-    not_icontains: (conditionsUrl) =>
-        !!window && window.location.href.toLowerCase().indexOf(conditionsUrl.toLowerCase()) === -1,
-    regex: (conditionsUrl) => !!window && isUrlMatchingRegex(window.location.href, conditionsUrl),
-    not_regex: (conditionsUrl) => !!window && !isUrlMatchingRegex(window.location.href, conditionsUrl),
-    exact: (conditionsUrl) => window?.location.href === conditionsUrl,
-    is_not: (conditionsUrl) => window?.location.href !== conditionsUrl,
+export const surveyValidationMap: Record<SurveyMatchType, (targets: string[], value?: string | null) => boolean> = {
+    icontains: (targets, value) =>
+        !!value && targets.some((target) => value.toLowerCase().includes(target.toLowerCase())),
+
+    not_icontains: (targets, value) =>
+        !!value && targets.every((target) => !value.toLowerCase().includes(target.toLowerCase())),
+
+    regex: (targets, value) => !!value && targets.some((target) => isMatchingRegex(value, target)),
+
+    not_regex: (targets, value) => !!value && targets.every((target) => !isMatchingRegex(value, target)),
+
+    exact: (targets, value) => !!value && targets.some((target) => value === target),
+
+    is_not: (targets, value) => !!value && targets.every((target) => value !== target),
 }
 
 function getRatingBucketForResponseValue(responseValue: number, scale: number) {
@@ -137,7 +143,27 @@ export function doesSurveyUrlMatch(survey: Survey): boolean {
         return true
     }
 
-    return surveyUrlValidationMap[survey.conditions?.urlMatchType ?? 'icontains'](survey.conditions.url)
+    const targets = [survey.conditions.url]
+    return surveyValidationMap[survey.conditions?.urlMatchType ?? 'icontains'](
+        targets,
+        assignableWindow?.location?.href
+    )
+}
+
+export function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
+    if (!survey.conditions?.deviceTypes) {
+        return true
+    }
+    // if we dont know the device type, assume it is not a match
+    if (!userAgent) {
+        return false
+    }
+
+    const deviceType = Info.deviceType(userAgent)
+    return surveyValidationMap[survey.conditions?.urlMatchType ?? 'icontains'](
+        survey.conditions.deviceTypes,
+        deviceType
+    )
 }
 
 export class PostHogSurveys {
@@ -284,7 +310,8 @@ export class PostHogSurveys {
                 const selectorCheck = survey.conditions?.selector
                     ? document?.querySelector(survey.conditions.selector)
                     : true
-                return urlCheck && selectorCheck
+                const deviceTypeCheck = doesSurveyDeviceTypesMatch(survey)
+                return urlCheck && selectorCheck && deviceTypeCheck
             })
 
             // get all the surveys that have been activated so far with user actions.

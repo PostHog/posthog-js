@@ -22,9 +22,9 @@ export const convertToURL = (url: string): HTMLAnchorElement | null => {
     return location
 }
 
-export const isUrlMatchingRegex = function (url: string, pattern: string): boolean {
+export const isMatchingRegex = function (value: string, pattern: string): boolean {
     if (!isValidRegex(pattern)) return false
-    return new RegExp(pattern).test(url)
+    return new RegExp(pattern).test(value)
 }
 
 export const formDataToQuery = function (formdata: Record<string, any> | FormData, arg_separator = '&'): string {
