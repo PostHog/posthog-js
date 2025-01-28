@@ -28,6 +28,7 @@ const logger = createLogger('[FeatureFlags]')
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
 const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
+const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_flag_payloads'
 
 export const filterActiveFeatureFlags = (featureFlags?: Record<string, string | boolean>) => {
     const activeFeatureFlags: Record<string, string | boolean> = {}
@@ -149,7 +150,18 @@ export class PostHogFeatureFlags {
 
     getFlagPayloads(): Record<string, JsonType> {
         const flagPayloads = this.instance.get_property(PERSISTENCE_FEATURE_FLAG_PAYLOADS)
-        return flagPayloads || {}
+        const overriddenPayloads = this.instance.get_property(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
+
+        if (!overriddenPayloads) {
+            return flagPayloads || {}
+        }
+
+        const finalPayloads = extend({}, flagPayloads || {})
+        const overriddenKeys = Object.keys(overriddenPayloads)
+        for (let i = 0; i < overriddenKeys.length; i++) {
+            finalPayloads[overriddenKeys[i]] = overriddenPayloads[overriddenKeys[i]]
+        }
+        return finalPayloads
     }
 
     /**
@@ -369,8 +381,15 @@ export class PostHogFeatureFlags {
      *
      * @param {Object|Array|String} flags Flags to override with.
      * @param {boolean} [suppressWarning=false] Optional parameter to suppress the override warning.
+     * @param {Object} [payloads] Optional parameter to override the payloads for the feature flags.
+     * @param {boolean} [triggerFlagEvent=true] Optional parameter to trigger the _fireFeatureFlagsCallbacks() event.
      */
-    override(flags: boolean | string[] | Record<string, string | boolean>, suppressWarning: boolean = false): void {
+    override(
+        flags: boolean | string[] | Record<string, string | boolean>,
+        suppressWarning: boolean = false,
+        payloads?: Record<string, JsonType>,
+        triggerFlagEvent?: boolean
+    ): void {
         if (!this.instance.__loaded || !this.instance.persistence) {
             return logger.uninitializedWarning('posthog.feature_flags.override')
         }
@@ -379,14 +398,25 @@ export class PostHogFeatureFlags {
 
         if (flags === false) {
             this.instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
-        } else if (isArray(flags)) {
-            const flagsObj: Record<string, string | boolean> = {}
-            for (let i = 0; i < flags.length; i++) {
-                flagsObj[flags[i]] = true
-            }
-            this.instance.persistence.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flagsObj })
+            this.instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
         } else {
-            this.instance.persistence.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flags })
+            if (isArray(flags)) {
+                const flagsObj: Record<string, string | boolean> = {}
+                for (let i = 0; i < flags.length; i++) {
+                    flagsObj[flags[i]] = true
+                }
+                this.instance.persistence.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flagsObj })
+            } else {
+                this.instance.persistence.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flags })
+            }
+
+            if (payloads) {
+                this.instance.persistence.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS]: payloads })
+            }
+        }
+
+        if (triggerFlagEvent) {
+            this._fireFeatureFlagsCallbacks()
         }
     }
     /*
