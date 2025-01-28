@@ -78,6 +78,7 @@ interface PostHogExtensions {
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
     canActivateRepeatedly?: (survey: any) => boolean
     generateSurveys?: (posthog: PostHog) => any | undefined
+    getNextSurveyStep?: (survey: any, currentQuestionIndex: number, response: string | string[] | number | null) => any
     postHogWebVitalsCallbacks?: {
         onLCP: (metric: any) => void
         onCLS: (metric: any) => void
