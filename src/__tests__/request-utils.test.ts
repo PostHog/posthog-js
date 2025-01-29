@@ -1,4 +1,4 @@
-import { getQueryParam, formDataToQuery, isUrlMatchingRegex, maskQueryParams } from '../utils/request-utils'
+import { getQueryParam, formDataToQuery, isMatchingRegex, maskQueryParams } from '../utils/request-utils'
 
 describe('request utils', () => {
     describe('_HTTPBuildQuery', () => {
@@ -147,7 +147,7 @@ describe('request utils', () => {
             ['does not match route', 'https://example.com', 'example.com/test', false],
             ['does not match domain', 'https://example.com', 'anotherone.com', false],
         ])('%s', (_name, url, regex, expected) => {
-            expect(isUrlMatchingRegex(url, regex)).toEqual(expected)
+            expect(isMatchingRegex(url, regex)).toEqual(expected)
         })
     })
 })
