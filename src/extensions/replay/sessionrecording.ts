@@ -47,6 +47,7 @@ import { gzipSync, strFromU8, strToU8 } from 'fflate'
 import { clampToRange } from '../../utils/number-utils'
 import Config from '../../config'
 import { includes } from '../../utils/string-utils'
+import { addEventListener } from '../../utils'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
@@ -492,10 +493,10 @@ export class SessionRecording {
             this._startCapture(startReason)
 
             // calling addEventListener multiple times is safe and will not add duplicates
-            window?.addEventListener('beforeunload', this._onBeforeUnload)
-            window?.addEventListener('offline', this._onOffline)
-            window?.addEventListener('online', this._onOnline)
-            window?.addEventListener('visibilitychange', this._onVisibilityChange)
+            addEventListener(window, 'beforeunload', this._onBeforeUnload)
+            addEventListener(window, 'offline', this._onOffline)
+            addEventListener(window, 'online', this._onOnline)
+            addEventListener(window, 'visibilitychange', this._onVisibilityChange)
 
             // on reload there might be an already sampled session that should be continued before decide response,
             // so we call this here _and_ in the decide response

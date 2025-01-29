@@ -7,10 +7,19 @@ const noDirectStringCheck = require('./no-direct-string-check')
 const noDirectDateCheck = require('./no-direct-date-check')
 const noDirectNumberCheck = require('./no-direct-number-check')
 const noDirectBooleanCheck = require('./no-direct-boolean-check')
+const noAddEventListener = require('./no-add-event-listener')
 
 const { RuleTester } = require('eslint')
 
-const ruleTester = new RuleTester()
+const ruleTester = new RuleTester({
+    parserOptions: {
+        ecmaVersion: 2015,
+        sourceType: 'module',
+    },
+    env: {
+        browser: true,
+    },
+})
 
 ruleTester.run('no-direct-null-check', noDirectNullCheck, {
     valid: [{ code: `isNull(x)` }],
@@ -119,6 +128,40 @@ ruleTester.run('no-direct-boolean-check', noDirectBooleanCheck, {
         {
             code: `typeof x === 'boolean'`,
             errors: [{ message: 'Use isBoolean instead of direct boolean checks.' }],
+        },
+    ],
+})
+
+ruleTester.run('no-add-event-listener', noAddEventListener, {
+    valid: [
+        { code: "addEventListener(document, 'click', () => {}, { passive: true })" },
+        { code: "addEventListener(window, 'scroll', () => {}, { capture: true, passive: true })" },
+    ],
+    invalid: [
+        {
+            code: "document.addEventListener('mouseleave', () => {})",
+            errors: [{ message: 'Use addEventListener from @utils instead of calling it directly on elements' }],
+            output: "import { addEventListener } from './utils'\naddEventListener(document, 'mouseleave', () => {})",
+        },
+        {
+            code: "element.addEventListener('click', () => {}, true)",
+            errors: [{ message: 'Use addEventListener from @utils instead of calling it directly on elements' }],
+            output: "import { addEventListener } from './utils'\naddEventListener(element, 'click', () => {}, { capture: true })",
+        },
+        {
+            code: "window.addEventListener('click', () => {}, {})",
+            errors: [{ message: 'Use addEventListener from @utils instead of calling it directly on elements' }],
+            output: "import { addEventListener } from './utils'\naddEventListener(window, 'click', () => {}, {})",
+        },
+        {
+            code: "document.addEventListener('pageleave', () => {}, { capture: true })",
+            errors: [{ message: 'Use addEventListener from @utils instead of calling it directly on elements' }],
+            output: "import { addEventListener } from './utils'\naddEventListener(document, 'pageleave', () => {}, { capture: true })",
+        },
+        {
+            code: "document.addEventListener('pageleave', () => {}, { capture: false })",
+            errors: [{ message: 'Use addEventListener from @utils instead of calling it directly on elements' }],
+            output: "import { addEventListener } from './utils'\naddEventListener(document, 'pageleave', () => {}, { capture: false })",
         },
     ],
 })

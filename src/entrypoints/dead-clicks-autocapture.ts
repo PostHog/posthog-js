@@ -6,6 +6,7 @@ import { DeadClickCandidate, DeadClicksAutoCaptureConfig, Properties } from '../
 import { autocapturePropertiesForElement } from '../autocapture'
 import { isElementInToolbar, isElementNode, isTag } from '../utils/element-utils'
 import { getNativeMutationObserverImplementation } from '../utils/prototype-utils'
+import { addEventListener } from '../utils'
 
 function asClick(event: MouseEvent): DeadClickCandidate | null {
     const eventTarget = getEventTarget(event)
@@ -98,11 +99,11 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _startClickObserver() {
-        assignableWindow.addEventListener('click', this._onClick)
+        addEventListener(assignableWindow, 'click', this._onClick)
     }
 
-    private _onClick = (event: MouseEvent): void => {
-        const click = asClick(event)
+    private _onClick = (event: Event): void => {
+        const click = asClick(event as MouseEvent)
         if (!isNull(click) && !this._ignoreClick(click)) {
             this._clicks.push(click)
         }
@@ -122,7 +123,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     // This allows the browser to optimize scrolling performance by not waiting for our handling of the scroll event
     // see https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener#passive
     private _startScrollObserver() {
-        assignableWindow.addEventListener('scroll', this._onScroll, { capture: true, passive: true })
+        addEventListener(assignableWindow, 'scroll', this._onScroll, { capture: true })
     }
 
     private _onScroll = (): void => {
@@ -141,7 +142,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     private _startSelectionChangedObserver() {
-        assignableWindow.addEventListener('selectionchange', this._onSelectionChange)
+        addEventListener(assignableWindow, 'selectionchange', this._onSelectionChange)
     }
 
     private _onSelectionChange = (): void => {

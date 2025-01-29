@@ -41,6 +41,9 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
     if (document?.body) {
         addScript()
     } else {
+        // Inlining this because we don't care about `passive: true` here
+        // and this saves us ~3% of the bundle size
+        // eslint-disable-next-line posthog-js/no-add-event-listener
         document?.addEventListener('DOMContentLoaded', addScript)
     }
 }

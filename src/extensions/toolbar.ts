@@ -1,4 +1,4 @@
-import { registerEvent, trySafe } from '../utils'
+import { addEventListener, trySafe } from '../utils'
 import { PostHog } from '../posthog-core'
 import { ToolbarParams } from '../types'
 import { _getHashParam } from '../utils/request-utils'
@@ -178,7 +178,7 @@ export class Toolbar {
 
             // Turbolinks doesn't fire an onload event but does replace the entire body, including the toolbar.
             // Thus, we ensure the toolbar is only loaded inside the body, and then reloaded on turbolinks:load.
-            registerEvent(window, 'turbolinks:load', () => {
+            addEventListener(window, 'turbolinks:load', () => {
                 this.setToolbarState(ToolbarState.UNINITIALIZED)
                 this.loadToolbar(toolbarParams)
             })

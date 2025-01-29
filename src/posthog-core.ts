@@ -4,9 +4,9 @@ import {
     each,
     eachArray,
     extend,
-    registerEvent,
     safewrapClass,
     isCrossDomainCookie,
+    addEventListener,
 } from './utils'
 import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
 import { PostHogFeatureFlags } from './posthog-featureflags'
@@ -552,7 +552,11 @@ export class PostHog {
         }
         // Set up event handler for pageleave
         // Use `onpagehide` if available, see https://calendar.perfplanet.com/2020/beaconing-in-practice/#beaconing-reliability-avoiding-abandons
-        window?.addEventListener?.('onpagehide' in self ? 'pagehide' : 'unload', this._handle_unload.bind(this))
+        //
+        // Not making it passive to try and force the browser to handle this before the page is unloaded
+        addEventListener(window, 'onpagehide' in self ? 'pagehide' : 'unload', this._handle_unload.bind(this), {
+            passive: false,
+        })
 
         this.toolbar.maybeLoadToolbar()
 
@@ -2150,13 +2154,17 @@ const add_dom_loaded_handler = function () {
             // 'loaded' is an IE thing
             dom_loaded_handler()
         } else {
-            document.addEventListener('DOMContentLoaded', dom_loaded_handler, false)
+            addEventListener(document, 'DOMContentLoaded', dom_loaded_handler, { capture: false })
         }
+
+        return
     }
 
-    // fallback handler, always will work
+    // Only IE6-8 don't support `document.addEventListener` and we don't support them
+    // so let's simply log an error stating PostHog couldn't be initialized
+    // We're checking for `window` to avoid erroring out on a SSR context
     if (window) {
-        registerEvent(window, 'load', dom_loaded_handler, true)
+        logger.error("Browser doesn't support `document.addEventListener` so PostHog couldn't be initialized")
     }
 }
 

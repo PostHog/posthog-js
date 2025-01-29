@@ -84,21 +84,33 @@ export default function Canvas() {
                     }
                 }
 
-                canvas.addEventListener('mousemove', function (e) {
-                    focalLength = e.x
-                })
+                canvas.addEventListener(
+                    'mousemove',
+                    function (e) {
+                        focalLength = e.x
+                    },
+                    { passive: true }
+                )
 
                 // Kick off the animation when the mouse enters the canvas
-                canvas.addEventListener('mouseover', function () {
-                    animate = true
-                    executeFrame()
-                })
+                canvas.addEventListener(
+                    'mouseover',
+                    function () {
+                        animate = true
+                        executeFrame()
+                    },
+                    { passive: true }
+                )
 
                 // Pause animation when the mouse exits the canvas
-                canvas.addEventListener('mouseout', function () {
-                    // mouseDown = false
-                    animate = false
-                })
+                canvas.addEventListener(
+                    'mouseout',
+                    function () {
+                        // mouseDown = false
+                        animate = false
+                    },
+                    { passive: true }
+                )
 
                 initializeStars()
                 // Draw the first frame to start animation

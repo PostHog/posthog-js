@@ -1,7 +1,7 @@
-import { Breaker, EventHandler, Properties } from '../types'
-import { hasOwnProperty, isArray, isFormData, isFunction, isNull, isNullish, isString } from './type-utils'
+import { Breaker, Properties } from '../types'
+import { hasOwnProperty, isArray, isFormData, isNull, isNullish, isString } from './type-utils'
 import { logger } from './logger'
-import { nativeForEach, nativeIndexOf, window } from './globals'
+import { nativeForEach, nativeIndexOf } from './globals'
 
 const breaker: Breaker = {}
 
@@ -208,92 +208,6 @@ export function _copyAndTruncateStrings<T extends Record<string, any> = Record<s
     }) as T
 }
 
-export const registerEvent = (function () {
-    // written by Dean Edwards, 2005
-    // with input from Tino Zijdel - crisp@xs4all.nl
-    // with input from Carl Sverre - mail@carlsverre.com
-    // with input from PostHog
-    // http://dean.edwards.name/weblog/2005/10/add-event/
-    // https://gist.github.com/1930440
-
-    /**
-     * @param {Object} element
-     * @param {string} type
-     * @param {function(...*)} handler
-     * @param {boolean=} oldSchool
-     * @param {boolean=} useCapture
-     */
-    const register_event = function (
-        element: Element | Window | Document | Node,
-        type: string,
-        handler: EventHandler,
-        oldSchool?: boolean,
-        useCapture?: boolean
-    ) {
-        if (!element) {
-            logger.error('No valid element provided to register_event')
-            return
-        }
-
-        if (element.addEventListener && !oldSchool) {
-            element.addEventListener(type, handler, !!useCapture)
-        } else {
-            const ontype = 'on' + type
-            const old_handler = (element as any)[ontype] // can be undefined
-            ;(element as any)[ontype] = makeHandler(element, handler, old_handler)
-        }
-    }
-
-    function makeHandler(
-        element: Element | Window | Document | Node,
-        new_handler: EventHandler,
-        old_handlers: EventHandler
-    ) {
-        return function (event: Event): boolean | void {
-            event = event || fixEvent(window?.event)
-
-            // this basically happens in firefox whenever another script
-            // overwrites the onload callback and doesn't pass the event
-            // object to previously defined callbacks.  All the browsers
-            // that don't define window.event implement addEventListener
-            // so the dom_loaded handler will still be fired as usual.
-            if (!event) {
-                return undefined
-            }
-
-            let ret = true
-            let old_result: any
-
-            if (isFunction(old_handlers)) {
-                old_result = old_handlers(event)
-            }
-            const new_result = new_handler.call(element, event)
-
-            if (false === old_result || false === new_result) {
-                ret = false
-            }
-
-            return ret
-        }
-    }
-
-    function fixEvent(event: Event | undefined): Event | undefined {
-        if (event) {
-            event.preventDefault = fixEvent.preventDefault
-            event.stopPropagation = fixEvent.stopPropagation
-        }
-        return event
-    }
-    fixEvent.preventDefault = function () {
-        ;(this as any as Event).returnValue = false
-    }
-    fixEvent.stopPropagation = function () {
-        ;(this as any as Event).cancelBubble = true
-    }
-
-    return register_event
-})()
-
 // NOTE: Update PostHogConfig docs if you change this list
 // We will not try to catch all bullets here, but we should make an effort to catch the most common ones
 // You should be highly against adding more to this list, because ultimately customers can configure
@@ -326,4 +240,20 @@ export function find<T>(value: T[], predicate: (value: T) => boolean): T | undef
         }
     }
     return undefined
+}
+
+// Use this instead of element.addEventListener to avoid eslint errors
+// this properly implements the default options for passive event listeners
+export function addEventListener(
+    element: Window | Document | Element | undefined,
+    event: string,
+    callback: EventListener,
+    options?: AddEventListenerOptions
+): void {
+    const { capture = false, passive = true } = options ?? {}
+
+    // This is the only place where we are allowed to call this function
+    // because the whole idea is that we should be calling this instead of the built-in one
+    // eslint-disable-next-line posthog-js/no-add-event-listener
+    element?.addEventListener(event, callback, { capture, passive })
 }
