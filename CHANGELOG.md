@@ -1,3 +1,7 @@
+## 1.212.0 - 2025-01-29
+
+- feat: sampling that can be shared (#1700)
+
 ## 1.211.4 - 2025-01-29
 
 - feat: Add new rule to guarantee events are tracked as passive (#1689)
