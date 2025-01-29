@@ -48,6 +48,7 @@ import { clampToRange } from '../../utils/number-utils'
 import Config from '../../config'
 import { includes } from '../../utils/string-utils'
 import { addEventListener } from '../../utils'
+import { sampleOnProperty } from '../sampling'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
@@ -592,14 +593,8 @@ export class SessionRecording {
          *
          * Otherwise, we should use the stored decision.
          */
-        let shouldSample: boolean
         const makeDecision = sessionIdChanged || !isBoolean(storedIsSampled)
-        if (makeDecision) {
-            const randomNumber = Math.random()
-            shouldSample = randomNumber < currentSampleRate
-        } else {
-            shouldSample = storedIsSampled
-        }
+        const shouldSample = makeDecision ? sampleOnProperty(sessionId, currentSampleRate) : storedIsSampled
 
         if (makeDecision) {
             if (shouldSample) {
