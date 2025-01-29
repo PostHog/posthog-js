@@ -1,31 +1,7 @@
 import { clampToRange } from '../utils/number-utils'
 import { BeforeSendFn, CaptureResult, KnownEventName } from '../types'
-import { isArray, isUndefined } from '../utils/type-utils'
 import { includes } from '../utils/string-utils'
-
-function appendArray(currentValue: string[] | undefined, sampleType: string | string[]): string[] {
-    return [...(currentValue ? currentValue : []), ...(isArray(sampleType) ? sampleType : [sampleType])]
-}
-
-function updateThreshold(currentValue: number | undefined, percent: number): number {
-    return (isUndefined(currentValue) ? 1 : currentValue) * percent
-}
-
-function simpleHash(str: string) {
-    let hash = 0
-    for (let i = 0; i < str.length; i++) {
-        hash = (hash << 5) - hash + str.charCodeAt(i) // (hash * 31) + char code
-        hash |= 0 // Convert to 32bit integer
-    }
-    return Math.abs(hash)
-}
-
-/*
- * receives percent as a number between 0 and 1
- */
-function sampleOnProperty(prop: string, percent: number): boolean {
-    return simpleHash(prop) % 100 < clampToRange(percent * 100, 0, 100)
-}
+import { appendArray, sampleOnProperty, updateThreshold } from '../extensions/sampling'
 
 /**
  * Provides an implementation of sampling that samples based on the distinct ID.
