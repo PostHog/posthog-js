@@ -103,10 +103,11 @@ export interface AutocaptureConfig {
     /**
      * List of DOM elements to allow autocapture on
      * e.g. ['a', 'button', 'form', 'input', 'select', 'textarea', 'label']
-     * we consider the tree of elements from the root to the target element of the click event
-     * so for the tree div > div > button > svg
-     * if the allowlist has button then we allow the capture when the button or the svg is the click target
-     * but not if either of the divs are detected as the click target
+     *
+     * We consider the tree of elements from the root to the target element of the click event
+     * so for the tree `div > div > button > svg`
+     * if the allowlist has `button` then we allow the capture when the `button` or the `svg` is the click target
+     * but not if either of the `div`s are detected as the click target
      */
     element_allowlist?: AutocaptureCompatibleElement[]
 
@@ -117,6 +118,8 @@ export interface AutocaptureConfig {
      * so for the tree div > div > button > svg
      * and allow list config `['[id]']`
      * we will capture the click if the click-target or its parents has any id
+     *
+     * Everything is allowed when there's no allowlist
      */
     css_selector_allowlist?: string[]
 
@@ -126,6 +129,9 @@ export interface AutocaptureConfig {
      */
     element_attribute_ignorelist?: string[]
 
+    /**
+     * When set to true, autocapture will capture the text of any element that is cut or copied.
+     */
     capture_copied_text?: boolean
 }
 
@@ -134,6 +140,7 @@ export interface BootstrapConfig {
     isIdentifiedID?: boolean
     featureFlags?: Record<string, boolean | string>
     featureFlagPayloads?: Record<string, JsonType>
+
     /**
      * Optionally provide a sessionID, this is so that you can provide an existing sessionID here to continue a user's session across a domain or device. It MUST be:
      * - unique to this user
@@ -147,28 +154,40 @@ export interface BootstrapConfig {
 export type SupportedWebVitalsMetrics = 'LCP' | 'CLS' | 'FCP' | 'INP'
 
 export interface PerformanceCaptureConfig {
-    /** works with session replay to use the browser's native performance observer to capture performance metrics */
+    /**
+     *  Works with session replay to use the browser's native performance observer to capture performance metrics
+     */
     network_timing?: boolean
-    /** use chrome's web vitals library to wrap fetch and capture web vitals */
+
+    /**
+     * Use chrome's web vitals library to wrap fetch and capture web vitals
+     */
     web_vitals?: boolean
+
     /**
      * We observe very large values reported by the Chrome web vitals library
      * These outliers are likely not real, useful values, and we exclude them
      * You can set this to 0 in order to include all values, NB this is not recommended
-     * if not set this defaults to 15 minutes
+     *
+     * @default 15 * 60 * 1000 (15 minutes)
      */
     __web_vitals_max_value?: number
+
     /**
      * By default all 4 metrics are captured
      * You can set this config to restrict which metrics are captured
      * e.g. ['CLS', 'FCP'] to only capture those two metrics
      * NB setting this does not override whether the capture is enabled
+     *
+     * @default ['LCP', 'CLS', 'FCP', 'INP']
      */
     web_vitals_allowed_metrics?: SupportedWebVitalsMetrics[]
+
     /**
-     * we delay flushing web vitals metrics to reduce the number of events we send
-     * this is the maximum time we will wait before sending the metrics
-     * if not set it defaults to 5 seconds
+     * We delay flushing web vitals metrics to reduce the number of events we send
+     * This is the maximum time we will wait before sending the metrics
+     *
+     * @default 5000
      */
     web_vitals_delayed_flush_ms?: number
 }
@@ -188,127 +207,502 @@ export interface DeadClickCandidate {
 }
 
 export type DeadClicksAutoCaptureConfig = {
-    // by default if a click is followed by a sroll within 100ms it is not a dead click
+    /**
+     * We'll not consider a click to be a dead click, if it's followed by a scroll within `scroll_threshold_ms` milliseconds
+     *
+     * @default 100
+     */
     scroll_threshold_ms?: number
-    // by default if a click is followed by a selection change within 100ms it is not a dead click
+
+    /**
+     * We'll not consider a click to be a dead click, if it's followed by a selection change within `selection_change_threshold_ms` milliseconds
+     *
+     * @default 100
+     */
     selection_change_threshold_ms?: number
-    // by default if a click is followed by a mutation within 2500ms it is not a dead click
+
+    /**
+     * We'll not consider a click to be a dead click, if it's followed by a mutation within `mutation_threshold_ms` milliseconds
+     *
+     * @default 2500
+     */
     mutation_threshold_ms?: number
+
     /**
      * Allows setting behavior for when a dead click is captured.
      * For e.g. to support capture to heatmaps
      *
      * If not provided the default behavior is to auto-capture dead click events
      *
-     * Only intended to be provided by the SDK
+     * Only intended to be provided by our own SDK
      */
     __onCapture?: ((click: DeadClickCandidate, properties: Properties) => void) | undefined
 } & Pick<AutocaptureConfig, 'element_attribute_ignorelist'>
 
 export interface HeatmapConfig {
-    /*
-     * how often to send batched data in $$heatmap_data events
-     * if set to 0 or not set, sends using the default interval of 1 second
-     * */
+    /**
+     * How often to send batched data in `$heatmap_data` events
+     * If set to 0 or not set, sends using the default interval of 1 second
+     *
+     * @default 1000
+     */
     flush_interval_milliseconds: number
 }
 
 export type BeforeSendFn = (cr: CaptureResult | null) => CaptureResult | null
 
+/**
+ * Configuration options for the PostHog JavaScript SDK.
+ * @see https://posthog.com/docs/libraries/js#config
+ */
 export interface PostHogConfig {
+    /** URL of your PostHog instance.
+     *
+     * @default 'https://us.i.posthog.com'
+     */
     api_host: string
-    /** @deprecated - This property is no longer supported */
-    api_method?: string
-    api_transport?: 'XHR' | 'fetch'
+
+    /**
+     * If using a reverse proxy for `api_host` then this should be the actual PostHog app URL (e.g. https://us.posthog.com).
+     * This ensures that links to PostHog point to the correct host.
+     *
+     * @default null
+     */
     ui_host: string | null
+
+    /**
+     * The transport method to use for API requests.
+     *
+     * @default 'fetch'
+     */
+    api_transport?: 'XHR' | 'fetch'
+
+    /**
+     * The token for your PostHog project.
+     * It should NOT be provided manually in the config, but rather passed as the first parameter to `posthog.init()`.
+     */
     token: string
-    autocapture: boolean | AutocaptureConfig
-    rageclick: boolean
-    cross_subdomain_cookie: boolean
-    persistence: 'localStorage' | 'cookie' | 'memory' | 'localStorage+cookie' | 'sessionStorage'
-    persistence_name: string
-    /** @deprecated - Use 'persistence_name' instead */
-    cookie_name?: string
-    loaded: (posthog_instance: PostHog) => void
 
-    /** @deprecated - Use `save_campaign_params` instead */
-    store_google?: boolean
-    save_campaign_params: boolean
-
-    custom_campaign_params: string[]
-    // a list of strings to be tested against navigator.userAgent to determine if the source is a bot
-    // this is **added to** the default list of bots that we check
-    // defaults to the empty array
-    custom_blocked_useragents: string[]
-    save_referrer: boolean
-    capture_pageview: boolean
-    capture_pageleave: boolean | 'if_capture_pageview'
-
-    /** @deprecated Use `debug` instead */
-    verbose?: boolean
-    debug: boolean
-
-    cookie_expiration: number
-    upgrade: boolean
-    disable_session_recording: boolean
-    disable_persistence: boolean
-    /** @deprecated - use `disable_persistence` instead  */
-    disable_cookie?: boolean
-    disable_surveys: boolean
-    disable_web_experiments: boolean
-    /** If set, posthog-js will never load external scripts such as those needed for Session Replay or Surveys. */
-    disable_external_dependency_loading?: boolean
-    prepare_external_dependency_script?: (script: HTMLScriptElement) => HTMLScriptElement | null
-    enable_recording_console_log?: boolean
-    secure_cookie: boolean
-    ip: boolean
-    /** Starts the SDK in an opted out state requiring opt_in_capturing() to be called before events will b captured  */
-    opt_out_capturing_by_default: boolean
-    opt_out_capturing_persistence_type: 'localStorage' | 'cookie'
-    /** If set to true this will disable persistence if the user is opted out of capturing. @default false */
-    opt_out_persistence_by_default?: boolean
-    /** Opt out of user agent filtering such as googlebot or other bots. Defaults to `false` */
-    opt_out_useragent_filter: boolean
-
-    opt_out_capturing_cookie_prefix: string | null
-    opt_in_site_apps: boolean
-    respect_dnt: boolean
-    /** @deprecated - use `property_denylist` instead  */
-    property_blacklist?: string[]
-    property_denylist: string[]
-    request_headers: { [header_name: string]: string }
-    on_request_error?: (error: RequestResponse) => void
-    /** @deprecated - use `request_headers` instead  */
-    xhr_headers?: { [header_name: string]: string }
-    /** @deprecated - use `on_request_error` instead  */
-    on_xhr_error?: (failedRequest: XMLHttpRequest) => void
-    request_batching: boolean
-    properties_string_max_length: number
-    session_recording: SessionRecordingOptions
-    session_idle_timeout_seconds: number
-    mask_all_element_attributes: boolean
-    mask_all_text: boolean
-    mask_personal_data_properties: boolean
-    custom_personal_data_properties: string[]
-    advanced_disable_decide: boolean
-    advanced_disable_feature_flags: boolean
-    advanced_disable_feature_flags_on_first_load: boolean
-    advanced_disable_toolbar_metrics: boolean
-    feature_flag_request_timeout_ms: number
-    get_device_id: (uuid: string) => string
+    /**
+     * The name this instance will be identified by.
+     * You don't need to set this most of the time,
+     * but can be useful if you have several Posthog instances running at the same time.
+     *
+     * @default 'posthog'
+     */
     name: string
 
     /**
-     * This function is called when collecting properties for an event.
-     * It allows you to edit data before it is sent
-     * @deprecated - use `before_send` instead
+     * Determines whether PostHog should autocapture events.
+     * This setting does not affect capturing pageview events (see `capture_pageview`).
+     *
+     * @default true
      */
-    sanitize_properties: ((properties: Properties, event_name: string) => Properties) | null
+    autocapture: boolean | AutocaptureConfig
+
     /**
-     * this is a read-only function that can be used to react to event capture
-     * @deprecated - use `before_send` instead - NB before_send is not read only
+     * Determines whether PostHog should capture rage clicks.
+     *
+     * @default true
      */
-    _onCapture: (eventName: string, eventData: CaptureResult) => void
+    rageclick: boolean
+
+    /**
+     * Determines if cookie should be set on the top level domain (example.com).
+     * If PostHog-js is loaded on a subdomain (test.example.com), and `cross_subdomain_cookie` is set to false,
+     * it'll set the cookie on the subdomain only (test.example.com).
+     *
+     * NOTE: It will be set to `false` if we detect that the domain is a subdomain of a platform that is excluded from cross-subdomain cookie setting.
+     * The current list of excluded platforms is `herokuapp.com`, `vercel.app`, and `netlify.app`.
+     *
+     * @see `isCrossDomainCookie`
+     * @default true
+     */
+    cross_subdomain_cookie: boolean
+
+    /**
+     * Determines how PostHog stores information about the user. See [persistence](https://posthog.com/docs/libraries/js#persistence) for details.
+     *
+     * @default 'localStorage+cookie'
+     */
+    persistence: 'localStorage' | 'cookie' | 'memory' | 'localStorage+cookie' | 'sessionStorage'
+
+    /**
+     * The name for the super properties persistent store
+     *
+     * @default ''
+     */
+    persistence_name: string
+
+    /** @deprecated - Use 'persistence_name' instead */
+    cookie_name?: string
+
+    /**
+     * A function to be called once the PostHog scripts have loaded successfully.
+     *
+     * @param posthog_instance - The PostHog instance that has been loaded.
+     */
+    loaded: (posthog_instance: PostHog) => void
+
+    /**
+     * Determines whether PostHog should save referrer information.
+     *
+     * @default true
+     */
+    save_referrer: boolean
+
+    /**
+     * Determines whether PostHog should save marketing parameters.
+     * These are `utm_*` paramaters and friends.
+     *
+     * @see {CAMPAIGN_PARAMS} from './utils/event-utils' - Default campaign parameters like utm_source, utm_medium, etc.
+     * @default true
+     */
+    save_campaign_params: boolean
+
+    /** @deprecated - Use `save_campaign_params` instead */
+    store_google?: boolean
+
+    /**
+     * Used to extend the list of campaign parameters that are saved by default.
+     *
+     * @see {CAMPAIGN_PARAMS} from './utils/event-utils' - Default campaign parameters like utm_source, utm_medium, etc.
+     * @default []
+     */
+    custom_campaign_params: string[]
+
+    /**
+     * Used to extend the list of user agents that are blocked by default.
+     *
+     * @see {DEFAULT_BLOCKED_UA_STRS} from './utils/blocked-uas' - Default list of blocked user agents.
+     * @default []
+     */
+    custom_blocked_useragents: string[]
+
+    /**
+     * Determines whether PostHog should be in debug mode.
+     * You can enable this to get more detailed logging.
+     *
+     * You can also enable this on your website by appending `?__posthog_debug=true` at the end of your URL
+     * You can also call `posthog.debug()` in your code to enable debug mode
+     *
+     * @default false
+     */
+    debug: boolean
+
+    /** @deprecated Use `debug` instead */
+    verbose?: boolean
+
+    /**
+     * Determines whether PostHog should capture pageview events automatically.
+     *
+     * @default true
+     */
+    capture_pageview: boolean
+
+    /**
+     * Determines whether PostHog should capture pageleave events.
+     * If set to `true`, it will capture pageleave events for all pages.
+     * If set to `'if_capture_pageview'`, it will only capture pageleave events if `capture_pageview` is also set to `true`.
+     *
+     * @default 'if_capture_pageview'
+     */
+    capture_pageleave: boolean | 'if_capture_pageview'
+
+    /**
+     * Determines the number of days to store cookies for.
+     *
+     * @default 365
+     */
+    cookie_expiration: number
+
+    /**
+     * Determines whether PostHog should upgrade old cookies.
+     * If set to `true`, the library will check for a cookie from our old js library and import super properties from it, then the old cookie is deleted.
+     * This option only works in the initialization, so make sure you set it when you create the library.
+     *
+     * @default false
+     */
+    upgrade: boolean
+
+    /**
+     * Determines whether PostHog should disable session recording.
+     *
+     * @default false
+     */
+    disable_session_recording: boolean
+
+    /**
+     * Determines whether PostHog should disable persistence.
+     * If set to `true`, the library will not save any data to the browser. It will also delete any data previously saved to the browser.
+     *
+     * @default false
+     */
+    disable_persistence: boolean
+
+    /** @deprecated - use `disable_persistence` instead */
+    disable_cookie?: boolean
+
+    /**
+     * Determines whether PostHog should disable surveys.
+     *
+     * @default false
+     */
+    disable_surveys: boolean
+
+    /**
+     * Determines whether PostHog should disable web experiments.
+     *
+     * Currently disabled while we're in BETA. It will be toggled to `true` in a future release.
+     *
+     * @default true
+     */
+    disable_web_experiments: boolean
+
+    /**
+     * Determines whether PostHog should disable any external dependency loading.
+     * This will prevent PostHog from requesting any external scripts such as those needed for Session Replay, Surveys or Site Apps.
+     *
+     * @default false
+     */
+    disable_external_dependency_loading: boolean
+
+    /**
+     * A function to be called when a script is being loaded.
+     * This can be used to modify the script before it is loaded.
+     * This is useful for adding a nonce to the script, for example.
+     *
+     * @param script - The script element that is being loaded.
+     * @returns The modified script element, or null if the script should not be loaded.
+     */
+    prepare_external_dependency_script?: (script: HTMLScriptElement) => HTMLScriptElement | null
+
+    /**
+     * Determines whether PostHog should enable recording console logs.
+     * When undefined, it falls back to the remote config setting.
+     *
+     * @default undefined
+     */
+    enable_recording_console_log?: boolean
+
+    /**
+     * Determines whether PostHog should use secure cookies.
+     * If this is `true`, PostHog cookies will be marked as secure,
+     * meaning they will only be transmitted over HTTPS.
+     *
+     * @default window.location.protocol === 'https:'
+     */
+    secure_cookie: boolean
+
+    /**
+     * Determines whether PostHog should capture IP addresses.
+     *
+     * @default true
+     */
+    ip: boolean
+
+    /**
+     * Determines if users should be opted out of PostHog tracking by default,
+     * requiring additional logic to opt them into capturing by calling `posthog.opt_in_capturing()`.
+     *
+     * @default false
+     */
+    opt_out_capturing_by_default: boolean
+
+    /**
+     * Determines where we'll save the information about whether users are opted out of capturing.
+     *
+     * @default 'localStorage'
+     */
+    opt_out_capturing_persistence_type: 'localStorage' | 'cookie'
+
+    /**
+     * Determines if users should be opted out of browser data storage by this PostHog instance by default,
+     * requiring additional logic to opt them into capturing by calling `posthog.opt_in_capturing()`.
+     *
+     * @default false
+     */
+    opt_out_persistence_by_default?: boolean
+
+    /**
+     * Determines if users should be opted out of user agent filtering such as googlebot or other bots.
+     * If this is set to `true`, PostHog will set `$browser_type` to either `bot` or `browser` for all events,
+     * but will process all events as if they were from a browser.
+     *
+     * @default false
+     */
+    opt_out_useragent_filter: boolean
+
+    /**
+     * Determines the prefix for the cookie used to store the information about whether users are opted out of capturing.
+     * When `null`, it falls back to the default prefix found in `consent.ts`.
+     *
+     * @default null
+     */
+    opt_out_capturing_cookie_prefix: string | null
+
+    /**
+     * Determines if users should be opted in to site apps.
+     *
+     * @default false
+     */
+    opt_in_site_apps: boolean
+
+    /**
+     * Determines whether PostHog should respect the Do Not Track header when computing
+     * consent in `ConsentManager`.
+     *
+     * @see `ConsentManager`
+     * @default false
+     */
+    respect_dnt: boolean
+
+    /**
+     * A list of properties that should never be sent with capture calls.
+     *
+     * @default []
+     */
+    property_denylist: string[]
+
+    /** @deprecated - use `property_denylist` instead  */
+    property_blacklist?: string[]
+
+    /**
+     * A list of headers that should be sent with requests to the PostHog API.
+     *
+     * @default {}
+     */
+    request_headers: { [header_name: string]: string }
+
+    /** @deprecated - use `request_headers` instead  */
+    xhr_headers?: { [header_name: string]: string }
+
+    /**
+     * A function that is called when a request to the PostHog API fails.
+     *
+     * @param error - The `RequestResponse` object that occurred.
+     */
+    on_request_error?: (error: RequestResponse) => void
+
+    /** @deprecated - use `on_request_error` instead  */
+    on_xhr_error?: (failedRequest: XMLHttpRequest) => void
+
+    /**
+     * Determines whether PostHog should batch requests to the PostHog API.
+     *
+     * @default true
+     */
+    request_batching: boolean
+
+    /**
+     * Determines the maximum length of the properties string that can be sent with capture calls.
+     *
+     * @default 65535
+     */
+    properties_string_max_length: number
+
+    /**
+     * Determines the session recording options.
+     *
+     * @see `SessionRecordingOptions`
+     * @default {}
+     */
+    session_recording: SessionRecordingOptions
+
+    /**
+     * Determines the session idle timeout in seconds.
+     * Any new event that's happened after this timeout will create a new session.
+     *
+     * @default 30 * 60 -- 30 minutes
+     */
+    session_idle_timeout_seconds: number
+
+    /**
+     * Prevent autocapture from capturing any attribute names on elements.
+     *
+     * @default false
+     */
+    mask_all_element_attributes: boolean
+
+    /**
+     * Prevent autocapture from capturing `textContent` on elements.
+     *
+     * @default false
+     */
+    mask_all_text: boolean
+
+    /**
+     * Prevent autocapture from capturing personal data properties.
+     * These include campaign parameters, UTM parameters, and other parameters that could be considered personal data under e.g. GDPR.
+     *
+     * @default false
+     */
+    mask_personal_data_properties: boolean
+
+    /**
+     * Custom list of personal data properties to mask.
+     *
+     * @default []
+     */
+    custom_personal_data_properties: string[]
+
+    /**
+     * One of the very first things the PostHog library does when init() is called
+     * is make a request to the /decide endpoint on PostHog's backend.
+     * This endpoint contains information on how to run the PostHog library
+     * so events are properly received in the backend.
+     *
+     * This endpoint is required to run most features of the library.
+     * However, if you're not using any of the described features,
+     * you may wish to turn off the call completely to avoid an extra request
+     * and reduce resource usage on both the client and the server.
+     *
+     * @default false
+     */
+    advanced_disable_decide: boolean
+
+    /**
+     * Will keep /decide running, but without any feature flag requests
+     *
+     * @default false
+     */
+    advanced_disable_feature_flags: boolean
+
+    /**
+     * Stops from firing feature flag requests on first page load.
+     * Only requests feature flags when user identity or properties are updated,
+     * or you manually request for flags to be loaded.
+     *
+     * @default false
+     */
+    advanced_disable_feature_flags_on_first_load: boolean
+
+    /**
+     * Determines whether PostHog should disable toolbar metrics.
+     * This is our internal instrumentation for our toolbar in your website.
+     *
+     * @default false
+     */
+    advanced_disable_toolbar_metrics: boolean
+
+    /**
+     * Sets timeout for fetching feature flags
+     *
+     * @default 3000
+     */
+    feature_flag_request_timeout_ms: number
+
+    /**
+     * Function to get the device ID.
+     * This doesn't usually need to be set, but can be useful if you want to use a custom device ID.
+     *
+     * @param uuid - The UUID we would use for the device ID.
+     * @returns The device ID.
+     *
+     * @default (uuid) => uuid
+     */
+    get_device_id: (uuid: string) => string
+
     /**
      * This function or array of functions - if provided - are called immediately before sending data to the server.
      * It allows you to edit data before it is sent, or choose not to send it all.
@@ -316,64 +710,161 @@ export interface PostHogConfig {
      * any one function returning null means the event will not be sent
      */
     before_send?: BeforeSendFn | BeforeSendFn[]
+
+    /** @deprecated - use `before_send` instead */
+    sanitize_properties: ((properties: Properties, event_name: string) => Properties) | null
+
+    /** @deprecated - use `before_send` instead */
+    _onCapture: (eventName: string, eventData: CaptureResult) => void
+
+    /**
+     * Determines whether to capture performance metrics.
+     * These include Network Timing and Web Vitals.
+     *
+     * When `undefined`, fallback to the remote configuration.
+     * If `false`, neither network timing nor web vitals will work.
+     * If an object, that will override the remote configuration.
+     *
+     * @see {PerformanceCaptureConfig}
+     * @default undefined
+     */
     capture_performance?: boolean | PerformanceCaptureConfig
-    // Should only be used for testing. Could negatively impact performance.
+
+    /**
+     * Determines whether to disable compression when sending events to the server.
+     * WARNING: Should only be used for testing. Could negatively impact performance.
+     *
+     * @default false
+     */
     disable_compression: boolean
+
+    /**
+     * An object containing the `distinctID`, `isIdentifiedID`, and `featureFlags` keys,
+     * where `distinctID` is a string, and `featureFlags` is an object of key-value pairs.
+     *
+     * Since there is a delay between initializing PostHog and fetching feature flags,
+     * feature flags are not always available immediately.
+     * This makes them unusable if you want to do something like redirecting a user
+     * to a different page based on a feature flag.
+     *
+     * You can, therefore, fetch the feature flags in your server and pre-fill them here,
+     * allowing PostHog to know the feature flag values immediately.
+     *
+     * After the SDK fetches feature flags from PostHog, it will use those flag values instead of bootstrapped ones.
+     *
+     * @default {}
+     */
     bootstrap: BootstrapConfig
+
+    /**
+     * The segment analytics object.
+     *
+     * @see https://posthog.com/docs/libraries/segment
+     */
     segment?: SegmentAnalytics
+
+    /**
+     * Determines whether to capture heatmaps.
+     *
+     * @see {HeatmapConfig}
+     * @default undefined
+     */
+    capture_heatmaps?: boolean | HeatmapConfig
+
     /* @deprecated - use `capture_heatmaps` instead */
     enable_heatmaps?: boolean
-    capture_heatmaps?: boolean | HeatmapConfig
+
+    /**
+     * Determines whether to capture dead clicks.
+     *
+     * @see {DeadClicksAutoCaptureConfig}
+     * @default undefined
+     */
     capture_dead_clicks?: boolean | DeadClicksAutoCaptureConfig
+
+    /**
+     * Determines whether to disable scroll properties.
+     * These allow you to keep track of how far down someone scrolled in your website.
+     *
+     * @default false
+     */
     disable_scroll_properties?: boolean
-    // Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
+
+    /**
+     * Let the pageview scroll stats use a custom css selector for the root element, e.g. `main`
+     * It will use `window.document.documentElement` if not specified.
+     */
     scroll_root_selector?: string | string[]
 
-    /** You can control whether events from PostHog-js have person processing enabled with the `person_profiles` config setting. There are three options:
-     * - `person_profiles: 'always'` _(default)_ - we will process persons data for all events
+    /**
+     * You can control whether events from PostHog-js have person processing enabled with the `person_profiles` config setting.
+     * There are three options:
+     * - `person_profiles: 'always'` - we will process persons data for all events
      * - `person_profiles: 'never'` - we won't process persons for any event. This means that anonymous users will not be merged once they sign up or login, so you lose the ability to create funnels that track users from anonymous to identified. All events (including `$identify`) will be sent with `$process_person_profile: False`.
-     * - `person_profiles: 'identified_only'` - we will only process persons when you call `posthog.identify`, `posthog.alias`, `posthog.setPersonProperties`, `posthog.group`, `posthog.setPersonPropertiesForFlags` or `posthog.setGroupPropertiesForFlags` Anonymous users won't get person profiles.
+     * - `person_profiles: 'identified_only'` _(default)_ - we will only process persons when you call `posthog.identify`, `posthog.alias`, `posthog.setPersonProperties`, `posthog.group`, `posthog.setPersonPropertiesForFlags` or `posthog.setGroupPropertiesForFlags` Anonymous users won't get person profiles.
+     *
+     * @default 'identified_only'
      */
     person_profiles?: 'always' | 'never' | 'identified_only'
+
     /** @deprecated - use `person_profiles` instead  */
     process_person?: 'always' | 'never' | 'identified_only'
 
-    /** Client side rate limiting */
+    /**
+     * Client side rate limiting
+     */
     rate_limiting?: {
-        /** The average number of events per second that should be permitted (defaults to 10) */
+        /**
+         * The average number of events per second that should be permitted
+         *
+         * @default 10
+         */
         events_per_second?: number
-        /** How many events can be captured in a burst. This defaults to 10 times the events_per_second count  */
+
+        /**
+         * How many events can be captured in a burst. This defaults to 10 times the events_per_second count
+         *
+         * @default 10 * `events_per_second`
+         */
         events_burst_limit?: number
     }
 
-    /** Used when sending data via `fetch`, use with care, this is intentionally meant to be used with NextJS `fetch`
-     *  Incorrect usage may cause out-of-date data for feature flags, actions tracking, etc.
-     *  See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
+    /**
+     * Used when sending data via `fetch`, use with care.
+     * This is intentionally meant to be used with NextJS `fetch`
+     *
+     * Incorrect `cache` usage may cause out-of-date data for feature flags, actions tracking, etc.
+     * See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
      */
     fetch_options?: {
         cache?: RequestInit['cache']
         next_options?: NextOptions
     }
 
+    // ------- PREVIEW CONFIGS -------
+
     /**
      * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * whether to wrap fetch and add tracing headers to the request
+     * Whether to wrap fetch and add tracing headers to the request
      * */
     __add_tracing_headers?: boolean
 
     /**
      * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * enables the new RemoteConfig approach to loading config instead of decide
+     * Enables the new RemoteConfig approach to loading config instead of decide
      * */
     __preview_remote_config?: boolean
 
     /**
      * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * whether to send a sentinel value for distinct id, device id, and session id, which will be replaced server-side by a cookieless hash
+     * Whether to send a sentinel value for distinct id, device id, and session id, which will be replaced server-side by a cookieless hash
      * */
     __preview_experimental_cookieless_mode?: boolean
 
-    // ------- RETIRED CONFIGS -------
+    // ------- RETIRED CONFIGS - NO REPLACEMENT OR USAGE -------
+
+    /** @deprecated - NOT USED ANYMORE, kept here for backwards compatibility reasons */
+    api_method?: string
 
     /** @deprecated - NOT USED ANYMORE, kept here for backwards compatibility reasons */
     inapp_protocol?: string
@@ -382,71 +873,146 @@ export interface PostHogConfig {
     inapp_link_new_window?: boolean
 }
 
-export interface OptInOutCapturingOptions {
-    capture: (event: string, properties: Properties, options: CaptureOptions) => void
-    capture_event_name: string
-    capture_properties: Properties
-    enable_persistence: boolean
-    clear_persistence: boolean
-    persistence_type: 'cookie' | 'localStorage' | 'localStorage+cookie'
-    cookie_prefix: string
-    cookie_expiration: number
-    cross_subdomain_cookie: boolean
-    secure_cookie: boolean
-}
-
 export interface SessionRecordingOptions {
+    /**
+     * Derived from `rrweb.record` options
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @default 'ph-nocapture'
+     */
     blockClass?: string | RegExp
+
+    /**
+     * Derived from `rrweb.record` options
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @default null
+     */
     blockSelector?: string | null
+
+    /**
+     * Derived from `rrweb.record` options
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @default 'ph-ignore-input'
+     */
     ignoreClass?: string
+
+    /**
+     * Derived from `rrweb.record` options
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @default 'ph-mask'
+     */
     maskTextClass?: string | RegExp
+
+    /**
+     * Derived from `rrweb.record` options
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @default undefined
+     */
     maskTextSelector?: string | null
-    maskTextFn?: ((text: string, element: HTMLElement | null) => string) | null
-    maskAllInputs?: boolean
-    maskInputOptions?: recordOptions['maskInputOptions']
-    maskInputFn?: ((text: string, element?: HTMLElement) => string) | null
+
+    /**
+     * Derived from `rrweb.record` options
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @default undefined
+     */
+    maskTextFn?: ((text: string, element?: HTMLElement) => string) | null
+
+    /**
+     * Derived from `rrweb.record` options
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @default {}
+     */
     slimDOMOptions?: recordOptions['slimDOMOptions']
+
+    /**
+     * Derived from `rrweb.record` options
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @default false
+     */
     collectFonts?: boolean
+
+    /**
+     * Derived from `rrweb.record` options
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @default true
+     */
     inlineStylesheet?: boolean
+
+    /**
+     * Derived from `rrweb.record` options
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @default false
+     */
     recordCrossOriginIframes?: boolean
+
+    /**
+     * Derived from `rrweb.record` options
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @default false
+     */
+    recordHeaders?: boolean
+
+    /**
+     * Derived from `rrweb.record` options
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     * @default false
+     */
+    recordBody?: boolean
+
     /**
      * Allows local config to override remote canvas recording settings from the decide response
      */
     captureCanvas?: SessionRecordingCanvasOptions
+
+    /**
+     * Modify the network request before it is captured. Returning null or undefined stops it being captured
+     */
+    maskCapturedNetworkRequestFn?: ((data: CapturedNetworkRequest) => CapturedNetworkRequest | null | undefined) | null
+
     /** @deprecated - use maskCapturedNetworkRequestFn instead  */
     maskNetworkRequestFn?: ((data: NetworkRequest) => NetworkRequest | null | undefined) | null
-    /** Modify the network request before it is captured. Returning null or undefined stops it being captured */
-    maskCapturedNetworkRequestFn?: ((data: CapturedNetworkRequest) => CapturedNetworkRequest | null | undefined) | null
-    // our settings here only support a subset of those proposed for rrweb's network capture plugin
-    recordHeaders?: boolean
-    recordBody?: boolean
-    // ADVANCED: while a user is active we take a full snapshot of the browser every interval. For very few sites playback performance might be better with different interval. Set to 0 to disable
+
+    /**
+     * ADVANCED: while a user is active we take a full snapshot of the browser every interval.
+     * For very few sites playback performance might be better with different interval.
+     * Set to 0 to disable
+     *
+     * @default 1000 * 60 * 5 (5 minutes)
+     */
     full_snapshot_interval_millis?: number
-    /*
-     ADVANCED: whether to partially compress rrweb events before sending them to the server,
-     defaults to true, can be set to false to disable partial compression
-     NB requests are still compressed when sent to the server regardless of this setting
-    */
+
+    /**
+     * ADVANCED: whether to partially compress rrweb events before sending them to the server,
+     * defaults to true, can be set to false to disable partial compression
+     * NB requests are still compressed when sent to the server regardless of this setting
+     *
+     * @default true
+     */
     compress_events?: boolean
-    /*
-     ADVANCED: alters the threshold before a recording considers a user has become idle.
-     Normally only altered alongside changes to session_idle_timeout_ms.
-     Default is 5 minutes.
-    */
+
+    /**
+     * ADVANCED: alters the threshold before a recording considers a user has become idle.
+     * Normally only altered alongside changes to session_idle_timeout_ms.
+     *
+     * @default 1000 * 60 * 5 (5 minutes)
+     */
     session_idle_threshold_ms?: number
-    /*
-     ADVANCED: alters the refill rate for the token bucket mutation throttling
-     Normally only altered alongside posthog support guidance.
-     Accepts values between 0 and 100
-     Default is 10.
-    */
+
+    /**
+     * ADVANCED: alters the refill rate for the token bucket mutation throttling
+     * Normally only altered alongside posthog support guidance.
+     * Accepts values between 0 and 100
+     *
+     * @default 10
+     */
     __mutationRateLimiterRefillRate?: number
-    /*
-     ADVANCED: alters the bucket size for the token bucket mutation throttling
-     Normally only altered alongside posthog support guidance.
-     Accepts values between 0 and 100
-     Default is 100.
-    */
+
+    /**
+     * ADVANCED: alters the bucket size for the token bucket mutation throttling
+     * Normally only altered alongside posthog support guidance.
+     * Accepts values between 0 and 100
+     *
+     * @default 100
+     */
     __mutationRateLimiterBucketSize?: number
 }
 
@@ -505,29 +1071,100 @@ export interface RetriableRequestOptions extends QueuedRequestOptions {
 }
 
 export interface CaptureOptions {
-    $set?: Properties /** used with $identify */
-    $set_once?: Properties /** used with $identify */
-    _url?: string /** Used to override the desired endpoint for the captured event */
-    _batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
-    _noTruncate?: boolean /** if set, overrides and disables config.properties_string_max_length */
-    send_instantly?: boolean /** if set skips the batched queue */
-    skip_client_rate_limiting?: boolean /** if set skips the client side rate limiting */
-    transport?: RequestOptions['transport'] /** if set, overrides the desired transport method */
+    /**
+     * Used when `$identify` is called
+     * Will set person properties overriding previous values
+     */
+    $set?: Properties
+
+    /**
+     * Used when `$identify` is called
+     * Will set person properties but only once, it will NOT override previous values
+     */
+    $set_once?: Properties
+
+    /**
+     * Used to override the desired endpoint for the captured event
+     */
+    _url?: string
+
+    /**
+     * key of queue, e.g. 'sessionRecording' vs 'event'
+     */
+    _batchKey?: string
+
+    /**
+     * If set, overrides and disables config.properties_string_max_length
+     */
+    _noTruncate?: boolean
+
+    /**
+     * If set, skips the batched queue
+     */
+    send_instantly?: boolean
+
+    /**
+     * If set, skips the client side rate limiting
+     */
+    skip_client_rate_limiting?: boolean
+
+    /**
+     * If set, overrides the desired transport method
+     */
+    transport?: RequestOptions['transport']
+
+    /**
+     * If set, overrides the current timestamp
+     */
     timestamp?: Date
 }
 
 export type FlagVariant = { flag: string; variant: string }
 
 export type SessionRecordingCanvasOptions = {
+    /**
+     * If set, records the canvas
+     *
+     * @default false
+     */
     recordCanvas?: boolean | null
+
+    /**
+     * If set, records the canvas at the given FPS
+     * Can be set in the remote configuration
+     * Limited between 0 and 12
+     *
+     * @default 0
+     */
     canvasFps?: number | null
-    // the API returns a decimal between 0 and 1 as a string
+
+    /**
+     * If set, records the canvas at the given quality
+     * Can be set in the remote configuration
+     * Must be an integer between 0 and 1
+     *
+     * @default 0
+     */
     canvasQuality?: string | null
 }
 
+/**
+ * Remote configuration for the PostHog instance
+ *
+ * All of these settings can be configured directly in your PostHog instance
+ * Any configuration set in the client overrides the information from the server
+ */
 export interface RemoteConfig {
+    /**
+     * Supported compression algorithms
+     */
     supportedCompression: Compression[]
+
+    /**
+     * If set, disables autocapture
+     */
     autocapture_opt_out?: boolean
+
     /**
      *     originally capturePerformance was replay only and so boolean true
      *     is equivalent to { network_timing: true }
@@ -538,12 +1175,31 @@ export interface RemoteConfig {
      *     TODO: deprecate this so we make a new config that doesn't need this explanation
      */
     capturePerformance?: boolean | PerformanceCaptureConfig
+
+    /**
+     * Whether we should use a custom endpoint for analytics
+     *
+     * @default { endpoint: "/e" }
+     */
     analytics?: {
         endpoint?: string
     }
+
+    /**
+     * Whether the `$elements_chain` property should be sent as a string or as an array
+     *
+     * @default false
+     */
     elementsChainAsString?: boolean
-    // this is currently in development and may have breaking changes without a major version bump
+
+    /**
+     * This is currently in development and may have breaking changes without a major version bump
+     */
     autocaptureExceptions?: boolean | { endpoint?: string }
+
+    /**
+     * Session recording configuration options
+     */
     sessionRecording?: SessionRecordingCanvasOptions & {
         endpoint?: string
         consoleLogRecordingEnabled?: boolean
@@ -557,18 +1213,61 @@ export interface RemoteConfig {
         urlBlocklist?: SessionRecordingUrlTrigger[]
         eventTriggers?: string[]
     }
+
+    /**
+     * Whether surveys are enabled
+     */
     surveys?: boolean
+
+    /**
+     * Parameters for the toolbar
+     */
     toolbarParams: ToolbarParams
-    editorParams?: ToolbarParams /** @deprecated, renamed to toolbarParams, still present on older API responses */
-    toolbarVersion: 'toolbar' /** @deprecated, moved to toolbarParams */
+
+    /**
+     * @deprecated renamed to toolbarParams, still present on older API responses
+     */
+    editorParams?: ToolbarParams
+
+    /**
+     * @deprecated, moved to toolbarParams
+     */
+    toolbarVersion: 'toolbar'
+
+    /**
+     * Whether the user is authenticated
+     */
     isAuthenticated: boolean
+
+    /**
+     * List of site apps with their IDs and URLs
+     */
     siteApps: { id: string; url: string }[]
+
+    /**
+     * Whether heatmaps are enabled
+     */
     heatmaps?: boolean
+
+    /**
+     * Whether to only capture identified users by default
+     */
     defaultIdentifiedOnly?: boolean
+
+    /**
+     * Whether to capture dead clicks
+     */
     captureDeadClicks?: boolean
-    hasFeatureFlags?: boolean // Indicates if the team has any flags enabled (if not we don't need to load them)
+
+    /**
+     * Indicates if the team has any flags enabled (if not we don't need to load them)
+     */
+    hasFeatureFlags?: boolean
 }
 
+/**
+ * Decide returns everything we have on the remote config plus feature flags and their payloads
+ */
 export interface DecideResponse extends RemoteConfig {
     featureFlags: Record<string, string | boolean>
     featureFlagPayloads: Record<string, JsonType>

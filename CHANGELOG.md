@@ -1,3 +1,25 @@
+## 1.212.0 - 2025-01-29
+
+- feat: sampling that can be shared (#1700)
+
+## 1.211.4 - 2025-01-29
+
+- feat: Add new rule to guarantee events are tracked as passive (#1689)
+
+## 1.211.3 - 2025-01-29
+
+- docs: Add documentation to all of our init options (#1681)
+- chore: add survey files codeowners (#1696)
+
+## 1.211.2 - 2025-01-28
+
+- fix: survey URL targeting should re-evaluate after the URL changes (#1695)
+
+## 1.211.1 - 2025-01-28
+
+- revert: "chore: upgrade rrweb to alpha.18" (#1659)
+- chore: codeowners for recorder file (#1693)
+
 ## 1.211.0 - 2025-01-27
 
 - refactor: Remove/deprecate/rename old options (#1694)

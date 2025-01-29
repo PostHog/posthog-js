@@ -1,4 +1,3 @@
-import { registerEvent } from './utils'
 import RageClick from './extensions/rageclick'
 import { DeadClickCandidate, Properties, RemoteConfig } from './types'
 import { PostHog } from './posthog-core'
@@ -11,6 +10,7 @@ import { createLogger } from './utils/logger'
 import { isElementInToolbar, isElementNode, isTag } from './utils/element-utils'
 import { DeadClicksAutocapture, isDeadClicksEnabledForHeatmaps } from './extensions/dead-clicks-autocapture'
 import { includes } from './utils/string-utils'
+import { addEventListener } from './utils'
 
 const DEFAULT_FLUSH_INTERVAL = 5000
 
@@ -60,9 +60,7 @@ export class Heatmaps {
         this.instance = instance
         this._enabledServerSide = !!this.instance.persistence?.props[HEATMAPS_ENABLED_SERVER_SIDE]
 
-        window?.addEventListener('beforeunload', () => {
-            this.flush()
-        })
+        addEventListener(window, 'beforeunload', this.flush)
     }
 
     public get flushIntervalMilliseconds(): number {
@@ -132,8 +130,10 @@ export class Heatmaps {
             return
         }
 
-        registerEvent(document, 'click', (e) => this._onClick((e || window?.event) as MouseEvent), false, true)
-        registerEvent(document, 'mousemove', (e) => this._onMouseMove((e || window?.event) as MouseEvent), false, true)
+        addEventListener(document, 'click', (e) => this._onClick((e || window?.event) as MouseEvent), { capture: true })
+        addEventListener(document, 'mousemove', (e) => this._onMouseMove((e || window?.event) as MouseEvent), {
+            capture: true,
+        })
 
         this.deadClicksCapture = new DeadClicksAutocapture(
             this.instance,

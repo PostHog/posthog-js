@@ -1,4 +1,5 @@
 import { PostHog } from '../posthog-core'
+import { doesSurveyUrlMatch } from '../posthog-surveys'
 import {
     Survey,
     SurveyAppearance,
@@ -34,6 +35,7 @@ import {
     style,
     SurveyContext,
 } from './surveys/surveys-utils'
+import { addEventListener } from '../utils'
 const logger = createLogger('[Surveys]')
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
@@ -120,15 +122,17 @@ export class SurveyManager {
                     const surveyPopup = document
                         .querySelector(`.PostHogWidget${survey.id}`)
                         ?.shadowRoot?.querySelector(`.survey-form`) as HTMLFormElement
-                    selectorOnPage.addEventListener('click', () => {
+
+                    addEventListener(selectorOnPage, 'click', () => {
                         if (surveyPopup) {
                             surveyPopup.style.display = surveyPopup.style.display === 'none' ? 'block' : 'none'
-                            surveyPopup.addEventListener('PHSurveyClosed', () => {
+                            addEventListener(surveyPopup, 'PHSurveyClosed', () => {
                                 this.removeSurveyFromFocus(survey.id)
                                 surveyPopup.style.display = 'none'
                             })
                         }
                     })
+
                     selectorOnPage.setAttribute('PHWidgetSurveyClickListener', 'true')
                 }
             }
@@ -434,8 +438,8 @@ export function usePopupVisibility(
             }
         }
 
-        window.addEventListener('PHSurveyClosed', handleSurveyClosed)
-        window.addEventListener('PHSurveySent', handleSurveySent)
+        addEventListener(window, 'PHSurveyClosed', handleSurveyClosed)
+        addEventListener(window, 'PHSurveySent', handleSurveySent)
 
         if (millisecondDelay > 0) {
             return handleShowSurveyWithDelay()
@@ -443,6 +447,48 @@ export function usePopupVisibility(
             return handleShowSurveyImmediately()
         }
     }, [])
+
+    // Add URL change listener to hide survey when URL no longer matches
+    useEffect(() => {
+        if (isPreviewMode || !survey.conditions?.url) {
+            return
+        }
+
+        const checkUrlMatch = () => {
+            const urlCheck = doesSurveyUrlMatch(survey)
+            if (!urlCheck) {
+                setIsPopupVisible(false)
+                removeSurveyFromFocus(survey.id)
+            }
+        }
+
+        // Listen for browser back/forward browser history changes
+        addEventListener(window, 'popstate', checkUrlMatch)
+        // Listen for hash changes, for SPA frameworks that use hash-based routing
+        // The hashchange event is fired when the fragment identifier of the URL has changed (the part of the URL beginning with and following the # symbol).
+        addEventListener(window, 'hashchange', checkUrlMatch)
+
+        // Listen for SPA navigation
+        const originalPushState = window.history.pushState
+        const originalReplaceState = window.history.replaceState
+
+        window.history.pushState = function (...args) {
+            originalPushState.apply(this, args)
+            checkUrlMatch()
+        }
+
+        window.history.replaceState = function (...args) {
+            originalReplaceState.apply(this, args)
+            checkUrlMatch()
+        }
+
+        return () => {
+            window.removeEventListener('popstate', checkUrlMatch)
+            window.removeEventListener('hashchange', checkUrlMatch)
+            window.history.pushState = originalPushState
+            window.history.replaceState = originalReplaceState
+        }
+    }, [isPreviewMode, survey, removeSurveyFromFocus])
 
     return { isPopupVisible, isSurveySent, setIsPopupVisible }
 }
@@ -519,9 +565,7 @@ export function SurveyPopup({
                 />
             )}
         </SurveyContext.Provider>
-    ) : (
-        <></>
-    )
+    ) : null
 }
 
 export function Questions({
@@ -682,10 +726,12 @@ export function FeedbackWidget({
             }
         }
         if (survey.appearance?.widgetType === 'selector') {
-            const widget = document.querySelector(survey.appearance.widgetSelector || '')
-            widget?.addEventListener('click', () => {
+            const widget = document.querySelector(survey.appearance.widgetSelector || '') ?? undefined
+
+            addEventListener(widget, 'click', () => {
                 setShowSurvey(!showSurvey)
             })
+
             widget?.setAttribute('PHWidgetSurveyClickListener', 'true')
         }
     }, [])

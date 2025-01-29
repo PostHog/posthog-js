@@ -10,6 +10,7 @@ import { createLogger } from './utils/logger'
 
 import { clampToRange } from './utils/number-utils'
 import { PostHog } from './posthog-core'
+import { addEventListener } from './utils'
 
 const logger = createLogger('[SessionId]')
 
@@ -198,11 +199,17 @@ export class SessionIdManager {
      * We conditionally check the primaryWindowExists value in the constructor to decide if the window id in the last session storage should be carried over.
      */
     private _listenToReloadWindow(): void {
-        window?.addEventListener('beforeunload', () => {
-            if (this._canUseSessionStorage()) {
-                sessionStore.remove(this._primary_window_exists_storage_key)
-            }
-        })
+        addEventListener(
+            window,
+            'beforeunload',
+            () => {
+                if (this._canUseSessionStorage()) {
+                    sessionStore.remove(this._primary_window_exists_storage_key)
+                }
+            },
+            // Not making it passive to try and force the browser to handle this before the page is unloaded
+            { capture: false }
+        )
     }
 
     /*

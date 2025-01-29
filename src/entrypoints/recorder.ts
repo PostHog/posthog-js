@@ -278,6 +278,9 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                     return originalSend(body)
                 }
 
+                // This is very tricky code, and making it passive won't bring many performance benefits,
+                // so let's ignore the rule here.
+                // eslint-disable-next-line posthog-js/no-add-event-listener
                 xhr.addEventListener('readystatechange', () => {
                     if (xhr.readyState !== xhr.DONE) {
                         return
@@ -325,6 +328,7 @@ function initXhrObserver(cb: networkCallback, win: IWindow, options: Required<Ne
                             //
                         })
                 })
+
                 originalOpen.call(xhr, method, url, async, username, password)
             }
         }
