@@ -122,6 +122,9 @@ const PRIMARY_INSTANCE_NAME = 'posthog'
 // should only be true for Opera<12
 let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 && userAgent?.indexOf('Mozilla') === -1
 
+// NOTE: Remember to update `types.ts` when changing a default value
+// to guarantee documentation is up to date, make sure to also update our website docs
+// NOTE²: This shouldn't ever change because we try very hard to be backwards-compatible
 export const defaultConfig = (): PostHogConfig => ({
     api_host: 'https://us.i.posthog.com',
     ui_host: null,
@@ -1721,142 +1724,8 @@ export class PostHog {
     /**
      * Update the configuration of a posthog library instance.
      *
-     * The default config is:
-     *
-     *     {
-     *       // PostHog API host
-     *       api_host: 'https://us.i.posthog.com',
-     *     *
-     *       // PostHog web app host, currently only used by the Sentry integration.
-     *       // This will only be different from api_host when using a reverse-proxied API host – in that case
-     *       // the original web app host needs to be passed here so that links to the web app are still convenient.
-     *       ui_host: 'https://us.posthog.com',
-     *
-     *       // Automatically capture clicks, form submissions and change events
-     *       autocapture: true
-     *
-     *       // Capture rage clicks
-     *       rageclick: true
-     *
-     *       // transport for sending requests ('XHR' | 'fetch' | 'sendBeacon')
-     *       // NB: sendBeacon should only be used for scenarios such as
-     *       // page unload where a "best-effort" attempt to send is
-     *       // acceptable; the sendBeacon API does not support callbacks
-     *       // or any way to know the result of the request. PostHog
-     *       // capturing via sendBeacon will not support any event-
-     *       // batching or retry mechanisms.
-     *       api_transport: 'fetch'
-     *
-     *       // super properties cookie expiration (in days)
-     *       cookie_expiration: 365
-     *
-     *       // super properties span subdomains
-     *       cross_subdomain_cookie: true
-     *
-     *       // debug mode
-     *       debug: false
-     *
-     *       // if this is true, the posthog cookie or localStorage entry
-     *       // will be deleted, and no user persistence will take place
-     *       disable_persistence: false
-     *
-     *       // if this is true, PostHog will automatically determine
-     *       // City, Region and Country data using the IP address of
-     *       //the client
-     *       ip: true
-     *
-     *       // opt users out of capturing by this PostHog instance by default
-     *       opt_out_capturing_by_default: false
-     *
-     *       // opt users out of browser data storage by this PostHog instance by default
-     *       opt_out_persistence_by_default: false
-     *
-     *       // opt out of user agent filtering such as googlebot or other bots
-     *       opt_out_useragent_filter: false
-     *
-     *       // persistence mechanism used by opt-in/opt-out methods - cookie
-     *       // or localStorage - falls back to cookie if localStorage is unavailable
-     *       opt_out_capturing_persistence_type: 'localStorage'
-     *
-     *       // customize the name of cookie/localStorage set by opt-in/opt-out methods
-     *       opt_out_capturing_cookie_prefix: null
-     *
-     *       // type of persistent store for super properties (cookie/
-     *       // localStorage) if set to 'localStorage', any existing
-     *       // posthog cookie value with the same persistence_name
-     *       // will be transferred to localStorage and deleted
-     *       persistence: 'cookie'
-     *
-     *       // name for super properties persistent store
-     *       persistence_name: ''
-     *
-     *       // deprecated, use property_denylist instead.
-     *       // names of properties/superproperties which should never
-     *       // be sent with capture() calls.
-     *       property_blacklist: []
-     *
-     *       // names of properties/superproperties which should never
-     *       // be sent with capture() calls.
-     *       property_denylist: []
-     *
-     *       // if this is true, posthog cookies will be marked as
-     *       // secure, meaning they will only be transmitted over https
-     *       secure_cookie: false
-     *
-     *       // should we capture a page view on page load
-     *       capture_pageview: true
-     *
-     *       // if you set upgrade to be true, the library will check for
-     *       // a cookie from our old js library and import super
-     *       // properties from it, then the old cookie is deleted
-     *       // The upgrade config option only works in the initialization,
-     *       // so make sure you set it when you create the library.
-     *       upgrade: false
-     *
-     *       // if this is true, session recording is always disabled.
-     *       disable_session_recording: false,
-     *
-     *       // extra HTTP request headers to set for each API request, in
-     *       // the format {'Header-Name': value}
-     *       response_headers: {}
-     *
-     *       // protocol for fetching in-app message resources, e.g.
-     *       // 'https://' or 'http://'; defaults to '//' (which defers to the
-     *       // current page's protocol)
-     *       inapp_protocol: '//'
-     *
-     *       // whether to open in-app message link in new tab/window
-     *       inapp_link_new_window: false
-     *
-     *      // a set of rrweb config options that PostHog users can configure
-     *      // see https://github.com/rrweb-io/rrweb/blob/master/guide.md
-     *      session_recording: {
-     *         blockClass: 'ph-no-capture',
-     *         blockSelector: null,
-     *         ignoreClass: 'ph-ignore-input',
-     *         maskAllInputs: true,
-     *         maskInputOptions: {password: true},
-     *         maskInputFn: null,
-     *         slimDOMOptions: {},
-     *         collectFonts: false,
-     *         inlineStylesheet: true,
-     *      }
-     *
-     *      // prevent autocapture from capturing any attribute names on elements
-     *      mask_all_element_attributes: false
-     *
-     *      // prevent autocapture from capturing textContent on all elements
-     *      mask_all_text: false
-     *
-     *      // Anonymous users get a random UUID as their device by default.
-     *      // This option allows overriding that option.
-     *      get_device_id: (uuid) => uuid
-     *     }
-     *
-     *
-     * @param {Object} config A dictionary of new configuration values to update
+     * @param {Partial<PostHogConfig>} config A dictionary of new configuration values to update
      */
-
     set_config(config: Partial<PostHogConfig>): void {
         const oldConfig = { ...this.config }
         if (isObject(config)) {
@@ -2099,11 +1968,6 @@ export class PostHog {
         return true
     }
 
-    /**
-     * Enable or disable persistence based on options
-     * only enable/disable if persistence is not already in this state
-     * @param {boolean} [disabled] If true, will re-enable sdk persistence
-     */
     private _sync_opt_out_with_persistence(): void {
         const isOptedOut = this.consent.isOptedOut()
         const defaultPersistenceDisabled = this.config.opt_out_persistence_by_default
@@ -2161,10 +2025,6 @@ export class PostHog {
      * Opt the user out of data capturing and cookies/localstorage for this PostHog instance.
      * If the config.opt_out_persistence_by_default is set to true, the SDK persistence will be disabled.
      *
-     * ### Usage
-     *
-     *     // opt user out
-     *     posthog.opt_out_capturing()
      */
     opt_out_capturing(): void {
         this.consent.optInOut(false)
@@ -2173,11 +2033,6 @@ export class PostHog {
 
     /**
      * Check whether the user has opted in to data capturing and cookies/localstorage for this PostHog instance
-     *
-     * ### Usage
-     *
-     *     const has_opted_in = posthog.has_opted_in_capturing();
-     *     // use has_opted_in value
      *
      * @returns {boolean} current opt-in status
      */
@@ -2188,11 +2043,6 @@ export class PostHog {
     /**
      * Check whether the user has opted out of data capturing and cookies/localstorage for this PostHog instance
      *
-     * ### Usage
-     *
-     *     const has_opted_out = posthog.has_opted_out_capturing();
-     *     // use has_opted_out value
-     *
      * @returns {boolean} current opt-out status
      */
     has_opted_out_capturing(): boolean {
@@ -2201,13 +2051,6 @@ export class PostHog {
 
     /**
      * Clear the user's opt in/out status of data capturing and cookies/localstorage for this PostHog instance
-     *
-     * ### Usage
-     *
-     *     // clear user's opt-in/out status
-     *     posthog.clear_opt_in_out_capturing();
-     *     *
-     * @param {Object} [config] A dictionary of config options to override
      */
     clear_opt_in_out_capturing(): void {
         this.consent.reset()
@@ -2229,6 +2072,12 @@ export class PostHog {
         }
     }
 
+    /**
+     * Enables or disables debug mode.
+     * You can also enable debug mode by appending `?__posthog_debug=true` to the URL
+     *
+     * @param {boolean} [debug] If true, will enable debug mode.
+     */
     debug(debug?: boolean): void {
         if (debug === false) {
             window?.console.log("You've disabled debug mode.")
