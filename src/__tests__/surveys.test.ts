@@ -22,6 +22,7 @@ import { window } from '../utils/globals'
 import { RequestRouter } from '../utils/request-router'
 import { assignableWindow } from '../utils/globals'
 import { generateSurveys } from '../extensions/surveys'
+import * as globals from '../utils/globals'
 
 describe('surveys', () => {
     let config: PostHogConfig
@@ -351,6 +352,24 @@ describe('surveys', () => {
             start_date: new Date().toISOString(),
             end_date: null,
         } as unknown as Survey
+        const surveyWithMobileDeviceType: Survey = {
+            name: 'survey with device type',
+            description: 'survey with device type description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with device type?' }],
+            conditions: { deviceTypes: ['Android', 'iOS', 'Mobile'], deviceTypesMatchType: 'icontains' },
+            start_date: new Date().toISOString(),
+            end_date: null,
+        } as unknown as Survey
+        const surveyWithWebDeviceType: Survey = {
+            name: 'survey with device type',
+            description: 'survey with device type description',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'what is a survey with device type?' }],
+            conditions: { deviceTypes: ['Web'], deviceTypesMatchType: 'icontains' },
+            start_date: new Date().toISOString(),
+            end_date: null,
+        } as unknown as Survey
         const surveyWithUrlDoesNotContainRegex: Survey = {
             name: 'survey with url does not contain regex',
             description: 'survey with url does not contain regex description',
@@ -595,6 +614,42 @@ describe('surveys', () => {
                 expect(data).toEqual([surveyWithExactUrlMatch])
             })
             assignableWindow.location = originalWindowLocation
+        })
+
+        it('returns surveys based on device types matching', () => {
+            surveysResponse = {
+                surveys: [surveyWithMobileDeviceType],
+            }
+
+            const userAgent =
+                'Mozilla/5.0 (Linux; U; Android-4.0.3; en-us; Galaxy Nexus Build/IML74K) AppleWebKit/535.7 (KHTML, like Gecko) CrMo/16.0.912.75 Mobile Safari/535.7'
+            // TS doesn't like it but we can assign userAgent
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            globals['userAgent'] = userAgent
+
+            // matching
+            surveys.getActiveMatchingSurveys((data) => {
+                expect(data).toEqual([surveyWithMobileDeviceType])
+            })
+        })
+
+        it('returns surveys based on device types not matching', () => {
+            surveysResponse = {
+                surveys: [surveyWithWebDeviceType],
+            }
+
+            const userAgent =
+                'Mozilla/5.0 (Linux; U; Android-4.0.3; en-us; Galaxy Nexus Build/IML74K) AppleWebKit/535.7 (KHTML, like Gecko) CrMo/16.0.912.75 Mobile Safari/535.7'
+            // TS doesn't like it but we can assign userAgent
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            globals['userAgent'] = userAgent
+
+            // matching
+            surveys.getActiveMatchingSurveys((data) => {
+                expect(data).toEqual([])
+            })
         })
 
         it('returns surveys based on exclusion conditions', () => {
