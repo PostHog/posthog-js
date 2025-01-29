@@ -302,6 +302,7 @@ describe('featureflags', () => {
             })
 
             it('supports payload overrides', () => {
+                // Test with warning suppressed
                 featureFlags.overrideFeatureFlags({
                     payloads: {
                         'beta-feature': { data: 'overridden' },
@@ -314,6 +315,29 @@ describe('featureflags', () => {
                     'beta-feature': { data: 'overridden' },
                     'alpha-feature-2': 456,
                 })
+
+                expect(window.console.warn).not.toHaveBeenCalledWith(
+                    '[PostHog.js] [FeatureFlags]',
+                    ' Overriding feature flag payloads!'
+                )
+
+                // Test without suppressing warning
+                featureFlags.overrideFeatureFlags({
+                    payloads: {
+                        'beta-feature': { data: 'overridden-again' },
+                    },
+                    suppressWarning: false,
+                })
+
+                expect(featureFlags.getFlagPayloads()).toEqual({
+                    'beta-feature': { data: 'overridden-again' },
+                    'alpha-feature-2': 123,
+                })
+                expect(window.console.warn).toHaveBeenCalledWith(
+                    '[PostHog.js] [FeatureFlags]',
+                    ' Overriding feature flag payloads!',
+                    expect.any(Object)
+                )
             })
 
             it('clears overrides when passed false', () => {
