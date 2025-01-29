@@ -1,3 +1,7 @@
+## 1.211.4 - 2025-01-29
+
+- feat: Add new rule to guarantee events are tracked as passive (#1689)
+
 ## 1.211.3 - 2025-01-29
 
 - docs: Add documentation to all of our init options (#1681)
