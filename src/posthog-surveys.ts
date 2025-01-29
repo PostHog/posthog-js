@@ -10,12 +10,11 @@ import {
 } from './posthog-surveys-types'
 import { RemoteConfig } from './types'
 import { Info } from './utils/event-utils'
-import { assignableWindow, document, userAgent } from './utils/globals'
+import { assignableWindow, document, userAgent, window } from './utils/globals'
 import { createLogger } from './utils/logger'
 import { isMatchingRegex } from './utils/string-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import { isNullish } from './utils/type-utils'
-import { window } from './utils/globals'
 
 const logger = createLogger('[Surveys]')
 

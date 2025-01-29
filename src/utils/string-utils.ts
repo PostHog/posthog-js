@@ -19,5 +19,9 @@ export function isDistinctIdStringLike(value: string): boolean {
 
 export const isMatchingRegex = function (value: string, pattern: string): boolean {
     if (!isValidRegex(pattern)) return false
-    return new RegExp(pattern).test(value)
+    try {
+        return new RegExp(pattern).test(value)
+    } catch {
+        return false
+    }
 }
