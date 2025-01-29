@@ -12,9 +12,10 @@ import { RemoteConfig } from './types'
 import { Info } from './utils/event-utils'
 import { assignableWindow, document, userAgent } from './utils/globals'
 import { createLogger } from './utils/logger'
-import { isMatchingRegex } from './utils/request-utils'
+import { isMatchingRegex } from './utils/string-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import { isNullish } from './utils/type-utils'
+import { window } from './utils/globals'
 
 const logger = createLogger('[Surveys]')
 
@@ -145,7 +146,7 @@ export function doesSurveyUrlMatch(survey: Survey): boolean {
         return true
     }
     // if we dont know the url, assume it is not a match
-    const href = assignableWindow?.location?.href
+    const href = window?.location?.href
     if (!href) {
         return false
     }
