@@ -463,10 +463,10 @@ export function usePopupVisibility(
         }
 
         // Listen for browser back/forward browser history changes
-        window.addEventListener('popstate', checkUrlMatch)
+        addEventListener(window, 'popstate', checkUrlMatch)
         // Listen for hash changes, for SPA frameworks that use hash-based routing
         // The hashchange event is fired when the fragment identifier of the URL has changed (the part of the URL beginning with and following the # symbol).
-        window.addEventListener('hashchange', checkUrlMatch)
+        addEventListener(window, 'hashchange', checkUrlMatch)
 
         // Listen for SPA navigation
         const originalPushState = window.history.pushState
