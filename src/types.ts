@@ -905,16 +905,32 @@ export interface SessionRecordingOptions {
     /**
      * Derived from `rrweb.record` options
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
-     * @default undefined
      */
     maskTextSelector?: string | null
 
     /**
      * Derived from `rrweb.record` options
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
-     * @default undefined
      */
     maskTextFn?: ((text: string, element?: HTMLElement) => string) | null
+
+    /**
+     * Derived from `rrweb.record` options
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     */
+    maskAllInputs?: boolean
+
+    /**
+     * Derived from `rrweb.record` options
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     */
+    maskInputOptions?: recordOptions['maskInputOptions']
+
+    /**
+     * Derived from `rrweb.record` options
+     * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+     */
+    maskInputFn?: ((text: string, element?: HTMLElement) => string) | null
 
     /**
      * Derived from `rrweb.record` options
