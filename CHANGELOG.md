@@ -1,3 +1,7 @@
+## 1.212.1 - 2025-01-29
+
+- docs: Add missing types (#1703)
+
 ## 1.212.0 - 2025-01-29
 
 - feat: sampling that can be shared (#1700)
