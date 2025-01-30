@@ -2437,5 +2437,19 @@ describe('SessionRecording', () => {
             // even though still waiting for URL to trigger
             expect(sessionRecording['status']).toBe('active')
         })
+
+        it('ANDS with Sampling', async () => {
+            sessionRecording.onRemoteConfig(
+                makeDecideResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['$exception'],
+                        sampleRate: '0.00', // i.e. never send recording
+                    },
+                })
+            )
+
+            expect(sessionRecording['status']).toBe('disabled')
+        })
     })
 })

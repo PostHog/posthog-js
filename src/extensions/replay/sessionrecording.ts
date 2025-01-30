@@ -397,6 +397,12 @@ export class SessionRecording {
             return 'disabled'
         }
 
+        // if sampling is set and the session is already decided to not be sampled
+        // then we should never be active
+        if (this.isSampled === false) {
+            return 'disabled'
+        }
+
         if (this._urlBlocked) {
             return 'paused'
         }
