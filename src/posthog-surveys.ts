@@ -6,26 +6,30 @@ import {
     SurveyCallback,
     SurveyQuestionBranchingType,
     SurveyQuestionType,
-    SurveyUrlMatchType,
+    SurveyMatchType,
 } from './posthog-surveys-types'
 import { RemoteConfig } from './types'
-import { assignableWindow, document, window } from './utils/globals'
+import { Info } from './utils/event-utils'
+import { assignableWindow, document, userAgent, window } from './utils/globals'
 import { createLogger } from './utils/logger'
-import { isUrlMatchingRegex } from './utils/request-utils'
+import { isMatchingRegex } from './utils/string-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import { isNullish } from './utils/type-utils'
 
 const logger = createLogger('[Surveys]')
 
-export const surveyUrlValidationMap: Record<SurveyUrlMatchType, (conditionsUrl: string) => boolean> = {
-    icontains: (conditionsUrl) =>
-        !!window && window.location.href.toLowerCase().indexOf(conditionsUrl.toLowerCase()) > -1,
-    not_icontains: (conditionsUrl) =>
-        !!window && window.location.href.toLowerCase().indexOf(conditionsUrl.toLowerCase()) === -1,
-    regex: (conditionsUrl) => !!window && isUrlMatchingRegex(window.location.href, conditionsUrl),
-    not_regex: (conditionsUrl) => !!window && !isUrlMatchingRegex(window.location.href, conditionsUrl),
-    exact: (conditionsUrl) => window?.location.href === conditionsUrl,
-    is_not: (conditionsUrl) => window?.location.href !== conditionsUrl,
+export const surveyValidationMap: Record<SurveyMatchType, (targets: string[], value: string) => boolean> = {
+    icontains: (targets, value) => targets.some((target) => value.toLowerCase().includes(target.toLowerCase())),
+
+    not_icontains: (targets, value) => targets.every((target) => !value.toLowerCase().includes(target.toLowerCase())),
+
+    regex: (targets, value) => targets.some((target) => isMatchingRegex(value, target)),
+
+    not_regex: (targets, value) => targets.every((target) => !isMatchingRegex(value, target)),
+
+    exact: (targets, value) => targets.some((target) => value === target),
+
+    is_not: (targets, value) => targets.every((target) => value !== target),
 }
 
 function getRatingBucketForResponseValue(responseValue: number, scale: number) {
@@ -131,13 +135,39 @@ export function getNextSurveyStep(
     return nextQuestionIndex
 }
 
+function defaultMatchType(matchType?: SurveyMatchType): SurveyMatchType {
+    return matchType ?? 'icontains'
+}
+
 // use urlMatchType to validate url condition, fallback to contains for backwards compatibility
 export function doesSurveyUrlMatch(survey: Survey): boolean {
     if (!survey.conditions?.url) {
         return true
     }
+    // if we dont know the url, assume it is not a match
+    const href = window?.location?.href
+    if (!href) {
+        return false
+    }
 
-    return surveyUrlValidationMap[survey.conditions?.urlMatchType ?? 'icontains'](survey.conditions.url)
+    const targets = [survey.conditions.url]
+    return surveyValidationMap[defaultMatchType(survey.conditions?.urlMatchType)](targets, href)
+}
+
+export function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
+    if (!survey.conditions?.deviceTypes) {
+        return true
+    }
+    // if we dont know the device type, assume it is not a match
+    if (!userAgent) {
+        return false
+    }
+
+    const deviceType = Info.deviceType(userAgent)
+    return surveyValidationMap[defaultMatchType(survey.conditions?.deviceTypesMatchType)](
+        survey.conditions.deviceTypes,
+        deviceType
+    )
 }
 
 export class PostHogSurveys {
@@ -284,7 +314,8 @@ export class PostHogSurveys {
                 const selectorCheck = survey.conditions?.selector
                     ? document?.querySelector(survey.conditions.selector)
                     : true
-                return urlCheck && selectorCheck
+                const deviceTypeCheck = doesSurveyDeviceTypesMatch(survey)
+                return urlCheck && selectorCheck && deviceTypeCheck
             })
 
             // get all the surveys that have been activated so far with user actions.

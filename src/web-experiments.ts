@@ -9,7 +9,8 @@ import {
 } from './web-experiments-types'
 import { WEB_EXPERIMENTS } from './constants'
 import { isNullish, isString } from './utils/type-utils'
-import { getQueryParam, isUrlMatchingRegex } from './utils/request-utils'
+import { getQueryParam } from './utils/request-utils'
+import { isMatchingRegex } from './utils/string-utils'
 import { logger } from './utils/logger'
 import { Info } from './utils/event-utils'
 import { isLikelyBot } from './utils/blocked-uas'
@@ -22,8 +23,8 @@ export const webExperimentUrlValidationMap: Record<
         !!window && location.href.toLowerCase().indexOf(conditionsUrl.toLowerCase()) > -1,
     not_icontains: (conditionsUrl, location) =>
         !!window && location.href.toLowerCase().indexOf(conditionsUrl.toLowerCase()) === -1,
-    regex: (conditionsUrl, location) => !!window && isUrlMatchingRegex(location.href, conditionsUrl),
-    not_regex: (conditionsUrl, location) => !!window && !isUrlMatchingRegex(location.href, conditionsUrl),
+    regex: (conditionsUrl, location) => !!window && isMatchingRegex(location.href, conditionsUrl),
+    not_regex: (conditionsUrl, location) => !!window && !isMatchingRegex(location.href, conditionsUrl),
     exact: (conditionsUrl, location) => location.href === conditionsUrl,
     is_not: (conditionsUrl, location) => location.href !== conditionsUrl,
 }

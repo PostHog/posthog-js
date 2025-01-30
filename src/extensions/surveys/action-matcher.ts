@@ -4,7 +4,7 @@ import { SimpleEventEmitter } from '../../utils/simple-event-emitter'
 import { CaptureResult } from '../../types'
 import { isUndefined } from '../../utils/type-utils'
 import { window } from '../../utils/globals'
-import { isUrlMatchingRegex } from '../../utils/request-utils'
+import { isMatchingRegex } from '../../utils/string-utils'
 
 export class ActionMatcher {
     private readonly actionRegistry?: Set<SurveyActionType>
@@ -121,7 +121,7 @@ export class ActionMatcher {
     private static matchString(url: string, pattern: string, matching: ActionStepStringMatching): boolean {
         switch (matching) {
             case 'regex':
-                return !!window && isUrlMatchingRegex(url, pattern)
+                return !!window && isMatchingRegex(url, pattern)
             case 'exact':
                 return pattern === url
             case 'contains':
@@ -130,7 +130,7 @@ export class ActionMatcher {
                 const adjustedRegExpStringPattern = ActionMatcher.escapeStringRegexp(pattern)
                     .replace(/_/g, '.')
                     .replace(/%/g, '.*')
-                return isUrlMatchingRegex(url, adjustedRegExpStringPattern)
+                return isMatchingRegex(url, adjustedRegExpStringPattern)
 
             default:
                 return false

@@ -1,4 +1,4 @@
-import { each, isValidRegex } from './'
+import { each } from './'
 
 import { isArray, isFile, isUndefined } from './type-utils'
 import { logger } from './logger'
@@ -20,11 +20,6 @@ export const convertToURL = (url: string): HTMLAnchorElement | null => {
 
     location.href = url
     return location
-}
-
-export const isUrlMatchingRegex = function (url: string, pattern: string): boolean {
-    if (!isValidRegex(pattern)) return false
-    return new RegExp(pattern).test(url)
 }
 
 export const formDataToQuery = function (formdata: Record<string, any> | FormData, arg_separator = '&'): string {

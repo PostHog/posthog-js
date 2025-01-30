@@ -123,7 +123,7 @@ export interface SurveyResponse {
 
 export type SurveyCallback = (surveys: Survey[]) => void
 
-export type SurveyUrlMatchType = 'regex' | 'not_regex' | 'exact' | 'is_not' | 'icontains' | 'not_icontains'
+export type SurveyMatchType = 'regex' | 'not_regex' | 'exact' | 'is_not' | 'icontains' | 'not_icontains'
 
 export interface SurveyElement {
     text?: string
@@ -165,7 +165,7 @@ export interface Survey {
         url?: string
         selector?: string
         seenSurveyWaitPeriodInDays?: number
-        urlMatchType?: SurveyUrlMatchType
+        urlMatchType?: SurveyMatchType
         events: {
             repeatedActivation?: boolean
             values: {
@@ -175,6 +175,8 @@ export interface Survey {
         actions: {
             values: SurveyActionType[]
         } | null
+        deviceTypes?: string[]
+        deviceTypesMatchType?: SurveyMatchType
     } | null
     start_date: string | null
     end_date: string | null
