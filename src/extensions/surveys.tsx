@@ -1024,7 +1024,6 @@ export function FeedbackWidget({
                 const widgetPos = widgetRef.current.getBoundingClientRect()
                 setStyleOverrides({
                     top: '50%',
-                    left: parseInt(`${widgetPos.right - 360}`),
                     bottom: 'auto',
                     borderRadius: 10,
                     borderBottom: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
