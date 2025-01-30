@@ -1,3 +1,7 @@
+## 1.214.0 - 2025-01-30
+
+- chore: add device types check (#1698)
+
 ## 1.213.0 - 2025-01-30
 
 - feat: deprecate `featureFlags.override` in favor of `featureFlags.overrideFeatureFlags`, a new function that supports overriding flags and flag payloads (#1697)
