@@ -2,7 +2,7 @@ import ts from 'typescript'
 import path from 'path'
 
 function extractTypeInfo(filePath: string, typeName: string): string {
-    const program = ts.createProgram([filePath], {})
+    const program = ts.createProgram([filePath], { noImgplicitAny: true, strictNullChecks: true })
     const checker = program.getTypeChecker()
     const sourceFile = program.getSourceFile(filePath)
 
