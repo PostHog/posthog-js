@@ -1,4 +1,5 @@
 import ts from 'typescript'
+import path from 'path'
 
 function extractTypeInfo(filePath: string, typeName: string): string {
     const program = ts.createProgram([filePath], {})
