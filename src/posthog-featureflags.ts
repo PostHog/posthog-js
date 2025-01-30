@@ -28,6 +28,7 @@ const logger = createLogger('[FeatureFlags]')
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
 const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
+const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_flag_payloads'
 
 export const filterActiveFeatureFlags = (featureFlags?: Record<string, string | boolean>) => {
     const activeFeatureFlags: Record<string, string | boolean> = {}
@@ -81,6 +82,26 @@ export const parseFeatureFlagDecideResponse = (
             [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
         })
 }
+
+type FeatureFlagOverrides = {
+    [flagName: string]: string | boolean
+}
+
+type FeatureFlagPayloadOverrides = {
+    [flagName: string]: JsonType
+}
+
+type FeatureFlagOverrideOptions = {
+    flags?: boolean | string[] | FeatureFlagOverrides
+    payloads?: FeatureFlagPayloadOverrides
+    suppressWarning?: boolean
+}
+
+type OverrideFeatureFlagsOptions =
+    | boolean // clear all overrides
+    | string[] // enable list of flags
+    | FeatureFlagOverrides // set variants directly
+    | FeatureFlagOverrideOptions
 
 export class PostHogFeatureFlags {
     _override_warning: boolean = false
@@ -149,7 +170,27 @@ export class PostHogFeatureFlags {
 
     getFlagPayloads(): Record<string, JsonType> {
         const flagPayloads = this.instance.get_property(PERSISTENCE_FEATURE_FLAG_PAYLOADS)
-        return flagPayloads || {}
+        const overriddenPayloads = this.instance.get_property(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
+
+        if (!overriddenPayloads) {
+            return flagPayloads || {}
+        }
+
+        const finalPayloads = extend({}, flagPayloads || {})
+        const overriddenKeys = Object.keys(overriddenPayloads)
+        for (let i = 0; i < overriddenKeys.length; i++) {
+            finalPayloads[overriddenKeys[i]] = overriddenPayloads[overriddenKeys[i]]
+        }
+
+        if (!this._override_warning) {
+            logger.warn(' Overriding feature flag payloads!', {
+                flagPayloads,
+                overriddenPayloads,
+                finalPayloads,
+            })
+            this._override_warning = true
+        }
+        return finalPayloads
     }
 
     /**
@@ -356,39 +397,90 @@ export class PostHogFeatureFlags {
         this._fireFeatureFlagsCallbacks(errorsLoading)
     }
 
-    /*
-     * Override feature flags on the client-side.  Useful for setting non-persistent feature flags, or for testing/debugging
-     * feature flags in the PostHog app.
+    /**
+     * @deprecated Use overrideFeatureFlags instead. This will be removed in a future version.
+     */
+    override(flags: boolean | string[] | Record<string, string | boolean>, suppressWarning: boolean = false): void {
+        logger.warn('override is deprecated. Please use overrideFeatureFlags instead.')
+        this.overrideFeatureFlags({
+            flags: flags,
+            suppressWarning: suppressWarning,
+        })
+    }
+
+    /**
+     * Override feature flags on the client-side. Useful for setting non-persistent feature flags,
+     * or for testing/debugging feature flags in the PostHog app.
      *
      * ### Usage:
      *
-     *     - posthog.feature_flags.override(false)
-     *     - posthog.feature_flags.override(['beta-feature'])
-     *     - posthog.feature_flags.override({'beta-feature': 'variant', 'other-feature': true})
-     *     - posthog.feature_flags.override({'beta-feature': 'variant'}, true) // Suppress warning log
-     *
-     * @param {Object|Array|String} flags Flags to override with.
-     * @param {boolean} [suppressWarning=false] Optional parameter to suppress the override warning.
+     *     - posthog.feature_flags.overrideFeatureFlags(false) // clear all overrides
+     *     - posthog.feature_flags.overrideFeatureFlags(['beta-feature']) // enable flags
+     *     - posthog.feature_flags.overrideFeatureFlags({'beta-feature': 'variant'}) // set variants
+     *     - posthog.feature_flags.overrideFeatureFlags({ // set both flags and payloads
+     *         flags: {'beta-feature': 'variant'},
+     *         payloads: { 'beta-feature': { someData: true } }
+     *       })
+     *     - posthog.feature_flags.overrideFeatureFlags({ // only override payloads
+     *         payloads: { 'beta-feature': { someData: true } }
+     *       })
      */
-    override(flags: boolean | string[] | Record<string, string | boolean>, suppressWarning: boolean = false): void {
+    overrideFeatureFlags(overrideOptions: OverrideFeatureFlagsOptions): void {
         if (!this.instance.__loaded || !this.instance.persistence) {
-            return logger.uninitializedWarning('posthog.feature_flags.override')
+            return logger.uninitializedWarning('posthog.feature_flags.overrideFeatureFlags')
         }
 
-        this._override_warning = suppressWarning
-
-        if (flags === false) {
+        // Clear all overrides if false, lets you do something like posthog.feature_flags.overrideFeatureFlags(false)
+        if (overrideOptions === false) {
             this.instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
-        } else if (isArray(flags)) {
-            const flagsObj: Record<string, string | boolean> = {}
-            for (let i = 0; i < flags.length; i++) {
-                flagsObj[flags[i]] = true
-            }
-            this.instance.persistence.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flagsObj })
-        } else {
-            this.instance.persistence.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flags })
+            this.instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
+            this._fireFeatureFlagsCallbacks()
+            return
         }
+
+        if (
+            overrideOptions &&
+            typeof overrideOptions === 'object' &&
+            ('flags' in overrideOptions || 'payloads' in overrideOptions)
+        ) {
+            const options = overrideOptions
+            this._override_warning = Boolean(options.suppressWarning ?? false)
+
+            // Handle flags if provided, lets you do something like posthog.feature_flags.overrideFeatureFlags({flags: ['beta-feature']})
+            if ('flags' in options) {
+                if (options.flags === false) {
+                    this.instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
+                } else if (options.flags) {
+                    if (isArray(options.flags)) {
+                        const flagsObj: Record<string, string | boolean> = {}
+                        for (let i = 0; i < options.flags.length; i++) {
+                            flagsObj[options.flags[i]] = true
+                        }
+                        this.instance.persistence.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: flagsObj })
+                    } else {
+                        this.instance.persistence.register({ [PERSISTENCE_OVERRIDE_FEATURE_FLAGS]: options.flags })
+                    }
+                }
+            }
+
+            // Handle payloads independently, lets you do something like posthog.feature_flags.overrideFeatureFlags({payloads: { 'beta-feature': { someData: true } }})
+            if ('payloads' in options) {
+                if (options.payloads === false) {
+                    this.instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
+                } else if (options.payloads) {
+                    this.instance.persistence.register({
+                        [PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS]: options.payloads,
+                    })
+                }
+            }
+
+            this._fireFeatureFlagsCallbacks()
+            return
+        }
+
+        this._fireFeatureFlagsCallbacks()
     }
+
     /*
      * Register an event listener that runs when feature flags become available or when they change.
      * If there are flags, the listener is called immediately in addition to being called on future changes.

@@ -201,74 +201,224 @@ describe('featureflags', () => {
         expect(instance.capture).not.toHaveBeenCalled()
     })
 
-    it('supports overrides', () => {
-        instance.persistence.props = {
-            $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
-            $enabled_feature_flags: {
-                'beta-feature': true,
-                'alpha-feature-2': true,
-                'multivariate-flag': 'variant-1',
-            },
-            $override_feature_flags: {
-                'beta-feature': false,
-                'alpha-feature-2': 'as-a-variant',
-            },
-        }
-
-        // should return both true and false flags
-        expect(featureFlags.getFlags()).toEqual(['beta-feature', 'alpha-feature-2', 'multivariate-flag'])
-        expect(featureFlags.getFlagVariants()).toEqual({
-            'alpha-feature-2': 'as-a-variant',
-            'multivariate-flag': 'variant-1',
-            'beta-feature': false,
-        })
-    })
-
-    it('supports suppressing override warnings', () => {
-        // Setup the initial state
-        instance.persistence.props = {
-            $active_feature_flags: ['beta-feature', 'alpha-feature-2'],
-            $enabled_feature_flags: {
-                'beta-feature': true,
-                'alpha-feature-2': true,
-            },
-        }
-        // Mark the instance as loaded
-        instance.__loaded = true
-
-        // Test without suppressing warning (default behavior)
-        featureFlags.override({
-            'beta-feature': false,
+    describe('feature flag overrides', () => {
+        beforeEach(() => {
+            // Common setup used across multiple tests
+            instance.__loaded = true
+            instance.persistence.props = {
+                $active_feature_flags: ['beta-feature', 'alpha-feature-2'],
+                $enabled_feature_flags: {
+                    'beta-feature': true,
+                    'alpha-feature-2': true,
+                },
+                $feature_flag_payloads: {
+                    'beta-feature': { original: 'payload' },
+                    'alpha-feature-2': 123,
+                },
+            }
         })
 
-        // Verify that the override took effect
-        expect(featureFlags.getFlagVariants()).toEqual({
-            'beta-feature': false,
-            'alpha-feature-2': true,
+        describe('deprecated override method', () => {
+            it('supports basic flag overrides with warning behavior', () => {
+                // Test default warning behavior
+                featureFlags.override({
+                    'beta-feature': false,
+                })
+
+                expect(featureFlags.getFlagVariants()).toEqual({
+                    'beta-feature': false,
+                    'alpha-feature-2': true,
+                })
+                expect(window.console.warn).toHaveBeenCalledWith(
+                    '[PostHog.js] [FeatureFlags]',
+                    ' Overriding feature flags!',
+                    expect.any(Object)
+                )
+
+                // Test suppressed warning behavior
+                mockWarn.mockClear()
+                featureFlags.override(
+                    {
+                        'alpha-feature-2': false,
+                    },
+                    { suppressWarning: true }
+                )
+
+                expect(window.console.warn).not.toHaveBeenCalledWith(
+                    '[PostHog.js] [FeatureFlags]',
+                    ' Overriding feature flags!'
+                )
+                expect(featureFlags.getFlagVariants()).toEqual({
+                    'beta-feature': true,
+                    'alpha-feature-2': false,
+                })
+            })
+
+            it('shows deprecation warning', () => {
+                featureFlags.override({ 'beta-feature': false })
+                expect(window.console.warn).toHaveBeenCalledWith(
+                    '[PostHog.js] [FeatureFlags]',
+                    'override is deprecated. Please use overrideFeatureFlags instead.'
+                )
+            })
         })
-        expect(window.console.warn).toHaveBeenCalledWith(
-            '[PostHog.js] [FeatureFlags]',
-            ' Overriding feature flags!',
-            expect.any(Object)
-        )
 
-        // Clear the mock to reset call count
-        mockWarn.mockClear()
+        describe('new overrideFeatureFlags method', () => {
+            it('supports basic flag overrides with warning behavior', () => {
+                // Test default warning behavior
+                featureFlags.overrideFeatureFlags({
+                    flags: {
+                        'beta-feature': false,
+                    },
+                })
 
-        // Test with suppressing warning (new behavior)
-        featureFlags.override(
-            {
-                'alpha-feature-2': false,
-            },
-            true
-        )
+                expect(featureFlags.getFlagVariants()).toEqual({
+                    'beta-feature': false,
+                    'alpha-feature-2': true,
+                })
+                expect(window.console.warn).toHaveBeenCalledWith(
+                    '[PostHog.js] [FeatureFlags]',
+                    ' Overriding feature flags!',
+                    expect.any(Object)
+                )
 
-        expect(window.console.warn).not.toHaveBeenCalled()
+                // Test suppressed warning behavior
+                mockWarn.mockClear()
+                featureFlags.overrideFeatureFlags({
+                    flags: {
+                        'alpha-feature-2': false,
+                    },
+                    suppressWarning: true,
+                })
 
-        // Verify that the override took effect even with no logs
-        expect(featureFlags.getFlagVariants()).toEqual({
-            'beta-feature': true,
-            'alpha-feature-2': false,
+                expect(window.console.warn).not.toHaveBeenCalledWith(
+                    '[PostHog.js] [FeatureFlags]',
+                    ' Overriding feature flags!'
+                )
+                expect(featureFlags.getFlagVariants()).toEqual({
+                    'beta-feature': true,
+                    'alpha-feature-2': false,
+                })
+            })
+
+            it('supports payload overrides', () => {
+                // Test with warning suppressed
+                featureFlags.overrideFeatureFlags({
+                    payloads: {
+                        'beta-feature': { data: 'overridden' },
+                        'alpha-feature-2': 456,
+                    },
+                    suppressWarning: true,
+                })
+
+                expect(featureFlags.getFlagPayloads()).toEqual({
+                    'beta-feature': { data: 'overridden' },
+                    'alpha-feature-2': 456,
+                })
+
+                expect(window.console.warn).not.toHaveBeenCalledWith(
+                    '[PostHog.js] [FeatureFlags]',
+                    ' Overriding feature flag payloads!'
+                )
+
+                // Test without suppressing warning
+                featureFlags.overrideFeatureFlags({
+                    payloads: {
+                        'beta-feature': { data: 'overridden-again' },
+                    },
+                    suppressWarning: false,
+                })
+
+                expect(featureFlags.getFlagPayloads()).toEqual({
+                    'beta-feature': { data: 'overridden-again' },
+                    'alpha-feature-2': 123,
+                })
+                expect(window.console.warn).toHaveBeenCalledWith(
+                    '[PostHog.js] [FeatureFlags]',
+                    ' Overriding feature flag payloads!',
+                    expect.any(Object)
+                )
+            })
+
+            it('clears overrides when passed false', () => {
+                // Set some overrides first
+                featureFlags.overrideFeatureFlags({
+                    flags: {
+                        'beta-feature': false,
+                    },
+                    payloads: {
+                        'beta-feature': { overridden: 'payload' },
+                    },
+                })
+
+                // Clear overrides
+                featureFlags.overrideFeatureFlags(false)
+
+                expect(featureFlags.getFlagVariants()).toEqual({
+                    'beta-feature': true,
+                    'alpha-feature-2': true,
+                })
+                expect(featureFlags.getFlagPayloads()).toEqual({
+                    'beta-feature': { original: 'payload' },
+                    'alpha-feature-2': 123,
+                })
+            })
+
+            it('includes overridden payload in feature flag called event', () => {
+                featureFlags.overrideFeatureFlags({
+                    flags: { 'beta-feature': true },
+                    payloads: { 'beta-feature': { overridden: 'payload' } },
+                })
+                featureFlags._hasLoadedFlags = true
+
+                featureFlags.getFeatureFlag('beta-feature')
+
+                expect(instance.capture).toHaveBeenCalledWith('$feature_flag_called', {
+                    $feature_flag: 'beta-feature',
+                    $feature_flag_response: true,
+                    $feature_flag_payload: { overridden: 'payload' },
+                    $feature_flag_bootstrapped_response: null,
+                    $feature_flag_bootstrapped_payload: null,
+                    $used_bootstrap_value: true,
+                })
+            })
+        })
+
+        describe('callback behavior', () => {
+            let callbackSpy: jest.Mock
+
+            beforeEach(() => {
+                callbackSpy = jest.fn()
+                featureFlags.onFeatureFlags(callbackSpy)
+            })
+
+            it('triggers callback with feature flag changes', () => {
+                featureFlags.overrideFeatureFlags({
+                    flags: {
+                        'beta-feature': false,
+                    },
+                })
+                expect(callbackSpy).toHaveBeenCalledWith(
+                    ['alpha-feature-2'],
+                    { 'alpha-feature-2': true },
+                    expect.any(Object)
+                )
+
+                callbackSpy.mockClear()
+
+                featureFlags.overrideFeatureFlags({
+                    flags: {
+                        'beta-feature': false,
+                        'alpha-feature-2': 'variant-1',
+                    },
+                })
+
+                expect(callbackSpy).toHaveBeenCalledWith(
+                    ['alpha-feature-2'],
+                    { 'alpha-feature-2': 'variant-1' },
+                    expect.any(Object)
+                )
+            })
         })
     })
 
