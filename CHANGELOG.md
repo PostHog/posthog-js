@@ -1,3 +1,8 @@
+## 1.213.0 - 2025-01-30
+
+- feat: deprecate `featureFlags.override` in favor of `featureFlags.overrideFeatureFlags`, a new function that supports overriding flags and flag payloads (#1697)
+- chore: snapshot types that we want to not accidentally deprecate or remove (#1705)
+
 ## 1.212.1 - 2025-01-29
 
 - docs: Add missing types (#1703)
