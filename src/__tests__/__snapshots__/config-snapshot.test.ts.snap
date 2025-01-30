@@ -3,8 +3,12 @@
 exports[`config snapshot for PostHogConfig 1`] = `
 "{
   \\"api_host\\": \\"string\\",
-  \\"ui_host\\": \\"string\\",
+  \\"ui_host\\": [
+    \\"null\\",
+    \\"string\\"
+  ],
   \\"api_transport\\": [
+    \\"undefined\\",
     \\"\\\\\\"XHR\\\\\\"\\",
     \\"\\\\\\"fetch\\\\\\"\\"
   ],
@@ -14,13 +18,32 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"false\\",
     \\"true\\",
     {
-      \\"url_allowlist\\": \\"(string | RegExp)[]\\",
-      \\"url_ignorelist\\": \\"(string | RegExp)[]\\",
-      \\"dom_event_allowlist\\": \\"DomAutocaptureEvents[]\\",
-      \\"element_allowlist\\": \\"AutocaptureCompatibleElement[]\\",
-      \\"css_selector_allowlist\\": \\"string[]\\",
-      \\"element_attribute_ignorelist\\": \\"string[]\\",
+      \\"url_allowlist\\": [
+        \\"undefined\\",
+        \\"(string | RegExp)[]\\"
+      ],
+      \\"url_ignorelist\\": [
+        \\"undefined\\",
+        \\"(string | RegExp)[]\\"
+      ],
+      \\"dom_event_allowlist\\": [
+        \\"undefined\\",
+        \\"DomAutocaptureEvents[]\\"
+      ],
+      \\"element_allowlist\\": [
+        \\"undefined\\",
+        \\"AutocaptureCompatibleElement[]\\"
+      ],
+      \\"css_selector_allowlist\\": [
+        \\"undefined\\",
+        \\"string[]\\"
+      ],
+      \\"element_attribute_ignorelist\\": [
+        \\"undefined\\",
+        \\"string[]\\"
+      ],
       \\"capture_copied_text\\": [
+        \\"undefined\\",
         \\"false\\",
         \\"true\\"
       ]
@@ -42,7 +65,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"\\\\\\"sessionStorage\\\\\\"\\"
   ],
   \\"persistence_name\\": \\"string\\",
-  \\"cookie_name\\": \\"string\\",
+  \\"cookie_name\\": [
+    \\"undefined\\",
+    \\"string\\"
+  ],
   \\"loaded\\": \\"(posthog_instance: PostHog) => void\\",
   \\"save_referrer\\": [
     \\"false\\",
@@ -53,6 +79,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"true\\"
   ],
   \\"store_google\\": [
+    \\"undefined\\",
     \\"false\\",
     \\"true\\"
   ],
@@ -63,6 +90,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"true\\"
   ],
   \\"verbose\\": [
+    \\"undefined\\",
     \\"false\\",
     \\"true\\"
   ],
@@ -89,6 +117,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"true\\"
   ],
   \\"disable_cookie\\": [
+    \\"undefined\\",
     \\"false\\",
     \\"true\\"
   ],
@@ -104,8 +133,12 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"false\\",
     \\"true\\"
   ],
-  \\"prepare_external_dependency_script\\": \\"(script: HTMLScriptElement) => HTMLScriptElement\\",
+  \\"prepare_external_dependency_script\\": [
+    \\"undefined\\",
+    \\"(script: HTMLScriptElement) => HTMLScriptElement | null\\"
+  ],
   \\"enable_recording_console_log\\": [
+    \\"undefined\\",
     \\"false\\",
     \\"true\\"
   ],
@@ -126,6 +159,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"\\\\\\"cookie\\\\\\"\\"
   ],
   \\"opt_out_persistence_by_default\\": [
+    \\"undefined\\",
     \\"false\\",
     \\"true\\"
   ],
@@ -133,7 +167,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"false\\",
     \\"true\\"
   ],
-  \\"opt_out_capturing_cookie_prefix\\": \\"string\\",
+  \\"opt_out_capturing_cookie_prefix\\": [
+    \\"null\\",
+    \\"string\\"
+  ],
   \\"opt_in_site_apps\\": [
     \\"false\\",
     \\"true\\"
@@ -143,11 +180,23 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"true\\"
   ],
   \\"property_denylist\\": \\"string[]\\",
-  \\"property_blacklist\\": \\"string[]\\",
+  \\"property_blacklist\\": [
+    \\"undefined\\",
+    \\"string[]\\"
+  ],
   \\"request_headers\\": \\"{ [header_name: string]: string; }\\",
-  \\"xhr_headers\\": \\"{ [header_name: string]: string; }\\",
-  \\"on_request_error\\": \\"(error: RequestResponse) => void\\",
-  \\"on_xhr_error\\": \\"(failedRequest: XMLHttpRequest) => void\\",
+  \\"xhr_headers\\": [
+    \\"undefined\\",
+    \\"{ [header_name: string]: string; }\\"
+  ],
+  \\"on_request_error\\": [
+    \\"undefined\\",
+    \\"(error: RequestResponse) => void\\"
+  ],
+  \\"on_xhr_error\\": [
+    \\"undefined\\",
+    \\"(failedRequest: XMLHttpRequest) => void\\"
+  ],
   \\"request_batching\\": [
     \\"false\\",
     \\"true\\"
@@ -155,9 +204,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
   \\"properties_string_max_length\\": \\"number\\",
   \\"session_recording\\": {
     \\"blockClass\\": [
+      \\"undefined\\",
       \\"string\\",
       {
-        \\"exec\\": \\"(string: string) => RegExpExecArray\\",
+        \\"exec\\": \\"(string: string) => RegExpExecArray | null\\",
         \\"test\\": \\"(string: string) => boolean\\",
         \\"source\\": \\"string\\",
         \\"global\\": [
@@ -173,7 +223,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
           \\"true\\"
         ],
         \\"lastIndex\\": \\"number\\",
-        \\"compile\\": \\"(pattern: string, flags?: string) => RegExp\\",
+        \\"compile\\": \\"(pattern: string, flags?: string | undefined) => RegExp\\",
         \\"flags\\": \\"string\\",
         \\"sticky\\": [
           \\"false\\",
@@ -187,19 +237,27 @@ exports[`config snapshot for PostHogConfig 1`] = `
           \\"false\\",
           \\"true\\"
         ],
-        \\"__@match@355\\": \\"(string: string) => RegExpMatchArray\\",
+        \\"__@match@355\\": \\"(string: string) => RegExpMatchArray | null\\",
         \\"__@replace@357\\": \\"{ (string: string, replaceValue: string): string; (string: string, replacer: (substring: string, ...args: any[]) => string): string; }\\",
         \\"__@search@360\\": \\"(string: string) => number\\",
-        \\"__@split@362\\": \\"(string: string, limit?: number) => string[]\\",
+        \\"__@split@362\\": \\"(string: string, limit?: number | undefined) => string[]\\",
         \\"__@matchAll@364\\": \\"(str: string) => IterableIterator<RegExpMatchArray>\\"
       }
     ],
-    \\"blockSelector\\": \\"string\\",
-    \\"ignoreClass\\": \\"string\\",
+    \\"blockSelector\\": [
+      \\"undefined\\",
+      \\"null\\",
+      \\"string\\"
+    ],
+    \\"ignoreClass\\": [
+      \\"undefined\\",
+      \\"string\\"
+    ],
     \\"maskTextClass\\": [
+      \\"undefined\\",
       \\"string\\",
       {
-        \\"exec\\": \\"(string: string) => RegExpExecArray\\",
+        \\"exec\\": \\"(string: string) => RegExpExecArray | null\\",
         \\"test\\": \\"(string: string) => boolean\\",
         \\"source\\": \\"string\\",
         \\"global\\": [
@@ -215,7 +273,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
           \\"true\\"
         ],
         \\"lastIndex\\": \\"number\\",
-        \\"compile\\": \\"(pattern: string, flags?: string) => RegExp\\",
+        \\"compile\\": \\"(pattern: string, flags?: string | undefined) => RegExp\\",
         \\"flags\\": \\"string\\",
         \\"sticky\\": [
           \\"false\\",
@@ -229,57 +287,103 @@ exports[`config snapshot for PostHogConfig 1`] = `
           \\"false\\",
           \\"true\\"
         ],
-        \\"__@match@355\\": \\"(string: string) => RegExpMatchArray\\",
+        \\"__@match@355\\": \\"(string: string) => RegExpMatchArray | null\\",
         \\"__@replace@357\\": \\"{ (string: string, replaceValue: string): string; (string: string, replacer: (substring: string, ...args: any[]) => string): string; }\\",
         \\"__@search@360\\": \\"(string: string) => number\\",
-        \\"__@split@362\\": \\"(string: string, limit?: number) => string[]\\",
+        \\"__@split@362\\": \\"(string: string, limit?: number | undefined) => string[]\\",
         \\"__@matchAll@364\\": \\"(str: string) => IterableIterator<RegExpMatchArray>\\"
       }
     ],
-    \\"maskTextSelector\\": \\"string\\",
-    \\"maskTextFn\\": \\"(text: string, element?: HTMLElement) => string\\",
+    \\"maskTextSelector\\": [
+      \\"undefined\\",
+      \\"null\\",
+      \\"string\\"
+    ],
+    \\"maskTextFn\\": [
+      \\"undefined\\",
+      \\"null\\",
+      \\"(text: string, element?: HTMLElement | undefined) => string\\"
+    ],
     \\"maskAllInputs\\": [
+      \\"undefined\\",
       \\"false\\",
       \\"true\\"
     ],
-    \\"maskInputOptions\\": \\"Partial<{ color: boolean; date: boolean; 'datetime-local': boolean; email: boolean; month: boolean; number: boolean; range: boolean; search: boolean; tel: boolean; text: boolean; time: boolean; url: boolean; week: boolean; textarea: boolean; select: boolean; password: boolean; }>\\",
-    \\"maskInputFn\\": \\"(text: string, element?: HTMLElement) => string\\",
+    \\"maskInputOptions\\": [
+      \\"undefined\\",
+      \\"Partial<{ color: boolean; date: boolean; 'datetime-local': boolean; email: boolean; month: boolean; number: boolean; range: boolean; search: boolean; tel: boolean; text: boolean; time: boolean; url: boolean; week: boolean; textarea: boolean; select: boolean; password: boolean; }>\\"
+    ],
+    \\"maskInputFn\\": [
+      \\"undefined\\",
+      \\"null\\",
+      \\"(text: string, element?: HTMLElement | undefined) => string\\"
+    ],
     \\"slimDOMOptions\\": [
+      \\"undefined\\",
       \\"true\\",
       \\"\\\\\\"all\\\\\\"\\",
       \\"Partial<{ script: boolean; comment: boolean; headFavicon: boolean; headWhitespace: boolean; headMetaDescKeywords: boolean; headMetaSocial: boolean; headMetaRobots: boolean; headMetaHttpEquiv: boolean; headMetaAuthorship: boolean; headMetaVerification: boolean; headTitleMutations: boolean; }>\\"
     ],
     \\"collectFonts\\": [
+      \\"undefined\\",
       \\"false\\",
       \\"true\\"
     ],
     \\"inlineStylesheet\\": [
+      \\"undefined\\",
       \\"false\\",
       \\"true\\"
     ],
     \\"recordCrossOriginIframes\\": [
+      \\"undefined\\",
       \\"false\\",
       \\"true\\"
     ],
     \\"recordHeaders\\": [
+      \\"undefined\\",
       \\"false\\",
       \\"true\\"
     ],
     \\"recordBody\\": [
+      \\"undefined\\",
       \\"false\\",
       \\"true\\"
     ],
-    \\"captureCanvas\\": \\"SessionRecordingCanvasOptions\\",
-    \\"maskCapturedNetworkRequestFn\\": \\"(data: CapturedNetworkRequest) => CapturedNetworkRequest\\",
-    \\"maskNetworkRequestFn\\": \\"(data: NetworkRequest) => NetworkRequest\\",
-    \\"full_snapshot_interval_millis\\": \\"number\\",
+    \\"captureCanvas\\": [
+      \\"undefined\\",
+      \\"SessionRecordingCanvasOptions\\"
+    ],
+    \\"maskCapturedNetworkRequestFn\\": [
+      \\"undefined\\",
+      \\"null\\",
+      \\"(data: CapturedNetworkRequest) => CapturedNetworkRequest | null | undefined\\"
+    ],
+    \\"maskNetworkRequestFn\\": [
+      \\"undefined\\",
+      \\"null\\",
+      \\"(data: NetworkRequest) => NetworkRequest | null | undefined\\"
+    ],
+    \\"full_snapshot_interval_millis\\": [
+      \\"undefined\\",
+      \\"number\\"
+    ],
     \\"compress_events\\": [
+      \\"undefined\\",
       \\"false\\",
       \\"true\\"
     ],
-    \\"session_idle_threshold_ms\\": \\"number\\",
-    \\"__mutationRateLimiterRefillRate\\": \\"number\\",
-    \\"__mutationRateLimiterBucketSize\\": \\"number\\"
+    \\"session_idle_threshold_ms\\": [
+      \\"undefined\\",
+      \\"number\\"
+    ],
+    \\"__mutationRateLimiterRefillRate\\": [
+      \\"undefined\\",
+      \\"number\\"
+    ],
+    \\"__mutationRateLimiterBucketSize\\": [
+      \\"undefined\\",
+      \\"number\\"
+    ]
   },
   \\"session_idle_timeout_seconds\\": \\"number\\",
   \\"mask_all_element_attributes\\": [
@@ -314,26 +418,42 @@ exports[`config snapshot for PostHogConfig 1`] = `
   \\"feature_flag_request_timeout_ms\\": \\"number\\",
   \\"get_device_id\\": \\"(uuid: string) => string\\",
   \\"before_send\\": [
+    \\"undefined\\",
     \\"BeforeSendFn\\",
     \\"BeforeSendFn[]\\"
   ],
-  \\"sanitize_properties\\": \\"(properties: Properties, event_name: string) => Properties\\",
+  \\"sanitize_properties\\": [
+    \\"null\\",
+    \\"(properties: Properties, event_name: string) => Properties\\"
+  ],
   \\"_onCapture\\": \\"(eventName: string, eventData: CaptureResult) => void\\",
   \\"capture_performance\\": [
+    \\"undefined\\",
     \\"false\\",
     \\"true\\",
     {
       \\"network_timing\\": [
+        \\"undefined\\",
         \\"false\\",
         \\"true\\"
       ],
       \\"web_vitals\\": [
+        \\"undefined\\",
         \\"false\\",
         \\"true\\"
       ],
-      \\"__web_vitals_max_value\\": \\"number\\",
-      \\"web_vitals_allowed_metrics\\": \\"SupportedWebVitalsMetrics[]\\",
-      \\"web_vitals_delayed_flush_ms\\": \\"number\\"
+      \\"__web_vitals_max_value\\": [
+        \\"undefined\\",
+        \\"number\\"
+      ],
+      \\"web_vitals_allowed_metrics\\": [
+        \\"undefined\\",
+        \\"SupportedWebVitalsMetrics[]\\"
+      ],
+      \\"web_vitals_delayed_flush_ms\\": [
+        \\"undefined\\",
+        \\"number\\"
+      ]
     }
   ],
   \\"disable_compression\\": [
@@ -341,17 +461,34 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"true\\"
   ],
   \\"bootstrap\\": {
-    \\"distinctID\\": \\"string\\",
+    \\"distinctID\\": [
+      \\"undefined\\",
+      \\"string\\"
+    ],
     \\"isIdentifiedID\\": [
+      \\"undefined\\",
       \\"false\\",
       \\"true\\"
     ],
-    \\"featureFlags\\": \\"Record<string, string | boolean>\\",
-    \\"featureFlagPayloads\\": \\"Record<string, JsonType>\\",
-    \\"sessionID\\": \\"string\\"
+    \\"featureFlags\\": [
+      \\"undefined\\",
+      \\"Record<string, string | boolean>\\"
+    ],
+    \\"featureFlagPayloads\\": [
+      \\"undefined\\",
+      \\"Record<string, JsonType>\\"
+    ],
+    \\"sessionID\\": [
+      \\"undefined\\",
+      \\"string\\"
+    ]
   },
-  \\"segment\\": \\"SegmentAnalytics\\",
+  \\"segment\\": [
+    \\"undefined\\",
+    \\"SegmentAnalytics\\"
+  ],
   \\"capture_heatmaps\\": [
+    \\"undefined\\",
     \\"false\\",
     \\"true\\",
     {
@@ -359,52 +496,74 @@ exports[`config snapshot for PostHogConfig 1`] = `
     }
   ],
   \\"enable_heatmaps\\": [
+    \\"undefined\\",
     \\"false\\",
     \\"true\\"
   ],
   \\"capture_dead_clicks\\": [
+    \\"undefined\\",
     \\"false\\",
     \\"true\\",
     [
-      \\"{ scroll_threshold_ms?: number; selection_change_threshold_ms?: number; mutation_threshold_ms?: number; __onCapture?: (click: DeadClickCandidate, properties: Properties) => void; }\\",
+      \\"{ scroll_threshold_ms?: number | undefined; selection_change_threshold_ms?: number | undefined; mutation_threshold_ms?: number | undefined; __onCapture?: ((click: DeadClickCandidate, properties: Properties) => void) | undefined; }\\",
       \\"Pick<AutocaptureConfig, \\\\\\"element_attribute_ignorelist\\\\\\">\\"
     ]
   ],
   \\"disable_scroll_properties\\": [
+    \\"undefined\\",
     \\"false\\",
     \\"true\\"
   ],
   \\"scroll_root_selector\\": [
+    \\"undefined\\",
     \\"string\\",
     \\"string[]\\"
   ],
   \\"person_profiles\\": [
+    \\"undefined\\",
     \\"\\\\\\"always\\\\\\"\\",
     \\"\\\\\\"never\\\\\\"\\",
     \\"\\\\\\"identified_only\\\\\\"\\"
   ],
   \\"process_person\\": [
+    \\"undefined\\",
     \\"\\\\\\"always\\\\\\"\\",
     \\"\\\\\\"never\\\\\\"\\",
     \\"\\\\\\"identified_only\\\\\\"\\"
   ],
-  \\"rate_limiting\\": \\"{ events_per_second?: number; events_burst_limit?: number; }\\",
-  \\"fetch_options\\": \\"{ cache?: RequestCache; next_options?: NextOptions; }\\",
+  \\"rate_limiting\\": [
+    \\"undefined\\",
+    \\"{ events_per_second?: number | undefined; events_burst_limit?: number | undefined; }\\"
+  ],
+  \\"fetch_options\\": [
+    \\"undefined\\",
+    \\"{ cache?: RequestCache | undefined; next_options?: NextOptions | undefined; }\\"
+  ],
   \\"__add_tracing_headers\\": [
+    \\"undefined\\",
     \\"false\\",
     \\"true\\"
   ],
   \\"__preview_remote_config\\": [
+    \\"undefined\\",
     \\"false\\",
     \\"true\\"
   ],
   \\"__preview_experimental_cookieless_mode\\": [
+    \\"undefined\\",
     \\"false\\",
     \\"true\\"
   ],
-  \\"api_method\\": \\"string\\",
-  \\"inapp_protocol\\": \\"string\\",
+  \\"api_method\\": [
+    \\"undefined\\",
+    \\"string\\"
+  ],
+  \\"inapp_protocol\\": [
+    \\"undefined\\",
+    \\"string\\"
+  ],
   \\"inapp_link_new_window\\": [
+    \\"undefined\\",
     \\"false\\",
     \\"true\\"
   ]
