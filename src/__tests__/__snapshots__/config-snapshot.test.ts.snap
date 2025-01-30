@@ -206,43 +206,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"blockClass\\": [
       \\"undefined\\",
       \\"string\\",
-      {
-        \\"exec\\": \\"(string: string) => RegExpExecArray | null\\",
-        \\"test\\": \\"(string: string) => boolean\\",
-        \\"source\\": \\"string\\",
-        \\"global\\": [
-          \\"false\\",
-          \\"true\\"
-        ],
-        \\"ignoreCase\\": [
-          \\"false\\",
-          \\"true\\"
-        ],
-        \\"multiline\\": [
-          \\"false\\",
-          \\"true\\"
-        ],
-        \\"lastIndex\\": \\"number\\",
-        \\"compile\\": \\"(pattern: string, flags?: string | undefined) => RegExp\\",
-        \\"flags\\": \\"string\\",
-        \\"sticky\\": [
-          \\"false\\",
-          \\"true\\"
-        ],
-        \\"unicode\\": [
-          \\"false\\",
-          \\"true\\"
-        ],
-        \\"dotAll\\": [
-          \\"false\\",
-          \\"true\\"
-        ],
-        \\"__@match@355\\": \\"(string: string) => RegExpMatchArray | null\\",
-        \\"__@replace@357\\": \\"{ (string: string, replaceValue: string): string; (string: string, replacer: (substring: string, ...args: any[]) => string): string; }\\",
-        \\"__@search@360\\": \\"(string: string) => number\\",
-        \\"__@split@362\\": \\"(string: string, limit?: number | undefined) => string[]\\",
-        \\"__@matchAll@364\\": \\"(str: string) => IterableIterator<RegExpMatchArray>\\"
-      }
+      \\"RegExp\\"
     ],
     \\"blockSelector\\": [
       \\"undefined\\",
@@ -256,43 +220,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"maskTextClass\\": [
       \\"undefined\\",
       \\"string\\",
-      {
-        \\"exec\\": \\"(string: string) => RegExpExecArray | null\\",
-        \\"test\\": \\"(string: string) => boolean\\",
-        \\"source\\": \\"string\\",
-        \\"global\\": [
-          \\"false\\",
-          \\"true\\"
-        ],
-        \\"ignoreCase\\": [
-          \\"false\\",
-          \\"true\\"
-        ],
-        \\"multiline\\": [
-          \\"false\\",
-          \\"true\\"
-        ],
-        \\"lastIndex\\": \\"number\\",
-        \\"compile\\": \\"(pattern: string, flags?: string | undefined) => RegExp\\",
-        \\"flags\\": \\"string\\",
-        \\"sticky\\": [
-          \\"false\\",
-          \\"true\\"
-        ],
-        \\"unicode\\": [
-          \\"false\\",
-          \\"true\\"
-        ],
-        \\"dotAll\\": [
-          \\"false\\",
-          \\"true\\"
-        ],
-        \\"__@match@355\\": \\"(string: string) => RegExpMatchArray | null\\",
-        \\"__@replace@357\\": \\"{ (string: string, replaceValue: string): string; (string: string, replacer: (substring: string, ...args: any[]) => string): string; }\\",
-        \\"__@search@360\\": \\"(string: string) => number\\",
-        \\"__@split@362\\": \\"(string: string, limit?: number | undefined) => string[]\\",
-        \\"__@matchAll@364\\": \\"(str: string) => IterableIterator<RegExpMatchArray>\\"
-      }
+      \\"RegExp\\"
     ],
     \\"maskTextSelector\\": [
       \\"undefined\\",
