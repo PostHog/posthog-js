@@ -15,7 +15,7 @@ function extractTypeInfo(filePath: string, typeName: string): string {
 
     function processType(type: ts.Type): any {
         if (type.isUnion() || type.isIntersection()) {
-            return type.types.map(getTypeString)
+            return type.types.map(processType)
         } else if (type.isClassOrInterface()) {
             const result: Record<string, any> = {}
             type.getProperties().forEach((symbol) => {
@@ -23,9 +23,8 @@ function extractTypeInfo(filePath: string, typeName: string): string {
                 result[symbol.getName()] = processType(propType)
             })
             return result
-        } else if (type.symbol && type.symbol.valueDeclaration) {
-            return getTypeString(type)
         }
+
         return getTypeString(type)
     }
 
@@ -44,11 +43,5 @@ function extractTypeInfo(filePath: string, typeName: string): string {
 describe('config snapshot', () => {
     it('for PostHogConfig', () => {
         expect(extractTypeInfo(path.resolve(__dirname, '../types.ts'), 'PostHogConfig')).toMatchSnapshot()
-    })
-    it('for AutocaptureConfig', () => {
-        expect(extractTypeInfo('src/types.ts', 'AutocaptureConfig')).toMatchSnapshot()
-    })
-    it('for SessionRecordingOptions', () => {
-        expect(extractTypeInfo('src/types.ts', 'SessionRecordingOptions')).toMatchSnapshot()
     })
 })
