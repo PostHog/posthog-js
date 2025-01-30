@@ -294,7 +294,6 @@ export class PostHogSurveys {
                 },
             })
         } else {
-            logger.info('Surveys already loaded, using existing data.')
             return callback(existingSurveys)
         }
     }
