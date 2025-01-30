@@ -2438,7 +2438,7 @@ describe('SessionRecording', () => {
             expect(sessionRecording['status']).toBe('active')
         })
 
-        it('ANDS with Sampling', async () => {
+        it('disables recording when sampling rate is 0 regardless of event triggers', async () => {
             sessionRecording.onRemoteConfig(
                 makeDecideResponse({
                     sessionRecording: {
