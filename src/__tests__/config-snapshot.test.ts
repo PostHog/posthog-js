@@ -43,7 +43,7 @@ function extractTypeInfo(filePath: string, typeName: string): string {
 
 describe('config snapshot', () => {
     it('for PostHogConfig', () => {
-        expect(extractTypeInfo('src/types.ts', 'PostHogConfig')).toMatchSnapshot()
+        expect(extractTypeInfo(path.resolve(__dirname, '../types.ts'), 'PostHogConfig')).toMatchSnapshot()
     })
     it('for AutocaptureConfig', () => {
         expect(extractTypeInfo('src/types.ts', 'AutocaptureConfig')).toMatchSnapshot()
