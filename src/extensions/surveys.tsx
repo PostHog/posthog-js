@@ -714,10 +714,8 @@ export function FeedbackWidget({
 
         if (survey.appearance?.widgetType === 'tab') {
             if (widgetRef.current) {
-                const widgetPos = widgetRef.current.getBoundingClientRect()
                 const style = {
                     top: '50%',
-                    left: parseInt(`${widgetPos.right - 360}`),
                     bottom: 'auto',
                     borderRadius: 10,
                     borderBottom: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
