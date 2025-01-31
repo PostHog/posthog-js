@@ -1,3 +1,7 @@
+## 1.215.1 - 2025-01-31
+
+- chore: export some types (#1710)
+
 ## 1.215.0 - 2025-01-31
 
 - feat: allow configuring request queue interval (#1708)
