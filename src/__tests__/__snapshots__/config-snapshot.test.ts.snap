@@ -467,6 +467,15 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"undefined\\",
     \\"{ cache?: RequestCache | undefined; next_options?: NextOptions | undefined; }\\"
   ],
+  \\"request_queue_config\\": [
+    \\"undefined\\",
+    {
+      \\"flush_interval_ms\\": [
+        \\"undefined\\",
+        \\"number\\"
+      ]
+    }
+  ],
   \\"__add_tracing_headers\\": [
     \\"undefined\\",
     \\"false\\",

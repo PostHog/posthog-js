@@ -2,7 +2,7 @@
 /// <reference lib="dom" />
 
 import { extendURLParams, request } from '../request'
-import { Compression, RequestOptions } from '../types'
+import { Compression, RequestWithOptions } from '../types'
 
 jest.mock('../utils/globals', () => ({
     ...jest.requireActual('../utils/globals'),
@@ -51,8 +51,8 @@ describe('request', () => {
     const now = 1700000000000
 
     const mockCallback = jest.fn()
-    let createRequest: (overrides?: Partial<RequestOptions>) => RequestOptions
-    let transport: RequestOptions['transport']
+    let createRequest: (overrides?: Partial<RequestWithOptions>) => RequestWithOptions
+    let transport: RequestWithOptions['transport']
 
     beforeEach(() => {
         mockedXHR.open.mockClear()

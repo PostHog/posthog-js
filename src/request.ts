@@ -1,6 +1,6 @@
 import { each, find } from './utils'
 import Config from './config'
-import { Compression, RequestOptions, RequestResponse } from './types'
+import { Compression, RequestWithOptions, RequestResponse } from './types'
 import { formDataToQuery } from './utils/request-utils'
 
 import { logger } from './utils/logger'
@@ -56,7 +56,7 @@ const encodeToDataString = (data: string | Record<string, any>): string => {
     return 'data=' + encodeURIComponent(typeof data === 'string' ? data : jsonStringify(data))
 }
 
-const encodePostData = ({ data, compression }: RequestOptions): EncodedBody | undefined => {
+const encodePostData = ({ data, compression }: RequestWithOptions): EncodedBody | undefined => {
     if (!data) {
         return
     }
@@ -90,7 +90,7 @@ const encodePostData = ({ data, compression }: RequestOptions): EncodedBody | un
     }
 }
 
-const xhr = (options: RequestOptions) => {
+const xhr = (options: RequestWithOptions) => {
     const req = new XMLHttpRequest!()
     req.open(options.method || 'GET', options.url, true)
     const { contentType, body } = encodePostData(options) ?? {}
@@ -130,7 +130,7 @@ const xhr = (options: RequestOptions) => {
     req.send(body)
 }
 
-const _fetch = (options: RequestOptions) => {
+const _fetch = (options: RequestWithOptions) => {
     const { contentType, body, estimatedSize } = encodePostData(options) ?? {}
 
     // eslint-disable-next-line compat/compat
@@ -196,7 +196,7 @@ const _fetch = (options: RequestOptions) => {
     return
 }
 
-const _sendBeacon = (options: RequestOptions) => {
+const _sendBeacon = (options: RequestWithOptions) => {
     // beacon documentation https://w3c.github.io/beacon/
     // beacons format the message and use the type property
 
@@ -215,7 +215,10 @@ const _sendBeacon = (options: RequestOptions) => {
     }
 }
 
-const AVAILABLE_TRANSPORTS: { transport: RequestOptions['transport']; method: (options: RequestOptions) => void }[] = []
+const AVAILABLE_TRANSPORTS: {
+    transport: RequestWithOptions['transport']
+    method: (options: RequestWithOptions) => void
+}[] = []
 
 // We add the transports in order of preference
 if (fetch) {
@@ -240,7 +243,7 @@ if (navigator?.sendBeacon) {
 }
 
 // This is the entrypoint. It takes care of sanitizing the options and then calls the appropriate request method.
-export const request = (_options: RequestOptions) => {
+export const request = (_options: RequestWithOptions) => {
     // Clone the options so we don't modify the original object
     const options = { ..._options }
     options.timeout = options.timeout || 60000

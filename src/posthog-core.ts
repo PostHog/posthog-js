@@ -24,7 +24,7 @@ import { SessionRecording } from './extensions/replay/sessionrecording'
 import { RemoteConfigLoader } from './remote-config'
 import { Toolbar } from './extensions/toolbar'
 import { localStore } from './storage'
-import { RequestQueue } from './request-queue'
+import { DEFAULT_FLUSH_INTERVAL_MS, RequestQueue } from './request-queue'
 import { RetryQueue } from './retry-queue'
 import { SessionIdManager } from './sessionid'
 import { RequestRouter, RequestRouterRegion } from './utils/request-router'
@@ -38,7 +38,7 @@ import {
     PostHogConfig,
     Properties,
     Property,
-    QueuedRequestOptions,
+    QueuedRequestWithOptions,
     RemoteConfig,
     RequestCallback,
     SessionIdChangedCallback,
@@ -186,6 +186,7 @@ export const defaultConfig = (): PostHogConfig => ({
     session_idle_timeout_seconds: 30 * 60, // 30 minutes
     person_profiles: 'identified_only',
     before_send: undefined,
+    request_queue_config: { flush_interval_ms: DEFAULT_FLUSH_INTERVAL_MS },
 
     // Used for internal testing
     _onCapture: __NOOP,
@@ -284,7 +285,7 @@ export class PostHog {
     _initialPageviewCaptured: boolean
     _triggered_notifs: any
     compression?: Compression
-    __request_queue: QueuedRequestOptions[]
+    __request_queue: QueuedRequestWithOptions[]
     analyticsDefaultEndpoint: string
     version = Config.LIB_VERSION
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
@@ -440,7 +441,10 @@ export class PostHog {
         const initialPersistenceProps = { ...this.persistence.props }
         const initialSessionProps = { ...this.sessionPersistence.props }
 
-        this._requestQueue = new RequestQueue((req) => this._send_retriable_request(req))
+        this._requestQueue = new RequestQueue(
+            (req) => this._send_retriable_request(req),
+            this.config.request_queue_config
+        )
         this._retryQueue = new RetryQueue(this)
         this.__request_queue = []
 
@@ -668,7 +672,7 @@ export class PostHog {
         this._retryQueue?.unload()
     }
 
-    _send_request(options: QueuedRequestOptions): void {
+    _send_request(options: QueuedRequestWithOptions): void {
         if (!this.__loaded) {
             return
         }
@@ -710,7 +714,7 @@ export class PostHog {
         })
     }
 
-    _send_retriable_request(options: QueuedRequestOptions): void {
+    _send_retriable_request(options: QueuedRequestWithOptions): void {
         if (this._retryQueue) {
             this._retryQueue.retriableRequest(options)
         } else {
@@ -918,7 +922,7 @@ export class PostHog {
 
         this._internalEventEmitter.emit('eventCaptured', data)
 
-        const requestOptions: QueuedRequestOptions = {
+        const requestOptions: QueuedRequestWithOptions = {
             method: 'POST',
             url: options?._url ?? this.requestRouter.endpointFor('api', this.analyticsDefaultEndpoint),
             data,
