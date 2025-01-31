@@ -125,12 +125,12 @@ const newQueuedEvent = (rrwebMethod: () => void): QueuedRRWebEvent => ({
     attempt: 1,
 })
 
-type compressedFullSnapshotEvent = {
+export type compressedFullSnapshotEvent = {
     type: EventType.FullSnapshot
     data: string
 }
 
-type compressedIncrementalSnapshotEvent = {
+export type compressedIncrementalSnapshotEvent = {
     type: EventType.IncrementalSnapshot
     data: {
         source: IncrementalSource
@@ -141,7 +141,7 @@ type compressedIncrementalSnapshotEvent = {
     }
 }
 
-type compressedIncrementalStyleSnapshotEvent = {
+export type compressedIncrementalStyleSnapshotEvent = {
     type: EventType.IncrementalSnapshot
     data: {
         source: IncrementalSource.StyleSheetRule
