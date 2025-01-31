@@ -2137,7 +2137,7 @@ export class PostHog {
      * @param userFeedback The feedback to capture.
      */
     captureTraceFeedback(traceId: string | number, userFeedback: string) {
-        this.capture('$ai_metric', {
+        this.capture('$ai_feedback', {
             $ai_trace_id: String(traceId),
             $ai_feedback_text: userFeedback,
         })

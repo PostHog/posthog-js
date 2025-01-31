@@ -53,13 +53,13 @@ describe('ai', () => {
     })
 
     describe('captureTraceFeedback()', () => {
-        it('should capture metric', () => {
+        it('should capture feedback', () => {
             const { posthog, beforeSendMock } = setup()
 
             posthog.captureTraceFeedback('123', 'feedback')
 
             const { event, properties } = beforeSendMock.mock.calls[0][0]
-            expect(event).toBe('$ai_metric')
+            expect(event).toBe('$ai_feedback')
             expect(properties['$ai_trace_id']).toBe('123')
             expect(properties['$ai_feedback_text']).toBe('feedback')
         })
@@ -70,7 +70,7 @@ describe('ai', () => {
             posthog.captureTraceFeedback(123, 'feedback')
 
             const { event, properties } = beforeSendMock.mock.calls[0][0]
-            expect(event).toBe('$ai_metric')
+            expect(event).toBe('$ai_feedback')
             expect(properties['$ai_trace_id']).toBe('123')
             expect(properties['$ai_feedback_text']).toBe('feedback')
         })
