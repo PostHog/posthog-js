@@ -1,21 +1,31 @@
-import { QueuedRequestOptions } from './types'
+import { QueuedRequestWithOptions, RequestQueueConfig } from './types'
 import { each } from './utils'
 
 import { isArray, isUndefined } from './utils/type-utils'
+import { clampToRange } from './utils/number-utils'
+
+export const DEFAULT_FLUSH_INTERVAL_MS = 3000
 
 export class RequestQueue {
     // We start in a paused state and only start flushing when enabled by the parent
     private isPaused: boolean = true
-    private queue: QueuedRequestOptions[] = []
+    private queue: QueuedRequestWithOptions[] = []
     private flushTimeout?: ReturnType<typeof setTimeout>
-    private flushTimeoutMs = 3000
-    private sendRequest: (req: QueuedRequestOptions) => void
+    private flushTimeoutMs: number
+    private sendRequest: (req: QueuedRequestWithOptions) => void
 
-    constructor(sendRequest: (req: QueuedRequestOptions) => void) {
+    constructor(sendRequest: (req: QueuedRequestWithOptions) => void, config?: RequestQueueConfig) {
+        this.flushTimeoutMs = clampToRange(
+            config?.flush_interval_ms || DEFAULT_FLUSH_INTERVAL_MS,
+            250,
+            5000,
+            'flush interval',
+            DEFAULT_FLUSH_INTERVAL_MS
+        )
         this.sendRequest = sendRequest
     }
 
-    enqueue(req: QueuedRequestOptions): void {
+    enqueue(req: QueuedRequestWithOptions): void {
         this.queue.push(req)
 
         if (!this.flushTimeout) {
@@ -72,9 +82,9 @@ export class RequestQueue {
         this.flushTimeout = undefined
     }
 
-    private formatQueue(): Record<string, QueuedRequestOptions> {
-        const requests: Record<string, QueuedRequestOptions> = {}
-        each(this.queue, (request: QueuedRequestOptions) => {
+    private formatQueue(): Record<string, QueuedRequestWithOptions> {
+        const requests: Record<string, QueuedRequestWithOptions> = {}
+        each(this.queue, (request: QueuedRequestWithOptions) => {
             const req = request
             const key = (req ? req.batchKey : null) || req.url
             if (isUndefined(requests[key])) {

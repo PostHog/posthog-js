@@ -841,6 +841,12 @@ export interface PostHogConfig {
         next_options?: NextOptions
     }
 
+    /**
+     * Used to change the behavior of the request queue.
+     * This is an advanced feature and should be used with caution.
+     */
+    request_queue_config?: RequestQueueConfig
+
     // ------- PREVIEW CONFIGS -------
 
     /**
@@ -1057,7 +1063,7 @@ export type RequestCallback = (response: RequestResponse) => void
 // See https://nextjs.org/docs/app/api-reference/functions/fetch#fetchurl-options
 type NextOptions = { revalidate: false | 0 | number; tags: string[] }
 
-export interface RequestOptions {
+export interface RequestWithOptions {
     url: string
     // Data can be a single object or an array of objects when batched
     data?: Record<string, any> | Record<string, any>[]
@@ -1077,13 +1083,27 @@ export interface RequestOptions {
 
 // Queued request types - the same as a request but with additional queueing information
 
-export interface QueuedRequestOptions extends RequestOptions {
-    batchKey?: string /** key of queue, e.g. 'sessionRecording' vs 'event' */
+export interface QueuedRequestWithOptions extends RequestWithOptions {
+    /** key of queue, e.g. 'sessionRecording' vs 'event' */
+    batchKey?: string
 }
 
 // Used explicitly for retriable requests
-export interface RetriableRequestOptions extends QueuedRequestOptions {
+export interface RetriableRequestWithOptions extends QueuedRequestWithOptions {
     retriesPerformedSoFar?: number
+}
+
+// we used to call a request that was sent to the queue with options attached `RequestQueueOptions`
+// so we can't call the options used to configure the behavior of the RequestQueue that as well,
+// so instead we call them config
+export interface RequestQueueConfig {
+    /**
+     *  ADVANCED - alters the frequency which PostHog sends events to the server.
+     *  generally speaking this is only set when apps have automatic page refreshes, or very short visits.
+     *  Defaults to 3 seconds when not set
+     *  Allowed values between 250 and 5000
+     * */
+    flush_interval_ms?: number
 }
 
 export interface CaptureOptions {
@@ -1127,7 +1147,7 @@ export interface CaptureOptions {
     /**
      * If set, overrides the desired transport method
      */
-    transport?: RequestOptions['transport']
+    transport?: RequestWithOptions['transport']
 
     /**
      * If set, overrides the current timestamp

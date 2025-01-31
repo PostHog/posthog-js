@@ -1,4 +1,4 @@
-import { RetriableRequestOptions } from './types'
+import { RetriableRequestWithOptions } from './types'
 
 import { isNumber, isUndefined } from './utils/type-utils'
 import { logger } from './utils/logger'
@@ -30,7 +30,7 @@ export function pickNextRetryDelay(retriesPerformedSoFar: number): number {
 
 interface RetryQueueElement {
     retryAt: number
-    requestOptions: RetriableRequestOptions
+    requestOptions: RetriableRequestWithOptions
 }
 
 export class RetryQueue {
@@ -58,7 +58,7 @@ export class RetryQueue {
         }
     }
 
-    retriableRequest({ retriesPerformedSoFar, ...options }: RetriableRequestOptions): void {
+    retriableRequest({ retriesPerformedSoFar, ...options }: RetriableRequestWithOptions): void {
         if (isNumber(retriesPerformedSoFar) && retriesPerformedSoFar > 0) {
             options.url = extendURLParams(options.url, { retry_count: retriesPerformedSoFar })
         }
@@ -81,7 +81,7 @@ export class RetryQueue {
         })
     }
 
-    private enqueue(requestOptions: RetriableRequestOptions): void {
+    private enqueue(requestOptions: RetriableRequestWithOptions): void {
         const retriesPerformedSoFar = requestOptions.retriesPerformedSoFar || 0
         requestOptions.retriesPerformedSoFar = retriesPerformedSoFar + 1
 
