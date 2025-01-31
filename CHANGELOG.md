@@ -1,3 +1,8 @@
+## 1.214.1 - 2025-01-31
+
+- fix: never send when not sampled (#1706)
+- chore: silence survey logging (#1707)
+
 ## 1.214.0 - 2025-01-30
 
 - chore: add device types check (#1698)
