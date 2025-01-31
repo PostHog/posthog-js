@@ -1,3 +1,7 @@
+## 1.215.0 - 2025-01-31
+
+- feat: allow configuring request queue interval (#1708)
+
 ## 1.214.1 - 2025-01-31
 
 - fix: never send when not sampled (#1706)
