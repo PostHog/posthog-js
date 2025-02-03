@@ -1,3 +1,7 @@
+## 1.215.2 - 2025-02-03
+
+- fix: checking status is too blunt for paused status (#1713)
+
 ## 1.215.1 - 2025-01-31
 
 - chore: export some types (#1710)
