@@ -1039,7 +1039,7 @@ export class SessionRecording {
         // Check if the URL matches any trigger patterns
         this._checkUrlTriggerConditions()
 
-        if (this.status === 'paused' && !isRecordingPausedEvent(rawEvent)) {
+        if (this._urlBlocked && !isRecordingPausedEvent(rawEvent)) {
             return
         }
 
@@ -1177,7 +1177,12 @@ export class SessionRecording {
         const isBelowMinimumDuration =
             isNumber(minimumDuration) && isPositiveSessionDuration && sessionDuration < minimumDuration
 
-        if (this.status === 'buffering' || this.status === 'paused' || isBelowMinimumDuration) {
+        if (
+            this.status === 'buffering' ||
+            this.status === 'paused' ||
+            this.status === 'disabled' ||
+            isBelowMinimumDuration
+        ) {
             this.flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)
@@ -1239,7 +1244,7 @@ export class SessionRecording {
 
         const url = window.location.href
 
-        const wasBlocked = this.status === 'paused'
+        const wasBlocked = this._urlBlocked
         const isNowBlocked = sessionRecordingUrlTriggerMatches(url, this._urlBlocklist)
 
         if (isNowBlocked && !wasBlocked) {
@@ -1268,7 +1273,8 @@ export class SessionRecording {
     }
 
     private _pauseRecording() {
-        if (this.status === 'paused') {
+        // we check _urlBlocked not status, since more than one thing can affect status
+        if (this._urlBlocked) {
             return
         }
 
@@ -1286,7 +1292,8 @@ export class SessionRecording {
     }
 
     private _resumeRecording() {
-        if (this.status !== 'paused') {
+        // we check _urlBlocked not status, since more than one thing can affect status
+        if (!this._urlBlocked) {
             return
         }
 

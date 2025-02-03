@@ -2301,6 +2301,10 @@ describe('SessionRecording', () => {
     describe('URL blocking', () => {
         beforeEach(() => {
             sessionRecording.startIfEnabledOrStop()
+            jest.spyOn(sessionRecording as any, '_tryAddCustomEvent')
+        })
+
+        it('does not flush buffer and includes pause event when hitting blocked URL', async () => {
             sessionRecording.onRemoteConfig(
                 makeDecideResponse({
                     sessionRecording: {
@@ -2314,9 +2318,7 @@ describe('SessionRecording', () => {
                     },
                 })
             )
-        })
 
-        it('does not flush buffer and includes pause event when hitting blocked URL', async () => {
             // Emit some events before hitting blocked URL
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
             _emit(createIncrementalSnapshot({ data: { source: 2 } }))
@@ -2373,6 +2375,45 @@ describe('SessionRecording', () => {
                     data: { source: 5 },
                 }),
             ])
+        })
+
+        it('only pauses once when sampling determines session should not record', () => {
+            sessionRecording.onRemoteConfig(
+                makeDecideResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        sampleRate: '0.00',
+                        urlBlocklist: [
+                            {
+                                matching: 'regex',
+                                url: '/blocked',
+                            },
+                        ],
+                    },
+                })
+            )
+            expect(sessionRecording['status']).toBe('disabled')
+            expect(sessionRecording['_urlBlocked']).toBe(false)
+            expect(sessionRecording['buffer'].data).toHaveLength(0)
+
+            fakeNavigateTo('https://test.com/blocked')
+            // check is trigger by rrweb emit, not the navigation per se, so...
+            _emit(createFullSnapshot({ data: { source: 1 } }))
+
+            expect(posthog.capture).not.toHaveBeenCalled()
+            expect(sessionRecording.status).toBe('disabled')
+            expect(sessionRecording['_urlBlocked']).toBe(true)
+            expect(sessionRecording['buffer'].data).toHaveLength(0)
+            expect((sessionRecording as any)['_tryAddCustomEvent']).toHaveBeenCalledWith('recording paused', {
+                reason: 'url blocker',
+            })
+            ;(sessionRecording as any)['_tryAddCustomEvent'].mockClear()
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            // regression: to check we've not accidentally got stuck in a pausing loop
+            expect((sessionRecording as any)['_tryAddCustomEvent']).not.toHaveBeenCalledWith('recording paused', {
+                reason: 'url blocker',
+            })
         })
     })
 
