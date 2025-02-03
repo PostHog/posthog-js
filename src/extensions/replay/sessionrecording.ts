@@ -1039,7 +1039,7 @@ export class SessionRecording {
         // Check if the URL matches any trigger patterns
         this._checkUrlTriggerConditions()
 
-        if (this.status === 'paused' && !isRecordingPausedEvent(rawEvent)) {
+        if (this._urlBlocked && !isRecordingPausedEvent(rawEvent)) {
             return
         }
 
@@ -1177,7 +1177,12 @@ export class SessionRecording {
         const isBelowMinimumDuration =
             isNumber(minimumDuration) && isPositiveSessionDuration && sessionDuration < minimumDuration
 
-        if (this.status === 'buffering' || this.status === 'paused' || isBelowMinimumDuration) {
+        if (
+            this.status === 'buffering' ||
+            this.status === 'paused' ||
+            this.status === 'disabled' ||
+            isBelowMinimumDuration
+        ) {
             this.flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)

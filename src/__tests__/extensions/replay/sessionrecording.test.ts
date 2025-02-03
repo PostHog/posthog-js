@@ -2301,6 +2301,7 @@ describe('SessionRecording', () => {
     describe('URL blocking', () => {
         beforeEach(() => {
             sessionRecording.startIfEnabledOrStop()
+            jest.spyOn(sessionRecording as any, '_tryAddCustomEvent')
         })
 
         it('does not flush buffer and includes pause event when hitting blocked URL', async () => {
@@ -2392,15 +2393,27 @@ describe('SessionRecording', () => {
                 })
             )
             expect(sessionRecording['status']).toBe('disabled')
+            expect(sessionRecording['_urlBlocked']).toBe(false)
+            expect(sessionRecording['buffer'].data).toHaveLength(0)
 
             fakeNavigateTo('https://test.com/blocked')
+            // check is trigger by rrweb emit, not the navigation per se, so...
+            _emit(createFullSnapshot({ data: { source: 1 } }))
+
             expect(posthog.capture).not.toHaveBeenCalled()
             expect(sessionRecording.status).toBe('disabled')
             expect(sessionRecording['_urlBlocked']).toBe(true)
-            // can check this._tryAddCustomEvent('recording paused', { reason: 'url blocker' })
+            expect(sessionRecording['buffer'].data).toHaveLength(0)
+            expect((sessionRecording as any)['_tryAddCustomEvent']).toHaveBeenCalledWith('recording paused', {
+                reason: 'url blocker',
+            })
+            ;(sessionRecording as any)['_tryAddCustomEvent'].mockClear()
 
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
-            // can check not this._tryAddCustomEvent('recording paused', { reason: 'url blocker' })
+            // regression: to check we've not accidentally got stuck in a pausing loop
+            expect((sessionRecording as any)['_tryAddCustomEvent']).not.toHaveBeenCalledWith('recording paused', {
+                reason: 'url blocker',
+            })
         })
     })
 
