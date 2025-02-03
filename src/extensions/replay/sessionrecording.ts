@@ -1268,7 +1268,8 @@ export class SessionRecording {
     }
 
     private _pauseRecording() {
-        if (this.status === 'paused') {
+        // we check _urlBlocked not status, since more than one thing can affect status
+        if (this._urlBlocked) {
             return
         }
 
@@ -1286,7 +1287,8 @@ export class SessionRecording {
     }
 
     private _resumeRecording() {
-        if (this.status !== 'paused') {
+        // we check _urlBlocked not status, since more than one thing can affect status
+        if (!this._urlBlocked) {
             return
         }
 
