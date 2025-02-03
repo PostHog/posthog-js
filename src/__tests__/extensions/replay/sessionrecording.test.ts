@@ -2301,6 +2301,9 @@ describe('SessionRecording', () => {
     describe('URL blocking', () => {
         beforeEach(() => {
             sessionRecording.startIfEnabledOrStop()
+        })
+
+        it('does not flush buffer and includes pause event when hitting blocked URL', async () => {
             sessionRecording.onRemoteConfig(
                 makeDecideResponse({
                     sessionRecording: {
@@ -2314,9 +2317,7 @@ describe('SessionRecording', () => {
                     },
                 })
             )
-        })
 
-        it('does not flush buffer and includes pause event when hitting blocked URL', async () => {
             // Emit some events before hitting blocked URL
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
             _emit(createIncrementalSnapshot({ data: { source: 2 } }))
@@ -2373,6 +2374,33 @@ describe('SessionRecording', () => {
                     data: { source: 5 },
                 }),
             ])
+        })
+
+        it('only pauses once when sampling determines session should not record', () => {
+            sessionRecording.onRemoteConfig(
+                makeDecideResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        sampleRate: '0.00',
+                        urlBlocklist: [
+                            {
+                                matching: 'regex',
+                                url: '/blocked',
+                            },
+                        ],
+                    },
+                })
+            )
+            expect(sessionRecording['status']).toBe('disabled')
+
+            fakeNavigateTo('https://test.com/blocked')
+            expect(posthog.capture).not.toHaveBeenCalled()
+            expect(sessionRecording.status).toBe('disabled')
+            expect(sessionRecording['_urlBlocked']).toBe(true)
+            // can check this._tryAddCustomEvent('recording paused', { reason: 'url blocker' })
+
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            // can check not this._tryAddCustomEvent('recording paused', { reason: 'url blocker' })
         })
     })
 

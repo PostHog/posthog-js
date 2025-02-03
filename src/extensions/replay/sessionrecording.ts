@@ -1239,7 +1239,7 @@ export class SessionRecording {
 
         const url = window.location.href
 
-        const wasBlocked = this.status === 'paused'
+        const wasBlocked = this._urlBlocked
         const isNowBlocked = sessionRecordingUrlTriggerMatches(url, this._urlBlocklist)
 
         if (isNowBlocked && !wasBlocked) {
