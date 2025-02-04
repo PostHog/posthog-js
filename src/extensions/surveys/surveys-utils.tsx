@@ -13,7 +13,7 @@ const logger = createLogger('[Surveys]')
 export const style = (appearance: SurveyAppearance | null) => {
     const positions = {
         left: 'left: 30px;',
-        right: 'right: 30px;',
+        right: 'right: 60px;',
         center: `
             left: 50%;
             transform: translateX(-50%);
