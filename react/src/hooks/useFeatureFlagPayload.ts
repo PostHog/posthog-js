@@ -7,7 +7,11 @@ export function useFeatureFlagPayload(flag: string): JsonType | undefined {
 
     const [featureFlagPayload, setFeatureFlagPayload] = useState<JsonType>()
     // would be nice to have a default value above however it's not possible due
-    // to a hydration error when using nextjs
+    // to a hydration error when using nextjs. Instead, we set default value with useEffect
+    // which is only run on the client
+    useEffect(() => {
+        setFeatureFlagPayload(client.getFeatureFlagPayload(flag))
+    }, [])
 
     useEffect(() => {
         return client.onFeatureFlags(() => {

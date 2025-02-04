@@ -6,7 +6,11 @@ export function useActiveFeatureFlags(): string[] | undefined {
 
     const [featureFlags, setFeatureFlags] = useState<string[] | undefined>()
     // would be nice to have a default value above however it's not possible due
-    // to a hydration error when using nextjs
+    // to a hydration error when using nextjs. Instead, we set default value with useEffect
+    // which is only run on the client
+    useEffect(() => {
+        setFeatureFlags(client.featureFlags)
+    }, [])
 
     useEffect(() => {
         return client.onFeatureFlags((flags) => {
