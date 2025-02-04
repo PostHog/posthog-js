@@ -1427,7 +1427,10 @@ export class PostHog {
             this.persistence.set_property(USER_STATE, 'identified')
 
             // Update current user properties
-            this.setPersonPropertiesForFlags(userPropertiesToSet || {}, false)
+            this.setPersonPropertiesForFlags(
+                { ...(userPropertiesToSetOnce || {}), ...(userPropertiesToSet || {}) },
+                false
+            )
 
             this.capture(
                 '$identify',
@@ -1484,7 +1487,7 @@ export class PostHog {
         }
 
         // Update current user properties
-        this.setPersonPropertiesForFlags(userPropertiesToSet || {})
+        this.setPersonPropertiesForFlags({ ...(userPropertiesToSetOnce || {}), ...(userPropertiesToSet || {}) })
 
         // if exactly this $set call has been sent before, don't send it again - determine based on hash of properties
 
