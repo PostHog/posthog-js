@@ -1,3 +1,7 @@
+## 1.215.3 - 2025-02-04
+
+- refactor: Simplify `Posthog.init()` signature (#1712)
+
 ## 1.215.2 - 2025-02-03
 
 - fix: checking status is too blunt for paused status (#1713)
