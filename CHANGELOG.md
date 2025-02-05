@@ -1,3 +1,8 @@
+## 1.215.4 - 2025-02-05
+
+- fix(flags): store setOnce properties in locally persisted feature flag props (#1716)
+- chore: better reset comment (#1717)
+
 ## 1.215.3 - 2025-02-04
 
 - refactor: Simplify `Posthog.init()` signature (#1712)
