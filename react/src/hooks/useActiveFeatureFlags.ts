@@ -1,10 +1,12 @@
+'use client'
+
 import { useEffect, useState } from 'react'
 import { usePostHog } from './usePostHog'
 
 export function useActiveFeatureFlags(): string[] | undefined {
     const client = usePostHog()
 
-    const [featureFlags, setFeatureFlags] = useState<string[] | undefined>()
+    const [featureFlags, setFeatureFlags] = useState<string[] | undefined>(() => client.featureFlags.getFlags())
     // would be nice to have a default value above however it's not possible due
     // to a hydration error when using nextjs
 
