@@ -1577,8 +1577,12 @@ export class PostHog {
     }
 
     /**
-     * Clears super properties and generates a new random distinct_id for this instance.
-     * Useful for clearing data when a user logs out.
+     * NB reset is normally only called when a user logs out
+     * calling reset at the wrong time can lead to unexpected results
+     * like split sessions
+     *
+     * Resets all info.
+     * For example: session id, super properties,  sets a random distinct_id and more.
      */
     reset(reset_device_id?: boolean): void {
         logger.info('reset')
