@@ -1,3 +1,8 @@
+## 1.215.6 - 2025-02-06
+
+- fix(flags): set default state values in feature flag hooks (#1719)
+- chore: correct type comment (#1721)
+
 ## 1.215.5 - 2025-02-06
 
 - chore: small readability refactor to getActiveMatchingSurveys (#1718)
