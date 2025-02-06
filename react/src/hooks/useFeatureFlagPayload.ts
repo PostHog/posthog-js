@@ -2,12 +2,10 @@ import { useEffect, useState } from 'react'
 import { JsonType } from 'posthog-js'
 import { usePostHog } from './usePostHog'
 
-export function useFeatureFlagPayload(flag: string): JsonType | undefined {
+export function useFeatureFlagPayload(flag: string): JsonType {
     const client = usePostHog()
 
-    const [featureFlagPayload, setFeatureFlagPayload] = useState<JsonType>()
-    // would be nice to have a default value above however it's not possible due
-    // to a hydration error when using nextjs
+    const [featureFlagPayload, setFeatureFlagPayload] = useState<JsonType>(() => client.getFeatureFlagPayload(flag))
 
     useEffect(() => {
         return client.onFeatureFlags(() => {

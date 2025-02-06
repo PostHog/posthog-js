@@ -1391,7 +1391,7 @@ export interface ToolbarParams {
 export type SnippetArrayItem = [method: string, ...args: any[]]
 
 export type JsonRecord = { [key: string]: JsonType }
-export type JsonType = string | number | boolean | null | JsonRecord | Array<JsonType>
+export type JsonType = string | number | boolean | null | undefined | JsonRecord | Array<JsonType>
 
 /** A feature that isn't publicly available yet.*/
 export interface EarlyAccessFeature {
