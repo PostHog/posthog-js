@@ -1169,17 +1169,19 @@ export type SessionRecordingCanvasOptions = {
      * If set, records the canvas at the given FPS
      * Can be set in the remote configuration
      * Limited between 0 and 12
+     * When canvas recording is enabled, if this is not set locally, then remote config sets this as 4
      *
-     * @default 0
+     * @default null-ish
      */
     canvasFps?: number | null
 
     /**
      * If set, records the canvas at the given quality
      * Can be set in the remote configuration
-     * Must be an integer between 0 and 1
+     * Must be a string that is a valid decimal between 0 and 1
+     * When canvas recording is enabled, if this is not set locally, then remote config sets this as "0.4"
      *
-     * @default 0
+     * @default null-ish
      */
     canvasQuality?: string | null
 }
