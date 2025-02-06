@@ -1,3 +1,7 @@
+## 1.215.5 - 2025-02-06
+
+- chore: small readability refactor to getActiveMatchingSurveys (#1718)
+
 ## 1.215.4 - 2025-02-05
 
 - fix(flags): store setOnce properties in locally persisted feature flag props (#1716)
