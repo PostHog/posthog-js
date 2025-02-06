@@ -7,8 +7,6 @@ export function useFeatureFlagVariantKey(flag: string): string | boolean | undef
     const [featureFlagVariantKey, setFeatureFlagVariantKey] = useState<string | boolean | undefined>(() =>
         client.getFeatureFlag(flag)
     )
-    // would be nice to have a default value above however it's not possible due
-    // to a hydration error when using nextjs
 
     useEffect(() => {
         return client.onFeatureFlags(() => {
