@@ -4,9 +4,9 @@ import { PostHog } from './posthog-core'
 import {
     Survey,
     SurveyCallback,
+    SurveyMatchType,
     SurveyQuestionBranchingType,
     SurveyQuestionType,
-    SurveyMatchType,
 } from './posthog-surveys-types'
 import { RemoteConfig } from './types'
 import { Info } from './utils/event-utils'
@@ -298,6 +298,13 @@ export class PostHogSurveys {
         }
     }
 
+    private isSurveyFeatureFlagEnabled(flagKey: string | null) {
+        if (!flagKey) {
+            return true
+        }
+        return this.instance.featureFlags.isFeatureEnabled(flagKey)
+    }
+
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false) {
         this.getSurveys((surveys) => {
             const activeSurveys = surveys.filter((survey) => {
@@ -328,30 +335,20 @@ export class PostHogSurveys {
                 ) {
                     return true
                 }
-                const linkedFlagCheck = survey.linked_flag_key
-                    ? this.instance.featureFlags.isFeatureEnabled(survey.linked_flag_key)
-                    : true
-                const targetingFlagCheck = survey.targeting_flag_key
-                    ? this.instance.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
-                    : true
+                const linkedFlagCheck = this.isSurveyFeatureFlagEnabled(survey.linked_flag_key)
+                const targetingFlagCheck = this.isSurveyFeatureFlagEnabled(survey.targeting_flag_key)
 
-                const hasEvents =
-                    survey.conditions?.events &&
-                    survey.conditions?.events?.values &&
-                    survey.conditions?.events?.values.length > 0
+                const hasEvents = (survey.conditions?.events?.values?.length ?? 0) > 0
+                const hasActions = (survey.conditions?.actions?.values?.length ?? 0) > 0
 
-                const hasActions =
-                    survey.conditions?.actions &&
-                    survey.conditions?.actions?.values &&
-                    survey.conditions?.actions?.values.length > 0
                 const eventBasedTargetingFlagCheck =
                     hasEvents || hasActions ? activatedSurveys?.includes(survey.id) : true
 
                 const overrideInternalTargetingFlagCheck = this._canActivateRepeatedly(survey)
                 const internalTargetingFlagCheck =
-                    survey.internal_targeting_flag_key && !overrideInternalTargetingFlagCheck
-                        ? this.instance.featureFlags.isFeatureEnabled(survey.internal_targeting_flag_key)
-                        : true
+                    overrideInternalTargetingFlagCheck ||
+                    this.isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key)
+
                 const flagsCheck = this.checkFlags(survey)
                 return (
                     linkedFlagCheck &&
