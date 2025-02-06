@@ -97,7 +97,7 @@ export class PostHogPersistence {
             // selected storage type wasn't supported, fallback to 'localstorage+cookie' if possible
             store = localPlusCookieStore
         } else {
-            store = cookieStore
+            store = memoryStore
         }
 
         return store

@@ -1,5 +1,3 @@
-'use client'
-
 import { useEffect, useState } from 'react'
 import { JsonType } from 'posthog-js'
 import { usePostHog } from './usePostHog'
