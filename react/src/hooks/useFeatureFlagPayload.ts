@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { JsonType } from 'posthog-js'
 import { usePostHog } from './usePostHog'
 
-export function useFeatureFlagPayload(flag: string): JsonType | undefined {
+export function useFeatureFlagPayload(flag: string): JsonType {
     const client = usePostHog()
 
     const [featureFlagPayload, setFeatureFlagPayload] = useState<JsonType>(() => client.getFeatureFlagPayload(flag))
