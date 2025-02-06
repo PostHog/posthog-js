@@ -5,6 +5,8 @@ import { useFeatureFlagPayload, useFeatureFlagVariantKey, useFeatureFlagEnabled,
 
 jest.useFakeTimers()
 
+const ACTIVE_FEATURE_FLAGS = ['example_feature_true', 'multivariate_feature', 'example_feature_payload']
+
 const FEATURE_FLAG_STATUS = {
     example_feature_true: true,
     example_feature_false: false,
@@ -38,6 +40,9 @@ describe('useFeatureFlagPayload hook', () => {
             }
             callback(activeFlags)
             return () => {}
+        },
+        featureFlags: {
+            getFlags: () => ACTIVE_FEATURE_FLAGS,
         },
     }))
 
