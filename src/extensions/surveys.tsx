@@ -77,10 +77,6 @@ export class SurveyManager {
                 return
             }
         }
-        // Adding this duplicate check to see if there's some sort of race-condition between getActiveMatchingSurveys and actual URL changes, as sometimes Surveys are shown up when they shouldn't be
-        if (!doesSurveyUrlMatch(survey)) {
-            return
-        }
 
         const surveySeen = getSurveySeen(survey)
         if (!surveySeen) {
@@ -230,6 +226,10 @@ export class SurveyManager {
             nonAPISurveyQueue.forEach((survey) => {
                 // We only evaluate the display logic for one survey at a time
                 if (!isNull(this.surveyInFocus)) {
+                    return
+                }
+                // Adding this duplicate check to see if there's some sort of race-condition between getActiveMatchingSurveys and actual URL changes, as sometimes Surveys are shown up when they shouldn't be
+                if (!doesSurveyUrlMatch(survey)) {
                     return
                 }
                 if (survey.type === SurveyType.Widget) {
