@@ -1,3 +1,8 @@
+## 1.216.1 - 2025-02-10
+
+- fix: capture when argument is not a string (#1724)
+- feat: Add e-commerce test page to nextjs playground (#1725)
+
 ## 1.216.0 - 2025-02-10
 
 - chore: Drop CI support for Node 16 (EOL), use pnpm 9 internally (#1723)
