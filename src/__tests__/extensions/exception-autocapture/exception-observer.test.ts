@@ -162,9 +162,17 @@ describe('Exception Observer', () => {
             })
             expect(request.batchKey).toBe('exceptionEvent')
         })
+
+        it('should instrument handlers when started', () => {
+            posthog.config.capture_exceptions = false
+            exceptionObserver = new ExceptionObserver(posthog)
+
+            expect(exceptionObserver.hasHandlers).toBe(false)
+            expect(exceptionObserver.isEnabled).toBe(false)
+        })
     })
 
-    describe('when there are handlers already', () => {
+    describe('when there are handlers already present', () => {
         const originalOnError = jest.fn()
         const originalOnUnhandledRejection = jest.fn()
 

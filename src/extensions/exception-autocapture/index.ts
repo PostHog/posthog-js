@@ -22,10 +22,7 @@ export class ExceptionObserver {
     }
 
     public get isEnabled(): boolean {
-        if (
-            !isUndefined(this.instance.config.capture_exceptions) &&
-            isBoolean(this.instance.config.capture_exceptions)
-        ) {
+        if (isBoolean(this.instance.config.capture_exceptions)) {
             return this.instance.config.capture_exceptions
         }
         return this.remoteEnabled ?? false
