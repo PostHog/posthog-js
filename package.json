@@ -25,7 +25,7 @@
         "typecheck": "tsc --noEmit --project tsconfig.json",
         "playwright": "pnpm exec playwright test --project webkit --project firefox --project chromium",
         "playwright-ui": "pnpm exec playwright test --ui --project webkit --project firefox --project chromium",
-        "prepare": "husky install",
+        "prepare": "pnpm exec husky install",
         "deprecate-old-versions": "node scripts/deprecate-old-versions.mjs",
         "check-testcafe-results": "ts-node testcafe/check-testcafe-results.js",
         "run-testcafe-localhost": "node scripts/run-testcafe-localhost.mjs"
