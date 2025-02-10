@@ -11,7 +11,7 @@
         "start": "next start",
         "lint": "next lint",
         "build-posthog-js": "cd ../../ && NODE_ENV=dev pnpm i && pnpm run build",
-        "link-posthog-js": "pnpm link ../.."
+        "link-posthog-js": "pnpm link ../.. && cd ../../react && pnpm link .."
     },
     "dependencies": {
         "@lottiefiles/react-lottie-player": "^3.5.4",
