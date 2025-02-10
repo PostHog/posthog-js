@@ -65,7 +65,7 @@ const events = [
     },
 ]
 
-export default function EcommerceTester() {
+export default function Ecommerce() {
     const posthog = usePostHog()
 
     return (
