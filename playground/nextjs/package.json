@@ -2,6 +2,7 @@
     "name": "nextjs",
     "version": "0.1.0",
     "private": true,
+    "packageManager": "pnpm@9.15.4",
     "scripts": {
         "clean-react": "cd ../../react && rm -rf ./node_modules/",
         "dev": "pnpm run link-posthog-js && pnpm run clean-react && next dev",
@@ -21,7 +22,7 @@
         "eslint": "^8.57.1",
         "hls.js": "^1.5.15",
         "next": "14.2.20",
-        "posthog-js": "1.200.1",
+        "posthog-js": "1.208.1",
         "react": "18.3.1",
         "react-dom": "18.3.1",
         "socket.io": "^4.8.1",

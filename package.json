@@ -5,6 +5,7 @@
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "hey@posthog.com",
     "license": "MIT",
+    "packageManager": "pnpm@9.15.4",
     "scripts": {
         "start": "pnpm build-react && pnpm build-rollup -w",
         "build": "pnpm build-rollup && pnpm build-react",
