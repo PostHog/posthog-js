@@ -25,6 +25,7 @@ export const PageHeader = () => {
                         <Link href="/replay-examples/canvas">Canvas</Link>
                         <Link href="/replay-examples/media">Media</Link>
                         <Link href="/replay-examples/long">Long</Link>
+                        <Link href="/ecommerce">E-commerce</Link>
                     </div>
 
                     <div>

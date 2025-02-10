@@ -12,6 +12,8 @@ import { PageHeader } from '@/src/Header'
 import { useUser } from '@/src/auth'
 import { posthogHelpers } from '@/src/posthog'
 
+const CDP_DOMAINS = ['https://*.redditstatic.com', 'https://*.reddit.com'].join(' ')
+
 export default function App({ Component, pageProps }: AppProps) {
     const router = useRouter()
 
@@ -54,10 +56,10 @@ export default function App({ Component, pageProps }: AppProps) {
                     httpEquiv="Content-Security-Policy"
                     content={`
                     default-src 'self';
-                    connect-src 'self' ${localhostDomain} https://*.posthog.com https://lottie.host;
-                    script-src 'self' 'unsafe-eval' 'unsafe-inline' ${localhostDomain} https://*.posthog.com;
+                    connect-src 'self' ${localhostDomain} https://*.posthog.com https://lottie.host ${CDP_DOMAINS};
+                    script-src 'self' 'unsafe-eval' 'unsafe-inline' ${localhostDomain} https://*.posthog.com ${CDP_DOMAINS};
                     style-src 'self' 'unsafe-inline' ${localhostDomain} https://*.posthog.com;
-                    img-src 'self' ${localhostDomain} https://*.posthog.com https://lottie.host;
+                    img-src 'self' ${localhostDomain} https://*.posthog.com https://lottie.host ${CDP_DOMAINS};
                 `}
                 />
             </Head>
