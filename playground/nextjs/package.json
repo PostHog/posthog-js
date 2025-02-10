@@ -11,7 +11,7 @@
         "start": "next start",
         "lint": "next lint",
         "build-posthog-js": "cd ../../ && NODE_ENV=dev pnpm i && pnpm run build",
-        "link-posthog-js": "cd ../../ && pnpm link --global && cd playground/nextjs && pnpm link --global posthog-js"
+        "link-posthog-js": "pnpm link ../.."
     },
     "dependencies": {
         "@lottiefiles/react-lottie-player": "^3.5.4",
@@ -22,7 +22,7 @@
         "eslint": "^8.57.1",
         "hls.js": "^1.5.15",
         "next": "14.2.20",
-        "posthog-js": "1.208.1",
+        "posthog-js": "^1.215.7",
         "react": "18.3.1",
         "react-dom": "18.3.1",
         "socket.io": "^4.8.1",
