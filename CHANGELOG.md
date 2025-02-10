@@ -1,3 +1,7 @@
+## 1.216.0 - 2025-02-10
+
+- chore: Drop CI support for Node 16 (EOL), use pnpm 9 internally (#1723)
+
 ## 1.215.7 - 2025-02-10
 
 
