@@ -71,7 +71,7 @@ describe('Exception Observer', () => {
         })
 
         it('should instrument handlers when started', () => {
-            expect(exceptionObserver.isCapturing).toBe(true)
+            expect(exceptionObserver.hasHandlers).toBe(true)
             expect(exceptionObserver.isEnabled).toBe(true)
 
             expect((window?.onerror as any).__POSTHOG_INSTRUMENTED__).toBe(true)
@@ -84,7 +84,7 @@ describe('Exception Observer', () => {
             expect((window?.onerror as any)?.__POSTHOG_INSTRUMENTED__).not.toBeDefined()
             expect((window?.onunhandledrejection as any)?.__POSTHOG_INSTRUMENTED__).not.toBeDefined()
 
-            expect(exceptionObserver.isCapturing).toBe(false)
+            expect(exceptionObserver.hasHandlers).toBe(false)
         })
 
         it('captures an event when an error is thrown', () => {
@@ -224,9 +224,9 @@ describe('Exception Observer', () => {
     describe('when no decide response', () => {
         it('cannot be started', () => {
             expect(exceptionObserver.isEnabled).toBe(false)
-            expect(exceptionObserver.isCapturing).toBe(false)
+            expect(exceptionObserver.hasHandlers).toBe(false)
             exceptionObserver['startCapturing']()
-            expect(exceptionObserver.isCapturing).toBe(false)
+            expect(exceptionObserver.hasHandlers).toBe(false)
         })
     })
 
@@ -237,9 +237,9 @@ describe('Exception Observer', () => {
 
         it('cannot be started', () => {
             expect(exceptionObserver.isEnabled).toBe(false)
-            expect(exceptionObserver.isCapturing).toBe(false)
+            expect(exceptionObserver.hasHandlers).toBe(false)
             exceptionObserver['startCapturing']()
-            expect(exceptionObserver.isCapturing).toBe(false)
+            expect(exceptionObserver.hasHandlers).toBe(false)
         })
     })
 })

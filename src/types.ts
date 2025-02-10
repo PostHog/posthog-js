@@ -780,7 +780,13 @@ export interface PostHogConfig {
      * @see {DeadClicksAutoCaptureConfig}
      * @default undefined
      */
-    capture_dead_clicks?: boolean | DeadClicksAutoCaptureConfig
+    capture_dead_clicks?: boolean | DeadClicksAutoCaptureConfig /**
+
+    * Determines whether to capture exceptions.
+    *
+    * @default undefined
+    */
+    capture_exceptions?: boolean
 
     /**
      * Determines whether to disable scroll properties.
