@@ -3,30 +3,44 @@ import { start } from './utils/setup'
 import { pollUntilEventCaptured } from './utils/event-capture-utils'
 
 test.describe('Exception capture', () => {
-    test('manual exception capture', async ({ page, context }) => {
-        await start(
-            {
-                decideResponseOverrides: {
-                    autocaptureExceptions: false,
-                },
-                url: './playground/cypress/index.html',
-            },
-            page,
-            context
-        )
+    test.describe('Exception autocapture enabled', () => {
+        test.beforeEach(async ({ page, context }) => {
+            await start(
+                { decideResponseOverrides: { autocaptureExceptions: false }, url: './playground/cypress/index.html' },
+                page,
+                context
+            )
+        })
 
-        await page.click('[data-cy-exception-button]')
+        test('manual exception capture of error', async ({ page }) => {
+            await page.click('[data-cy-exception-button]')
 
-        await pollUntilEventCaptured(page, '$exception')
+            await pollUntilEventCaptured(page, '$exception')
 
-        const captures = await page.capturedEvents()
-        expect(captures.map((c) => c.event)).toEqual(['$pageview', '$autocapture', '$exception'])
-        expect(captures[2].event).toEqual('$exception')
-        expect(captures[2].properties.extra_prop).toEqual(2)
-        expect(captures[2].properties.$exception_source).toBeUndefined()
-        expect(captures[2].properties.$exception_personURL).toBeUndefined()
-        expect(captures[2].properties.$exception_list[0].value).toEqual('wat even am I')
-        expect(captures[2].properties.$exception_list[0].type).toEqual('Error')
+            const captures = await page.capturedEvents()
+            expect(captures.map((c) => c.event)).toEqual(['$pageview', '$autocapture', '$exception'])
+            expect(captures[2].event).toEqual('$exception')
+            expect(captures[2].properties.extra_prop).toEqual(2)
+            expect(captures[2].properties.$exception_source).toBeUndefined()
+            expect(captures[2].properties.$exception_personURL).toBeUndefined()
+            expect(captures[2].properties.$exception_list[0].value).toEqual('wat even am I')
+            expect(captures[2].properties.$exception_list[0].type).toEqual('Error')
+        })
+
+        test('manual exception capture of string', async ({ page }) => {
+            await page.click('[data-cy-exception-string-button]')
+
+            await pollUntilEventCaptured(page, '$exception')
+
+            const captures = await page.capturedEvents()
+            expect(captures.map((c) => c.event)).toEqual(['$pageview', '$autocapture', '$exception'])
+            expect(captures[2].event).toEqual('$exception')
+            expect(captures[2].properties.extra_prop).toEqual(2)
+            expect(captures[2].properties.$exception_source).toBeUndefined()
+            expect(captures[2].properties.$exception_personURL).toBeUndefined()
+            expect(captures[2].properties.$exception_list[0].value).toEqual('I am a plain old string')
+            expect(captures[2].properties.$exception_list[0].type).toEqual('Error')
+        })
     })
 
     test.describe('Exception autocapture enabled', () => {
@@ -34,9 +48,7 @@ test.describe('Exception capture', () => {
             await page.waitingForNetworkCausedBy(['**/exception-autocapture.js*'], async () => {
                 await start(
                     {
-                        decideResponseOverrides: {
-                            autocaptureExceptions: true,
-                        },
+                        decideResponseOverrides: { autocaptureExceptions: true },
                         url: './playground/cypress/index.html',
                     },
                     page,

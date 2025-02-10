@@ -90,6 +90,10 @@ export const isFile = (x: unknown): x is File => {
     return x instanceof File
 }
 
+export const isError = (x: unknown): x is Error => {
+    return x instanceof Error
+}
+
 export const isKnownUnsafeEditableEvent = (x: unknown): x is KnownUnsafeEditableEvent => {
     return includes(knownUnsafeEditableEvent as unknown as string[], x)
 }

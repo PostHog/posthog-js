@@ -1503,6 +1503,11 @@ export type CapturedNetworkRequest = Writable<Omit<PerformanceEntry, 'toJSON'>> 
     isInitial?: boolean
 }
 
+export type ErrorConversionArgs = {
+    event: string | Event
+    error?: Error
+}
+
 export type ErrorEventArgs = [
     event: string | Event,
     source?: string | undefined,

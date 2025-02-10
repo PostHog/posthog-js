@@ -56,6 +56,7 @@ import {
     isArray,
     isEmptyObject,
     isEmptyString,
+    isError,
     isFunction,
     isKnownUnsafeEditableEvent,
     isNullish,
@@ -1834,12 +1835,12 @@ export class PostHog {
     }
 
     /** Capture a caught exception manually */
-    captureException(error: Error, additionalProperties?: Properties): void {
+    captureException(error: unknown, additionalProperties?: Properties): void {
         const syntheticException = new Error('PostHog syntheticException')
         const properties: Properties = isFunction(assignableWindow.__PosthogExtensions__?.parseErrorAsProperties)
             ? {
                   ...assignableWindow.__PosthogExtensions__.parseErrorAsProperties(
-                      [error.message, undefined, undefined, undefined, error],
+                      isError(error) ? { error, event: error.message } : { event: error as Event | string },
                       // create synthetic error to get stack in cases where user input does not contain one
                       // creating the exceptions soon into our code as possible means we should only have to
                       // remove a single frame (this 'captureException' method) from the resultant stack
@@ -1851,8 +1852,8 @@ export class PostHog {
                   $exception_level: 'error',
                   $exception_list: [
                       {
-                          type: error.name,
-                          value: error.message,
+                          type: isError(error) ? error.name : 'Error',
+                          value: isError(error) ? error.message : error,
                           mechanism: {
                               handled: true,
                               synthetic: false,
