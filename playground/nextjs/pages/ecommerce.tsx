@@ -65,7 +65,7 @@ const events = [
     },
 ]
 
-export default function SurveyForm() {
+export default function EcommerceTester() {
     const posthog = usePostHog()
 
     return (
