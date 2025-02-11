@@ -339,17 +339,17 @@ export class SessionRecording {
 
         const enabled: boolean =
             canvasRecording_client_side?.recordCanvas ?? canvasRecording_server_side?.enabled ?? false
-        const fps: number = canvasRecording_client_side?.canvasFps ?? canvasRecording_server_side?.fps ?? 0
+        const fps: number = canvasRecording_client_side?.canvasFps ?? canvasRecording_server_side?.fps ?? 4
         let quality: string | number =
-            canvasRecording_client_side?.canvasQuality ?? canvasRecording_server_side?.quality ?? 0
+            canvasRecording_client_side?.canvasQuality ?? canvasRecording_server_side?.quality ?? 0.4
         if (typeof quality === 'string') {
             quality = parseFloat(quality)
         }
 
         return {
             enabled,
-            fps: clampToRange(fps, 0, 12, 'canvas recording fps'),
-            quality: clampToRange(quality, 0, 1, 'canvas recording quality'),
+            fps: clampToRange(fps, 0, 12, 'canvas recording fps', 4),
+            quality: clampToRange(quality, 0, 1, 'canvas recording quality', 0.4),
         }
     }
 
