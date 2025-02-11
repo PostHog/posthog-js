@@ -74,6 +74,10 @@ const PARTIAL_COMPRESSION_THRESHOLD = ONE_KB
 export const RECORDING_MAX_EVENT_SIZE = ONE_KB * ONE_KB * 0.9 // ~1mb (with some wiggle room)
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
+const DEFAULT_CANVAS_QUALITY = 0.4
+const DEFAULT_CANVAS_FPS = 4
+const MAX_CANVAS_FPS = 12
+const MAX_CANVAS_QUALITY = 1
 
 const ACTIVE_SOURCES = [
     IncrementalSource.MouseMove,
@@ -339,9 +343,10 @@ export class SessionRecording {
 
         const enabled: boolean =
             canvasRecording_client_side?.recordCanvas ?? canvasRecording_server_side?.enabled ?? false
-        const fps: number = canvasRecording_client_side?.canvasFps ?? canvasRecording_server_side?.fps ?? 4
+        const fps: number =
+            canvasRecording_client_side?.canvasFps ?? canvasRecording_server_side?.fps ?? DEFAULT_CANVAS_FPS
         let quality: string | number =
-            canvasRecording_client_side?.canvasQuality ?? canvasRecording_server_side?.quality ?? 0.4
+            canvasRecording_client_side?.canvasQuality ?? canvasRecording_server_side?.quality ?? DEFAULT_CANVAS_QUALITY
         if (typeof quality === 'string') {
             const parsed = parseFloat(quality)
             quality = isNaN(parsed) ? 0.4 : parsed
@@ -349,8 +354,8 @@ export class SessionRecording {
 
         return {
             enabled,
-            fps: clampToRange(fps, 0, 12, 'canvas recording fps', 4),
-            quality: clampToRange(quality, 0, 1, 'canvas recording quality', 0.4),
+            fps: clampToRange(fps, 0, MAX_CANVAS_FPS, 'canvas recording fps', DEFAULT_CANVAS_FPS),
+            quality: clampToRange(quality, 0, MAX_CANVAS_QUALITY, 'canvas recording quality', DEFAULT_CANVAS_QUALITY),
         }
     }
 
