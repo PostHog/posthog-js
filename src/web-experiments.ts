@@ -260,37 +260,8 @@ export class WebExperiments {
                 const elements = document?.querySelectorAll(transform.selector)
                 elements?.forEach((element) => {
                     const htmlElement = element as HTMLElement
-                    if (transform.attributes) {
-                        transform.attributes.forEach((attribute) => {
-                            switch (attribute.name) {
-                                case 'text':
-                                    htmlElement.innerText = attribute.value
-                                    break
-
-                                case 'html':
-                                    htmlElement.innerHTML = attribute.value
-                                    break
-
-                                case 'cssClass':
-                                    htmlElement.className = attribute.value
-                                    break
-
-                                default:
-                                    htmlElement.setAttribute(attribute.name, attribute.value)
-                            }
-                        })
-                    }
-
-                    if (transform.text) {
-                        htmlElement.innerText = transform.text
-                    }
-
                     if (transform.html) {
-                        if (htmlElement.parentElement) {
-                            htmlElement.parentElement.innerHTML = transform.html
-                        } else {
-                            htmlElement.innerHTML = transform.html
-                        }
+                        htmlElement.innerHTML = transform.html
                     }
 
                     if (transform.css) {

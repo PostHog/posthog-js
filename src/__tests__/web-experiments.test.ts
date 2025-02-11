@@ -11,30 +11,29 @@ describe('Web Experimentation', () => {
     let posthog: PostHog
     let persistence: PostHogPersistence
     let experimentsResponse: { status?: number; experiments?: WebExperiment[] }
+
     const signupButtonWebExperimentWithFeatureFlag = {
         id: 3,
         name: 'Signup button test',
         feature_flag_key: 'signup-button-test',
         variants: {
-            Signup: {
+            'variant-sign-up': {
                 transforms: [
                     {
                         selector: '#set-user-properties',
-                        text: 'Sign me up',
                         html: 'Sign me up',
                     },
                 ],
             },
-            'Send-it': {
+            'variant-send-it': {
                 transforms: [
                     {
                         selector: '#set-user-properties',
-                        text: 'Send it',
                         html: 'Send it',
                     },
                 ],
             },
-            'css-transform': {
+            'variant-css-transform': {
                 transforms: [
                     {
                         selector: '#set-user-properties',
@@ -42,7 +41,7 @@ describe('Web Experimentation', () => {
                     },
                 ],
             },
-            'innerhtml-transform': {
+            'variant-inner-html-transform': {
                 transforms: [
                     {
                         selector: '#set-user-properties',
@@ -54,7 +53,6 @@ describe('Web Experimentation', () => {
                 transforms: [
                     {
                         selector: '#set-user-properties',
-                        text: 'Sign up',
                         html: 'Sign up',
                     },
                 ],
@@ -66,7 +64,7 @@ describe('Web Experimentation', () => {
         id: 3,
         name: 'Signup button test',
         variants: {
-            Signup: {
+            'variant-sign-up': {
                 conditions: {
                     url: 'https://example.com/Signup',
                     urlMatchType: 'exact',
@@ -74,27 +72,24 @@ describe('Web Experimentation', () => {
                 transforms: [
                     {
                         selector: '#set-user-properties',
-                        text: 'Sign me up',
                         html: 'Sign me up',
                     },
                 ],
             },
-            'Send-it': {
+            'variant-send-it': {
                 conditions: { url: 'regex-url', urlMatchType: 'regex' },
                 transforms: [
                     {
                         selector: '#set-user-properties',
-                        text: 'Send it',
                         html: 'Send it',
                     },
                 ],
             },
-            icontains: {
+            'variant-icontains': {
                 conditions: { url: 'checkout', urlMatchType: 'icontains' },
                 transforms: [
                     {
                         selector: '#set-user-properties',
-                        text: 'Sign up',
                         html: 'Sign up',
                     },
                 ],
@@ -103,7 +98,6 @@ describe('Web Experimentation', () => {
                 transforms: [
                     {
                         selector: '#set-user-properties',
-                        text: 'Sign up',
                         html: 'Sign up',
                     },
                 ],
@@ -147,23 +141,15 @@ describe('Web Experimentation', () => {
     })
 
     function createTestDocument() {
-        // eslint-disable-next-line no-restricted-globals
-        const elTarget = document.createElement('img')
-        elTarget.id = 'primary_button'
-        // eslint-disable-next-line no-restricted-globals
         const elParent = document.createElement('span')
-        elParent.innerText = 'original'
-        elParent.className = 'original'
-        elParent.appendChild(elTarget)
-        // eslint-disable-next-line no-restricted-globals
+        elParent.innerHTML = 'original'
         document.querySelectorAll = function () {
             return [elParent] as unknown as NodeListOf<Element>
         }
-
         return elParent
     }
 
-    function testUrlMatch(testLocation: string, expectedText: string) {
+    function testUrlMatch(testLocation: string, expectedInnerHTML: string) {
         experimentsResponse = {
             experiments: [buttonWebExperimentWithUrlConditions],
         }
@@ -176,7 +162,7 @@ describe('Web Experimentation', () => {
         }
 
         webExperiment.getWebExperimentsAndEvaluateDisplayLogic(false)
-        expect(elParent.innerText).toEqual(expectedText)
+        expect(elParent.innerHTML).toEqual(expectedInnerHTML)
     }
 
     function assertElementChanged(variant: string, expectedProperty: string, value: string) {
@@ -191,11 +177,6 @@ describe('Web Experimentation', () => {
             case 'css':
                 expect(elParent.getAttribute('style')).toEqual(value)
                 break
-
-            case 'innerText':
-                expect(elParent.innerText).toEqual(value)
-                break
-
             case 'innerHTML':
                 expect(elParent.innerHTML).toEqual(value)
                 break
@@ -212,45 +193,51 @@ describe('Web Experimentation', () => {
             const elParent = createTestDocument()
 
             simulateFeatureFlags({
-                'signup-button-test': 'Sign me up',
+                'signup-button-test': 'variant-sign-up',
             })
 
-            expect(elParent.innerText).toEqual('original')
+            expect(elParent.innerHTML).toEqual('original')
         })
     })
 
     describe('url match conditions', () => {
         it('exact location match', () => {
+            // Should match 'variant-sign-up' -> "Sign me up"
             const testLocation = 'https://example.com/Signup'
-            const expectedText = 'Sign me up'
-            testUrlMatch(testLocation, expectedText)
+            const expectedInnerHTML = 'Sign me up'
+            testUrlMatch(testLocation, expectedInnerHTML)
         })
 
         it('regex location match', () => {
+            // Should match 'variant-send-it' -> "Send it"
             const testLocation = 'https://regex-url.com/test'
-            const expectedText = 'Send it'
-            testUrlMatch(testLocation, expectedText)
+            const expectedInnerHTML = 'Send it'
+            testUrlMatch(testLocation, expectedInnerHTML)
         })
 
         it('icontains location match', () => {
+            // Should match 'variantIcontains' -> "Sign up"
             const testLocation = 'https://example.com/checkout'
-            const expectedText = 'Sign up'
-            testUrlMatch(testLocation, expectedText)
+            const expectedInnerHTML = 'Sign up'
+            testUrlMatch(testLocation, expectedInnerHTML)
         })
     })
 
     describe('utm match conditions', () => {
         it('can disqualify on utm terms', () => {
             const buttonWebExperimentWithUTMConditions = buttonWebExperimentWithUrlConditions
-            buttonWebExperimentWithUTMConditions.variants['Signup'].conditions = {
+
+            // Attach UTM conditions to the 'variant-sign-up' variant
+            buttonWebExperimentWithUTMConditions.variants['variant-sign-up'].conditions = {
                 utm: {
                     utm_campaign: 'marketing',
                     utm_medium: 'desktop',
                 },
             }
+
             const testLocation = 'https://example.com/landing-page?utm_campaign=marketing&utm_medium=mobile'
-            const expectedText = 'original'
-            testUrlMatch(testLocation, expectedText)
+            const expectedInnerHTML = 'original'
+            testUrlMatch(testLocation, expectedInnerHTML)
         })
     })
 
@@ -265,6 +252,7 @@ describe('Web Experimentation', () => {
                     token: 'testtoken',
                     autocapture: true,
                     region: 'us-east-1',
+                    // no disable_web_experiments set to false here, so it’s implicitly enabled
                 } as unknown as PostHogConfig,
                 persistence: persistence,
                 get_property: jest.fn(),
@@ -277,23 +265,15 @@ describe('Web Experimentation', () => {
 
             posthog.requestRouter = new RequestRouter(disabledPostHog)
             webExperiment = new WebExperiments(disabledPostHog)
-            assertElementChanged('control', 'innerText', 'original')
-        })
-
-        it('can set text of Span Element', async () => {
-            experimentsResponse = {
-                experiments: [signupButtonWebExperimentWithFeatureFlag],
-            }
-
-            assertElementChanged('Signup', 'innerText', 'Sign me up')
-            expect(posthog.capture).not.toHaveBeenCalled()
+            assertElementChanged('control', 'innerHTML', 'original')
         })
 
         it('makes no modifications if control variant', () => {
             experimentsResponse = {
                 experiments: [signupButtonWebExperimentWithFeatureFlag],
             }
-            assertElementChanged('control', 'innerText', 'original')
+            // control => do nothing
+            assertElementChanged('control', 'innerHTML', 'original')
             expect(posthog.capture).not.toHaveBeenCalled()
         })
 
@@ -301,36 +281,49 @@ describe('Web Experimentation', () => {
             experimentsResponse = {
                 experiments: [buttonWebExperimentWithUrlConditions],
             }
+
             const webExperiment = new WebExperiments(posthog)
             const elParent = createTestDocument()
             const original = WebExperiments.getWindowLocation
+
             WebExperiments.getWindowLocation = () => {
                 // eslint-disable-next-line compat/compat
                 return new URL(
-                    'https://example.com/landing-page?__experiment_id=3&__experiment_variant=Signup'
+                    'https://example.com/landing-page?__experiment_id=3&__experiment_variant=variant-sign-up'
                 ) as unknown as Location
             }
 
+            // This forces a preview of 'variant-sign-up', ignoring real flags.
             webExperiment.previewWebExperiment()
 
             WebExperiments.getWindowLocation = original
-            expect(elParent.innerText).toEqual('Sign me up')
+            expect(elParent.innerHTML).toEqual('Sign me up')
             expect(posthog.capture).not.toHaveBeenCalled()
         })
 
-        it('can set css of Span Element', async () => {
+        it('can set text of a <span> element', async () => {
             experimentsResponse = {
                 experiments: [signupButtonWebExperimentWithFeatureFlag],
             }
-
-            assertElementChanged('css-transform', 'css', 'font-size:40px')
+            // 'variant-sign-up' => "Sign me up"
+            assertElementChanged('variant-sign-up', 'innerHTML', 'Sign me up')
+            expect(posthog.capture).not.toHaveBeenCalled()
         })
 
-        it('can set innerHTML of Span Element', async () => {
+        it('can set child element of a <span> element', async () => {
             experimentsResponse = {
                 experiments: [signupButtonWebExperimentWithFeatureFlag],
             }
-            assertElementChanged('innerhtml-transform', 'innerHTML', '<h1>hello world</h1>')
+            // variantInnerHtmlTransform => <h1>hello world</h1>
+            assertElementChanged('variant-inner-html-transform', 'innerHTML', '<h1>hello world</h1>')
+        })
+
+        it('can set css of a <span> element', async () => {
+            experimentsResponse = {
+                experiments: [signupButtonWebExperimentWithFeatureFlag],
+            }
+            // variantCssTransform => sets 'font-size:40px'
+            assertElementChanged('variant-css-transform', 'css', 'font-size:40px')
         })
     })
 
