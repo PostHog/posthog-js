@@ -343,7 +343,8 @@ export class SessionRecording {
         let quality: string | number =
             canvasRecording_client_side?.canvasQuality ?? canvasRecording_server_side?.quality ?? 0.4
         if (typeof quality === 'string') {
-            quality = parseFloat(quality)
+            const parsed = parseFloat(quality)
+            quality = isNaN(parsed) ? 0.4 : parsed
         }
 
         return {
