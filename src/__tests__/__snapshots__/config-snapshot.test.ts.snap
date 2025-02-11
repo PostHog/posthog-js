@@ -437,6 +437,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
       \\"Pick<AutocaptureConfig, \\\\\\"element_attribute_ignorelist\\\\\\">\\"
     ]
   ],
+  \\"capture_exceptions\\": [
+    \\"undefined\\",
+    \\"false\\",
+    \\"true\\"
+  ],
   \\"disable_scroll_properties\\": [
     \\"undefined\\",
     \\"false\\",
