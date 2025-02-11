@@ -344,10 +344,39 @@ describe('SessionRecording', () => {
             '%s',
             (_name: string, serverSide: boolean | undefined, clientSide: boolean | undefined, expected: boolean) => {
                 posthog.persistence?.register({
-                    [SESSION_RECORDING_CANVAS_RECORDING]: { enabled: serverSide, fps: 4, quality: 0.1 },
+                    [SESSION_RECORDING_CANVAS_RECORDING]: { enabled: serverSide, fps: 4, quality: '0.1' },
                 })
                 posthog.config.session_recording.captureCanvas = { recordCanvas: clientSide }
-                expect(sessionRecording['canvasRecording']).toMatchObject({ enabled: expected })
+                expect(sessionRecording['canvasRecording']).toMatchObject({ enabled: expected, fps: 4, quality: 0.1 })
+            }
+        )
+
+        it.each([
+            ['max fps and quality', 12, '1.0', 12, 1],
+            ['min fps and quality', 0, '0.0', 0, 0],
+            ['mid fps and quality', 6, '0.5', 6, 0.5],
+            ['null fps and quality', null, null, 4, 0.4],
+            ['undefined fps and quality', undefined, undefined, 4, 0.4],
+            ['string fps and quality', '12', '1.0', 4, 1],
+            ['over max fps and quality', 15, '1.5', 12, 1],
+        ])(
+            '%s',
+            (
+                _name: string,
+                fps: number | string | null | undefined,
+                quality: string | null | undefined,
+                expectedFps: number,
+                expectedQuality: number
+            ) => {
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_CANVAS_RECORDING]: { enabled: true, fps, quality },
+                })
+
+                expect(sessionRecording['canvasRecording']).toMatchObject({
+                    enabled: true,
+                    fps: expectedFps,
+                    quality: expectedQuality,
+                })
             }
         )
     })
