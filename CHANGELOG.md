@@ -1,3 +1,7 @@
+## 1.217.1 - 2025-02-11
+
+- fix: canvas quality value (#1727)
+
 ## 1.217.0 - 2025-02-11
 
 - feat: override exception capture clientside (#1726)
