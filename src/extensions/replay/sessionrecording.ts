@@ -337,9 +337,14 @@ export class SessionRecording {
         const canvasRecording_client_side = this.instance.config.session_recording.captureCanvas
         const canvasRecording_server_side = this.instance.get_property(SESSION_RECORDING_CANVAS_RECORDING)
 
-        const enabled = canvasRecording_client_side?.recordCanvas ?? canvasRecording_server_side?.enabled ?? false
-        const fps = canvasRecording_client_side?.canvasFps ?? canvasRecording_server_side?.fps ?? 0
-        const quality = canvasRecording_client_side?.canvasQuality ?? canvasRecording_server_side?.quality ?? 0
+        const enabled: boolean =
+            canvasRecording_client_side?.recordCanvas ?? canvasRecording_server_side?.enabled ?? false
+        const fps: number = canvasRecording_client_side?.canvasFps ?? canvasRecording_server_side?.fps ?? 0
+        let quality: string | number =
+            canvasRecording_client_side?.canvasQuality ?? canvasRecording_server_side?.quality ?? 0
+        if (typeof quality === 'string') {
+            quality = parseFloat(quality)
+        }
 
         return {
             enabled,

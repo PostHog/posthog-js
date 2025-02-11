@@ -344,10 +344,10 @@ describe('SessionRecording', () => {
             '%s',
             (_name: string, serverSide: boolean | undefined, clientSide: boolean | undefined, expected: boolean) => {
                 posthog.persistence?.register({
-                    [SESSION_RECORDING_CANVAS_RECORDING]: { enabled: serverSide, fps: 4, quality: 0.1 },
+                    [SESSION_RECORDING_CANVAS_RECORDING]: { enabled: serverSide, fps: 4, quality: '0.1' },
                 })
                 posthog.config.session_recording.captureCanvas = { recordCanvas: clientSide }
-                expect(sessionRecording['canvasRecording']).toMatchObject({ enabled: expected })
+                expect(sessionRecording['canvasRecording']).toMatchObject({ enabled: expected, fps: 4, quality: 0.1 })
             }
         )
     })
