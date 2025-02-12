@@ -1,3 +1,7 @@
+## 1.217.2 - 2025-02-12
+
+- fix(no-code experiments): refactor (6) (#1728)
+
 ## 1.217.1 - 2025-02-11
 
 - fix: canvas quality value (#1727)
