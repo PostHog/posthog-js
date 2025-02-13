@@ -1,3 +1,7 @@
+## 1.217.3 - 2025-02-13
+
+- Revert "fix: check url match twice because of potential race condition (#1722)" (#1733)
+
 ## 1.217.2 - 2025-02-12
 
 - fix(no-code experiments): refactor (6) (#1728)
