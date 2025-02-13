@@ -153,8 +153,8 @@ export type compressedIncrementalStyleSnapshotEvent = {
         styleId?: number
         replace?: string
         replaceSync?: string
-        adds: string
-        removes: string
+        adds?: string
+        removes?: string
     }
 }
 
@@ -209,8 +209,8 @@ function compressEvent(event: eventWithTime): eventWithTime | compressedEventWit
                 cv: '2024-10',
                 data: {
                     ...event.data,
-                    adds: gzipToString(event.data.adds),
-                    removes: gzipToString(event.data.removes),
+                    adds: event.data.adds ? gzipToString(event.data.adds) : undefined,
+                    removes: event.data.removes ? gzipToString(event.data.removes) : undefined,
                 },
             }
         }
