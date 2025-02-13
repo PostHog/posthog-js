@@ -1356,6 +1356,8 @@ export type FeatureFlagsCallback = (
     }
 ) => void
 
+export type RemoteConfigFeatureFlagCallback = (payload: JsonType) => void
+
 export interface PersistentStore {
     is_supported: () => boolean
     error: (error: any) => void
