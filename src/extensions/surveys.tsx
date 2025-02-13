@@ -228,10 +228,6 @@ export class SurveyManager {
                 if (!isNull(this.surveyInFocus)) {
                     return
                 }
-                // Adding this duplicate check to see if there's some sort of race-condition between getActiveMatchingSurveys and actual URL changes, as sometimes Surveys are shown up when they shouldn't be
-                if (!doesSurveyUrlMatch(survey)) {
-                    return
-                }
                 if (survey.type === SurveyType.Widget) {
                     if (
                         survey.appearance?.widgetType === 'tab' &&
@@ -410,6 +406,12 @@ export function usePopupVisibility(
         }
 
         const showSurvey = () => {
+            // check if the url is still matching, necessary for delayed surveys, as the URL may have changed
+            // since the survey was scheduled to appear
+            if (!doesSurveyUrlMatch(survey)) {
+                return
+            }
+
             setIsPopupVisible(true)
             window.dispatchEvent(new Event('PHSurveyShown'))
             posthog.capture('survey shown', {
