@@ -1,3 +1,7 @@
+## 1.217.4 - 2025-02-13
+
+- fix: unexpected undefined should be expected (#1731)
+
 ## 1.217.3 - 2025-02-13
 
 - Revert "fix: check url match twice because of potential race condition (#1722)" (#1733)
