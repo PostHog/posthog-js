@@ -8,6 +8,7 @@ import {
     SESSION_RECORDING_CANVAS_RECORDING,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_MASKING,
     SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE,
     SESSION_RECORDING_SAMPLE_RATE,
 } from '../../../constants'
@@ -626,6 +627,21 @@ describe('SessionRecording', () => {
                 enabled: true,
                 fps: 6,
                 quality: '0.2',
+            })
+        })
+
+        it('stores masking config in persistence if set on the server', () => {
+            posthog.persistence?.register({ [SESSION_RECORDING_MASKING]: undefined })
+
+            sessionRecording.onRemoteConfig(
+                makeDecideResponse({
+                    sessionRecording: { endpoint: '/s/', masking: { maskAllInputs: true, maskTextSelector: '*' } },
+                })
+            )
+
+            expect(posthog.get_property(SESSION_RECORDING_MASKING)).toEqual({
+                maskAllInputs: true,
+                maskTextSelector: '*',
             })
         })
 
