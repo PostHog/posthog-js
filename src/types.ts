@@ -783,6 +783,13 @@ export interface PostHogConfig {
     capture_dead_clicks?: boolean | DeadClicksAutoCaptureConfig
 
     /**
+     * Determines whether to capture exceptions.
+     *
+     * @default undefined
+     */
+    capture_exceptions?: boolean
+
+    /**
      * Determines whether to disable scroll properties.
      * These allow you to keep track of how far down someone scrolled in your website.
      *

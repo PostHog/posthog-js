@@ -4,13 +4,13 @@ import { Properties, RemoteConfig } from '../../types'
 
 import { createLogger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
+import { isBoolean, isUndefined } from '../../utils/type-utils'
 
 const logger = createLogger('[ExceptionAutocapture]')
 
 export class ExceptionObserver {
     instance: PostHog
     remoteEnabled: boolean | undefined
-    private originalOnUnhandledRejectionHandler: Window['onunhandledrejection'] | null | undefined = undefined
     private unwrapOnError: (() => void) | undefined
     private unwrapUnhandledRejection: (() => void) | undefined
 
@@ -21,20 +21,19 @@ export class ExceptionObserver {
         this.startIfEnabled()
     }
 
-    get isEnabled() {
+    public get isEnabled(): boolean {
+        if (isBoolean(this.instance.config.capture_exceptions)) {
+            return this.instance.config.capture_exceptions
+        }
         return this.remoteEnabled ?? false
     }
 
-    get isCapturing() {
-        return !!(window?.onerror as any)?.__POSTHOG_INSTRUMENTED__
-    }
-
     get hasHandlers() {
-        return this.originalOnUnhandledRejectionHandler || this.unwrapOnError
+        return !isUndefined(this.unwrapOnError)
     }
 
     startIfEnabled(): void {
-        if (this.isEnabled && !this.isCapturing) {
+        if (this.isEnabled && !this.hasHandlers) {
             logger.info('enabled, starting...')
             this.loadScript(this.startCapturing)
         }
@@ -59,7 +58,7 @@ export class ExceptionObserver {
     }
 
     private startCapturing = () => {
-        if (!window || !this.isEnabled || this.hasHandlers || this.isCapturing) {
+        if (!window || !this.isEnabled || this.hasHandlers) {
             return
         }
 
@@ -83,7 +82,10 @@ export class ExceptionObserver {
 
     private stopCapturing() {
         this.unwrapOnError?.()
+        this.unwrapOnError = undefined
+
         this.unwrapUnhandledRejection?.()
+        this.unwrapUnhandledRejection = undefined
     }
 
     onRemoteConfig(response: RemoteConfig) {

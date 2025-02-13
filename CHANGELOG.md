@@ -1,3 +1,19 @@
+## 1.217.3 - 2025-02-13
+
+- Revert "fix: check url match twice because of potential race condition (#1722)" (#1733)
+
+## 1.217.2 - 2025-02-12
+
+- fix(no-code experiments): refactor (6) (#1728)
+
+## 1.217.1 - 2025-02-11
+
+- fix: canvas quality value (#1727)
+
+## 1.217.0 - 2025-02-11
+
+- feat: override exception capture clientside (#1726)
+
 ## 1.216.1 - 2025-02-10
 
 - fix: capture when argument is not a string (#1724)
