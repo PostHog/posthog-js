@@ -1,3 +1,7 @@
+## 1.217.7 - 2025-02-14
+
+- fix: skip device type check if no devices set (#1737)
+
 ## 1.217.6 - 2025-02-14
 
 - fix: heatmaps unload listener (#1736)
