@@ -397,10 +397,12 @@ export class SessionRecording {
         const maskAllInputs = masking_client_side?.maskAllInputs ?? masking_server_side?.maskAllInputs
         const maskTextSelector = masking_client_side?.maskTextSelector ?? masking_server_side?.maskTextSelector
 
-        return {
-            maskAllInputs,
-            maskTextSelector,
-        }
+        return !isUndefined(maskAllInputs) || !isUndefined(maskTextSelector)
+            ? {
+                  maskAllInputs,
+                  maskTextSelector,
+              }
+            : undefined
     }
 
     private get sampleRate(): number | null {
