@@ -429,6 +429,73 @@ describe('SessionRecording', () => {
         )
     })
 
+    describe('masking config', () => {
+        it.each([
+            [
+                'enabled when both enabled',
+                { maskAllInputs: true, maskTextSelector: '*' },
+                { maskAllInputs: true, maskTextSelector: '*' },
+                { maskAllInputs: true, maskTextSelector: '*' },
+            ],
+            [
+                'disabled when both disabled',
+                { maskAllInputs: false },
+                { maskAllInputs: false },
+                { maskAllInputs: false },
+            ],
+            [
+                'is undefined when nothing is set',
+                undefined,
+                undefined,
+                {
+                    maskAllInputs: undefined,
+                    maskTextSelector: undefined,
+                },
+            ],
+            [
+                'uses client config when set if server config is not set',
+                undefined,
+                { maskAllInputs: true, maskTextSelector: '#client' },
+                { maskAllInputs: true, maskTextSelector: '#client' },
+            ],
+            [
+                'uses server config when set if client config is not set',
+                { maskAllInputs: false, maskTextSelector: '#server' },
+                undefined,
+                { maskAllInputs: false, maskTextSelector: '#server' },
+            ],
+            [
+                'overrides server config with client config if both are set',
+                { maskAllInputs: false, maskTextSelector: '#server' },
+                { maskAllInputs: true, maskTextSelector: '#client' },
+                { maskAllInputs: true, maskTextSelector: '#client' },
+            ],
+            [
+                'partially overrides server config with client config if both are set',
+                { maskAllInputs: true, maskTextSelector: '*' },
+                { maskAllInputs: false },
+                { maskAllInputs: false, maskTextSelector: '*' },
+            ],
+        ])(
+            '%s',
+            (
+                _name: string,
+                serverConfig: { maskAllInputs?: boolean; maskTextSelector?: string } | undefined,
+                clientConfig: { maskAllInputs: boolean; maskTextSelector?: string } | undefined,
+                expected: { maskAllInputs: boolean; maskTextSelector?: string } | undefined
+            ) => {
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_MASKING]: serverConfig,
+                })
+
+                posthog.config.session_recording.maskAllInputs = clientConfig?.maskAllInputs
+                posthog.config.session_recording.maskTextSelector = clientConfig?.maskTextSelector
+
+                expect(sessionRecording['masking']).toEqual(expected)
+            }
+        )
+    })
+
     describe('startIfEnabledOrStop', () => {
         beforeEach(() => {
             // need to cast as any to mock private methods

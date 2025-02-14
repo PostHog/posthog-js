@@ -394,9 +394,12 @@ export class SessionRecording {
             maskTextSelector: this.instance.config.session_recording?.maskTextSelector,
         }
 
+        const maskAllInputs = masking_client_side?.maskAllInputs ?? masking_server_side?.maskAllInputs
+        const maskTextSelector = masking_client_side?.maskTextSelector ?? masking_server_side?.maskTextSelector
+
         return {
-            ...masking_server_side,
-            ...masking_client_side,
+            maskAllInputs,
+            maskTextSelector,
         }
     }
 
