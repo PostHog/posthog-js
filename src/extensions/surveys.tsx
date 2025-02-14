@@ -406,6 +406,12 @@ export function usePopupVisibility(
         }
 
         const showSurvey = () => {
+            // check if the url is still matching, necessary for delayed surveys, as the URL may have changed
+            // since the survey was scheduled to appear
+            if (!doesSurveyUrlMatch(survey)) {
+                return
+            }
+
             setIsPopupVisible(true)
             window.dispatchEvent(new Event('PHSurveyShown'))
             posthog.capture('survey shown', {

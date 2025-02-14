@@ -752,6 +752,49 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
         expect(window.history.pushState).toBe(originalPushState)
         expect(window.history.replaceState).toBe(originalReplaceState)
     })
+
+    it('should not show delayed survey if URL no longer matches when delay expires', () => {
+        jest.useFakeTimers()
+
+        // Create a survey with a URL condition and a 2 second delay
+        const survey = createTestSurvey({
+            url: '/initial-path',
+            urlMatchType: 'exact',
+        })
+        survey.appearance = { surveyPopupDelaySeconds: 2 }
+
+        // Set initial matching URL
+        Object.defineProperty(window, 'location', {
+            value: new URL('https://example.com/initial-path'),
+            writable: true,
+        })
+
+        // Start the survey visibility hook
+        const { result } = renderHook(() => usePopupVisibility(survey, posthog, 2000, false, mockRemoveSurveyFromFocus))
+
+        // Initially the survey should not be visible (due to delay)
+        expect(result.current.isPopupVisible).toBe(false)
+
+        // Change URL to non-matching path before delay expires
+        act(() => {
+            Object.defineProperty(window, 'location', {
+                value: new URL('https://example.com/different-path'),
+                writable: true,
+            })
+            window.dispatchEvent(new Event('popstate'))
+        })
+
+        // Advance timers past the delay
+        act(() => {
+            jest.advanceTimersByTime(2000)
+        })
+
+        // Survey should still not be visible since URL no longer matches
+        expect(result.current.isPopupVisible).toBe(false)
+        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
+
+        jest.useRealTimers()
+    })
 })
 
 describe('preview renders', () => {
