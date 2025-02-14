@@ -2,15 +2,6 @@ import { usePostHog } from 'posthog-js/react'
 
 const events = [
     {
-        name: 'Product Added',
-        properties: {
-            product_id: 'SomeProductID',
-            name: 'SomeProductName',
-            price: 42,
-            quantity: 1,
-        },
-    },
-    {
         name: 'Products Searched',
         properties: {
             products: [
@@ -25,6 +16,15 @@ const events = [
                     price: 43,
                 },
             ],
+        },
+    },
+    {
+        name: 'Product Added',
+        properties: {
+            product_id: 'SomeProductID',
+            name: 'SomeProductName',
+            price: 42,
+            quantity: 1,
         },
     },
     {
@@ -58,6 +58,21 @@ const events = [
         },
     },
     {
+        name: 'Product Viewed',
+        properties: {
+            product_id: 'SomeProductID',
+            name: 'SomeProductName',
+        },
+    },
+    {
+        name: 'Lead Generated',
+        properties: {},
+    },
+    {
+        name: 'Signed Up',
+        properties: {},
+    },
+    {
         name: 'Custom Event',
         properties: {
             foo: 'bar',
@@ -65,7 +80,7 @@ const events = [
     },
 ]
 
-export default function Ecommerce() {
+export default function DestinationTester() {
     const posthog = usePostHog()
 
     return (
