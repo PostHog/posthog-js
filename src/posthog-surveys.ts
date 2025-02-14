@@ -155,7 +155,7 @@ export function doesSurveyUrlMatch(survey: Survey): boolean {
 }
 
 export function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
-    if (!survey.conditions?.deviceTypes) {
+    if (!survey.conditions?.deviceTypes || survey.conditions?.deviceTypes.length === 0) {
         return true
     }
     // if we dont know the device type, assume it is not a match
