@@ -51,7 +51,7 @@ export class SessionPropsManager {
         instance: PostHog,
         sessionIdManager: SessionIdManager,
         persistence: PostHogPersistence,
-        sessionSourceParamGenerator?: (instance?: PostHog) => LegacySessionSourceProps
+        sessionSourceParamGenerator?: (instance?: PostHog) => LegacySessionSourceProps | CurrentSessionSourceProps
     ) {
         this.instance = instance
         this._sessionIdManager = sessionIdManager
