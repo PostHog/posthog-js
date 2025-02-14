@@ -284,6 +284,7 @@ export class PostHog {
     webPerformance = new DeprecatedWebPerformanceObserver()
 
     _initialPageviewCaptured: boolean
+    _personProcessingSetOncePropertiesSent: boolean = false
     _triggered_notifs: any
     compression?: Compression
     __request_queue: QueuedRequestWithOptions[]
@@ -1068,17 +1069,32 @@ export class PostHog {
         return properties
     }
 
+    /**
+     * Add additional set_once properties to the event when creating a person profile. This allows us to create the
+     * profile with mostly-accurate properties, despite earlier events not setting them. We do this by storing them in
+     * persistence.
+     * @param dataSetOnce
+     */
     _calculate_set_once_properties(dataSetOnce?: Properties): Properties | undefined {
         if (!this.persistence || !this._hasPersonProcessing()) {
             return dataSetOnce
         }
+
+        if (this._personProcessingSetOncePropertiesSent) {
+            // We only need to send these properties once. Sending them with later events would be redundant and would
+            // just require extra work on the server to process them.
+            return dataSetOnce
+        }
         // if we're an identified person, send initial params with every event
-        let setOnceProperties = extend({}, this.persistence.get_initial_props(), dataSetOnce || {})
+        const initialProps = this.persistence.get_initial_props()
+        const sessionProps = this.sessionPropsManager?.getSetOnceInitialSessionPropsProps()
+        let setOnceProperties = extend({}, initialProps, sessionProps || {}, dataSetOnce || {})
         const sanitize_properties = this.config.sanitize_properties
         if (sanitize_properties) {
             logger.error('sanitize_properties is deprecated. Use before_send instead')
             setOnceProperties = sanitize_properties(setOnceProperties, '$set_once')
         }
+        this._personProcessingSetOncePropertiesSent = true
         if (isEmptyObject(setOnceProperties)) {
             return undefined
         }
