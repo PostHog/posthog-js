@@ -1,3 +1,7 @@
+## 1.218.0 - 2025-02-14
+
+- feat(flags): Add remote config feature flag method that bypasses cached values (#1729)
+
 ## 1.217.7 - 2025-02-14
 
 - fix: skip device type check if no devices set (#1737)
