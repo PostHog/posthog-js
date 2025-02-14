@@ -1,3 +1,7 @@
+## 1.217.6 - 2025-02-14
+
+- fix: heatmaps unload listener (#1736)
+
 ## 1.217.5 - 2025-02-14
 
 - fix: check url match before trigger showSurvey (#1732)
