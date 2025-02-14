@@ -364,7 +364,8 @@ export class PostHogFeatureFlags {
      * Fetches the payload for a remote config feature flag. This method will bypass any cached values and fetch the latest
      * value from the PostHog API.
      *
-     * Note: Encrypted remote config payloads will not be redacted, nor decrypted in the response.
+     * Note: Because the posthog-js SDK is primarily used with public project API keys, encrypted remote config payloads will
+     * be redacted, never decrypted in the response.
      *
      * ### Usage:
      *
