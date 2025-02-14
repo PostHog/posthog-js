@@ -9,6 +9,7 @@ import {
     JsonType,
     Compression,
     EarlyAccessFeature,
+    RemoteConfigFeatureFlagCallback,
 } from './types'
 import { PostHogPersistence } from './posthog-persistence'
 
@@ -357,6 +358,37 @@ export class PostHogFeatureFlags {
     getFeatureFlagPayload(key: string): JsonType {
         const payloads = this.getFlagPayloads()
         return payloads[key]
+    }
+
+    /*
+     * Fetches the payload for a remote config feature flag. This method will bypass any cached values and fetch the latest
+     * value from the PostHog API.
+     *
+     * Note: Encrypted remote config payloads will not be redacted, nor decrypted in the response.
+     *
+     * ### Usage:
+     *
+     *     getRemoteConfigPayload("home-page-welcome-message", (payload) => console.log(`Fetched remote config: ${payload}`))
+     *
+     * @param {String} key Key of the feature flag.
+     * @param {Function} [callback] The callback function will be called once the remote config feature flag payload has been fetched.
+     */
+    getRemoteConfigPayload(key: string, callback: RemoteConfigFeatureFlagCallback): void {
+        const token = this.instance.config.token
+        this.instance._send_request({
+            method: 'POST',
+            url: this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
+            data: {
+                distinct_id: this.instance.get_distinct_id(),
+                token,
+            },
+            compression: this.instance.config.disable_compression ? undefined : Compression.Base64,
+            timeout: this.instance.config.feature_flag_request_timeout_ms,
+            callback: (response) => {
+                const flagPayloads = response.json?.['featureFlagPayloads']
+                callback(flagPayloads?.[key] || undefined)
+            },
+        })
     }
 
     /*
