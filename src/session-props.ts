@@ -11,8 +11,6 @@ import type { SessionIdManager } from './sessionid'
 import type { PostHogPersistence } from './posthog-persistence'
 import { CLIENT_SESSION_PROPS } from './constants'
 import type { PostHog } from './posthog-core'
-import { each } from './utils'
-import { stripLeadingDollar } from './utils/string-utils'
 
 interface LegacySessionSourceProps {
     initialPathName: string
@@ -80,10 +78,7 @@ export class SessionPropsManager {
         this._persistence.register({ [CLIENT_SESSION_PROPS]: newProps })
     }
 
-    /**
-     * Return all available props. Might want to be filtered depending on the use case.
-     */
-    _props() {
+    getSetOnceInitialSessionPropsProps() {
         const p = this._getStored()?.props
         if (!p) {
             return {}
@@ -101,17 +96,5 @@ export class SessionPropsManager {
                 utm_term: p.utm_term,
             }
         }
-    }
-
-    getSessionProps() {
-        const result: Record<string, any> = {}
-        const p = this._props()
-        each(p, function (v, k) {
-            result['$client_session_' + stripLeadingDollar(k)] = v
-        })
-    }
-
-    getSetOnceInitialSessionPropsProps() {
-        return this._props()
     }
 }
