@@ -213,23 +213,24 @@ export const Info = {
     },
 
     personPropsFromInfo: function (info: Record<string, any>): Record<string, any> {
-        const { r: r, u: u } = info
-        const referring_domain = r == null ? undefined : r == '$direct' ? '$direct' : convertToURL(r)?.host
+        const { r: referrer, u: url } = info
+        const referring_domain =
+            referrer == null ? undefined : referrer == '$direct' ? '$direct' : convertToURL(referrer)?.host
 
         const props: Record<string, string | undefined> = {
-            $referrer: r,
+            $referrer: referrer,
             $referring_domain: referring_domain,
         }
-        if (u) {
-            props['$current_url'] = u
-            const location = convertToURL(u)
+        if (url) {
+            props['$current_url'] = url
+            const location = convertToURL(url)
             props['$host'] = location?.host
             props['$pathname'] = location?.pathname
-            const campaignParams = this._campaignParamsFromUrl(u)
+            const campaignParams = this._campaignParamsFromUrl(url)
             extend(props, campaignParams)
         }
-        if (r) {
-            const searchInfo = this._searchInfoFromReferrer(r)
+        if (referrer) {
+            const searchInfo = this._searchInfoFromReferrer(referrer)
             extend(props, searchInfo)
         }
         return props
