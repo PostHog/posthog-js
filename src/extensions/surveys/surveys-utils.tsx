@@ -209,6 +209,12 @@ export const style = (appearance: SurveyAppearance | null) => {
               background: ${appearance?.backgroundColor || '#eeeded'};
               opacity: .60;
           }
+          .limit-height {
+              max-height: 300px;
+              overflow: auto;
+              scrollbar-width: thin;
+              scrollbar-color: ${appearance?.borderColor || '#c9c6c6'} ${appearance?.backgroundColor || '#eeeded'};
+          }
           .multiple-choice-options {
               margin-top: 13px;
               font-size: 14px;

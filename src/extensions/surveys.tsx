@@ -12,6 +12,7 @@ import {
 
 import * as Preact from 'preact'
 import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks'
+import { addEventListener } from '../utils'
 import { document as _document, window as _window } from '../utils/globals'
 import { createLogger } from '../utils/logger'
 import { isNull, isNumber } from '../utils/type-utils'
@@ -35,7 +36,6 @@ import {
     style,
     SurveyContext,
 } from './surveys/surveys-utils'
-import { addEventListener } from '../utils'
 const logger = createLogger('[Surveys]')
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
