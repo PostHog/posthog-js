@@ -1,3 +1,7 @@
+## 1.218.2 - 2025-02-15
+
+- chore: limit height of multiple choice question (#1740)
+
 ## 1.218.1 - 2025-02-14
 
 
