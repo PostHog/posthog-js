@@ -125,7 +125,6 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
         console.warn(
             '[PostHog.js] No `apiKey` or `client` were provided to `PostHogProvider`. Using default global `window.posthog` instance. You must initialize it manually. This is not recommended behavior.'
         )
-
         return posthogJs
     }
 
