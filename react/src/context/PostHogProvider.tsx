@@ -128,7 +128,7 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
         )
 
         setPosthog(posthogJs)
-    }, [client, apiKey, JSON.stringify(options)])
+    }, [client, apiKey, JSON.stringify(options)]) // Stringify options to be a stable reference
 
     return <PostHogContext.Provider value={{ client: posthog }}>{children}</PostHogContext.Provider>
 }
