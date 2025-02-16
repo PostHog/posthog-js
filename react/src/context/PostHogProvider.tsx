@@ -46,9 +46,8 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
     // We're not storing a simple boolean here because we want to be able to detect if the
     // apiKey or options have changed.
     const [alreadyInitialized, setAlreadyInitialized] = useState<AlreadyInitialized>(false)
-    const [posthog, setPosthog] = useState<PostHog>()
 
-    useEffect(() => {
+    const getPosthogClient = () => {
         if (client) {
             if (apiKey) {
                 console.warn(
@@ -101,8 +100,7 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
                 })
 
                 // Return the same already-initialized global client
-                setPosthog(posthogJs)
-                return
+                return posthogJs
             }
 
             // If it's the first time running this, but it has been loaded elsewhere, warn the user about it.
@@ -121,15 +119,21 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
             })
 
             // Return global client
-            setPosthog(posthogJs)
-            return
+            return posthogJs
         }
 
         console.warn(
             '[PostHog.js] No `apiKey` or `client` were provided to `PostHogProvider`. Using default global `window.posthog` instance. You must initialize it manually. This is not recommended behavior.'
         )
 
-        setPosthog(posthogJs)
+        return posthogJs
+    }
+
+    const [posthog, setPosthog] = useState<PostHog>(getPosthogClient())
+
+    useEffect(() => {
+        const posthog = getPosthogClient()
+        setPosthog(posthog)
     }, [client, apiKey, JSON.stringify(options)]) // Stringify options to be a stable reference
 
     return <PostHogContext.Provider value={{ client: posthog }}>{children}</PostHogContext.Provider>

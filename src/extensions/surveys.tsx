@@ -592,7 +592,7 @@ export function Questions({
     const { isPreviewMode, previewPageIndex, handleCloseSurveyPopup, isPopup, onPreviewSubmit } =
         useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
-    const [surveyQuestions, setSurveyQuestions] = useState<SurveyQuestion[]>([])
+    const [surveyQuestions, setSurveyQuestions] = useState<SurveyQuestion[]>(getDisplayOrderQuestions(survey))
 
     useEffect(() => {
         setSurveyQuestions(getDisplayOrderQuestions(survey))

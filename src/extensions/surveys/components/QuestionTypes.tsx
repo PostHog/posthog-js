@@ -231,7 +231,7 @@ export function MultipleChoiceQuestion({
     displayQuestionIndex: number
 }) {
     const textRef = useRef(null)
-    const [choices, setChoices] = useState<string[]>([])
+    const [choices, setChoices] = useState<string[]>(getDisplayOrderChoices(question))
     const [selectedChoices, setSelectedChoices] = useState<string | string[] | null>(
         question.type === SurveyQuestionType.MultipleChoice ? [] : null
     )
