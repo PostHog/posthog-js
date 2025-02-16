@@ -102,6 +102,7 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
 
                 // Return the same already-initialized global client
                 setPosthog(posthogJs)
+                return
             }
 
             // If it's the first time running this, but it has been loaded elsewhere, warn the user about it.
@@ -121,6 +122,7 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
 
             // Return global client
             setPosthog(posthogJs)
+            return
         }
 
         console.warn(
