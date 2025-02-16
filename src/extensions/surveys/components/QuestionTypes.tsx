@@ -1,5 +1,5 @@
 import { RefObject } from 'preact'
-import { useMemo, useRef, useState } from 'preact/hooks'
+import { useEffect, useRef, useState } from 'preact/hooks'
 import {
     BasicSurveyQuestion,
     LinkSurveyQuestion,
@@ -231,12 +231,16 @@ export function MultipleChoiceQuestion({
     displayQuestionIndex: number
 }) {
     const textRef = useRef(null)
-    const choices = useMemo(() => getDisplayOrderChoices(question), [question])
+    const [choices, setChoices] = useState<string[]>([])
     const [selectedChoices, setSelectedChoices] = useState<string | string[] | null>(
         question.type === SurveyQuestionType.MultipleChoice ? [] : null
     )
     const [openChoiceSelected, setOpenChoiceSelected] = useState(false)
     const [openEndedInput, setOpenEndedInput] = useState('')
+
+    useEffect(() => {
+        setChoices(getDisplayOrderChoices(question))
+    }, [question])
 
     const inputType = question.type === SurveyQuestionType.SingleChoice ? 'radio' : 'checkbox'
     return (

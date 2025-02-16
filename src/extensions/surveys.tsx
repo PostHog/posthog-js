@@ -11,7 +11,7 @@ import {
 } from '../posthog-surveys-types'
 
 import * as Preact from 'preact'
-import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks'
+import { useContext, useEffect, useRef, useState } from 'preact/hooks'
 import { addEventListener } from '../utils'
 import { document as _document, window as _window } from '../utils/globals'
 import { createLogger } from '../utils/logger'
@@ -592,7 +592,11 @@ export function Questions({
     const { isPreviewMode, previewPageIndex, handleCloseSurveyPopup, isPopup, onPreviewSubmit } =
         useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
-    const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
+    const [surveyQuestions, setSurveyQuestions] = useState<SurveyQuestion[]>([])
+
+    useEffect(() => {
+        setSurveyQuestions(getDisplayOrderQuestions(survey))
+    }, [survey])
 
     // Sync preview state
     useEffect(() => {
