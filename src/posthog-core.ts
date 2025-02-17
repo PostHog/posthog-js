@@ -989,15 +989,15 @@ export class PostHog {
             properties['$window_id'] = windowId
         }
 
-        if (this.sessionRecording) {
-            properties['$recording_status'] = this.sessionRecording.status
-            try {
+        try {
+            if (this.sessionRecording) {
+                properties['$recording_status'] = this.sessionRecording.status
                 properties['$sdk_debug_replay_internal_buffer_length'] = this.sessionRecording['buffer'].data.length
                 properties['$sdk_debug_replay_internal_buffer_size'] = this.sessionRecording['buffer'].size
-                properties['$sdk_debug_retry_queue_size'] = this._retryQueue?.['queue']?.length
-            } catch {
-                properties['$recording_debug_error_capturing_properties'] = true
             }
+            properties['$sdk_debug_retry_queue_size'] = this._retryQueue?.['queue']?.length
+        } catch {
+            properties['$sdk_debug_error_capturing_properties'] = true
         }
 
         if (this.requestRouter.region === RequestRouterRegion.CUSTOM) {
