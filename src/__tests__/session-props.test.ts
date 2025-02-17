@@ -117,11 +117,11 @@ describe('Session Props Manager', () => {
         }
 
         // act
-        const properties = sessionPropsManager.getSessionProps()
+        const properties = sessionPropsManager.getSetOnceInitialSessionPropsProps()
 
         //assert
         expect(properties).toEqual({
-            $client_session_initial_utm_source: 'some-utm-source',
+            utm_source: 'some-utm-source',
         })
     })
 })

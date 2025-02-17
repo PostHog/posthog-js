@@ -529,11 +529,13 @@ describe('posthog core', () => {
             )
 
             posthog.persistence.get_initial_props = () => ({ initial: 'prop' })
+            posthog.sessionPropsManager.getSetOnceInitialSessionPropsProps = () => ({ session: 'prop' })
             posthog.persistence.props[ENABLE_PERSON_PROCESSING] = true // person processing is needed for $set_once
             expect(posthog._calculate_set_once_properties({ key: 'prop' })).toEqual({
                 event_name: '$set_once',
                 token: undefined,
                 initial: 'prop',
+                session: 'prop',
                 key: 'prop',
             })
         })
