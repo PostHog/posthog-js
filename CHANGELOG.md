@@ -1,3 +1,7 @@
+## 1.219.1 - 2025-02-17
+
+- feat: add more debug signals (#1743)
+
 ## 1.219.0 - 2025-02-17
 
 - feat(web-analytics): Handle set_once latest props in a cross-subdomain way (#1739)
