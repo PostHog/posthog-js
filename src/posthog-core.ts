@@ -996,8 +996,8 @@ export class PostHog {
                 properties['$sdk_debug_replay_internal_buffer_size'] = this.sessionRecording['buffer'].size
             }
             properties['$sdk_debug_retry_queue_size'] = this._retryQueue?.['queue']?.length
-        } catch {
-            properties['$sdk_debug_error_capturing_properties'] = true
+        } catch (e: any) {
+            properties['$sdk_debug_error_capturing_properties'] = String(e)
         }
 
         if (this.requestRouter.region === RequestRouterRegion.CUSTOM) {
