@@ -444,6 +444,9 @@ describe('posthog core', () => {
                 $is_identified: false,
                 $process_person_profile: false,
                 $recording_status: 'buffering',
+                $sdk_debug_replay_internal_buffer_length: 0,
+                $sdk_debug_replay_internal_buffer_size: 0,
+                $sdk_debug_retry_queue_size: 0,
             })
         })
 
@@ -467,6 +470,9 @@ describe('posthog core', () => {
                 $is_identified: false,
                 $process_person_profile: false,
                 $recording_status: 'buffering',
+                $sdk_debug_replay_internal_buffer_length: 0,
+                $sdk_debug_replay_internal_buffer_size: 0,
+                $sdk_debug_retry_queue_size: 0,
             })
         })
 
@@ -564,6 +570,40 @@ describe('posthog core', () => {
             expect(posthog._calculate_event_properties('$pageview', {}, new Date(), uuid)).toEqual(
                 expect.objectContaining({ title: 'test' })
             )
+        })
+
+        it('includes pageview id from previous pageview', () => {
+            const pageview1Properties = posthog._calculate_event_properties(
+                '$pageview',
+                {},
+                new Date(),
+                'pageview-id-1'
+            )
+            expect(pageview1Properties.$pageview_id).toEqual('pageview-id-1')
+
+            const event1Properties = posthog._calculate_event_properties('custom event', {}, new Date(), 'event-id-1')
+            expect(event1Properties.$pageview_id).toEqual('pageview-id-1')
+
+            const pageview2Properties = posthog._calculate_event_properties(
+                '$pageview',
+                {},
+                new Date(),
+                'pageview-id-2'
+            )
+            expect(pageview2Properties.$pageview_id).toEqual('pageview-id-2')
+            expect(pageview2Properties.$prev_pageview_id).toEqual('pageview-id-1')
+
+            const event2Properties = posthog._calculate_event_properties('custom event', {}, new Date(), 'event-id-2')
+            expect(event2Properties.$pageview_id).toEqual('pageview-id-2')
+
+            const pageleaveProperties = posthog._calculate_event_properties(
+                '$pageleave',
+                {},
+                new Date(),
+                'pageleave-id'
+            )
+            expect(pageleaveProperties.$pageview_id).toEqual('pageview-id-2')
+            expect(pageleaveProperties.$prev_pageview_id).toEqual('pageview-id-2')
         })
 
         it('includes pageview id from previous pageview', () => {
