@@ -1,3 +1,7 @@
+## 1.219.0 - 2025-02-17
+
+- feat(web-analytics): Handle set_once latest props in a cross-subdomain way (#1739)
+
 ## 1.218.2 - 2025-02-15
 
 - chore: limit height of multiple choice question (#1740)
