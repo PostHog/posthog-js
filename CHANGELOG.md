@@ -1,3 +1,7 @@
+## 1.219.3 - 2025-02-18
+
+- fix(devex): update frontend/package.json when pushing to main repo (#1746)
+
 ## 1.219.2 - 2025-02-18
 
 - fix: last seen survey date logic (#1745)
