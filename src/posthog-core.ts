@@ -34,6 +34,7 @@ import {
     Compression,
     EarlyAccessFeatureCallback,
     EventName,
+    FeatureFlagsCallback,
     JsonType,
     PostHogConfig,
     Properties,
@@ -1288,16 +1289,18 @@ export class PostHog {
     /*
      * Register an event listener that runs when feature flags become available or when they change.
      * If there are flags, the listener is called immediately in addition to being called on future changes.
+     * Note that this is not called only when we fetch feature flags from the server, but also when they change in the browser.
      *
      * ### Usage:
      *
-     *     posthog.onFeatureFlags(function(featureFlags) { // do something })
+     *     posthog.onFeatureFlags(function(featureFlags, featureFlagsVariants, { errorsLoading }) { // do something })
      *
      * @param {Function} [callback] The callback function will be called once the feature flags are ready or when they are updated.
-     *                              It'll return a list of feature flags enabled for the user.
+     *                              It'll return a list of feature flags enabled for the user, the variants,
+     *                              and also a context object indicating whether we succeeded to fetch the flags or not.
      * @returns {Function} A function that can be called to unsubscribe the listener. Used by useEffect when the component unmounts.
      */
-    onFeatureFlags(callback: (flags: string[], variants: Record<string, string | boolean>) => void): () => void {
+    onFeatureFlags(callback: FeatureFlagsCallback): () => void {
         return this.featureFlags.onFeatureFlags(callback)
     }
 

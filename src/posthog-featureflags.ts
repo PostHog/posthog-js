@@ -520,10 +520,11 @@ export class PostHogFeatureFlags {
      *
      * ### Usage:
      *
-     *     posthog.onFeatureFlags(function(featureFlags) { // do something })
+     *     posthog.onFeatureFlags(function(featureFlags, featureFlagsVariants, { errorsLoading }) { // do something })
      *
      * @param {Function} [callback] The callback function will be called once the feature flags are ready or when they are updated.
-     *                              It'll return a list of feature flags enabled for the user.
+     *                              It'll return a list of feature flags enabled for the user, the variants,
+     *                              and also a context object indicating whether we succeeded to fetch the flags or not.
      * @returns {Function} A function that can be called to unsubscribe the listener. Used by useEffect when the component unmounts.
      */
     onFeatureFlags(callback: FeatureFlagsCallback): () => void {
