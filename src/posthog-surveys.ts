@@ -174,6 +174,8 @@ export class PostHogSurveys {
     private _decideServerResponse?: boolean
     public _surveyEventReceiver: SurveyEventReceiver | null
     private _surveyManager: any
+    private _isFetchingSurveys: boolean = false
+    private _isInitializingSurveys: boolean = false
 
     constructor(private readonly instance: PostHog) {
         // we set this to undefined here because we need the persistence storage for this type
@@ -214,34 +216,63 @@ export class PostHogSurveys {
             return
         }
 
-        const generateSurveys = phExtensions.generateSurveys
-
-        if (!this._decideServerResponse) {
-            logger.warn('Decide not loaded yet. Not loading surveys.')
+        if (this._isInitializingSurveys) {
+            logger.info('Already initializing surveys, skipping...')
             return
         }
 
-        if (this._surveyEventReceiver == null) {
-            this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
-        }
+        this._isInitializingSurveys = true
 
-        if (!generateSurveys) {
-            const loadExternalDependency = phExtensions.loadExternalDependency
+        try {
+            const generateSurveys = phExtensions.generateSurveys
 
-            if (loadExternalDependency) {
-                loadExternalDependency(this.instance, 'surveys', (err) => {
-                    if (err) {
-                        logger.error('Could not load surveys script', err)
-                        return
-                    }
-
-                    this._surveyManager = phExtensions.generateSurveys?.(this.instance)
-                })
-            } else {
-                logger.error('PostHog loadExternalDependency extension not found. Cannot load remote config.')
+            if (!this._decideServerResponse) {
+                logger.warn('Decide not loaded yet. Not loading surveys.')
+                this._isInitializingSurveys = false
+                return
             }
-        } else {
-            this._surveyManager = generateSurveys(this.instance)
+
+            if (this._surveyEventReceiver == null) {
+                this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
+            }
+
+            if (!generateSurveys) {
+                const loadExternalDependency = phExtensions.loadExternalDependency
+
+                if (loadExternalDependency) {
+                    loadExternalDependency(this.instance, 'surveys', (err) => {
+                        if (err) {
+                            logger.error('Could not load surveys script', err)
+                            this._isInitializingSurveys = false
+                            return
+                        }
+
+                        try {
+                            if (!this._surveyManager) {
+                                // Double-check we still don't have a manager
+                                this._surveyManager = phExtensions.generateSurveys?.(this.instance)
+                            }
+                        } finally {
+                            this._isInitializingSurveys = false
+                        }
+                    })
+                } else {
+                    logger.error('PostHog loadExternalDependency extension not found. Cannot load remote config.')
+                    this._isInitializingSurveys = false
+                }
+            } else {
+                try {
+                    if (!this._surveyManager) {
+                        // Double-check we still don't have a manager
+                        this._surveyManager = generateSurveys(this.instance)
+                    }
+                } finally {
+                    this._isInitializingSurveys = false
+                }
+            }
+        } catch (e) {
+            this._isInitializingSurveys = false
+            throw e
         }
     }
 
@@ -250,7 +281,6 @@ export class PostHogSurveys {
         // then we shouldn't return survey data
         if (this.instance.config.disable_surveys) {
             logger.info('Disabled. Not loading surveys.')
-
             return callback([])
         }
 
@@ -261,38 +291,50 @@ export class PostHogSurveys {
         const existingSurveys = this.instance.get_property(SURVEYS)
 
         if (!existingSurveys || forceReload) {
-            this.instance._send_request({
-                url: this.instance.requestRouter.endpointFor(
-                    'api',
-                    `/api/surveys/?token=${this.instance.config.token}`
-                ),
-                method: 'GET',
-                callback: (response) => {
-                    const statusCode = response.statusCode
-                    if (statusCode !== 200 || !response.json) {
-                        logger.error(`Surveys API could not be loaded, status: ${statusCode}`)
-                        return callback([])
-                    }
-                    const surveys = response.json.surveys || []
+            // Prevent concurrent API calls
+            if (this._isFetchingSurveys) {
+                return
+            }
 
-                    const eventOrActionBasedSurveys = surveys.filter(
-                        (survey: Survey) =>
-                            (survey.conditions?.events &&
-                                survey.conditions?.events?.values &&
-                                survey.conditions?.events?.values?.length > 0) ||
-                            (survey.conditions?.actions &&
-                                survey.conditions?.actions?.values &&
-                                survey.conditions?.actions?.values?.length > 0)
-                    )
+            try {
+                this._isFetchingSurveys = true
+                this.instance._send_request({
+                    url: this.instance.requestRouter.endpointFor(
+                        'api',
+                        `/api/surveys/?token=${this.instance.config.token}`
+                    ),
+                    method: 'GET',
+                    callback: (response) => {
+                        this._isFetchingSurveys = false
+                        const statusCode = response.statusCode
+                        if (statusCode !== 200 || !response.json) {
+                            logger.error(`Surveys API could not be loaded, status: ${statusCode}`)
+                            return callback([])
+                        }
+                        const surveys = response.json.surveys || []
 
-                    if (eventOrActionBasedSurveys.length > 0) {
-                        this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
-                    }
+                        const eventOrActionBasedSurveys = surveys.filter(
+                            (survey: Survey) =>
+                                (survey.conditions?.events &&
+                                    survey.conditions?.events?.values &&
+                                    survey.conditions?.events?.values?.length > 0) ||
+                                (survey.conditions?.actions &&
+                                    survey.conditions?.actions?.values &&
+                                    survey.conditions?.actions?.values?.length > 0)
+                        )
 
-                    this.instance.persistence?.register({ [SURVEYS]: surveys })
-                    return callback(surveys)
-                },
-            })
+                        if (eventOrActionBasedSurveys.length > 0) {
+                            this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
+                        }
+
+                        this.instance.persistence?.register({ [SURVEYS]: surveys })
+                        return callback(surveys)
+                    },
+                })
+            } catch (e) {
+                this._isFetchingSurveys = false
+                throw e
+            }
         } else {
             return callback(existingSurveys)
         }
