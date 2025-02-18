@@ -1,3 +1,7 @@
+## 1.219.2 - 2025-02-18
+
+- fix: last seen survey date logic (#1745)
+
 ## 1.219.1 - 2025-02-17
 
 - feat: add more debug signals (#1743)
