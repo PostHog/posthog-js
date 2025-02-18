@@ -35,15 +35,15 @@ import {
 import { assignableWindow, window } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
 import {
-    customEvent,
+    type customEvent,
     EventType,
-    eventWithTime,
-    fullSnapshotEvent,
-    incrementalData,
-    incrementalSnapshotEvent,
+    type eventWithTime,
+    type fullSnapshotEvent,
+    type incrementalData,
+    type incrementalSnapshotEvent,
     IncrementalSource,
-    metaEvent,
-    pluginEvent,
+    type metaEvent,
+    type pluginEvent,
 } from '@rrweb/types'
 import Mock = jest.Mock
 import { ConsentManager } from '../../../consent'

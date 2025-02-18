@@ -114,6 +114,9 @@
         "typescript": "^5.5.4",
         "yargs": "^17.7.2"
     },
+    "peerDependencies": {
+        "@rrweb/types": "2.0.0-alpha.17"
+    },
     "lint-staged": {
         "*.{ts,tsx,js,json}": "prettier --write",
         "*.js": "eslint --cache --fix",

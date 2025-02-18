@@ -2,10 +2,11 @@ import { MutationRateLimiter } from '../../../extensions/replay/mutation-rate-li
 import {
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     MUTATION_SOURCE_TYPE,
-    rrwebRecord,
 } from '../../../extensions/replay/sessionrecording-utils'
+import type { rrwebRecord } from '../../../extensions/replay/types/rrweb'
 import { jest } from '@jest/globals'
-import { eventWithTime, mutationData } from '@rrweb/types'
+import type { eventWithTime, mutationData } from '@rrweb/types'
+
 jest.useFakeTimers()
 
 const makeEvent = (mutations: {
