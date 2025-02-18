@@ -32,6 +32,7 @@ import {
     getContrastingTextColor,
     getDisplayOrderQuestions,
     getSurveySeen,
+    hasWaitPeriodPassed,
     sendSurveyEvent,
     style,
     SurveyContext,
@@ -69,13 +70,9 @@ export class SurveyManager {
     private handlePopoverSurvey = (survey: Survey): void => {
         const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
         const lastSeenSurveyDate = localStorage.getItem(`lastSeenSurveyDate`)
-        if (surveyWaitPeriodInDays && lastSeenSurveyDate) {
-            const today = new Date()
-            const diff = Math.abs(today.getTime() - new Date(lastSeenSurveyDate).getTime())
-            const diffDaysFromToday = Math.ceil(diff / (1000 * 3600 * 24))
-            if (diffDaysFromToday < surveyWaitPeriodInDays) {
-                return
-            }
+
+        if (!hasWaitPeriodPassed(lastSeenSurveyDate, surveyWaitPeriodInDays)) {
+            return
         }
 
         const surveySeen = getSurveySeen(survey)

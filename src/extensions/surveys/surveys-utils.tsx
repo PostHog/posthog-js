@@ -694,6 +694,20 @@ const getSurveyInteractionProperty = (survey: Survey, action: string): string =>
     return surveyProperty
 }
 
+export const hasWaitPeriodPassed = (
+    lastSeenSurveyDate: string | null,
+    waitPeriodInDays: number | undefined
+): boolean => {
+    if (!waitPeriodInDays || !lastSeenSurveyDate) {
+        return true
+    }
+
+    const today = new Date()
+    const diff = Math.abs(today.getTime() - new Date(lastSeenSurveyDate).getTime())
+    const diffDaysFromToday = Math.ceil(diff / (1000 * 3600 * 24))
+    return diffDaysFromToday > waitPeriodInDays
+}
+
 interface SurveyContextProps {
     isPreviewMode: boolean
     previewPageIndex: number | undefined
