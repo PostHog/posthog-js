@@ -1,3 +1,7 @@
+## 1.219.4 - 2025-02-18
+
+- fix: Fix types for `onFeatureFlags` callback (#1748)
+
 ## 1.219.3 - 2025-02-18
 
 - fix(devex): update frontend/package.json when pushing to main repo (#1746)
