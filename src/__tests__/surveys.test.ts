@@ -1,28 +1,27 @@
 /// <reference lib="dom" />
 
-import { PostHogSurveys } from '../posthog-surveys'
-import {
-    SurveyType,
-    SurveyQuestionType,
-    Survey,
-    MultipleSurveyQuestion,
-    SurveyQuestionBranchingType,
-    SurveyQuestion,
-    RatingSurveyQuestion,
-} from '../posthog-surveys-types'
+import { generateSurveys } from '../extensions/surveys'
 import {
     canActivateRepeatedly,
     getDisplayOrderChoices,
     getDisplayOrderQuestions,
 } from '../extensions/surveys/surveys-utils'
-import { PostHogPersistence } from '../posthog-persistence'
 import { PostHog } from '../posthog-core'
+import { PostHogPersistence } from '../posthog-persistence'
+import { PostHogSurveys } from '../posthog-surveys'
+import {
+    MultipleSurveyQuestion,
+    RatingSurveyQuestion,
+    Survey,
+    SurveyQuestion,
+    SurveyQuestionBranchingType,
+    SurveyQuestionType,
+    SurveyType,
+} from '../posthog-surveys-types'
 import { DecideResponse, PostHogConfig, Properties } from '../types'
-import { window } from '../utils/globals'
-import { RequestRouter } from '../utils/request-router'
-import { assignableWindow } from '../utils/globals'
-import { generateSurveys } from '../extensions/surveys'
 import * as globals from '../utils/globals'
+import { assignableWindow, window } from '../utils/globals'
+import { RequestRouter } from '../utils/request-router'
 
 describe('surveys', () => {
     let config: PostHogConfig
@@ -236,6 +235,7 @@ describe('surveys', () => {
         })
         expect(instance._send_request).toHaveBeenCalledWith({
             url: 'https://us.i.posthog.com/api/surveys/?token=testtoken',
+            timeout: 10000,
             method: 'GET',
             callback: expect.any(Function),
         })
@@ -280,6 +280,7 @@ describe('surveys', () => {
         })
         expect(instance._send_request).toHaveBeenCalledWith({
             url: 'https://us.i.posthog.com/api/surveys/?token=testtoken',
+            timeout: 10000,
             method: 'GET',
             callback: expect.any(Function),
         })
