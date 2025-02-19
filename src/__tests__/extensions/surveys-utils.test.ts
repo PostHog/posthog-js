@@ -1,4 +1,5 @@
-import { hasWaitPeriodPassed } from '../../extensions/surveys/surveys-utils'
+import { canActivateRepeatedly, hasEvents, hasWaitPeriodPassed } from '../../extensions/surveys/surveys-utils'
+import { Survey, SurveySchedule, SurveyType } from '../../posthog-surveys-types'
 
 describe('hasWaitPeriodPassed', () => {
     let originalDate: DateConstructor
@@ -68,5 +69,113 @@ describe('hasWaitPeriodPassed', () => {
     it('should return false when just 5 minutes have passed', () => {
         const lastSeenDate = '2025-01-15T11:55:00Z' // 5 minutes ago
         expect(hasWaitPeriodPassed(lastSeenDate, 1)).toBe(false)
+    })
+})
+
+describe('hasEvents', () => {
+    it('should return false when survey has no conditions', () => {
+        const survey = {
+            conditions: undefined,
+        } as Pick<Survey, 'conditions'>
+        expect(hasEvents(survey)).toBe(false)
+    })
+
+    it('should return false when survey has no events', () => {
+        const survey = {
+            conditions: {
+                events: undefined,
+                actions: { values: [] },
+            },
+        } as Pick<Survey, 'conditions'>
+        expect(hasEvents(survey)).toBe(false)
+    })
+
+    it('should return false when survey has empty events values', () => {
+        const survey = {
+            conditions: {
+                events: {
+                    values: [],
+                },
+                actions: { values: [] },
+            },
+        } as Pick<Survey, 'conditions'>
+        expect(hasEvents(survey)).toBe(false)
+    })
+
+    it('should return true when survey has events values', () => {
+        const survey = {
+            conditions: {
+                events: {
+                    values: [{ name: 'event1' }, { name: 'event2' }],
+                },
+                actions: { values: [] },
+            },
+        } as Pick<Survey, 'conditions'>
+        expect(hasEvents(survey)).toBe(true)
+    })
+})
+
+describe('canActivateRepeatedly', () => {
+    it('should return true when survey is a Widget type with Always schedule', () => {
+        const survey = {
+            type: SurveyType.Widget,
+            schedule: SurveySchedule.Always,
+            conditions: undefined,
+        } as Pick<Survey, 'type' | 'schedule' | 'conditions'>
+        expect(canActivateRepeatedly(survey)).toBe(true)
+    })
+
+    it('should return false when survey is not a Widget type with Always schedule', () => {
+        const survey = {
+            type: SurveyType.Popover,
+            schedule: SurveySchedule.Always,
+            conditions: undefined,
+        } as Pick<Survey, 'type' | 'schedule' | 'conditions'>
+        expect(canActivateRepeatedly(survey)).toBe(false)
+    })
+
+    it('should return false when survey has no events', () => {
+        const survey = {
+            type: SurveyType.Popover,
+            schedule: SurveySchedule.Once,
+            conditions: {
+                events: {
+                    repeatedActivation: true,
+                    values: [],
+                },
+                actions: { values: [] },
+            },
+        } as Pick<Survey, 'type' | 'schedule' | 'conditions'>
+        expect(canActivateRepeatedly(survey)).toBe(false)
+    })
+
+    it('should return true when survey has events and repeatedActivation is true', () => {
+        const survey = {
+            type: SurveyType.Popover,
+            schedule: SurveySchedule.Once,
+            conditions: {
+                events: {
+                    repeatedActivation: true,
+                    values: [{ name: 'event1' }],
+                },
+                actions: { values: [] },
+            },
+        } as Pick<Survey, 'type' | 'schedule' | 'conditions'>
+        expect(canActivateRepeatedly(survey)).toBe(true)
+    })
+
+    it('should return false when survey has events but repeatedActivation is false', () => {
+        const survey = {
+            type: SurveyType.Popover,
+            schedule: SurveySchedule.Once,
+            conditions: {
+                events: {
+                    repeatedActivation: false,
+                    values: [{ name: 'event1' }],
+                },
+                actions: { values: [] },
+            },
+        } as Pick<Survey, 'type' | 'schedule' | 'conditions'>
+        expect(canActivateRepeatedly(survey)).toBe(false)
     })
 })
