@@ -275,6 +275,10 @@ export class PostHogSurveys {
             return callback([])
         }
 
+        if (this._surveyEventReceiver == null) {
+            this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
+        }
+
         const existingSurveys = this.instance.get_property(SURVEYS)
 
         if (!existingSurveys || forceReload) {
