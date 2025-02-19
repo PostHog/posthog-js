@@ -12,7 +12,7 @@ import { RemoteConfig } from './types'
 import { Info } from './utils/event-utils'
 import { assignableWindow, document, userAgent, window } from './utils/globals'
 import { createLogger } from './utils/logger'
-import { isMatchingRegex } from './utils/string-utils'
+import { isMatchingRegex } from './utils/regex-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import { isNullish } from './utils/type-utils'
 
