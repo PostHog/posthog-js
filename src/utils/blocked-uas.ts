@@ -8,6 +8,7 @@ export const DEFAULT_BLOCKED_UA_STRS = [
     'bingpreview',
     'bot.htm',
     'bot.php',
+    'chrome-lighthouse',
     'crawler',
     'deepscan',
     'duckduckbot',
