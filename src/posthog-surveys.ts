@@ -202,6 +202,11 @@ export class PostHogSurveys {
             return
         }
 
+        if (this._isInitializingSurveys) {
+            logger.info('Already initializing surveys, skipping...')
+            return
+        }
+
         const disableSurveys = this.instance.config.disable_surveys
 
         if (disableSurveys) {
@@ -213,11 +218,6 @@ export class PostHogSurveys {
 
         if (!phExtensions) {
             logger.error('PostHog Extensions not found.')
-            return
-        }
-
-        if (this._isInitializingSurveys) {
-            logger.info('Already initializing surveys, skipping...')
             return
         }
 
@@ -293,7 +293,7 @@ export class PostHogSurveys {
         if (!existingSurveys || forceReload) {
             // Prevent concurrent API calls
             if (this._isFetchingSurveys) {
-                return
+                return callback([])
             }
 
             try {
