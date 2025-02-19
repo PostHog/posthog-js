@@ -1,5 +1,3 @@
-import { isValidRegex } from '.'
-
 export function includes<T = any>(str: T[] | string, needle: T): boolean {
     return (str as any).indexOf(needle) !== -1
 }
@@ -15,13 +13,4 @@ export const stripLeadingDollar = function (s: string): string {
 
 export function isDistinctIdStringLike(value: string): boolean {
     return ['distinct_id', 'distinctid'].includes(value.toLowerCase())
-}
-
-export const isMatchingRegex = function (value: string, pattern: string): boolean {
-    if (!isValidRegex(pattern)) return false
-    try {
-        return new RegExp(pattern).test(value)
-    } catch {
-        return false
-    }
 }
