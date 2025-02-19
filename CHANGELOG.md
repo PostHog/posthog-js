@@ -1,3 +1,7 @@
+## 1.219.5 - 2025-02-19
+
+- Block Chrome-Lighthouse UA (used by ahrefs) (#1751)
+
 ## 1.219.4 - 2025-02-18
 
 - fix: Fix types for `onFeatureFlags` callback (#1748)
