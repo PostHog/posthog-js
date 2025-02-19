@@ -1,3 +1,7 @@
+## 1.219.6 - 2025-02-19
+
+- fix: Remove circular dependency (#1750)
+
 ## 1.219.5 - 2025-02-19
 
 - Block Chrome-Lighthouse UA (used by ahrefs) (#1751)
