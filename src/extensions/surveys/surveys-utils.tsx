@@ -1,6 +1,13 @@
 import { VNode, cloneElement, createContext } from 'preact'
 import { PostHog } from '../../posthog-core'
-import { MultipleSurveyQuestion, Survey, SurveyAppearance, SurveyQuestion } from '../../posthog-surveys-types'
+import {
+    MultipleSurveyQuestion,
+    Survey,
+    SurveyAppearance,
+    SurveyQuestion,
+    SurveySchedule,
+    SurveyType,
+} from '../../posthog-surveys-types'
 import { document as _document, window as _window } from '../../utils/globals'
 import { createLogger } from '../../utils/logger'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
@@ -645,6 +652,10 @@ export const hasEvents = (survey: Survey): boolean => {
 }
 
 export const canActivateRepeatedly = (survey: Survey): boolean => {
+    if (survey.schedule === SurveySchedule.Always && survey.type === SurveyType.Widget) {
+        return true
+    }
+
     return !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey))
 }
 
