@@ -221,20 +221,19 @@ export class PostHogSurveys {
             return
         }
 
+        if (!this._decideServerResponse) {
+            logger.warn('Decide not loaded yet. Not loading surveys.')
+            return
+        }
+
+        if (this._surveyEventReceiver == null) {
+            this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
+        }
+
         this._isInitializingSurveys = true
 
         try {
             const generateSurveys = phExtensions.generateSurveys
-
-            if (!this._decideServerResponse) {
-                logger.warn('Decide not loaded yet. Not loading surveys.')
-                this._isInitializingSurveys = false
-                return
-            }
-
-            if (this._surveyEventReceiver == null) {
-                this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
-            }
 
             if (!generateSurveys) {
                 const loadExternalDependency = phExtensions.loadExternalDependency
@@ -243,36 +242,28 @@ export class PostHogSurveys {
                     loadExternalDependency(this.instance, 'surveys', (err) => {
                         if (err) {
                             logger.error('Could not load surveys script', err)
-                            this._isInitializingSurveys = false
                             return
                         }
 
-                        try {
-                            if (!this._surveyManager) {
-                                // Double-check we still don't have a manager
-                                this._surveyManager = phExtensions.generateSurveys?.(this.instance)
-                            }
-                        } finally {
-                            this._isInitializingSurveys = false
+                        if (!this._surveyManager) {
+                            // Double-check we still don't have a manager
+                            this._surveyManager = phExtensions.generateSurveys?.(this.instance)
                         }
                     })
                 } else {
                     logger.error('PostHog loadExternalDependency extension not found. Cannot load remote config.')
-                    this._isInitializingSurveys = false
                 }
             } else {
-                try {
-                    if (!this._surveyManager) {
-                        // Double-check we still don't have a manager
-                        this._surveyManager = generateSurveys(this.instance)
-                    }
-                } finally {
-                    this._isInitializingSurveys = false
+                if (!this._surveyManager) {
+                    // Double-check we still don't have a manager
+                    this._surveyManager = generateSurveys(this.instance)
                 }
             }
         } catch (e) {
-            this._isInitializingSurveys = false
+            logger.error('Error initializing surveys', e)
             throw e
+        } finally {
+            this._isInitializingSurveys = false
         }
     }
 
@@ -304,6 +295,7 @@ export class PostHogSurveys {
                         `/api/surveys/?token=${this.instance.config.token}`
                     ),
                     method: 'GET',
+                    timeout: 10000, // 10 second timeout
                     callback: (response) => {
                         this._isFetchingSurveys = false
                         const statusCode = response.statusCode
