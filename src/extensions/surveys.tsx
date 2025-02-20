@@ -370,6 +370,16 @@ type UseHideSurveyOnURLChangeProps = {
     isPreviewMode?: boolean
 }
 
+/**
+ * This hook handles URL-based survey visibility after the initial mount.
+ * The initial URL check is handled by the `getActiveMatchingSurveys` method in  the `PostHogSurveys` class,
+ * which ensures the URL matches before displaying a survey for the first time.
+ * That is the method that is called every second to see if there's a matching survey.
+ *
+ * This separation of concerns means:
+ * 1. Initial URL matching is done by `getActiveMatchingSurveys` before displaying the survey
+ * 2. Subsequent URL changes are handled here to hide/show the survey as the user navigates
+ */
 export function useToggleSurveyOnURLChange({
     survey,
     removeSurveyFromFocus,
