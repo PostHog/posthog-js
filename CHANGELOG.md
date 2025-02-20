@@ -1,3 +1,7 @@
+## 1.222.0 - 2025-02-20
+
+- chore: Make `@rrweb/types` a peer dependency (#1749)
+
 ## 1.221.1 - 2025-02-20
 
 - fix: check url matching on URL change for widget-type surveys (#1755)
