@@ -1,5 +1,5 @@
 import { getQueryParam, formDataToQuery, maskQueryParams } from '../utils/request-utils'
-import { isMatchingRegex } from '../utils/string-utils'
+import { isMatchingRegex } from '../utils/regex-utils'
 
 describe('request utils', () => {
     describe('_HTTPBuildQuery', () => {

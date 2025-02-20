@@ -144,6 +144,12 @@ export interface SurveyRenderReason {
     disabledReason?: string
 }
 
+export enum SurveySchedule {
+    Once = 'once',
+    Recurring = 'recurring',
+    Always = 'always',
+}
+
 export interface Survey {
     // Sync this with the backend's SurveyAPISerializer!
     id: string
@@ -182,6 +188,7 @@ export interface Survey {
     end_date: string | null
     current_iteration: number | null
     current_iteration_start_date: string | null
+    schedule?: SurveySchedule | null
 }
 
 export interface SurveyActionType {

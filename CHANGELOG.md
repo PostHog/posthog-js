@@ -1,3 +1,31 @@
+## 1.222.0 - 2025-02-20
+
+- chore: Make `@rrweb/types` a peer dependency (#1749)
+
+## 1.221.1 - 2025-02-20
+
+- fix: check url matching on URL change for widget-type surveys (#1755)
+
+## 1.221.0 - 2025-02-20
+
+- feat: allow widget surveys to be repeated indefinitely (#1752)
+
+## 1.220.0 - 2025-02-20
+
+- feat(llm-observability): metric and feedback methods (#1709)
+
+## 1.219.6 - 2025-02-19
+
+- fix: Remove circular dependency (#1750)
+
+## 1.219.5 - 2025-02-19
+
+- Block Chrome-Lighthouse UA (used by ahrefs) (#1751)
+
+## 1.219.4 - 2025-02-18
+
+- fix: Fix types for `onFeatureFlags` callback (#1748)
+
 ## 1.219.3 - 2025-02-18
 
 - fix(devex): update frontend/package.json when pushing to main repo (#1746)

@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.219.3",
+    "version": "1.222.0",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "hey@posthog.com",
@@ -113,6 +113,9 @@
         "tslib": "^2.5.0",
         "typescript": "^5.5.4",
         "yargs": "^17.7.2"
+    },
+    "peerDependencies": {
+        "@rrweb/types": "2.0.0-alpha.17"
     },
     "lint-staged": {
         "*.{ts,tsx,js,json}": "prettier --write",
