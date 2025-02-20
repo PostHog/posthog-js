@@ -247,6 +247,7 @@ export class PostHogSurveys {
                         if (this._surveyEventReceiver == null) {
                             this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
                         }
+                        logger.info('Surveys loaded successfully')
                     })
                 } else {
                     logger.error('PostHog loadExternalDependency extension not found. Cannot load remote config.')
@@ -258,6 +259,7 @@ export class PostHogSurveys {
                 if (this._surveyEventReceiver == null) {
                     this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
                 }
+                logger.info('Surveys loaded successfully')
             }
         } catch (e) {
             logger.error('Error initializing surveys', e)
