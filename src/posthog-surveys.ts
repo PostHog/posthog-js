@@ -295,7 +295,7 @@ export class PostHogSurveys {
                         `/api/surveys/?token=${this.instance.config.token}`
                     ),
                     method: 'GET',
-                    timeout: 10000, // 10 second timeout
+                    timeout: this.instance.config.surveys_request_timeout_ms,
                     callback: (response) => {
                         this._isFetchingSurveys = false
                         const statusCode = response.statusCode
