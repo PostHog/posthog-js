@@ -2166,6 +2166,32 @@ export class PostHog {
     public getPageViewId(): string | undefined {
         return this.pageViewManager._currentPageview?.pageViewId
     }
+
+    /**
+     * Capture written user feedback for a LLM trace. Numeric values are converted to strings.
+     * @param traceId The trace ID to capture feedback for.
+     * @param userFeedback The feedback to capture.
+     */
+    captureTraceFeedback(traceId: string | number, userFeedback: string) {
+        this.capture('$ai_feedback', {
+            $ai_trace_id: String(traceId),
+            $ai_feedback_text: userFeedback,
+        })
+    }
+
+    /**
+     * Capture a metric for a LLM trace. Numeric values are converted to strings.
+     * @param traceId The trace ID to capture the metric for.
+     * @param metricName The name of the metric to capture.
+     * @param metricValue The value of the metric to capture.
+     */
+    captureTraceMetric(traceId: string | number, metricName: string, metricValue: string | number | boolean) {
+        this.capture('$ai_metric', {
+            $ai_trace_id: String(traceId),
+            $ai_metric_name: metricName,
+            $ai_metric_value: String(metricValue),
+        })
+    }
 }
 
 safewrapClass(PostHog, ['identify'])
