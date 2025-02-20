@@ -226,10 +226,6 @@ export class PostHogSurveys {
             return
         }
 
-        if (this._surveyEventReceiver == null) {
-            this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
-        }
-
         this._isInitializingSurveys = true
 
         try {
@@ -248,6 +244,9 @@ export class PostHogSurveys {
 
                         this._surveyManager = phExtensions.generateSurveys?.(this.instance)
                         this._isInitializingSurveys = false
+                        if (this._surveyEventReceiver == null) {
+                            this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
+                        }
                     })
                 } else {
                     logger.error('PostHog loadExternalDependency extension not found. Cannot load remote config.')
@@ -256,6 +255,9 @@ export class PostHogSurveys {
             } else {
                 this._surveyManager = generateSurveys(this.instance)
                 this._isInitializingSurveys = false
+                if (this._surveyEventReceiver == null) {
+                    this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
+                }
             }
         } catch (e) {
             logger.error('Error initializing surveys', e)
@@ -270,10 +272,6 @@ export class PostHogSurveys {
         if (this.instance.config.disable_surveys) {
             logger.info('Disabled. Not loading surveys.')
             return callback([])
-        }
-
-        if (this._surveyEventReceiver == null) {
-            this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
         }
 
         const existingSurveys = this.instance.get_property(SURVEYS)

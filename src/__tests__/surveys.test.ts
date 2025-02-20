@@ -1,5 +1,6 @@
 /// <reference lib="dom" />
 
+import { SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
 import { generateSurveys } from '../extensions/surveys'
 import {
     canActivateRepeatedly,
@@ -22,6 +23,7 @@ import { DecideResponse, PostHogConfig, Properties } from '../types'
 import * as globals from '../utils/globals'
 import { assignableWindow, window } from '../utils/globals'
 import { RequestRouter } from '../utils/request-router'
+import { SurveyEventReceiver } from '../utils/survey-event-receiver'
 
 describe('surveys', () => {
     let config: PostHogConfig
@@ -177,6 +179,7 @@ describe('surveys', () => {
             token: 'testtoken',
             api_host: 'https://app.posthog.com',
             persistence: 'memory',
+            surveys_request_timeout_ms: SURVEYS_REQUEST_TIMEOUT_MS,
         } as unknown as PostHogConfig
 
         instance = {
@@ -210,6 +213,14 @@ describe('surveys', () => {
         // all being squashed into a mock posthog so...
         instance.getActiveMatchingSurveys = instance.surveys.getActiveMatchingSurveys.bind(instance.surveys)
 
+        // mock loadIfEnabled so posthog.surveys.loadIfEnabled() doesn't call _send_request
+        // and it instantiates the survey event receiver
+        const loadIfEnabledMock = jest.fn()
+        loadIfEnabledMock.mockImplementation(() => {
+            surveys._surveyEventReceiver = new SurveyEventReceiver(instance)
+        })
+        surveys.loadIfEnabled = loadIfEnabledMock
+
         Object.defineProperty(window, 'location', {
             configurable: true,
             enumerable: true,
@@ -235,7 +246,7 @@ describe('surveys', () => {
         })
         expect(instance._send_request).toHaveBeenCalledWith({
             url: 'https://us.i.posthog.com/api/surveys/?token=testtoken',
-            timeout: 10000,
+            timeout: SURVEYS_REQUEST_TIMEOUT_MS,
             method: 'GET',
             callback: expect.any(Function),
         })
@@ -262,6 +273,7 @@ describe('surveys', () => {
 
     it('getSurveys registers the survey event receiver if a survey has events', () => {
         surveysResponse = { surveys: surveysWithEvents }
+        surveys.loadIfEnabled()
         surveys.getSurveys((data) => {
             expect(data).toEqual(surveysWithEvents)
         }, true)
@@ -280,7 +292,6 @@ describe('surveys', () => {
         })
         expect(instance._send_request).toHaveBeenCalledWith({
             url: 'https://us.i.posthog.com/api/surveys/?token=testtoken',
-            timeout: 10000,
             method: 'GET',
             callback: expect.any(Function),
         })
