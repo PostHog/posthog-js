@@ -1,3 +1,7 @@
+## 1.221.1 - 2025-02-20
+
+- fix: check url matching on URL change for widget-type surveys (#1755)
+
 ## 1.221.0 - 2025-02-20
 
 - feat: allow widget surveys to be repeated indefinitely (#1752)
