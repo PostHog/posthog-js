@@ -245,19 +245,13 @@ export class PostHogSurveys {
                             return
                         }
 
-                        if (!this._surveyManager) {
-                            // Double-check we still don't have a manager
-                            this._surveyManager = phExtensions.generateSurveys?.(this.instance)
-                        }
+                        this._surveyManager = phExtensions.generateSurveys?.(this.instance)
                     })
                 } else {
                     logger.error('PostHog loadExternalDependency extension not found. Cannot load remote config.')
                 }
             } else {
-                if (!this._surveyManager) {
-                    // Double-check we still don't have a manager
-                    this._surveyManager = generateSurveys(this.instance)
-                }
+                this._surveyManager = generateSurveys(this.instance)
             }
         } catch (e) {
             logger.error('Error initializing surveys', e)
