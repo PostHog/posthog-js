@@ -1,6 +1,6 @@
 import { PostHog } from './posthog-core'
 import type { SegmentAnalytics } from './extensions/segment-integration'
-import { recordOptions } from './extensions/replay/sessionrecording-utils'
+import type { recordOptions } from './extensions/replay/types/rrweb'
 
 export type Property = any
 export type Properties = Record<string, Property>
