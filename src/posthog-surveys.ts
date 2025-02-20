@@ -140,7 +140,7 @@ function defaultMatchType(matchType?: SurveyMatchType): SurveyMatchType {
 }
 
 // use urlMatchType to validate url condition, fallback to contains for backwards compatibility
-export function doesSurveyUrlMatch(survey: Survey): boolean {
+export function doesSurveyUrlMatch(survey: Pick<Survey, 'conditions'>): boolean {
     if (!survey.conditions?.url) {
         return true
     }

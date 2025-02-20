@@ -363,6 +363,62 @@ export function generateSurveys(posthog: PostHog) {
     return surveyManager
 }
 
+type UseHideSurveyOnURLChangeProps = {
+    survey: Pick<Survey, 'id' | 'conditions'>
+    removeSurveyFromFocus: (id: string) => void
+    setSurveyVisible: (visible: boolean) => void
+    isPreviewMode?: boolean
+}
+
+export function useToggleSurveyOnURLChange({
+    survey,
+    removeSurveyFromFocus,
+    setSurveyVisible,
+    isPreviewMode = false,
+}: UseHideSurveyOnURLChangeProps) {
+    useEffect(() => {
+        if (isPreviewMode || !survey.conditions?.url) {
+            return
+        }
+
+        const checkUrlMatch = () => {
+            const urlCheck = doesSurveyUrlMatch(survey)
+            if (!urlCheck) {
+                setSurveyVisible(false)
+                return removeSurveyFromFocus(survey.id)
+            }
+            setSurveyVisible(true)
+        }
+
+        // Listen for browser back/forward browser history changes
+        addEventListener(window, 'popstate', checkUrlMatch)
+        // Listen for hash changes, for SPA frameworks that use hash-based routing
+        // The hashchange event is fired when the fragment identifier of the URL has changed (the part of the URL beginning with and following the # symbol).
+        addEventListener(window, 'hashchange', checkUrlMatch)
+
+        // Listen for SPA navigation
+        const originalPushState = window.history.pushState
+        const originalReplaceState = window.history.replaceState
+
+        window.history.pushState = function (...args) {
+            originalPushState.apply(this, args)
+            checkUrlMatch()
+        }
+
+        window.history.replaceState = function (...args) {
+            originalReplaceState.apply(this, args)
+            checkUrlMatch()
+        }
+
+        return () => {
+            window.removeEventListener('popstate', checkUrlMatch)
+            window.removeEventListener('hashchange', checkUrlMatch)
+            window.history.pushState = originalPushState
+            window.history.replaceState = originalReplaceState
+        }
+    }, [isPreviewMode, survey, removeSurveyFromFocus, setSurveyVisible])
+}
+
 export function usePopupVisibility(
     survey: Survey,
     posthog: PostHog | undefined,
@@ -451,47 +507,12 @@ export function usePopupVisibility(
         }
     }, [])
 
-    // Add URL change listener to hide survey when URL no longer matches
-    useEffect(() => {
-        if (isPreviewMode || !survey.conditions?.url) {
-            return
-        }
-
-        const checkUrlMatch = () => {
-            const urlCheck = doesSurveyUrlMatch(survey)
-            if (!urlCheck) {
-                setIsPopupVisible(false)
-                removeSurveyFromFocus(survey.id)
-            }
-        }
-
-        // Listen for browser back/forward browser history changes
-        addEventListener(window, 'popstate', checkUrlMatch)
-        // Listen for hash changes, for SPA frameworks that use hash-based routing
-        // The hashchange event is fired when the fragment identifier of the URL has changed (the part of the URL beginning with and following the # symbol).
-        addEventListener(window, 'hashchange', checkUrlMatch)
-
-        // Listen for SPA navigation
-        const originalPushState = window.history.pushState
-        const originalReplaceState = window.history.replaceState
-
-        window.history.pushState = function (...args) {
-            originalPushState.apply(this, args)
-            checkUrlMatch()
-        }
-
-        window.history.replaceState = function (...args) {
-            originalReplaceState.apply(this, args)
-            checkUrlMatch()
-        }
-
-        return () => {
-            window.removeEventListener('popstate', checkUrlMatch)
-            window.removeEventListener('hashchange', checkUrlMatch)
-            window.history.pushState = originalPushState
-            window.history.replaceState = originalReplaceState
-        }
-    }, [isPreviewMode, survey, removeSurveyFromFocus])
+    useToggleSurveyOnURLChange({
+        survey,
+        removeSurveyFromFocus,
+        setSurveyVisible: setIsPopupVisible,
+        isPreviewMode,
+    })
 
     return { isPopupVisible, isSurveySent, setIsPopupVisible }
 }
@@ -701,7 +722,8 @@ export function FeedbackWidget({
     posthog?: PostHog
     readOnly?: boolean
     removeSurveyFromFocus: (id: string) => void
-}): JSX.Element {
+}): JSX.Element | null {
+    const [isFeedbackButtonVisible, setIsFeedbackButtonVisible] = useState(true)
     const [showSurvey, setShowSurvey] = useState(false)
     const [styleOverrides, setStyle] = useState({})
     const widgetRef = useRef<HTMLDivElement>(null)
@@ -739,8 +761,18 @@ export function FeedbackWidget({
         }
     }, [])
 
+    useToggleSurveyOnURLChange({
+        survey,
+        removeSurveyFromFocus,
+        setSurveyVisible: setIsFeedbackButtonVisible,
+    })
+
+    if (!isFeedbackButtonVisible) {
+        return null
+    }
+
     return (
-        <>
+        <Preact.Fragment>
             {survey.appearance?.widgetType === 'tab' && (
                 <div
                     className="ph-survey-widget-tab"
@@ -763,7 +795,7 @@ export function FeedbackWidget({
                     isPopup={true}
                 />
             )}
-        </>
+        </Preact.Fragment>
     )
 }
 
