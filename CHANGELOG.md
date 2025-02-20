@@ -1,3 +1,7 @@
+## 1.221.0 - 2025-02-20
+
+- feat: allow widget surveys to be repeated indefinitely (#1752)
+
 ## 1.220.0 - 2025-02-20
 
 - feat(llm-observability): metric and feedback methods (#1709)
