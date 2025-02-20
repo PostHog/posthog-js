@@ -1,3 +1,7 @@
+## 1.220.0 - 2025-02-20
+
+- feat(llm-observability): metric and feedback methods (#1709)
+
 ## 1.219.6 - 2025-02-19
 
 - fix: Remove circular dependency (#1750)
