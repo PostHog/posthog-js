@@ -8,6 +8,7 @@ import {
     ENABLE_PERSON_PROCESSING,
     FLAG_CALL_REPORTED,
     PEOPLE_DISTINCT_ID_KEY,
+    SURVEYS_REQUEST_TIMEOUT_MS,
     USER_STATE,
 } from './constants'
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
@@ -176,7 +177,7 @@ export const defaultConfig = (): PostHogConfig => ({
     advanced_disable_feature_flags_on_first_load: false,
     advanced_disable_toolbar_metrics: false,
     feature_flag_request_timeout_ms: 3000,
-    surveys_request_timeout_ms: 10000,
+    surveys_request_timeout_ms: SURVEYS_REQUEST_TIMEOUT_MS,
     on_request_error: (res) => {
         const error = 'Bad HTTP status: ' + res.statusCode + ' ' + res.text
         logger.error(error)

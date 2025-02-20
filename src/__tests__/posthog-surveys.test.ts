@@ -8,7 +8,7 @@ jest.mock('../utils/logger', () => ({
 }))
 jest.useFakeTimers()
 
-import { SURVEYS } from '../constants'
+import { SURVEYS, SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
 import { PostHog } from '../posthog-core'
 import { doesSurveyUrlMatch, PostHogSurveys } from '../posthog-surveys'
 import { assignableWindow, window } from '../utils/globals'
@@ -32,6 +32,7 @@ describe('posthog-surveys', () => {
                 config: {
                     disable_surveys: false,
                     token: 'test-token',
+                    surveys_request_timeout_ms: SURVEYS_REQUEST_TIMEOUT_MS,
                 },
                 persistence: {
                     register: jest.fn(),
@@ -246,7 +247,7 @@ describe('posthog-surveys', () => {
 
                 expect(mockPostHog._send_request).toHaveBeenCalledWith(
                     expect.objectContaining({
-                        timeout: 10000,
+                        timeout: SURVEYS_REQUEST_TIMEOUT_MS,
                     })
                 )
             })
