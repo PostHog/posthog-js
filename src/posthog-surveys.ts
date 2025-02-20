@@ -242,22 +242,25 @@ export class PostHogSurveys {
                     loadExternalDependency(this.instance, 'surveys', (err) => {
                         if (err) {
                             logger.error('Could not load surveys script', err)
+                            this._isInitializingSurveys = false
                             return
                         }
 
                         this._surveyManager = phExtensions.generateSurveys?.(this.instance)
+                        this._isInitializingSurveys = false
                     })
                 } else {
                     logger.error('PostHog loadExternalDependency extension not found. Cannot load remote config.')
+                    this._isInitializingSurveys = false
                 }
             } else {
                 this._surveyManager = generateSurveys(this.instance)
+                this._isInitializingSurveys = false
             }
         } catch (e) {
             logger.error('Error initializing surveys', e)
-            throw e
-        } finally {
             this._isInitializingSurveys = false
+            throw e
         }
     }
 
