@@ -292,6 +292,7 @@ describe('surveys', () => {
         })
         expect(instance._send_request).toHaveBeenCalledWith({
             url: 'https://us.i.posthog.com/api/surveys/?token=testtoken',
+            timeout: SURVEYS_REQUEST_TIMEOUT_MS,
             method: 'GET',
             callback: expect.any(Function),
         })
