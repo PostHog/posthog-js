@@ -37,6 +37,7 @@ import {
     style,
     SurveyContext,
 } from './surveys/surveys-utils'
+import { prepareStylesheet } from './utils/stylesheet-loader'
 const logger = createLogger('[Surveys]')
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
@@ -94,8 +95,14 @@ export class SurveyManager {
 
     private handleWidget = (survey: Survey): void => {
         const shadow = createWidgetShadow(survey)
-        const surveyStyleSheet = style(survey.appearance)
-        shadow.appendChild(Object.assign(document.createElement('style'), { innerText: surveyStyleSheet }))
+
+        const stylesheetContent = style(survey.appearance)
+        const stylesheet = prepareStylesheet(stylesheetContent, this.posthog)
+
+        if (stylesheet) {
+            shadow.appendChild(stylesheet)
+        }
+
         Preact.render(
             <FeedbackWidget
                 key={'feedback-survey'}
@@ -279,15 +286,17 @@ export const renderSurveysPreview = ({
     previewPageIndex,
     forceDisableHtml,
     onPreviewSubmit,
+    posthog,
 }: {
     survey: Survey
     parentElement: HTMLElement
     previewPageIndex: number
     forceDisableHtml?: boolean
     onPreviewSubmit?: (res: string | string[] | number | null) => void
+    posthog?: PostHog
 }) => {
-    const surveyStyleSheet = style(survey.appearance)
-    const styleElement = Object.assign(document.createElement('style'), { innerText: surveyStyleSheet })
+    const stylesheetContent = style(survey.appearance)
+    const stylesheet = prepareStylesheet(stylesheetContent, posthog)
 
     // Remove previously attached <style>
     Array.from(parentElement.children).forEach((child) => {
@@ -296,7 +305,10 @@ export const renderSurveysPreview = ({
         }
     })
 
-    parentElement.appendChild(styleElement)
+    if (stylesheet) {
+        parentElement.appendChild(stylesheet)
+    }
+
     const textColor = getContrastingTextColor(
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor || 'white'
     )
@@ -326,14 +338,19 @@ export const renderFeedbackWidgetPreview = ({
     survey,
     root,
     forceDisableHtml,
+    posthog,
 }: {
     survey: Survey
     root: HTMLElement
     forceDisableHtml?: boolean
+    posthog?: PostHog
 }) => {
-    const widgetStyleSheet = createWidgetStyle(survey.appearance?.widgetColor)
-    const styleElement = Object.assign(document.createElement('style'), { innerText: widgetStyleSheet })
-    root.appendChild(styleElement)
+    const stylesheetContent = createWidgetStyle(survey.appearance?.widgetColor)
+    const stylesheet = prepareStylesheet(stylesheetContent, posthog)
+    if (stylesheet) {
+        root.appendChild(stylesheet)
+    }
+
     Preact.render(
         <FeedbackWidget
             key={'feedback-render-preview'}
