@@ -900,6 +900,27 @@ describe('SessionRecording', () => {
             })
         })
 
+        describe('masking', () => {
+            it('passes remote masking options to rrweb', () => {
+                posthog.config.session_recording.maskAllInputs = undefined
+
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_MASKING]: { maskAllInputs: true, maskTextSelector: '*' },
+                })
+
+                sessionRecording.startIfEnabledOrStop()
+
+                sessionRecording['_onScriptLoaded']()
+
+                expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        maskAllInputs: true,
+                        maskTextSelector: '*',
+                    })
+                )
+            })
+        })
+
         describe('capturing passwords', () => {
             it.each([
                 ['no masking options', {} as SessionRecordingOptions, true],
