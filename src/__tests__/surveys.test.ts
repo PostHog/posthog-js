@@ -1,28 +1,27 @@
 /// <reference lib="dom" />
 
-import { PostHogSurveys } from '../posthog-surveys'
-import {
-    SurveyType,
-    SurveyQuestionType,
-    Survey,
-    MultipleSurveyQuestion,
-    SurveyQuestionBranchingType,
-    SurveyQuestion,
-    RatingSurveyQuestion,
-} from '../posthog-surveys-types'
+import { generateSurveys, getNextSurveyStep } from '../extensions/surveys'
 import {
     canActivateRepeatedly,
     getDisplayOrderChoices,
     getDisplayOrderQuestions,
 } from '../extensions/surveys/surveys-utils'
-import { PostHogPersistence } from '../posthog-persistence'
 import { PostHog } from '../posthog-core'
+import { PostHogPersistence } from '../posthog-persistence'
+import { PostHogSurveys } from '../posthog-surveys'
+import {
+    MultipleSurveyQuestion,
+    RatingSurveyQuestion,
+    Survey,
+    SurveyQuestion,
+    SurveyQuestionBranchingType,
+    SurveyQuestionType,
+    SurveyType,
+} from '../posthog-surveys-types'
 import { DecideResponse, PostHogConfig, Properties } from '../types'
-import { window } from '../utils/globals'
-import { RequestRouter } from '../utils/request-router'
-import { assignableWindow } from '../utils/globals'
-import { generateSurveys } from '../extensions/surveys'
 import * as globals from '../utils/globals'
+import { assignableWindow, window } from '../utils/globals'
+import { RequestRouter } from '../utils/request-router'
 
 describe('surveys', () => {
     let config: PostHogConfig
@@ -914,8 +913,8 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Question A' },
                 { type: SurveyQuestionType.Open, question: 'Question B' },
             ] as SurveyQuestion[]
-            expect(surveys.getNextSurveyStep(survey, 0, 'Some response')).toEqual(1)
-            expect(surveys.getNextSurveyStep(survey, 1, 'Some response')).toEqual(SurveyQuestionBranchingType.End)
+            expect(getNextSurveyStep(survey, 0, 'Some response')).toEqual(1)
+            expect(getNextSurveyStep(survey, 1, 'Some response')).toEqual(SurveyQuestionBranchingType.End)
         })
 
         it('should branch out to `end`', () => {
@@ -927,7 +926,7 @@ describe('surveys', () => {
                 },
                 { type: SurveyQuestionType.Open, question: 'Question B' },
             ] as SurveyQuestion[]
-            expect(surveys.getNextSurveyStep(survey, 0, 'Some response')).toEqual(SurveyQuestionBranchingType.End)
+            expect(getNextSurveyStep(survey, 0, 'Some response')).toEqual(SurveyQuestionBranchingType.End)
         })
 
         it('should branch out to a specific question', () => {
@@ -940,7 +939,7 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Question B' },
                 { type: SurveyQuestionType.Open, question: 'Question C' },
             ] as SurveyQuestion[]
-            expect(surveys.getNextSurveyStep(survey, 0, 'Some response')).toEqual(2)
+            expect(getNextSurveyStep(survey, 0, 'Some response')).toEqual(2)
         })
 
         // Single-choice
@@ -960,9 +959,9 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Why no?' },
                 { type: SurveyQuestionType.Open, question: 'Why maybe?' },
             ] as unknown[] as SurveyQuestion[]
-            expect(surveys.getNextSurveyStep(survey, 0, 'Yes')).toEqual(1)
-            expect(surveys.getNextSurveyStep(survey, 0, 'No')).toEqual(2)
-            expect(surveys.getNextSurveyStep(survey, 0, 'Maybe')).toEqual(3)
+            expect(getNextSurveyStep(survey, 0, 'Yes')).toEqual(1)
+            expect(getNextSurveyStep(survey, 0, 'No')).toEqual(2)
+            expect(getNextSurveyStep(survey, 0, 'Maybe')).toEqual(3)
         })
 
         // Response-based branching, scale 1-3
@@ -982,9 +981,9 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
             ] as unknown[] as SurveyQuestion[]
 
-            expect(surveys.getNextSurveyStep(survey, 0, 1)).toEqual(1)
-            expect(surveys.getNextSurveyStep(survey, 0, 2)).toEqual(2)
-            expect(surveys.getNextSurveyStep(survey, 0, 3)).toEqual(3)
+            expect(getNextSurveyStep(survey, 0, 1)).toEqual(1)
+            expect(getNextSurveyStep(survey, 0, 2)).toEqual(2)
+            expect(getNextSurveyStep(survey, 0, 3)).toEqual(3)
         })
 
         // Response-based branching, scale 1-5
@@ -1004,9 +1003,9 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
             ] as unknown as SurveyQuestion[]
 
-            expect(surveys.getNextSurveyStep(survey, 0, 1)).toEqual(1)
-            expect(surveys.getNextSurveyStep(survey, 0, 3)).toEqual(2)
-            expect(surveys.getNextSurveyStep(survey, 0, 5)).toEqual(3)
+            expect(getNextSurveyStep(survey, 0, 1)).toEqual(1)
+            expect(getNextSurveyStep(survey, 0, 3)).toEqual(2)
+            expect(getNextSurveyStep(survey, 0, 5)).toEqual(3)
         })
 
         // Response-based branching, scale 1-7
@@ -1026,13 +1025,13 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Great! What did you enjoy the most?' },
             ] as unknown as SurveyQuestion[]
 
-            expect(surveys.getNextSurveyStep(survey, 0, 1)).toEqual(1)
-            expect(surveys.getNextSurveyStep(survey, 0, 2)).toEqual(1)
-            expect(surveys.getNextSurveyStep(survey, 0, 3)).toEqual(1)
-            expect(surveys.getNextSurveyStep(survey, 0, 4)).toEqual(2)
-            expect(surveys.getNextSurveyStep(survey, 0, 5)).toEqual(3)
-            expect(surveys.getNextSurveyStep(survey, 0, 6)).toEqual(3)
-            expect(surveys.getNextSurveyStep(survey, 0, 7)).toEqual(3)
+            expect(getNextSurveyStep(survey, 0, 1)).toEqual(1)
+            expect(getNextSurveyStep(survey, 0, 2)).toEqual(1)
+            expect(getNextSurveyStep(survey, 0, 3)).toEqual(1)
+            expect(getNextSurveyStep(survey, 0, 4)).toEqual(2)
+            expect(getNextSurveyStep(survey, 0, 5)).toEqual(3)
+            expect(getNextSurveyStep(survey, 0, 6)).toEqual(3)
+            expect(getNextSurveyStep(survey, 0, 7)).toEqual(3)
         })
 
         // Response-based branching, scale 0-10 (NPS)
@@ -1052,9 +1051,9 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
             ] as unknown as SurveyQuestion[]
 
-            expect(surveys.getNextSurveyStep(survey, 0, 1)).toEqual(1)
-            expect(surveys.getNextSurveyStep(survey, 0, 8)).toEqual(2)
-            expect(surveys.getNextSurveyStep(survey, 0, 10)).toEqual(3)
+            expect(getNextSurveyStep(survey, 0, 1)).toEqual(1)
+            expect(getNextSurveyStep(survey, 0, 8)).toEqual(2)
+            expect(getNextSurveyStep(survey, 0, 10)).toEqual(3)
         })
 
         it('should display questions in the order AGCEHDFB', () => {
@@ -1108,7 +1107,7 @@ describe('surveys', () => {
             for (let i = 0; i < survey.questions.length; i++) {
                 const currentQuestion = survey.questions[currentStep]
                 actualOrder.push(currentQuestion.question)
-                currentStep = surveys.getNextSurveyStep(survey, currentStep, 'Some response')
+                currentStep = getNextSurveyStep(survey, currentStep, 'Some response')
             }
 
             expect(desiredOrder).toEqual(actualOrder)
@@ -1167,7 +1166,7 @@ describe('surveys', () => {
             for (const answer of answers) {
                 const currentQuestion = survey.questions[currentStep]
                 actualOrder.push(currentQuestion.question)
-                currentStep = surveys.getNextSurveyStep(survey, currentStep, answer)
+                currentStep = getNextSurveyStep(survey, currentStep, answer)
             }
             expect(desiredOrder).toEqual(actualOrder)
             expect(currentStep).toEqual(SurveyQuestionBranchingType.End)
@@ -1180,7 +1179,7 @@ describe('surveys', () => {
             for (const answer of answers) {
                 const currentQuestion = survey.questions[currentStep]
                 actualOrder.push(currentQuestion.question)
-                currentStep = surveys.getNextSurveyStep(survey, currentStep, answer)
+                currentStep = getNextSurveyStep(survey, currentStep, answer)
             }
             expect(desiredOrder).toEqual(actualOrder)
             expect(currentStep).toEqual(SurveyQuestionBranchingType.End)
@@ -1193,7 +1192,7 @@ describe('surveys', () => {
             for (const answer of answers) {
                 const currentQuestion = survey.questions[currentStep]
                 actualOrder.push(currentQuestion.question)
-                currentStep = surveys.getNextSurveyStep(survey, currentStep, answer)
+                currentStep = getNextSurveyStep(survey, currentStep, answer)
             }
             expect(desiredOrder).toEqual(actualOrder)
             expect(currentStep).toEqual(SurveyQuestionBranchingType.End)
@@ -1210,7 +1209,7 @@ describe('surveys', () => {
             for (const answer of answers) {
                 const currentQuestion = survey.questions[currentStep]
                 actualOrder.push(currentQuestion.question)
-                currentStep = surveys.getNextSurveyStep(survey, currentStep, answer)
+                currentStep = getNextSurveyStep(survey, currentStep, answer)
             }
             expect(desiredOrder).toEqual(actualOrder)
             expect(currentStep).toEqual(SurveyQuestionBranchingType.End)
@@ -1231,7 +1230,7 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
             ] as unknown as SurveyQuestion[]
-            expect(() => surveys.getNextSurveyStep(survey, 0, 1)).toThrow('The scale must be one of: 3, 5, 7, 10')
+            expect(() => getNextSurveyStep(survey, 0, 1)).toThrow('The scale must be one of: 3, 5, 7, 10')
         })
 
         it('should throw an error for a response value out of the valid range', () => {
@@ -1249,13 +1248,13 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
             ] as unknown as SurveyQuestion[]
-            expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-3')
+            expect(() => getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-3')
             ;(survey.questions[0] as RatingSurveyQuestion).scale = 5
-            expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-5')
+            expect(() => getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-5')
             ;(survey.questions[0] as RatingSurveyQuestion).scale = 7
-            expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-7')
+            expect(() => getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 1-7')
             ;(survey.questions[0] as RatingSurveyQuestion).scale = 10
-            expect(() => surveys.getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 0-10')
+            expect(() => getNextSurveyStep(survey, 0, 20)).toThrow('The response must be in range 0-10')
         })
 
         it('should throw an error for if a response value in a rating question is not an integer', () => {
@@ -1273,10 +1272,8 @@ describe('surveys', () => {
                 { type: SurveyQuestionType.Open, question: 'Seems you are not completely happy. Tell us more!' },
                 { type: SurveyQuestionType.Open, question: 'Glad to hear that. Tell us more!' },
             ] as unknown as SurveyQuestion[]
-            expect(() => surveys.getNextSurveyStep(survey, 0, '2')).toThrow('The response type must be an integer')
-            expect(() => surveys.getNextSurveyStep(survey, 0, 'some_string')).toThrow(
-                'The response type must be an integer'
-            )
+            expect(() => getNextSurveyStep(survey, 0, '2')).toThrow('The response type must be an integer')
+            expect(() => getNextSurveyStep(survey, 0, 'some_string')).toThrow('The response type must be an integer')
         })
     })
 
