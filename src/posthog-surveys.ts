@@ -236,17 +236,15 @@ export class PostHogSurveys {
 
                 if (loadExternalDependency) {
                     loadExternalDependency(this.instance, 'surveys', (err) => {
-                        if (err) {
+                        if (err || !phExtensions.generateSurveys) {
                             logger.error('Could not load surveys script', err)
                             this._isInitializingSurveys = false
                             return
                         }
 
-                        this._surveyManager = phExtensions.generateSurveys?.(this.instance)
+                        this._surveyManager = phExtensions.generateSurveys(this.instance)
                         this._isInitializingSurveys = false
-                        if (this._surveyEventReceiver == null) {
-                            this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
-                        }
+                        this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
                         logger.info('Surveys loaded successfully')
                     })
                 } else {
@@ -256,9 +254,7 @@ export class PostHogSurveys {
             } else {
                 this._surveyManager = generateSurveys(this.instance)
                 this._isInitializingSurveys = false
-                if (this._surveyEventReceiver == null) {
-                    this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
-                }
+                this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
                 logger.info('Surveys loaded successfully')
             }
         } catch (e) {
