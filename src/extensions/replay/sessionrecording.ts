@@ -13,11 +13,10 @@ import {
 import {
     estimateSize,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-    recordOptions,
-    rrwebRecord,
     splitBuffer,
     truncateLargeConsoleLogs,
 } from './sessionrecording-utils'
+import type { recordOptions, rrwebRecord } from './types/rrweb'
 import { PostHog } from '../../posthog-core'
 import {
     CaptureResult,
@@ -29,7 +28,7 @@ import {
     SessionRecordingUrlTrigger,
 } from '../../types'
 import {
-    customEvent,
+    type customEvent,
     EventType,
     type eventWithTime,
     IncrementalSource,
@@ -74,6 +73,10 @@ const PARTIAL_COMPRESSION_THRESHOLD = ONE_KB
 export const RECORDING_MAX_EVENT_SIZE = ONE_KB * ONE_KB * 0.9 // ~1mb (with some wiggle room)
 export const RECORDING_BUFFER_TIMEOUT = 2000 // 2 seconds
 export const SESSION_RECORDING_BATCH_KEY = 'recordings'
+const DEFAULT_CANVAS_QUALITY = 0.4
+const DEFAULT_CANVAS_FPS = 4
+const MAX_CANVAS_FPS = 12
+const MAX_CANVAS_QUALITY = 1
 
 const ACTIVE_SOURCES = [
     IncrementalSource.MouseMove,
@@ -149,8 +152,8 @@ export type compressedIncrementalStyleSnapshotEvent = {
         styleId?: number
         replace?: string
         replaceSync?: string
-        adds: string
-        removes: string
+        adds?: string
+        removes?: string
     }
 }
 
@@ -205,8 +208,8 @@ function compressEvent(event: eventWithTime): eventWithTime | compressedEventWit
                 cv: '2024-10',
                 data: {
                     ...event.data,
-                    adds: gzipToString(event.data.adds),
-                    removes: gzipToString(event.data.removes),
+                    adds: event.data.adds ? gzipToString(event.data.adds) : undefined,
+                    removes: event.data.removes ? gzipToString(event.data.removes) : undefined,
                 },
             }
         }
@@ -337,14 +340,21 @@ export class SessionRecording {
         const canvasRecording_client_side = this.instance.config.session_recording.captureCanvas
         const canvasRecording_server_side = this.instance.get_property(SESSION_RECORDING_CANVAS_RECORDING)
 
-        const enabled = canvasRecording_client_side?.recordCanvas ?? canvasRecording_server_side?.enabled ?? false
-        const fps = canvasRecording_client_side?.canvasFps ?? canvasRecording_server_side?.fps ?? 0
-        const quality = canvasRecording_client_side?.canvasQuality ?? canvasRecording_server_side?.quality ?? 0
+        const enabled: boolean =
+            canvasRecording_client_side?.recordCanvas ?? canvasRecording_server_side?.enabled ?? false
+        const fps: number =
+            canvasRecording_client_side?.canvasFps ?? canvasRecording_server_side?.fps ?? DEFAULT_CANVAS_FPS
+        let quality: string | number =
+            canvasRecording_client_side?.canvasQuality ?? canvasRecording_server_side?.quality ?? DEFAULT_CANVAS_QUALITY
+        if (typeof quality === 'string') {
+            const parsed = parseFloat(quality)
+            quality = isNaN(parsed) ? 0.4 : parsed
+        }
 
         return {
             enabled,
-            fps: clampToRange(fps, 0, 12, 'canvas recording fps'),
-            quality: clampToRange(quality, 0, 1, 'canvas recording quality'),
+            fps: clampToRange(fps, 0, MAX_CANVAS_FPS, 'canvas recording fps', DEFAULT_CANVAS_FPS),
+            quality: clampToRange(quality, 0, MAX_CANVAS_QUALITY, 'canvas recording quality', DEFAULT_CANVAS_QUALITY),
         }
     }
 

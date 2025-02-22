@@ -4,7 +4,7 @@
 // import 'posthog-js/dist/exception-autocapture'
 // import 'posthog-js/dist/tracing-headers'
 
-import posthogJS, { PostHogConfig } from 'posthog-js'
+import posthogJS, { PostHog, PostHogConfig } from 'posthog-js'
 import { User } from './auth'
 
 export const PERSON_PROCESSING_MODE: 'always' | 'identified_only' | 'never' =
@@ -12,7 +12,7 @@ export const PERSON_PROCESSING_MODE: 'always' | 'identified_only' | 'never' =
 
 export const POSTHOG_USE_SNIPPET: boolean = (process.env.NEXT_PUBLIC_POSTHOG_USE_SNIPPET as any) || false
 
-export const posthog = POSTHOG_USE_SNIPPET
+export const posthog: PostHog = POSTHOG_USE_SNIPPET
     ? typeof window !== 'undefined'
         ? (window as any).posthog
         : null
@@ -64,6 +64,7 @@ if (typeof window !== 'undefined') {
         persistence_name: `${process.env.NEXT_PUBLIC_POSTHOG_KEY}_nextjs`,
         opt_in_site_apps: true,
         __preview_remote_config: true,
+        __preview_experimental_cookieless_mode: false,
         ...configForConsent(),
     })
     // Help with debugging

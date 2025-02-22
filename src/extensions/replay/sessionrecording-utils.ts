@@ -1,5 +1,4 @@
-import type { eventWithTime, listenerHandler, pluginEvent } from '@rrweb/types'
-import type { record } from '@rrweb/record'
+import type { eventWithTime, pluginEvent } from '@rrweb/types'
 
 import { isObject } from '../../utils/type-utils'
 import { SnapshotBuffer } from './sessionrecording'
@@ -39,18 +38,6 @@ export const PLUGIN_EVENT_TYPE = 6
 export const MUTATION_SOURCE_TYPE = 0
 
 export const MAX_MESSAGE_SIZE = 5000000 // ~5mb
-
-export type rrwebRecord = {
-    (options: recordOptions): listenerHandler
-    addCustomEvent: (tag: string, payload: any) => void
-    takeFullSnapshot: () => void
-    mirror: {
-        getId(n: Node | undefined | null): number
-        getNode(id: number): Node | null
-    }
-}
-
-export declare type recordOptions = Exclude<Parameters<typeof record<eventWithTime>>[0], undefined>
 
 /*
  * Check whether a data payload is nearing 5mb. If it is, it checks the data for

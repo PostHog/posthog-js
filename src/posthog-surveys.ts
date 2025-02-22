@@ -12,7 +12,7 @@ import { RemoteConfig } from './types'
 import { Info } from './utils/event-utils'
 import { assignableWindow, document, userAgent, window } from './utils/globals'
 import { createLogger } from './utils/logger'
-import { isMatchingRegex } from './utils/string-utils'
+import { isMatchingRegex } from './utils/regex-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import { isNullish } from './utils/type-utils'
 
@@ -140,7 +140,7 @@ function defaultMatchType(matchType?: SurveyMatchType): SurveyMatchType {
 }
 
 // use urlMatchType to validate url condition, fallback to contains for backwards compatibility
-export function doesSurveyUrlMatch(survey: Survey): boolean {
+export function doesSurveyUrlMatch(survey: Pick<Survey, 'conditions'>): boolean {
     if (!survey.conditions?.url) {
         return true
     }
@@ -155,7 +155,7 @@ export function doesSurveyUrlMatch(survey: Survey): boolean {
 }
 
 export function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
-    if (!survey.conditions?.deviceTypes) {
+    if (!survey.conditions?.deviceTypes || survey.conditions?.deviceTypes.length === 0) {
         return true
     }
     // if we dont know the device type, assume it is not a match

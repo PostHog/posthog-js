@@ -34,6 +34,31 @@ const INITIAL_CAMPAIGN_PARAMS_NULL = {
     $initial_wbraid: null,
 }
 
+const CAMPAIGN_PARAMS_NULL = {
+    _kx: null,
+    dclid: null,
+    fbclid: null,
+    gad_source: null,
+    gbraid: null,
+    gclid: null,
+    gclsrc: null,
+    $host: null,
+    igshid: null,
+    irclid: null,
+    li_fat_id: null,
+    mc_cid: null,
+    msclkid: null,
+    rdt_cid: null,
+    ttclid: null,
+    twclid: null,
+    utm_campaign: null,
+    utm_content: null,
+    utm_medium: null,
+    utm_source: null,
+    utm_term: null,
+    wbraid: null,
+}
+
 jest.mock('../utils/globals', () => {
     const orig = jest.requireActual('../utils/globals')
     const mockURLGetter = jest.fn()
@@ -215,20 +240,27 @@ describe('person processing', () => {
             expect(identifyCall[0].event).toEqual('$identify')
             expect(identifyCall[0].$set_once).toEqual({
                 ...INITIAL_CAMPAIGN_PARAMS_NULL,
+                ...CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
                 $initial_pathname: '/',
                 $initial_referrer: 'https://referrer.com',
                 $initial_referring_domain: 'referrer.com',
                 $initial_utm_source: 'foo',
+                $current_url: 'https://example.com?utm_source=foo',
+                $host: 'example.com',
+                $pathname: '/',
+                $referrer: 'https://referrer.com',
+                $referring_domain: 'referrer.com',
+                utm_source: 'foo',
             })
         })
 
         it('should preserve initial referrer info across a separate session', async () => {
             // arrange
-            const { posthog, beforeSendMock } = await setup('identified_only')
             mockReferrerGetter.mockReturnValue('https://referrer1.com')
             mockURLGetter.mockReturnValue('https://example1.com/pathname1?utm_source=foo1')
+            const { posthog, beforeSendMock } = await setup('identified_only')
 
             // act
             // s1
@@ -237,6 +269,7 @@ describe('person processing', () => {
             // end session
             posthog.sessionManager!.resetSessionId()
             posthog.sessionPersistence!.clear()
+            window.sessionStorage.clear()
 
             // s2
             mockReferrerGetter.mockReturnValue('https://referrer2.com')
@@ -258,37 +291,36 @@ describe('person processing', () => {
             expect(eventS2Identify[0].event).toEqual('$identify')
             expect(eventS2Identify[0].$set_once).toEqual({
                 ...INITIAL_CAMPAIGN_PARAMS_NULL,
+                ...CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example1.com/pathname1?utm_source=foo1',
                 $initial_host: 'example1.com',
                 $initial_pathname: '/pathname1',
                 $initial_referrer: 'https://referrer1.com',
                 $initial_referring_domain: 'referrer1.com',
                 $initial_utm_source: 'foo1',
+                $current_url: 'https://example2.com/pathname2?utm_source=foo2',
+                $host: 'example2.com',
+                $pathname: '/pathname2',
+                $referrer: 'https://referrer2.com',
+                $referring_domain: 'referrer2.com',
+                utm_source: 'foo2',
             })
 
             expect(eventS2After[0].event).toEqual('event s2 after identify')
-            expect(eventS2After[0].$set_once).toEqual({
-                ...INITIAL_CAMPAIGN_PARAMS_NULL,
-                $initial_current_url: 'https://example1.com/pathname1?utm_source=foo1',
-                $initial_host: 'example1.com',
-                $initial_pathname: '/pathname1',
-                $initial_referrer: 'https://referrer1.com',
-                $initial_referring_domain: 'referrer1.com',
-                $initial_utm_source: 'foo1',
-            })
+            expect(eventS2After[0].$set_once).toEqual(undefined)
         })
 
         it('should preserve initial referrer info across subdomain', async () => {
             const persistenceName = uuidv7()
 
+            mockReferrerGetter.mockReturnValue('https://referrer1.com')
+            mockURLGetter.mockReturnValue('https://example1.com/pathname1?utm_source=foo1')
             // arrange
             const { posthog: posthog1, beforeSendMock: beforeSendMock1 } = await setup(
                 'identified_only',
                 undefined,
                 persistenceName
             )
-            mockReferrerGetter.mockReturnValue('https://referrer1.com')
-            mockURLGetter.mockReturnValue('https://example1.com/pathname1?utm_source=foo1')
 
             // act
             // subdomain 1
@@ -297,16 +329,17 @@ describe('person processing', () => {
 
             // clear localstorage, but not cookies, to simulate changing subdomain
             window.localStorage.clear()
+            window.sessionStorage.clear()
 
             // subdomain 2
+            mockReferrerGetter.mockReturnValue('https://referrer2.com')
+            mockURLGetter.mockReturnValue('https://example2.com/pathname2?utm_source=foo2')
             const { posthog: posthog2, beforeSendMock: beforeSendMock2 } = await setup(
                 'identified_only',
                 undefined,
                 persistenceName
             )
 
-            mockReferrerGetter.mockReturnValue('https://referrer2.com')
-            mockURLGetter.mockReturnValue('https://example2.com/pathname2?utm_source=foo2')
             posthog2.capture('event s2 before identify')
             posthog2.identify(distinctId)
             posthog2.capture('event s2 after identify')
@@ -327,24 +360,23 @@ describe('person processing', () => {
             expect(eventS2Identify[0].event).toEqual('$identify')
             expect(eventS2Identify[0].$set_once).toEqual({
                 ...INITIAL_CAMPAIGN_PARAMS_NULL,
+                ...CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example1.com/pathname1?utm_source=foo1',
                 $initial_host: 'example1.com',
                 $initial_pathname: '/pathname1',
                 $initial_referrer: 'https://referrer1.com',
                 $initial_referring_domain: 'referrer1.com',
                 $initial_utm_source: 'foo1',
+                $current_url: 'https://example2.com/pathname2?utm_source=foo2',
+                $host: 'example2.com',
+                $pathname: '/pathname2',
+                $referrer: 'https://referrer2.com',
+                $referring_domain: 'referrer2.com',
+                utm_source: 'foo2',
             })
 
             expect(eventS2After[0].event).toEqual('event s2 after identify')
-            expect(eventS2After[0].$set_once).toEqual({
-                ...INITIAL_CAMPAIGN_PARAMS_NULL,
-                $initial_current_url: 'https://example1.com/pathname1?utm_source=foo1',
-                $initial_host: 'example1.com',
-                $initial_pathname: '/pathname1',
-                $initial_referrer: 'https://referrer1.com',
-                $initial_referring_domain: 'referrer1.com',
-                $initial_utm_source: 'foo1',
-            })
+            expect(eventS2After[0].$set_once).toEqual(undefined)
         })
 
         it('should include initial referrer info in identify event if always', async () => {
@@ -359,20 +391,26 @@ describe('person processing', () => {
             expect(identifyCall[0].event).toEqual('$identify')
             expect(identifyCall[0].$set_once).toEqual({
                 ...INITIAL_CAMPAIGN_PARAMS_NULL,
+                ...CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
                 $initial_pathname: '/',
                 $initial_referrer: 'https://referrer.com',
                 $initial_referring_domain: 'referrer.com',
                 $initial_utm_source: 'foo',
+                $current_url: 'https://example.com?utm_source=foo',
+                $host: 'example.com',
+                $pathname: '/',
+                $referrer: 'https://referrer.com',
+                $referring_domain: 'referrer.com',
+                utm_source: 'foo',
             })
         })
 
         it('should include initial search params', async () => {
             // arrange
-            const { posthog, beforeSendMock } = await setup('always')
             mockReferrerGetter.mockReturnValue('https://www.google.com?q=bar')
-
+            const { posthog, beforeSendMock } = await setup('always')
             // act
             posthog.identify(distinctId)
 
@@ -381,6 +419,7 @@ describe('person processing', () => {
             expect(identifyCall[0].event).toEqual('$identify')
             expect(identifyCall[0].$set_once).toEqual({
                 ...INITIAL_CAMPAIGN_PARAMS_NULL,
+                ...CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
                 $initial_pathname: '/',
@@ -389,11 +428,21 @@ describe('person processing', () => {
                 $initial_utm_source: 'foo',
                 $initial_ph_keyword: 'bar',
                 $initial_search_engine: 'google',
+                $current_url: 'https://example.com?utm_source=foo',
+                $host: 'example.com',
+                $pathname: '/',
+                $referrer: 'https://www.google.com?q=bar',
+                $referring_domain: 'www.google.com',
+                utm_source: 'foo',
+                ph_keyword: 'bar',
+                $search_engine: 'google',
             })
         })
 
         it('should be backwards compatible with deprecated INITIAL_REFERRER_INFO and INITIAL_CAMPAIGN_PARAMS way of saving initial person props', async () => {
             // arrange
+            mockReferrerGetter.mockReturnValue('https://mocked.referrer.com')
+            mockURLGetter.mockReturnValue('https://mocked.example.com/mocked-path?utm_source=mocked-source')
             const { posthog, beforeSendMock } = await setup('always')
             posthog.persistence!.props[INITIAL_REFERRER_INFO] = {
                 referrer: 'https://deprecated-referrer.com',
@@ -410,9 +459,16 @@ describe('person processing', () => {
             const identifyCall = beforeSendMock.mock.calls[0]
             expect(identifyCall[0].event).toEqual('$identify')
             expect(identifyCall[0].$set_once).toEqual({
+                ...CAMPAIGN_PARAMS_NULL,
                 $initial_referrer: 'https://deprecated-referrer.com',
                 $initial_referring_domain: 'deprecated-referrer.com',
                 $initial_utm_source: 'deprecated-source',
+                $host: 'mocked.example.com',
+                $pathname: '/mocked-path',
+                $referrer: 'https://mocked.referrer.com',
+                $referring_domain: 'mocked.referrer.com',
+                $current_url: 'https://mocked.example.com/mocked-path?utm_source=mocked-source',
+                utm_source: 'mocked-source',
             })
         })
     })
@@ -424,21 +480,28 @@ describe('person processing', () => {
 
             // act
             posthog.capture('custom event before identify')
-            posthog.identify(distinctId)
+            posthog._requirePersonProcessing('test')
             posthog.capture('custom event after identify')
 
             // assert
             const eventBeforeIdentify = beforeSendMock.mock.calls[0]
             expect(eventBeforeIdentify[0].$set_once).toBeUndefined()
-            const eventAfterIdentify = beforeSendMock.mock.calls[2]
+            const eventAfterIdentify = beforeSendMock.mock.calls[1]
             expect(eventAfterIdentify[0].$set_once).toEqual({
                 ...INITIAL_CAMPAIGN_PARAMS_NULL,
+                ...CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
                 $initial_pathname: '/',
                 $initial_referrer: 'https://referrer.com',
                 $initial_referring_domain: 'referrer.com',
                 $initial_utm_source: 'foo',
+                $current_url: 'https://example.com?utm_source=foo',
+                $host: 'example.com',
+                $pathname: '/',
+                $referrer: 'https://referrer.com',
+                $referring_domain: 'referrer.com',
+                utm_source: 'foo',
             })
         })
 
@@ -448,30 +511,29 @@ describe('person processing', () => {
 
             // act
             posthog.capture('custom event before identify')
-            posthog.identify(distinctId)
+            posthog._requirePersonProcessing('test')
             posthog.capture('custom event after identify')
 
             // assert
             const eventBeforeIdentify = beforeSendMock.mock.calls[0]
             expect(eventBeforeIdentify[0].$set_once).toEqual({
                 ...INITIAL_CAMPAIGN_PARAMS_NULL,
+                ...CAMPAIGN_PARAMS_NULL,
                 $initial_current_url: 'https://example.com?utm_source=foo',
                 $initial_host: 'example.com',
                 $initial_pathname: '/',
                 $initial_referrer: 'https://referrer.com',
                 $initial_referring_domain: 'referrer.com',
                 $initial_utm_source: 'foo',
+                $current_url: 'https://example.com?utm_source=foo',
+                $host: 'example.com',
+                $pathname: '/',
+                $referrer: 'https://referrer.com',
+                $referring_domain: 'referrer.com',
+                utm_source: 'foo',
             })
-            const eventAfterIdentify = beforeSendMock.mock.calls[2]
-            expect(eventAfterIdentify[0].$set_once).toEqual({
-                ...INITIAL_CAMPAIGN_PARAMS_NULL,
-                $initial_current_url: 'https://example.com?utm_source=foo',
-                $initial_host: 'example.com',
-                $initial_pathname: '/',
-                $initial_referrer: 'https://referrer.com',
-                $initial_referring_domain: 'referrer.com',
-                $initial_utm_source: 'foo',
-            })
+            const eventAfterIdentify = beforeSendMock.mock.calls[1]
+            expect(eventAfterIdentify[0].$set_once).toEqual(undefined)
         })
     })
 

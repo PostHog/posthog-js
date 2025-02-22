@@ -1,3 +1,104 @@
+## 1.222.0 - 2025-02-20
+
+- chore: Make `@rrweb/types` a peer dependency (#1749)
+
+## 1.221.1 - 2025-02-20
+
+- fix: check url matching on URL change for widget-type surveys (#1755)
+
+## 1.221.0 - 2025-02-20
+
+- feat: allow widget surveys to be repeated indefinitely (#1752)
+
+## 1.220.0 - 2025-02-20
+
+- feat(llm-observability): metric and feedback methods (#1709)
+
+## 1.219.6 - 2025-02-19
+
+- fix: Remove circular dependency (#1750)
+
+## 1.219.5 - 2025-02-19
+
+- Block Chrome-Lighthouse UA (used by ahrefs) (#1751)
+
+## 1.219.4 - 2025-02-18
+
+- fix: Fix types for `onFeatureFlags` callback (#1748)
+
+## 1.219.3 - 2025-02-18
+
+- fix(devex): update frontend/package.json when pushing to main repo (#1746)
+
+## 1.219.2 - 2025-02-18
+
+- fix: last seen survey date logic (#1745)
+
+## 1.219.1 - 2025-02-17
+
+- feat: add more debug signals (#1743)
+
+## 1.219.0 - 2025-02-17
+
+- feat(web-analytics): Handle set_once latest props in a cross-subdomain way (#1739)
+
+## 1.218.2 - 2025-02-15
+
+- chore: limit height of multiple choice question (#1740)
+
+## 1.218.1 - 2025-02-14
+
+
+
+## 1.218.0 - 2025-02-14
+
+- feat(flags): Add remote config feature flag method that bypasses cached values (#1729)
+
+## 1.217.7 - 2025-02-14
+
+- fix: skip device type check if no devices set (#1737)
+
+## 1.217.6 - 2025-02-14
+
+- fix: heatmaps unload listener (#1736)
+
+## 1.217.5 - 2025-02-14
+
+- fix: check url match before trigger showSurvey (#1732)
+
+## 1.217.4 - 2025-02-13
+
+- fix: unexpected undefined should be expected (#1731)
+
+## 1.217.3 - 2025-02-13
+
+- Revert "fix: check url match twice because of potential race condition (#1722)" (#1733)
+
+## 1.217.2 - 2025-02-12
+
+- fix(no-code experiments): refactor (6) (#1728)
+
+## 1.217.1 - 2025-02-11
+
+- fix: canvas quality value (#1727)
+
+## 1.217.0 - 2025-02-11
+
+- feat: override exception capture clientside (#1726)
+
+## 1.216.1 - 2025-02-10
+
+- fix: capture when argument is not a string (#1724)
+- feat: Add e-commerce test page to nextjs playground (#1725)
+
+## 1.216.0 - 2025-02-10
+
+- chore: Drop CI support for Node 16 (EOL), use pnpm 9 internally (#1723)
+
+## 1.215.7 - 2025-02-10
+
+
+
 ## 1.215.6 - 2025-02-06
 
 - fix(flags): set default state values in feature flag hooks (#1719)

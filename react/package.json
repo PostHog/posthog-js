@@ -10,6 +10,7 @@
     },
     "author": "hey@posthog.com",
     "license": "MIT",
+    "packageManager": "pnpm@9.15.4",
     "scripts": {
         "prebuild": "npm run clean",
         "start": "tsc-watch",
@@ -17,7 +18,9 @@
         "build": "pnpm clean && cross-env NODE_ENV=production rollup -c rollup.config.ts",
         "test": "jest",
         "test:debug": "jest --runInBand",
-        "prepublishOnly": "pnpm test && pnpm build"
+        "prepublishOnly": "pnpm test && pnpm build",
+        "link-posthog-js": "pnpm link ..",
+        "clean-node-modules": "rimraf -r node_modules && pnpm run link-posthog-js"
     },
     "main": "dist/umd/index.js",
     "module": "dist/esm/index.js",

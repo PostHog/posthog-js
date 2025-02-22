@@ -43,7 +43,9 @@ describe('Error conversion', () => {
                 },
             ],
         }
-        expect(errorToProperties(['Uncaught exception: InternalError: but somehow still a string'])).toEqual(expected)
+        expect(errorToProperties({ event: 'Uncaught exception: InternalError: but somehow still a string' })).toEqual(
+            expected
+        )
     })
 
     it('should convert a plain object to an error', () => {
@@ -57,7 +59,7 @@ describe('Error conversion', () => {
                 },
             ],
         }
-        expect(errorToProperties([{ string: 'candidate', foo: 'bar' } as unknown as Event])).toEqual(expected)
+        expect(errorToProperties({ event: { string: 'candidate', foo: 'bar' } as unknown as Event })).toEqual(expected)
     })
 
     it('should convert a plain Event to an error', () => {
@@ -72,13 +74,13 @@ describe('Error conversion', () => {
             ],
         }
         const event = new MouseEvent('click', { bubbles: true, cancelable: true, composed: true })
-        expect(errorToProperties([event])).toEqual(expected)
+        expect(errorToProperties({ event })).toEqual(expected)
     })
 
     it('should convert a plain Error to an error', () => {
         const error = new Error('oh no an error has happened')
 
-        const errorProperties = errorToProperties(['something', undefined, undefined, undefined, error])
+        const errorProperties = errorToProperties({ event: 'something', error })
         if (isNull(errorProperties)) {
             throw new Error("this mustn't be null")
         }
@@ -115,12 +117,12 @@ describe('Error conversion', () => {
             ],
         }
         const event = new FakeDomError('click', 'foo')
-        expect(errorToProperties([event as unknown as Event])).toEqual(expected)
+        expect(errorToProperties({ event: event as unknown as Event })).toEqual(expected)
     })
 
     it('should convert a DOM Exception to an error', () => {
         const event = new DOMException('oh no disaster', 'dom-exception')
-        const errorProperties = errorToProperties([event as unknown as Event])
+        const errorProperties = errorToProperties({ event: event as unknown as Event })
 
         if (isNull(errorProperties)) {
             throw new Error("this mustn't be null")
@@ -140,7 +142,7 @@ describe('Error conversion', () => {
     it('should convert an error event to an error', () => {
         const event = new ErrorEvent('oh no an error event', { error: new Error('the real error is hidden inside') })
 
-        const errorProperties = errorToProperties([event as unknown as Event])
+        const errorProperties = errorToProperties({ event: event as unknown as Event })
         if (isNull(errorProperties)) {
             throw new Error("this mustn't be null")
         }
@@ -155,20 +157,6 @@ describe('Error conversion', () => {
         expect(errorProperties.$exception_list[0].stacktrace.frames[0].filename).toBeDefined()
         expect(errorProperties.$exception_list[0].mechanism.synthetic).toEqual(false)
         expect(errorProperties.$exception_list[0].mechanism.handled).toEqual(true)
-    })
-
-    it('can convert source, lineno, colno', () => {
-        const expected: ErrorProperties = {
-            $exception_level: 'error',
-            $exception_list: [
-                {
-                    type: 'Error',
-                    value: 'string candidate',
-                    mechanism: { synthetic: true, handled: true },
-                },
-            ],
-        }
-        expect(errorToProperties(['string candidate', 'a source', 12, 200])).toEqual(expected)
     })
 
     it('should convert unhandled promise rejection that the browser has messed around with', () => {

@@ -13,7 +13,7 @@ const wrapOnError = (captureFn: (props: Properties) => void) => {
     const originalOnError = win.onerror
 
     win.onerror = function (...args: ErrorEventArgs): boolean {
-        const errorProperties = errorToProperties(args)
+        const errorProperties = errorToProperties({ event: args[0], error: args[4] })
         captureFn(errorProperties)
         return originalOnError?.(...args) ?? false
     }

@@ -59,8 +59,6 @@ export class Heatmaps {
     constructor(instance: PostHog) {
         this.instance = instance
         this._enabledServerSide = !!this.instance.persistence?.props[HEATMAPS_ENABLED_SERVER_SIDE]
-
-        addEventListener(window, 'beforeunload', this.flush)
     }
 
     public get flushIntervalMilliseconds(): number {
@@ -129,6 +127,8 @@ export class Heatmaps {
         if (!window || !document) {
             return
         }
+
+        addEventListener(window, 'beforeunload', this.flush.bind(this))
 
         addEventListener(document, 'click', (e) => this._onClick((e || window?.event) as MouseEvent), { capture: true })
         addEventListener(document, 'mousemove', (e) => this._onMouseMove((e || window?.event) as MouseEvent), {

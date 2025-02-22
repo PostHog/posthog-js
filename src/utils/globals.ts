@@ -3,7 +3,7 @@ import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
 import {
     DeadClicksAutoCaptureConfig,
-    ErrorEventArgs,
+    ErrorConversionArgs,
     ErrorMetadata,
     Properties,
     RemoteConfig,
@@ -66,10 +66,7 @@ interface PostHogExtensions {
 
     loadSiteApp?: (posthog: PostHog, appUrl: string, callback: (error?: string | Event, event?: Event) => void) => void
 
-    parseErrorAsProperties?: (
-        [event, source, lineno, colno, error]: ErrorEventArgs,
-        metadata?: ErrorMetadata
-    ) => ErrorProperties
+    parseErrorAsProperties?: ({ error, event }: ErrorConversionArgs, metadata?: ErrorMetadata) => ErrorProperties
     errorWrappingFunctions?: {
         wrapOnError: (captureFn: (props: Properties) => void) => () => void
         wrapUnhandledRejection: (captureFn: (props: Properties) => void) => () => void

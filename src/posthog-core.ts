@@ -34,6 +34,7 @@ import {
     Compression,
     EarlyAccessFeatureCallback,
     EventName,
+    FeatureFlagsCallback,
     JsonType,
     PostHogConfig,
     Properties,
@@ -56,6 +57,7 @@ import {
     isArray,
     isEmptyObject,
     isEmptyString,
+    isError,
     isFunction,
     isKnownUnsafeEditableEvent,
     isNullish,
@@ -283,6 +285,7 @@ export class PostHog {
     webPerformance = new DeprecatedWebPerformanceObserver()
 
     _initialPageviewCaptured: boolean
+    _personProcessingSetOncePropertiesSent: boolean = false
     _triggered_notifs: any
     compression?: Compression
     __request_queue: QueuedRequestWithOptions[]
@@ -988,8 +991,15 @@ export class PostHog {
             properties['$window_id'] = windowId
         }
 
-        if (this.sessionRecording) {
-            properties['$recording_status'] = this.sessionRecording.status
+        try {
+            if (this.sessionRecording) {
+                properties['$recording_status'] = this.sessionRecording.status
+                properties['$sdk_debug_replay_internal_buffer_length'] = this.sessionRecording['buffer'].data.length
+                properties['$sdk_debug_replay_internal_buffer_size'] = this.sessionRecording['buffer'].size
+            }
+            properties['$sdk_debug_retry_queue_size'] = this._retryQueue?.['queue']?.length
+        } catch (e: any) {
+            properties['$sdk_debug_error_capturing_properties'] = String(e)
         }
 
         if (this.requestRouter.region === RequestRouterRegion.CUSTOM) {
@@ -1067,17 +1077,32 @@ export class PostHog {
         return properties
     }
 
+    /**
+     * Add additional set_once properties to the event when creating a person profile. This allows us to create the
+     * profile with mostly-accurate properties, despite earlier events not setting them. We do this by storing them in
+     * persistence.
+     * @param dataSetOnce
+     */
     _calculate_set_once_properties(dataSetOnce?: Properties): Properties | undefined {
         if (!this.persistence || !this._hasPersonProcessing()) {
             return dataSetOnce
         }
+
+        if (this._personProcessingSetOncePropertiesSent) {
+            // We only need to send these properties once. Sending them with later events would be redundant and would
+            // just require extra work on the server to process them.
+            return dataSetOnce
+        }
         // if we're an identified person, send initial params with every event
-        let setOnceProperties = extend({}, this.persistence.get_initial_props(), dataSetOnce || {})
+        const initialProps = this.persistence.get_initial_props()
+        const sessionProps = this.sessionPropsManager?.getSetOnceInitialSessionPropsProps()
+        let setOnceProperties = extend({}, initialProps, sessionProps || {}, dataSetOnce || {})
         const sanitize_properties = this.config.sanitize_properties
         if (sanitize_properties) {
             logger.error('sanitize_properties is deprecated. Use before_send instead')
             setOnceProperties = sanitize_properties(setOnceProperties, '$set_once')
         }
+        this._personProcessingSetOncePropertiesSent = true
         if (isEmptyObject(setOnceProperties)) {
             return undefined
         }
@@ -1264,16 +1289,18 @@ export class PostHog {
     /*
      * Register an event listener that runs when feature flags become available or when they change.
      * If there are flags, the listener is called immediately in addition to being called on future changes.
+     * Note that this is not called only when we fetch feature flags from the server, but also when they change in the browser.
      *
      * ### Usage:
      *
-     *     posthog.onFeatureFlags(function(featureFlags) { // do something })
+     *     posthog.onFeatureFlags(function(featureFlags, featureFlagsVariants, { errorsLoading }) { // do something })
      *
      * @param {Function} [callback] The callback function will be called once the feature flags are ready or when they are updated.
-     *                              It'll return a list of feature flags enabled for the user.
+     *                              It'll return a list of feature flags enabled for the user, the variants,
+     *                              and also a context object indicating whether we succeeded to fetch the flags or not.
      * @returns {Function} A function that can be called to unsubscribe the listener. Used by useEffect when the component unmounts.
      */
-    onFeatureFlags(callback: (flags: string[], variants: Record<string, string | boolean>) => void): () => void {
+    onFeatureFlags(callback: FeatureFlagsCallback): () => void {
         return this.featureFlags.onFeatureFlags(callback)
     }
 
@@ -1834,12 +1861,12 @@ export class PostHog {
     }
 
     /** Capture a caught exception manually */
-    captureException(error: Error, additionalProperties?: Properties): void {
+    captureException(error: unknown, additionalProperties?: Properties): void {
         const syntheticException = new Error('PostHog syntheticException')
         const properties: Properties = isFunction(assignableWindow.__PosthogExtensions__?.parseErrorAsProperties)
             ? {
                   ...assignableWindow.__PosthogExtensions__.parseErrorAsProperties(
-                      [error.message, undefined, undefined, undefined, error],
+                      isError(error) ? { error, event: error.message } : { event: error as Event | string },
                       // create synthetic error to get stack in cases where user input does not contain one
                       // creating the exceptions soon into our code as possible means we should only have to
                       // remove a single frame (this 'captureException' method) from the resultant stack
@@ -1851,8 +1878,8 @@ export class PostHog {
                   $exception_level: 'error',
                   $exception_list: [
                       {
-                          type: error.name,
-                          value: error.message,
+                          type: isError(error) ? error.name : 'Error',
+                          value: isError(error) ? error.message : error,
                           mechanism: {
                               handled: true,
                               synthetic: false,
@@ -2138,6 +2165,32 @@ export class PostHog {
 
     public getPageViewId(): string | undefined {
         return this.pageViewManager._currentPageview?.pageViewId
+    }
+
+    /**
+     * Capture written user feedback for a LLM trace. Numeric values are converted to strings.
+     * @param traceId The trace ID to capture feedback for.
+     * @param userFeedback The feedback to capture.
+     */
+    captureTraceFeedback(traceId: string | number, userFeedback: string) {
+        this.capture('$ai_feedback', {
+            $ai_trace_id: String(traceId),
+            $ai_feedback_text: userFeedback,
+        })
+    }
+
+    /**
+     * Capture a metric for a LLM trace. Numeric values are converted to strings.
+     * @param traceId The trace ID to capture the metric for.
+     * @param metricName The name of the metric to capture.
+     * @param metricValue The value of the metric to capture.
+     */
+    captureTraceMetric(traceId: string | number, metricName: string, metricValue: string | number | boolean) {
+        this.capture('$ai_metric', {
+            $ai_trace_id: String(traceId),
+            $ai_metric_name: metricName,
+            $ai_metric_value: String(metricValue),
+        })
     }
 }
 

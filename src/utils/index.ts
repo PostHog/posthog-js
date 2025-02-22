@@ -107,15 +107,6 @@ export function entries<T = any>(obj: Record<string, T>): [string, T][] {
     return resArray
 }
 
-export const isValidRegex = function (str: string): boolean {
-    try {
-        new RegExp(str)
-    } catch {
-        return false
-    }
-    return true
-}
-
 export const trySafe = function <T>(fn: () => T): T | undefined {
     try {
         return fn()

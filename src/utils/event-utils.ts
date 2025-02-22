@@ -194,43 +194,54 @@ export const Info = {
         }
     },
 
-    initialPersonInfo: function (): Record<string, any> {
+    personInfo: function ({
+        maskPersonalDataProperties,
+        customPersonalDataProperties,
+    }: {
+        maskPersonalDataProperties?: boolean
+        customPersonalDataProperties?: string[]
+    } = {}) {
+        const paramsToMask = maskPersonalDataProperties
+            ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
+            : []
+        const url = location?.href.substring(0, 1000)
         // we're being a bit more economical with bytes here because this is stored in the cookie
         return {
             r: this.referrer().substring(0, 1000),
-            u: location?.href.substring(0, 1000),
+            u: url ? maskQueryParams(url, paramsToMask, MASKED) : undefined,
         }
     },
 
-    initialPersonPropsFromInfo: function (info: Record<string, any>): Record<string, any> {
-        const { r: initial_referrer, u: initial_current_url } = info
+    personPropsFromInfo: function (info: Record<string, any>): Record<string, any> {
+        const { r: referrer, u: url } = info
         const referring_domain =
-            initial_referrer == null
-                ? undefined
-                : initial_referrer == '$direct'
-                  ? '$direct'
-                  : convertToURL(initial_referrer)?.host
+            referrer == null ? undefined : referrer == '$direct' ? '$direct' : convertToURL(referrer)?.host
 
         const props: Record<string, string | undefined> = {
-            $initial_referrer: initial_referrer,
-            $initial_referring_domain: referring_domain,
+            $referrer: referrer,
+            $referring_domain: referring_domain,
         }
-        if (initial_current_url) {
-            props['$initial_current_url'] = initial_current_url
-            const location = convertToURL(initial_current_url)
-            props['$initial_host'] = location?.host
-            props['$initial_pathname'] = location?.pathname
-            const campaignParams = this._campaignParamsFromUrl(initial_current_url)
-            each(campaignParams, function (v, k: string) {
-                props['$initial_' + stripLeadingDollar(k)] = v
-            })
+        if (url) {
+            props['$current_url'] = url
+            const location = convertToURL(url)
+            props['$host'] = location?.host
+            props['$pathname'] = location?.pathname
+            const campaignParams = this._campaignParamsFromUrl(url)
+            extend(props, campaignParams)
         }
-        if (initial_referrer) {
-            const searchInfo = this._searchInfoFromReferrer(initial_referrer)
-            each(searchInfo, function (v, k: string) {
-                props['$initial_' + stripLeadingDollar(k)] = v
-            })
+        if (referrer) {
+            const searchInfo = this._searchInfoFromReferrer(referrer)
+            extend(props, searchInfo)
         }
+        return props
+    },
+
+    initialPersonPropsFromInfo: function (info: Record<string, any>): Record<string, any> {
+        const personProps = this.personPropsFromInfo(info)
+        const props: Record<string, any> = {}
+        each(personProps, function (val: any, key: string) {
+            props[`$initial_${stripLeadingDollar(key)}`] = val
+        })
         return props
     },
 

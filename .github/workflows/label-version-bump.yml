@@ -24,8 +24,6 @@ jobs:
                   fetch-depth: 0
 
             - uses: pnpm/action-setup@v4
-              with:
-                version: 8.x.x
 
             - name: Detect version bump type
               id: bump-type

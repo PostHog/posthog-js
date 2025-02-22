@@ -1,6 +1,13 @@
 import { VNode, cloneElement, createContext } from 'preact'
 import { PostHog } from '../../posthog-core'
-import { MultipleSurveyQuestion, Survey, SurveyAppearance, SurveyQuestion } from '../../posthog-surveys-types'
+import {
+    MultipleSurveyQuestion,
+    Survey,
+    SurveyAppearance,
+    SurveyQuestion,
+    SurveySchedule,
+    SurveyType,
+} from '../../posthog-surveys-types'
 import { document as _document, window as _window } from '../../utils/globals'
 import { createLogger } from '../../utils/logger'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
@@ -208,6 +215,12 @@ export const style = (appearance: SurveyAppearance | null) => {
               margin-top: 6px;
               background: ${appearance?.backgroundColor || '#eeeded'};
               opacity: .60;
+          }
+          .limit-height {
+              max-height: 300px;
+              overflow: auto;
+              scrollbar-width: thin;
+              scrollbar-color: ${appearance?.borderColor || '#c9c6c6'} ${appearance?.backgroundColor || '#eeeded'};
           }
           .multiple-choice-options {
               margin-top: 13px;
@@ -634,11 +647,15 @@ export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
     return reverseIfUnshuffled(survey.questions, shuffle(survey.questions))
 }
 
-export const hasEvents = (survey: Survey): boolean => {
+export const hasEvents = (survey: Pick<Survey, 'conditions'>): boolean => {
     return survey.conditions?.events?.values?.length != undefined && survey.conditions?.events?.values?.length > 0
 }
 
-export const canActivateRepeatedly = (survey: Survey): boolean => {
+export const canActivateRepeatedly = (survey: Pick<Survey, 'schedule' | 'type' | 'conditions'>): boolean => {
+    if (survey.schedule === SurveySchedule.Always && survey.type === SurveyType.Widget) {
+        return true
+    }
+
     return !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey))
 }
 
@@ -686,6 +703,20 @@ const getSurveyInteractionProperty = (survey: Survey, action: string): string =>
     }
 
     return surveyProperty
+}
+
+export const hasWaitPeriodPassed = (
+    lastSeenSurveyDate: string | null,
+    waitPeriodInDays: number | undefined
+): boolean => {
+    if (!waitPeriodInDays || !lastSeenSurveyDate) {
+        return true
+    }
+
+    const today = new Date()
+    const diff = Math.abs(today.getTime() - new Date(lastSeenSurveyDate).getTime())
+    const diffDaysFromToday = Math.ceil(diff / (1000 * 3600 * 24))
+    return diffDaysFromToday > waitPeriodInDays
 }
 
 interface SurveyContextProps {

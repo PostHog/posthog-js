@@ -11,7 +11,7 @@ import {
 import { defaultStackParser, StackFrame } from './stack-trace'
 
 import { isEmptyString, isString, isUndefined } from '../../utils/type-utils'
-import { ErrorEventArgs, ErrorMetadata, SeverityLevel, severityLevels } from '../../types'
+import { ErrorConversionArgs, ErrorEventArgs, ErrorMetadata, SeverityLevel, severityLevels } from '../../types'
 
 export interface ErrorProperties {
     $exception_list: Exception[]
@@ -243,11 +243,7 @@ function errorPropertiesFromObject(candidate: Record<string, unknown>, metadata?
     }
 }
 
-export function errorToProperties(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    [event, _, __, ___, error]: ErrorEventArgs,
-    metadata?: ErrorMetadata
-): ErrorProperties {
+export function errorToProperties({ error, event }: ErrorConversionArgs, metadata?: ErrorMetadata): ErrorProperties {
     let errorProperties: ErrorProperties = { $exception_list: [] }
 
     const candidate = error || event
@@ -312,11 +308,14 @@ export function unhandledRejectionToProperties([ev]: [ev: PromiseRejectionEvent]
         })
     }
 
-    return errorToProperties([error as string | Event], {
-        handled: false,
-        overrideExceptionType: 'UnhandledRejection',
-        defaultExceptionMessage: String(error),
-    })
+    return errorToProperties(
+        { event: error as string | Event },
+        {
+            handled: false,
+            overrideExceptionType: 'UnhandledRejection',
+            defaultExceptionMessage: String(error),
+        }
+    )
 }
 
 function getUnhandledRejectionError(error: unknown): unknown {

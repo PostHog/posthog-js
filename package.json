@@ -1,10 +1,11 @@
 {
     "name": "posthog-js",
-    "version": "1.215.6",
+    "version": "1.222.0",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "hey@posthog.com",
     "license": "MIT",
+    "packageManager": "pnpm@9.15.4",
     "scripts": {
         "start": "pnpm build-react && pnpm build-rollup -w",
         "build": "pnpm build-rollup && pnpm build-react",
@@ -24,7 +25,7 @@
         "typecheck": "tsc --noEmit --project tsconfig.json",
         "playwright": "pnpm exec playwright test --project webkit --project firefox --project chromium",
         "playwright-ui": "pnpm exec playwright test --ui --project webkit --project firefox --project chromium",
-        "prepare": "husky install",
+        "prepare": "[ -z \"$VERCEL\" ] && husky install || echo \"Skipping husky install on vercel build\"",
         "deprecate-old-versions": "node scripts/deprecate-old-versions.mjs",
         "check-testcafe-results": "ts-node testcafe/check-testcafe-results.js",
         "run-testcafe-localhost": "node scripts/run-testcafe-localhost.mjs"
@@ -112,6 +113,9 @@
         "tslib": "^2.5.0",
         "typescript": "^5.5.4",
         "yargs": "^17.7.2"
+    },
+    "peerDependencies": {
+        "@rrweb/types": "2.0.0-alpha.17"
     },
     "lint-staged": {
         "*.{ts,tsx,js,json}": "prettier --write",

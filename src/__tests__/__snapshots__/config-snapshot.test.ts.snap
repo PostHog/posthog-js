@@ -249,8 +249,8 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"slimDOMOptions\\": [
       \\"undefined\\",
       \\"true\\",
-      \\"\\\\\\"all\\\\\\"\\",
-      \\"Partial<{ script: boolean; comment: boolean; headFavicon: boolean; headWhitespace: boolean; headMetaDescKeywords: boolean; headMetaSocial: boolean; headMetaRobots: boolean; headMetaHttpEquiv: boolean; headMetaAuthorship: boolean; headMetaVerification: boolean; headTitleMutations: boolean; }>\\"
+      \\"Partial<{ script: boolean; comment: boolean; headFavicon: boolean; headWhitespace: boolean; headMetaDescKeywords: boolean; headMetaSocial: boolean; headMetaRobots: boolean; headMetaHttpEquiv: boolean; headMetaAuthorship: boolean; headMetaVerification: boolean; headTitleMutations: boolean; }>\\",
+      \\"\\\\\\"all\\\\\\"\\"
     ],
     \\"collectFonts\\": [
       \\"undefined\\",
@@ -436,6 +436,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
       \\"{ scroll_threshold_ms?: number | undefined; selection_change_threshold_ms?: number | undefined; mutation_threshold_ms?: number | undefined; __onCapture?: ((click: DeadClickCandidate, properties: Properties) => void) | undefined; }\\",
       \\"Pick<AutocaptureConfig, \\\\\\"element_attribute_ignorelist\\\\\\">\\"
     ]
+  ],
+  \\"capture_exceptions\\": [
+    \\"undefined\\",
+    \\"false\\",
+    \\"true\\"
   ],
   \\"disable_scroll_properties\\": [
     \\"undefined\\",

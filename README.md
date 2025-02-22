@@ -10,7 +10,7 @@ This README is intended for developing the library itself.
 
 we use pnpm.
 
-it's best to install using `npm install -g pnpm@latest-8`
+it's best to install using `npm install -g pnpm@latest-9`
 and then `pnpm` commands as usual
 
 ## 

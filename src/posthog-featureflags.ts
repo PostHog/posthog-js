@@ -9,6 +9,7 @@ import {
     JsonType,
     Compression,
     EarlyAccessFeature,
+    RemoteConfigFeatureFlagCallback,
 } from './types'
 import { PostHogPersistence } from './posthog-persistence'
 
@@ -374,6 +375,38 @@ export class PostHogFeatureFlags {
     }
 
     /*
+     * Fetches the payload for a remote config feature flag. This method will bypass any cached values and fetch the latest
+     * value from the PostHog API.
+     *
+     * Note: Because the posthog-js SDK is primarily used with public project API keys, encrypted remote config payloads will
+     * be redacted, never decrypted in the response.
+     *
+     * ### Usage:
+     *
+     *     getRemoteConfigPayload("home-page-welcome-message", (payload) => console.log(`Fetched remote config: ${payload}`))
+     *
+     * @param {String} key Key of the feature flag.
+     * @param {Function} [callback] The callback function will be called once the remote config feature flag payload has been fetched.
+     */
+    getRemoteConfigPayload(key: string, callback: RemoteConfigFeatureFlagCallback): void {
+        const token = this.instance.config.token
+        this.instance._send_request({
+            method: 'POST',
+            url: this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
+            data: {
+                distinct_id: this.instance.get_distinct_id(),
+                token,
+            },
+            compression: this.instance.config.disable_compression ? undefined : Compression.Base64,
+            timeout: this.instance.config.feature_flag_request_timeout_ms,
+            callback: (response) => {
+                const flagPayloads = response.json?.['featureFlagPayloads']
+                callback(flagPayloads?.[key] || undefined)
+            },
+        })
+    }
+
+    /*
      * See if feature flag is enabled for user.
      *
      * ### Usage:
@@ -501,10 +534,11 @@ export class PostHogFeatureFlags {
      *
      * ### Usage:
      *
-     *     posthog.onFeatureFlags(function(featureFlags) { // do something })
+     *     posthog.onFeatureFlags(function(featureFlags, featureFlagsVariants, { errorsLoading }) { // do something })
      *
      * @param {Function} [callback] The callback function will be called once the feature flags are ready or when they are updated.
-     *                              It'll return a list of feature flags enabled for the user.
+     *                              It'll return a list of feature flags enabled for the user, the variants,
+     *                              and also a context object indicating whether we succeeded to fetch the flags or not.
      * @returns {Function} A function that can be called to unsubscribe the listener. Used by useEffect when the component unmounts.
      */
     onFeatureFlags(callback: FeatureFlagsCallback): () => void {

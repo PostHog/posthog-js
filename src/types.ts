@@ -1,6 +1,6 @@
 import { PostHog } from './posthog-core'
 import type { SegmentAnalytics } from './extensions/segment-integration'
-import { recordOptions } from './extensions/replay/sessionrecording-utils'
+import type { recordOptions } from './extensions/replay/types/rrweb'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -783,6 +783,13 @@ export interface PostHogConfig {
     capture_dead_clicks?: boolean | DeadClicksAutoCaptureConfig
 
     /**
+     * Determines whether to capture exceptions.
+     *
+     * @default undefined
+     */
+    capture_exceptions?: boolean
+
+    /**
      * Determines whether to disable scroll properties.
      * These allow you to keep track of how far down someone scrolled in your website.
      *
@@ -1349,6 +1356,8 @@ export type FeatureFlagsCallback = (
     }
 ) => void
 
+export type RemoteConfigFeatureFlagCallback = (payload: JsonType) => void
+
 export interface PersistentStore {
     is_supported: () => boolean
     error: (error: any) => void
@@ -1501,6 +1510,11 @@ export type CapturedNetworkRequest = Writable<Omit<PerformanceEntry, 'toJSON'>> 
     responseBody?: string | null
     // was this captured before fetch/xhr could have been wrapped
     isInitial?: boolean
+}
+
+export type ErrorConversionArgs = {
+    event: string | Event
+    error?: Error
 }
 
 export type ErrorEventArgs = [

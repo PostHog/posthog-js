@@ -4,7 +4,7 @@ import { SimpleEventEmitter } from '../../utils/simple-event-emitter'
 import { CaptureResult } from '../../types'
 import { isUndefined } from '../../utils/type-utils'
 import { window } from '../../utils/globals'
-import { isMatchingRegex } from '../../utils/string-utils'
+import { isMatchingRegex } from '../../utils/regex-utils'
 
 export class ActionMatcher {
     private readonly actionRegistry?: Set<SurveyActionType>
