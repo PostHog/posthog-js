@@ -1,33 +1,41 @@
+import { Autocapture } from './autocapture'
 import Config from './config'
-import {
-    _copyAndTruncateStrings,
-    each,
-    eachArray,
-    extend,
-    safewrapClass,
-    isCrossDomainCookie,
-    addEventListener,
-} from './utils'
-import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
-import { PostHogFeatureFlags } from './posthog-featureflags'
-import { PostHogPersistence } from './posthog-persistence'
+import { ConsentManager } from './consent'
 import {
     ALIAS_ID_KEY,
+    COOKIELESS_MODE_FLAG_PROPERTY,
+    COOKIELESS_SENTINEL_VALUE,
+    ENABLE_PERSON_PROCESSING,
     FLAG_CALL_REPORTED,
     PEOPLE_DISTINCT_ID_KEY,
+    SURVEYS_REQUEST_TIMEOUT_MS,
     USER_STATE,
-    ENABLE_PERSON_PROCESSING,
-    COOKIELESS_SENTINEL_VALUE,
-    COOKIELESS_MODE_FLAG_PROPERTY,
 } from './constants'
+import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
+import { ExceptionObserver } from './extensions/exception-autocapture'
 import { SessionRecording } from './extensions/replay/sessionrecording'
-import { RemoteConfigLoader } from './remote-config'
+import { setupSegmentIntegration } from './extensions/segment-integration'
+import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
 import { Toolbar } from './extensions/toolbar'
-import { localStore } from './storage'
+import { TracingHeaders } from './extensions/tracing-headers'
+import { WebVitalsAutocapture } from './extensions/web-vitals'
+import { Heatmaps } from './heatmaps'
+import { PageViewManager } from './page-view'
+import { PostHogExceptions } from './posthog-exceptions'
+import { PostHogFeatureFlags } from './posthog-featureflags'
+import { PostHogPersistence } from './posthog-persistence'
+import { PostHogSurveys } from './posthog-surveys'
+import { Survey, SurveyCallback, SurveyQuestionBranchingType } from './posthog-surveys-types'
+import { RateLimiter } from './rate-limiter'
+import { RemoteConfigLoader } from './remote-config'
+import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
 import { DEFAULT_FLUSH_INTERVAL_MS, RequestQueue } from './request-queue'
 import { RetryQueue } from './retry-queue'
+import { ScrollManager } from './scroll-manager'
+import { SessionPropsManager } from './session-props'
 import { SessionIdManager } from './sessionid'
-import { RequestRouter, RequestRouterRegion } from './utils/request-router'
+import { SiteApps } from './site-apps'
+import { localStore } from './storage'
 import {
     CaptureOptions,
     CaptureResult,
@@ -46,13 +54,23 @@ import {
     SnippetArrayItem,
     ToolbarParams,
 } from './types'
-import { SentryIntegration, SentryIntegrationOptions, sentryIntegration } from './extensions/sentry-integration'
-import { setupSegmentIntegration } from './extensions/segment-integration'
-import { PageViewManager } from './page-view'
-import { PostHogSurveys } from './posthog-surveys'
-import { RateLimiter } from './rate-limiter'
-import { uuidv7 } from './uuidv7'
-import { Survey, SurveyCallback, SurveyQuestionBranchingType } from './posthog-surveys-types'
+import {
+    _copyAndTruncateStrings,
+    addEventListener,
+    each,
+    eachArray,
+    extend,
+    isCrossDomainCookie,
+    safewrapClass,
+} from './utils'
+import { isLikelyBot } from './utils/blocked-uas'
+import { Info } from './utils/event-utils'
+import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
+import { getIdentifyHash } from './utils/identify-utils'
+import { logger } from './utils/logger'
+import { RequestRouter, RequestRouterRegion } from './utils/request-router'
+import { SimpleEventEmitter } from './utils/simple-event-emitter'
+import { includes, isDistinctIdStringLike } from './utils/string-utils'
 import {
     isArray,
     isEmptyObject,
@@ -66,25 +84,8 @@ import {
     isString,
     isUndefined,
 } from './utils/type-utils'
-import { Info } from './utils/event-utils'
-import { logger } from './utils/logger'
-import { SessionPropsManager } from './session-props'
-import { isLikelyBot } from './utils/blocked-uas'
-import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
-import { Heatmaps } from './heatmaps'
-import { ScrollManager } from './scroll-manager'
-import { SimpleEventEmitter } from './utils/simple-event-emitter'
-import { Autocapture } from './autocapture'
-import { TracingHeaders } from './extensions/tracing-headers'
-import { ConsentManager } from './consent'
-import { ExceptionObserver } from './extensions/exception-autocapture'
-import { WebVitalsAutocapture } from './extensions/web-vitals'
+import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
-import { PostHogExceptions } from './posthog-exceptions'
-import { SiteApps } from './site-apps'
-import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
-import { includes, isDistinctIdStringLike } from './utils/string-utils'
-import { getIdentifyHash } from './utils/identify-utils'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -176,6 +177,7 @@ export const defaultConfig = (): PostHogConfig => ({
     advanced_disable_feature_flags_on_first_load: false,
     advanced_disable_toolbar_metrics: false,
     feature_flag_request_timeout_ms: 3000,
+    surveys_request_timeout_ms: SURVEYS_REQUEST_TIMEOUT_MS,
     on_request_error: (res) => {
         const error = 'Bad HTTP status: ' + res.statusCode + ' ' + res.text
         logger.error(error)
