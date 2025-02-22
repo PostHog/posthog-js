@@ -106,4 +106,78 @@ describe('loaded() with flags', () => {
             expect(instance._send_request).toHaveBeenCalledTimes(1)
         })
     })
+
+    describe('quota limiting', () => {
+        let mockLogger: jest.SpyInstance
+
+        beforeEach(async () => {
+            mockLogger = jest.spyOn(console, 'warn').mockImplementation()
+            instance = await createPosthog()
+        })
+
+        afterEach(() => {
+            mockLogger.mockRestore()
+        })
+
+        it('does not process feature flags when quota limited', async () => {
+            instance._send_request = jest.fn(({ callback }) =>
+                callback?.({
+                    statusCode: 200,
+                    json: {
+                        quotaLimited: ['feature_flags'],
+                        featureFlags: { 'test-flag': true },
+                    },
+                })
+            )
+
+            const receivedFeatureFlagsSpy = jest.spyOn(instance.featureFlags, 'receivedFeatureFlags')
+
+            instance.featureFlags._callDecideEndpoint()
+            jest.runAllTimers()
+
+            expect(receivedFeatureFlagsSpy).not.toHaveBeenCalled()
+        })
+
+        it('processes feature flags when not quota limited', async () => {
+            const mockFlags = { 'test-flag': true }
+            instance._send_request = jest.fn(({ callback }) =>
+                callback?.({
+                    statusCode: 200,
+                    json: {
+                        featureFlags: mockFlags,
+                    },
+                })
+            )
+
+            const receivedFeatureFlagsSpy = jest.spyOn(instance.featureFlags, 'receivedFeatureFlags')
+
+            instance.featureFlags._callDecideEndpoint()
+            jest.runAllTimers()
+
+            expect(receivedFeatureFlagsSpy).toHaveBeenCalledWith({ featureFlags: mockFlags }, false)
+        })
+
+        it('processes feature flags when other resources are quota limited', async () => {
+            const mockFlags = { 'test-flag': true }
+            instance._send_request = jest.fn(({ callback }) =>
+                callback?.({
+                    statusCode: 200,
+                    json: {
+                        quotaLimited: ['recordings'],
+                        featureFlags: mockFlags,
+                    },
+                })
+            )
+
+            const receivedFeatureFlagsSpy = jest.spyOn(instance.featureFlags, 'receivedFeatureFlags')
+
+            instance.featureFlags._callDecideEndpoint()
+            jest.runAllTimers()
+
+            expect(receivedFeatureFlagsSpy).toHaveBeenCalledWith(
+                { quotaLimited: ['recordings'], featureFlags: mockFlags },
+                false
+            )
+        })
+    })
 })
