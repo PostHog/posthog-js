@@ -1,3 +1,7 @@
+## 1.223.0 - 2025-02-22
+
+- feat: Add new `prepare_external_dependency_stylesheet` config option (#1757)
+
 ## 1.222.0 - 2025-02-20
 
 - chore: Make `@rrweb/types` a peer dependency (#1749)
