@@ -1,6 +1,6 @@
-import { PostHog } from './posthog-core'
-import type { SegmentAnalytics } from './extensions/segment-integration'
 import type { recordOptions } from './extensions/replay/types/rrweb'
+import type { SegmentAnalytics } from './extensions/segment-integration'
+import { PostHog } from './posthog-core'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -701,6 +701,13 @@ export interface PostHogConfig {
      * @default 3000
      */
     feature_flag_request_timeout_ms: number
+
+    /**
+     * Sets timeout for fetching surveys
+     *
+     * @default 10000
+     */
+    surveys_request_timeout_ms: number
 
     /**
      * Function to get the device ID.
