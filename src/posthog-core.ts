@@ -25,7 +25,7 @@ import { PostHogExceptions } from './posthog-exceptions'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import { PostHogSurveys } from './posthog-surveys'
-import { Survey, SurveyCallback, SurveyQuestionBranchingType } from './posthog-surveys-types'
+import { SurveyCallback } from './posthog-surveys-types'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
@@ -1341,15 +1341,6 @@ export class PostHog {
     /** Checks the feature flags associated with this Survey to see if the survey can be rendered. */
     canRenderSurvey(surveyId: string): void {
         this.surveys.canRenderSurvey(surveyId)
-    }
-
-    /** Get the next step of the survey: a question index or `end` */
-    getNextSurveyStep(
-        survey: Survey,
-        currentQuestionIndex: number,
-        response: string | string[] | number | null
-    ): number | SurveyQuestionBranchingType.End {
-        return this.surveys.getNextSurveyStep(survey, currentQuestionIndex, response)
     }
 
     /**
