@@ -8,6 +8,7 @@ import {
     SESSION_RECORDING_CANVAS_RECORDING,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_MASKING,
     SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE,
     SESSION_RECORDING_SAMPLE_RATE,
 } from '../../../constants'
@@ -428,6 +429,65 @@ describe('SessionRecording', () => {
         )
     })
 
+    describe('masking config', () => {
+        it.each([
+            [
+                'enabled when both enabled',
+                { maskAllInputs: true, maskTextSelector: '*' },
+                { maskAllInputs: true, maskTextSelector: '*' },
+                { maskAllInputs: true, maskTextSelector: '*' },
+            ],
+            [
+                'disabled when both disabled',
+                { maskAllInputs: false },
+                { maskAllInputs: false },
+                { maskAllInputs: false },
+            ],
+            ['is undefined when nothing is set', undefined, undefined, undefined],
+            [
+                'uses client config when set if server config is not set',
+                undefined,
+                { maskAllInputs: true, maskTextSelector: '#client' },
+                { maskAllInputs: true, maskTextSelector: '#client' },
+            ],
+            [
+                'uses server config when set if client config is not set',
+                { maskAllInputs: false, maskTextSelector: '#server' },
+                undefined,
+                { maskAllInputs: false, maskTextSelector: '#server' },
+            ],
+            [
+                'overrides server config with client config if both are set',
+                { maskAllInputs: false, maskTextSelector: '#server' },
+                { maskAllInputs: true, maskTextSelector: '#client' },
+                { maskAllInputs: true, maskTextSelector: '#client' },
+            ],
+            [
+                'partially overrides server config with client config if both are set',
+                { maskAllInputs: true, maskTextSelector: '*' },
+                { maskAllInputs: false },
+                { maskAllInputs: false, maskTextSelector: '*' },
+            ],
+        ])(
+            '%s',
+            (
+                _name: string,
+                serverConfig: { maskAllInputs?: boolean; maskTextSelector?: string } | undefined,
+                clientConfig: { maskAllInputs: boolean; maskTextSelector?: string } | undefined,
+                expected: { maskAllInputs: boolean; maskTextSelector?: string } | undefined
+            ) => {
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_MASKING]: serverConfig,
+                })
+
+                posthog.config.session_recording.maskAllInputs = clientConfig?.maskAllInputs
+                posthog.config.session_recording.maskTextSelector = clientConfig?.maskTextSelector
+
+                expect(sessionRecording['masking']).toEqual(expected)
+            }
+        )
+    })
+
     describe('startIfEnabledOrStop', () => {
         beforeEach(() => {
             // need to cast as any to mock private methods
@@ -629,6 +689,21 @@ describe('SessionRecording', () => {
             })
         })
 
+        it('stores masking config in persistence if set on the server', () => {
+            posthog.persistence?.register({ [SESSION_RECORDING_MASKING]: undefined })
+
+            sessionRecording.onRemoteConfig(
+                makeDecideResponse({
+                    sessionRecording: { endpoint: '/s/', masking: { maskAllInputs: true, maskTextSelector: '*' } },
+                })
+            )
+
+            expect(posthog.get_property(SESSION_RECORDING_MASKING)).toEqual({
+                maskAllInputs: true,
+                maskTextSelector: '*',
+            })
+        })
+
         it('stores false in persistence if recording is not enabled from the server', () => {
             posthog.persistence?.register({ [SESSION_RECORDING_ENABLED_SERVER_SIDE]: undefined })
 
@@ -822,6 +897,27 @@ describe('SessionRecording', () => {
                 plugins: [],
                 inlineStylesheet: true,
                 recordCrossOriginIframes: false,
+            })
+        })
+
+        describe('masking', () => {
+            it('passes remote masking options to rrweb', () => {
+                posthog.config.session_recording.maskAllInputs = undefined
+
+                posthog.persistence?.register({
+                    [SESSION_RECORDING_MASKING]: { maskAllInputs: true, maskTextSelector: '*' },
+                })
+
+                sessionRecording.startIfEnabledOrStop()
+
+                sessionRecording['_onScriptLoaded']()
+
+                expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        maskAllInputs: true,
+                        maskTextSelector: '*',
+                    })
+                )
             })
         })
 
