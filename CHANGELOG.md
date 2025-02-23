@@ -1,3 +1,7 @@
+## 1.223.3 - 2025-02-23
+
+- fix: dont show survey on url change, only hide it (#1761)
+
 ## 1.223.2 - 2025-02-22
 
 - fix: improve survey bundle size (#1759)
