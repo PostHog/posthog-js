@@ -5,8 +5,8 @@ import {
     renderFeedbackWidgetPreview,
     renderSurveysPreview,
     SurveyManager,
+    useHideSurveyOnURLChange,
     usePopupVisibility,
-    useToggleSurveyOnURLChange,
 } from '../../extensions/surveys'
 import { createShadow } from '../../extensions/surveys/surveys-utils'
 import { Survey, SurveyQuestionType, SurveyType } from '../../posthog-surveys-types'
@@ -798,7 +798,7 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
     })
 })
 
-describe('useToggleSurveyOnURLChange', () => {
+describe('useHideSurveyOnURLChange', () => {
     let originalLocationHref: string
     let originalPushState: typeof window.history.pushState
     let originalReplaceState: typeof window.history.replaceState
@@ -846,7 +846,7 @@ describe('useToggleSurveyOnURLChange', () => {
         }
 
         renderHook(() =>
-            useToggleSurveyOnURLChange({
+            useHideSurveyOnURLChange({
                 survey,
                 removeSurveyFromFocus: mockRemoveSurveyFromFocus,
                 setSurveyVisible: mockSetSurveyVisible,
@@ -872,7 +872,7 @@ describe('useToggleSurveyOnURLChange', () => {
         }
 
         renderHook(() =>
-            useToggleSurveyOnURLChange({
+            useHideSurveyOnURLChange({
                 survey,
                 removeSurveyFromFocus: mockRemoveSurveyFromFocus,
                 setSurveyVisible: mockSetSurveyVisible,
@@ -900,7 +900,7 @@ describe('useToggleSurveyOnURLChange', () => {
         }
 
         renderHook(() =>
-            useToggleSurveyOnURLChange({
+            useHideSurveyOnURLChange({
                 survey,
                 removeSurveyFromFocus: mockRemoveSurveyFromFocus,
                 setSurveyVisible: mockSetSurveyVisible,
@@ -928,7 +928,7 @@ describe('useToggleSurveyOnURLChange', () => {
         }
 
         renderHook(() =>
-            useToggleSurveyOnURLChange({
+            useHideSurveyOnURLChange({
                 survey,
                 removeSurveyFromFocus: mockRemoveSurveyFromFocus,
                 setSurveyVisible: mockSetSurveyVisible,
@@ -956,7 +956,7 @@ describe('useToggleSurveyOnURLChange', () => {
         }
 
         renderHook(() =>
-            useToggleSurveyOnURLChange({
+            useHideSurveyOnURLChange({
                 survey,
                 removeSurveyFromFocus: mockRemoveSurveyFromFocus,
                 setSurveyVisible: mockSetSurveyVisible,
@@ -988,7 +988,7 @@ describe('useToggleSurveyOnURLChange', () => {
         }
 
         renderHook(() =>
-            useToggleSurveyOnURLChange({
+            useHideSurveyOnURLChange({
                 survey,
                 removeSurveyFromFocus: mockRemoveSurveyFromFocus,
                 setSurveyVisible: mockSetSurveyVisible,
@@ -1020,7 +1020,7 @@ describe('useToggleSurveyOnURLChange', () => {
         }
 
         const { unmount } = renderHook(() =>
-            useToggleSurveyOnURLChange({
+            useHideSurveyOnURLChange({
                 survey,
                 removeSurveyFromFocus: mockRemoveSurveyFromFocus,
                 setSurveyVisible: mockSetSurveyVisible,
@@ -1043,67 +1043,6 @@ describe('useToggleSurveyOnURLChange', () => {
         expect(mockSetSurveyVisible).not.toHaveBeenCalled()
     })
 
-    it('should show survey when URL changes to match conditions', () => {
-        const survey = {
-            id: 'test-survey',
-            conditions: {
-                url: 'https://example.com/target-path',
-                urlMatchType: 'exact' as const,
-                events: null,
-                actions: null,
-            },
-        }
-
-        // Start with a non-matching URL
-        Object.defineProperty(window, 'location', {
-            value: { href: 'https://example.com/initial-path' },
-            writable: true,
-        })
-
-        renderHook(() =>
-            useToggleSurveyOnURLChange({
-                survey,
-                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
-                setSurveyVisible: mockSetSurveyVisible,
-                isPreviewMode: false,
-            })
-        )
-
-        // Initial mount should not trigger any visibility changes
-        expect(mockSetSurveyVisible).not.toHaveBeenCalled()
-        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
-
-        // Change to another non-matching URL
-        act(() => {
-            Object.defineProperty(window, 'location', {
-                value: { href: 'https://example.com/another-wrong-path' },
-                writable: true,
-            })
-            window.dispatchEvent(new Event('popstate'))
-        })
-
-        // Survey should remain hidden
-        expect(mockSetSurveyVisible).toHaveBeenLastCalledWith(false)
-        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
-
-        // Reset mocks for clarity
-        mockSetSurveyVisible.mockClear()
-        mockRemoveSurveyFromFocus.mockClear()
-
-        // Change URL to match the survey conditions
-        act(() => {
-            Object.defineProperty(window, 'location', {
-                value: { href: 'https://example.com/target-path' },
-                writable: true,
-            })
-            window.dispatchEvent(new Event('popstate'))
-        })
-
-        // Survey should become visible
-        expect(mockSetSurveyVisible).toHaveBeenCalledWith(true)
-        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
-    })
-
     it('should keep survey visible when URL still matches after navigation', () => {
         const survey = {
             id: 'test-survey',
@@ -1116,7 +1055,7 @@ describe('useToggleSurveyOnURLChange', () => {
         }
 
         renderHook(() =>
-            useToggleSurveyOnURLChange({
+            useHideSurveyOnURLChange({
                 survey,
                 removeSurveyFromFocus: mockRemoveSurveyFromFocus,
                 setSurveyVisible: mockSetSurveyVisible,
@@ -1129,7 +1068,6 @@ describe('useToggleSurveyOnURLChange', () => {
         })
 
         expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
-        expect(mockSetSurveyVisible).toHaveBeenCalledWith(true)
     })
 })
 

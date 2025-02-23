@@ -498,9 +498,9 @@ type UseHideSurveyOnURLChangeProps = {
  *
  * This separation of concerns means:
  * 1. Initial URL matching is done by `getActiveMatchingSurveys` before displaying the survey
- * 2. Subsequent URL changes are handled here to hide/show the survey as the user navigates
+ * 2. Subsequent URL changes are handled here to hide the survey as the user navigates
  */
-export function useToggleSurveyOnURLChange({
+export function useHideSurveyOnURLChange({
     survey,
     removeSurveyFromFocus,
     setSurveyVisible,
@@ -517,7 +517,6 @@ export function useToggleSurveyOnURLChange({
                 setSurveyVisible(false)
                 return removeSurveyFromFocus(survey.id)
             }
-            setSurveyVisible(true)
         }
 
         // Listen for browser back/forward browser history changes
@@ -637,7 +636,7 @@ export function usePopupVisibility(
         }
     }, [])
 
-    useToggleSurveyOnURLChange({
+    useHideSurveyOnURLChange({
         survey,
         removeSurveyFromFocus,
         setSurveyVisible: setIsPopupVisible,
@@ -880,7 +879,7 @@ export function FeedbackWidget({
         }
     }, [])
 
-    useToggleSurveyOnURLChange({
+    useHideSurveyOnURLChange({
         survey,
         removeSurveyFromFocus,
         setSurveyVisible: setIsFeedbackButtonVisible,
