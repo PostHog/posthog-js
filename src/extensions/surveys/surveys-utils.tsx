@@ -17,6 +17,16 @@ const SurveySeenPrefix = 'seenSurvey_'
 
 const logger = createLogger('[Surveys]')
 
+export function getFontFamily(fontFamily?: string): string {
+    if (fontFamily === 'inherit') {
+        return 'inherit'
+    }
+
+    const defaultFontStack =
+        'BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"'
+    return fontFamily ? `${fontFamily}, ${defaultFontStack}` : `-apple-system, ${defaultFontStack}`
+}
+
 export const style = (appearance: SurveyAppearance | null) => {
     const positions = {
         left: 'left: 30px;',
@@ -33,7 +43,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               bottom: 0px;
               color: black;
               font-weight: normal;
-              font-family: ${appearance?.fontFamily || '-apple-system'}, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+              font-family: ${getFontFamily(appearance?.fontFamily)};
               text-align: left;
               max-width: ${parseInt(appearance?.maxWidth || '300')}px;
               width: 100%;
@@ -67,7 +77,7 @@ export const style = (appearance: SurveyAppearance | null) => {
           .survey-form textarea {
               color: #2d2d2d;
               font-size: 14px;
-              font-family: ${appearance?.fontFamily || '-apple-system'}, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+              font-family: ${getFontFamily(appearance?.fontFamily)};
               background: white;
               color: black;
               outline: none;
