@@ -1,3 +1,7 @@
+## 1.223.4 - 2025-02-25
+
+- fix: support inherit font family on surveys (#1763)
+
 ## 1.223.3 - 2025-02-23
 
 - fix: dont show survey on url change, only hide it (#1761)
