@@ -15,7 +15,7 @@ describe('loaded() with flags', () => {
             ...config,
             loaded: (ph) => {
                 ph.capture = jest.fn()
-                ph._send_request = jest.fn(({ callback }) => callback?.({ status: 200, json: {} }))
+                ph._send_request = jest.fn(({ callback }) => callback?.({ statusCode: 200, json: {} }))
                 ph._start_queue_if_opted_in = jest.fn()
 
                 jest.spyOn(ph.featureFlags, 'setGroupPropertiesForFlags')
@@ -108,25 +108,42 @@ describe('loaded() with flags', () => {
     })
 
     describe('quota limiting', () => {
-        let mockLogger: jest.SpyInstance
-
         beforeEach(async () => {
-            mockLogger = jest.spyOn(console, 'warn').mockImplementation()
             instance = await createPosthog()
         })
 
-        afterEach(() => {
-            mockLogger.mockRestore()
-        })
-
-        it('does not process feature flags when quota limited', async () => {
+        it.each([
+            {
+                name: 'does not process feature flags when quota limited',
+                response: {
+                    quotaLimited: ['feature_flags'],
+                    featureFlags: { 'test-flag': true },
+                },
+                expectedCall: false,
+                expectedArgs: undefined,
+            },
+            {
+                name: 'processes feature flags when not quota limited',
+                response: {
+                    featureFlags: { 'test-flag': true },
+                },
+                expectedCall: true,
+                expectedArgs: { featureFlags: { 'test-flag': true } },
+            },
+            {
+                name: 'processes feature flags when other resources are quota limited',
+                response: {
+                    quotaLimited: ['recordings'],
+                    featureFlags: { 'test-flag': true },
+                },
+                expectedCall: true,
+                expectedArgs: { quotaLimited: ['recordings'], featureFlags: { 'test-flag': true } },
+            },
+        ])('$name', async ({ response, expectedCall, expectedArgs }) => {
             instance._send_request = jest.fn(({ callback }) =>
                 callback?.({
                     statusCode: 200,
-                    json: {
-                        quotaLimited: ['feature_flags'],
-                        featureFlags: { 'test-flag': true },
-                    },
+                    json: response,
                 })
             )
 
@@ -135,49 +152,11 @@ describe('loaded() with flags', () => {
             instance.featureFlags._callDecideEndpoint()
             jest.runAllTimers()
 
-            expect(receivedFeatureFlagsSpy).not.toHaveBeenCalled()
-        })
-
-        it('processes feature flags when not quota limited', async () => {
-            const mockFlags = { 'test-flag': true }
-            instance._send_request = jest.fn(({ callback }) =>
-                callback?.({
-                    statusCode: 200,
-                    json: {
-                        featureFlags: mockFlags,
-                    },
-                })
-            )
-
-            const receivedFeatureFlagsSpy = jest.spyOn(instance.featureFlags, 'receivedFeatureFlags')
-
-            instance.featureFlags._callDecideEndpoint()
-            jest.runAllTimers()
-
-            expect(receivedFeatureFlagsSpy).toHaveBeenCalledWith({ featureFlags: mockFlags }, false)
-        })
-
-        it('processes feature flags when other resources are quota limited', async () => {
-            const mockFlags = { 'test-flag': true }
-            instance._send_request = jest.fn(({ callback }) =>
-                callback?.({
-                    statusCode: 200,
-                    json: {
-                        quotaLimited: ['recordings'],
-                        featureFlags: mockFlags,
-                    },
-                })
-            )
-
-            const receivedFeatureFlagsSpy = jest.spyOn(instance.featureFlags, 'receivedFeatureFlags')
-
-            instance.featureFlags._callDecideEndpoint()
-            jest.runAllTimers()
-
-            expect(receivedFeatureFlagsSpy).toHaveBeenCalledWith(
-                { quotaLimited: ['recordings'], featureFlags: mockFlags },
-                false
-            )
+            if (expectedCall) {
+                expect(receivedFeatureFlagsSpy).toHaveBeenCalledWith(expectedArgs, false)
+            } else {
+                expect(receivedFeatureFlagsSpy).not.toHaveBeenCalled()
+            }
         })
     })
 })

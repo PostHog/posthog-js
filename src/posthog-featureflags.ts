@@ -104,7 +104,7 @@ type OverrideFeatureFlagsOptions =
     | FeatureFlagOverrides // set variants directly
     | FeatureFlagOverrideOptions
 
-enum QuotaLimitedResource {
+export enum QuotaLimitedResource {
     FeatureFlags = 'feature_flags',
     Recordings = 'recordings',
 }
