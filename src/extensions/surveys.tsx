@@ -748,20 +748,25 @@ export function Questions({
 
     const onNextButtonClick = ({
         res,
-        originalQuestionIndex,
         displayQuestionIndex,
+        originalQuestionIndex,
+        questionId,
     }: {
         res: string | string[] | number | null
-        originalQuestionIndex: number
         displayQuestionIndex: number
+        originalQuestionIndex: number
+        questionId?: string
     }) => {
         if (!posthog) {
             logger.error('onNextButtonClick called without a PostHog instance.')
             return
         }
 
-        const responseKey =
-            originalQuestionIndex === 0 ? `$survey_response` : `$survey_response_${originalQuestionIndex}`
+        const responseKey = questionId
+            ? `$survey_response_${questionId}`
+            : originalQuestionIndex === 0
+              ? `$survey_response`
+              : `$survey_response_${originalQuestionIndex}`
 
         setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
 
@@ -815,8 +820,9 @@ export function Questions({
                                 onSubmit: (res) =>
                                     onNextButtonClick({
                                         res,
-                                        originalQuestionIndex,
                                         displayQuestionIndex,
+                                        originalQuestionIndex,
+                                        questionId: question.id,
                                     }),
                                 onPreviewSubmit,
                             })}
