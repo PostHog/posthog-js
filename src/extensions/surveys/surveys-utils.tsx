@@ -10,6 +10,7 @@ import {
 } from '../../posthog-surveys-types'
 import { document as _document, window as _window } from '../../utils/globals'
 import { createLogger } from '../../utils/logger'
+import { prepareStylesheet } from '../utils/stylesheet-loader'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
@@ -542,15 +543,15 @@ export const defaultSurveyAppearance: SurveyAppearance = {
 
 export const defaultBackgroundColor = '#eeeded'
 
-export const createShadow = (styleSheet: string, surveyId: string, element?: Element) => {
+export const createShadow = (styleSheet: string, surveyId: string, element?: Element, posthog?: PostHog) => {
     const div = document.createElement('div')
     div.className = `PostHogSurvey${surveyId}`
     const shadow = div.attachShadow({ mode: 'open' })
     if (styleSheet) {
-        const styleElement = Object.assign(document.createElement('style'), {
-            innerText: styleSheet,
-        })
-        shadow.appendChild(styleElement)
+        const styleElement = prepareStylesheet(document, styleSheet, posthog)
+        if (styleElement) {
+            shadow.appendChild(styleElement)
+        }
     }
     ;(element ? element : document.body).appendChild(div)
     return shadow
