@@ -655,6 +655,7 @@ interface SurveyPopupProps {
     removeSurveyFromFocus: (id: string) => void
     isPopup?: boolean
     onPreviewSubmit?: (res: string | string[] | number | null) => void
+    onSurveyDismissedOrSent?: () => void
 }
 
 export function SurveyPopup({
@@ -666,6 +667,7 @@ export function SurveyPopup({
     removeSurveyFromFocus,
     isPopup,
     onPreviewSubmit = () => {},
+    onSurveyDismissedOrSent = () => {},
 }: SurveyPopupProps) {
     const isPreviewMode = Number.isInteger(previewPageIndex)
     // NB: The client-side code passes the millisecondDelay in seconds, but setTimeout expects milliseconds, so we multiply by 1000
@@ -697,6 +699,7 @@ export function SurveyPopup({
                 handleCloseSurveyPopup: () => dismissedSurveyEvent(survey, posthog, isPreviewMode),
                 isPopup: isPopup || false,
                 onPreviewSubmit,
+                onSurveyDismissedOrSent,
             }}
         >
             {!shouldShowConfirmation ? (
@@ -736,8 +739,14 @@ export function Questions({
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
     )
     const [questionsResponses, setQuestionsResponses] = useState({})
-    const { isPreviewMode, previewPageIndex, handleCloseSurveyPopup, isPopup, onPreviewSubmit } =
-        useContext(SurveyContext)
+    const {
+        isPreviewMode,
+        previewPageIndex,
+        handleCloseSurveyPopup,
+        isPopup,
+        onPreviewSubmit,
+        onSurveyDismissedOrSent,
+    } = useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
@@ -768,6 +777,7 @@ export function Questions({
         const nextStep = getNextSurveyStep(survey, displayQuestionIndex, res)
         if (nextStep === SurveyQuestionBranchingType.End) {
             sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
+            onSurveyDismissedOrSent()
         } else {
             setCurrentQuestionIndex(nextStep)
         }
@@ -806,7 +816,14 @@ export function Questions({
                                     : {}
                             }
                         >
-                            {isPopup && <Cancel onClick={() => handleCloseSurveyPopup()} />}
+                            {isPopup && (
+                                <Cancel
+                                    onClick={() => {
+                                        handleCloseSurveyPopup()
+                                        onSurveyDismissedOrSent()
+                                    }}
+                                />
+                            )}
                             {getQuestionComponent({
                                 question,
                                 forceDisableHtml,
@@ -911,6 +928,7 @@ export function FeedbackWidget({
                     style={styleOverrides}
                     removeSurveyFromFocus={removeSurveyFromFocus}
                     isPopup={true}
+                    onSurveyDismissedOrSent={() => setShowSurvey(false)}
                 />
             )}
         </Preact.Fragment>

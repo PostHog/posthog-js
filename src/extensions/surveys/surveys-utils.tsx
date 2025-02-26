@@ -735,6 +735,7 @@ interface SurveyContextProps {
     handleCloseSurveyPopup: () => void
     isPopup: boolean
     onPreviewSubmit: (res: string | string[] | number | null) => void
+    onSurveyDismissedOrSent: () => void
 }
 
 export const SurveyContext = createContext<SurveyContextProps>({
@@ -743,6 +744,7 @@ export const SurveyContext = createContext<SurveyContextProps>({
     handleCloseSurveyPopup: () => {},
     isPopup: true,
     onPreviewSubmit: () => {},
+    onSurveyDismissedOrSent: () => {},
 })
 
 interface RenderProps {
