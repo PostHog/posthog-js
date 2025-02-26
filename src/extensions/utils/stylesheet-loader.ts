@@ -8,7 +8,7 @@ export const prepareStylesheet = (document: Document, innerText: string, posthog
     let stylesheet: HTMLStyleElement | null = document.createElement('style')
     stylesheet.innerText = innerText
 
-    if (posthog?.config.prepare_external_dependency_stylesheet) {
+    if (posthog?.config?.prepare_external_dependency_stylesheet) {
         stylesheet = posthog.config.prepare_external_dependency_stylesheet(stylesheet)
     }
 
