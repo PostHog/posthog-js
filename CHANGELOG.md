@@ -1,3 +1,7 @@
+## 1.223.5 - 2025-02-26
+
+- fix: nonce missing style script (#1765)
+
 ## 1.223.4 - 2025-02-25
 
 - fix: support inherit font family on surveys (#1763)
