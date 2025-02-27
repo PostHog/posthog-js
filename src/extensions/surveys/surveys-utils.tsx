@@ -733,17 +733,19 @@ export const hasWaitPeriodPassed = (
 interface SurveyContextProps {
     isPreviewMode: boolean
     previewPageIndex: number | undefined
-    handleCloseSurveyPopup: () => void
+    onPopupSurveyDismissed: () => void
     isPopup: boolean
     onPreviewSubmit: (res: string | string[] | number | null) => void
+    onPopupSurveySent: () => void
 }
 
 export const SurveyContext = createContext<SurveyContextProps>({
     isPreviewMode: false,
     previewPageIndex: 0,
-    handleCloseSurveyPopup: () => {},
+    onPopupSurveyDismissed: () => {},
     isPopup: true,
     onPreviewSubmit: () => {},
+    onPopupSurveySent: () => {},
 })
 
 interface RenderProps {
