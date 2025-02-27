@@ -182,7 +182,7 @@ export class SurveyManager {
         const surveySeen = getSurveySeen(survey)
         if (!surveySeen) {
             this.addSurveyToFocus(survey.id)
-            const shadow = createShadow(style(survey?.appearance), survey.id)
+            const shadow = createShadow(style(survey?.appearance), survey.id, undefined, this.posthog)
             Preact.render(
                 <SurveyPopup
                     key={'popover-survey'}
@@ -197,10 +197,10 @@ export class SurveyManager {
     }
 
     private handleWidget = (survey: Survey): void => {
-        const shadow = createWidgetShadow(survey)
+        const shadow = createWidgetShadow(survey, this.posthog)
 
         const stylesheetContent = style(survey.appearance)
-        const stylesheet = prepareStylesheet(stylesheetContent, this.posthog)
+        const stylesheet = prepareStylesheet(document, stylesheetContent, this.posthog)
 
         if (stylesheet) {
             shadow.appendChild(stylesheet)
@@ -399,7 +399,7 @@ export const renderSurveysPreview = ({
     posthog?: PostHog
 }) => {
     const stylesheetContent = style(survey.appearance)
-    const stylesheet = prepareStylesheet(stylesheetContent, posthog)
+    const stylesheet = prepareStylesheet(document, stylesheetContent, posthog)
 
     // Remove previously attached <style>
     Array.from(parentElement.children).forEach((child) => {
@@ -449,7 +449,7 @@ export const renderFeedbackWidgetPreview = ({
     posthog?: PostHog
 }) => {
     const stylesheetContent = createWidgetStyle(survey.appearance?.widgetColor)
-    const stylesheet = prepareStylesheet(stylesheetContent, posthog)
+    const stylesheet = prepareStylesheet(document, stylesheetContent, posthog)
     if (stylesheet) {
         root.appendChild(stylesheet)
     }
