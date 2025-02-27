@@ -1073,7 +1073,7 @@ describe('useHideSurveyOnURLChange', () => {
     })
 })
 
-describe('onSurveyDismissedOrSent callback', () => {
+describe('onPopupSurveyDismissed callback', () => {
     let posthog: PostHog
 
     beforeEach(() => {
@@ -1118,7 +1118,7 @@ describe('onSurveyDismissedOrSent callback', () => {
             current_iteration_start_date: new Date().toISOString(),
         } as Survey
 
-        const mockOnSurveyDismissedOrSent = jest.fn()
+        const onPopupSurveyDismissed = jest.fn()
         const mockRemoveSurveyFromFocus = jest.fn()
 
         // Render the SurveyPopup component with our mocked callback
@@ -1127,7 +1127,7 @@ describe('onSurveyDismissedOrSent callback', () => {
                 survey: survey,
                 removeSurveyFromFocus: mockRemoveSurveyFromFocus,
                 isPopup: true,
-                onPopupSurveyDismissed: mockOnSurveyDismissedOrSent,
+                onPopupSurveyDismissed: onPopupSurveyDismissed,
                 posthog: posthog,
             })
         )
@@ -1143,7 +1143,7 @@ describe('onSurveyDismissedOrSent callback', () => {
             fireEvent.click(cancelButton)
 
             // Verify our callback was called
-            expect(mockOnSurveyDismissedOrSent).toHaveBeenCalledTimes(1)
+            expect(onPopupSurveyDismissed).toHaveBeenCalledTimes(1)
         }
     })
 })

@@ -746,14 +746,8 @@ export function Questions({
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
     )
     const [questionsResponses, setQuestionsResponses] = useState({})
-    const {
-        isPreviewMode,
-        previewPageIndex,
-        onPopupSurveyDismissed: handleCloseSurveyPopup,
-        isPopup,
-        onPreviewSubmit,
-        onPopupSurveySent: onSurveyDismissedOrSent,
-    } = useContext(SurveyContext)
+    const { isPreviewMode, previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit, onPopupSurveySent } =
+        useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
@@ -784,7 +778,7 @@ export function Questions({
         const nextStep = getNextSurveyStep(survey, displayQuestionIndex, res)
         if (nextStep === SurveyQuestionBranchingType.End) {
             sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
-            onSurveyDismissedOrSent()
+            onPopupSurveySent()
         } else {
             setCurrentQuestionIndex(nextStep)
         }
@@ -826,8 +820,7 @@ export function Questions({
                             {isPopup && (
                                 <Cancel
                                     onClick={() => {
-                                        handleCloseSurveyPopup()
-                                        onSurveyDismissedOrSent()
+                                        onPopupSurveyDismissed()
                                     }}
                                 />
                             )}
