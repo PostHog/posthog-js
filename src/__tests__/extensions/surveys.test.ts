@@ -1088,7 +1088,7 @@ describe('onSurveyDismissedOrSent callback', () => {
         } as unknown as PostHog
     })
 
-    test('onSurveyDismissedOrSent is called when Cancel button is clicked in SurveyPopup', () => {
+    test('onPopupSurveyDismissed is called when Cancel button is clicked in SurveyPopup', () => {
         // Create a simple survey for testing
         const survey = {
             id: 'test-survey',
@@ -1127,7 +1127,7 @@ describe('onSurveyDismissedOrSent callback', () => {
                 survey: survey,
                 removeSurveyFromFocus: mockRemoveSurveyFromFocus,
                 isPopup: true,
-                onSurveyDismissedOrSent: mockOnSurveyDismissedOrSent,
+                onPopupSurveyDismissed: mockOnSurveyDismissedOrSent,
                 posthog: posthog,
             })
         )

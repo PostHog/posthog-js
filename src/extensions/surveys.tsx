@@ -655,7 +655,8 @@ interface SurveyPopupProps {
     removeSurveyFromFocus: (id: string) => void
     isPopup?: boolean
     onPreviewSubmit?: (res: string | string[] | number | null) => void
-    onSurveyDismissedOrSent?: () => void
+    onPopupSurveyDismissed?: () => void
+    onPopupSurveySent?: () => void
 }
 
 export function SurveyPopup({
@@ -667,7 +668,8 @@ export function SurveyPopup({
     removeSurveyFromFocus,
     isPopup,
     onPreviewSubmit = () => {},
-    onSurveyDismissedOrSent = () => {},
+    onPopupSurveyDismissed = () => {},
+    onPopupSurveySent = () => {},
 }: SurveyPopupProps) {
     const isPreviewMode = Number.isInteger(previewPageIndex)
     // NB: The client-side code passes the millisecondDelay in seconds, but setTimeout expects milliseconds, so we multiply by 1000
@@ -696,10 +698,15 @@ export function SurveyPopup({
             value={{
                 isPreviewMode,
                 previewPageIndex: previewPageIndex,
-                handleCloseSurveyPopup: () => dismissedSurveyEvent(survey, posthog, isPreviewMode),
+                onPopupSurveyDismissed: () => {
+                    dismissedSurveyEvent(survey, posthog, isPreviewMode)
+                    onPopupSurveyDismissed()
+                },
                 isPopup: isPopup || false,
                 onPreviewSubmit,
-                onSurveyDismissedOrSent,
+                onPopupSurveySent: () => {
+                    onPopupSurveySent()
+                },
             }}
         >
             {!shouldShowConfirmation ? (
@@ -742,10 +749,10 @@ export function Questions({
     const {
         isPreviewMode,
         previewPageIndex,
-        handleCloseSurveyPopup,
+        onPopupSurveyDismissed: handleCloseSurveyPopup,
         isPopup,
         onPreviewSubmit,
-        onSurveyDismissedOrSent,
+        onPopupSurveySent: onSurveyDismissedOrSent,
     } = useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
@@ -906,6 +913,10 @@ export function FeedbackWidget({
         return null
     }
 
+    const resetShowSurvey = () => {
+        setShowSurvey(false)
+    }
+
     return (
         <Preact.Fragment>
             {survey.appearance?.widgetType === 'tab' && (
@@ -928,7 +939,8 @@ export function FeedbackWidget({
                     style={styleOverrides}
                     removeSurveyFromFocus={removeSurveyFromFocus}
                     isPopup={true}
-                    onSurveyDismissedOrSent={() => setShowSurvey(false)}
+                    onPopupSurveyDismissed={resetShowSurvey}
+                    onPopupSurveySent={resetShowSurvey}
                 />
             )}
         </Preact.Fragment>
