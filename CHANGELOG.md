@@ -1,3 +1,7 @@
+## 1.224.1 - 2025-02-27
+
+- fix: dont require double click to show feedback surveys (#1767)
+
 ## 1.224.0 - 2025-02-27
 
 - feat(feature-flags): support quota limiting for feature flags (#1758)
