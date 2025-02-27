@@ -104,6 +104,11 @@ type OverrideFeatureFlagsOptions =
     | FeatureFlagOverrides // set variants directly
     | FeatureFlagOverrideOptions
 
+export enum QuotaLimitedResource {
+    FeatureFlags = 'feature_flags',
+    Recordings = 'recordings',
+}
+
 export class PostHogFeatureFlags {
     _override_warning: boolean = false
     featureFlagEventHandlers: FeatureFlagsCallback[]
@@ -302,6 +307,15 @@ export class PostHogFeatureFlags {
                 }
 
                 this._flagsLoadedFromRemote = !errorsLoading
+
+                if (response.json && response.json.quotaLimited?.includes(QuotaLimitedResource.FeatureFlags)) {
+                    // log a warning and then early return
+                    logger.warn(
+                        'You have hit your feature flags quota limit, and will not be able to load feature flags until the quota is reset.  Please visit https://posthog.com/docs/billing/limits-alerts to learn more.'
+                    )
+                    return
+                }
+
                 this.receivedFeatureFlags(response.json ?? {}, errorsLoading)
 
                 if (this._additionalReloadRequested) {
