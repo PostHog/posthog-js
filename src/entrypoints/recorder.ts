@@ -122,11 +122,12 @@ function shouldRecordBody({
     type,
     recordBody,
     headers,
+    url,
 }: {
     type: 'request' | 'response'
-    recordBody: NetworkRecordOptions['recordBody']
     headers: Headers
     url: string | URL | RequestInfo
+    recordBody: NetworkRecordOptions['recordBody']
 }) {
     function matchesContentType(contentTypes: string[]) {
         const contentTypeHeader = Object.keys(headers).find((key) => key.toLowerCase() === 'content-type')
@@ -134,7 +135,30 @@ function shouldRecordBody({
         return contentTypes.some((ct) => contentType?.includes(ct))
     }
 
+    /**
+     * particularly in canvas applications we see many requests to blob URLs
+     * e.g. blob:https://video_url
+     * these blob/object URLs are local to the browser, we can never capture that body
+     * so we can just return false here
+     */
+    function isBlobURL(url: string | URL | RequestInfo) {
+        try {
+            if (typeof url === 'string') {
+                return url.startsWith('blob:')
+            }
+            if (url instanceof URL) {
+                return url.protocol === 'blob:'
+            }
+            if (url instanceof Request) {
+                return isBlobURL(url.url)
+            }
+            return false
+        } catch {
+            return false
+        }
+    }
     if (!recordBody) return false
+    if (isBlobURL(url)) return false
     if (isBoolean(recordBody)) return true
     if (isArray(recordBody)) return matchesContentType(recordBody)
     const recordBodyType = recordBody[type]
