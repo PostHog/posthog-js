@@ -70,6 +70,7 @@ interface PostHogExtensions {
     errorWrappingFunctions?: {
         wrapOnError: (captureFn: (props: Properties) => void) => () => void
         wrapUnhandledRejection: (captureFn: (props: Properties) => void) => () => void
+        wrapConsoleError: (captureFn: (props: Properties) => void) => () => void
     }
     rrweb?: { record: any; version: string }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
