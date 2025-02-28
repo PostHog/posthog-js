@@ -48,7 +48,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               text-align: left;
               max-width: ${parseInt(appearance?.maxWidth || '300')}px;
               width: 100%;
-              z-index: ${parseInt(appearance?.zIndex || '99999')};
+              z-index: ${parseInt(appearance?.zIndex || '2147482647')};
               border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
               border-bottom: 0px;
               ${positions[appearance?.position || 'right'] || 'right: 30px;'}

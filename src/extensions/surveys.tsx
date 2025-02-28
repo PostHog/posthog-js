@@ -888,8 +888,71 @@ export function FeedbackWidget({
         if (survey.appearance?.widgetType === 'selector') {
             const widget = document.querySelector(survey.appearance.widgetSelector || '') ?? undefined
 
-            addEventListener(widget, 'click', () => {
+            addEventListener(widget, 'click', (event) => {
+                // Calculate position based on the selector button
+                const buttonRect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+                const viewportHeight = window.innerHeight
+
+                // Get survey width from maxWidth or default to 300px
+                const surveyWidth = parseInt(survey.appearance?.maxWidth || '300')
+
+                // Calculate horizontal center position of the button
+                const buttonCenterX = buttonRect.left + buttonRect.width / 2
+
+                // Calculate horizontal center position
+                let left = buttonCenterX - surveyWidth / 2
+
+                // Ensure the survey doesn't go off-screen horizontally
+                const rightEdge = left + surveyWidth
+                if (rightEdge > window.innerWidth) {
+                    left = window.innerWidth - surveyWidth - 20 // 20px padding from right edge
+                }
+                if (left < 20) {
+                    left = 20 // 20px padding from left edge
+                }
+
+                // Determine if we should show above or below
+                let showAbove = false
+
+                // Check if there's enough space below (need at least 300px)
+                // If not enough space below, show above
+                if (buttonRect.bottom + 300 > viewportHeight) {
+                    showAbove = true
+                }
+
+                // Calculate vertical position with appropriate spacing
+                const verticalSpacing = 8 // Reduced space between button and survey (was 15)
+                const topPosition = buttonRect.bottom + window.scrollY + verticalSpacing
+                const bottomPosition = viewportHeight - buttonRect.top + window.scrollY + verticalSpacing
+
+                // Set style overrides for positioning
+                setStyle({
+                    position: 'fixed',
+                    bottom: showAbove ? bottomPosition + 'px' : 'auto',
+                    top: showAbove ? 'auto' : topPosition + 'px',
+                    left: left + 'px',
+                    right: 'auto',
+                    transform: 'none',
+                    border: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
+                    borderRadius: '10px',
+                    width: `${surveyWidth}px`,
+                    zIndex: 2147483647,
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                })
+
                 setShowSurvey(!showSurvey)
+
+                // Focus the input field after a short delay to ensure the survey is rendered
+                if (!showSurvey) {
+                    setTimeout(() => {
+                        const inputField = document
+                            .querySelector('.PostHogWidget' + survey.id)
+                            ?.shadowRoot?.querySelector('textarea, input[type="text"]') as HTMLElement
+                        if (inputField) {
+                            inputField.focus()
+                        }
+                    }, 100)
+                }
             })
 
             widget?.setAttribute('PHWidgetSurveyClickListener', 'true')
