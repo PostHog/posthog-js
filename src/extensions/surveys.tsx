@@ -35,6 +35,7 @@ import {
     hasWaitPeriodPassed,
     sendSurveyEvent,
     style,
+    SURVEY_DEFAULT_Z_INDEX,
     SurveyContext,
 } from './surveys/surveys-utils'
 import { prepareStylesheet } from './utils/stylesheet-loader'
@@ -960,7 +961,7 @@ export function FeedbackWidget({
                     border: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
                     borderRadius: '10px',
                     width: `${surveyWidth}px`,
-                    zIndex: 2147483647,
+                    zIndex: SURVEY_DEFAULT_Z_INDEX,
                     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
                     maxHeight: showAbove
                         ? `calc(100vh - 40px - ${spacing * 2}px)`

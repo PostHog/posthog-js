@@ -1,6 +1,7 @@
 import { PostHog } from '../posthog-core'
 import { Survey } from '../posthog-surveys-types'
 import { document as _document } from '../utils/globals'
+import { SURVEY_DEFAULT_Z_INDEX } from './surveys/surveys-utils'
 import { prepareStylesheet } from './utils/stylesheet-loader'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
@@ -37,7 +38,7 @@ export function createWidgetStyle(widgetColor?: string) {
             border-radius: 3px 3px 0 0;
             text-align: center;
             cursor: pointer;
-            z-index: 9999999;
+            z-index: ${SURVEY_DEFAULT_Z_INDEX};
         }
         .ph-survey-widget-tab:hover {
             padding-bottom: 13px;
