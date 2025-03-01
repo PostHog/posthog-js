@@ -44,6 +44,10 @@ const logger = createLogger('[Surveys]')
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 
+function getPosthogWidgetClass(surveyId: string) {
+    return `.PostHogWidget${surveyId}`
+}
+
 function getRatingBucketForResponseValue(responseValue: number, scale: number) {
     if (scale === 3) {
         if (responseValue < 1 || responseValue > 3) {
@@ -227,7 +231,7 @@ export class SurveyManager {
                 // we have to check if user selector already has a survey listener attached to it because we always have to check if it's on the page or not
                 if (!selectorOnPage.getAttribute('PHWidgetSurveyClickListener')) {
                     const surveyPopup = document
-                        .querySelector(`.PostHogWidget${survey.id}`)
+                        .querySelector(getPosthogWidgetClass(survey.id))
                         ?.shadowRoot?.querySelector(`.survey-form`) as HTMLFormElement
 
                     addEventListener(selectorOnPage, 'click', () => {
@@ -606,7 +610,7 @@ export function usePopupVisibility(
             localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
             setTimeout(() => {
                 const inputField = document
-                    .querySelector('.PostHogWidget' + survey.id)
+                    .querySelector(getPosthogWidgetClass(survey.id))
                     ?.shadowRoot?.querySelector('textarea, input[type="text"]') as HTMLElement
                 if (inputField) {
                     inputField.focus()
