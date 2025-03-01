@@ -604,6 +604,14 @@ export function usePopupVisibility(
                 sessionRecordingUrl: posthog.get_session_replay_url?.(),
             })
             localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
+            setTimeout(() => {
+                const inputField = document
+                    .querySelector('.PostHogWidget' + survey.id)
+                    ?.shadowRoot?.querySelector('textarea, input[type="text"]') as HTMLElement
+                if (inputField) {
+                    inputField.focus()
+                }
+            }, 100)
         }
 
         const handleShowSurveyWithDelay = () => {
@@ -920,39 +928,42 @@ export function FeedbackWidget({
                     showAbove = true
                 }
 
-                // Calculate vertical position with appropriate spacing
-                const verticalSpacing = 8 // Reduced space between button and survey (was 15)
-                const topPosition = buttonRect.bottom + window.scrollY + verticalSpacing
-                const bottomPosition = viewportHeight - buttonRect.top + window.scrollY + verticalSpacing
+                // Simple spacing between button and survey
+                const spacing = 12
+
+                // Calculate positions
+                let topPosition
+
+                if (showAbove) {
+                    // Problem: When showing above, we're trying to position based on an estimated height,
+                    // but we don't know the actual height of the survey yet.
+                    // Solution: Instead of using top positioning for above, use bottom positioning
+                    // This will anchor the survey to the bottom edge at the button's top position
+                    topPosition = null // We'll use bottom positioning instead
+                } else {
+                    // When showing below, position the top of the survey below the button plus spacing
+                    topPosition = buttonRect.bottom + window.scrollY + spacing
+                }
 
                 // Set style overrides for positioning
                 setStyle({
                     position: 'fixed',
-                    bottom: showAbove ? bottomPosition + 'px' : 'auto',
                     top: showAbove ? 'auto' : topPosition + 'px',
                     left: left + 'px',
                     right: 'auto',
+                    bottom: showAbove ? window.innerHeight - buttonRect.top + spacing + 'px' : 'auto',
                     transform: 'none',
                     border: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
                     borderRadius: '10px',
                     width: `${surveyWidth}px`,
                     zIndex: 2147483647,
                     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                    maxHeight: showAbove
+                        ? `calc(100vh - 40px - ${spacing * 2}px)`
+                        : `calc(100vh - ${topPosition}px - 20px)`,
                 })
 
                 setShowSurvey(!showSurvey)
-
-                // Focus the input field after a short delay to ensure the survey is rendered
-                if (!showSurvey) {
-                    setTimeout(() => {
-                        const inputField = document
-                            .querySelector('.PostHogWidget' + survey.id)
-                            ?.shadowRoot?.querySelector('textarea, input[type="text"]') as HTMLElement
-                        if (inputField) {
-                            inputField.focus()
-                        }
-                    }, 100)
-                }
             })
 
             widget?.setAttribute('PHWidgetSurveyClickListener', 'true')
