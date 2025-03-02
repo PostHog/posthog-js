@@ -1,3 +1,7 @@
+## 1.225.0 - 2025-03-02
+
+- feat: better positioning for survey selectors (#1772)
+
 ## 1.224.1 - 2025-02-27
 
 - fix: dont require double click to show feedback surveys (#1767)
