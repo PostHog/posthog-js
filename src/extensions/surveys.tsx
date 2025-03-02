@@ -35,6 +35,7 @@ import {
     hasWaitPeriodPassed,
     sendSurveyEvent,
     style,
+    SURVEY_DEFAULT_Z_INDEX,
     SurveyContext,
 } from './surveys/surveys-utils'
 import { prepareStylesheet } from './utils/stylesheet-loader'
@@ -43,6 +44,10 @@ const logger = createLogger('[Surveys]')
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
+
+function getPosthogWidgetClass(surveyId: string) {
+    return `.PostHogWidget${surveyId}`
+}
 
 function getRatingBucketForResponseValue(responseValue: number, scale: number) {
     if (scale === 3) {
@@ -227,7 +232,7 @@ export class SurveyManager {
                 // we have to check if user selector already has a survey listener attached to it because we always have to check if it's on the page or not
                 if (!selectorOnPage.getAttribute('PHWidgetSurveyClickListener')) {
                     const surveyPopup = document
-                        .querySelector(`.PostHogWidget${survey.id}`)
+                        .querySelector(getPosthogWidgetClass(survey.id))
                         ?.shadowRoot?.querySelector(`.survey-form`) as HTMLFormElement
 
                     addEventListener(selectorOnPage, 'click', () => {
@@ -604,6 +609,14 @@ export function usePopupVisibility(
                 sessionRecordingUrl: posthog.get_session_replay_url?.(),
             })
             localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
+            setTimeout(() => {
+                const inputField = document
+                    .querySelector(getPosthogWidgetClass(survey.id))
+                    ?.shadowRoot?.querySelector('textarea, input[type="text"]') as HTMLElement
+                if (inputField) {
+                    inputField.focus()
+                }
+            }, 100)
         }
 
         const handleShowSurveyWithDelay = () => {
@@ -888,7 +901,73 @@ export function FeedbackWidget({
         if (survey.appearance?.widgetType === 'selector') {
             const widget = document.querySelector(survey.appearance.widgetSelector || '') ?? undefined
 
-            addEventListener(widget, 'click', () => {
+            addEventListener(widget, 'click', (event) => {
+                // Calculate position based on the selector button
+                const buttonRect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+                const viewportHeight = window.innerHeight
+
+                // Get survey width from maxWidth or default to 300px
+                const surveyWidth = parseInt(survey.appearance?.maxWidth || '300')
+
+                // Calculate horizontal center position of the button
+                const buttonCenterX = buttonRect.left + buttonRect.width / 2
+
+                // Calculate horizontal center position
+                let left = buttonCenterX - surveyWidth / 2
+
+                // Ensure the survey doesn't go off-screen horizontally
+                const rightEdge = left + surveyWidth
+                if (rightEdge > window.innerWidth) {
+                    left = window.innerWidth - surveyWidth - 20 // 20px padding from right edge
+                }
+                if (left < 20) {
+                    left = 20 // 20px padding from left edge
+                }
+
+                // Determine if we should show above or below
+                let showAbove = false
+
+                // Check if there's enough space below (need at least 300px)
+                // If not enough space below, show above
+                if (buttonRect.bottom + 300 > viewportHeight) {
+                    showAbove = true
+                }
+
+                // Simple spacing between button and survey
+                const spacing = 12
+
+                // Calculate positions
+                let topPosition
+
+                if (showAbove) {
+                    // Problem: When showing above, we're trying to position based on an estimated height,
+                    // but we don't know the actual height of the survey yet.
+                    // Solution: Instead of using top positioning for above, use bottom positioning
+                    // This will anchor the survey to the bottom edge at the button's top position
+                    topPosition = null // We'll use bottom positioning instead
+                } else {
+                    // When showing below, position the top of the survey below the button plus spacing
+                    topPosition = buttonRect.bottom + window.scrollY + spacing
+                }
+
+                // Set style overrides for positioning
+                setStyle({
+                    position: 'fixed',
+                    top: showAbove ? 'auto' : topPosition + 'px',
+                    left: left + 'px',
+                    right: 'auto',
+                    bottom: showAbove ? window.innerHeight - buttonRect.top + spacing + 'px' : 'auto',
+                    transform: 'none',
+                    border: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
+                    borderRadius: '10px',
+                    width: `${surveyWidth}px`,
+                    zIndex: SURVEY_DEFAULT_Z_INDEX,
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                    maxHeight: showAbove
+                        ? `calc(100vh - 40px - ${spacing * 2}px)`
+                        : `calc(100vh - ${topPosition}px - 20px)`,
+                })
+
                 setShowSurvey(!showSurvey)
             })
 
