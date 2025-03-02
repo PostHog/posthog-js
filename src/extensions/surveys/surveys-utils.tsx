@@ -18,6 +18,8 @@ const SurveySeenPrefix = 'seenSurvey_'
 
 const logger = createLogger('[Surveys]')
 
+export const SURVEY_DEFAULT_Z_INDEX = 2147483647
+
 export function getFontFamily(fontFamily?: string): string {
     if (fontFamily === 'inherit') {
         return 'inherit'
@@ -48,7 +50,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               text-align: left;
               max-width: ${parseInt(appearance?.maxWidth || '300')}px;
               width: 100%;
-              z-index: ${parseInt(appearance?.zIndex || '99999')};
+              z-index: ${parseInt(appearance?.zIndex || SURVEY_DEFAULT_Z_INDEX.toString())};
               border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
               border-bottom: 0px;
               ${positions[appearance?.position || 'right'] || 'right: 30px;'}
