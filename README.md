@@ -6,20 +6,29 @@
 For information on using this library in your app, [see PostHog Docs](https://posthog.com/docs/libraries/js).  
 This README is intended for developing the library itself.
 
-## dependencies
+## Dependencies
 
 we use pnpm.
 
 it's best to install using `npm install -g pnpm@latest-9`
 and then `pnpm` commands as usual
 
-## 
+### Optional Dependencies
+
+This package has the following optional peer dependencies:
+
+- `@rrweb/types` (2.0.0-alpha.17): Only required if you're using Angular Compiler and need type definitions for the rrweb integration.
+- `rrweb-snapshot` (2.0.0-alpha.17): Only required if you're using Angular Compiler and need type definitions for the rrweb integration.
+
+These dependencies are marked as optional to reduce installation size for users who don't need these specific features.
+
+##
 
 ## Testing
 
-* Unit tests: run `pnpm test`.
-* Cypress: run `pnpm start` to have a test server running and separately `pnpm cypress` to launch Cypress test engine.
-* Playwright: run e.g. `pnpm exec playwright test --ui --project webkit --project firefox` to run with UI and in webkit and firefox
+- Unit tests: run `pnpm test`.
+- Cypress: run `pnpm start` to have a test server running and separately `pnpm cypress` to launch Cypress test engine.
+- Playwright: run e.g. `pnpm exec playwright test --ui --project webkit --project firefox` to run with UI and in webkit and firefox
 
 ### Running TestCafe E2E tests with BrowserStack
 
@@ -74,7 +83,7 @@ We have 2 options for linking this project to your local version: via [pnpm link
 - e.g. from the `package.json` within `posthog`, replace `"posthog-js": "1.131.4"` with `"posthog-js": "file:../posthog-js"`
 - run `pnpm install` from the root of the project in which you just created a local path
 
-Then, once this link has been created, any time you need to make a change to `posthog-js`, you can run `pnpm build` from the `posthog-js` root and the changes will appear in the other repo.  
+Then, once this link has been created, any time you need to make a change to `posthog-js`, you can run `pnpm build` from the `posthog-js` root and the changes will appear in the other repo.
 
 #### `pnpm link`
 
@@ -85,7 +94,7 @@ Then, once this link has been created, any time you need to make a change to `po
 ## Releasing a new version
 
 Just put a `bump patch/minor/major` label on your PR! Once the PR is merged, a new version with the appropriate version bump will be released, and the dependency will be updated in [posthog/PostHog](https://github.com/posthog/PostHog) – automatically.
-  
+
 If you forget to add the label, don't try to update the version locally as you won't be able to push that commit to the main branch. Instead, just make a new PR.
 
 ### Prereleases
