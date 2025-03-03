@@ -10,7 +10,7 @@ import {
 import { WEB_EXPERIMENTS } from './constants'
 import { isNullish, isString } from './utils/type-utils'
 import { getQueryParam } from './utils/request-utils'
-import { isMatchingRegex } from './utils/string-utils'
+import { isMatchingRegex } from './utils/regex-utils'
 import { logger } from './utils/logger'
 import { Info } from './utils/event-utils'
 import { isLikelyBot } from './utils/blocked-uas'

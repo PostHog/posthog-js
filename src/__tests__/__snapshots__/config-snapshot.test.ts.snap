@@ -137,6 +137,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"undefined\\",
     \\"(script: HTMLScriptElement) => HTMLScriptElement | null\\"
   ],
+  \\"prepare_external_dependency_stylesheet\\": [
+    \\"undefined\\",
+    \\"(stylesheet: HTMLStyleElement) => HTMLStyleElement | null\\"
+  ],
   \\"enable_recording_console_log\\": [
     \\"undefined\\",
     \\"false\\",
@@ -249,8 +253,8 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"slimDOMOptions\\": [
       \\"undefined\\",
       \\"true\\",
-      \\"\\\\\\"all\\\\\\"\\",
-      \\"Partial<{ script: boolean; comment: boolean; headFavicon: boolean; headWhitespace: boolean; headMetaDescKeywords: boolean; headMetaSocial: boolean; headMetaRobots: boolean; headMetaHttpEquiv: boolean; headMetaAuthorship: boolean; headMetaVerification: boolean; headTitleMutations: boolean; }>\\"
+      \\"Partial<{ script: boolean; comment: boolean; headFavicon: boolean; headWhitespace: boolean; headMetaDescKeywords: boolean; headMetaSocial: boolean; headMetaRobots: boolean; headMetaHttpEquiv: boolean; headMetaAuthorship: boolean; headMetaVerification: boolean; headTitleMutations: boolean; }>\\",
+      \\"\\\\\\"all\\\\\\"\\"
     ],
     \\"collectFonts\\": [
       \\"undefined\\",
@@ -344,6 +348,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"true\\"
   ],
   \\"feature_flag_request_timeout_ms\\": \\"number\\",
+  \\"surveys_request_timeout_ms\\": \\"number\\",
   \\"get_device_id\\": \\"(uuid: string) => string\\",
   \\"before_send\\": [
     \\"undefined\\",

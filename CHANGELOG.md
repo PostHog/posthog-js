@@ -1,3 +1,112 @@
+## 1.225.1 - 2025-03-03
+
+- fix: add semrush audit bot (#1775)
+- chore: add posthog built rrweb (#1770)
+
+## 1.225.0 - 2025-03-02
+
+- feat: better positioning for survey selectors (#1772)
+
+## 1.224.1 - 2025-02-27
+
+- fix: dont require double click to show feedback surveys (#1767)
+
+## 1.224.0 - 2025-02-27
+
+- feat(feature-flags): support quota limiting for feature flags (#1758)
+
+## 1.223.5 - 2025-02-26
+
+- fix: nonce missing style script (#1765)
+
+## 1.223.4 - 2025-02-25
+
+- fix: support inherit font family on surveys (#1763)
+
+## 1.223.3 - 2025-02-23
+
+- fix: dont show survey on url change, only hide it (#1761)
+
+## 1.223.2 - 2025-02-22
+
+- fix: improve survey bundle size (#1759)
+
+## 1.223.1 - 2025-02-22
+
+
+
+## 1.223.0 - 2025-02-22
+
+- feat: Add new `prepare_external_dependency_stylesheet` config option (#1757)
+
+## 1.222.0 - 2025-02-20
+
+- chore: Make `@rrweb/types` a peer dependency (#1749)
+
+## 1.221.1 - 2025-02-20
+
+- fix: check url matching on URL change for widget-type surveys (#1755)
+
+## 1.221.0 - 2025-02-20
+
+- feat: allow widget surveys to be repeated indefinitely (#1752)
+
+## 1.220.0 - 2025-02-20
+
+- feat(llm-observability): metric and feedback methods (#1709)
+
+## 1.219.6 - 2025-02-19
+
+- fix: Remove circular dependency (#1750)
+
+## 1.219.5 - 2025-02-19
+
+- Block Chrome-Lighthouse UA (used by ahrefs) (#1751)
+
+## 1.219.4 - 2025-02-18
+
+- fix: Fix types for `onFeatureFlags` callback (#1748)
+
+## 1.219.3 - 2025-02-18
+
+- fix(devex): update frontend/package.json when pushing to main repo (#1746)
+
+## 1.219.2 - 2025-02-18
+
+- fix: last seen survey date logic (#1745)
+
+## 1.219.1 - 2025-02-17
+
+- feat: add more debug signals (#1743)
+
+## 1.219.0 - 2025-02-17
+
+- feat(web-analytics): Handle set_once latest props in a cross-subdomain way (#1739)
+
+## 1.218.2 - 2025-02-15
+
+- chore: limit height of multiple choice question (#1740)
+
+## 1.218.1 - 2025-02-14
+
+
+
+## 1.218.0 - 2025-02-14
+
+- feat(flags): Add remote config feature flag method that bypasses cached values (#1729)
+
+## 1.217.7 - 2025-02-14
+
+- fix: skip device type check if no devices set (#1737)
+
+## 1.217.6 - 2025-02-14
+
+- fix: heatmaps unload listener (#1736)
+
+## 1.217.5 - 2025-02-14
+
+- fix: check url match before trigger showSurvey (#1732)
+
 ## 1.217.4 - 2025-02-13
 
 - fix: unexpected undefined should be expected (#1731)

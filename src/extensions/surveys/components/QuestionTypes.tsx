@@ -248,7 +248,7 @@ export function MultipleChoiceQuestion({
                 forceDisableHtml={forceDisableHtml}
                 backgroundColor={appearance.backgroundColor}
             />
-            <div className="multiple-choice-options">
+            <div className="multiple-choice-options limit-height">
                 {/* Remove the last element from the choices, if hasOpenChoice is set */}
                 {/* shuffle all other options here if question.shuffleOptions is set */}
                 {/* Always ensure that the open ended choice is the last option */}

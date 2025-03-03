@@ -6,16 +6,15 @@
  *
  * These have the same lifespan as a session_id
  */
-import { location } from './utils/globals'
 import { Info } from './utils/event-utils'
 import type { SessionIdManager } from './sessionid'
 import type { PostHogPersistence } from './posthog-persistence'
 import { CLIENT_SESSION_PROPS } from './constants'
 import type { PostHog } from './posthog-core'
 
-interface SessionSourceProps {
+interface LegacySessionSourceProps {
     initialPathName: string
-    referringDomain: string // Is actually host, but named domain for internal consistency. Should contain a port if there is one.
+    referringDomain: string // Is actually referring host, but named referring domain for internal consistency. Should contain a port if there is one.
     utm_medium?: string
     utm_source?: string
     utm_campaign?: string
@@ -23,35 +22,36 @@ interface SessionSourceProps {
     utm_term?: string
 }
 
-interface StoredSessionSourceProps {
-    sessionId: string
-    props: SessionSourceProps
+interface CurrentSessionSourceProps {
+    r: string // Referring host
+    u: string | undefined // full URL
 }
 
-const generateSessionSourceParams = (instance?: PostHog): SessionSourceProps => {
-    const config = instance?.config
-    return {
-        initialPathName: location?.pathname || '',
-        referringDomain: Info.referringDomain(),
-        ...Info.campaignParams({
-            customTrackedParams: config?.custom_campaign_params,
-            maskPersonalDataProperties: config?.mask_personal_data_properties,
-            customPersonalDataProperties: config?.custom_personal_data_properties,
-        }),
-    }
+interface StoredSessionSourceProps {
+    sessionId: string
+    props: LegacySessionSourceProps | CurrentSessionSourceProps
+}
+
+const generateSessionSourceParams = (posthog?: PostHog): LegacySessionSourceProps | CurrentSessionSourceProps => {
+    return Info.personInfo({
+        maskPersonalDataProperties: posthog?.config.mask_personal_data_properties,
+        customPersonalDataProperties: posthog?.config.custom_personal_data_properties,
+    })
 }
 
 export class SessionPropsManager {
     private readonly instance: PostHog
     private readonly _sessionIdManager: SessionIdManager
     private readonly _persistence: PostHogPersistence
-    private readonly _sessionSourceParamGenerator: (instance?: PostHog) => SessionSourceProps
+    private readonly _sessionSourceParamGenerator: (
+        instance?: PostHog
+    ) => LegacySessionSourceProps | CurrentSessionSourceProps
 
     constructor(
         instance: PostHog,
         sessionIdManager: SessionIdManager,
         persistence: PostHogPersistence,
-        sessionSourceParamGenerator?: (instance?: PostHog) => SessionSourceProps
+        sessionSourceParamGenerator?: (instance?: PostHog) => LegacySessionSourceProps | CurrentSessionSourceProps
     ) {
         this.instance = instance
         this._sessionIdManager = sessionIdManager
@@ -61,12 +61,12 @@ export class SessionPropsManager {
         this._sessionIdManager.onSessionId(this._onSessionIdCallback)
     }
 
-    _getStoredProps(): StoredSessionSourceProps | undefined {
+    _getStored(): StoredSessionSourceProps | undefined {
         return this._persistence.props[CLIENT_SESSION_PROPS]
     }
 
     _onSessionIdCallback = (sessionId: string) => {
-        const stored = this._getStoredProps()
+        const stored = this._getStored()
         if (stored && stored.sessionId === sessionId) {
             return
         }
@@ -78,20 +78,23 @@ export class SessionPropsManager {
         this._persistence.register({ [CLIENT_SESSION_PROPS]: newProps })
     }
 
-    getSessionProps() {
-        const p = this._getStoredProps()?.props
+    getSetOnceInitialSessionPropsProps() {
+        const p = this._getStored()?.props
         if (!p) {
             return {}
         }
-
-        return {
-            $client_session_initial_referring_host: p.referringDomain,
-            $client_session_initial_pathname: p.initialPathName,
-            $client_session_initial_utm_source: p.utm_source,
-            $client_session_initial_utm_campaign: p.utm_campaign,
-            $client_session_initial_utm_medium: p.utm_medium,
-            $client_session_initial_utm_content: p.utm_content,
-            $client_session_initial_utm_term: p.utm_term,
+        if ('r' in p) {
+            return Info.personPropsFromInfo(p)
+        } else {
+            return {
+                $referring_domain: p.referringDomain,
+                $pathname: p.initialPathName,
+                utm_source: p.utm_source,
+                utm_campaign: p.utm_campaign,
+                utm_medium: p.utm_medium,
+                utm_content: p.utm_content,
+                utm_term: p.utm_term,
+            }
         }
     }
 }

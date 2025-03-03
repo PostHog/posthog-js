@@ -1,10 +1,12 @@
 /* eslint-disable compat/compat */
 import { act, fireEvent, render, renderHook } from '@testing-library/preact'
 import {
+    SurveyManager,
+    SurveyPopup,
     generateSurveys,
     renderFeedbackWidgetPreview,
     renderSurveysPreview,
-    SurveyManager,
+    useHideSurveyOnURLChange,
     usePopupVisibility,
 } from '../../extensions/surveys'
 import { createShadow } from '../../extensions/surveys/surveys-utils'
@@ -612,6 +614,7 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
             feature_flag_keys: null,
             linked_flag_key: null,
             targeting_flag_key: null,
+            internal_targeting_flag_key: null,
             appearance: {},
         }) as Survey
 
@@ -751,6 +754,397 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
 
         expect(window.history.pushState).toBe(originalPushState)
         expect(window.history.replaceState).toBe(originalReplaceState)
+    })
+
+    it('should not show delayed survey if URL no longer matches when delay expires', () => {
+        jest.useFakeTimers()
+
+        // Create a survey with a URL condition and a 2 second delay
+        const survey = createTestSurvey({
+            url: '/initial-path',
+            urlMatchType: 'exact',
+        })
+        survey.appearance = { surveyPopupDelaySeconds: 2 }
+
+        // Set initial matching URL
+        Object.defineProperty(window, 'location', {
+            value: new URL('https://example.com/initial-path'),
+            writable: true,
+        })
+
+        // Start the survey visibility hook
+        const { result } = renderHook(() => usePopupVisibility(survey, posthog, 2000, false, mockRemoveSurveyFromFocus))
+
+        // Initially the survey should not be visible (due to delay)
+        expect(result.current.isPopupVisible).toBe(false)
+
+        // Change URL to non-matching path before delay expires
+        act(() => {
+            Object.defineProperty(window, 'location', {
+                value: new URL('https://example.com/different-path'),
+                writable: true,
+            })
+            window.dispatchEvent(new Event('popstate'))
+        })
+
+        // Advance timers past the delay
+        act(() => {
+            jest.advanceTimersByTime(2000)
+        })
+
+        // Survey should still not be visible since URL no longer matches
+        expect(result.current.isPopupVisible).toBe(false)
+        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
+
+        jest.useRealTimers()
+    })
+})
+
+describe('useHideSurveyOnURLChange', () => {
+    let originalLocationHref: string
+    let originalPushState: typeof window.history.pushState
+    let originalReplaceState: typeof window.history.replaceState
+    let mockRemoveSurveyFromFocus: jest.Mock
+    let mockSetSurveyVisible: jest.Mock
+
+    beforeEach(() => {
+        // Store original history methods
+        originalPushState = window.history.pushState
+        originalReplaceState = window.history.replaceState
+        mockRemoveSurveyFromFocus = jest.fn()
+        mockSetSurveyVisible = jest.fn()
+
+        // Store original location and set initial location
+        originalLocationHref = window.location.href
+        Object.defineProperty(window, 'location', {
+            value: { href: 'https://example.com' },
+            writable: true,
+        })
+    })
+
+    afterEach(() => {
+        // Restore original history methods
+        window.history.pushState = originalPushState
+        window.history.replaceState = originalReplaceState
+
+        // Restore original location
+        Object.defineProperty(window, 'location', {
+            value: { href: originalLocationHref },
+            writable: true,
+        })
+
+        jest.clearAllMocks()
+    })
+
+    it('should not do anything in preview mode', () => {
+        const survey = {
+            id: 'test-survey',
+            conditions: {
+                url: 'example.com',
+                urlMatchType: 'exact' as const,
+                events: null,
+                actions: null,
+            },
+        }
+
+        renderHook(() =>
+            useHideSurveyOnURLChange({
+                survey,
+                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
+                setSurveyVisible: mockSetSurveyVisible,
+                isPreviewMode: true,
+            })
+        )
+
+        act(() => {
+            window.history.pushState({}, '', '/different-path')
+        })
+
+        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
+        expect(mockSetSurveyVisible).not.toHaveBeenCalled()
+    })
+
+    it('should not do anything if no URL conditions are set', () => {
+        const survey = {
+            id: 'test-survey',
+            conditions: {
+                events: null,
+                actions: null,
+            },
+        }
+
+        renderHook(() =>
+            useHideSurveyOnURLChange({
+                survey,
+                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
+                setSurveyVisible: mockSetSurveyVisible,
+                isPreviewMode: false,
+            })
+        )
+
+        act(() => {
+            window.history.pushState({}, '', '/different-path')
+        })
+
+        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
+        expect(mockSetSurveyVisible).not.toHaveBeenCalled()
+    })
+
+    it('should handle pushState navigation', () => {
+        const survey = {
+            id: 'test-survey',
+            conditions: {
+                url: 'example.com',
+                urlMatchType: 'exact' as const,
+                events: null,
+                actions: null,
+            },
+        }
+
+        renderHook(() =>
+            useHideSurveyOnURLChange({
+                survey,
+                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
+                setSurveyVisible: mockSetSurveyVisible,
+                isPreviewMode: false,
+            })
+        )
+
+        act(() => {
+            window.history.pushState({}, '', '/different-path')
+        })
+
+        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
+        expect(mockSetSurveyVisible).toHaveBeenCalledWith(false)
+    })
+
+    it('should handle replaceState navigation', () => {
+        const survey = {
+            id: 'test-survey',
+            conditions: {
+                url: 'example.com',
+                urlMatchType: 'exact' as const,
+                events: null,
+                actions: null,
+            },
+        }
+
+        renderHook(() =>
+            useHideSurveyOnURLChange({
+                survey,
+                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
+                setSurveyVisible: mockSetSurveyVisible,
+                isPreviewMode: false,
+            })
+        )
+
+        act(() => {
+            window.history.replaceState({}, '', '/different-path')
+        })
+
+        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
+        expect(mockSetSurveyVisible).toHaveBeenCalledWith(false)
+    })
+
+    it('should handle popstate events', () => {
+        const survey = {
+            id: 'test-survey',
+            conditions: {
+                url: 'example.com',
+                urlMatchType: 'exact' as const,
+                events: null,
+                actions: null,
+            },
+        }
+
+        renderHook(() =>
+            useHideSurveyOnURLChange({
+                survey,
+                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
+                setSurveyVisible: mockSetSurveyVisible,
+                isPreviewMode: false,
+            })
+        )
+
+        act(() => {
+            Object.defineProperty(window, 'location', {
+                value: { href: 'https://different.com' },
+                writable: true,
+            })
+            window.dispatchEvent(new Event('popstate'))
+        })
+
+        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
+        expect(mockSetSurveyVisible).toHaveBeenCalledWith(false)
+    })
+
+    it('should handle hashchange events', () => {
+        const survey = {
+            id: 'test-survey',
+            conditions: {
+                url: 'example.com',
+                urlMatchType: 'exact' as const,
+                events: null,
+                actions: null,
+            },
+        }
+
+        renderHook(() =>
+            useHideSurveyOnURLChange({
+                survey,
+                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
+                setSurveyVisible: mockSetSurveyVisible,
+                isPreviewMode: false,
+            })
+        )
+
+        act(() => {
+            Object.defineProperty(window, 'location', {
+                value: { href: 'https://different.com/#/some-hash' },
+                writable: true,
+            })
+            window.dispatchEvent(new Event('hashchange'))
+        })
+
+        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
+        expect(mockSetSurveyVisible).toHaveBeenCalledWith(false)
+    })
+
+    it('should clean up event listeners and history methods on unmount', () => {
+        const survey = {
+            id: 'test-survey',
+            conditions: {
+                url: 'example.com',
+                urlMatchType: 'exact' as const,
+                events: null,
+                actions: null,
+            },
+        }
+
+        const { unmount } = renderHook(() =>
+            useHideSurveyOnURLChange({
+                survey,
+                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
+                setSurveyVisible: mockSetSurveyVisible,
+                isPreviewMode: false,
+            })
+        )
+
+        unmount()
+
+        expect(window.history.pushState).toBe(originalPushState)
+        expect(window.history.replaceState).toBe(originalReplaceState)
+
+        // Verify that events don't trigger callbacks after unmount
+        act(() => {
+            window.dispatchEvent(new Event('popstate'))
+            window.dispatchEvent(new Event('hashchange'))
+        })
+
+        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
+        expect(mockSetSurveyVisible).not.toHaveBeenCalled()
+    })
+
+    it('should keep survey visible when URL still matches after navigation', () => {
+        const survey = {
+            id: 'test-survey',
+            conditions: {
+                url: 'example.com',
+                urlMatchType: 'icontains' as const,
+                events: null,
+                actions: null,
+            },
+        }
+
+        renderHook(() =>
+            useHideSurveyOnURLChange({
+                survey,
+                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
+                setSurveyVisible: mockSetSurveyVisible,
+                isPreviewMode: false,
+            })
+        )
+
+        act(() => {
+            window.history.pushState({}, '', '/some-path')
+        })
+
+        expect(mockRemoveSurveyFromFocus).not.toHaveBeenCalled()
+    })
+})
+
+describe('onPopupSurveyDismissed callback', () => {
+    let posthog: PostHog
+
+    beforeEach(() => {
+        document.getElementsByTagName('html')[0].innerHTML = ''
+        localStorage.clear()
+        jest.clearAllMocks()
+
+        // Mock PostHog instance
+        posthog = {
+            capture: jest.fn(),
+            get_session_replay_url: jest.fn(),
+        } as unknown as PostHog
+    })
+
+    test('onPopupSurveyDismissed is called when Cancel button is clicked in SurveyPopup', () => {
+        // Create a simple survey for testing
+        const survey = {
+            id: 'test-survey',
+            name: 'Test Survey',
+            description: 'Test Survey Description',
+            type: SurveyType.Popover,
+            questions: [
+                {
+                    type: SurveyQuestionType.Open,
+                    question: 'What do you think?',
+                    description: '',
+                    originalQuestionIndex: 0,
+                },
+            ],
+            start_date: new Date().toISOString(),
+            end_date: null,
+            feature_flag_keys: null,
+            linked_flag_key: null,
+            targeting_flag_key: null,
+            internal_targeting_flag_key: null,
+            appearance: {},
+            conditions: {
+                events: { values: [] },
+                actions: { values: [] },
+            },
+            current_iteration: 1,
+            current_iteration_start_date: new Date().toISOString(),
+        } as Survey
+
+        const onPopupSurveyDismissed = jest.fn()
+        const mockRemoveSurveyFromFocus = jest.fn()
+
+        // Render the SurveyPopup component with our mocked callback
+        render(
+            h(SurveyPopup, {
+                survey: survey,
+                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
+                isPopup: true,
+                onPopupSurveyDismissed: onPopupSurveyDismissed,
+                posthog: posthog,
+            })
+        )
+
+        // Find the Cancel button
+        const cancelButton = document.querySelector('.cancel-btn-wrapper')
+
+        // Verify the button exists
+        expect(cancelButton).not.toBeNull()
+
+        // Click the Cancel button
+        if (cancelButton) {
+            fireEvent.click(cancelButton)
+
+            // Verify our callback was called
+            expect(onPopupSurveyDismissed).toHaveBeenCalledTimes(1)
+        }
     })
 })
 

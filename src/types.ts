@@ -1,6 +1,6 @@
-import { PostHog } from './posthog-core'
+import type { recordOptions } from './extensions/replay/types/rrweb'
 import type { SegmentAnalytics } from './extensions/segment-integration'
-import { recordOptions } from './extensions/replay/sessionrecording-utils'
+import { PostHog } from './posthog-core'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -478,6 +478,16 @@ export interface PostHogConfig {
     prepare_external_dependency_script?: (script: HTMLScriptElement) => HTMLScriptElement | null
 
     /**
+     * A function to be called when a stylesheet is being loaded.
+     * This can be used to modify the stylesheet before it is loaded.
+     * This is useful for adding a nonce to the stylesheet, for example.
+     *
+     * @param stylesheet - The stylesheet element that is being loaded.
+     * @returns The modified stylesheet element, or null if the stylesheet should not be loaded.
+     */
+    prepare_external_dependency_stylesheet?: (stylesheet: HTMLStyleElement) => HTMLStyleElement | null
+
+    /**
      * Determines whether PostHog should enable recording console logs.
      * When undefined, it falls back to the remote config setting.
      *
@@ -691,6 +701,13 @@ export interface PostHogConfig {
      * @default 3000
      */
     feature_flag_request_timeout_ms: number
+
+    /**
+     * Sets timeout for fetching surveys
+     *
+     * @default 10000
+     */
+    surveys_request_timeout_ms: number
 
     /**
      * Function to get the device ID.
@@ -1356,6 +1373,8 @@ export type FeatureFlagsCallback = (
         errorsLoading?: boolean
     }
 ) => void
+
+export type RemoteConfigFeatureFlagCallback = (payload: JsonType) => void
 
 export interface PersistentStore {
     is_supported: () => boolean

@@ -1,14 +1,34 @@
 import { VNode, cloneElement, createContext } from 'preact'
 import { PostHog } from '../../posthog-core'
-import { MultipleSurveyQuestion, Survey, SurveyAppearance, SurveyQuestion } from '../../posthog-surveys-types'
+import {
+    MultipleSurveyQuestion,
+    Survey,
+    SurveyAppearance,
+    SurveyQuestion,
+    SurveySchedule,
+    SurveyType,
+} from '../../posthog-surveys-types'
 import { document as _document, window as _window } from '../../utils/globals'
 import { createLogger } from '../../utils/logger'
+import { prepareStylesheet } from '../utils/stylesheet-loader'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 const SurveySeenPrefix = 'seenSurvey_'
 
 const logger = createLogger('[Surveys]')
+
+export const SURVEY_DEFAULT_Z_INDEX = 2147483647
+
+export function getFontFamily(fontFamily?: string): string {
+    if (fontFamily === 'inherit') {
+        return 'inherit'
+    }
+
+    const defaultFontStack =
+        'BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"'
+    return fontFamily ? `${fontFamily}, ${defaultFontStack}` : `-apple-system, ${defaultFontStack}`
+}
 
 export const style = (appearance: SurveyAppearance | null) => {
     const positions = {
@@ -26,11 +46,11 @@ export const style = (appearance: SurveyAppearance | null) => {
               bottom: 0px;
               color: black;
               font-weight: normal;
-              font-family: ${appearance?.fontFamily || '-apple-system'}, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+              font-family: ${getFontFamily(appearance?.fontFamily)};
               text-align: left;
               max-width: ${parseInt(appearance?.maxWidth || '300')}px;
               width: 100%;
-              z-index: ${parseInt(appearance?.zIndex || '99999')};
+              z-index: ${parseInt(appearance?.zIndex || SURVEY_DEFAULT_Z_INDEX.toString())};
               border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
               border-bottom: 0px;
               ${positions[appearance?.position || 'right'] || 'right: 30px;'}
@@ -60,7 +80,7 @@ export const style = (appearance: SurveyAppearance | null) => {
           .survey-form textarea {
               color: #2d2d2d;
               font-size: 14px;
-              font-family: ${appearance?.fontFamily || '-apple-system'}, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+              font-family: ${getFontFamily(appearance?.fontFamily)};
               background: white;
               color: black;
               outline: none;
@@ -208,6 +228,12 @@ export const style = (appearance: SurveyAppearance | null) => {
               margin-top: 6px;
               background: ${appearance?.backgroundColor || '#eeeded'};
               opacity: .60;
+          }
+          .limit-height {
+              max-height: 300px;
+              overflow: auto;
+              scrollbar-width: thin;
+              scrollbar-color: ${appearance?.borderColor || '#c9c6c6'} ${appearance?.backgroundColor || '#eeeded'};
           }
           .multiple-choice-options {
               margin-top: 13px;
@@ -519,15 +545,15 @@ export const defaultSurveyAppearance: SurveyAppearance = {
 
 export const defaultBackgroundColor = '#eeeded'
 
-export const createShadow = (styleSheet: string, surveyId: string, element?: Element) => {
+export const createShadow = (styleSheet: string, surveyId: string, element?: Element, posthog?: PostHog) => {
     const div = document.createElement('div')
     div.className = `PostHogSurvey${surveyId}`
     const shadow = div.attachShadow({ mode: 'open' })
     if (styleSheet) {
-        const styleElement = Object.assign(document.createElement('style'), {
-            innerText: styleSheet,
-        })
-        shadow.appendChild(styleElement)
+        const styleElement = prepareStylesheet(document, styleSheet, posthog)
+        if (styleElement) {
+            shadow.appendChild(styleElement)
+        }
     }
     ;(element ? element : document.body).appendChild(div)
     return shadow
@@ -634,11 +660,15 @@ export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
     return reverseIfUnshuffled(survey.questions, shuffle(survey.questions))
 }
 
-export const hasEvents = (survey: Survey): boolean => {
+export const hasEvents = (survey: Pick<Survey, 'conditions'>): boolean => {
     return survey.conditions?.events?.values?.length != undefined && survey.conditions?.events?.values?.length > 0
 }
 
-export const canActivateRepeatedly = (survey: Survey): boolean => {
+export const canActivateRepeatedly = (survey: Pick<Survey, 'schedule' | 'type' | 'conditions'>): boolean => {
+    if (survey.schedule === SurveySchedule.Always && survey.type === SurveyType.Widget) {
+        return true
+    }
+
     return !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey))
 }
 
@@ -688,20 +718,36 @@ const getSurveyInteractionProperty = (survey: Survey, action: string): string =>
     return surveyProperty
 }
 
+export const hasWaitPeriodPassed = (
+    lastSeenSurveyDate: string | null,
+    waitPeriodInDays: number | undefined
+): boolean => {
+    if (!waitPeriodInDays || !lastSeenSurveyDate) {
+        return true
+    }
+
+    const today = new Date()
+    const diff = Math.abs(today.getTime() - new Date(lastSeenSurveyDate).getTime())
+    const diffDaysFromToday = Math.ceil(diff / (1000 * 3600 * 24))
+    return diffDaysFromToday > waitPeriodInDays
+}
+
 interface SurveyContextProps {
     isPreviewMode: boolean
     previewPageIndex: number | undefined
-    handleCloseSurveyPopup: () => void
+    onPopupSurveyDismissed: () => void
     isPopup: boolean
     onPreviewSubmit: (res: string | string[] | number | null) => void
+    onPopupSurveySent: () => void
 }
 
 export const SurveyContext = createContext<SurveyContextProps>({
     isPreviewMode: false,
     previewPageIndex: 0,
-    handleCloseSurveyPopup: () => {},
+    onPopupSurveyDismissed: () => {},
     isPopup: true,
     onPreviewSubmit: () => {},
+    onPopupSurveySent: () => {},
 })
 
 interface RenderProps {

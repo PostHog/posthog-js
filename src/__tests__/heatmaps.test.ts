@@ -80,6 +80,29 @@ describe('heatmaps', () => {
         })
     })
 
+    it('should flush on window unload', async () => {
+        posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
+
+        window.dispatchEvent(new Event('beforeunload'))
+
+        expect(beforeSendMock).toBeCalledTimes(1)
+        expect(beforeSendMock.mock.lastCall[0]).toMatchObject({
+            event: '$$heatmap',
+            properties: {
+                $heatmap_data: {
+                    'http://replaced/': [
+                        {
+                            target_fixed: false,
+                            type: 'click',
+                            x: 10,
+                            y: 20,
+                        },
+                    ],
+                },
+            },
+        })
+    })
+
     it('requires interval to pass before sending data', async () => {
         posthog.heatmaps?.['_onClick']?.(createMockMouseEvent())
 

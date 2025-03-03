@@ -1,39 +1,48 @@
+import { Autocapture } from './autocapture'
 import Config from './config'
-import {
-    _copyAndTruncateStrings,
-    each,
-    eachArray,
-    extend,
-    safewrapClass,
-    isCrossDomainCookie,
-    addEventListener,
-} from './utils'
-import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
-import { PostHogFeatureFlags } from './posthog-featureflags'
-import { PostHogPersistence } from './posthog-persistence'
+import { ConsentManager } from './consent'
 import {
     ALIAS_ID_KEY,
+    COOKIELESS_MODE_FLAG_PROPERTY,
+    COOKIELESS_SENTINEL_VALUE,
+    ENABLE_PERSON_PROCESSING,
     FLAG_CALL_REPORTED,
     PEOPLE_DISTINCT_ID_KEY,
+    SURVEYS_REQUEST_TIMEOUT_MS,
     USER_STATE,
-    ENABLE_PERSON_PROCESSING,
-    COOKIELESS_SENTINEL_VALUE,
-    COOKIELESS_MODE_FLAG_PROPERTY,
 } from './constants'
+import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
+import { ExceptionObserver } from './extensions/exception-autocapture'
 import { SessionRecording } from './extensions/replay/sessionrecording'
-import { RemoteConfigLoader } from './remote-config'
+import { setupSegmentIntegration } from './extensions/segment-integration'
+import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
 import { Toolbar } from './extensions/toolbar'
-import { localStore } from './storage'
+import { TracingHeaders } from './extensions/tracing-headers'
+import { WebVitalsAutocapture } from './extensions/web-vitals'
+import { Heatmaps } from './heatmaps'
+import { PageViewManager } from './page-view'
+import { PostHogExceptions } from './posthog-exceptions'
+import { PostHogFeatureFlags } from './posthog-featureflags'
+import { PostHogPersistence } from './posthog-persistence'
+import { PostHogSurveys } from './posthog-surveys'
+import { SurveyCallback } from './posthog-surveys-types'
+import { RateLimiter } from './rate-limiter'
+import { RemoteConfigLoader } from './remote-config'
+import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
 import { DEFAULT_FLUSH_INTERVAL_MS, RequestQueue } from './request-queue'
 import { RetryQueue } from './retry-queue'
+import { ScrollManager } from './scroll-manager'
+import { SessionPropsManager } from './session-props'
 import { SessionIdManager } from './sessionid'
-import { RequestRouter, RequestRouterRegion } from './utils/request-router'
+import { SiteApps } from './site-apps'
+import { localStore } from './storage'
 import {
     CaptureOptions,
     CaptureResult,
     Compression,
     EarlyAccessFeatureCallback,
     EventName,
+    FeatureFlagsCallback,
     JsonType,
     PostHogConfig,
     Properties,
@@ -45,13 +54,23 @@ import {
     SnippetArrayItem,
     ToolbarParams,
 } from './types'
-import { SentryIntegration, SentryIntegrationOptions, sentryIntegration } from './extensions/sentry-integration'
-import { setupSegmentIntegration } from './extensions/segment-integration'
-import { PageViewManager } from './page-view'
-import { PostHogSurveys } from './posthog-surveys'
-import { RateLimiter } from './rate-limiter'
-import { uuidv7 } from './uuidv7'
-import { Survey, SurveyCallback, SurveyQuestionBranchingType } from './posthog-surveys-types'
+import {
+    _copyAndTruncateStrings,
+    addEventListener,
+    each,
+    eachArray,
+    extend,
+    isCrossDomainCookie,
+    safewrapClass,
+} from './utils'
+import { isLikelyBot } from './utils/blocked-uas'
+import { Info } from './utils/event-utils'
+import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
+import { getIdentifyHash } from './utils/identify-utils'
+import { logger } from './utils/logger'
+import { RequestRouter, RequestRouterRegion } from './utils/request-router'
+import { SimpleEventEmitter } from './utils/simple-event-emitter'
+import { includes, isDistinctIdStringLike } from './utils/string-utils'
 import {
     isArray,
     isEmptyObject,
@@ -65,25 +84,8 @@ import {
     isString,
     isUndefined,
 } from './utils/type-utils'
-import { Info } from './utils/event-utils'
-import { logger } from './utils/logger'
-import { SessionPropsManager } from './session-props'
-import { isLikelyBot } from './utils/blocked-uas'
-import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
-import { Heatmaps } from './heatmaps'
-import { ScrollManager } from './scroll-manager'
-import { SimpleEventEmitter } from './utils/simple-event-emitter'
-import { Autocapture } from './autocapture'
-import { TracingHeaders } from './extensions/tracing-headers'
-import { ConsentManager } from './consent'
-import { ExceptionObserver } from './extensions/exception-autocapture'
-import { WebVitalsAutocapture } from './extensions/web-vitals'
+import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
-import { PostHogExceptions } from './posthog-exceptions'
-import { SiteApps } from './site-apps'
-import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
-import { includes, isDistinctIdStringLike } from './utils/string-utils'
-import { getIdentifyHash } from './utils/identify-utils'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -175,6 +177,7 @@ export const defaultConfig = (): PostHogConfig => ({
     advanced_disable_feature_flags_on_first_load: false,
     advanced_disable_toolbar_metrics: false,
     feature_flag_request_timeout_ms: 3000,
+    surveys_request_timeout_ms: SURVEYS_REQUEST_TIMEOUT_MS,
     on_request_error: (res) => {
         const error = 'Bad HTTP status: ' + res.statusCode + ' ' + res.text
         logger.error(error)
@@ -284,6 +287,7 @@ export class PostHog {
     webPerformance = new DeprecatedWebPerformanceObserver()
 
     _initialPageviewCaptured: boolean
+    _personProcessingSetOncePropertiesSent: boolean = false
     _triggered_notifs: any
     compression?: Compression
     __request_queue: QueuedRequestWithOptions[]
@@ -989,8 +993,15 @@ export class PostHog {
             properties['$window_id'] = windowId
         }
 
-        if (this.sessionRecording) {
-            properties['$recording_status'] = this.sessionRecording.status
+        try {
+            if (this.sessionRecording) {
+                properties['$recording_status'] = this.sessionRecording.status
+                properties['$sdk_debug_replay_internal_buffer_length'] = this.sessionRecording['buffer'].data.length
+                properties['$sdk_debug_replay_internal_buffer_size'] = this.sessionRecording['buffer'].size
+            }
+            properties['$sdk_debug_retry_queue_size'] = this._retryQueue?.['queue']?.length
+        } catch (e: any) {
+            properties['$sdk_debug_error_capturing_properties'] = String(e)
         }
 
         if (this.requestRouter.region === RequestRouterRegion.CUSTOM) {
@@ -1068,17 +1079,32 @@ export class PostHog {
         return properties
     }
 
+    /**
+     * Add additional set_once properties to the event when creating a person profile. This allows us to create the
+     * profile with mostly-accurate properties, despite earlier events not setting them. We do this by storing them in
+     * persistence.
+     * @param dataSetOnce
+     */
     _calculate_set_once_properties(dataSetOnce?: Properties): Properties | undefined {
         if (!this.persistence || !this._hasPersonProcessing()) {
             return dataSetOnce
         }
+
+        if (this._personProcessingSetOncePropertiesSent) {
+            // We only need to send these properties once. Sending them with later events would be redundant and would
+            // just require extra work on the server to process them.
+            return dataSetOnce
+        }
         // if we're an identified person, send initial params with every event
-        let setOnceProperties = extend({}, this.persistence.get_initial_props(), dataSetOnce || {})
+        const initialProps = this.persistence.get_initial_props()
+        const sessionProps = this.sessionPropsManager?.getSetOnceInitialSessionPropsProps()
+        let setOnceProperties = extend({}, initialProps, sessionProps || {}, dataSetOnce || {})
         const sanitize_properties = this.config.sanitize_properties
         if (sanitize_properties) {
             logger.error('sanitize_properties is deprecated. Use before_send instead')
             setOnceProperties = sanitize_properties(setOnceProperties, '$set_once')
         }
+        this._personProcessingSetOncePropertiesSent = true
         if (isEmptyObject(setOnceProperties)) {
             return undefined
         }
@@ -1265,16 +1291,18 @@ export class PostHog {
     /*
      * Register an event listener that runs when feature flags become available or when they change.
      * If there are flags, the listener is called immediately in addition to being called on future changes.
+     * Note that this is not called only when we fetch feature flags from the server, but also when they change in the browser.
      *
      * ### Usage:
      *
-     *     posthog.onFeatureFlags(function(featureFlags) { // do something })
+     *     posthog.onFeatureFlags(function(featureFlags, featureFlagsVariants, { errorsLoading }) { // do something })
      *
      * @param {Function} [callback] The callback function will be called once the feature flags are ready or when they are updated.
-     *                              It'll return a list of feature flags enabled for the user.
+     *                              It'll return a list of feature flags enabled for the user, the variants,
+     *                              and also a context object indicating whether we succeeded to fetch the flags or not.
      * @returns {Function} A function that can be called to unsubscribe the listener. Used by useEffect when the component unmounts.
      */
-    onFeatureFlags(callback: (flags: string[], variants: Record<string, string | boolean>) => void): () => void {
+    onFeatureFlags(callback: FeatureFlagsCallback): () => void {
         return this.featureFlags.onFeatureFlags(callback)
     }
 
@@ -1313,15 +1341,6 @@ export class PostHog {
     /** Checks the feature flags associated with this Survey to see if the survey can be rendered. */
     canRenderSurvey(surveyId: string): void {
         this.surveys.canRenderSurvey(surveyId)
-    }
-
-    /** Get the next step of the survey: a question index or `end` */
-    getNextSurveyStep(
-        survey: Survey,
-        currentQuestionIndex: number,
-        response: string | string[] | number | null
-    ): number | SurveyQuestionBranchingType.End {
-        return this.surveys.getNextSurveyStep(survey, currentQuestionIndex, response)
     }
 
     /**
@@ -2139,6 +2158,32 @@ export class PostHog {
 
     public getPageViewId(): string | undefined {
         return this.pageViewManager._currentPageview?.pageViewId
+    }
+
+    /**
+     * Capture written user feedback for a LLM trace. Numeric values are converted to strings.
+     * @param traceId The trace ID to capture feedback for.
+     * @param userFeedback The feedback to capture.
+     */
+    captureTraceFeedback(traceId: string | number, userFeedback: string) {
+        this.capture('$ai_feedback', {
+            $ai_trace_id: String(traceId),
+            $ai_feedback_text: userFeedback,
+        })
+    }
+
+    /**
+     * Capture a metric for a LLM trace. Numeric values are converted to strings.
+     * @param traceId The trace ID to capture the metric for.
+     * @param metricName The name of the metric to capture.
+     * @param metricValue The value of the metric to capture.
+     */
+    captureTraceMetric(traceId: string | number, metricName: string, metricValue: string | number | boolean) {
+        this.capture('$ai_metric', {
+            $ai_trace_id: String(traceId),
+            $ai_metric_name: metricName,
+            $ai_metric_value: String(metricValue),
+        })
     }
 }
 

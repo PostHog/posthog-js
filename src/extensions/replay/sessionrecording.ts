@@ -14,11 +14,10 @@ import {
 import {
     estimateSize,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-    recordOptions,
-    rrwebRecord,
     splitBuffer,
     truncateLargeConsoleLogs,
 } from './sessionrecording-utils'
+import type { recordOptions, rrwebRecord } from './types/rrweb'
 import { PostHog } from '../../posthog-core'
 import {
     CaptureResult,
@@ -31,7 +30,7 @@ import {
     SessionRecordingUrlTrigger,
 } from '../../types'
 import {
-    customEvent,
+    type customEvent,
     EventType,
     type eventWithTime,
     IncrementalSource,

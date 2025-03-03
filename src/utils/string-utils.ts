@@ -14,21 +14,3 @@ export const stripLeadingDollar = function (s: string): string {
 export function isDistinctIdStringLike(value: string): boolean {
     return ['distinct_id', 'distinctid'].includes(value.toLowerCase())
 }
-
-const isValidRegex = function (str: string): boolean {
-    try {
-        new RegExp(str)
-    } catch {
-        return false
-    }
-    return true
-}
-
-export const isMatchingRegex = function (value: string, pattern: string): boolean {
-    if (!isValidRegex(pattern)) return false
-    try {
-        return new RegExp(pattern).test(value)
-    } catch {
-        return false
-    }
-}

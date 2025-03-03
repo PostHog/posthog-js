@@ -1,18 +1,12 @@
 import { SURVEYS } from './constants'
 import { getSurveySeenStorageKeys } from './extensions/surveys/surveys-utils'
 import { PostHog } from './posthog-core'
-import {
-    Survey,
-    SurveyCallback,
-    SurveyMatchType,
-    SurveyQuestionBranchingType,
-    SurveyQuestionType,
-} from './posthog-surveys-types'
+import { Survey, SurveyCallback, SurveyMatchType } from './posthog-surveys-types'
 import { RemoteConfig } from './types'
 import { Info } from './utils/event-utils'
 import { assignableWindow, document, userAgent, window } from './utils/globals'
 import { createLogger } from './utils/logger'
-import { isMatchingRegex } from './utils/string-utils'
+import { isMatchingRegex } from './utils/regex-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import { isNullish } from './utils/type-utils'
 
@@ -32,115 +26,12 @@ export const surveyValidationMap: Record<SurveyMatchType, (targets: string[], va
     is_not: (targets, value) => targets.every((target) => value !== target),
 }
 
-function getRatingBucketForResponseValue(responseValue: number, scale: number) {
-    if (scale === 3) {
-        if (responseValue < 1 || responseValue > 3) {
-            throw new Error('The response must be in range 1-3')
-        }
-
-        return responseValue === 1 ? 'negative' : responseValue === 2 ? 'neutral' : 'positive'
-    } else if (scale === 5) {
-        if (responseValue < 1 || responseValue > 5) {
-            throw new Error('The response must be in range 1-5')
-        }
-
-        return responseValue <= 2 ? 'negative' : responseValue === 3 ? 'neutral' : 'positive'
-    } else if (scale === 7) {
-        if (responseValue < 1 || responseValue > 7) {
-            throw new Error('The response must be in range 1-7')
-        }
-
-        return responseValue <= 3 ? 'negative' : responseValue === 4 ? 'neutral' : 'positive'
-    } else if (scale === 10) {
-        if (responseValue < 0 || responseValue > 10) {
-            throw new Error('The response must be in range 0-10')
-        }
-
-        return responseValue <= 6 ? 'detractors' : responseValue <= 8 ? 'passives' : 'promoters'
-    }
-
-    throw new Error('The scale must be one of: 3, 5, 7, 10')
-}
-
-export function getNextSurveyStep(
-    survey: Survey,
-    currentQuestionIndex: number,
-    response: string | string[] | number | null
-) {
-    const question = survey.questions[currentQuestionIndex]
-    const nextQuestionIndex = currentQuestionIndex + 1
-
-    if (!question.branching?.type) {
-        if (currentQuestionIndex === survey.questions.length - 1) {
-            return SurveyQuestionBranchingType.End
-        }
-
-        return nextQuestionIndex
-    }
-
-    if (question.branching.type === SurveyQuestionBranchingType.End) {
-        return SurveyQuestionBranchingType.End
-    } else if (question.branching.type === SurveyQuestionBranchingType.SpecificQuestion) {
-        if (Number.isInteger(question.branching.index)) {
-            return question.branching.index
-        }
-    } else if (question.branching.type === SurveyQuestionBranchingType.ResponseBased) {
-        // Single choice
-        if (question.type === SurveyQuestionType.SingleChoice) {
-            // :KLUDGE: for now, look up the choiceIndex based on the response
-            // TODO: once QuestionTypes.MultipleChoiceQuestion is refactored, pass the selected choiceIndex into this method
-            const selectedChoiceIndex = question.choices.indexOf(`${response}`)
-
-            if (question.branching?.responseValues?.hasOwnProperty(selectedChoiceIndex)) {
-                const nextStep = question.branching.responseValues[selectedChoiceIndex]
-
-                // Specific question
-                if (Number.isInteger(nextStep)) {
-                    return nextStep
-                }
-
-                if (nextStep === SurveyQuestionBranchingType.End) {
-                    return SurveyQuestionBranchingType.End
-                }
-
-                return nextQuestionIndex
-            }
-        } else if (question.type === SurveyQuestionType.Rating) {
-            if (typeof response !== 'number' || !Number.isInteger(response)) {
-                throw new Error('The response type must be an integer')
-            }
-
-            const ratingBucket = getRatingBucketForResponseValue(response, question.scale)
-
-            if (question.branching?.responseValues?.hasOwnProperty(ratingBucket)) {
-                const nextStep = question.branching.responseValues[ratingBucket]
-
-                // Specific question
-                if (Number.isInteger(nextStep)) {
-                    return nextStep
-                }
-
-                if (nextStep === SurveyQuestionBranchingType.End) {
-                    return SurveyQuestionBranchingType.End
-                }
-
-                return nextQuestionIndex
-            }
-        }
-
-        return nextQuestionIndex
-    }
-
-    logger.warn('Falling back to next question index due to unexpected branching type')
-    return nextQuestionIndex
-}
-
 function defaultMatchType(matchType?: SurveyMatchType): SurveyMatchType {
     return matchType ?? 'icontains'
 }
 
 // use urlMatchType to validate url condition, fallback to contains for backwards compatibility
-export function doesSurveyUrlMatch(survey: Survey): boolean {
+export function doesSurveyUrlMatch(survey: Pick<Survey, 'conditions'>): boolean {
     if (!survey.conditions?.url) {
         return true
     }
@@ -155,7 +46,7 @@ export function doesSurveyUrlMatch(survey: Survey): boolean {
 }
 
 export function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
-    if (!survey.conditions?.deviceTypes) {
+    if (!survey.conditions?.deviceTypes || survey.conditions?.deviceTypes.length === 0) {
         return true
     }
     // if we dont know the device type, assume it is not a match
@@ -174,6 +65,8 @@ export class PostHogSurveys {
     private _decideServerResponse?: boolean
     public _surveyEventReceiver: SurveyEventReceiver | null
     private _surveyManager: any
+    private _isFetchingSurveys: boolean = false
+    private _isInitializingSurveys: boolean = false
 
     constructor(private readonly instance: PostHog) {
         // we set this to undefined here because we need the persistence storage for this type
@@ -200,6 +93,11 @@ export class PostHogSurveys {
             return
         }
 
+        if (this._isInitializingSurveys) {
+            logger.info('Already initializing surveys, skipping...')
+            return
+        }
+
         const disableSurveys = this.instance.config.disable_surveys
 
         if (disableSurveys) {
@@ -214,34 +112,46 @@ export class PostHogSurveys {
             return
         }
 
-        const generateSurveys = phExtensions.generateSurveys
-
         if (!this._decideServerResponse) {
             logger.warn('Decide not loaded yet. Not loading surveys.')
             return
         }
 
-        if (this._surveyEventReceiver == null) {
-            this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
-        }
+        this._isInitializingSurveys = true
 
-        if (!generateSurveys) {
-            const loadExternalDependency = phExtensions.loadExternalDependency
+        try {
+            const generateSurveys = phExtensions.generateSurveys
 
-            if (loadExternalDependency) {
-                loadExternalDependency(this.instance, 'surveys', (err) => {
-                    if (err) {
-                        logger.error('Could not load surveys script', err)
-                        return
-                    }
+            if (!generateSurveys) {
+                const loadExternalDependency = phExtensions.loadExternalDependency
 
-                    this._surveyManager = phExtensions.generateSurveys?.(this.instance)
-                })
+                if (loadExternalDependency) {
+                    loadExternalDependency(this.instance, 'surveys', (err) => {
+                        if (err || !phExtensions.generateSurveys) {
+                            logger.error('Could not load surveys script', err)
+                            this._isInitializingSurveys = false
+                            return
+                        }
+
+                        this._surveyManager = phExtensions.generateSurveys(this.instance)
+                        this._isInitializingSurveys = false
+                        this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
+                        logger.info('Surveys loaded successfully')
+                    })
+                } else {
+                    logger.error('PostHog loadExternalDependency extension not found. Cannot load remote config.')
+                    this._isInitializingSurveys = false
+                }
             } else {
-                logger.error('PostHog loadExternalDependency extension not found. Cannot load remote config.')
+                this._surveyManager = generateSurveys(this.instance)
+                this._isInitializingSurveys = false
+                this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
+                logger.info('Surveys loaded successfully')
             }
-        } else {
-            this._surveyManager = generateSurveys(this.instance)
+        } catch (e) {
+            logger.error('Error initializing surveys', e)
+            this._isInitializingSurveys = false
+            throw e
         }
     }
 
@@ -250,49 +160,57 @@ export class PostHogSurveys {
         // then we shouldn't return survey data
         if (this.instance.config.disable_surveys) {
             logger.info('Disabled. Not loading surveys.')
-
             return callback([])
-        }
-
-        if (this._surveyEventReceiver == null) {
-            this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
         }
 
         const existingSurveys = this.instance.get_property(SURVEYS)
 
         if (!existingSurveys || forceReload) {
-            this.instance._send_request({
-                url: this.instance.requestRouter.endpointFor(
-                    'api',
-                    `/api/surveys/?token=${this.instance.config.token}`
-                ),
-                method: 'GET',
-                callback: (response) => {
-                    const statusCode = response.statusCode
-                    if (statusCode !== 200 || !response.json) {
-                        logger.error(`Surveys API could not be loaded, status: ${statusCode}`)
-                        return callback([])
-                    }
-                    const surveys = response.json.surveys || []
+            // Prevent concurrent API calls
+            if (this._isFetchingSurveys) {
+                return callback([])
+            }
 
-                    const eventOrActionBasedSurveys = surveys.filter(
-                        (survey: Survey) =>
-                            (survey.conditions?.events &&
-                                survey.conditions?.events?.values &&
-                                survey.conditions?.events?.values?.length > 0) ||
-                            (survey.conditions?.actions &&
-                                survey.conditions?.actions?.values &&
-                                survey.conditions?.actions?.values?.length > 0)
-                    )
+            try {
+                this._isFetchingSurveys = true
+                this.instance._send_request({
+                    url: this.instance.requestRouter.endpointFor(
+                        'api',
+                        `/api/surveys/?token=${this.instance.config.token}`
+                    ),
+                    method: 'GET',
+                    timeout: this.instance.config.surveys_request_timeout_ms,
+                    callback: (response) => {
+                        this._isFetchingSurveys = false
+                        const statusCode = response.statusCode
+                        if (statusCode !== 200 || !response.json) {
+                            logger.error(`Surveys API could not be loaded, status: ${statusCode}`)
+                            return callback([])
+                        }
+                        const surveys = response.json.surveys || []
 
-                    if (eventOrActionBasedSurveys.length > 0) {
-                        this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
-                    }
+                        const eventOrActionBasedSurveys = surveys.filter(
+                            (survey: Survey) =>
+                                (survey.conditions?.events &&
+                                    survey.conditions?.events?.values &&
+                                    survey.conditions?.events?.values?.length > 0) ||
+                                (survey.conditions?.actions &&
+                                    survey.conditions?.actions?.values &&
+                                    survey.conditions?.actions?.values?.length > 0)
+                        )
 
-                    this.instance.persistence?.register({ [SURVEYS]: surveys })
-                    return callback(surveys)
-                },
-            })
+                        if (eventOrActionBasedSurveys.length > 0) {
+                            this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
+                        }
+
+                        this.instance.persistence?.register({ [SURVEYS]: surveys })
+                        return callback(surveys)
+                    },
+                })
+            } catch (e) {
+                this._isFetchingSurveys = false
+                throw e
+            }
         } else {
             return callback(existingSurveys)
         }
@@ -375,7 +293,6 @@ export class PostHogSurveys {
             return this.instance.featureFlags.isFeatureEnabled(value)
         })
     }
-    getNextSurveyStep = getNextSurveyStep
 
     // this method is lazily loaded onto the window to avoid loading preact and other dependencies if surveys is not enabled
     private _canActivateRepeatedly(survey: Survey) {
