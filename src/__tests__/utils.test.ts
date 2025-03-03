@@ -140,7 +140,7 @@ describe('utils', () => {
             [
                 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)',
             ],
-            ['Buck/2.4.2; (+https://app.hypefactors.com/media-monitoring/about.html'],
+            ['Buck/2.4.2; (+https://app.hypefactors.com/media-monitoring/about.html)'],
 
             ['op3-fetcher/1.0 (bot; https://op3.dev)'],
             ['ZoomBot (Linkbot 1.0 http://suite.seozoom.it/bot.html)'],
