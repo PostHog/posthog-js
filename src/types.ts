@@ -451,6 +451,13 @@ export interface PostHogConfig {
     disable_surveys: boolean
 
     /**
+     * Determines whether PostHog should disable survey partial response.
+     *
+     * @default true
+     */
+    disable_survey_partial_response: boolean
+
+    /**
      * Determines whether PostHog should disable web experiments.
      *
      * Currently disabled while we're in BETA. It will be toggled to `true` in a future release.
