@@ -1,15 +1,25 @@
 export const DEFAULT_BLOCKED_UA_STRS = [
     'ahrefsbot',
     'ahrefssiteaudit',
+    'amazonbot',
+    'amazonproductbot',
+    'app.hypefactors.com', // Buck, but "buck" is too short to be safe to block
     'applebot',
+    'archive.org_bot',
+    'awariobot',
+    'backlinksextendedbot',
     'baiduspider',
     'better uptime bot',
     'bingbot',
     'bingpreview',
+    // should we just block anything containing "bot"?
     'bot.htm',
     'bot.php',
+    '(bot;',
+    'bot/',
     'chrome-lighthouse',
     'crawler',
+    'dataforseobot',
     'deepscan',
     'duckduckbot',
     'facebookexternal',
@@ -18,24 +28,32 @@ export const DEFAULT_BLOCKED_UA_STRS = [
     'hubspot',
     'ia_archiver',
     'linkedinbot',
+    'meta-externalagent',
     'mj12bot',
     'msnbot',
     'nessus',
+    'perplexitybot',
     'petalbot',
     'pinterest',
     'prerender',
     'rogerbot',
     'screaming frog',
+    'sebot-wa',
     'semrushbot',
+    'sentryuptimebot',
     // sem rush also uses siteauditbot
     'siteauditbot',
     'sitebulb',
+    'slackbot',
     'slurp',
+    'trendictionbot',
     'turnitin',
     'twitterbot',
+    'uptimerobot',
     'vercelbot',
     'yahoo! slurp',
     'yandexbot',
+    'zoombot',
 
     // OpenAI Crawlers
     'gptbot',
@@ -49,7 +67,7 @@ export const DEFAULT_BLOCKED_UA_STRS = [
 
     // a whole bunch of goog-specific crawlers
     // https://developers.google.com/search/docs/advanced/crawling/overview-google-crawlers
-    'Google-HotelAdsVerifier',
+    'google-hoteladsverifier',
     'adsbot-google',
     'apis-google',
     'duplexweb-google',
@@ -61,7 +79,7 @@ export const DEFAULT_BLOCKED_UA_STRS = [
     'googleweblight',
     'mediapartners-google',
     'storebot-google',
-    'Bytespider;',
+    'bytespider',
 ]
 
 /**
