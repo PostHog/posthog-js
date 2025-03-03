@@ -1,3 +1,8 @@
+## 1.225.1 - 2025-03-03
+
+- fix: add semrush audit bot (#1775)
+- chore: add posthog built rrweb (#1770)
+
 ## 1.225.0 - 2025-03-02
 
 - feat: better positioning for survey selectors (#1772)
