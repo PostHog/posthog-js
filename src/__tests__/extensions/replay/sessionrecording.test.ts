@@ -443,7 +443,7 @@ describe('SessionRecording', () => {
                 { maskAllInputs: false },
                 { maskAllInputs: false },
             ],
-            ['uses default nothing is set', undefined, undefined, { maskAllInputs: true, maskTextSelector: undefined }],
+            ['is undefined when nothing is set', undefined, undefined, undefined],
             [
                 'uses client config when set if server config is not set',
                 undefined,
