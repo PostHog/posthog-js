@@ -161,6 +161,10 @@ describe('utils', () => {
             ['meta-externalagent/1.1 (+https://developers.facebook.com/docs/sharing/webmasters/crawler)'],
             ['Mozilla/5.0 +https://chartable.com/crawler Trackable/0.1'],
             ['Mozilla/5.0 (compatible; SnapchatAds/1.0; +https://businesshelp.snapchat.com/s/article/adsbot-crawler)'],
+            [
+                'Mozilla/5.0 (compatible; SeznamBot/4.0; +https://o-seznam.cz/napoveda/vyhledavani/en/seznambot-crawler/)',
+            ],
+            ['BrightEdge Crawler/1.0 (crawler@brightedge.com)'],
         ])('blocks based on user agent', (botString) => {
             expect(isBlockedUA(botString, [])).toBe(true)
             expect(isBlockedUA(botString.toLowerCase(), [])).toBe(true)
@@ -181,10 +185,6 @@ describe('utils', () => {
             [
                 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) elec/1.0.0 Chrome/126.0.6478.127 Electron/31.2.1 Safari/537.36',
             ],
-            [
-                'Mozilla/5.0 (compatible; SeznamBot/4.0; +https://o-seznam.cz/napoveda/vyhledavani/en/seznambot-crawler/)',
-            ],
-            ['BrightEdge Crawler/1.0 (crawler@brightedge.com)'],
         ])('does not block based on non-bot user agent', (userAgent) => {
             expect(isBlockedUA(userAgent, [])).toBe(false)
             expect(isBlockedUA(userAgent.toLowerCase(), [])).toBe(false)
