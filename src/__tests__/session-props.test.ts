@@ -117,7 +117,7 @@ describe('Session Props Manager', () => {
         }
 
         // act
-        const properties = sessionPropsManager.getSetOnceInitialSessionPropsProps()
+        const properties = sessionPropsManager.getSetOnceProps()
 
         //assert
         expect(properties).toEqual({
