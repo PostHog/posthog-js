@@ -27,8 +27,8 @@ import {
     NetworkRequest,
     Properties,
     RemoteConfig,
-    SessionRecordingUrlTrigger,
     type SessionRecordingOptions,
+    SessionRecordingUrlTrigger,
 } from '../../types'
 import {
     customEvent,
@@ -387,7 +387,7 @@ export class SessionRecording {
             : undefined
     }
 
-    private get masking(): Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector'> | undefined {
+    private get masking(): Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector'> {
         const masking_server_side = this.instance.get_property(SESSION_RECORDING_MASKING)
         const masking_client_side = {
             maskAllInputs: this.instance.config.session_recording?.maskAllInputs,
@@ -397,12 +397,10 @@ export class SessionRecording {
         const maskAllInputs = masking_client_side?.maskAllInputs ?? masking_server_side?.maskAllInputs
         const maskTextSelector = masking_client_side?.maskTextSelector ?? masking_server_side?.maskTextSelector
 
-        return !isUndefined(maskAllInputs) || !isUndefined(maskTextSelector)
-            ? {
-                  maskAllInputs,
-                  maskTextSelector,
-              }
-            : undefined
+        return {
+            maskAllInputs: isNullish(maskAllInputs) ? true : maskAllInputs,
+            maskTextSelector: isNullish(maskTextSelector) ? undefined : maskTextSelector,
+        }
     }
 
     private get sampleRate(): number | null {
@@ -930,9 +928,9 @@ export class SessionRecording {
             blockSelector: undefined,
             ignoreClass: 'ph-ignore-input',
             maskTextClass: 'ph-mask',
-            maskTextSelector: undefined,
+            maskTextSelector: this.masking.maskTextSelector ?? undefined,
             maskTextFn: undefined,
-            maskAllInputs: true,
+            maskAllInputs: this.masking.maskAllInputs,
             maskInputOptions: { password: true },
             maskInputFn: undefined,
             slimDOMOptions: {},
@@ -960,11 +958,6 @@ export class SessionRecording {
             sessionRecordingOptions.recordCanvas = true
             sessionRecordingOptions.sampling = { canvas: this.canvasRecording.fps }
             sessionRecordingOptions.dataURLOptions = { type: 'image/webp', quality: this.canvasRecording.quality }
-        }
-
-        if (this.masking) {
-            sessionRecordingOptions.maskAllInputs = this.masking.maskAllInputs
-            sessionRecordingOptions.maskTextSelector = this.masking.maskTextSelector ?? undefined
         }
 
         if (!this.rrwebRecord) {
