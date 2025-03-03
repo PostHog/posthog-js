@@ -759,7 +759,7 @@ export function Questions({
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
     )
     const [questionsResponses, setQuestionsResponses] = useState({})
-    const { isPreviewMode, previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit, onPopupSurveySent } =
+    const { previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit, onPopupSurveySent } =
         useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
@@ -772,12 +772,10 @@ export function Questions({
     const onNextButtonClick = ({
         res,
         displayQuestionIndex,
-        originalQuestionIndex,
         questionId,
     }: {
         res: string | string[] | number | null
         displayQuestionIndex: number
-        originalQuestionIndex: number
         questionId?: string
     }) => {
         if (!posthog) {
@@ -785,11 +783,12 @@ export function Questions({
             return
         }
 
-        const responseKey = questionId
-            ? `$survey_response_${questionId}`
-            : originalQuestionIndex === 0
-              ? `$survey_response`
-              : `$survey_response_${originalQuestionIndex}`
+        if (!questionId) {
+            logger.error('onNextButtonClick called without a questionId.')
+            return
+        }
+
+        const responseKey = `$survey_response_${questionId}`
 
         setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
 
@@ -816,11 +815,7 @@ export function Questions({
             }
         >
             {surveyQuestions.map((question, displayQuestionIndex) => {
-                const { originalQuestionIndex } = question
-
-                const isVisible = isPreviewMode
-                    ? currentQuestionIndex === originalQuestionIndex
-                    : currentQuestionIndex === displayQuestionIndex
+                const isVisible = currentQuestionIndex === displayQuestionIndex
                 return (
                     isVisible && (
                         <div
@@ -851,7 +846,6 @@ export function Questions({
                                     onNextButtonClick({
                                         res,
                                         displayQuestionIndex,
-                                        originalQuestionIndex,
                                         questionId: question.id,
                                     }),
                                 onPreviewSubmit,
