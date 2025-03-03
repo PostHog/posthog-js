@@ -1,7 +1,4 @@
 export const DEFAULT_BLOCKED_UA_STRS = [
-    // this list is getting quite big - at some point we should decide whether to just block anything containing the
-    // word "bot" or "crawler" or similar
-    'adsbot-crawler',
     'ahrefsbot',
     'ahrefssiteaudit',
     'amazonbot',
