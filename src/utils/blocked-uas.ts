@@ -27,6 +27,8 @@ export const DEFAULT_BLOCKED_UA_STRS = [
     'rogerbot',
     'screaming frog',
     'semrushbot',
+    // sem rush also uses siteauditbot
+    'siteauditbot',
     'sitebulb',
     'slurp',
     'turnitin',
