@@ -17,7 +17,6 @@ export const DEFAULT_BLOCKED_UA_STRS = [
     'bot.php',
     '(bot;',
     'bot/',
-    'chrome-lighthouse',
     'crawler',
     'dataforseobot',
     'deepscan',
@@ -80,6 +79,13 @@ export const DEFAULT_BLOCKED_UA_STRS = [
     'mediapartners-google',
     'storebot-google',
     'bytespider',
+
+    // Believe it or not, these are all from Lighthouse
+    // We'll make them an exhaustive match to decrease false positives
+    // https://github.com/GoogleChrome/lighthouse/blob/main/core/config/constants.js
+    'chrome-lighthouse',
+    'mozilla/5.0 (linux; android 11; moto g power (2022)) applewebkit/537.36 (khtml, like gecko) chrome/119.0.0.0 mobile safari/537.36', // Mobile UA for Lighthouse
+    'mozilla/5.0 (macintosh; intel mac os x 10_15_7) applewebkit/537.36 (khtml, like gecko) chrome/119.0.0.0 safari/537.36', // Desktop UA for Lighthouse
 ]
 
 /**
