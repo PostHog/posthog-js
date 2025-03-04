@@ -993,7 +993,7 @@ export class PostHog {
             properties['$window_id'] = windowId
         }
         if (this.sessionPropsManager) {
-            properties['$session'] = this.sessionPropsManager.getSessionProps()
+            extend(properties, this.sessionPropsManager.getSessionProps())
         }
 
         try {

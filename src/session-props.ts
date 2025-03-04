@@ -13,7 +13,8 @@ import type { SessionIdManager } from './sessionid'
 import type { PostHogPersistence } from './posthog-persistence'
 import { CLIENT_SESSION_PROPS } from './constants'
 import type { PostHog } from './posthog-core'
-import { stripEmptyProperties } from './utils'
+import { each, stripEmptyProperties } from './utils'
+import { stripLeadingDollar } from './utils/string-utils'
 
 interface LegacySessionSourceProps {
     initialPathName: string
@@ -102,7 +103,15 @@ export class SessionPropsManager {
     }
 
     getSessionProps() {
-        // it's the same props, but don't include null for unset properties
-        return stripEmptyProperties(this.getSetOnceProps())
+        // it's the same props, but don't include null for unset properties, and add a prefix
+        const p: Record<string, any> = {}
+        each(stripEmptyProperties(this.getSetOnceProps()), (v, k) => {
+            if (k === '$current_url') {
+                // $session_entry_current_url would be a weird name, call it $session_entry_url instead
+                k = 'url'
+            }
+            p[`$session_entry_${stripLeadingDollar(k)}`] = v
+        })
+        return p
     }
 }
