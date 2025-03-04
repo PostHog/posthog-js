@@ -1,3 +1,7 @@
+## 1.227.0 - 2025-03-04
+
+- feat: support loading masking remotely (#1734)
+
 ## 1.226.0 - 2025-03-04
 
 - feat(web-analytics): Add $session property with an object of props on session_id lifecycle (#1780)
