@@ -46,7 +46,7 @@ describe('PostHogFeature component', () => {
                 }
             }
             callback(activeFlags)
-            return () => {}
+            return () => { }
         },
         capture: jest.fn(),
     }))
@@ -262,6 +262,11 @@ describe('PostHogFeature component', () => {
         expect(given.posthog.capture).not.toHaveBeenCalled()
 
         fireEvent.click(screen.getByTestId('helloDiv'))
+        expect(given.posthog.capture).toHaveBeenCalledWith('$feature_interaction', {
+            feature_flag: 'multivariate_feature',
+            feature_flag_variant: 'string-value',
+            $set: { '$feature_interaction/multivariate_feature': 'string-value' },
+        })
         expect(given.posthog.capture).toHaveBeenCalledTimes(1)
     })
 
