@@ -10,8 +10,10 @@
         "preview": "vite preview"
     },
     "dependencies": {
+        "@types/node": "^22.13.9",
         "react": "^19.0.0",
-        "react-dom": "^19.0.0"
+        "react-dom": "^19.0.0",
+        "typescript": "^5.8.2"
     },
     "devDependencies": {
         "@eslint/js": "^9.21.0",
