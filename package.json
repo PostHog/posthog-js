@@ -118,7 +118,16 @@
         "yargs": "^17.7.2"
     },
     "peerDependencies": {
-        "@rrweb/types": "2.0.0-alpha.17"
+        "@rrweb/types": "2.0.0-alpha.17",
+        "rrweb-snapshot": "2.0.0-alpha.17"
+    },
+    "peerDependenciesMeta": {
+        "@rrweb/types": {
+            "optional": true
+        },
+        "rrweb-snapshot": {
+            "optional": true
+        }
     },
     "lint-staged": {
         "*.{ts,tsx,js,json}": "prettier --write",
