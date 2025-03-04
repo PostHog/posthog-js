@@ -6,4 +6,6 @@ export default defineNuxtConfig({
             posthogHost: '<posthog_instance_address>',
         },
     },
+
+    compatibilityDate: '2025-03-04',
 })

@@ -1,5 +1,5 @@
 /* eslint-disable no-console */
-import { useActiveFeatureFlags, usePostHog } from 'posthog-js/react'
+import { PostHogFeature, useActiveFeatureFlags, usePostHog } from 'posthog-js/react'
 import { useEffect, useState } from 'react'
 import { cookieConsentGiven, PERSON_PROCESSING_MODE } from '@/src/posthog'
 import { setAllPersonProfilePropertiesAsPersonPropertiesForFlags } from 'posthog-js/lib/src/customizations'
@@ -88,6 +88,23 @@ export default function Home() {
 
             {isClient && (
                 <>
+                    <div className="px-4 py-2 bg-gray-100 rounded border-2 border-gray-800 my-2">
+                        <h1>PostHog React Components</h1>
+                        <p>
+                            Contains some flagged components. You need to create a `beta-feature` flag in PostHog to see
+                            them. It should have variants `test` and `control`.
+                        </p>
+                        <PostHogFeature flag="beta-feature" match="test" trackInteraction trackView>
+                            <p className="px-4 py-2 bg-gray-100 rounded border-2 border-gray-800 my-2">
+                                This is a beta feature, With the variant "test"
+                            </p>
+                        </PostHogFeature>
+                        <PostHogFeature flag="beta-feature" match="control" trackInteraction trackView>
+                            <p className="px-4 py-2 bg-gray-100 rounded border-2 border-gray-800 my-2">
+                                This is a beta feature, With the variant "control"
+                            </p>
+                        </PostHogFeature>
+                    </div>
                     {!consentGiven && (
                         <p className="border border-red-900 bg-red-200 rounded p-2">
                             <b>Consent not given!</b> Session recording, surveys, and autocapture are disabled.
