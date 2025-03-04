@@ -1,3 +1,8 @@
+## 1.226.0 - 2025-03-04
+
+- feat(web-analytics): Add $session property with an object of props on session_id lifecycle (#1780)
+- feat: Block more bots (#1776)
+
 ## 1.225.1 - 2025-03-03
 
 - fix: add semrush audit bot (#1775)
