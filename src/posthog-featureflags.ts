@@ -268,7 +268,10 @@ export class PostHogFeatureFlags {
             distinct_id: this.instance.get_distinct_id(),
             groups: this.instance.getGroups(),
             $anon_distinct_id: this.$anon_distinct_id,
-            person_properties: this.instance.get_property(STORED_PERSON_PROPERTIES_KEY),
+            person_properties: {
+                ...(this.instance.persistence?.get_initial_props() || {}),
+                ...(this.instance.get_property(STORED_PERSON_PROPERTIES_KEY) || {}),
+            },
             group_properties: this.instance.get_property(STORED_GROUP_PROPERTIES_KEY),
         }
 

@@ -785,6 +785,7 @@ describe('featureflags', () => {
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 $anon_distinct_id: 'rando_id',
+                person_properties: {},
             })
         })
 
@@ -805,6 +806,7 @@ describe('featureflags', () => {
                 token: 'random fake token',
                 distinct_id: 'blah id',
                 $anon_distinct_id: 'rando_id',
+                person_properties: {},
             })
 
             featureFlags.reloadFeatureFlags()
@@ -815,7 +817,7 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[1][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
-                // $anon_distinct_id: "rando_id"
+                person_properties: {},
             })
 
             featureFlags.reloadFeatureFlags()
@@ -825,7 +827,7 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[2][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
-                // $anon_distinct_id: "rando_id"
+                person_properties: {},
             })
         })
 
@@ -966,6 +968,7 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                person_properties: {},
             })
         })
 
@@ -988,6 +991,7 @@ describe('featureflags', () => {
             expect(instance._send_request.mock.calls[0][0].data).toEqual({
                 token: 'random fake token',
                 distinct_id: 'blah id',
+                person_properties: {},
                 group_properties: { orgs: { a: 'b', c: 'd' }, projects: { x: 'y', c: 'e' } },
             })
         })
