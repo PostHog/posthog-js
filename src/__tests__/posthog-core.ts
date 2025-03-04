@@ -418,7 +418,7 @@ describe('posthog core', () => {
             } as unknown as SessionIdManager,
             sessionPropsManager: {
                 getSessionProps: jest.fn().mockReturnValue({
-                    someSessionProp: 'foo',
+                    $session_entry_referring_domain: 'https://referrer.example.com',
                 }),
             } as unknown as SessionPropsManager,
         }
@@ -447,7 +447,7 @@ describe('posthog core', () => {
                 persistent: 'prop',
                 $window_id: 'windowId',
                 $session_id: 'sessionId',
-                $session: { someSessionProp: 'foo' },
+                $session_entry_referring_domain: 'https://referrer.example.com',
                 $is_identified: false,
                 $process_person_profile: false,
                 $recording_status: 'buffering',
