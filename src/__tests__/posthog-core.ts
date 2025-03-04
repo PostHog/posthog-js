@@ -473,7 +473,7 @@ describe('posthog core', () => {
                 persistent: 'prop',
                 $window_id: 'windowId',
                 $session_id: 'sessionId',
-                $session: { someSessionProp: 'foo' },
+                $session_entry_referring_domain: 'https://referrer.example.com',
                 $lib_custom_api_host: 'https://custom.posthog.com',
                 $is_identified: false,
                 $process_person_profile: false,
