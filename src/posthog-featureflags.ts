@@ -270,7 +270,7 @@ export class PostHogFeatureFlags {
             $anon_distinct_id: this.$anon_distinct_id,
             person_properties: {
                 ...(this.instance.persistence?.get_initial_props() || {}),
-                ...this.instance.get_property(STORED_PERSON_PROPERTIES_KEY),
+                ...(this.instance.get_property(STORED_PERSON_PROPERTIES_KEY) || {}),
             },
             group_properties: this.instance.get_property(STORED_GROUP_PROPERTIES_KEY),
         }
