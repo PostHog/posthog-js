@@ -26,6 +26,10 @@ These dependencies are marked as optional to reduce installation size for users 
 
 ## Testing
 
+> [!NOTE]
+> Run `pnpm build` at least once before running tests.
+
+
 - Unit tests: run `pnpm test`.
 - Cypress: run `pnpm start` to have a test server running and separately `pnpm cypress` to launch Cypress test engine.
 - Playwright: run e.g. `pnpm exec playwright test --ui --project webkit --project firefox` to run with UI and in webkit and firefox
