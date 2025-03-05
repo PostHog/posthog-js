@@ -304,8 +304,9 @@ export class PostHogFeatureFlags {
                     this.instance._onRemoteConfig(response.json ?? {})
                 }
 
-                if (data.disable_flags) {
+                if (data.disable_flags && !this._additionalReloadRequested) {
                     // If flags are disabled then there is no need to call decide again (flags are the only thing that may change)
+                    // UNLESS, an additional reload is requested.
                     return
                 }
 
