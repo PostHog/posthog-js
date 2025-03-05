@@ -18,6 +18,7 @@
         "test": "pnpm test:unit && pnpm test:custom-eslint-rules && pnpm test:functional",
         "test:unit": "jest src",
         "test:custom-eslint-rules": "jest eslint-rules",
+        "test:unit:surveys": "jest '.*surveys.*.test.'",
         "test:react": "cd react; pnpm test",
         "test:functional": "jest functional_tests",
         "test-watch": "jest --watch src",
