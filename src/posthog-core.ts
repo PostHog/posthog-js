@@ -992,6 +992,9 @@ export class PostHog {
             properties['$session_id'] = sessionId
             properties['$window_id'] = windowId
         }
+        if (this.sessionPropsManager) {
+            extend(properties, this.sessionPropsManager.getSessionProps())
+        }
 
         try {
             if (this.sessionRecording) {
@@ -1097,7 +1100,7 @@ export class PostHog {
         }
         // if we're an identified person, send initial params with every event
         const initialProps = this.persistence.get_initial_props()
-        const sessionProps = this.sessionPropsManager?.getSetOnceInitialSessionPropsProps()
+        const sessionProps = this.sessionPropsManager?.getSetOnceProps()
         let setOnceProperties = extend({}, initialProps, sessionProps || {}, dataSetOnce || {})
         const sanitize_properties = this.config.sanitize_properties
         if (sanitize_properties) {

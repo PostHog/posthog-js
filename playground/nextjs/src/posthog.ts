@@ -55,6 +55,8 @@ if (typeof window !== 'undefined') {
         api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com',
         session_recording: {
             recordCrossOriginIframes: true,
+            blockSelector: '.ph-block-image',
+            ignoreClass: 'ph-ignore-image',
         },
         debug: true,
         disable_web_experiments: false,

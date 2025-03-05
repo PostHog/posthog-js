@@ -59,7 +59,7 @@ export default function App({ Component, pageProps }: AppProps) {
                     connect-src 'self' ${localhostDomain} https://*.posthog.com https://lottie.host ${CDP_DOMAINS};
                     script-src 'self' 'unsafe-eval' 'unsafe-inline' ${localhostDomain} https://*.posthog.com ${CDP_DOMAINS};
                     style-src 'self' 'unsafe-inline' ${localhostDomain} https://*.posthog.com;
-                    img-src 'self' ${localhostDomain} https://*.posthog.com https://lottie.host ${CDP_DOMAINS};
+                    img-src 'self' ${localhostDomain} https://*.posthog.com https://lottie.host https://cataas.com ${CDP_DOMAINS};
                 `}
                 />
             </Head>

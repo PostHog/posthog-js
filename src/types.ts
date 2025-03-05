@@ -1270,6 +1270,7 @@ export interface RemoteConfig {
         minimumDurationMilliseconds?: number
         linkedFlag?: string | FlagVariant | null
         networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
+        masking?: Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector'>
         urlTriggers?: SessionRecordingUrlTrigger[]
         scriptConfig?: { script?: string | undefined }
         urlBlocklist?: SessionRecordingUrlTrigger[]
