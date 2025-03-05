@@ -293,7 +293,9 @@ export class PostHogFeatureFlags {
                     // successful request
                     // reset anon_distinct_id after at least a single request with it
                     // makes it through
-                    this.$anon_distinct_id = undefined
+                    if (!this._additionalReloadRequested) {
+                        this.$anon_distinct_id = undefined
+                    }
                     errorsLoading = false
                 }
 
