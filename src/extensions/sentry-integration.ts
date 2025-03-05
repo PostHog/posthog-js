@@ -87,13 +87,18 @@ export function createEventProcessor(
 
         const exceptions: _SentryException[] = event.exception?.values || []
 
-        exceptions.forEach((exception) => {
-            if (exception.stacktrace) {
-                exception.stacktrace.type = 'raw'
-
-                exception.stacktrace.frames.forEach((frame: any) => {
-                    frame.platform = 'web:javascript'
-                })
+        const exceptionList = exceptions.map((exception) => {
+            return {
+                ...exception,
+                stacktrace: exception.stacktrace
+                    ? {
+                          ...exception.stacktrace,
+                          type: 'raw',
+                          frames: (exception.stacktrace.frames || []).map((frame: any) => {
+                              return { ...frame, platform: 'web:javascript' }
+                          }),
+                      }
+                    : undefined,
             }
         })
 
@@ -111,7 +116,7 @@ export function createEventProcessor(
             $exception_type: exceptions[0]?.type,
             $exception_personURL: personUrl,
             $exception_level: event.level,
-            $exception_list: exceptions,
+            $exception_list: exceptionList,
             // Sentry Exception Properties
             $sentry_event_id: event.event_id,
             $sentry_exception: event.exception,
