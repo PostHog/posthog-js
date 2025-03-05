@@ -19,6 +19,41 @@ export default function Media() {
 
     return (
         <>
+            <h1>Images</h1>
+            <p>Useful testing for Replay handling image elements</p>
+            <div style={{ display: 'flex', flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ margin: 10 }}>
+                    <h3>Image (no overload)</h3>
+                    <p className="max-w-64">
+                        No overload means we can see the image, but it's not as detailed as if we were blocking it
+                    </p>
+                    <img src="https://cataas.com/cat?width=200" />
+                </div>
+                <div style={{ margin: 10 }}>
+                    <h3>Image (ignored)</h3>
+                    <p className="max-w-64">
+                        Ignoring only affects input elements, so we can still see the image even though it matches
+                    </p>
+                    <img className="ph-ignore-image" src="https://cataas.com/cat?width=200" />
+                </div>
+                <div style={{ margin: 10 }}>
+                    <h3>Image (blocked)</h3>
+                    <p className="max-w-64">
+                        Blocking only affects images that match the selector, so we can not see the image even though it
+                        matches
+                    </p>
+                    <img className="ph-block-image" src="https://cataas.com/cat?width=200" />
+                </div>
+                <div style={{ margin: 10 }}>
+                    <h3>Image (blocked - default class)</h3>
+                    <p className="max-w-64">
+                        Blocking only affects images that match the default blockClass, so we can not see the image even
+                        though it matches
+                    </p>
+                    <img className="ph-no-capture" src="https://cataas.com/cat?width=200" />
+                </div>
+            </div>
+
             <h1>Video</h1>
             <p>Useful testing for Replay handling video elements</p>
             <div style={{ margin: 10 }}>
