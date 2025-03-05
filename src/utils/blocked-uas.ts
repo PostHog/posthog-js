@@ -1,24 +1,16 @@
 export const DEFAULT_BLOCKED_UA_STRS = [
-    'ahrefsbot',
-    'ahrefssiteaudit',
+    // Random assortment of bots
     'amazonbot',
     'amazonproductbot',
-    'app.hypefactors.com', // Buck, but "buck" is too short to be safe to block
+    'app.hypefactors.com', // Buck, but "buck" is too short to be safe to block (https://app.hypefactors.com/media-monitoring/about.htm)
     'applebot',
     'archive.org_bot',
     'awariobot',
     'backlinksextendedbot',
     'baiduspider',
-    'better uptime bot',
     'bingbot',
     'bingpreview',
-    // should we just block anything containing "bot"?
-    'bot.htm',
-    'bot.php',
-    '(bot;',
-    'bot/',
     'chrome-lighthouse',
-    'crawler',
     'dataforseobot',
     'deepscan',
     'duckduckbot',
@@ -32,33 +24,49 @@ export const DEFAULT_BLOCKED_UA_STRS = [
     'mj12bot',
     'msnbot',
     'nessus',
-    'perplexitybot',
     'petalbot',
     'pinterest',
     'prerender',
     'rogerbot',
     'screaming frog',
     'sebot-wa',
-    'semrushbot',
-    'sentryuptimebot',
-    // sem rush also uses siteauditbot
-    'siteauditbot',
     'sitebulb',
     'slackbot',
     'slurp',
     'trendictionbot',
     'turnitin',
     'twitterbot',
-    'uptimerobot',
     'vercelbot',
     'yahoo! slurp',
     'yandexbot',
     'zoombot',
 
-    // OpenAI Crawlers
+    // Bot-like words, maybe we should block `bot` entirely?
+    'bot.htm',
+    'bot.php',
+    '(bot;',
+    'bot/',
+    'crawler',
+
+    // Ahrefs: https://ahrefs.com/seo/glossary/ahrefsbot
+    'ahrefsbot',
+    'ahrefssiteaudit',
+
+    // Semrush bots: https://www.semrush.com/bot/
+    'semrushbot',
+    'siteauditbot',
+    'splitsignalbot',
+
+    // AI Crawlers
     'gptbot',
     'oai-searchbot',
     'chatgpt-user',
+    'perplexitybot',
+
+    // Uptime-like stuff
+    'better uptime bot',
+    'sentryuptimebot',
+    'uptimerobot',
 
     // headless browsers
     'headlesschrome',
