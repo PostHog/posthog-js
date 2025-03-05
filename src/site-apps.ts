@@ -91,7 +91,7 @@ export class SiteApps {
                 app.processedBuffer = true
             }
 
-            if (Object.keys(this.apps).every((id) => this.apps[id].processedBuffer || this.apps[id].errored)) {
+            if (Object.values(this.apps).every((app) => app.processedBuffer || app.errored)) {
                 this.stopBuffering?.()
             }
         }
