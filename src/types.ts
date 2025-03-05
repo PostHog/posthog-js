@@ -1363,6 +1363,7 @@ export type SiteApp = {
     id: string
     loaded: boolean
     errored: boolean
+    processedBuffer: boolean
     processEvent?: (globals: SiteAppGlobals) => void
 }
 
