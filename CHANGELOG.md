@@ -1,3 +1,13 @@
+## 1.227.1 - 2025-03-05
+
+- feat: posthog feature component should report variant too (#1783)
+- chore: image blocking example (#1789)
+- chore(): set all github actions to run on ubuntu-22.04 (#1784)
+- fix(flags): Make sure flags are loaded when identify is called (#1785)
+- fix(flags): pass along $initial_ person properties in decide requests automatically (#1781)
+- chore: Mark peerDependencies as optional (#1777)
+- feat: Make `getQueryParams` more resilient (#1778)
+
 ## 1.227.0 - 2025-03-04
 
 - feat: support loading masking remotely (#1734)
