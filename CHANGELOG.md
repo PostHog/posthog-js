@@ -1,3 +1,7 @@
+## 1.227.2 - 2025-03-05
+
+
+
 ## 1.227.1 - 2025-03-05
 
 - feat: posthog feature component should report variant too (#1783)
