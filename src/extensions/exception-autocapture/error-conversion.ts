@@ -8,10 +8,11 @@ import {
     isPlainObject,
     isPrimitive,
 } from './type-checking'
-import { defaultStackParser, StackFrame } from './stack-trace'
+import { defaultStackParser, StackFrame, StackParser } from './stack-trace'
 
 import { isEmptyString, isString, isUndefined } from '../../utils/type-utils'
 import { ErrorConversionArgs, ErrorEventArgs, ErrorMetadata, SeverityLevel, severityLevels } from '../../types'
+import { getFilenameToChunkIdMap } from './chunk-ids'
 
 export interface ErrorProperties {
     $exception_list: Exception[]
@@ -66,7 +67,8 @@ export function parseStackFrames(ex: Error & { stacktrace?: string }, framesToPo
     const skipLines = getSkipFirstStackStringLines(ex)
 
     try {
-        const frames = defaultStackParser(stacktrace, skipLines)
+        const parser = defaultStackParser
+        const frames = applyChunkIds(parser(stacktrace, skipLines), parser)
         // frames are reversed so we remove the from the back of the array
         return frames.slice(0, frames.length - framesToPop)
     } catch {
@@ -74,6 +76,18 @@ export function parseStackFrames(ex: Error & { stacktrace?: string }, framesToPo
     }
 
     return []
+}
+
+export function applyChunkIds(frames: StackFrame[], parser: StackParser): StackFrame[] {
+    const filenameDebugIdMap = getFilenameToChunkIdMap(parser)
+
+    frames.forEach((frame) => {
+        if (frame.filename) {
+            frame.chunk_id = filenameDebugIdMap[frame.filename]
+        }
+    })
+
+    return frames
 }
 
 const reactMinifiedRegexp = /Minified React error #\d+;/i
