@@ -44,6 +44,14 @@ export default function Media() {
                     </p>
                     <img className="ph-block-image" src="https://cataas.com/cat?width=200" />
                 </div>
+                <div style={{ margin: 10 }}>
+                    <h3>Image (blocked - default class)</h3>
+                    <p className="max-w-64">
+                        Blocking only affects images that match the default blockClass, so we can not see the image even
+                        though it matches
+                    </p>
+                    <img className="ph-no-capture" src="https://cataas.com/cat?width=200" />
+                </div>
             </div>
 
             <h1>Video</h1>
