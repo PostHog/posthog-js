@@ -55,11 +55,14 @@ function captureFeatureInteraction({
     posthog: PostHog
     flagVariant?: string | boolean
 }) {
-    posthog.capture('$feature_interaction', {
+    const properties: Record<string, any> = {
         feature_flag: flag,
-        feature_flag_variant: typeof flagVariant === 'string' ? flagVariant : undefined,
         $set: { [`$feature_interaction/${flag}`]: flagVariant ?? true },
-    })
+    }
+    if (typeof flagVariant === 'string') {
+        properties.feature_flag_variant = flagVariant
+    }
+    posthog.capture('$feature_interaction', properties)
 }
 
 function captureFeatureView({
@@ -71,11 +74,14 @@ function captureFeatureView({
     posthog: PostHog
     flagVariant?: string | boolean
 }) {
-    posthog.capture('$feature_view', {
+    const properties: Record<string, any> = {
         feature_flag: flag,
-        feature_flag_variant: typeof flagVariant === 'string' ? flagVariant : undefined,
         $set: { [`$feature_view/${flag}`]: flagVariant ?? true },
-    })
+    }
+    if (typeof flagVariant === 'string') {
+        properties.feature_flag_variant = flagVariant
+    }
+    posthog.capture('$feature_view', properties)
 }
 
 function VisibilityAndClickTracker({
