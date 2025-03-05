@@ -165,6 +165,12 @@ describe('utils', () => {
                 'Mozilla/5.0 (compatible; SeznamBot/4.0; +https://o-seznam.cz/napoveda/vyhledavani/en/seznambot-crawler/)',
             ],
             ['BrightEdge Crawler/1.0 (crawler@brightedge.com)'],
+            [
+                'Mozilla/5.0 (Linux; Android 11; moto g power (2022)) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36',
+            ],
+            [
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            ],
         ])('blocks based on user agent', (botString) => {
             expect(isBlockedUA(botString, [])).toBe(true)
             expect(isBlockedUA(botString.toLowerCase(), [])).toBe(true)
