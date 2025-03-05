@@ -310,7 +310,7 @@ describe('SiteApps', () => {
                     siteApps: [
                         {
                             id: '1',
-                            init: jest.fn((config: Omit<AppConfig, 'processEvent'>) => {
+                            init: jest.fn((config: AppConfig) => {
                                 const processEvent = jest.fn()
                                 appConfigs.push({ ...config, processEvent })
                                 onInit?.(config)
