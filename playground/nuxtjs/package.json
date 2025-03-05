@@ -13,6 +13,7 @@
         "nuxt": "^3.4.3"
     },
     "dependencies": {
-        "posthog-js": "^1.55.1"
-    }
+        "posthog-js": "file:../../dist/"
+    },
+    "packageManager": "pnpm@9.15.4"
 }
