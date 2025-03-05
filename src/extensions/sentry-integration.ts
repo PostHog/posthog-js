@@ -87,6 +87,21 @@ export function createEventProcessor(
 
         const exceptions: _SentryException[] = event.exception?.values || []
 
+        const exceptionList = exceptions.map((exception) => {
+            return {
+                ...exception,
+                stacktrace: exception.stacktrace
+                    ? {
+                          ...exception.stacktrace,
+                          type: 'raw',
+                          frames: (exception.stacktrace.frames || []).map((frame: any) => {
+                              return { ...frame, platform: 'web:javascript' }
+                          }),
+                      }
+                    : undefined,
+            }
+        })
+
         const data: SentryExceptionProperties & {
             // two properties added to match any exception auto-capture
             // added manually to avoid any dependency on the lazily loaded content
@@ -101,23 +116,7 @@ export function createEventProcessor(
             $exception_type: exceptions[0]?.type,
             $exception_personURL: personUrl,
             $exception_level: event.level,
-            $exception_list: exceptions.map((exception) => {
-                return {
-                    ...exception,
-                    stacktrace: exception.stacktrace
-                        ? {
-                              ...exception.stacktrace,
-                              type: 'raw',
-                              frames: exception.stacktrace.frames?.map?.((frame: any) => {
-                                  return {
-                                      ...frame,
-                                      platform: 'web:javascript',
-                                  }
-                              }),
-                          }
-                        : undefined,
-                }
-            }),
+            $exception_list: exceptionList,
             // Sentry Exception Properties
             $sentry_event_id: event.event_id,
             $sentry_exception: event.exception,
