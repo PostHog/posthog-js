@@ -15,11 +15,11 @@ jobs:
             - uses: pnpm/action-setup@v4
             - uses: actions/setup-node@v4
               with:
-                node-version: '18'
-                cache: 'pnpm'
+                  node-version: '18'
+                  cache: 'pnpm'
             - run: pnpm install
             - run: pnpm build
-            - run: pnpm test:unit
+            - run: pnpm test:unit --verbose
 
     integration:
         name: Playwright E2E tests
@@ -29,7 +29,7 @@ jobs:
             - uses: pnpm/action-setup@v4
             - uses: actions/setup-node@v4
               with:
-                node-version: '18'
+                  node-version: '18'
             - run: pnpm install
             - run: pnpm build
             - name: Install Playwright Browsers
@@ -39,9 +39,9 @@ jobs:
             - uses: actions/upload-artifact@v4
               if: ${{ !cancelled() }}
               with:
-                name: playwright-report
-                path: playwright-report/
-                retention-days: 30
+                  name: playwright-report
+                  path: playwright-report/
+                  retention-days: 30
 
     functional:
         name: Functional tests
@@ -51,8 +51,8 @@ jobs:
             - uses: pnpm/action-setup@v4
             - uses: actions/setup-node@v4
               with:
-                node-version: '18'
-                cache: 'pnpm'
+                  node-version: '18'
+                  cache: 'pnpm'
             - run: pnpm install
             - run: pnpm run test:functional
 
