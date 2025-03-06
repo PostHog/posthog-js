@@ -29,7 +29,10 @@ declare module '@playwright/test' {
         resetCapturedEvents(): Promise<void>
 
         capturedEvents(): Promise<CaptureResult[]>
-
+        /**
+         * Runs the provided action, waiting for the network requests matching the provided url patterns to complete.
+         * Intended when running an action causes network requests that need to complete before we should continue.
+         */
         waitingForNetworkCausedBy: (urlPatterns: (string | RegExp)[], action: () => Promise<void>) => Promise<void>
 
         expectCapturedEventsToBe(expectedEvents: string[]): Promise<void>
