@@ -1,3 +1,10 @@
+## 1.229.2 - 2025-03-06
+
+- fix: make survey preview behave like the actual (#1799)
+- chore(err): add playground for error tracking (#1796)
+- chore: sourcemap sample app (#1782)
+- chore: refactor playwright helper for clarity (#1774)
+
 ## 1.229.1 - 2025-03-06
 
 - fix: stop setting platform on sentry event (#1790)
