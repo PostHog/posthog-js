@@ -1,4 +1,4 @@
-import { lazy } from 'react'
+import { lazy, Suspense } from 'react'
 
 const ErrorButton = lazy(() => import('./error-button'))
 
@@ -7,7 +7,9 @@ function App() {
         <div
             style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', width: '100vw' }}
         >
-            <ErrorButton />
+            <Suspense fallback={<div>Loading...</div>}>
+                <ErrorButton />
+            </Suspense>
         </div>
     )
 }
