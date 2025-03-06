@@ -33,7 +33,10 @@ declare module '@playwright/test' {
          * Runs the provided action, waiting for the network requests matching the provided url patterns to complete.
          * Intended when running an action causes network requests that need to complete before we should continue.
          */
-        waitingForNetworkCausedBy: (options: {urlPatternsToWaitFor: (string |RegExp)[], action: () => Promise<void>}) => Promise<void>
+        waitingForNetworkCausedBy: (options: {
+            urlPatternsToWaitFor: (string | RegExp)[]
+            action: () => Promise<void>
+        }) => Promise<void>
 
         expectCapturedEventsToBe(expectedEvents: string[]): Promise<void>
     }
@@ -52,10 +55,11 @@ export const test = base.extend<{ mockStaticAssets: void; page: Page }>({
                 return (window as WindowWithPostHog).capturedEvents || []
             })
         }
-        page.waitingForNetworkCausedBy = async function (
-            options: {urlPatternsToWaitFor: (string |RegExp)[], action: () => Promise<void>}
-        ) {
-            const responsePromises = options.urlPatterns.map((urlPattern) => {
+        page.waitingForNetworkCausedBy = async function (options: {
+            urlPatternsToWaitFor: (string | RegExp)[]
+            action: () => Promise<void>
+        }) {
+            const responsePromises = options.urlPatternsToWaitFor.map((urlPattern) => {
                 return this.waitForResponse(urlPattern)
             })
 
@@ -74,7 +78,6 @@ export const test = base.extend<{ mockStaticAssets: void; page: Page }>({
     },
     mockStaticAssets: [
         async ({ context }, use) => {
-            // also equivalent of cy.intercept('GET', '/surveys/*').as('surveys') ??
             void context.route('**/e/*', (route) => {
                 route.fulfill({
                     status: 200,
