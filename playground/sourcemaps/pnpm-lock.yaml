@@ -8,9 +8,6 @@ importers:
 
   .:
     dependencies:
-      '@sentry/cli':
-        specifier: ^2.42.2
-        version: 2.42.2
       '@types/node':
         specifier: ^22.13.9
         version: 22.13.9
@@ -27,6 +24,9 @@ importers:
       '@eslint/js':
         specifier: ^9.21.0
         version: 9.21.0
+      '@sentry/cli':
+        specifier: ^2.42.2
+        version: 2.42.2
       '@types/react':
         specifier: ^19.0.10
         version: 19.0.10
