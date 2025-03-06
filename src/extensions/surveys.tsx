@@ -31,6 +31,7 @@ import {
     dismissedSurveyEvent,
     getContrastingTextColor,
     getDisplayOrderQuestions,
+    getSurveyResponseKey,
     getSurveySeen,
     hasWaitPeriodPassed,
     sendSurveyEvent,
@@ -788,7 +789,7 @@ export function Questions({
             return
         }
 
-        const responseKey = `$survey_response_${questionId}`
+        const responseKey = getSurveyResponseKey(questionId)
 
         setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
 

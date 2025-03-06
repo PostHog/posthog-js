@@ -30,6 +30,10 @@ export function getFontFamily(fontFamily?: string): string {
     return fontFamily ? `${fontFamily}, ${defaultFontStack}` : `-apple-system, ${defaultFontStack}`
 }
 
+export function getSurveyResponseKey(questionId: string) {
+    return `$survey_response_${questionId}`
+}
+
 export const style = (appearance: SurveyAppearance | null) => {
     const positions = {
         left: 'left: 30px;',
