@@ -1,15 +1,17 @@
 export const DEFAULT_BLOCKED_UA_STRS = [
-    'ahrefsbot',
-    'ahrefssiteaudit',
+    // Random assortment of bots
+    'amazonbot',
+    'amazonproductbot',
+    'app.hypefactors.com', // Buck, but "buck" is too short to be safe to block (https://app.hypefactors.com/media-monitoring/about.htm)
     'applebot',
+    'archive.org_bot',
+    'awariobot',
+    'backlinksextendedbot',
     'baiduspider',
-    'better uptime bot',
     'bingbot',
     'bingpreview',
-    'bot.htm',
-    'bot.php',
     'chrome-lighthouse',
-    'crawler',
+    'dataforseobot',
     'deepscan',
     'duckduckbot',
     'facebookexternal',
@@ -18,6 +20,7 @@ export const DEFAULT_BLOCKED_UA_STRS = [
     'hubspot',
     'ia_archiver',
     'linkedinbot',
+    'meta-externalagent',
     'mj12bot',
     'msnbot',
     'nessus',
@@ -26,19 +29,44 @@ export const DEFAULT_BLOCKED_UA_STRS = [
     'prerender',
     'rogerbot',
     'screaming frog',
-    'semrushbot',
+    'sebot-wa',
     'sitebulb',
+    'slackbot',
     'slurp',
+    'trendictionbot',
     'turnitin',
     'twitterbot',
     'vercelbot',
     'yahoo! slurp',
     'yandexbot',
+    'zoombot',
 
-    // OpenAI Crawlers
+    // Bot-like words, maybe we should block `bot` entirely?
+    'bot.htm',
+    'bot.php',
+    '(bot;',
+    'bot/',
+    'crawler',
+
+    // Ahrefs: https://ahrefs.com/seo/glossary/ahrefsbot
+    'ahrefsbot',
+    'ahrefssiteaudit',
+
+    // Semrush bots: https://www.semrush.com/bot/
+    'semrushbot',
+    'siteauditbot',
+    'splitsignalbot',
+
+    // AI Crawlers
     'gptbot',
     'oai-searchbot',
     'chatgpt-user',
+    'perplexitybot',
+
+    // Uptime-like stuff
+    'better uptime bot',
+    'sentryuptimebot',
+    'uptimerobot',
 
     // headless browsers
     'headlesschrome',
@@ -47,7 +75,7 @@ export const DEFAULT_BLOCKED_UA_STRS = [
 
     // a whole bunch of goog-specific crawlers
     // https://developers.google.com/search/docs/advanced/crawling/overview-google-crawlers
-    'Google-HotelAdsVerifier',
+    'google-hoteladsverifier',
     'adsbot-google',
     'apis-google',
     'duplexweb-google',
@@ -59,7 +87,7 @@ export const DEFAULT_BLOCKED_UA_STRS = [
     'googleweblight',
     'mediapartners-google',
     'storebot-google',
-    'Bytespider;',
+    'bytespider',
 ]
 
 /**
