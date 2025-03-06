@@ -4,14 +4,19 @@
     "version": "0.0.0",
     "type": "module",
     "scripts": {
-        "dev": "vite",
+        "dev": "pnpm run link-posthog-js && vite",
         "build": "vite build",
+        "start": "pnpm run build && posthog-cli sourcemap inject --directory ./dist/assets/ && pnpm run preview",
         "lint": "eslint .",
-        "preview": "vite preview"
+        "preview": "vite preview",
+        "build-posthog-js": "cd ../../ && NODE_ENV=dev pnpm i && pnpm run build",
+        "link-posthog-js": "pnpm link ../..",
+        "clean-react": "cd ../../react && pnpm run clean-node-modules"
     },
     "dependencies": {
         "@sentry/cli": "^2.42.2",
         "@types/node": "^22.13.9",
+        "posthog-js": "^1.215.7",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
         "typescript": "^5.8.2"
@@ -29,5 +34,10 @@
         "eslint-plugin-react-refresh": "^0.4.19",
         "globals": "^15.15.0",
         "vite": "^6.2.0"
+    },
+    "pnpm": {
+        "overrides": {
+            "posthog-js": "link:../.."
+        }
     }
 }

@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  posthog-js: link:../..
+
 importers:
 
   .:
@@ -14,6 +17,9 @@ importers:
       '@types/node':
         specifier: ^22.13.9
         version: 22.13.9
+      posthog-js:
+        specifier: ^1.215.7
+        version: link:../..
       react:
         specifier: ^19.0.0
         version: 19.0.0

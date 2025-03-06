@@ -1,16 +1,20 @@
-import { useState } from 'react'
 import { lazy } from 'react'
+import posthog from 'posthog-js'
 
 const SubApp = lazy(() => import('./SubApp'))
 
-function App() {
-    const [count, setCount] = useState(0)
+function sendException() {
+    const error = new Error('Test Error')
+    posthog.captureException(error)
+    throw error
+}
 
+function App() {
     return (
         <>
-            <h1>Vite + React</h1>
+            <h1>Error testing</h1>
             <div className="card">
-                <button onClick={() => setCount((count) => count + 1)}>count is {count}</button>
+                <button onClick={() => sendException()}>Send exception</button>
             </div>
             <SubApp />
         </>
