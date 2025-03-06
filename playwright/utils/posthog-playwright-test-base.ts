@@ -33,7 +33,7 @@ declare module '@playwright/test' {
          * Runs the provided action, waiting for the network requests matching the provided url patterns to complete.
          * Intended when running an action causes network requests that need to complete before we should continue.
          */
-        waitingForNetworkCausedBy: (urlPatterns: (string | RegExp)[], action: () => Promise<void>) => Promise<void>
+        waitingForNetworkCausedBy: (options: {urlPatternsToWaitFor: (string |RegExp)[], action: () => Promise<void>}) => Promise<void>
 
         expectCapturedEventsToBe(expectedEvents: string[]): Promise<void>
     }
@@ -53,14 +53,13 @@ export const test = base.extend<{ mockStaticAssets: void; page: Page }>({
             })
         }
         page.waitingForNetworkCausedBy = async function (
-            urlPatterns: (string | RegExp)[],
-            action: () => Promise<void>
+            options: {urlPatternsToWaitFor: (string |RegExp)[], action: () => Promise<void>}
         ) {
-            const responsePromises = urlPatterns.map((urlPattern) => {
+            const responsePromises = options.urlPatterns.map((urlPattern) => {
                 return this.waitForResponse(urlPattern)
             })
 
-            await action()
+            await options.action()
 
             // eslint-disable-next-line compat/compat
             await Promise.allSettled(responsePromises)

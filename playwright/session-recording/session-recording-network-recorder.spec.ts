@@ -62,7 +62,7 @@ test.beforeEach(async ({ context }) => {
                 })
             }
 
-            await page.waitingForNetworkCausedBy(['**/recorder.js*'], async () => {
+            await page.waitingForNetworkCausedBy({urlPatternsToWaitFor: ['**/recorder.js*'], action: async () => {
                 await start(
                     {
                         options: {
@@ -83,7 +83,7 @@ test.beforeEach(async ({ context }) => {
                     page,
                     context
                 )
-            })
+            }})
 
             // also wrap after posthog is loaded
             await page.evaluate((isBadlyBehaved) => {
@@ -102,9 +102,9 @@ test.beforeEach(async ({ context }) => {
         })
         ;['fetch', 'xhr'].forEach((networkType) => {
             test('it captures ' + networkType, async ({ page, browserName }) => {
-                await page.waitingForNetworkCausedBy(['**/ses/*', 'https://example.com/'], async () => {
+                await page.waitingForNetworkCausedBy({urlPatternsToWaitFor: ['**/ses/*', 'https://example.com/'], action: async () => {
                     await page.click(`[data-cy-${networkType}-call-button]`)
-                })
+                }})
                 const capturedEvents = await page.capturedEvents()
                 const snapshots = capturedEvents.filter((c) => c.event === '$snapshot')
 

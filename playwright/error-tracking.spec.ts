@@ -45,7 +45,7 @@ test.describe('Exception capture', () => {
 
     test.describe('Exception autocapture enabled', () => {
         test.beforeEach(async ({ page, context }) => {
-            await page.waitingForNetworkCausedBy(['**/exception-autocapture.js*'], async () => {
+            await page.waitingForNetworkCausedBy({urlPatternsToWaitFor: ['**/exception-autocapture.js*'], action: async () => {
                 await start(
                     {
                         decideResponseOverrides: { autocaptureExceptions: true },
@@ -54,7 +54,7 @@ test.describe('Exception capture', () => {
                     page,
                     context
                 )
-            })
+            }})
         })
 
         test('adds stacktrace to captured strings', async ({ page, browserName }) => {

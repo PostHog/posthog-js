@@ -110,14 +110,14 @@ test.describe('decide', () => {
     test('does a single decide call on following changes', async ({ page }) => {
         expect(decideRequests.length).toBe(1)
 
-        await page.waitingForNetworkCausedBy(['**/decide/**'], async () => {
+        await page.waitingForNetworkCausedBy({urlPatternsToWaitFor: ['**/decide/**'], action: async () => {
             await page.evaluate(() => {
                 const ph = (window as any).posthog
                 ph.group('company', 'id:6')
                 ph.group('playlist', 'id:77')
                 ph.group('anothergroup', 'id:99')
             })
-        })
+        }})
         // need a short delay so that the decide request can be captured into the decideRequests array
         await page.waitForTimeout(1)
         expect(decideRequests.length).toBe(2)
