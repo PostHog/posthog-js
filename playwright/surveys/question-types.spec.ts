@@ -1,6 +1,6 @@
+import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 import { expect, test } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
-import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 
 const startOptions = {
     options: {},
@@ -14,19 +14,28 @@ const openTextQuestion = {
     type: 'open',
     question: 'What feedback do you have for us?',
     description: 'plain text description',
+    id: 'open_text_1',
 }
 
-const npsRatingQuestion = { type: 'rating', display: 'number', scale: 10, question: 'Would you recommend surveys?' }
+const npsRatingQuestion = {
+    type: 'rating',
+    display: 'number',
+    scale: 10,
+    question: 'Would you recommend surveys?',
+    id: 'nps_rating_1',
+}
 
 const multipleChoiceQuestion = {
     type: 'multiple_choice',
     question: 'Which types of content would you like to see more of?',
     choices: ['Tutorials', 'Product Updates', 'Events', 'Other'],
+    id: 'multiple_choice_1',
 }
 const singleChoiceQuestion = {
     type: 'single_choice',
     question: 'What is your occupation?',
     choices: ['Product Manager', 'Engineer', 'Designer', 'Other'],
+    id: 'single_choice_1',
 }
 const appearanceWithThanks = {
     displayThankYouMessage: true,

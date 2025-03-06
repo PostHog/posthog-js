@@ -1,6 +1,6 @@
+import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 import { expect, test } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
-import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 
 const startOptions = {
     options: {},
@@ -14,6 +14,7 @@ const openTextQuestion = {
     type: 'open',
     question: 'What feedback do you have for us?',
     description: 'plain text description',
+    id: 'open_text_1',
 }
 
 test.describe('surveys - feedback widget', () => {
