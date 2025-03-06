@@ -62,28 +62,31 @@ test.beforeEach(async ({ context }) => {
                 })
             }
 
-            await page.waitingForNetworkCausedBy({urlPatternsToWaitFor: ['**/recorder.js*'], action: async () => {
-                await start(
-                    {
-                        options: {
-                            session_recording: {},
-                        },
-                        decideResponseOverrides: {
-                            sessionRecording: {
-                                endpoint: '/ses/',
-                                networkPayloadCapture: { recordBody: true, recordHeaders: true },
+            await page.waitingForNetworkCausedBy({
+                urlPatternsToWaitFor: ['**/recorder.js*'],
+                action: async () => {
+                    await start(
+                        {
+                            options: {
+                                session_recording: {},
                             },
-                            capturePerformance: true,
-                            autocapture_opt_out: true,
+                            decideResponseOverrides: {
+                                sessionRecording: {
+                                    endpoint: '/ses/',
+                                    networkPayloadCapture: { recordBody: true, recordHeaders: true },
+                                },
+                                capturePerformance: true,
+                                autocapture_opt_out: true,
+                            },
+                            url: './playground/cypress/index.html',
+                            runBeforePostHogInit: wrapInPageContext,
+                            runAfterPostHogInit: wrapInPageContext,
                         },
-                        url: './playground/cypress/index.html',
-                        runBeforePostHogInit: wrapInPageContext,
-                        runAfterPostHogInit: wrapInPageContext,
-                    },
-                    page,
-                    context
-                )
-            }})
+                        page,
+                        context
+                    )
+                },
+            })
 
             // also wrap after posthog is loaded
             await page.evaluate((isBadlyBehaved) => {
@@ -102,9 +105,12 @@ test.beforeEach(async ({ context }) => {
         })
         ;['fetch', 'xhr'].forEach((networkType) => {
             test('it captures ' + networkType, async ({ page, browserName }) => {
-                await page.waitingForNetworkCausedBy({urlPatternsToWaitFor: ['**/ses/*', 'https://example.com/'], action: async () => {
-                    await page.click(`[data-cy-${networkType}-call-button]`)
-                }})
+                await page.waitingForNetworkCausedBy({
+                    urlPatternsToWaitFor: ['**/ses/*', 'https://example.com/'],
+                    action: async () => {
+                        await page.click(`[data-cy-${networkType}-call-button]`)
+                    },
+                })
                 const capturedEvents = await page.capturedEvents()
                 const snapshots = capturedEvents.filter((c) => c.event === '$snapshot')
 

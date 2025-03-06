@@ -27,9 +27,12 @@ test.describe('Session recording - sampling', () => {
         },
     }
     test.beforeEach(async ({ page, context }) => {
-        await page.waitingForNetworkCausedBy({urlPatternsToWaitFor: ['**/recorder.js*'], action: async () => {
-            await start(startOptions, page, context)
-        }})
+        await page.waitingForNetworkCausedBy({
+            urlPatternsToWaitFor: ['**/recorder.js*'],
+            action: async () => {
+                await start(startOptions, page, context)
+            },
+        })
 
         await page.expectCapturedEventsToBe(['$pageview'])
         await page.resetCapturedEvents()
@@ -58,19 +61,25 @@ test.describe('Session recording - sampling', () => {
         await page.resetCapturedEvents()
         await page.reload()
 
-        await page.waitingForNetworkCausedBy({urlPatternsToWaitFor: ['**/recorder.js*'], action: async () => {
-            await start(
-                {
-                    ...sampleZeroStartOptions,
-                    type: 'reload',
-                },
-                page,
-                context
-            )
-        }})
-        await page.waitingForNetworkCausedBy({urlPatternsToWaitFor: ['**/ses/*'], action: async () => {
-            await page.locator('[data-cy-input]').fill('hello posthog!')
-        }})
+        await page.waitingForNetworkCausedBy({
+            urlPatternsToWaitFor: ['**/recorder.js*'],
+            action: async () => {
+                await start(
+                    {
+                        ...sampleZeroStartOptions,
+                        type: 'reload',
+                    },
+                    page,
+                    context
+                )
+            },
+        })
+        await page.waitingForNetworkCausedBy({
+            urlPatternsToWaitFor: ['**/ses/*'],
+            action: async () => {
+                await page.locator('[data-cy-input]').fill('hello posthog!')
+            },
+        })
 
         const afterReloadCapturedEvents = await page.capturedEvents()
         const lastCaptured = afterReloadCapturedEvents[afterReloadCapturedEvents.length - 1]

@@ -19,9 +19,12 @@ test.describe('session recording in array.full.js', () => {
     test('captures session events', async ({ page, context }) => {
         await start(startOptions, page, context)
 
-        await page.waitingForNetworkCausedBy({urlPatternsToWaitFor: ['**/ses/*'], action: async () => {
-            await page.locator('[data-cy-input]').fill('hello posthog!')
-        }})
+        await page.waitingForNetworkCausedBy({
+            urlPatternsToWaitFor: ['**/ses/*'],
+            action: async () => {
+                await page.locator('[data-cy-input]').fill('hello posthog!')
+            },
+        })
 
         await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
