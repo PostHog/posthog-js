@@ -1335,6 +1335,7 @@ export interface DecideResponse extends RemoteConfig {
     featureFlags: Record<string, string | boolean>
     featureFlagPayloads: Record<string, JsonType>
     errorsWhileComputingFlags: boolean
+    requestId?: string
 }
 
 export type SiteAppGlobals = {
@@ -1363,6 +1364,7 @@ export type SiteApp = {
     id: string
     loaded: boolean
     errored: boolean
+    processedBuffer: boolean
     processEvent?: (globals: SiteAppGlobals) => void
 }
 
