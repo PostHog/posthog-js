@@ -38,6 +38,7 @@ export interface SurveyAppearance {
     // questionable: Not in frontend/src/types.ts -> SurveyAppearance, but used in site app
     maxWidth?: string
     zIndex?: string
+    disabledButtonOpacity?: string
 }
 
 export enum SurveyType {
