@@ -1,3 +1,7 @@
+## 1.229.1 - 2025-03-06
+
+- fix: stop setting platform on sentry event (#1790)
+
 ## 1.229.0 - 2025-03-06
 
 
