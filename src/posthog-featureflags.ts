@@ -30,6 +30,7 @@ const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
 const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_flag_payloads'
+const PERSISTENCE_FEATURE_FLAG_REQUEST_ID = '$feature_flag_request_id'
 
 export const filterActiveFeatureFlags = (featureFlags?: Record<string, string | boolean>) => {
     const activeFeatureFlags: Record<string, string | boolean> = {}
@@ -49,6 +50,7 @@ export const parseFeatureFlagDecideResponse = (
 ) => {
     const flags = response['featureFlags']
     const flagPayloads = response['featureFlagPayloads']
+    const requestId = response['requestId']
     if (!flags) {
         return
     }
@@ -81,6 +83,7 @@ export const parseFeatureFlagDecideResponse = (
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFeatureFlags)),
             [ENABLED_FEATURE_FLAGS]: newFeatureFlags || {},
             [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
+            ...(requestId ? { [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: requestId } : {}),
         })
 }
 
@@ -349,6 +352,7 @@ export class PostHogFeatureFlags {
         }
         const flagValue = this.getFlagVariants()[key]
         const flagReportValue = `${flagValue}`
+        const requestId = this.instance.get_property(PERSISTENCE_FEATURE_FLAG_REQUEST_ID) || undefined
         const flagCallReported: Record<string, string[]> = this.instance.get_property(FLAG_CALL_REPORTED) || {}
 
         if (options.send_event || !('send_event' in options)) {
@@ -364,6 +368,7 @@ export class PostHogFeatureFlags {
                     $feature_flag: key,
                     $feature_flag_response: flagValue,
                     $feature_flag_payload: this.getFeatureFlagPayload(key) || null,
+                    $feature_flag_request_id: requestId,
                     $feature_flag_bootstrapped_response: this.instance.config.bootstrap?.featureFlags?.[key] || null,
                     $feature_flag_bootstrapped_payload:
                         this.instance.config.bootstrap?.featureFlagPayloads?.[key] || null,

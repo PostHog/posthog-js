@@ -1213,6 +1213,75 @@ describe('featureflags', () => {
             })
         })
     })
+
+    describe('Feature Flag Request ID', () => {
+        const TEST_REQUEST_ID = 'test-request-id-123'
+
+        it('saves requestId from decide response', () => {
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                requestId: TEST_REQUEST_ID,
+            })
+
+            expect(instance.get_property('$feature_flag_request_id')).toEqual(TEST_REQUEST_ID)
+        })
+
+        it('includes requestId in feature flag called event', () => {
+            // Setup flags with requestId
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                requestId: TEST_REQUEST_ID,
+            })
+            featureFlags._hasLoadedFlags = true
+
+            // Test flag call
+            featureFlags.getFeatureFlag('test-flag')
+
+            // Verify capture call includes requestId
+            expect(instance.capture).toHaveBeenCalledWith(
+                '$feature_flag_called',
+                expect.objectContaining({
+                    $feature_flag: 'test-flag',
+                    $feature_flag_response: true,
+                    $feature_flag_request_id: TEST_REQUEST_ID,
+                })
+            )
+        })
+
+        it('updates requestId when new decide response is received', () => {
+            // First decide response
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                requestId: TEST_REQUEST_ID,
+            })
+
+            expect(instance.get_property('$feature_flag_request_id')).toEqual(TEST_REQUEST_ID)
+
+            // Second decide response with new ID
+            const NEW_REQUEST_ID = 'new-request-id-456'
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                requestId: NEW_REQUEST_ID,
+            })
+
+            expect(instance.get_property('$feature_flag_request_id')).toEqual(NEW_REQUEST_ID)
+
+            // Verify new ID is used in events
+            featureFlags._hasLoadedFlags = true
+            featureFlags.getFeatureFlag('test-flag')
+
+            expect(instance.capture).toHaveBeenCalledWith(
+                '$feature_flag_called',
+                expect.objectContaining({
+                    $feature_flag_request_id: NEW_REQUEST_ID,
+                })
+            )
+        })
+    })
 })
 
 describe('parseFeatureFlagDecideResponse', () => {
@@ -1268,6 +1337,21 @@ describe('parseFeatureFlagDecideResponse', () => {
 
         expect(persistence.register).not.toHaveBeenCalled()
         expect(persistence.unregister).not.toHaveBeenCalled()
+    })
+
+    it('parses the requestId from the decide response', () => {
+        const decideResponse = {
+            featureFlags: { 'test-flag': true },
+            requestId: 'test-request-id-123',
+        }
+        parseFeatureFlagDecideResponse(decideResponse, persistence)
+
+        expect(persistence.register).toHaveBeenCalledWith({
+            $active_feature_flags: ['test-flag'],
+            $enabled_feature_flags: { 'test-flag': true },
+            $feature_flag_payloads: {},
+            $feature_flag_request_id: 'test-request-id-123',
+        })
     })
 })
 
