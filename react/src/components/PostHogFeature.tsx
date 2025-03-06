@@ -46,12 +46,42 @@ export function PostHogFeature({
     return <>{fallback}</>
 }
 
-function captureFeatureInteraction(flag: string, posthog: PostHog) {
-    posthog.capture('$feature_interaction', { feature_flag: flag, $set: { [`$feature_interaction/${flag}`]: true } })
+function captureFeatureInteraction({
+    flag,
+    posthog,
+    flagVariant,
+}: {
+    flag: string
+    posthog: PostHog
+    flagVariant?: string | boolean
+}) {
+    const properties: Record<string, any> = {
+        feature_flag: flag,
+        $set: { [`$feature_interaction/${flag}`]: flagVariant ?? true },
+    }
+    if (typeof flagVariant === 'string') {
+        properties.feature_flag_variant = flagVariant
+    }
+    posthog.capture('$feature_interaction', properties)
 }
 
-function captureFeatureView(flag: string, posthog: PostHog) {
-    posthog.capture('$feature_view', { feature_flag: flag })
+function captureFeatureView({
+    flag,
+    posthog,
+    flagVariant,
+}: {
+    flag: string
+    posthog: PostHog
+    flagVariant?: string | boolean
+}) {
+    const properties: Record<string, any> = {
+        feature_flag: flag,
+        $set: { [`$feature_view/${flag}`]: flagVariant ?? true },
+    }
+    if (typeof flagVariant === 'string') {
+        properties.feature_flag_variant = flagVariant
+    }
+    posthog.capture('$feature_view', properties)
 }
 
 function VisibilityAndClickTracker({
@@ -109,17 +139,18 @@ function VisibilityAndClickTrackers({
     const clickTrackedRef = useRef(false)
     const visibilityTrackedRef = useRef(false)
     const posthog = usePostHog()
+    const variant = useFeatureFlagVariantKey(flag)
 
     const cachedOnClick = useCallback(() => {
         if (!clickTrackedRef.current && trackInteraction) {
-            captureFeatureInteraction(flag, posthog)
+            captureFeatureInteraction({ flag, posthog, flagVariant: variant })
             clickTrackedRef.current = true
         }
-    }, [flag, posthog, trackInteraction])
+    }, [flag, posthog, trackInteraction, variant])
 
     const onIntersect = (entry: IntersectionObserverEntry) => {
         if (!visibilityTrackedRef.current && entry.isIntersecting) {
-            captureFeatureView(flag, posthog)
+            captureFeatureView({ flag, posthog, flagVariant: variant })
             visibilityTrackedRef.current = true
         }
     }

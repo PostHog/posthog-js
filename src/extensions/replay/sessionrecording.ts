@@ -4,6 +4,7 @@ import {
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
     SESSION_RECORDING_IS_SAMPLED,
+    SESSION_RECORDING_MASKING,
     SESSION_RECORDING_MINIMUM_DURATION,
     SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE,
     SESSION_RECORDING_SAMPLE_RATE,
@@ -25,6 +26,7 @@ import {
     NetworkRequest,
     Properties,
     RemoteConfig,
+    type SessionRecordingOptions,
     SessionRecordingUrlTrigger,
 } from '../../types'
 import {
@@ -384,6 +386,24 @@ export class SessionRecording {
             : undefined
     }
 
+    private get masking(): Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector'> | undefined {
+        const masking_server_side = this.instance.get_property(SESSION_RECORDING_MASKING)
+        const masking_client_side = {
+            maskAllInputs: this.instance.config.session_recording?.maskAllInputs,
+            maskTextSelector: this.instance.config.session_recording?.maskTextSelector,
+        }
+
+        const maskAllInputs = masking_client_side?.maskAllInputs ?? masking_server_side?.maskAllInputs
+        const maskTextSelector = masking_client_side?.maskTextSelector ?? masking_server_side?.maskTextSelector
+
+        return !isUndefined(maskAllInputs) || !isUndefined(maskTextSelector)
+            ? {
+                  maskAllInputs,
+                  maskTextSelector,
+              }
+            : undefined
+    }
+
     private get sampleRate(): number | null {
         const rate = this.instance.get_property(SESSION_RECORDING_SAMPLE_RATE)
         return isNumber(rate) ? rate : null
@@ -704,6 +724,7 @@ export class SessionRecording {
                         capturePerformance: response.capturePerformance,
                         ...response.sessionRecording?.networkPayloadCapture,
                     },
+                    [SESSION_RECORDING_MASKING]: response.sessionRecording?.masking,
                     [SESSION_RECORDING_CANVAS_RECORDING]: {
                         enabled: response.sessionRecording?.recordCanvas,
                         fps: response.sessionRecording?.canvasFps,
@@ -938,6 +959,11 @@ export class SessionRecording {
             sessionRecordingOptions.recordCanvas = true
             sessionRecordingOptions.sampling = { canvas: this.canvasRecording.fps }
             sessionRecordingOptions.dataURLOptions = { type: 'image/webp', quality: this.canvasRecording.quality }
+        }
+
+        if (this.masking) {
+            sessionRecordingOptions.maskAllInputs = this.masking.maskAllInputs
+            sessionRecordingOptions.maskTextSelector = this.masking.maskTextSelector ?? undefined
         }
 
         if (!this.rrwebRecord) {
