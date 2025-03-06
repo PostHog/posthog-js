@@ -9,7 +9,7 @@ on:
 jobs:
     unit:
         name: Unit tests
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-22.04
         steps:
             - uses: actions/checkout@v4
             - uses: pnpm/action-setup@v4
@@ -23,7 +23,7 @@ jobs:
 
     integration:
         name: Playwright E2E tests
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-22.04
         steps:
             - uses: actions/checkout@v4
             - uses: pnpm/action-setup@v4
@@ -45,7 +45,7 @@ jobs:
 
     functional:
         name: Functional tests
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-22.04
         steps:
             - uses: actions/checkout@v4
             - uses: pnpm/action-setup@v4
@@ -58,7 +58,7 @@ jobs:
 
     lint:
         name: Lint
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-22.04
         steps:
             - uses: actions/checkout@v4
             - uses: pnpm/action-setup@v4

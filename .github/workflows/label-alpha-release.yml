@@ -8,7 +8,7 @@ on:
 jobs:
   check-permissions:
     name: "Check user has permission to release"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     outputs:
 # can have multiple outputs
 #      check-result: ${{ steps.check-permissions.outputs.check-result }}
@@ -21,7 +21,7 @@ jobs:
           require: 'write'
   warn-when-failed:
     name: Warn when the user does not have the required permissions
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: check-permissions
     if: needs.check-permissions.outputs.require-result == 'false'
     steps:
@@ -30,7 +30,7 @@ jobs:
 
   label-alpha-release:
     name: Release alpha version based on PR label
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: check-permissions
     if: needs.check-permissions.outputs.require-result == 'true' && 
         contains(github.event.pull_request.labels.*.name, 'release alpha')

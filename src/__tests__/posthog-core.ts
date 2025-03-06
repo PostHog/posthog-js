@@ -1,9 +1,9 @@
 import { mockLogger } from './helpers/mock-logger'
 
 import { Info } from '../utils/event-utils'
+import * as globals from '../utils/globals'
 import { document, window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
-import * as globals from '../utils/globals'
 import { ENABLE_PERSON_PROCESSING, USER_STATE } from '../constants'
 import { createPosthogInstance, defaultPostHog } from './helpers/posthog-instance'
 import { PostHogConfig, RemoteConfig } from '../types'
@@ -12,6 +12,7 @@ import { PostHogPersistence } from '../posthog-persistence'
 import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
 import { SessionRecording } from '../extensions/replay/sessionrecording'
+import { SessionPropsManager } from '../session-props'
 
 describe('posthog core', () => {
     const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
@@ -415,6 +416,11 @@ describe('posthog core', () => {
                     sessionId: 'sessionId',
                 }),
             } as unknown as SessionIdManager,
+            sessionPropsManager: {
+                getSessionProps: jest.fn().mockReturnValue({
+                    $session_entry_referring_domain: 'https://referrer.example.com',
+                }),
+            } as unknown as SessionPropsManager,
         }
 
         beforeEach(() => {
@@ -441,6 +447,7 @@ describe('posthog core', () => {
                 persistent: 'prop',
                 $window_id: 'windowId',
                 $session_id: 'sessionId',
+                $session_entry_referring_domain: 'https://referrer.example.com',
                 $is_identified: false,
                 $process_person_profile: false,
                 $recording_status: 'buffering',
@@ -466,6 +473,7 @@ describe('posthog core', () => {
                 persistent: 'prop',
                 $window_id: 'windowId',
                 $session_id: 'sessionId',
+                $session_entry_referring_domain: 'https://referrer.example.com',
                 $lib_custom_api_host: 'https://custom.posthog.com',
                 $is_identified: false,
                 $process_person_profile: false,
@@ -535,7 +543,7 @@ describe('posthog core', () => {
             )
 
             posthog.persistence.get_initial_props = () => ({ initial: 'prop' })
-            posthog.sessionPropsManager.getSetOnceInitialSessionPropsProps = () => ({ session: 'prop' })
+            posthog.sessionPropsManager.getSetOnceProps = () => ({ session: 'prop' })
             posthog.persistence.props[ENABLE_PERSON_PROCESSING] = true // person processing is needed for $set_once
             expect(posthog._calculate_set_once_properties({ key: 'prop' })).toEqual({
                 event_name: '$set_once',

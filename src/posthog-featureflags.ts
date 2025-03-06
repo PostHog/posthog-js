@@ -268,7 +268,10 @@ export class PostHogFeatureFlags {
             distinct_id: this.instance.get_distinct_id(),
             groups: this.instance.getGroups(),
             $anon_distinct_id: this.$anon_distinct_id,
-            person_properties: this.instance.get_property(STORED_PERSON_PROPERTIES_KEY),
+            person_properties: {
+                ...(this.instance.persistence?.get_initial_props() || {}),
+                ...(this.instance.get_property(STORED_PERSON_PROPERTIES_KEY) || {}),
+            },
             group_properties: this.instance.get_property(STORED_GROUP_PROPERTIES_KEY),
         }
 
@@ -290,7 +293,9 @@ export class PostHogFeatureFlags {
                     // successful request
                     // reset anon_distinct_id after at least a single request with it
                     // makes it through
-                    this.$anon_distinct_id = undefined
+                    if (!this._additionalReloadRequested) {
+                        this.$anon_distinct_id = undefined
+                    }
                     errorsLoading = false
                 }
 
@@ -301,8 +306,9 @@ export class PostHogFeatureFlags {
                     this.instance._onRemoteConfig(response.json ?? {})
                 }
 
-                if (data.disable_flags) {
+                if (data.disable_flags && !this._additionalReloadRequested) {
                     // If flags are disabled then there is no need to call decide again (flags are the only thing that may change)
+                    // UNLESS, an additional reload is requested.
                     return
                 }
 

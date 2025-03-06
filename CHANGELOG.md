@@ -1,3 +1,39 @@
+## 1.228.1 - 2025-03-05
+
+
+
+## 1.228.0 - 2025-03-05
+
+
+
+## 1.227.2 - 2025-03-05
+
+
+
+## 1.227.1 - 2025-03-05
+
+- feat: posthog feature component should report variant too (#1783)
+- chore: image blocking example (#1789)
+- chore(): set all github actions to run on ubuntu-22.04 (#1784)
+- fix(flags): Make sure flags are loaded when identify is called (#1785)
+- fix(flags): pass along $initial_ person properties in decide requests automatically (#1781)
+- chore: Mark peerDependencies as optional (#1777)
+- feat: Make `getQueryParams` more resilient (#1778)
+
+## 1.227.0 - 2025-03-04
+
+- feat: support loading masking remotely (#1734)
+
+## 1.226.0 - 2025-03-04
+
+- feat(web-analytics): Add $session property with an object of props on session_id lifecycle (#1780)
+- feat: Block more bots (#1776)
+
+## 1.225.1 - 2025-03-03
+
+- fix: add semrush audit bot (#1775)
+- chore: add posthog built rrweb (#1770)
+
 ## 1.225.0 - 2025-03-02
 
 - feat: better positioning for survey selectors (#1772)
