@@ -57,7 +57,6 @@ interface SurveyQuestionBase {
     descriptionContentType?: SurveyQuestionDescriptionContentType
     optional?: boolean
     buttonText?: string
-    originalQuestionIndex: number
     branching?: NextQuestionBranching | EndBranching | ResponseBasedBranching | SpecificQuestionBranching
 }
 
