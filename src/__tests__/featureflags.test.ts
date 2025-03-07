@@ -623,7 +623,7 @@ describe('featureflags', () => {
             })
 
             expect(instance._send_request).toHaveBeenCalledWith({
-                url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
+                url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token&stage=beta',
                 method: 'GET',
                 callback: expect.any(Function),
             })
@@ -653,7 +653,7 @@ describe('featureflags', () => {
             })
 
             expect(instance._send_request).toHaveBeenCalledWith({
-                url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
+                url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token&stage=beta',
                 method: 'GET',
                 callback: expect.any(Function),
             })
@@ -675,6 +675,22 @@ describe('featureflags', () => {
                 expect(data).toEqual([EARLY_ACCESS_FEATURE_SECOND])
             }, true)
             expect(instance._send_request).toHaveBeenCalledTimes(1)
+        })
+
+        it('getEarlyAccessFeatures can request specific stages', () => {
+            featureFlags.getEarlyAccessFeatures(
+                (data) => {
+                    expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
+                },
+                false,
+                ['concept', 'beta']
+            )
+
+            expect(instance._send_request).toHaveBeenCalledWith({
+                url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token&stage=concept&stage=beta',
+                method: 'GET',
+                callback: expect.any(Function),
+            })
         })
 
         it('update enrollment should update the early access feature enrollment', () => {
