@@ -1,3 +1,7 @@
+## 1.229.3 - 2025-03-07
+
+- Reverse error message (#1795)
+
 ## 1.229.2 - 2025-03-06
 
 - fix: make survey preview behave like the actual (#1799)
