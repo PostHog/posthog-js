@@ -822,7 +822,7 @@ describe('surveys', () => {
 
         it('should be able to find the original question from its ID', () => {
             const shuffledQuestions = getDisplayOrderQuestions(surveyWithShufflingQuestions)
-            console.log('************************************', shuffledQuestions)
+            const shuffledQuestions = getDisplayOrderQuestions(surveyWithShufflingQuestions)
             for (let i = 0; i < shuffledQuestions.length; i++) {
                 const originalQuestion = surveyWithShufflingQuestions.questions.find(
                     (q) => q.id === shuffledQuestions[i].id
