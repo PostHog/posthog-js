@@ -61,8 +61,8 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
                 )
             }
 
-            if (client.__loaded) {
-                console.warn('[PostHog.js] `client` was already loaded elsewhere. This may cause issues.')
+            if (!client.__loaded) {
+                console.warn('[PostHog.js] you should provide an _initialized_ `client` to `PostHogProvider` .')
             }
 
             return client
