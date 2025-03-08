@@ -10,6 +10,17 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
         return callback('Loading of external scripts is disabled')
     }
 
+    // Check if script already exists
+    const existingScripts = document?.querySelectorAll('script')
+    if (existingScripts) {
+        for (let i = 0; i < existingScripts.length; i++) {
+            if (existingScripts[i].src === url) {
+                // Script already exists, just call the callback
+                return callback()
+            }
+        }
+    }
+
     const addScript = () => {
         if (!document) {
             return callback('document not found')

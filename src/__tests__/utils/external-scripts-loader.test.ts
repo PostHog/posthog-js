@@ -33,6 +33,18 @@ describe('external-scripts-loader', () => {
             expect(callback).toHaveBeenCalledWith(undefined, event)
         })
 
+        it('should not add duplicate scripts when called multiple times with the same URL', () => {
+            // First call to load the script
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', callback)
+
+            // Second call with the same script
+            assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', callback)
+
+            const scripts = document!.getElementsByTagName('script')
+            expect(scripts.length).toBe(1) // This will fail, showing the bug
+            expect(scripts[0].src).toMatchInlineSnapshot(`"https://us-assets.i.posthog.com/static/recorder.js?v=1.0.0"`)
+        })
+
         it("should add the script to the page when there aren't any preexisting scripts on the page", () => {
             assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', callback)
             const scripts = document!.getElementsByTagName('script')
