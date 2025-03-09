@@ -16,8 +16,8 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
     if (existingScripts) {
         for (let i = 0; i < existingScripts.length; i++) {
             if (existingScripts[i].src === url) {
-                // Script already exists, do nothing, the first addition called the callback
-                return
+                // Script already exists, we still call the callback, they have to be idempotent
+                return callback()
             }
         }
     }
