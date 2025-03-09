@@ -41,7 +41,7 @@ describe('external-scripts-loader', () => {
             assignableWindow.__PosthogExtensions__.loadExternalDependency(mockPostHog, 'recorder', callback)
 
             const scripts = document!.getElementsByTagName('script')
-            expect(scripts.length).toBe(1) // This will fail, showing the bug
+            expect(scripts.length).toBe(1)
             expect(scripts[0].src).toMatchInlineSnapshot(`"https://us-assets.i.posthog.com/static/recorder.js?v=1.0.0"`)
         })
 
