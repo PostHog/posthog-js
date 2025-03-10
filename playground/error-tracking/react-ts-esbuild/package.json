@@ -7,8 +7,8 @@
         "dev": "vite",
         "build": "tsc -b && vite build",
         "lint": "eslint .",
-        "upload": "posthog-cli sourcemap upload --directory ./dist/assets",
         "inject": "posthog-cli sourcemap inject --directory ./dist/assets",
+        "upload": "posthog-cli sourcemap upload --directory ./dist/assets",
         "preview": "vite preview",
         "link-posthog": "pnpm link ../../..",
         "build-posthog": "cd ../../.. && NODE_ENV=dev pnpm i && pnpm run build"
