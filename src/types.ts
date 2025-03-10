@@ -1432,6 +1432,7 @@ export interface EarlyAccessFeature {
     flagKey: string | null
 }
 
+export type EarlyAccessFeatureStage = 'concept' | 'alpha' | 'beta' | 'general-availability'
 export type EarlyAccessFeatureCallback = (earlyAccessFeatures: EarlyAccessFeature[]) => void
 
 export interface EarlyAccessFeatureResponse {
