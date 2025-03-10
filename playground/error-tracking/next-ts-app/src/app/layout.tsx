@@ -25,7 +25,7 @@ export default function RootLayout({
     return (
         <html lang="en">
             <body className={`${geistSans.variable} ${geistMono.variable}`}>
-                <PosthogProvider>{children}</PosthogProvider>
+                <PosthogProvider debug={true}>{children}</PosthogProvider>
             </body>
         </html>
     )

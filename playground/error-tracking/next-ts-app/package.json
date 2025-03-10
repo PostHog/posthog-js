@@ -7,8 +7,8 @@
         "build": "next build",
         "start": "next start",
         "lint": "next lint",
-        "inject": "posthog-cli sourcemap inject --host http://localhost:8010 --directory ./.next/static/chunks",
-        "upload": "posthog-cli sourcemap upload --host http://localhost:8010 --directory ./.next/static/chunks",
+        "inject": "posthog-cli --host http://localhost:8010 sourcemap  inject  --directory ./.next/static/chunks",
+        "upload": "posthog-cli --host http://localhost:8010 sourcemap upload --directory ./.next/static/chunks",
         "link-posthog": "pnpm link ../../..",
         "build-posthog": "cd ../../.. && NODE_ENV=dev pnpm i && pnpm run build"
     },
