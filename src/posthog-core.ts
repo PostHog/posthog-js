@@ -1878,7 +1878,7 @@ export class PostHog {
                           value: isError(error)
                               ? error.message
                               : isObject(error) && 'message' in error
-                                ? error.message
+                                ? String(error.message)
                                 : String(error),
                           mechanism: {
                               handled: true,
