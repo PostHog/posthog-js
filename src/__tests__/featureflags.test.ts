@@ -623,7 +623,7 @@ describe('featureflags', () => {
             })
 
             expect(instance._send_request).toHaveBeenCalledWith({
-                url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token&stage=beta',
+                url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
                 method: 'GET',
                 callback: expect.any(Function),
             })
@@ -653,7 +653,7 @@ describe('featureflags', () => {
             })
 
             expect(instance._send_request).toHaveBeenCalledWith({
-                url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token&stage=beta',
+                url: 'https://us.i.posthog.com/api/early_access_features/?token=random fake token',
                 method: 'GET',
                 callback: expect.any(Function),
             })
