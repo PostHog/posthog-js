@@ -1,3 +1,7 @@
+## 1.230.1 - 2025-03-10
+
+- fix: handle non Error objects being passed to captureException (#1806)
+
 ## 1.230.0 - 2025-03-10
 
 - feat: allow early access feature stage specification (#1805)
