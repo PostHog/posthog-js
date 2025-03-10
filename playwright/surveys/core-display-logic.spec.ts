@@ -13,6 +13,7 @@ const openTextQuestion = {
     type: 'open',
     question: 'What feedback do you have for us?',
     description: 'plain text description',
+    id: 'open_text_1',
 }
 
 test.describe('surveys - core display logic', () => {

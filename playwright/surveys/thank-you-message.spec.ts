@@ -15,6 +15,7 @@ const emojiRatingQuestion = {
     scale: 5,
     question: 'How happy are you with your purchase?',
     optional: true,
+    id: 'emoji_rating_1',
 }
 
 const appearanceWithThanks = {

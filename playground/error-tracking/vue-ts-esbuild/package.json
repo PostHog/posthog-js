@@ -1,0 +1,23 @@
+{
+    "name": "vue-ts-esbuild",
+    "private": true,
+    "version": "0.0.0",
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "vue-tsc -b && vite build",
+        "upload": "posthog-cli sourcemap upload --directory ./dist/assets",
+        "inject": "posthog-cli sourcemap inject --directory ./dist/assets",
+        "preview": "vite preview"
+    },
+    "dependencies": {
+        "vue": "^3.5.13"
+    },
+    "devDependencies": {
+        "@vitejs/plugin-vue": "^5.2.1",
+        "@vue/tsconfig": "^0.7.0",
+        "typescript": "~5.7.2",
+        "vite": "^6.2.0",
+        "vue-tsc": "^2.2.4"
+    }
+}

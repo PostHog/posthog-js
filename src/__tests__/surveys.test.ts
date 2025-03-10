@@ -795,11 +795,11 @@ describe('surveys', () => {
             description: 'survey without shuffling questions',
             type: SurveyType.Popover,
             questions: [
-                { type: SurveyQuestionType.Open, question: 'Question A' },
-                { type: SurveyQuestionType.Open, question: 'Question B' },
-                { type: SurveyQuestionType.Open, question: 'Question C' },
-                { type: SurveyQuestionType.Open, question: 'Question D' },
-                { type: SurveyQuestionType.Open, question: 'Question E' },
+                { type: SurveyQuestionType.Open, question: 'Question A', id: 'question-a' },
+                { type: SurveyQuestionType.Open, question: 'Question B', id: 'question-b' },
+                { type: SurveyQuestionType.Open, question: 'Question C', id: 'question-c' },
+                { type: SurveyQuestionType.Open, question: 'Question D', id: 'question-d' },
+                { type: SurveyQuestionType.Open, question: 'Question E', id: 'question-e' },
             ],
             start_date: new Date().toISOString(),
             end_date: null,
@@ -820,14 +820,13 @@ describe('surveys', () => {
             )
         })
 
-        it('should retain original index of question if shuffleQuestions is true', () => {
+        it('should be able to find the original question from its ID', () => {
             const shuffledQuestions = getDisplayOrderQuestions(surveyWithShufflingQuestions)
-            console.log('************************************', shuffledQuestions)
             for (let i = 0; i < shuffledQuestions.length; i++) {
-                const originalQuestionIndex = shuffledQuestions[i].originalQuestionIndex
-                expect(shuffledQuestions[i].question).toEqual(
-                    surveyWithShufflingQuestions.questions[originalQuestionIndex].question
+                const originalQuestion = surveyWithShufflingQuestions.questions.find(
+                    (q) => q.id === shuffledQuestions[i].id
                 )
+                expect(shuffledQuestions[i].question).toEqual(originalQuestion?.question)
             }
         })
 
