@@ -10,6 +10,18 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
         return callback('Loading of external scripts is disabled')
     }
 
+    // If we add a script more than once then the browser will parse and execute it
+    // So, even if idempotent we waste parsing and processing time
+    const existingScripts = document?.querySelectorAll('script')
+    if (existingScripts) {
+        for (let i = 0; i < existingScripts.length; i++) {
+            if (existingScripts[i].src === url) {
+                // Script already exists, we still call the callback, they have to be idempotent
+                return callback()
+            }
+        }
+    }
+
     const addScript = () => {
         if (!document) {
             return callback('document not found')
