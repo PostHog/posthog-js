@@ -1,3 +1,7 @@
+## 1.230.0 - 2025-03-10
+
+- feat: allow early access feature stage specification (#1805)
+
 ## 1.229.5 - 2025-03-07
 
 - fix: Stop logging error when client is uninitialized (#1803)
