@@ -10,6 +10,7 @@ import {
     Compression,
     EarlyAccessFeature,
     RemoteConfigFeatureFlagCallback,
+    EarlyAccessFeatureStage,
 } from './types'
 import { PostHogPersistence } from './posthog-persistence'
 
@@ -591,14 +592,20 @@ export class PostHogFeatureFlags {
         this._fireFeatureFlagsCallbacks()
     }
 
-    getEarlyAccessFeatures(callback: EarlyAccessFeatureCallback, force_reload = false): void {
+    getEarlyAccessFeatures(
+        callback: EarlyAccessFeatureCallback,
+        force_reload = false,
+        stages?: EarlyAccessFeatureStage[]
+    ): void {
         const existing_early_access_features = this.instance.get_property(PERSISTENCE_EARLY_ACCESS_FEATURES)
+
+        const stageParams = stages ? `&${stages.map((s) => `stage=${s}`).join('&')}` : ''
 
         if (!existing_early_access_features || force_reload) {
             this.instance._send_request({
                 url: this.instance.requestRouter.endpointFor(
                     'api',
-                    `/api/early_access_features/?token=${this.instance.config.token}`
+                    `/api/early_access_features/?token=${this.instance.config.token}${stageParams}`
                 ),
                 method: 'GET',
                 callback: (response) => {
