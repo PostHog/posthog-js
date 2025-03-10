@@ -1,3 +1,11 @@
+## 1.229.5 - 2025-03-07
+
+- fix: Stop logging error when client is uninitialized (#1803)
+
+## 1.229.4 - 2025-03-07
+
+- chore: use quesiton ID instead of question index if it's available (#1764)
+
 ## 1.229.3 - 2025-03-07
 
 - Reverse error message (#1795)

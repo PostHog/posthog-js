@@ -61,10 +61,6 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
                 )
             }
 
-            if (!client.__loaded) {
-                console.warn('[PostHog.js] you should provide an _initialized_ `client` to `PostHogProvider` .')
-            }
-
             return client
         }
 

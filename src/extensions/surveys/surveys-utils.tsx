@@ -30,6 +30,10 @@ export function getFontFamily(fontFamily?: string): string {
     return fontFamily ? `${fontFamily}, ${defaultFontStack}` : `-apple-system, ${defaultFontStack}`
 }
 
+export function getSurveyResponseKey(questionId: string) {
+    return `$survey_response_${questionId}`
+}
+
 export const style = (appearance: SurveyAppearance | null) => {
     const positions = {
         left: 'left: 30px;',
@@ -648,11 +652,6 @@ export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string
 }
 
 export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
-    // retain the original questionIndex so we can correlate values in the webapp
-    survey.questions.forEach((question, idx) => {
-        question.originalQuestionIndex = idx
-    })
-
     if (!survey.appearance || !survey.appearance.shuffleQuestions) {
         return survey.questions
     }

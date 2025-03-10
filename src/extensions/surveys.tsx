@@ -31,6 +31,7 @@ import {
     dismissedSurveyEvent,
     getContrastingTextColor,
     getDisplayOrderQuestions,
+    getSurveyResponseKey,
     getSurveySeen,
     hasWaitPeriodPassed,
     sendSurveyEvent,
@@ -759,7 +760,7 @@ export function Questions({
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
     )
     const [questionsResponses, setQuestionsResponses] = useState({})
-    const { isPreviewMode, previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit, onPopupSurveySent } =
+    const { previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit, onPopupSurveySent } =
         useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
@@ -771,20 +772,24 @@ export function Questions({
 
     const onNextButtonClick = ({
         res,
-        originalQuestionIndex,
         displayQuestionIndex,
+        questionId,
     }: {
         res: string | string[] | number | null
-        originalQuestionIndex: number
         displayQuestionIndex: number
+        questionId?: string
     }) => {
         if (!posthog) {
             logger.error('onNextButtonClick called without a PostHog instance.')
             return
         }
 
-        const responseKey =
-            originalQuestionIndex === 0 ? `$survey_response` : `$survey_response_${originalQuestionIndex}`
+        if (!questionId) {
+            logger.error('onNextButtonClick called without a questionId.')
+            return
+        }
+
+        const responseKey = getSurveyResponseKey(questionId)
 
         setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
 
@@ -811,11 +816,7 @@ export function Questions({
             }
         >
             {surveyQuestions.map((question, displayQuestionIndex) => {
-                const { originalQuestionIndex } = question
-
-                const isVisible = isPreviewMode
-                    ? currentQuestionIndex === originalQuestionIndex
-                    : currentQuestionIndex === displayQuestionIndex
+                const isVisible = currentQuestionIndex === displayQuestionIndex
                 return (
                     isVisible && (
                         <div
@@ -845,8 +846,8 @@ export function Questions({
                                 onSubmit: (res) =>
                                     onNextButtonClick({
                                         res,
-                                        originalQuestionIndex,
                                         displayQuestionIndex,
+                                        questionId: question.id,
                                     }),
                                 onPreviewSubmit,
                             })}
