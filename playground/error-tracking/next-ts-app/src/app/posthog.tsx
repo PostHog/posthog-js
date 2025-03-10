@@ -9,5 +9,5 @@ export function PosthogProvider({ children }: { children: React.ReactNode }) {
             autocapture: false,
         })
     }, [])
-    return <div>{children}</div>
+    return <>{children}</>
 }
