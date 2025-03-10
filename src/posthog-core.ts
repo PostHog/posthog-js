@@ -1875,7 +1875,11 @@ export class PostHog {
                   $exception_list: [
                       {
                           type: isError(error) ? error.name : 'Error',
-                          value: isError(error) ? error.message : error,
+                          value: isError(error)
+                              ? error.message
+                              : isObject(error) && 'message' in error
+                                ? error.message
+                                : String(error),
                           mechanism: {
                               handled: true,
                               synthetic: false,
