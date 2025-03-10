@@ -1279,7 +1279,7 @@ export class PostHog {
     getEarlyAccessFeatures(
         callback: EarlyAccessFeatureCallback,
         force_reload = false,
-        stages: EarlyAccessFeatureStage[]
+        stages?: EarlyAccessFeatureStage[]
     ): void {
         return this.featureFlags.getEarlyAccessFeatures(callback, force_reload, stages)
     }

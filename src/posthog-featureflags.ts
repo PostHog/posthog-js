@@ -595,7 +595,7 @@ export class PostHogFeatureFlags {
     getEarlyAccessFeatures(
         callback: EarlyAccessFeatureCallback,
         force_reload = false,
-        stages: EarlyAccessFeatureStage[]
+        stages?: EarlyAccessFeatureStage[]
     ): void {
         const existing_early_access_features = this.instance.get_property(PERSISTENCE_EARLY_ACCESS_FEATURES)
 
