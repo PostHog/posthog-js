@@ -136,7 +136,7 @@
         "*.{ts,tsx}": [
             "eslint src --fix",
             "eslint playwright --fix",
-            "pnpm prettier"
+            "prettier --write"
         ]
     },
     "browserslist": [
