@@ -1,4 +1,3 @@
-import { getSurveyResponseKey } from '../../src/extensions/surveys/surveys-utils'
 import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 import { expect, test } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
@@ -167,10 +166,13 @@ test.describe('surveys - core display logic', () => {
             '$autocapture',
         ])
         const surveySent = captures.find((c) => c.event === 'survey sent')
-        expect(surveySent!.properties[getSurveyResponseKey('multiple_choice_1')]).toEqual(['Product Updates', 'Events'])
+        expect(surveySent!.properties['$survey_response_multiple_choice_1']).toEqual(['Product Updates', 'Events'])
+        expect(surveySent!.properties['$survey_response']).toEqual(['Product Updates', 'Events'])
         expect(surveySent!.properties['$survey_id']).toEqual('12345')
-        expect(surveySent!.properties[getSurveyResponseKey('open_text_1')]).toEqual('Great job!')
-        expect(surveySent!.properties[getSurveyResponseKey('nps_rating_1')]).toBeNull()
+        expect(surveySent!.properties['$survey_response_open_text_1']).toEqual('Great job!')
+        expect(surveySent!.properties['$survey_response_1']).toEqual('Great job!')
+        expect(surveySent!.properties['$survey_response_nps_rating_1']).toBeNull()
+        expect(surveySent!.properties['$survey_response_2']).toBeNull()
     })
 
     test('multiple choice questions with open choice', async ({ page, context }) => {
@@ -210,7 +212,8 @@ test.describe('surveys - core display logic', () => {
             'survey sent',
         ])
         const surveySent = captures.find((c) => c.event === 'survey sent')
-        expect(surveySent!.properties[getSurveyResponseKey('multiple_choice_1')]).toEqual(['Tutorials', 'Newsletters'])
+        expect(surveySent!.properties['$survey_response_multiple_choice_1']).toEqual(['Tutorials', 'Newsletters'])
+        expect(surveySent!.properties['$survey_response']).toEqual(['Tutorials', 'Newsletters'])
     })
 
     test('single choice questions with open choice', async ({ page, context }) => {
@@ -256,6 +259,7 @@ test.describe('surveys - core display logic', () => {
             'survey sent',
         ])
         const surveySent = captures.find((c) => c.event === 'survey sent')
-        expect(surveySent!.properties[getSurveyResponseKey('single_choice_1')]).toEqual('Product engineer')
+        expect(surveySent!.properties['$survey_response_single_choice_1']).toEqual('Product engineer')
+        expect(surveySent!.properties['$survey_response']).toEqual('Product engineer')
     })
 })

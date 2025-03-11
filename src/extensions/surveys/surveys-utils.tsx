@@ -30,8 +30,23 @@ export function getFontFamily(fontFamily?: string): string {
     return fontFamily ? `${fontFamily}, ${defaultFontStack}` : `-apple-system, ${defaultFontStack}`
 }
 
-export function getSurveyResponseKey(questionId: string) {
+function getSurveyIdBasedResponseKey(questionId: string) {
     return `$survey_response_${questionId}`
+}
+
+function getSurveyIndexBasedResponseKey(questionIndex: number) {
+    return questionIndex === 0 ? '$survey_response' : `$survey_response_${questionIndex}`
+}
+
+export function getSurveyResponseKeys(survey: Survey, questionId: string): [string, string | undefined] {
+    const questionIndex = survey.questions.findIndex((question) => question.id === questionId)
+
+    // This case shouldn't happen, but adding a fallback to avoid errors if it ever does.
+    if (questionIndex === -1) {
+        return [getSurveyIdBasedResponseKey(questionId), undefined]
+    }
+
+    return [getSurveyIdBasedResponseKey(questionId), getSurveyIndexBasedResponseKey(questionIndex)]
 }
 
 export const style = (appearance: SurveyAppearance | null) => {

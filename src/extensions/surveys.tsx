@@ -31,7 +31,7 @@ import {
     dismissedSurveyEvent,
     getContrastingTextColor,
     getDisplayOrderQuestions,
-    getSurveyResponseKey,
+    getSurveyResponseKeys,
     getSurveySeen,
     hasWaitPeriodPassed,
     sendSurveyEvent,
@@ -745,6 +745,10 @@ export function SurveyPopup({
     ) : null
 }
 
+interface QuestionResponses {
+    [key: string]: string | string[] | number | null
+}
+
 export function Questions({
     survey,
     forceDisableHtml,
@@ -759,7 +763,7 @@ export function Questions({
     const textColor = getContrastingTextColor(
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
     )
-    const [questionsResponses, setQuestionsResponses] = useState({})
+    const [questionsResponses, setQuestionsResponses] = useState<QuestionResponses>({})
     const { previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit, onPopupSurveySent } =
         useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
@@ -789,9 +793,13 @@ export function Questions({
             return
         }
 
-        const responseKey = getSurveyResponseKey(questionId)
-
-        setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
+        const [responseKey, responseKeyIndex] = getSurveyResponseKeys(survey, questionId)
+        const newQuestionsResponses: QuestionResponses = { ...questionsResponses }
+        newQuestionsResponses[responseKey] = res
+        if (responseKeyIndex) {
+            newQuestionsResponses[responseKeyIndex] = res
+        }
+        setQuestionsResponses(newQuestionsResponses)
 
         const nextStep = getNextSurveyStep(survey, displayQuestionIndex, res)
         if (nextStep === SurveyQuestionBranchingType.End) {

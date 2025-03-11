@@ -1,4 +1,3 @@
-import { getSurveyResponseKey } from '../../src/extensions/surveys/surveys-utils'
 import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 import { expect, test } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
@@ -51,7 +50,8 @@ test.describe('surveys - feedback widget', () => {
         expect(surveySentEvent!.properties).toEqual(
             expect.objectContaining({
                 $survey_id: '123',
-                [getSurveyResponseKey('open_text_1')]: 'experiments is awesome!',
+                $survey_response: 'experiments is awesome!',
+                $survey_response_open_text_1: 'experiments is awesome!',
             })
         )
     })
@@ -100,7 +100,8 @@ test.describe('surveys - feedback widget', () => {
         expect(surveySentEvent!.properties).toEqual(
             expect.objectContaining({
                 $survey_id: '123',
-                [getSurveyResponseKey('open_text_1')]: 'experiments is awesome!',
+                $survey_response_open_text_1: 'experiments is awesome!',
+                $survey_response: 'experiments is awesome!',
                 $survey_iteration: 2,
                 $survey_iteration_start_date: '12-12-2004',
             })
