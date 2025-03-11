@@ -136,7 +136,8 @@
         "*.js": "eslint --cache --fix",
         "*.{ts,tsx}": [
             "eslint src --fix",
-            "eslint playwright --fix"
+            "eslint playwright --fix",
+            "prettier --write"
         ]
     },
     "browserslist": [
