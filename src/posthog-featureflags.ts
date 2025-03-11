@@ -11,6 +11,7 @@ import {
     EarlyAccessFeature,
     RemoteConfigFeatureFlagCallback,
     EarlyAccessFeatureStage,
+    FeatureFlagDetail,
 } from './types'
 import { PostHogPersistence } from './posthog-persistence'
 
@@ -30,6 +31,7 @@ const logger = createLogger('[FeatureFlags]')
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
 const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
+const PERSISTENCE_FEATURE_FLAG_DETAILS = '$feature_flag_details'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_flag_payloads'
 const PERSISTENCE_FEATURE_FLAG_REQUEST_ID = '$feature_flag_request_id'
 
@@ -47,45 +49,81 @@ export const parseFeatureFlagDecideResponse = (
     response: Partial<DecideResponse>,
     persistence: PostHogPersistence,
     currentFlags: Record<string, string | boolean> = {},
-    currentFlagPayloads: Record<string, JsonType> = {}
+    currentFlagPayloads: Record<string, JsonType> = {},
+    currentFlagDetails: Record<string, FeatureFlagDetail> = {}
 ) => {
-    const flags = response['featureFlags']
-    const flagPayloads = response['featureFlagPayloads']
-    const requestId = response['requestId']
-    if (!flags) {
-        return
+    const normalizedResponse = normalizeDecideResponse(response)
+    const flagDetails = normalizedResponse.flags
+    const featureFlags = normalizedResponse.featureFlags
+    const flagPayloads = normalizedResponse.featureFlagPayloads
+
+    if (!featureFlags) {
+        return // <-- This early return means we don't update anything, which is good.
     }
+
+    const requestId = response['requestId']
+
     // using the v1 api
-    if (isArray(flags)) {
+    if (isArray(featureFlags)) {
+        logger.warn('v1 of the feature flags endpoint is deprecated. Please use the latest version.')
         const $enabled_feature_flags: Record<string, boolean> = {}
-        if (flags) {
-            for (let i = 0; i < flags.length; i++) {
-                $enabled_feature_flags[flags[i]] = true
+        if (featureFlags) {
+            for (let i = 0; i < featureFlags.length; i++) {
+                $enabled_feature_flags[featureFlags[i]] = true
             }
         }
         persistence &&
             persistence.register({
-                [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: flags,
+                [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: featureFlags,
                 [ENABLED_FEATURE_FLAGS]: $enabled_feature_flags,
             })
         return
     }
 
     // using the v2+ api
-    let newFeatureFlags = flags
+    let newFeatureFlags = featureFlags
     let newFeatureFlagPayloads = flagPayloads
+    let newFeatureFlagDetails = flagDetails
     if (response.errorsWhileComputingFlags) {
         // if not all flags were computed, we upsert flags instead of replacing them
         newFeatureFlags = { ...currentFlags, ...newFeatureFlags }
         newFeatureFlagPayloads = { ...currentFlagPayloads, ...newFeatureFlagPayloads }
+        newFeatureFlagDetails = { ...currentFlagDetails, ...newFeatureFlagDetails }
     }
+
     persistence &&
         persistence.register({
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFeatureFlags)),
             [ENABLED_FEATURE_FLAGS]: newFeatureFlags || {},
             [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
+            [PERSISTENCE_FEATURE_FLAG_DETAILS]: newFeatureFlagDetails || {},
             ...(requestId ? { [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: requestId } : {}),
         })
+}
+
+const normalizeDecideResponse = (response: Partial<DecideResponse>): Partial<DecideResponse> => {
+    const flagDetails = response['flags']
+
+    if (flagDetails) {
+        // This is a v=4 request.
+
+        // Map of flag keys to flag values: Record<string, string | boolean>
+        response.featureFlags = Object.fromEntries(
+            Object.keys(flagDetails).map((flag) => [flag, flagDetails[flag].variant ?? flagDetails[flag].enabled])
+        )
+        // Map of flag keys to flag payloads: Record<string, JsonType>
+        response.featureFlagPayloads = Object.fromEntries(
+            Object.keys(flagDetails)
+                .filter((flag) => flagDetails[flag].enabled)
+                .filter((flag) => flagDetails[flag].metadata?.payload)
+                .map((flag) => [flag, flagDetails[flag].metadata?.payload])
+        )
+    } else {
+        logger.warn(
+            'Using an older version of the feature flags endpoint. Please upgrade your PostHog server to the latest version'
+        )
+    }
+    return response
 }
 
 type FeatureFlagOverrides = {
@@ -153,6 +191,32 @@ export class PostHogFeatureFlags {
 
     getFlags(): string[] {
         return Object.keys(this.getFlagVariants())
+    }
+
+    getFlagsWithDetails(): Record<string, FeatureFlagDetail> {
+        const flagDetails = this.instance.get_property(PERSISTENCE_FEATURE_FLAG_DETAILS)
+
+        const overriddenPayloads = this.instance.get_property(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
+
+        if (!overriddenPayloads) {
+            return flagDetails || {}
+        }
+
+        const finalDetails = extend({}, flagDetails || {})
+        const overriddenKeys = Object.keys(overriddenPayloads)
+        for (let i = 0; i < overriddenKeys.length; i++) {
+            finalDetails[overriddenKeys[i]] = overriddenPayloads[overriddenKeys[i]]
+        }
+
+        if (!this._override_warning) {
+            logger.warn(' Overriding feature flag details!', {
+                flagDetails,
+                overriddenPayloads,
+                finalDetails,
+            })
+            this._override_warning = true
+        }
+        return finalDetails
     }
 
     getFlagVariants(): Record<string, string | boolean> {
@@ -286,7 +350,7 @@ export class PostHogFeatureFlags {
         this._requestInFlight = true
         this.instance._send_request({
             method: 'POST',
-            url: this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
+            url: this.instance.requestRouter.endpointFor('api', '/decide/?v=4'),
             data,
             compression: this.instance.config.disable_compression ? undefined : Compression.Base64,
             timeout: this.instance.config.feature_flag_request_timeout_ms,
@@ -365,10 +429,15 @@ export class PostHogFeatureFlags {
                 }
                 this.instance.persistence?.register({ [FLAG_CALL_REPORTED]: flagCallReported })
 
+                const flagDetails = this.getFeatureFlagDetails(key)
+
                 this.instance.capture('$feature_flag_called', {
                     $feature_flag: key,
                     $feature_flag_response: flagValue,
                     $feature_flag_payload: this.getFeatureFlagPayload(key) || null,
+                    $feature_flag_version: flagDetails?.metadata?.version,
+                    $feature_flag_reason: flagDetails?.reason?.description ?? flagDetails?.reason?.code,
+                    $feature_flag_id: flagDetails?.metadata?.id,
                     $feature_flag_request_id: requestId,
                     $feature_flag_bootstrapped_response: this.instance.config.bootstrap?.featureFlags?.[key] || null,
                     $feature_flag_bootstrapped_payload:
@@ -379,6 +448,22 @@ export class PostHogFeatureFlags {
             }
         }
         return flagValue
+    }
+
+    /*
+     * Retrieves the details for a feature flag.
+     *
+     * ### Usage:
+     *
+     *     const details = getFeatureFlagDetails("my-flag")
+     *     console.log(details.metadata.version)
+     *     console.log(details.reason)
+     *
+     * @param {String} key Key of the feature flag.
+     */
+    getFeatureFlagDetails(key: string): FeatureFlagDetail | undefined {
+        const details = this.getFlagsWithDetails()
+        return details[key]
     }
 
     getFeatureFlagPayload(key: string): JsonType {
@@ -404,7 +489,7 @@ export class PostHogFeatureFlags {
         const token = this.instance.config.token
         this.instance._send_request({
             method: 'POST',
-            url: this.instance.requestRouter.endpointFor('api', '/decide/?v=3'),
+            url: this.instance.requestRouter.endpointFor('api', '/decide/?v=4'),
             data: {
                 distinct_id: this.instance.get_distinct_id(),
                 token,
@@ -452,7 +537,14 @@ export class PostHogFeatureFlags {
 
         const currentFlags = this.getFlagVariants()
         const currentFlagPayloads = this.getFlagPayloads()
-        parseFeatureFlagDecideResponse(response, this.instance.persistence, currentFlags, currentFlagPayloads)
+        const currentFlagDetails = this.getFlagsWithDetails()
+        parseFeatureFlagDecideResponse(
+            response,
+            this.instance.persistence,
+            currentFlags,
+            currentFlagPayloads,
+            currentFlagDetails
+        )
         this._fireFeatureFlagsCallbacks(errorsLoading)
     }
 

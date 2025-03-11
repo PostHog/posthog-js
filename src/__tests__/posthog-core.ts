@@ -1212,7 +1212,7 @@ describe('posthog core', () => {
                 })
 
                 expect(sendRequestMock.mock.calls[0][0]).toMatchObject({
-                    url: 'http://localhost/decide/?v=3',
+                    url: 'http://localhost/decide/?v=4',
                 })
             })
 
