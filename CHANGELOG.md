@@ -1,3 +1,8 @@
+## 1.230.2 - 2025-03-11
+
+- fix: simple loader race protection (#1804)
+- chore(err): add next template (typescript + app router) (#1807)
+
 ## 1.230.1 - 2025-03-10
 
 - fix: handle non Error objects being passed to captureException (#1806)
