@@ -5,7 +5,7 @@
     "scripts": {
         "dev": "next dev",
         "build": "next build",
-        "start": "next start",
+        "preview": "next start",
         "lint": "next lint",
         "inject": "posthog-cli sourcemap inject --directory ./.next/static/chunks",
         "upload": "posthog-cli sourcemap upload --directory ./.next/static/chunks",
