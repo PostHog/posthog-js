@@ -1506,18 +1506,12 @@ export class PostHog {
             return
         }
 
+        const hash = getPersonPropertiesHash(this.get_distinct_id(), userPropertiesToSet, userPropertiesToSetOnce)
+
         // if exactly this $set call has been sent before, don't send it again - determine based on hash of properties
-        if (
-            this._cachedPersonProperties !==
-            getPersonPropertiesHash(this.get_distinct_id(), userPropertiesToSet, userPropertiesToSetOnce)
-        ) {
-            this._cachedPersonProperties = getPersonPropertiesHash(
-                this.get_distinct_id(),
-                userPropertiesToSet,
-                userPropertiesToSetOnce
-            )
-        } else {
+        if (this._cachedPersonProperties === hash) {
             logger.info('A duplicate setPersonProperties call was made with the same properties. It has been ignored.')
+            return
         }
 
         // Update current user properties
@@ -1525,11 +1519,7 @@ export class PostHog {
 
         this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
 
-        this._cachedPersonProperties = getPersonPropertiesHash(
-            this.get_distinct_id(),
-            userPropertiesToSet,
-            userPropertiesToSetOnce
-        )
+        this._cachedPersonProperties = hash
     }
 
     /**
