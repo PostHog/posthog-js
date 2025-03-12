@@ -36,23 +36,23 @@
 
 ## 1.229.0 - 2025-03-06
 
-
+- feat: add chunk_id to stack frames (#1794)
 
 ## 1.228.2 - 2025-03-06
 
-
+- chore(flags): support handling optional `requestId`s in `/decide` responses (#1793)
 
 ## 1.228.1 - 2025-03-05
 
-
+- fix(flags): do not reset $anon_distinct_id after first decide call if advanced_disable_feature_flags_on_first_load is true (#1786)
 
 ## 1.228.0 - 2025-03-05
 
-
+- fix: Fix site app loading (#1792)
 
 ## 1.227.2 - 2025-03-05
 
-
+- feat: Block yet another semrush crawler/bot (#1791)
 
 ## 1.227.1 - 2025-03-05
 
