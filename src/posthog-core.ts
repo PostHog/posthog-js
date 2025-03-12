@@ -1635,7 +1635,6 @@ export class PostHog {
         this.surveys.reset()
         this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()
-        this._cachedIdentify = null
         this._cachedPersonProperties = null
         if (this.config.__preview_experimental_cookieless_mode) {
             this.register_once(
