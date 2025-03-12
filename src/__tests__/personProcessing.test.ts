@@ -813,4 +813,120 @@ describe('person processing', () => {
             expect(beforeSendMock.mock.calls[1][0].properties.$process_person_profile).toEqual(false)
         })
     })
+
+    describe('property calls deduplication', () => {
+        it('should dedupe identical consecutive calls to setPersonProperties', async () => {
+            const { posthog, beforeSendMock } = await setup('always')
+
+            posthog.setPersonProperties({ email: 'john@example.com' })
+            posthog.setPersonProperties({ email: 'john@example.com' })
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(1)
+            expect(beforeSendMock).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    event: '$set',
+                    properties: expect.objectContaining({
+                        $set: { email: 'john@example.com' },
+                        $set_once: {},
+                    }),
+                })
+            )
+        })
+
+        it('should not dedupe when properties are different', async () => {
+            const { posthog, beforeSendMock } = await setup('always')
+
+            posthog.setPersonProperties({ email: 'john@example.com' })
+            posthog.setPersonProperties({ email: 'john.doe@example.com' })
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(2)
+        })
+
+        it('should not dedupe when set_once properties are different', async () => {
+            const { posthog, beforeSendMock } = await setup('always')
+
+            posthog.setPersonProperties({ email: 'john@example.com' }, { first_seen: 'today' })
+            posthog.setPersonProperties({ email: 'john@example.com' }, { first_seen: 'yesterday' })
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(2)
+        })
+
+        it('does not dedupe when properties are in different order but identical', async () => {
+            const { posthog, beforeSendMock } = await setup('always')
+
+            posthog.setPersonProperties({ name: 'John', email: 'john@example.com' })
+            posthog.setPersonProperties({ email: 'john@example.com', name: 'John' })
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(2)
+        })
+
+        it('should log a message when deduping properties', async () => {
+            const { posthog } = await setup('always')
+            mockLogger.info = jest.fn()
+
+            posthog.setPersonProperties({ email: 'john@example.com' })
+            posthog.setPersonProperties({ email: 'john@example.com' })
+
+            expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('duplicate'))
+        })
+
+        it('should not dedupe after distinct_id changes', async () => {
+            const { posthog, beforeSendMock } = await setup('always')
+
+            posthog.setPersonProperties({ email: 'john@example.com' })
+
+            posthog.identify('new-id')
+
+            posthog.setPersonProperties({ email: 'john@example.com' })
+
+            // 1 for setPersonProperties, 1 for identify, 1 for second setPersonProperties
+            expect(beforeSendMock).toHaveBeenCalledTimes(3)
+        })
+
+        it('should dedupe when using people.set with identical properties', async () => {
+            const { posthog, beforeSendMock } = await setup('always')
+
+            posthog.people.set({ email: 'john@example.com' })
+            posthog.people.set({ email: 'john@example.com' })
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(1)
+        })
+
+        it('should dedupe when mixing people.set and setPersonProperties with identical properties', async () => {
+            const { posthog, beforeSendMock } = await setup('always')
+
+            posthog.people.set({ email: 'john@example.com' })
+            posthog.setPersonProperties({ email: 'john@example.com' })
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(1)
+        })
+
+        it('should dedupe when using people.set_once with identical properties', async () => {
+            const { posthog, beforeSendMock } = await setup('always')
+
+            posthog.people.set_once({ first_seen: 'today' })
+            posthog.people.set_once({ first_seen: 'today' })
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(1)
+        })
+
+        it('should not dedupe when mixing set and set_once with same properties', async () => {
+            const { posthog, beforeSendMock } = await setup('always')
+
+            posthog.people.set({ email: 'john@example.com' })
+            posthog.people.set_once({ email: 'john@example.com' })
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(2)
+        })
+
+        it('should reset deduplication cache after reset()', async () => {
+            const { posthog, beforeSendMock } = await setup('always')
+
+            posthog.setPersonProperties({ email: 'john@example.com' })
+            posthog.reset()
+            posthog.setPersonProperties({ email: 'john@example.com' })
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(2)
+        })
+    })
 })

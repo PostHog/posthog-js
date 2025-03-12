@@ -1469,6 +1469,14 @@ export class PostHog {
                 },
                 { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} }
             )
+
+            this._cachedPersonProperties = getPersonPropertiesHash(
+                new_distinct_id,
+                userPropertiesToSet,
+                userPropertiesToSetOnce
+            )
+
+            logger.info('this._cachedPersonProperties', this._cachedPersonProperties)
             // let the reload feature flag request know to send this previous distinct id
             // for flag consistency
             this.featureFlags.setAnonymousDistinctId(previous_distinct_id)
