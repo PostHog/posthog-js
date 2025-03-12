@@ -815,7 +815,7 @@ describe('person processing', () => {
     })
 
     describe('property calls deduplication', () => {
-        it('should dedupe identical consecutive calls to setPersonProperties', async () => {
+        it('should deduplicate identical consecutive calls to setPersonProperties', async () => {
             const { posthog, beforeSendMock } = await setup('always')
 
             posthog.setPersonProperties({ email: 'john@example.com' })
@@ -833,7 +833,7 @@ describe('person processing', () => {
             )
         })
 
-        it('should not dedupe when properties are different', async () => {
+        it('should not deduplicate when properties are different', async () => {
             const { posthog, beforeSendMock } = await setup('always')
 
             posthog.setPersonProperties({ email: 'john@example.com' })
@@ -842,7 +842,7 @@ describe('person processing', () => {
             expect(beforeSendMock).toHaveBeenCalledTimes(2)
         })
 
-        it('should not dedupe when set_once properties are different', async () => {
+        it('should not deduplicate when set_once properties are different', async () => {
             const { posthog, beforeSendMock } = await setup('always')
 
             posthog.setPersonProperties({ email: 'john@example.com' }, { first_seen: 'today' })
@@ -851,7 +851,7 @@ describe('person processing', () => {
             expect(beforeSendMock).toHaveBeenCalledTimes(2)
         })
 
-        it('does not dedupe when properties are in different order but identical', async () => {
+        it('does not deduplicate when properties are in different order but identical', async () => {
             const { posthog, beforeSendMock } = await setup('always')
 
             posthog.setPersonProperties({ name: 'John', email: 'john@example.com' })
@@ -870,7 +870,7 @@ describe('person processing', () => {
             expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('duplicate'))
         })
 
-        it('should not dedupe after distinct_id changes', async () => {
+        it('should not deduplicate after distinct_id changes', async () => {
             const { posthog, beforeSendMock } = await setup('always')
 
             posthog.setPersonProperties({ email: 'john@example.com' })
@@ -879,11 +879,12 @@ describe('person processing', () => {
 
             posthog.setPersonProperties({ email: 'john@example.com' })
 
-            // 1 for setPersonProperties, 1 for identify, 1 for second setPersonProperties
-            expect(beforeSendMock).toHaveBeenCalledTimes(3)
+            const calls = beforeSendMock.mock.calls
+            expect(calls.filter((call) => call[0].event === '$set').length).toEqual(2)
+            expect(calls.filter((call) => call[0].event === '$identify').length).toEqual(1)
         })
 
-        it('should dedupe when using people.set with identical properties', async () => {
+        it('should deduplicate when using people.set with identical properties', async () => {
             const { posthog, beforeSendMock } = await setup('always')
 
             posthog.people.set({ email: 'john@example.com' })
@@ -892,7 +893,7 @@ describe('person processing', () => {
             expect(beforeSendMock).toHaveBeenCalledTimes(1)
         })
 
-        it('should dedupe when mixing people.set and setPersonProperties with identical properties', async () => {
+        it('should deduplicate when mixing people.set and setPersonProperties with identical properties', async () => {
             const { posthog, beforeSendMock } = await setup('always')
 
             posthog.people.set({ email: 'john@example.com' })
@@ -901,7 +902,7 @@ describe('person processing', () => {
             expect(beforeSendMock).toHaveBeenCalledTimes(1)
         })
 
-        it('should dedupe when using people.set_once with identical properties', async () => {
+        it('should deduplicate when using people.set_once with identical properties', async () => {
             const { posthog, beforeSendMock } = await setup('always')
 
             posthog.people.set_once({ first_seen: 'today' })
@@ -910,7 +911,7 @@ describe('person processing', () => {
             expect(beforeSendMock).toHaveBeenCalledTimes(1)
         })
 
-        it('should not dedupe when mixing set and set_once with same properties', async () => {
+        it('should not deduplicate when mixing set and set_once with same properties', async () => {
             const { posthog, beforeSendMock } = await setup('always')
 
             posthog.people.set({ email: 'john@example.com' })
@@ -927,6 +928,52 @@ describe('person processing', () => {
             posthog.setPersonProperties({ email: 'john@example.com' })
 
             expect(beforeSendMock).toHaveBeenCalledTimes(2)
+        })
+
+        it('should deduplicate a setPersonProperties call after identify()', async () => {
+            const { posthog, beforeSendMock } = await setup('always')
+
+            posthog.identify('new-id', { email: 'john@example.com' }, { first_seen: 'today' })
+            posthog.setPersonProperties({ email: 'john@example.com' }, { first_seen: 'today' })
+
+            expect(beforeSendMock).toHaveBeenCalledTimes(1)
+            const calls = beforeSendMock.mock.calls
+            expect(calls.filter((call) => call[0].event === '$identify').length).toEqual(1)
+        })
+
+        it('should not deduplicate a setPersonProperties call after identify() if the $set properties are different', async () => {
+            const { posthog, beforeSendMock } = await setup('always')
+
+            posthog.identify('new-id', { email: 'john@example.com' }, { first_seen: 'today' })
+            posthog.setPersonProperties({ email: 'jane@example.com' }, { first_seen: 'today' })
+
+            const calls = beforeSendMock.mock.calls
+            expect(calls.filter((call) => call[0].event === '$identify').length).toEqual(1)
+            expect(calls.filter((call) => call[0].event === '$set').length).toEqual(1)
+        })
+
+        it('should not deduplicate a setPersonProperties call after identify() if the $set_onceproperties are different', async () => {
+            const { posthog, beforeSendMock } = await setup('always')
+
+            posthog.identify('new-id', { email: 'john@example.com' }, { first_seen: 'today' })
+            posthog.setPersonProperties({ email: 'john@example.com' }, { first_seen: 'yesterday' })
+
+            const calls = beforeSendMock.mock.calls
+            expect(calls.filter((call) => call[0].event === '$identify').length).toEqual(1)
+            expect(calls.filter((call) => call[0].event === '$set').length).toEqual(1)
+        })
+
+        it('should not deduplicate a call after an identity change', async () => {
+            const { posthog, beforeSendMock } = await setup('always')
+
+            posthog.setPersonProperties({ email: 'john@example.com' })
+            posthog.identify('new-id')
+            posthog.setPersonProperties({ email: 'john@example.com' })
+
+            const calls = beforeSendMock.mock.calls
+
+            expect(calls.filter((call) => call[0].event === '$identify').length).toEqual(1)
+            expect(calls.filter((call) => call[0].event === '$set').length).toEqual(2)
         })
     })
 })
