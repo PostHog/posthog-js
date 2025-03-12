@@ -171,6 +171,11 @@ test.describe('surveys - core display logic', () => {
         expect(surveySent!.properties['$survey_id']).toEqual('12345')
         expect(surveySent!.properties[getSurveyResponseKey('open_text_1')]).toEqual('Great job!')
         expect(surveySent!.properties[getSurveyResponseKey('nps_rating_1')]).toBeNull()
+        expect(surveySent!.properties['$survey_question_index_to_id']).toEqual({
+            0: getSurveyResponseKey('multiple_choice_1'),
+            1: getSurveyResponseKey('open_text_1'),
+            2: getSurveyResponseKey('nps_rating_1'),
+        })
     })
 
     test('multiple choice questions with open choice', async ({ page, context }) => {
@@ -211,6 +216,9 @@ test.describe('surveys - core display logic', () => {
         ])
         const surveySent = captures.find((c) => c.event === 'survey sent')
         expect(surveySent!.properties[getSurveyResponseKey('multiple_choice_1')]).toEqual(['Tutorials', 'Newsletters'])
+        expect(surveySent!.properties['$survey_question_index_to_id']).toEqual({
+            0: getSurveyResponseKey('multiple_choice_1'),
+        })
     })
 
     test('single choice questions with open choice', async ({ page, context }) => {
@@ -257,5 +265,8 @@ test.describe('surveys - core display logic', () => {
         ])
         const surveySent = captures.find((c) => c.event === 'survey sent')
         expect(surveySent!.properties[getSurveyResponseKey('single_choice_1')]).toEqual('Product engineer')
+        expect(surveySent!.properties['$survey_question_index_to_id']).toEqual({
+            0: getSurveyResponseKey('single_choice_1'),
+        })
     })
 })
