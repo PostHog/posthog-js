@@ -23,6 +23,9 @@ Commands to test sourcemap upload:
 // Generate build artifacts and use posthog-cli to inject snippets into sources and sourcemaps
 VITE_POSTHOG_KEY='<your-project-key>' VITE_POSTHOG_HOST='http://localhost:8010' pnpm run build
 
+// For NextJS based app use
+NEXT_PUBLIC_POSTHOG_KEY='<your-project-key>' NEXT_PUBLIC_HOST='http://localhost:8010' pnpm run build
+
 // Use posthog-cli to inject snippets into sources and sourcemaps
 pnpm run inject
 
