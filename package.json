@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.230.0",
+    "version": "1.230.2",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "hey@posthog.com",
@@ -13,7 +13,8 @@
         "build-react": "cd react; NODE_ENV=dev pnpm i; pnpm build;",
         "lint": "eslint src && eslint playwright",
         "lint:fix": "eslint src --fix && eslint playwright --fix",
-        "prettier": "prettier --write src/ functional_tests/",
+        "prettier": "prettier --write src/ functional_tests/ playwright/",
+        "prettier:check": "prettier --check src/ functional_tests/ playwright/",
         "prepublishOnly": "pnpm lint && pnpm build && pnpm test && pnpm test:react",
         "test": "pnpm test:unit && pnpm test:custom-eslint-rules && pnpm test:functional",
         "test:unit": "jest src",
@@ -135,7 +136,8 @@
         "*.js": "eslint --cache --fix",
         "*.{ts,tsx}": [
             "eslint src --fix",
-            "eslint playwright --fix"
+            "eslint playwright --fix",
+            "prettier --write"
         ]
     },
     "browserslist": [
