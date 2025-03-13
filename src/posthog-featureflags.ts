@@ -23,7 +23,7 @@ import {
     FLAG_CALL_REPORTED,
 } from './constants'
 
-import { isArray } from './utils/type-utils'
+import { isArray, isUndefined } from './utils/type-utils'
 import { createLogger } from './utils/logger'
 
 const logger = createLogger('[FeatureFlags]')
@@ -196,16 +196,47 @@ export class PostHogFeatureFlags {
     getFlagsWithDetails(): Record<string, FeatureFlagDetail> {
         const flagDetails = this.instance.get_property(PERSISTENCE_FEATURE_FLAG_DETAILS)
 
+        const overridenFlags = this.instance.get_property(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
         const overriddenPayloads = this.instance.get_property(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
 
-        if (!overriddenPayloads) {
+        if (!overriddenPayloads && !overridenFlags) {
             return flagDetails || {}
         }
 
         const finalDetails = extend({}, flagDetails || {})
-        const overriddenKeys = Object.keys(overriddenPayloads)
-        for (let i = 0; i < overriddenKeys.length; i++) {
-            finalDetails[overriddenKeys[i]] = overriddenPayloads[overriddenKeys[i]]
+        const overriddenKeys = [
+            ...new Set([...Object.keys(overriddenPayloads || {}), ...Object.keys(overridenFlags || {})]),
+        ]
+        for (const key of overriddenKeys) {
+            const originalDetail = finalDetails[key]
+            const overrideFlagValue = overridenFlags?.[key]
+
+            const finalEnabled = isUndefined(overrideFlagValue) ? originalDetail.enabled : !!overrideFlagValue
+
+            const overrideVariant = isUndefined(overrideFlagValue)
+                ? originalDetail.variant
+                : typeof overrideFlagValue === 'string'
+                  ? overrideFlagValue
+                  : undefined
+
+            const overridePayload = overriddenPayloads?.[key]
+
+            const overridenDetail = {
+                ...originalDetail,
+                enabled: finalEnabled,
+                // If the flag is not enabled, the variant should be undefined, even if the original has a variant value.
+                variant: finalEnabled ? (overrideVariant ?? originalDetail?.variant) : undefined,
+            }
+
+            if (overridePayload) {
+                overridenDetail.metadata = {
+                    ...originalDetail?.metadata,
+                    payload: overridePayload,
+                    original_payload: originalDetail?.metadata?.payload,
+                }
+            }
+
+            finalDetails[key] = overridenDetail
         }
 
         if (!this._override_warning) {
