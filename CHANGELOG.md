@@ -1,3 +1,8 @@
+## 1.230.4 - 2025-03-13
+
+- chore: allow push to main in GH actions (#1825)
+- chore: add new question index to id map (#1812)
+
 ## 1.230.3 - 2025-03-13
 
 This version doesn't exist but we did fail to publish it, since then patch version bump has been failing
