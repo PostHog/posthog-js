@@ -116,7 +116,7 @@ function shouldRecordHeaders(type: 'request' | 'response', recordHeaders: Networ
     return !!recordHeaders && (isBoolean(recordHeaders) || recordHeaders[type])
 }
 
-function shouldRecordBody({
+export function shouldRecordBody({
     type,
     recordBody,
     headers,

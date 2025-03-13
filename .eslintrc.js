@@ -78,6 +78,7 @@ module.exports = {
                 ...rules,
                 'no-console': 'off',
                 'no-restricted-globals': 'off',
+                'compat/compat': 'off', // Explicitly disable compat/compat rules
             },
         },
         {

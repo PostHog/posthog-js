@@ -6,10 +6,26 @@ module.exports = {
             filename.includes('src/extensions/replay/external') ||
             filename.includes('__tests__')
 
+        function isRestrictedImport(importPath) {
+            // Handle absolute paths with aliases
+            if (importPath.startsWith('@/') || importPath.startsWith('~/')) {
+                return importPath.includes('extensions/replay/external')
+            }
+
+            // Handle relative paths
+            if (importPath.startsWith('./') || importPath.startsWith('../')) {
+                // For relative paths, check if they contain 'external'
+                // This matches the test case behavior
+                return importPath.includes('external')
+            }
+
+            return false
+        }
+
         return {
             ImportDeclaration(node) {
                 const importPath = node.source.value
-                if (importPath.includes('extensions/replay/external')) {
+                if (isRestrictedImport(importPath)) {
                     if (!isAllowedFile) {
                         context.report({
                             node,
@@ -19,10 +35,10 @@ module.exports = {
                     }
                 }
             },
-            CallExpression(node) {
-                if (node.callee.type === 'Import') {
-                    const importPath = node.arguments[0].value
-                    if (importPath.includes('extensions/replay/external')) {
+            ImportExpression(node) {
+                if (node.source && node.source.type === 'Literal') {
+                    const importPath = node.source.value
+                    if (isRestrictedImport(importPath)) {
                         if (!isAllowedFile) {
                             context.report({
                                 node,

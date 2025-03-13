@@ -3,7 +3,7 @@ const { RuleTester } = require('eslint')
 
 const ruleTester = new RuleTester({
     parserOptions: {
-        ecmaVersion: 2015,
+        ecmaVersion: 2020,
         sourceType: 'module',
     },
     env: {
@@ -80,7 +80,7 @@ ruleTester.run('no-external-replay-imports', noExternalReplayImports, {
         },
         // Disallowed dynamic import
         {
-            code: "import('./external/denylist')",
+            code: "import('./external/denylist').then(module => {})",
             filename: '/project/src/utils/something.ts',
             errors: [
                 {
