@@ -398,7 +398,7 @@ export class SessionRecording {
 
         return !isUndefined(maskAllInputs) || !isUndefined(maskTextSelector)
             ? {
-                  maskAllInputs,
+                  maskAllInputs: maskAllInputs ?? true,
                   maskTextSelector,
               }
             : undefined
