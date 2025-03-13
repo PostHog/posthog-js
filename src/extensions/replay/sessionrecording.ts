@@ -962,7 +962,7 @@ export class SessionRecording {
         }
 
         if (this.masking) {
-            sessionRecordingOptions.maskAllInputs = this.masking.maskAllInputs
+            sessionRecordingOptions.maskAllInputs = this.masking.maskAllInputs ?? true
             sessionRecordingOptions.maskTextSelector = this.masking.maskTextSelector ?? undefined
         }
 
