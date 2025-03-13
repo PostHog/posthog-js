@@ -12,6 +12,7 @@ const rules = {
     'no-empty': 'off',
     'no-console': 'error',
     'no-only-tests/no-only-tests': 'error',
+    'posthog-js/no-external-replay-imports': 'error',
 }
 
 const extend = [
