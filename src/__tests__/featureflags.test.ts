@@ -93,7 +93,7 @@ describe('featureflags', () => {
                     },
                     metadata: {
                         version: 4,
-                        payload: '{"payload": "test"}',
+                        payload: { payload: 'test' },
                         id: 1,
                         description: 'test-description',
                     },
@@ -115,7 +115,7 @@ describe('featureflags', () => {
                 },
                 metadata: {
                     version: 4,
-                    payload: '{"payload": "test"}',
+                    payload: { payload: 'test' },
                     id: 1,
                     description: 'test-description',
                 },
@@ -379,7 +379,9 @@ describe('featureflags', () => {
                 expect(featureFlags.getFeatureFlagDetails('beta-feature')).toEqual({
                     key: 'beta-feature',
                     enabled: false,
+                    original_enabled: true,
                     variant: undefined,
+                    original_variant: 'beta-variant-1',
                     reason: {
                         code: 'test-reason',
                         condition_index: 1,
@@ -409,6 +411,7 @@ describe('featureflags', () => {
                 expect(featureFlags.getFeatureFlagDetails('alpha-feature-2')).toEqual({
                     key: 'alpha-feature-2',
                     enabled: false,
+                    original_enabled: true,
                     variant: undefined,
                     reason: undefined,
                     metadata: { payload: 200 },
@@ -468,7 +471,7 @@ describe('featureflags', () => {
                             },
                             metadata: {
                                 version: 4,
-                                payload: '{"payload": "test"}',
+                                payload: { payload: 'test' },
                                 id: 1,
                                 description: 'test-description',
                             },
@@ -495,7 +498,7 @@ describe('featureflags', () => {
                         metadata: {
                             version: 4,
                             payload: { data: 'overridden' },
-                            original_payload: '{"payload": "test"}',
+                            original_payload: { payload: 'test' },
                             id: 1,
                             description: 'test-description',
                         },
@@ -543,6 +546,85 @@ describe('featureflags', () => {
                     $feature_flag_bootstrapped_response: null,
                     $feature_flag_bootstrapped_payload: null,
                     $used_bootstrap_value: true,
+                })
+            })
+
+            it('includes original values in feature flag called event when details are available', () => {
+                instance.persistence.props = {
+                    $feature_flag_details: {
+                        'beta-feature': {
+                            key: 'beta-feature',
+                            enabled: false,
+                            variant: undefined,
+                            reason: undefined,
+                            metadata: {
+                                payload: { status: 'original' },
+                            },
+                        },
+                        'alpha-feature-2': {
+                            key: 'alpha-feature-2',
+                            enabled: false,
+                            variant: undefined,
+                            reason: undefined,
+                            metadata: undefined,
+                        },
+                        'multivariate-flag': {
+                            key: 'multivariate-flag',
+                            enabled: true,
+                            variant: 'multivariate-variant-1',
+                            reason: undefined,
+                            metadata: undefined,
+                        },
+                    },
+                }
+                featureFlags.overrideFeatureFlags({
+                    flags: { 'beta-feature': true, 'alpha-feature-2': 'variant-1', 'multivariate-flag': false },
+                    payloads: { 'beta-feature': { overridden: { status: 'overridden' } } },
+                })
+                featureFlags._hasLoadedFlags = true
+
+                featureFlags.getFeatureFlag('beta-feature')
+
+                expect(instance.capture).toHaveBeenCalledWith('$feature_flag_called', {
+                    $feature_flag: 'beta-feature',
+                    $feature_flag_response: true,
+                    $feature_flag_payload: { overridden: { status: 'overridden' } },
+                    $feature_flag_bootstrapped_response: null,
+                    $feature_flag_bootstrapped_payload: null,
+                    $used_bootstrap_value: true,
+                    $feature_flag_original_response: false,
+                    $feature_flag_original_payload: { status: 'original' },
+                    $feature_flag_request_id: undefined,
+                })
+
+                instance.capture.mockClear()
+
+                featureFlags.getFeatureFlag('alpha-feature-2')
+
+                expect(instance.capture).toHaveBeenCalledWith('$feature_flag_called', {
+                    $feature_flag: 'alpha-feature-2',
+                    $feature_flag_response: 'variant-1',
+                    $feature_flag_payload: null,
+                    $feature_flag_bootstrapped_response: null,
+                    $feature_flag_bootstrapped_payload: null,
+                    $used_bootstrap_value: true,
+                    $feature_flag_original_response: false,
+                    $feature_flag_request_id: undefined,
+                })
+
+                instance.capture.mockClear()
+
+                featureFlags.getFeatureFlag('multivariate-flag')
+
+                expect(instance.capture).toHaveBeenCalledWith('$feature_flag_called', {
+                    $feature_flag: 'multivariate-flag',
+                    $feature_flag_response: false,
+                    $feature_flag_payload: null,
+                    $feature_flag_bootstrapped_response: null,
+                    $feature_flag_bootstrapped_payload: null,
+                    $used_bootstrap_value: true,
+                    $feature_flag_original_response: 'multivariate-variant-1',
+                    $feature_flag_request_id: undefined,
                 })
             })
         })
@@ -1274,7 +1356,7 @@ describe('featureflags', () => {
                         key: 'beta-feature',
                         enabled: true,
                         variant: undefined,
-                        metadata: { payload: '{"some": "payload"}' },
+                        metadata: { payload: { some: 'payload' } },
                     },
                     'alpha-feature-2': {
                         key: 'alpha-feature-2',

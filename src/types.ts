@@ -1380,7 +1380,11 @@ export type FeatureFlagsCallback = (
 export type FeatureFlagDetail = {
     key: string
     enabled: boolean
+    // Only used when overriding a flag payload.
+    original_enabled?: boolean | undefined
     variant: string | undefined
+    // Only used when overriding a flag payload.
+    original_variant?: string | undefined
     reason: EvaluationReason | undefined
     metadata: FeatureFlagMetadata | undefined
 }
@@ -1390,7 +1394,8 @@ export type FeatureFlagMetadata = {
     version: number | undefined
     description: string | undefined
     payload: JsonType | undefined
-    original_payload?: JsonType | undefined // Only used when overriding a flag payload.
+    // Only used when overriding a flag payload.
+    original_payload?: JsonType | undefined
 }
 
 export type EvaluationReason = {

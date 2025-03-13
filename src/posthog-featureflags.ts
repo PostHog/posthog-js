@@ -228,6 +228,16 @@ export class PostHogFeatureFlags {
                 variant: finalEnabled ? (overrideVariant ?? originalDetail?.variant) : undefined,
             }
 
+            // Keep track of the original enabled and variant values so we can send them in the $feature_flag_called event.
+            // This will be helpful for debugging and for understanding the impact of overrides.
+            if (finalEnabled !== originalDetail?.enabled) {
+                overridenDetail.original_enabled = originalDetail?.enabled
+            }
+
+            if (overrideVariant !== originalDetail?.variant) {
+                overridenDetail.original_variant = originalDetail?.variant
+            }
+
             if (overridePayload) {
                 overridenDetail.metadata = {
                     ...originalDetail?.metadata,
@@ -439,7 +449,7 @@ export class PostHogFeatureFlags {
      *     if(posthog.getFeatureFlag('my-flag') === 'some-variant') { // do something }
      *
      * @param {Object|String} key Key of the feature flag.
-     * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
+     * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_called event to PostHog.
      */
     getFeatureFlag(key: string, options: { send_event?: boolean } = {}): boolean | string | undefined {
         if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
@@ -462,20 +472,45 @@ export class PostHogFeatureFlags {
 
                 const flagDetails = this.getFeatureFlagDetails(key)
 
-                this.instance.capture('$feature_flag_called', {
+                const properties: Record<string, any | undefined> = {
                     $feature_flag: key,
                     $feature_flag_response: flagValue,
                     $feature_flag_payload: this.getFeatureFlagPayload(key) || null,
-                    $feature_flag_version: flagDetails?.metadata?.version,
-                    $feature_flag_reason: flagDetails?.reason?.description ?? flagDetails?.reason?.code,
-                    $feature_flag_id: flagDetails?.metadata?.id,
                     $feature_flag_request_id: requestId,
                     $feature_flag_bootstrapped_response: this.instance.config.bootstrap?.featureFlags?.[key] || null,
                     $feature_flag_bootstrapped_payload:
                         this.instance.config.bootstrap?.featureFlagPayloads?.[key] || null,
                     // If we haven't yet received a response from the /decide endpoint, we must have used the bootstrapped value
                     $used_bootstrap_value: !this._flagsLoadedFromRemote,
-                })
+                }
+
+                if (flagDetails?.metadata?.version) {
+                    properties.$feature_flag_version = flagDetails.metadata.version
+                }
+
+                const reason = flagDetails?.reason?.description ?? flagDetails?.reason?.code
+                if (reason) {
+                    properties.$feature_flag_reason = reason
+                }
+
+                if (flagDetails?.metadata?.id) {
+                    properties.$feature_flag_id = flagDetails.metadata.id
+                }
+
+                // It's possible that flag values were overridden by calling overrideFeatureFlags.
+                // We want to capture the original values in case someone forgets they were using overrides
+                // and is wondering why their app is acting weird.
+                if (!isUndefined(flagDetails?.original_variant) || !isUndefined(flagDetails?.original_enabled)) {
+                    properties.$feature_flag_original_response = !isUndefined(flagDetails.original_variant)
+                        ? flagDetails.original_variant
+                        : flagDetails.original_enabled
+                }
+
+                if (flagDetails?.metadata?.original_payload) {
+                    properties.$feature_flag_original_payload = flagDetails?.metadata?.original_payload
+                }
+
+                this.instance.capture('$feature_flag_called', properties)
             }
         }
         return flagValue
