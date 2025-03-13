@@ -52,6 +52,13 @@ test.describe('surveys - feedback widget', () => {
             expect.objectContaining({
                 $survey_id: '123',
                 [getSurveyResponseKey('open_text_1')]: 'experiments is awesome!',
+                $survey_questions: [
+                    {
+                        id: 'open_text_1',
+                        question: 'What feedback do you have for us?',
+                        index: 0,
+                    },
+                ],
             })
         )
     })
@@ -103,6 +110,13 @@ test.describe('surveys - feedback widget', () => {
                 [getSurveyResponseKey('open_text_1')]: 'experiments is awesome!',
                 $survey_iteration: 2,
                 $survey_iteration_start_date: '12-12-2004',
+                $survey_questions: [
+                    {
+                        id: 'open_text_1',
+                        question: 'What feedback do you have for us?',
+                        index: 0,
+                    },
+                ],
             })
         )
     })
