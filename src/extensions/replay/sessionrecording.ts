@@ -386,20 +386,25 @@ export class SessionRecording {
             : undefined
     }
 
-    private get masking(): Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector'> | undefined {
+    private get masking():
+        | Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector' | 'blockSelector'>
+        | undefined {
         const masking_server_side = this.instance.get_property(SESSION_RECORDING_MASKING)
         const masking_client_side = {
             maskAllInputs: this.instance.config.session_recording?.maskAllInputs,
             maskTextSelector: this.instance.config.session_recording?.maskTextSelector,
+            blockSelector: this.instance.config.session_recording?.blockSelector,
         }
 
         const maskAllInputs = masking_client_side?.maskAllInputs ?? masking_server_side?.maskAllInputs
         const maskTextSelector = masking_client_side?.maskTextSelector ?? masking_server_side?.maskTextSelector
+        const blockSelector = masking_client_side?.blockSelector ?? masking_server_side?.blockSelector
 
-        return !isUndefined(maskAllInputs) || !isUndefined(maskTextSelector)
+        return !isUndefined(maskAllInputs) || !isUndefined(maskTextSelector) || !isUndefined(blockSelector)
             ? {
                   maskAllInputs: maskAllInputs ?? true,
                   maskTextSelector,
+                  blockSelector,
               }
             : undefined
     }
@@ -964,6 +969,7 @@ export class SessionRecording {
         if (this.masking) {
             sessionRecordingOptions.maskAllInputs = this.masking.maskAllInputs ?? true
             sessionRecordingOptions.maskTextSelector = this.masking.maskTextSelector ?? undefined
+            sessionRecordingOptions.blockSelector = this.masking.blockSelector ?? undefined
         }
 
         if (!this.rrwebRecord) {

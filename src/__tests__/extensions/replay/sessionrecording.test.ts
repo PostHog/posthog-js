@@ -469,18 +469,34 @@ describe('SessionRecording', () => {
                 { maskAllInputs: false, maskTextSelector: '*' },
             ],
             [
-                'mask inputs default is correct if client sets text selector    ',
+                'mask inputs default is correct if client sets text selector',
                 undefined,
                 { maskTextSelector: '*' },
                 { maskAllInputs: true, maskTextSelector: '*' },
+            ],
+            [
+                'can set blockSelector to img',
+                undefined,
+                { blockSelector: 'img' },
+                { maskAllInputs: true, maskTextSelector: undefined, blockSelector: 'img' },
+            ],
+            [
+                'can set blockSelector to some other selector',
+                undefined,
+                { blockSelector: 'div' },
+                { maskAllInputs: true, maskTextSelector: undefined, blockSelector: 'div' },
             ],
         ])(
             '%s',
             (
                 _name: string,
-                serverConfig: { maskAllInputs?: boolean; maskTextSelector?: string } | undefined,
-                clientConfig: { maskAllInputs?: boolean; maskTextSelector?: string } | undefined,
-                expected: { maskAllInputs: boolean; maskTextSelector?: string } | undefined
+                serverConfig:
+                    | { maskAllInputs?: boolean; maskTextSelector?: string; blockSelector?: string }
+                    | undefined,
+                clientConfig:
+                    | { maskAllInputs?: boolean; maskTextSelector?: string; blockSelector?: string }
+                    | undefined,
+                expected: { maskAllInputs: boolean; maskTextSelector?: string; blockSelector?: string } | undefined
             ) => {
                 posthog.persistence?.register({
                     [SESSION_RECORDING_MASKING]: serverConfig,
@@ -488,6 +504,7 @@ describe('SessionRecording', () => {
 
                 posthog.config.session_recording.maskAllInputs = clientConfig?.maskAllInputs
                 posthog.config.session_recording.maskTextSelector = clientConfig?.maskTextSelector
+                posthog.config.session_recording.blockSelector = clientConfig?.blockSelector
 
                 expect(sessionRecording['masking']).toEqual(expected)
             }
