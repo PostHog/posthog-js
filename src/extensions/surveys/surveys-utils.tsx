@@ -34,16 +34,6 @@ export function getSurveyResponseKey(questionId: string) {
     return `$survey_response_${questionId}`
 }
 
-function getSurveyIndexToIdMap(survey: Survey) {
-    return survey.questions.reduce<Record<number, string>>((acc, question, index) => {
-        if (!question.id) {
-            return acc
-        }
-        acc[index] = getSurveyResponseKey(question.id)
-        return acc
-    }, {})
-}
-
 export const style = (appearance: SurveyAppearance | null) => {
     const positions = {
         left: 'left: 30px;',
@@ -589,9 +579,12 @@ export const sendSurveyEvent = (
         $survey_id: survey.id,
         $survey_iteration: survey.current_iteration,
         $survey_iteration_start_date: survey.current_iteration_start_date,
-        $survey_questions: survey.questions.map((question) => question.question),
+        $survey_questions: survey.questions.map((question, index) => ({
+            id: question.id,
+            question: question.question,
+            index,
+        })),
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
-        $survey_question_index_to_id: getSurveyIndexToIdMap(survey),
         ...responses,
         $set: {
             [getSurveyInteractionProperty(survey, 'responded')]: true,
