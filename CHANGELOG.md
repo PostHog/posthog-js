@@ -1,3 +1,8 @@
+## 1.230.3 - 2025-03-13
+
+This version doesn't exist but we did fail to publish it, since then patch version bump has been failing
+We have skipped this version
+
 ## 1.230.2 - 2025-03-11
 
 - fix: simple loader race protection (#1804)
