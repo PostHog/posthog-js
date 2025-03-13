@@ -5,8 +5,10 @@
 
 ## 1.230.3 - 2025-03-13
 
-This version doesn't exist but we did fail to publish it, since then patch version bump has been failing
-We have skipped this version
+- fix: session recording class type and typo (#1815)
+- chore: update web vitals (#1820)
+- fix: default mask all inputs must be defined (#1819)
+- fix(err): fix hosts, linting and documentation (#1818)
 
 ## 1.230.2 - 2025-03-11
 
