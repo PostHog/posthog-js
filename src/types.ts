@@ -1390,6 +1390,7 @@ export type FeatureFlagMetadata = {
     version: number | undefined
     description: string | undefined
     payload: JsonType | undefined
+    original_payload?: JsonType | undefined // Only used when overriding a flag payload.
 }
 
 export type EvaluationReason = {

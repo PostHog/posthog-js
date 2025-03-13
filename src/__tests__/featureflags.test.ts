@@ -345,6 +345,76 @@ describe('featureflags', () => {
                 })
             })
 
+            it('supports basic flag details overrides with warning behavior', () => {
+                instance.persistence.props = {
+                    $feature_flag_details: {
+                        'beta-feature': {
+                            key: 'beta-feature',
+                            enabled: true,
+                            variant: 'beta-variant-1',
+                            reason: {
+                                code: 'test-reason',
+                                condition_index: 1,
+                                description: undefined,
+                            },
+                            metadata: undefined,
+                        },
+                        'alpha-feature-2': {
+                            key: 'alpha-feature-2',
+                            enabled: true,
+                            variant: undefined,
+                            reason: undefined,
+                            metadata: { payload: 200 },
+                        },
+                    },
+                }
+
+                // Test default warning behavior
+                featureFlags.overrideFeatureFlags({
+                    flags: {
+                        'beta-feature': false,
+                    },
+                })
+
+                expect(featureFlags.getFeatureFlagDetails('beta-feature')).toEqual({
+                    key: 'beta-feature',
+                    enabled: false,
+                    variant: undefined,
+                    reason: {
+                        code: 'test-reason',
+                        condition_index: 1,
+                        description: undefined,
+                    },
+                    metadata: undefined,
+                })
+                expect(window.console.warn).toHaveBeenCalledWith(
+                    '[PostHog.js] [FeatureFlags]',
+                    ' Overriding feature flags!',
+                    expect.any(Object)
+                )
+
+                // Test suppressed warning behavior
+                mockWarn.mockClear()
+                featureFlags.overrideFeatureFlags({
+                    flags: {
+                        'alpha-feature-2': false,
+                    },
+                    suppressWarning: true,
+                })
+
+                expect(window.console.warn).not.toHaveBeenCalledWith(
+                    '[PostHog.js] [FeatureFlags]',
+                    ' Overriding feature flags!'
+                )
+                expect(featureFlags.getFeatureFlagDetails('alpha-feature-2')).toEqual({
+                    key: 'alpha-feature-2',
+                    enabled: false,
+                    variant: undefined,
+                    reason: undefined,
+                    metadata: { payload: 200 },
+                })
+            })
+
             it('supports payload overrides', () => {
                 // Test with warning suppressed
                 featureFlags.overrideFeatureFlags({
@@ -382,6 +452,55 @@ describe('featureflags', () => {
                     ' Overriding feature flag payloads!',
                     expect.any(Object)
                 )
+            })
+
+            it('supports payload overrides with details', () => {
+                instance.persistence.props = {
+                    $feature_flag_details: {
+                        'beta-feature': {
+                            key: 'beta-feature',
+                            enabled: true,
+                            variant: 'beta-variant-1',
+                            reason: {
+                                code: 'test-reason',
+                                condition_index: 1,
+                                description: undefined,
+                            },
+                            metadata: {
+                                version: 4,
+                                payload: '{"payload": "test"}',
+                                id: 1,
+                                description: 'test-description',
+                            },
+                        },
+                    },
+                }
+
+                featureFlags.overrideFeatureFlags({
+                    payloads: {
+                        'beta-feature': { data: 'overridden' },
+                    },
+                })
+
+                expect(featureFlags.getFlagsWithDetails()).toEqual({
+                    'beta-feature': {
+                        key: 'beta-feature',
+                        enabled: true,
+                        variant: 'beta-variant-1',
+                        reason: {
+                            code: 'test-reason',
+                            condition_index: 1,
+                            description: undefined,
+                        },
+                        metadata: {
+                            version: 4,
+                            payload: { data: 'overridden' },
+                            original_payload: '{"payload": "test"}',
+                            id: 1,
+                            description: 'test-description',
+                        },
+                    },
+                })
             })
 
             it('clears overrides when passed false', () => {
