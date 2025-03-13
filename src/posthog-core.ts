@@ -41,6 +41,7 @@ import {
     CaptureResult,
     Compression,
     EarlyAccessFeatureCallback,
+    EarlyAccessFeatureStage,
     EventName,
     FeatureFlagsCallback,
     JsonType,
@@ -1275,8 +1276,12 @@ export class PostHog {
     }
 
     /** Get the list of early access features. To check enrollment status, use `isFeatureEnabled`. */
-    getEarlyAccessFeatures(callback: EarlyAccessFeatureCallback, force_reload = false): void {
-        return this.featureFlags.getEarlyAccessFeatures(callback, force_reload)
+    getEarlyAccessFeatures(
+        callback: EarlyAccessFeatureCallback,
+        force_reload = false,
+        stages?: EarlyAccessFeatureStage[]
+    ): void {
+        return this.featureFlags.getEarlyAccessFeatures(callback, force_reload, stages)
     }
 
     /**
@@ -1875,7 +1880,11 @@ export class PostHog {
                   $exception_list: [
                       {
                           type: isError(error) ? error.name : 'Error',
-                          value: isError(error) ? error.message : error,
+                          value: isError(error)
+                              ? error.message
+                              : isObject(error) && 'message' in error
+                                ? String(error.message)
+                                : String(error),
                           mechanism: {
                               handled: true,
                               synthetic: false,

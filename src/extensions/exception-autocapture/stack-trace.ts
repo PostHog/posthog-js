@@ -250,7 +250,6 @@ export function createStackParser(...parsers: StackLineParser[]): StackParser {
 
             for (const parser of sortedParsers) {
                 const frame = parser(cleanedLine)
-
                 if (frame) {
                     frames.push(frame)
                     break

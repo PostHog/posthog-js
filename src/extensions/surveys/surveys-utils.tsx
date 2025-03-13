@@ -30,6 +30,10 @@ export function getFontFamily(fontFamily?: string): string {
     return fontFamily ? `${fontFamily}, ${defaultFontStack}` : `-apple-system, ${defaultFontStack}`
 }
 
+export function getSurveyResponseKey(questionId: string) {
+    return `$survey_response_${questionId}`
+}
+
 export const style = (appearance: SurveyAppearance | null) => {
     const positions = {
         left: 'left: 30px;',
@@ -73,7 +77,7 @@ export const style = (appearance: SurveyAppearance | null) => {
           }
 
           .form-submit[disabled] {
-              opacity: 0.6;
+              opacity: ${appearance?.disabledButtonOpacity || '0.6'};
               filter: grayscale(50%);
               cursor: not-allowed;
           }
@@ -575,7 +579,11 @@ export const sendSurveyEvent = (
         $survey_id: survey.id,
         $survey_iteration: survey.current_iteration,
         $survey_iteration_start_date: survey.current_iteration_start_date,
-        $survey_questions: survey.questions.map((question) => question.question),
+        $survey_questions: survey.questions.map((question, index) => ({
+            id: question.id,
+            question: question.question,
+            index,
+        })),
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
         ...responses,
         $set: {
@@ -648,11 +656,6 @@ export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string
 }
 
 export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
-    // retain the original questionIndex so we can correlate values in the webapp
-    survey.questions.forEach((question, idx) => {
-        question.originalQuestionIndex = idx
-    })
-
     if (!survey.appearance || !survey.appearance.shuffleQuestions) {
         return survey.questions
     }

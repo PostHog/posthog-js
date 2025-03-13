@@ -56,12 +56,15 @@ test.describe('Session Recording - opting out', () => {
     test('can start recording after starting opted out', async ({ page, context }) => {
         await startWith({ opt_out_capturing_by_default: true }, page, context)
 
-        await page.waitingForNetworkCausedBy(['**/recorder.js*'], async () => {
-            await page.evaluate(() => {
-                const ph = (window as WindowWithPostHog).posthog
-                ph?.opt_in_capturing()
-                ph?.startSessionRecording()
-            })
+        await page.waitingForNetworkCausedBy({
+            urlPatternsToWaitFor: ['**/recorder.js*'],
+            action: async () => {
+                await page.evaluate(() => {
+                    const ph = (window as WindowWithPostHog).posthog
+                    ph?.opt_in_capturing()
+                    ph?.startSessionRecording()
+                })
+            },
         })
 
         await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
@@ -76,12 +79,15 @@ test.describe('Session Recording - opting out', () => {
     test('can start recording when starting disabled', async ({ page, context }) => {
         await startWith({ disable_session_recording: true }, page, context)
 
-        await page.waitingForNetworkCausedBy(['**/recorder.js*'], async () => {
-            await page.resetCapturedEvents()
-            await page.evaluate(() => {
-                const ph = (window as WindowWithPostHog).posthog
-                ph?.startSessionRecording()
-            })
+        await page.waitingForNetworkCausedBy({
+            urlPatternsToWaitFor: ['**/recorder.js*'],
+            action: async () => {
+                await page.resetCapturedEvents()
+                await page.evaluate(() => {
+                    const ph = (window as WindowWithPostHog).posthog
+                    ph?.startSessionRecording()
+                })
+            },
         })
 
         await page.locator('[data-cy-input]').type('hello posthog!')
