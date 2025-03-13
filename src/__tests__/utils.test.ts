@@ -13,7 +13,7 @@ import { isLikelyBot, DEFAULT_BLOCKED_UA_STRS, isBlockedUA, NavigatorUAData } fr
 import { expect } from '@jest/globals'
 
 import { _base64Encode } from '../utils/encode-utils'
-import { getPersonPropertiesHash } from '../utils/identify-utils'
+import { getPersonPropertiesHash } from '../utils/person-property-utils'
 
 function userAgentFor(botString: string) {
     const randOne = (Math.random() + 1).toString(36).substring(7)

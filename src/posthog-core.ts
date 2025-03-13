@@ -67,7 +67,7 @@ import {
 import { isLikelyBot } from './utils/blocked-uas'
 import { Info } from './utils/event-utils'
 import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
-import { getPersonPropertiesHash } from './utils/identify-utils'
+import { getPersonPropertiesHash } from './utils/person-property-utils'
 import { logger } from './utils/logger'
 import { RequestRouter, RequestRouterRegion } from './utils/request-router'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
@@ -1476,7 +1476,6 @@ export class PostHog {
                 userPropertiesToSetOnce
             )
 
-            logger.info('this._cachedPersonProperties', this._cachedPersonProperties)
             // let the reload feature flag request know to send this previous distinct id
             // for flag consistency
             this.featureFlags.setAnonymousDistinctId(previous_distinct_id)
