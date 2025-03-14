@@ -1623,7 +1623,11 @@ describe('featureflags', () => {
                     $feature_flag_response: 'variant-1',
                     $feature_flag_request_id: TEST_REQUEST_ID,
                     $feature_flag_version: 42,
-                    $feature_flag_reason: 'test-reason',
+                    $feature_flag_reason: {
+                        description: 'test-reason',
+                        code: 'test-code',
+                        condition_index: 1,
+                    },
                     $feature_flag_id: 23,
                 })
             )
