@@ -17,6 +17,7 @@ import { PostHogPersistence } from './posthog-persistence'
 
 import {
     PERSISTENCE_EARLY_ACCESS_FEATURES,
+    PERSISTENCE_FEATURE_FLAG_DETAILS,
     ENABLED_FEATURE_FLAGS,
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
@@ -31,7 +32,6 @@ const logger = createLogger('[FeatureFlags]')
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
 const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
-const PERSISTENCE_FEATURE_FLAG_DETAILS = '$feature_flag_details'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_flag_payloads'
 const PERSISTENCE_FEATURE_FLAG_REQUEST_ID = '$feature_flag_request_id'
 
