@@ -32,6 +32,7 @@ export const SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION = '$session_recor
 export const SESSION_RECORDING_EVENT_TRIGGER_STATUS = '$session_recording_event_trigger_status'
 export const ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
 export const PERSISTENCE_EARLY_ACCESS_FEATURES = '$early_access_features'
+export const PERSISTENCE_FEATURE_FLAG_DETAILS = '$feature_flag_details'
 export const STORED_PERSON_PROPERTIES_KEY = '$stored_person_properties'
 export const STORED_GROUP_PROPERTIES_KEY = '$stored_group_properties'
 export const SURVEYS = '$surveys'
@@ -71,6 +72,7 @@ export const PERSISTENCE_RESERVED_PROPERTIES = [
     ENABLED_FEATURE_FLAGS,
     USER_STATE,
     PERSISTENCE_EARLY_ACCESS_FEATURES,
+    PERSISTENCE_FEATURE_FLAG_DETAILS,
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
     SURVEYS,

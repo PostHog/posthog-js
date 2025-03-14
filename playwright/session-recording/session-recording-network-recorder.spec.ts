@@ -134,7 +134,7 @@ test.beforeEach(async ({ context }) => {
                               // webkit isn't capturing this failed request in the pre-wrapped fetch performance observer records
                               // [/https:\/\/localhost:\d+\/array\/test%20token\/config.js/, 'script'],
                               [
-                                  /https:\/\/localhost:\d+\/decide\/\?v=3&ip=1&_=\d+&ver=1\.\d\d\d\.\d+&compression=base64/,
+                                  /https:\/\/localhost:\d+\/decide\/\?v=4&ip=1&_=\d+&ver=1\.\d\d\d\.\d+&compression=base64/,
                                   'fetch',
                               ],
                               // webkit isn't capturing this failed request in the pre-wrapped fetch performance observer records
@@ -158,7 +158,7 @@ test.beforeEach(async ({ context }) => {
                               [/https:\/\/localhost:\d+\/static\/array.js/, 'script'],
                               [/https:\/\/localhost:\d+\/array\/test%20token\/config.js/, 'script'],
                               [
-                                  /https:\/\/localhost:\d+\/decide\/\?v=3&ip=1&_=\d+&ver=1\.\d\d\d\.\d+&compression=base64/,
+                                  /https:\/\/localhost:\d+\/decide\/\?v=4&ip=1&_=\d+&ver=1\.\d\d\d\.\d+&compression=base64/,
                                   'fetch',
                               ],
                               [
