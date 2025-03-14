@@ -1877,7 +1877,7 @@ describe('parseFeatureFlagDecideResponse', () => {
                     enabled: false,
                     variant: undefined,
                     reason: {
-                        code: 'no_maching_condition',
+                        code: 'no_matching_condition',
                         condition_index: undefined,
                         description: undefined,
                     },
