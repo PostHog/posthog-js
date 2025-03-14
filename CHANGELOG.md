@@ -1,3 +1,9 @@
+## 1.231.0 - 2025-03-14
+
+- feat: no recording blob urls (#1768)
+- chore: update changelog (#1824)
+- feat: remote image masking (#1826)
+
 ## 1.230.4 - 2025-03-13
 
 - chore: allow push to main in GH actions (#1825)
