@@ -13,6 +13,7 @@ import { isLikelyBot, DEFAULT_BLOCKED_UA_STRS, isBlockedUA, NavigatorUAData } fr
 import { expect } from '@jest/globals'
 
 import { _base64Encode } from '../utils/encode-utils'
+import { getPersonPropertiesHash } from '../utils/person-property-utils'
 
 function userAgentFor(botString: string) {
     const randOne = (Math.random() + 1).toString(36).substring(7)
@@ -312,6 +313,103 @@ describe('utils', () => {
             const input = ''
             const expectedOutput = '' // Base64 encoded string of an empty string is an empty string
             expect(_base64Encode(input)).toBe(expectedOutput)
+        })
+    })
+
+    describe('getPersonPropertiesHash', () => {
+        it('returns a string hash with only distinct_id', () => {
+            const hash = getPersonPropertiesHash('user123')
+            expect(typeof hash).toBe('string')
+            expect(hash).toContain('user123')
+        })
+
+        it('returns the same hash for the same inputs', () => {
+            const distinct_id = 'user123'
+            const userPropertiesToSet = { name: 'John Doe', email: 'john@example.com' }
+            const userPropertiesToSetOnce = { first_seen: '2023-01-01' }
+
+            const hash1 = getPersonPropertiesHash(distinct_id, userPropertiesToSet, userPropertiesToSetOnce)
+            const hash2 = getPersonPropertiesHash(distinct_id, userPropertiesToSet, userPropertiesToSetOnce)
+
+            expect(hash1).toBe(hash2)
+        })
+
+        it('returns different hashes for different distinct_ids', () => {
+            const props = { name: 'John Doe' }
+            const hash1 = getPersonPropertiesHash('user1', props)
+            const hash2 = getPersonPropertiesHash('user2', props)
+
+            expect(hash1).not.toBe(hash2)
+        })
+
+        it('returns different hashes for different userPropertiesToSet', () => {
+            const distinct_id = 'user123'
+            const hash1 = getPersonPropertiesHash(distinct_id, { name: 'John' })
+            const hash2 = getPersonPropertiesHash(distinct_id, { name: 'Jane' })
+
+            expect(hash1).not.toBe(hash2)
+        })
+
+        it('returns different hashes for different userPropertiesToSetOnce', () => {
+            const distinct_id = 'user123'
+            const hash1 = getPersonPropertiesHash(distinct_id, undefined, { first_seen: '2023-01-01' })
+            const hash2 = getPersonPropertiesHash(distinct_id, undefined, { first_seen: '2023-02-01' })
+
+            expect(hash1).not.toBe(hash2)
+        })
+
+        it('includes all parameters in the hash', () => {
+            const distinct_id = 'user123'
+            const userPropertiesToSet = { name: 'John Doe' }
+            const userPropertiesToSetOnce = { first_seen: '2023-01-01' }
+
+            const hash = getPersonPropertiesHash(distinct_id, userPropertiesToSet, userPropertiesToSetOnce)
+
+            expect(hash).toContain('user123')
+            expect(hash).toContain('John Doe')
+            expect(hash).toContain('2023-01-01')
+        })
+
+        it('handles undefined userPropertiesToSet', () => {
+            const distinct_id = 'user123'
+            const userPropertiesToSetOnce = { first_seen: '2023-01-01' }
+
+            const hash = getPersonPropertiesHash(distinct_id, undefined, userPropertiesToSetOnce)
+
+            expect(hash).toContain('user123')
+            expect(hash).toContain('2023-01-01')
+            expect(hash).not.toContain('undefined')
+        })
+
+        it('handles undefined userPropertiesToSetOnce', () => {
+            const distinct_id = 'user123'
+            const userPropertiesToSet = { name: 'John Doe' }
+
+            const hash = getPersonPropertiesHash(distinct_id, userPropertiesToSet)
+
+            expect(hash).toContain('user123')
+            expect(hash).toContain('John Doe')
+        })
+
+        it('handles complex nested properties', () => {
+            const distinct_id = 'user123'
+            const userPropertiesToSet = {
+                profile: {
+                    name: 'John Doe',
+                    contacts: ['email', 'phone'],
+                    details: {
+                        age: 30,
+                        location: 'New York',
+                    },
+                },
+            }
+
+            const hash = getPersonPropertiesHash(distinct_id, userPropertiesToSet)
+
+            expect(typeof hash).toBe('string')
+            expect(hash).toContain('user123')
+            expect(hash).toContain('John Doe')
+            expect(hash).toContain('New York')
         })
     })
 })
