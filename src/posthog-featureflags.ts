@@ -631,23 +631,23 @@ export class PostHogFeatureFlags {
      *
      * ### Usage:
      *
-     *     - posthog.feature_flags.overrideFeatureFlags(false) // clear all overrides
-     *     - posthog.feature_flags.overrideFeatureFlags(['beta-feature']) // enable flags
-     *     - posthog.feature_flags.overrideFeatureFlags({'beta-feature': 'variant'}) // set variants
-     *     - posthog.feature_flags.overrideFeatureFlags({ // set both flags and payloads
+     *     - posthog.featureFlags.overrideFeatureFlags(false) // clear all overrides
+     *     - posthog.featureFlags.overrideFeatureFlags(['beta-feature']) // enable flags
+     *     - posthog.featureFlags.overrideFeatureFlags({'beta-feature': 'variant'}) // set variants
+     *     - posthog.featureFlags.overrideFeatureFlags({ // set both flags and payloads
      *         flags: {'beta-feature': 'variant'},
      *         payloads: { 'beta-feature': { someData: true } }
      *       })
-     *     - posthog.feature_flags.overrideFeatureFlags({ // only override payloads
+     *     - posthog.featureFlags.overrideFeatureFlags({ // only override payloads
      *         payloads: { 'beta-feature': { someData: true } }
      *       })
      */
     overrideFeatureFlags(overrideOptions: OverrideFeatureFlagsOptions): void {
         if (!this.instance.__loaded || !this.instance.persistence) {
-            return logger.uninitializedWarning('posthog.feature_flags.overrideFeatureFlags')
+            return logger.uninitializedWarning('posthog.featureFlags.overrideFeatureFlags')
         }
 
-        // Clear all overrides if false, lets you do something like posthog.feature_flags.overrideFeatureFlags(false)
+        // Clear all overrides if false, lets you do something like posthog.featureFlags.overrideFeatureFlags(false)
         if (overrideOptions === false) {
             this.instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
             this.instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
@@ -663,7 +663,7 @@ export class PostHogFeatureFlags {
             const options = overrideOptions
             this._override_warning = Boolean(options.suppressWarning ?? false)
 
-            // Handle flags if provided, lets you do something like posthog.feature_flags.overrideFeatureFlags({flags: ['beta-feature']})
+            // Handle flags if provided, lets you do something like posthog.featureFlags.overrideFeatureFlags({flags: ['beta-feature']})
             if ('flags' in options) {
                 if (options.flags === false) {
                     this.instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
@@ -680,7 +680,7 @@ export class PostHogFeatureFlags {
                 }
             }
 
-            // Handle payloads independently, lets you do something like posthog.feature_flags.overrideFeatureFlags({payloads: { 'beta-feature': { someData: true } }})
+            // Handle payloads independently, lets you do something like posthog.featureFlags.overrideFeatureFlags({payloads: { 'beta-feature': { someData: true } }})
             if ('payloads' in options) {
                 if (options.payloads === false) {
                     this.instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
