@@ -179,8 +179,11 @@ export class SurveyManager {
     }
 
     private clearSurveyTimeout(surveyId: string) {
-        clearTimeout(this.surveyTimeouts.get(surveyId))
-        this.surveyTimeouts.delete(surveyId)
+        const timeout = this.surveyTimeouts.get(surveyId)
+        if (timeout) {
+            clearTimeout(timeout)
+            this.surveyTimeouts.delete(surveyId)
+        }
     }
 
     private handlePopoverSurvey = (survey: Survey): void => {
