@@ -650,7 +650,6 @@ export function usePopupVisibility(
             }, 100)
         }
 
-        // Add event listeners
         addEventListener(window, 'PHSurveyClosed', handleSurveyClosed)
         addEventListener(window, 'PHSurveySent', handleSurveySent)
 
@@ -658,17 +657,14 @@ export function usePopupVisibility(
             // This path is only used for direct usage of SurveyPopup,
             // not for surveys managed by SurveyManager
             const timeoutId = setTimeout(showSurvey, millisecondDelay)
-
             return () => {
                 clearTimeout(timeoutId)
                 window.removeEventListener('PHSurveyClosed', handleSurveyClosed)
                 window.removeEventListener('PHSurveySent', handleSurveySent)
             }
         } else {
-            // No delay, show immediately
             // This is the path used for surveys managed by SurveyManager
             showSurvey()
-
             return () => {
                 window.removeEventListener('PHSurveyClosed', handleSurveyClosed)
                 window.removeEventListener('PHSurveySent', handleSurveySent)
