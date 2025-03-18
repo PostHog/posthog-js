@@ -83,32 +83,28 @@ export class SiteApps {
     }
 
     setupSiteApp(loader: SiteAppLoader) {
-        const app: SiteApp = {
-            id: loader.id,
-            loaded: false,
-            errored: false,
-        }
-        this.apps[loader.id] = app
-
-        const onLoaded = (success: boolean) => {
-            this.apps[loader.id].errored = !success
-            this.apps[loader.id].loaded = true
-
-            logger.info(`Site app with id ${loader.id} ${success ? 'loaded' : 'errored'}`)
-
-            if (success && this.bufferedInvocations.length) {
+        const app = this.apps[loader.id]
+        const processBufferedEvents = () => {
+            if (!app.errored && this.bufferedInvocations.length) {
                 logger.info(`Processing ${this.bufferedInvocations.length} events for site app with id ${loader.id}`)
                 this.bufferedInvocations.forEach((globals) => app.processEvent?.(globals))
+                app.processedBuffer = true
             }
 
-            for (const app of Object.values(this.apps)) {
-                if (!app.loaded) {
-                    // If any other apps are not loaded, we don't want to stop buffering
-                    return
-                }
+            if (Object.values(this.apps).every((app) => app.processedBuffer || app.errored)) {
+                this.stopBuffering?.()
             }
+        }
 
-            this.stopBuffering?.()
+        let hasInitReturned = false
+        const onLoaded = (success: boolean) => {
+            app.errored = !success
+            app.loaded = true
+            logger.info(`Site app with id ${loader.id} ${success ? 'loaded' : 'errored'}`)
+            // ensure that we don't call processBufferedEvents until after init() returns and we've set up processEvent
+            if (hasInitReturned) {
+                processBufferedEvents()
+            }
         }
 
         try {
@@ -118,13 +114,40 @@ export class SiteApps {
                     onLoaded(success)
                 },
             })
-
             if (processEvent) {
                 app.processEvent = processEvent
             }
+            hasInitReturned = true
         } catch (e) {
             logger.error(`Error while initializing PostHog app with config id ${loader.id}`, e)
             onLoaded(false)
+        }
+
+        // if the app loaded synchronously, process the events now
+        if (hasInitReturned && app.loaded) {
+            try {
+                processBufferedEvents()
+            } catch (e) {
+                logger.error(`Error while processing buffered events PostHog app with config id ${loader.id}`, e)
+                app.errored = true
+            }
+        }
+    }
+
+    private setupSiteApps() {
+        const siteAppLoaders = this.siteAppLoaders || []
+
+        // do this in 2 passes, so that this.apps is populated before we call init
+        for (const loader of siteAppLoaders) {
+            this.apps[loader.id] = {
+                id: loader.id,
+                loaded: false,
+                errored: false,
+                processedBuffer: false,
+            }
+        }
+        for (const loader of siteAppLoaders) {
+            this.setupSiteApp(loader)
         }
     }
 
@@ -151,9 +174,7 @@ export class SiteApps {
                 return
             }
 
-            for (const app of this.siteAppLoaders) {
-                this.setupSiteApp(app)
-            }
+            this.setupSiteApps()
 
             // NOTE: We could improve this to only fire if we actually have listeners for the event
             this.instance.on('eventCaptured', (event) => this.onCapturedEvent(event))

@@ -10,6 +10,7 @@ import {
     Compression,
     EarlyAccessFeature,
     RemoteConfigFeatureFlagCallback,
+    EarlyAccessFeatureStage,
 } from './types'
 import { PostHogPersistence } from './posthog-persistence'
 
@@ -30,6 +31,7 @@ const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
 const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_flag_payloads'
+const PERSISTENCE_FEATURE_FLAG_REQUEST_ID = '$feature_flag_request_id'
 
 export const filterActiveFeatureFlags = (featureFlags?: Record<string, string | boolean>) => {
     const activeFeatureFlags: Record<string, string | boolean> = {}
@@ -49,6 +51,7 @@ export const parseFeatureFlagDecideResponse = (
 ) => {
     const flags = response['featureFlags']
     const flagPayloads = response['featureFlagPayloads']
+    const requestId = response['requestId']
     if (!flags) {
         return
     }
@@ -81,6 +84,7 @@ export const parseFeatureFlagDecideResponse = (
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFeatureFlags)),
             [ENABLED_FEATURE_FLAGS]: newFeatureFlags || {},
             [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
+            ...(requestId ? { [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: requestId } : {}),
         })
 }
 
@@ -268,7 +272,10 @@ export class PostHogFeatureFlags {
             distinct_id: this.instance.get_distinct_id(),
             groups: this.instance.getGroups(),
             $anon_distinct_id: this.$anon_distinct_id,
-            person_properties: this.instance.get_property(STORED_PERSON_PROPERTIES_KEY),
+            person_properties: {
+                ...(this.instance.persistence?.get_initial_props() || {}),
+                ...(this.instance.get_property(STORED_PERSON_PROPERTIES_KEY) || {}),
+            },
             group_properties: this.instance.get_property(STORED_GROUP_PROPERTIES_KEY),
         }
 
@@ -290,7 +297,9 @@ export class PostHogFeatureFlags {
                     // successful request
                     // reset anon_distinct_id after at least a single request with it
                     // makes it through
-                    this.$anon_distinct_id = undefined
+                    if (!this._additionalReloadRequested) {
+                        this.$anon_distinct_id = undefined
+                    }
                     errorsLoading = false
                 }
 
@@ -301,8 +310,9 @@ export class PostHogFeatureFlags {
                     this.instance._onRemoteConfig(response.json ?? {})
                 }
 
-                if (data.disable_flags) {
+                if (data.disable_flags && !this._additionalReloadRequested) {
                     // If flags are disabled then there is no need to call decide again (flags are the only thing that may change)
+                    // UNLESS, an additional reload is requested.
                     return
                 }
 
@@ -343,6 +353,7 @@ export class PostHogFeatureFlags {
         }
         const flagValue = this.getFlagVariants()[key]
         const flagReportValue = `${flagValue}`
+        const requestId = this.instance.get_property(PERSISTENCE_FEATURE_FLAG_REQUEST_ID) || undefined
         const flagCallReported: Record<string, string[]> = this.instance.get_property(FLAG_CALL_REPORTED) || {}
 
         if (options.send_event || !('send_event' in options)) {
@@ -358,6 +369,7 @@ export class PostHogFeatureFlags {
                     $feature_flag: key,
                     $feature_flag_response: flagValue,
                     $feature_flag_payload: this.getFeatureFlagPayload(key) || null,
+                    $feature_flag_request_id: requestId,
                     $feature_flag_bootstrapped_response: this.instance.config.bootstrap?.featureFlags?.[key] || null,
                     $feature_flag_bootstrapped_payload:
                         this.instance.config.bootstrap?.featureFlagPayloads?.[key] || null,
@@ -580,14 +592,20 @@ export class PostHogFeatureFlags {
         this._fireFeatureFlagsCallbacks()
     }
 
-    getEarlyAccessFeatures(callback: EarlyAccessFeatureCallback, force_reload = false): void {
+    getEarlyAccessFeatures(
+        callback: EarlyAccessFeatureCallback,
+        force_reload = false,
+        stages?: EarlyAccessFeatureStage[]
+    ): void {
         const existing_early_access_features = this.instance.get_property(PERSISTENCE_EARLY_ACCESS_FEATURES)
+
+        const stageParams = stages ? `&${stages.map((s) => `stage=${s}`).join('&')}` : ''
 
         if (!existing_early_access_features || force_reload) {
             this.instance._send_request({
                 url: this.instance.requestRouter.endpointFor(
                     'api',
-                    `/api/early_access_features/?token=${this.instance.config.token}`
+                    `/api/early_access_features/?token=${this.instance.config.token}${stageParams}`
                 ),
                 method: 'GET',
                 callback: (response) => {

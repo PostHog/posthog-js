@@ -1,16 +1,20 @@
-/* Client-side session parameters. These are primarily used by web analytics,
- * which relies on these for session analytics without the plugin server being
- * available for the person level set-once properties. Obviously not consistent
- * between client-side events and server-side events but this is acceptable
- * as web analytics only uses client-side.
+/* Store some session-level attribution-related properties in the persistence layer
  *
- * These have the same lifespan as a session_id
+ * These have the same lifespan as a session_id, meaning that if the session_id changes, these properties will be reset.
+ *
+ * We only store the entry URL and referrer, and derive many props (such as utm tags) from those.
+ *
+ * Given that the cookie is limited to 4K bytes, we don't want to store too much data, so we chose not to store device
+ * properties (such as browser, OS, etc) here, as usually getting the current value of those from event properties is
+ * sufficient.
  */
 import { Info } from './utils/event-utils'
 import type { SessionIdManager } from './sessionid'
 import type { PostHogPersistence } from './posthog-persistence'
 import { CLIENT_SESSION_PROPS } from './constants'
 import type { PostHog } from './posthog-core'
+import { each, stripEmptyProperties } from './utils'
+import { stripLeadingDollar } from './utils/string-utils'
 
 interface LegacySessionSourceProps {
     initialPathName: string
@@ -78,7 +82,7 @@ export class SessionPropsManager {
         this._persistence.register({ [CLIENT_SESSION_PROPS]: newProps })
     }
 
-    getSetOnceInitialSessionPropsProps() {
+    getSetOnceProps() {
         const p = this._getStored()?.props
         if (!p) {
             return {}
@@ -96,5 +100,18 @@ export class SessionPropsManager {
                 utm_term: p.utm_term,
             }
         }
+    }
+
+    getSessionProps() {
+        // it's the same props, but don't include null for unset properties, and add a prefix
+        const p: Record<string, any> = {}
+        each(stripEmptyProperties(this.getSetOnceProps()), (v, k) => {
+            if (k === '$current_url') {
+                // $session_entry_current_url would be a weird name, call it $session_entry_url instead
+                k = 'url'
+            }
+            p[`$session_entry_${stripLeadingDollar(k)}`] = v
+        })
+        return p
     }
 }

@@ -914,7 +914,7 @@ export interface SessionRecordingOptions {
     /**
      * Derived from `rrweb.record` options
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
-     * @default 'ph-nocapture'
+     * @default 'ph-no-capture'
      */
     blockClass?: string | RegExp
 
@@ -930,7 +930,7 @@ export interface SessionRecordingOptions {
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
      * @default 'ph-ignore-input'
      */
-    ignoreClass?: string
+    ignoreClass?: string | RegExp
 
     /**
      * Derived from `rrweb.record` options
@@ -1277,6 +1277,7 @@ export interface RemoteConfig {
         minimumDurationMilliseconds?: number
         linkedFlag?: string | FlagVariant | null
         networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
+        masking?: Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector'>
         urlTriggers?: SessionRecordingUrlTrigger[]
         scriptConfig?: { script?: string | undefined }
         urlBlocklist?: SessionRecordingUrlTrigger[]
@@ -1341,6 +1342,7 @@ export interface DecideResponse extends RemoteConfig {
     featureFlags: Record<string, string | boolean>
     featureFlagPayloads: Record<string, JsonType>
     errorsWhileComputingFlags: boolean
+    requestId?: string
 }
 
 export type SiteAppGlobals = {
@@ -1369,6 +1371,7 @@ export type SiteApp = {
     id: string
     loaded: boolean
     errored: boolean
+    processedBuffer: boolean
     processEvent?: (globals: SiteAppGlobals) => void
 }
 
@@ -1436,6 +1439,7 @@ export interface EarlyAccessFeature {
     flagKey: string | null
 }
 
+export type EarlyAccessFeatureStage = 'concept' | 'alpha' | 'beta' | 'general-availability'
 export type EarlyAccessFeatureCallback = (earlyAccessFeatures: EarlyAccessFeature[]) => void
 
 export interface EarlyAccessFeatureResponse {

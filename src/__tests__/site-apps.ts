@@ -298,32 +298,35 @@ describe('SiteApps', () => {
     })
 
     describe('onRemoteConfig', () => {
-        let appConfigs: {
+        interface AppConfig {
             posthog: PostHog
             callback: (success: boolean) => void
-        }[] = []
-
-        beforeEach(() => {
-            appConfigs = []
+        }
+        let appConfigs: (AppConfig & { processEvent: jest.Mock })[] = []
+        const init = (onInit?: (appConfig: AppConfig) => void) => {
             assignableWindow._POSTHOG_REMOTE_CONFIG = {
                 [token]: {
                     config: {},
                     siteApps: [
                         {
                             id: '1',
-                            init: jest.fn((config) => {
-                                appConfigs.push(config)
+                            init: jest.fn((config: AppConfig) => {
+                                const processEvent = jest.fn()
+                                appConfigs.push({ ...config, processEvent })
+                                onInit?.(config)
                                 return {
-                                    processEvent: jest.fn(),
+                                    processEvent,
                                 }
                             }),
                         },
                         {
                             id: '2',
-                            init: jest.fn((config) => {
-                                appConfigs.push(config)
+                            init: jest.fn((config: AppConfig) => {
+                                const processEvent = jest.fn()
+                                appConfigs.push({ ...config, processEvent })
+                                onInit?.(config)
                                 return {
-                                    processEvent: jest.fn(),
+                                    processEvent,
                                 }
                             }),
                         },
@@ -332,14 +335,20 @@ describe('SiteApps', () => {
             } as any
 
             siteAppsInstance.init()
+        }
+
+        beforeEach(() => {
+            appConfigs = []
         })
 
         it('sets up the eventCaptured listener if site apps', () => {
+            init()
             siteAppsInstance.onRemoteConfig({} as RemoteConfig)
             expect(posthog.on).toHaveBeenCalledWith('eventCaptured', expect.any(Function))
         })
 
         it('does not sets up the eventCaptured listener if no site apps', () => {
+            init()
             assignableWindow._POSTHOG_REMOTE_CONFIG = {
                 [token]: {
                     config: {},
@@ -351,11 +360,13 @@ describe('SiteApps', () => {
         })
 
         it('loads site apps via the window object if defined', () => {
+            init()
             siteAppsInstance.onRemoteConfig({} as RemoteConfig)
             expect(appConfigs[0]).toBeDefined()
             expect(siteAppsInstance.apps['1']).toEqual({
                 errored: false,
                 loaded: false,
+                processedBuffer: false,
                 id: '1',
                 processEvent: expect.any(Function),
             })
@@ -365,17 +376,20 @@ describe('SiteApps', () => {
             expect(siteAppsInstance.apps['1']).toEqual({
                 errored: false,
                 loaded: true,
+                processedBuffer: false,
                 id: '1',
                 processEvent: expect.any(Function),
             })
         })
 
         it('marks site app as errored if callback fails', () => {
+            init()
             siteAppsInstance.onRemoteConfig({} as RemoteConfig)
             expect(appConfigs[0]).toBeDefined()
             expect(siteAppsInstance.apps['1']).toMatchObject({
                 errored: false,
                 loaded: false,
+                processedBuffer: false,
             })
 
             appConfigs[0].callback(false)
@@ -383,10 +397,12 @@ describe('SiteApps', () => {
             expect(siteAppsInstance.apps['1']).toMatchObject({
                 errored: true,
                 loaded: true,
+                processedBuffer: false,
             })
         })
 
         it('calls the processEvent method if it exists and events are buffered', () => {
+            init()
             emitCaptureEvent?.('test_event1', { event: 'test_event1' } as any)
             siteAppsInstance.onRemoteConfig({} as RemoteConfig)
             emitCaptureEvent?.('test_event2', { event: 'test_event2' } as any)
@@ -402,7 +418,8 @@ describe('SiteApps', () => {
             )
         })
 
-        it('clears the buffer after all apps are loaded', () => {
+        it('clears the buffer after all apps are loaded, when succeeding async', () => {
+            init()
             emitCaptureEvent?.('test_event1', { event: 'test_event1' } as any)
             emitCaptureEvent?.('test_event2', { event: 'test_event2' } as any)
             expect(siteAppsInstance['bufferedInvocations'].length).toBe(2)
@@ -410,11 +427,30 @@ describe('SiteApps', () => {
             siteAppsInstance.onRemoteConfig({} as RemoteConfig)
             appConfigs[0].callback(true)
             expect(siteAppsInstance['bufferedInvocations'].length).toBe(2)
-            appConfigs[1].callback(false)
+            appConfigs[1].callback(true)
             expect(siteAppsInstance['bufferedInvocations'].length).toBe(0)
+
+            expect(siteAppsInstance.apps['1'].processEvent).toHaveBeenCalledTimes(2)
+            expect(siteAppsInstance.apps['2'].processEvent).toHaveBeenCalledTimes(2)
+        })
+
+        it('clears the buffer after all apps are loaded, when succeeding sync', () => {
+            init(({ callback }) => {
+                callback(true)
+            })
+            emitCaptureEvent?.('test_event1', { event: 'test_event1' } as any)
+            emitCaptureEvent?.('test_event2', { event: 'test_event2' } as any)
+            expect(siteAppsInstance['bufferedInvocations'].length).toBe(2)
+
+            siteAppsInstance.onRemoteConfig({} as RemoteConfig)
+            expect(siteAppsInstance['bufferedInvocations'].length).toBe(0)
+
+            expect(siteAppsInstance.apps['1'].processEvent).toHaveBeenCalledTimes(2)
+            expect(siteAppsInstance.apps['2'].processEvent).toHaveBeenCalledTimes(2)
         })
 
         it('logs error if site apps are disabled but response contains site apps', () => {
+            init()
             posthog.config.opt_in_site_apps = false
             assignableWindow.POSTHOG_DEBUG = true
 

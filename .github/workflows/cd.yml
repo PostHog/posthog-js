@@ -8,7 +8,7 @@ on:
 jobs:
     check-package-version:
         name: Check package version and detect an update
-        runs-on: ubuntu-20.04
+        runs-on: ubuntu-22.04
         outputs:
             committed-version: ${{ steps.check-package-version.outputs.committed-version }}
             published-version: ${{ steps.check-package-version.outputs.published-version }}
@@ -23,7 +23,7 @@ jobs:
 
     release:
         name: Publish release if new version
-        runs-on: ubuntu-20.04
+        runs-on: ubuntu-22.04
         needs: check-package-version
         if: needs.check-package-version.outputs.is-new-version == 'true'
         env:
@@ -94,7 +94,7 @@ jobs:
 
     create-posthog-main-repo-pull-request:
         name: Create main repo PR with new posthog-js version
-        runs-on: ubuntu-20.04
+        runs-on: ubuntu-22.04
         needs: [check-package-version, release]
         env:
             COMMITTED_VERSION: ${{ needs.check-package-version.outputs.committed-version }}
@@ -179,7 +179,7 @@ jobs:
 
     create-posthog-com-repo-pull-request:
         name: Create posthog.com repo PR with new posthog-js version
-        runs-on: ubuntu-20.04
+        runs-on: ubuntu-22.04
         needs: [check-package-version, release]
         env:
             COMMITTED_VERSION: ${{ needs.check-package-version.outputs.committed-version }}

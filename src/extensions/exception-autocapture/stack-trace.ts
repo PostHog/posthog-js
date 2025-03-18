@@ -47,7 +47,7 @@ export interface StackFrame {
     instruction_addr?: string
     addr_mode?: string
     vars?: { [key: string]: any }
-    debug_id?: string
+    chunk_id?: string
 }
 
 const WEBPACK_ERROR_REGEXP = /\(error: (.*)\)/
@@ -250,7 +250,6 @@ export function createStackParser(...parsers: StackLineParser[]): StackParser {
 
             for (const parser of sortedParsers) {
                 const frame = parser(cleanedLine)
-
                 if (frame) {
                     frames.push(frame)
                     break

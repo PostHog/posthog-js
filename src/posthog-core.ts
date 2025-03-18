@@ -41,6 +41,7 @@ import {
     CaptureResult,
     Compression,
     EarlyAccessFeatureCallback,
+    EarlyAccessFeatureStage,
     EventName,
     FeatureFlagsCallback,
     JsonType,
@@ -993,6 +994,9 @@ export class PostHog {
             properties['$session_id'] = sessionId
             properties['$window_id'] = windowId
         }
+        if (this.sessionPropsManager) {
+            extend(properties, this.sessionPropsManager.getSessionProps())
+        }
 
         try {
             if (this.sessionRecording) {
@@ -1098,7 +1102,7 @@ export class PostHog {
         }
         // if we're an identified person, send initial params with every event
         const initialProps = this.persistence.get_initial_props()
-        const sessionProps = this.sessionPropsManager?.getSetOnceInitialSessionPropsProps()
+        const sessionProps = this.sessionPropsManager?.getSetOnceProps()
         let setOnceProperties = extend({}, initialProps, sessionProps || {}, dataSetOnce || {})
         const sanitize_properties = this.config.sanitize_properties
         if (sanitize_properties) {
@@ -1273,8 +1277,12 @@ export class PostHog {
     }
 
     /** Get the list of early access features. To check enrollment status, use `isFeatureEnabled`. */
-    getEarlyAccessFeatures(callback: EarlyAccessFeatureCallback, force_reload = false): void {
-        return this.featureFlags.getEarlyAccessFeatures(callback, force_reload)
+    getEarlyAccessFeatures(
+        callback: EarlyAccessFeatureCallback,
+        force_reload = false,
+        stages?: EarlyAccessFeatureStage[]
+    ): void {
+        return this.featureFlags.getEarlyAccessFeatures(callback, force_reload, stages)
     }
 
     /**
@@ -1873,7 +1881,11 @@ export class PostHog {
                   $exception_list: [
                       {
                           type: isError(error) ? error.name : 'Error',
-                          value: isError(error) ? error.message : error,
+                          value: isError(error)
+                              ? error.message
+                              : isObject(error) && 'message' in error
+                                ? String(error.message)
+                                : String(error),
                           mechanism: {
                               handled: true,
                               synthetic: false,

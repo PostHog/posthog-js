@@ -1,3 +1,110 @@
+## 1.231.2 - 2025-03-18
+
+- fix: check surveys timeout in the survey manager level (#1832)
+
+## 1.231.1 - 2025-03-18
+
+- chore: update posthog rrweb (#1831)
+- chore: add a regression example for toolbar z-index highlighting (#1827)
+
+## 1.231.0 - 2025-03-14
+
+- feat: no recording blob urls (#1768)
+- chore: update changelog (#1824)
+- feat: remote image masking (#1826)
+
+## 1.230.4 - 2025-03-13
+
+- chore: allow push to main in GH actions (#1825)
+- chore: add new question index to id map (#1812)
+
+## 1.230.3 - 2025-03-13
+
+- fix: session recording class type and typo (#1815)
+- chore: update web vitals (#1820)
+- fix: default mask all inputs must be defined (#1819)
+- fix(err): fix hosts, linting and documentation (#1818)
+
+## 1.230.2 - 2025-03-11
+
+- fix: simple loader race protection (#1804)
+- chore(err): add next template (typescript + app router) (#1807)
+
+## 1.230.1 - 2025-03-10
+
+- fix: handle non Error objects being passed to captureException (#1806)
+
+## 1.230.0 - 2025-03-10
+
+- feat: allow early access feature stage specification (#1805)
+
+## 1.229.5 - 2025-03-07
+
+- fix: Stop logging error when client is uninitialized (#1803)
+
+## 1.229.4 - 2025-03-07
+
+- chore: use quesiton ID instead of question index if it's available (#1764)
+
+## 1.229.3 - 2025-03-07
+
+- Reverse error message (#1795)
+
+## 1.229.2 - 2025-03-06
+
+- fix: make survey preview behave like the actual (#1799)
+- chore(err): add playground for error tracking (#1796)
+- chore: sourcemap sample app (#1782)
+- chore: refactor playwright helper for clarity (#1774)
+
+## 1.229.1 - 2025-03-06
+
+- fix: stop setting platform on sentry event (#1790)
+
+## 1.229.0 - 2025-03-06
+
+- feat: add chunk_id to stack frames (#1794)
+
+## 1.228.2 - 2025-03-06
+
+- chore(flags): support handling optional `requestId`s in `/decide` responses (#1793)
+
+## 1.228.1 - 2025-03-05
+
+- fix(flags): do not reset $anon_distinct_id after first decide call if advanced_disable_feature_flags_on_first_load is true (#1786)
+
+## 1.228.0 - 2025-03-05
+
+- fix: Fix site app loading (#1792)
+
+## 1.227.2 - 2025-03-05
+
+- feat: Block yet another semrush crawler/bot (#1791)
+
+## 1.227.1 - 2025-03-05
+
+- feat: posthog feature component should report variant too (#1783)
+- chore: image blocking example (#1789)
+- chore(): set all github actions to run on ubuntu-22.04 (#1784)
+- fix(flags): Make sure flags are loaded when identify is called (#1785)
+- fix(flags): pass along $initial_ person properties in decide requests automatically (#1781)
+- chore: Mark peerDependencies as optional (#1777)
+- feat: Make `getQueryParams` more resilient (#1778)
+
+## 1.227.0 - 2025-03-04
+
+- feat: support loading masking remotely (#1734)
+
+## 1.226.0 - 2025-03-04
+
+- feat(web-analytics): Add $session property with an object of props on session_id lifecycle (#1780)
+- feat: Block more bots (#1776)
+
+## 1.225.1 - 2025-03-03
+
+- fix: add semrush audit bot (#1775)
+- chore: add posthog built rrweb (#1770)
+
 ## 1.225.0 - 2025-03-02
 
 - feat: better positioning for survey selectors (#1772)

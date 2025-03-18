@@ -117,11 +117,67 @@ describe('Session Props Manager', () => {
         }
 
         // act
-        const properties = sessionPropsManager.getSetOnceInitialSessionPropsProps()
+        const properties = sessionPropsManager.getSetOnceProps()
 
         //assert
         expect(properties).toEqual({
             utm_source: 'some-utm-source',
+        })
+    })
+
+    it('should convert a url and referrer into a full set of props', () => {
+        // arrange
+        const { persistence, sessionPropsManager } = createSessionPropsManager()
+        persistence.props = {
+            $client_session_props: {
+                props: {
+                    r: 'http://referrer.example.com/referrer',
+                    u: 'https://app.example.com/page?utm_source=example',
+                },
+                sessionId: 'session-id',
+            },
+        }
+
+        // act
+        const setOnceProps = sessionPropsManager.getSetOnceProps()
+        const sessionProps = sessionPropsManager.getSessionProps()
+
+        //assert
+        expect(setOnceProps).toEqual({
+            $current_url: 'https://app.example.com/page?utm_source=example',
+            $host: 'app.example.com',
+            $pathname: '/page',
+            $referrer: 'http://referrer.example.com/referrer',
+            $referring_domain: 'referrer.example.com',
+            _kx: null,
+            dclid: null,
+            fbclid: null,
+            gad_source: null,
+            gbraid: null,
+            gclid: null,
+            gclsrc: null,
+            igshid: null,
+            irclid: null,
+            li_fat_id: null,
+            mc_cid: null,
+            msclkid: null,
+            rdt_cid: null,
+            ttclid: null,
+            twclid: null,
+            utm_campaign: null,
+            utm_content: null,
+            utm_medium: null,
+            utm_source: 'example',
+            utm_term: null,
+            wbraid: null,
+        })
+        expect(sessionProps).toEqual({
+            $session_entry_referring_domain: 'referrer.example.com',
+            $session_entry_referrer: 'http://referrer.example.com/referrer',
+            $session_entry_url: 'https://app.example.com/page?utm_source=example',
+            $session_entry_host: 'app.example.com',
+            $session_entry_pathname: '/page',
+            $session_entry_utm_source: 'example',
         })
     })
 })

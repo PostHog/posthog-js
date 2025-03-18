@@ -31,6 +31,7 @@ import {
     dismissedSurveyEvent,
     getContrastingTextColor,
     getDisplayOrderQuestions,
+    getSurveyResponseKey,
     getSurveySeen,
     hasWaitPeriodPassed,
     sendSurveyEvent,
@@ -155,6 +156,7 @@ export function getNextSurveyStep(
 export class SurveyManager {
     private posthog: PostHog
     private surveyInFocus: string | null
+    private surveyTimeouts: Map<string, NodeJS.Timeout> = new Map()
 
     constructor(posthog: PostHog) {
         this.posthog = posthog
@@ -176,6 +178,14 @@ export class SurveyManager {
         return true
     }
 
+    private clearSurveyTimeout(surveyId: string) {
+        const timeout = this.surveyTimeouts.get(surveyId)
+        if (timeout) {
+            clearTimeout(timeout)
+            this.surveyTimeouts.delete(surveyId)
+        }
+    }
+
     private handlePopoverSurvey = (survey: Survey): void => {
         const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
         const lastSeenSurveyDate = localStorage.getItem(`lastSeenSurveyDate`)
@@ -186,18 +196,39 @@ export class SurveyManager {
 
         const surveySeen = getSurveySeen(survey)
         if (!surveySeen) {
+            this.clearSurveyTimeout(survey.id)
             this.addSurveyToFocus(survey.id)
+            const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
             const shadow = createShadow(style(survey?.appearance), survey.id, undefined, this.posthog)
-            Preact.render(
-                <SurveyPopup
-                    key={'popover-survey'}
-                    posthog={this.posthog}
-                    survey={survey}
-                    removeSurveyFromFocus={this.removeSurveyFromFocus}
-                    isPopup={true}
-                />,
-                shadow
-            )
+            if (delaySeconds <= 0) {
+                return Preact.render(
+                    <SurveyPopup
+                        key={'popover-survey'}
+                        posthog={this.posthog}
+                        survey={survey}
+                        removeSurveyFromFocus={this.removeSurveyFromFocus}
+                        isPopup={true}
+                    />,
+                    shadow
+                )
+            }
+            const timeoutId = setTimeout(() => {
+                if (!doesSurveyUrlMatch(survey)) {
+                    return this.removeSurveyFromFocus(survey.id)
+                }
+                // rendering with surveyPopupDelaySeconds = 0 because we're already handling the timeout here
+                Preact.render(
+                    <SurveyPopup
+                        key={'popover-survey'}
+                        posthog={this.posthog}
+                        survey={{ ...survey, appearance: { ...survey.appearance, surveyPopupDelaySeconds: 0 } }}
+                        removeSurveyFromFocus={this.removeSurveyFromFocus}
+                        isPopup={true}
+                    />,
+                    shadow
+                )
+            }, delaySeconds * 1000)
+            this.surveyTimeouts.set(survey.id, timeoutId)
         }
     }
 
@@ -370,6 +401,7 @@ export class SurveyManager {
         if (this.surveyInFocus !== id) {
             logger.error(`Survey ${id} is not in focus. Cannot remove survey ${id}.`)
         }
+        this.clearSurveyTimeout(id)
         this.surveyInFocus = null
     }
 
@@ -379,6 +411,7 @@ export class SurveyManager {
             addSurveyToFocus: this.addSurveyToFocus,
             removeSurveyFromFocus: this.removeSurveyFromFocus,
             surveyInFocus: this.surveyInFocus,
+            surveyTimeouts: this.surveyTimeouts,
             canShowNextEventBasedSurvey: this.canShowNextEventBasedSurvey,
             handleWidget: this.handleWidget,
             handlePopoverSurvey: this.handlePopoverSurvey,
@@ -594,7 +627,6 @@ export function usePopupVisibility(
 
         const showSurvey = () => {
             // check if the url is still matching, necessary for delayed surveys, as the URL may have changed
-            // since the survey was scheduled to appear
             if (!doesSurveyUrlMatch(survey)) {
                 return
             }
@@ -619,33 +651,25 @@ export function usePopupVisibility(
             }, 100)
         }
 
-        const handleShowSurveyWithDelay = () => {
-            const timeoutId = setTimeout(() => {
-                showSurvey()
-            }, millisecondDelay)
+        addEventListener(window, 'PHSurveyClosed', handleSurveyClosed)
+        addEventListener(window, 'PHSurveySent', handleSurveySent)
 
+        if (millisecondDelay > 0) {
+            // This path is only used for direct usage of SurveyPopup,
+            // not for surveys managed by SurveyManager
+            const timeoutId = setTimeout(showSurvey, millisecondDelay)
             return () => {
                 clearTimeout(timeoutId)
                 window.removeEventListener('PHSurveyClosed', handleSurveyClosed)
                 window.removeEventListener('PHSurveySent', handleSurveySent)
             }
-        }
-
-        const handleShowSurveyImmediately = () => {
+        } else {
+            // This is the path used for surveys managed by SurveyManager
             showSurvey()
             return () => {
                 window.removeEventListener('PHSurveyClosed', handleSurveyClosed)
                 window.removeEventListener('PHSurveySent', handleSurveySent)
             }
-        }
-
-        addEventListener(window, 'PHSurveyClosed', handleSurveyClosed)
-        addEventListener(window, 'PHSurveySent', handleSurveySent)
-
-        if (millisecondDelay > 0) {
-            return handleShowSurveyWithDelay()
-        } else {
-            return handleShowSurveyImmediately()
         }
     }, [])
 
@@ -768,7 +792,6 @@ export function Questions({
     )
     const [questionsResponses, setQuestionsResponses] = useState({})
     const {
-        isPreviewMode,
         previewPageIndex,
         onPopupSurveyDismissed,
         isPopup,
@@ -786,20 +809,24 @@ export function Questions({
 
     const onNextButtonClick = ({
         res,
-        originalQuestionIndex,
         displayQuestionIndex,
+        questionId,
     }: {
         res: string | string[] | number | null
-        originalQuestionIndex: number
         displayQuestionIndex: number
+        questionId?: string
     }) => {
         if (!posthog) {
             logger.error('onNextButtonClick called without a PostHog instance.')
             return
         }
 
-        const responseKey =
-            originalQuestionIndex === 0 ? `$survey_response` : `$survey_response_${originalQuestionIndex}`
+        if (!questionId) {
+            logger.error('onNextButtonClick called without a questionId.')
+            return
+        }
+
+        const responseKey = getSurveyResponseKey(questionId)
 
         setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
 
@@ -832,11 +859,7 @@ export function Questions({
             }
         >
             {surveyQuestions.map((question, displayQuestionIndex) => {
-                const { originalQuestionIndex } = question
-
-                const isVisible = isPreviewMode
-                    ? currentQuestionIndex === originalQuestionIndex
-                    : currentQuestionIndex === displayQuestionIndex
+                const isVisible = currentQuestionIndex === displayQuestionIndex
                 return (
                     isVisible && (
                         <div
@@ -866,8 +889,8 @@ export function Questions({
                                 onSubmit: (res) =>
                                     onNextButtonClick({
                                         res,
-                                        originalQuestionIndex,
                                         displayQuestionIndex,
+                                        questionId: question.id,
                                     }),
                                 onPreviewSubmit,
                             })}
