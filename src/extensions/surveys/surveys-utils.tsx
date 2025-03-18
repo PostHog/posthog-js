@@ -16,7 +16,7 @@ const window = _window as Window & typeof globalThis
 const document = _document as Document
 const SurveySeenPrefix = 'seenSurvey_'
 
-const logger = createLogger('[Surveys]')
+const logger = createLogger('[Surveys Utils]')
 
 export const SURVEY_DEFAULT_Z_INDEX = 2147483647
 
@@ -567,8 +567,8 @@ type SendSurveyEventArgs = {
     responses: Record<string, string | number | string[] | null>
     survey: Survey
     posthog?: PostHog
-    surveyCompleted?: boolean
-    surveyResponseId?: string
+    surveyCompleted: boolean
+    surveyResponseId: string
 }
 
 export const sendSurveyEvent = ({
@@ -585,23 +585,22 @@ export const sendSurveyEvent = ({
     localStorage.setItem(getSurveySeenKey(survey), 'true')
 
     // Don't send partial response if survey is not completed and disable_survey_partial_response is true
-    if (!surveyCompleted && survey.enable_partial_response) {
+    if (!surveyCompleted && !survey.enable_partial_response) {
         return
-    } else if (!survey.enable_partial_response) {
-        logger.info('[PostHog Surveys] survey partial response sent', {
-            surveyId: survey.id,
-            surveyName: survey.name,
-            surveyCompleted,
-            surveyResponseId,
-            responses,
-        })
     }
+
+    logger.info('[PostHog Surveys] survey partial response payload', {
+        surveyId: survey.id,
+        surveyName: survey.name,
+        surveyCompleted,
+        surveyResponseId,
+        responses,
+    })
 
     posthog.capture('survey sent', {
         $survey_name: survey.name,
         $survey_completed: surveyCompleted || false,
         $survey_id: survey.id,
-        $survey_response_id: surveyResponseId,
         $survey_iteration: survey.current_iteration,
         $survey_iteration_start_date: survey.current_iteration_start_date,
         $survey_questions: survey.questions.map((question, index) => ({
@@ -610,6 +609,7 @@ export const sendSurveyEvent = ({
             index,
         })),
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
+        $survey_response_id: surveyResponseId,
         ...responses,
         $set: {
             [getSurveyInteractionProperty(survey, 'responded')]: true,
@@ -770,7 +770,7 @@ interface SurveyContextProps {
     isPopup: boolean
     onPreviewSubmit: (res: string | string[] | number | null) => void
     onPopupSurveySent: () => void
-    surveyResponseId?: string
+    surveyResponseId: string
 }
 
 export const SurveyContext = createContext<SurveyContextProps>({
@@ -780,6 +780,7 @@ export const SurveyContext = createContext<SurveyContextProps>({
     isPopup: true,
     onPreviewSubmit: () => {},
     onPopupSurveySent: () => {},
+    surveyResponseId: '',
 })
 
 interface RenderProps {
