@@ -568,7 +568,7 @@ type SendSurveyEventArgs = {
     survey: Survey
     posthog?: PostHog
     surveyCompleted?: boolean
-    surveyResponseInsertID?: string
+    surveyResponseId?: string
 }
 
 export const sendSurveyEvent = ({
@@ -576,7 +576,7 @@ export const sendSurveyEvent = ({
     survey,
     posthog,
     surveyCompleted,
-    surveyResponseInsertID,
+    surveyResponseId,
 }: SendSurveyEventArgs) => {
     if (!posthog) {
         logger.error('[survey sent] event not captured, PostHog instance not found.')
@@ -585,14 +585,14 @@ export const sendSurveyEvent = ({
     localStorage.setItem(getSurveySeenKey(survey), 'true')
 
     // Don't send partial response if survey is not completed and disable_survey_partial_response is true
-    if (!surveyCompleted && posthog.config.disable_survey_partial_response) {
+    if (!surveyCompleted && survey.enable_partial_response) {
         return
-    } else if (!posthog.config.disable_survey_partial_response) {
+    } else if (!survey.enable_partial_response) {
         logger.info('[PostHog Surveys] survey partial response sent', {
             surveyId: survey.id,
             surveyName: survey.name,
             surveyCompleted,
-            surveyResponseInsertID,
+            surveyResponseId,
             responses,
         })
     }
@@ -601,7 +601,7 @@ export const sendSurveyEvent = ({
         $survey_name: survey.name,
         $survey_completed: surveyCompleted || false,
         $survey_id: survey.id,
-        $survey_response_id: surveyResponseInsertID,
+        $survey_response_id: surveyResponseId,
         $survey_iteration: survey.current_iteration,
         $survey_iteration_start_date: survey.current_iteration_start_date,
         $survey_questions: survey.questions.map((question, index) => ({
@@ -770,7 +770,7 @@ interface SurveyContextProps {
     isPopup: boolean
     onPreviewSubmit: (res: string | string[] | number | null) => void
     onPopupSurveySent: () => void
-    surveyResponseInsertID?: string
+    surveyResponseId?: string
 }
 
 export const SurveyContext = createContext<SurveyContextProps>({

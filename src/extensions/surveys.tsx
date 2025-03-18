@@ -16,6 +16,7 @@ import { addEventListener } from '../utils'
 import { document as _document, window as _window } from '../utils/globals'
 import { createLogger } from '../utils/logger'
 import { isNull, isNumber } from '../utils/type-utils'
+import { uuidv7 } from '../uuidv7'
 import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import { Cancel } from './surveys/components/QuestionHeader'
@@ -708,10 +709,6 @@ export function SurveyPopup({
     onPopupSurveyDismissed = () => {},
     onPopupSurveySent = () => {},
 }: SurveyPopupProps) {
-    const surveyResponseInsertID = useMemo(
-        () => survey.id + Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10),
-        [survey.id]
-    )
     const isPreviewMode = Number.isInteger(previewPageIndex)
     // NB: The client-side code passes the millisecondDelay in seconds, but setTimeout expects milliseconds, so we multiply by 1000
     const surveyPopupDelayMilliseconds = survey.appearance?.surveyPopupDelaySeconds
@@ -740,9 +737,9 @@ export function SurveyPopup({
             onPopupSurveySent: () => {
                 onPopupSurveySent()
             },
-            surveyResponseInsertID,
+            surveyResponseId: uuidv7(),
         }),
-        [isPreviewMode, previewPageIndex, onPopupSurveyDismissed, survey, posthog]
+        [isPreviewMode, previewPageIndex, onPopupSurveyDismissed, survey, posthog, uuidv7]
     )
 
     if (isPreviewMode) {
@@ -791,14 +788,8 @@ export function Questions({
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
     )
     const [questionsResponses, setQuestionsResponses] = useState({})
-    const {
-        previewPageIndex,
-        onPopupSurveyDismissed,
-        isPopup,
-        onPreviewSubmit,
-        onPopupSurveySent,
-        surveyResponseInsertID,
-    } = useContext(SurveyContext)
+    const { previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit, onPopupSurveySent, surveyResponseId } =
+        useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
@@ -837,7 +828,7 @@ export function Questions({
                 survey,
                 posthog,
                 surveyCompleted: nextStep === SurveyQuestionBranchingType.End,
-                surveyResponseInsertID,
+                surveyResponseId,
             })
             onPopupSurveySent()
         } else {
