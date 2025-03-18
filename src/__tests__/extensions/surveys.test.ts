@@ -12,7 +12,7 @@ import {
 import { createShadow } from '../../extensions/surveys/surveys-utils'
 import { Survey, SurveyQuestionType, SurveyType } from '../../posthog-surveys-types'
 
-import { beforeEach } from '@jest/globals'
+import { afterAll, beforeAll, beforeEach } from '@jest/globals'
 import '@testing-library/jest-dom'
 import * as Preact from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
@@ -713,6 +713,15 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
     let originalPushState: typeof window.history.pushState
     let originalReplaceState: typeof window.history.replaceState
 
+    // Set up fake timers for all tests in this suite
+    beforeAll(() => {
+        jest.useFakeTimers()
+    })
+
+    afterAll(() => {
+        jest.useRealTimers()
+    })
+
     const createTestSurvey = (urlCondition?: { url: string; urlMatchType?: string }): Survey =>
         ({
             id: 'test-survey',
@@ -874,8 +883,6 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
     })
 
     it('should not show delayed survey if URL no longer matches when delay expires', () => {
-        jest.useFakeTimers()
-
         // Create a survey with a URL condition and a 2 second delay
         const survey = createTestSurvey({
             url: '/initial-path',
@@ -888,6 +895,11 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
             value: new URL('https://example.com/initial-path'),
             writable: true,
         })
+
+        // Ensure clearTimeout is defined in the global scope for this test
+        if (typeof global.clearTimeout === 'undefined') {
+            global.clearTimeout = jest.fn()
+        }
 
         // Start the survey visibility hook
         const { result } = renderHook(() => usePopupVisibility(survey, posthog, 2000, false, mockRemoveSurveyFromFocus))
@@ -906,14 +918,12 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
 
         // Advance timers past the delay
         act(() => {
-            jest.advanceTimersByTime(2000)
+            jest.runAllTimers()
         })
 
         // Survey should still not be visible since URL no longer matches
         expect(result.current.isPopupVisible).toBe(false)
         expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
-
-        jest.useRealTimers()
     })
 })
 
