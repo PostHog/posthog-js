@@ -642,9 +642,12 @@ describe('SurveyManager', () => {
                 // Add survey to focus and create a timeout
                 surveyManager.getTestAPI().addSurveyToFocus(survey.id)
 
-                // Create and store timeoutId
                 if (survey.appearance?.surveyPopupDelaySeconds) {
-                    const timeoutId = setTimeout(() => {}, survey.appearance.surveyPopupDelaySeconds * 1000)
+                    const timeoutId = setTimeout(() => {
+                        // This simulates what would happen when the timeout completes
+                        // In the real implementation, it would render the survey
+                        surveyManager.getTestAPI().surveyTimeouts.delete(survey.id)
+                    }, survey.appearance.surveyPopupDelaySeconds * 1000)
                     surveyManager.getTestAPI().surveyTimeouts.set(survey.id, timeoutId)
                 }
             })

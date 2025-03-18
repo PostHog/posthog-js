@@ -215,7 +215,6 @@ export class SurveyManager {
                 if (!doesSurveyUrlMatch(survey)) {
                     return this.removeSurveyFromFocus(survey.id)
                 }
-
                 Preact.render(
                     <SurveyPopup
                         key={'popover-survey'}
