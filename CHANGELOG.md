@@ -1,3 +1,7 @@
+## 1.231.2 - 2025-03-18
+
+- fix: check surveys timeout in the survey manager level (#1832)
+
 ## 1.231.1 - 2025-03-18
 
 - chore: update posthog rrweb (#1831)
