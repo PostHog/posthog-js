@@ -179,10 +179,8 @@ export class SurveyManager {
     }
 
     private clearSurveyTimeout(surveyId: string) {
-        if (this.surveyTimeouts.has(surveyId)) {
-            clearTimeout(this.surveyTimeouts.get(surveyId))
-            this.surveyTimeouts.delete(surveyId)
-        }
+        clearTimeout(this.surveyTimeouts.get(surveyId))
+        this.surveyTimeouts.delete(surveyId)
     }
 
     private handlePopoverSurvey = (survey: Survey): void => {
@@ -215,6 +213,7 @@ export class SurveyManager {
                 if (!doesSurveyUrlMatch(survey)) {
                     return this.removeSurveyFromFocus(survey.id)
                 }
+                // rendering with surveyPopupDelaySeconds = 0 because we're already handling the timeout here
                 Preact.render(
                     <SurveyPopup
                         key={'popover-survey'}
