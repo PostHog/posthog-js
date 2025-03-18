@@ -1,3 +1,8 @@
+## 1.231.1 - 2025-03-18
+
+- chore: update posthog rrweb (#1831)
+- chore: add a regression example for toolbar z-index highlighting (#1827)
+
 ## 1.231.0 - 2025-03-14
 
 - feat: no recording blob urls (#1768)
