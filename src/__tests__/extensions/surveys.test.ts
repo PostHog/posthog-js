@@ -14,7 +14,7 @@ import { Survey, SurveyQuestionType, SurveyType } from '../../posthog-surveys-ty
 
 import { beforeEach } from '@jest/globals'
 import '@testing-library/jest-dom'
-import { h } from 'preact'
+import * as Preact from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse } from '../../types'
@@ -587,6 +587,120 @@ describe('SurveyManager', () => {
             )
         })
     })
+
+    describe('timeout management', () => {
+        let mockPostHog: PostHog
+        let surveyManager: SurveyManager
+        let mockSurvey: Survey
+
+        beforeEach(() => {
+            jest.useFakeTimers()
+            // Set up mocks
+            mockPostHog = {
+                getActiveMatchingSurveys: jest.fn(),
+                get_session_replay_url: jest.fn(),
+                capture: jest.fn(),
+                featureFlags: {
+                    isFeatureEnabled: jest.fn().mockReturnValue(true),
+                },
+            } as unknown as PostHog
+
+            surveyManager = new SurveyManager(mockPostHog)
+
+            mockSurvey = {
+                id: 'delayed-survey',
+                name: 'Delayed Survey',
+                description: 'A survey with delay',
+                type: SurveyType.Popover,
+                linked_flag_key: null,
+                targeting_flag_key: null,
+                internal_targeting_flag_key: null,
+                questions: [
+                    {
+                        question: 'Test question?',
+                        type: SurveyQuestionType.Open,
+                        id: 'q1',
+                    },
+                ],
+                appearance: {
+                    surveyPopupDelaySeconds: 5,
+                },
+                conditions: null,
+                start_date: '2021-01-01T00:00:00.000Z',
+                end_date: null,
+                current_iteration: null,
+                current_iteration_start_date: null,
+                feature_flag_keys: [],
+            }
+
+            // Make the internal methods accessible for testing
+            jest.spyOn(surveyManager as any, 'addSurveyToFocus')
+            jest.spyOn(surveyManager as any, 'removeSurveyFromFocus')
+
+            // Mock doesSurveyUrlMatch to always return true, used in handlePopoverSurvey
+            jest.spyOn(surveyManager as any, 'handlePopoverSurvey').mockImplementation((survey: Survey) => {
+                // Add survey to focus and create a timeout
+                surveyManager.getTestAPI().addSurveyToFocus(survey.id)
+
+                // Create and store timeoutId
+                if (survey.appearance?.surveyPopupDelaySeconds) {
+                    const timeoutId = setTimeout(() => {}, survey.appearance.surveyPopupDelaySeconds * 1000)
+                    surveyManager.getTestAPI().surveyTimeouts.set(survey.id, timeoutId)
+                }
+            })
+        })
+
+        afterEach(() => {
+            jest.useRealTimers()
+            jest.clearAllMocks()
+        })
+
+        test('should track timeouts when scheduling delayed surveys', () => {
+            surveyManager.getTestAPI().handlePopoverSurvey(mockSurvey)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(mockSurvey.id)).toBe(true)
+        })
+
+        test('should clear timeouts when removing survey from focus', () => {
+            // Setup
+            surveyManager.getTestAPI().handlePopoverSurvey(mockSurvey)
+            const timeoutId = surveyManager.getTestAPI().surveyTimeouts.get(mockSurvey.id)
+            expect(timeoutId).toBeDefined()
+
+            // Test that clearTimeout is called with correct ID
+            const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout')
+            surveyManager.getTestAPI().removeSurveyFromFocus(mockSurvey.id)
+            expect(clearTimeoutSpy).toHaveBeenCalledWith(timeoutId)
+
+            // Verify timeout was removed from map
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(mockSurvey.id)).toBe(false)
+        })
+
+        test('should manage multiple survey timeouts correctly', () => {
+            // Setup first survey
+            surveyManager.getTestAPI().handlePopoverSurvey(mockSurvey)
+            const firstTimeoutId = surveyManager.getTestAPI().surveyTimeouts.get(mockSurvey.id)
+
+            // Clear and reset to test second survey
+            surveyManager.getTestAPI().removeSurveyFromFocus(mockSurvey.id)
+
+            // Create and schedule second survey
+            const mockSurvey2 = {
+                ...mockSurvey,
+                id: 'delayed-survey-2',
+                appearance: {
+                    surveyPopupDelaySeconds: 10,
+                },
+            }
+
+            // Schedule second survey
+            surveyManager.getTestAPI().handlePopoverSurvey(mockSurvey2)
+            const secondTimeoutId = surveyManager.getTestAPI().surveyTimeouts.get(mockSurvey2.id)
+
+            // Verify both timeouts are tracked separately
+            expect(firstTimeoutId).not.toEqual(secondTimeoutId)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(mockSurvey2.id)
+        })
+    })
 })
 
 describe('usePopupVisibility URL changes should hide surveys accordingly', () => {
@@ -1123,7 +1237,7 @@ describe('onPopupSurveyDismissed callback', () => {
 
         // Render the SurveyPopup component with our mocked callback
         render(
-            h(SurveyPopup, {
+            Preact.h(SurveyPopup, {
                 survey: survey,
                 removeSurveyFromFocus: mockRemoveSurveyFromFocus,
                 isPopup: true,
@@ -1418,11 +1532,11 @@ describe('preview renders', () => {
                 }
             }, [currentPageIndex])
 
-            return h('div', { ref: surveyPreviewRef })
+            return Preact.h('div', { ref: surveyPreviewRef })
         }
 
         // Render the test component
-        const { container } = render(h(TestSurveyPreview, {}))
+        const { container } = render(Preact.h(TestSurveyPreview, {}))
 
         // Check if we're on the first question
         expect(container.textContent).toContain('Question 1')
