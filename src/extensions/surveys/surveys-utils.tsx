@@ -567,39 +567,37 @@ type SendSurveyEventArgs = {
     responses: Record<string, string | number | string[] | null>
     survey: Survey
     posthog?: PostHog
-    surveyCompleted: boolean
-    surveyResponseId: string
+    isSurveyCompleted: boolean
+    surveySubmissionId: string
 }
 
 export const sendSurveyEvent = ({
     responses,
     survey,
     posthog,
-    surveyCompleted,
-    surveyResponseId,
+    isSurveyCompleted,
+    surveySubmissionId,
 }: SendSurveyEventArgs) => {
     if (!posthog) {
         logger.error('[survey sent] event not captured, PostHog instance not found.')
         return
     }
-    localStorage.setItem(getSurveySeenKey(survey), 'true')
-
-    // Don't send partial response if survey is not completed and disable_survey_partial_response is true
-    if (!surveyCompleted && !survey.enable_partial_response) {
+    if (!isSurveyCompleted && !survey.enable_partial_responses) {
         return
     }
+    localStorage.setItem(getSurveySeenKey(survey), 'true')
 
     logger.info('[PostHog Surveys] survey partial response payload', {
         surveyId: survey.id,
         surveyName: survey.name,
-        surveyCompleted,
-        surveyResponseId,
+        surveyCompleted: isSurveyCompleted,
+        surveySubmissionId,
         responses,
     })
 
     posthog.capture('survey sent', {
         $survey_name: survey.name,
-        $survey_completed: surveyCompleted || false,
+        $survey_completed: isSurveyCompleted,
         $survey_id: survey.id,
         $survey_iteration: survey.current_iteration,
         $survey_iteration_start_date: survey.current_iteration_start_date,
@@ -609,14 +607,14 @@ export const sendSurveyEvent = ({
             index,
         })),
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
-        $survey_response_id: surveyResponseId,
+        $survey_submission_id: surveySubmissionId,
         ...responses,
         $set: {
             [getSurveyInteractionProperty(survey, 'responded')]: true,
         },
     })
 
-    if (surveyCompleted) {
+    if (isSurveyCompleted) {
         window.dispatchEvent(new Event('PHSurveySent'))
     }
 }
@@ -770,7 +768,7 @@ interface SurveyContextProps {
     isPopup: boolean
     onPreviewSubmit: (res: string | string[] | number | null) => void
     onPopupSurveySent: () => void
-    surveyResponseId: string
+    surveySubmissionId: string
 }
 
 export const SurveyContext = createContext<SurveyContextProps>({
@@ -780,7 +778,7 @@ export const SurveyContext = createContext<SurveyContextProps>({
     isPopup: true,
     onPreviewSubmit: () => {},
     onPopupSurveySent: () => {},
-    surveyResponseId: '',
+    surveySubmissionId: '',
 })
 
 interface RenderProps {

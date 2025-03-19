@@ -737,7 +737,7 @@ export function SurveyPopup({
             onPopupSurveySent: () => {
                 onPopupSurveySent()
             },
-            surveyResponseId: uuidv7(),
+            surveySubmissionId: uuidv7(),
         }),
         [isPreviewMode, previewPageIndex, onPopupSurveyDismissed, survey, posthog, uuidv7]
     )
@@ -788,8 +788,14 @@ export function Questions({
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
     )
     const [questionsResponses, setQuestionsResponses] = useState({})
-    const { previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit, onPopupSurveySent, surveyResponseId } =
-        useContext(SurveyContext)
+    const {
+        previewPageIndex,
+        onPopupSurveyDismissed,
+        isPopup,
+        onPreviewSubmit,
+        onPopupSurveySent,
+        surveySubmissionId,
+    } = useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
@@ -822,14 +828,15 @@ export function Questions({
         setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
 
         const nextStep = getNextSurveyStep(survey, displayQuestionIndex, res)
-        if (nextStep === SurveyQuestionBranchingType.End) {
-            sendSurveyEvent({
-                responses: { ...questionsResponses, [responseKey]: res },
-                survey,
-                posthog,
-                surveyCompleted: nextStep === SurveyQuestionBranchingType.End,
-                surveyResponseId,
-            })
+        const isSurveyCompleted = nextStep === SurveyQuestionBranchingType.End
+        sendSurveyEvent({
+            responses: { ...questionsResponses, [responseKey]: res },
+            survey,
+            posthog,
+            isSurveyCompleted: isSurveyCompleted,
+            surveySubmissionId,
+        })
+        if (isSurveyCompleted) {
             onPopupSurveySent()
         } else {
             setCurrentQuestionIndex(nextStep)
