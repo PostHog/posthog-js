@@ -211,7 +211,7 @@ export class PostHogFeatureFlags {
             const originalDetail = finalDetails[key]
             const overrideFlagValue = overridenFlags?.[key]
 
-            const finalEnabled = isUndefined(overrideFlagValue) ? originalDetail.enabled : !!overrideFlagValue
+            const finalEnabled = isUndefined(overrideFlagValue) ? originalDetail?.enabled ?? false : !!overrideFlagValue
 
             const overrideVariant = isUndefined(overrideFlagValue)
                 ? originalDetail.variant
