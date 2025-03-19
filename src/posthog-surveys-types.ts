@@ -122,7 +122,7 @@ export interface SurveyResponse {
     surveys: Survey[]
 }
 
-export type SurveyCallback = (surveys: Survey[]) => void
+export type SurveyCallback = (surveys: Survey[], context?: { errorsLoading?: boolean }) => void
 
 export type SurveyMatchType = 'regex' | 'not_regex' | 'exact' | 'is_not' | 'icontains' | 'not_icontains'
 
