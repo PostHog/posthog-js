@@ -1599,7 +1599,7 @@ describe('featureflags', () => {
                         enabled: true,
                         variant: 'variant-1',
                         reason: {
-                            description: 'test-reason',
+                            description: 'Matched condition set 1',
                             code: 'test-code',
                             condition_index: 1,
                         },
@@ -1623,11 +1623,7 @@ describe('featureflags', () => {
                     $feature_flag_response: 'variant-1',
                     $feature_flag_request_id: TEST_REQUEST_ID,
                     $feature_flag_version: 42,
-                    $feature_flag_reason: {
-                        description: 'test-reason',
-                        code: 'test-code',
-                        condition_index: 1,
-                    },
+                    $feature_flag_reason: 'Matched condition set 1',
                     $feature_flag_id: 23,
                 })
             )

@@ -488,7 +488,7 @@ export class PostHogFeatureFlags {
                     properties.$feature_flag_version = flagDetails.metadata.version
                 }
 
-                const reason = flagDetails?.reason
+                const reason = flagDetails?.reason?.description ?? flagDetails?.reason?.code
                 if (reason) {
                     properties.$feature_flag_reason = reason
                 }
