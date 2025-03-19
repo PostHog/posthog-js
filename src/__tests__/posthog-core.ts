@@ -333,6 +333,13 @@ describe('posthog core', () => {
                 })
             )
         })
+
+        it('does not allow you to set complex current url', () => {
+            const posthog = posthogWith(defaultConfig, defaultOverrides)
+            const captureResult = posthog.capture('event-name', { $current_url: new URL('https://app.posthog.com/s/') })
+
+            expect(captureResult.properties.$current_url).toEqual('http://localhost/')
+        })
     })
 
     describe('_afterDecideResponse', () => {
