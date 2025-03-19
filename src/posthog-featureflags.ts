@@ -484,7 +484,7 @@ export class PostHogFeatureFlags {
                     $used_bootstrap_value: !this._flagsLoadedFromRemote,
                 }
 
-                if (flagDetails?.metadata?.version) {
+                if (!isUndefined(flagDetails?.metadata?.version)) {
                     properties.$feature_flag_version = flagDetails.metadata.version
                 }
 
