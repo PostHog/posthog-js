@@ -256,7 +256,7 @@ export class SessionRecording {
     private _captureStarted: boolean
     private stopRrweb: listenerHandler | undefined
     private receivedDecide: boolean
-    private isIdle = false
+    private isIdle: boolean | 'unknown' = 'unknown'
 
     private _linkedFlagSeen: boolean = false
     private _lastActivityTimestamp: number = Date.now()
@@ -863,13 +863,18 @@ export class SessionRecording {
         if (isUserInteraction) {
             this._lastActivityTimestamp = event.timestamp
             if (this.isIdle) {
+                const idleWasUnknown = this.isIdle === 'unknown'
                 // Remove the idle state
                 this.isIdle = false
-                this._tryAddCustomEvent('sessionNoLongerIdle', {
-                    reason: 'user activity',
-                    type: event.type,
-                })
-                returningFromIdle = true
+                // if the idle state was unknown, we don't want to add an event, since we're just in bootup
+                // whereas if it was true, we know we've been idle for a while, and we can mark ourselves as returning from idle
+                if (!idleWasUnknown) {
+                    this._tryAddCustomEvent('sessionNoLongerIdle', {
+                        reason: 'user activity',
+                        type: event.type,
+                    })
+                    returningFromIdle = true
+                }
             }
         }
 
@@ -1005,7 +1010,8 @@ export class SessionRecording {
 
         // We reset the last activity timestamp, resetting the idle timer
         this._lastActivityTimestamp = Date.now()
-        this.isIdle = false
+        // stay unknown if we're not sure if we're idle or not
+        this.isIdle = isBoolean(this.isIdle) ? this.isIdle : 'unknown'
 
         this._tryAddCustomEvent('$session_options', {
             sessionRecordingOptions,
@@ -1022,7 +1028,7 @@ export class SessionRecording {
             clearInterval(this._fullSnapshotTimer)
         }
         // we don't schedule snapshots while idle
-        if (this.isIdle) {
+        if (this.isIdle === true) {
             return
         }
 
@@ -1109,7 +1115,8 @@ export class SessionRecording {
         this._updateWindowAndSessionIds(event)
 
         // When in an idle state we keep recording, but don't capture the events,
-        if (this.isIdle && !isSessionIdleEvent(event)) {
+        // we don't want to return early if idle is 'unknown'
+        if (this.isIdle === true && !isSessionIdleEvent(event)) {
             return
         }
 
