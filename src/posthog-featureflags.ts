@@ -11,18 +11,20 @@ import {
     EarlyAccessFeature,
     RemoteConfigFeatureFlagCallback,
     EarlyAccessFeatureStage,
+    FeatureFlagDetail,
 } from './types'
 import { PostHogPersistence } from './posthog-persistence'
 
 import {
     PERSISTENCE_EARLY_ACCESS_FEATURES,
+    PERSISTENCE_FEATURE_FLAG_DETAILS,
     ENABLED_FEATURE_FLAGS,
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
     FLAG_CALL_REPORTED,
 } from './constants'
 
-import { isArray } from './utils/type-utils'
+import { isArray, isUndefined } from './utils/type-utils'
 import { createLogger } from './utils/logger'
 
 const logger = createLogger('[FeatureFlags]')
@@ -47,45 +49,81 @@ export const parseFeatureFlagDecideResponse = (
     response: Partial<DecideResponse>,
     persistence: PostHogPersistence,
     currentFlags: Record<string, string | boolean> = {},
-    currentFlagPayloads: Record<string, JsonType> = {}
+    currentFlagPayloads: Record<string, JsonType> = {},
+    currentFlagDetails: Record<string, FeatureFlagDetail> = {}
 ) => {
-    const flags = response['featureFlags']
-    const flagPayloads = response['featureFlagPayloads']
-    const requestId = response['requestId']
-    if (!flags) {
-        return
+    const normalizedResponse = normalizeDecideResponse(response)
+    const flagDetails = normalizedResponse.flags
+    const featureFlags = normalizedResponse.featureFlags
+    const flagPayloads = normalizedResponse.featureFlagPayloads
+
+    if (!featureFlags) {
+        return // <-- This early return means we don't update anything, which is good.
     }
+
+    const requestId = response['requestId']
+
     // using the v1 api
-    if (isArray(flags)) {
+    if (isArray(featureFlags)) {
+        logger.warn('v1 of the feature flags endpoint is deprecated. Please use the latest version.')
         const $enabled_feature_flags: Record<string, boolean> = {}
-        if (flags) {
-            for (let i = 0; i < flags.length; i++) {
-                $enabled_feature_flags[flags[i]] = true
+        if (featureFlags) {
+            for (let i = 0; i < featureFlags.length; i++) {
+                $enabled_feature_flags[featureFlags[i]] = true
             }
         }
         persistence &&
             persistence.register({
-                [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: flags,
+                [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: featureFlags,
                 [ENABLED_FEATURE_FLAGS]: $enabled_feature_flags,
             })
         return
     }
 
     // using the v2+ api
-    let newFeatureFlags = flags
+    let newFeatureFlags = featureFlags
     let newFeatureFlagPayloads = flagPayloads
+    let newFeatureFlagDetails = flagDetails
     if (response.errorsWhileComputingFlags) {
         // if not all flags were computed, we upsert flags instead of replacing them
         newFeatureFlags = { ...currentFlags, ...newFeatureFlags }
         newFeatureFlagPayloads = { ...currentFlagPayloads, ...newFeatureFlagPayloads }
+        newFeatureFlagDetails = { ...currentFlagDetails, ...newFeatureFlagDetails }
     }
+
     persistence &&
         persistence.register({
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFeatureFlags)),
             [ENABLED_FEATURE_FLAGS]: newFeatureFlags || {},
             [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
+            [PERSISTENCE_FEATURE_FLAG_DETAILS]: newFeatureFlagDetails || {},
             ...(requestId ? { [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: requestId } : {}),
         })
+}
+
+const normalizeDecideResponse = (response: Partial<DecideResponse>): Partial<DecideResponse> => {
+    const flagDetails = response['flags']
+
+    if (flagDetails) {
+        // This is a v=4 request.
+
+        // Map of flag keys to flag values: Record<string, string | boolean>
+        response.featureFlags = Object.fromEntries(
+            Object.keys(flagDetails).map((flag) => [flag, flagDetails[flag].variant ?? flagDetails[flag].enabled])
+        )
+        // Map of flag keys to flag payloads: Record<string, JsonType>
+        response.featureFlagPayloads = Object.fromEntries(
+            Object.keys(flagDetails)
+                .filter((flag) => flagDetails[flag].enabled)
+                .filter((flag) => flagDetails[flag].metadata?.payload)
+                .map((flag) => [flag, flagDetails[flag].metadata?.payload])
+        )
+    } else {
+        logger.warn(
+            'Using an older version of the feature flags endpoint. Please upgrade your PostHog server to the latest version'
+        )
+    }
+    return response
 }
 
 type FeatureFlagOverrides = {
@@ -153,6 +191,75 @@ export class PostHogFeatureFlags {
 
     getFlags(): string[] {
         return Object.keys(this.getFlagVariants())
+    }
+
+    getFlagsWithDetails(): Record<string, FeatureFlagDetail> {
+        const flagDetails = this.instance.get_property(PERSISTENCE_FEATURE_FLAG_DETAILS)
+
+        const overridenFlags = this.instance.get_property(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
+        const overriddenPayloads = this.instance.get_property(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
+
+        if (!overriddenPayloads && !overridenFlags) {
+            return flagDetails || {}
+        }
+
+        const finalDetails = extend({}, flagDetails || {})
+        const overriddenKeys = [
+            ...new Set([...Object.keys(overriddenPayloads || {}), ...Object.keys(overridenFlags || {})]),
+        ]
+        for (const key of overriddenKeys) {
+            const originalDetail = finalDetails[key]
+            const overrideFlagValue = overridenFlags?.[key]
+
+            const finalEnabled = isUndefined(overrideFlagValue)
+                ? (originalDetail?.enabled ?? false)
+                : !!overrideFlagValue
+
+            const overrideVariant = isUndefined(overrideFlagValue)
+                ? originalDetail.variant
+                : typeof overrideFlagValue === 'string'
+                  ? overrideFlagValue
+                  : undefined
+
+            const overridePayload = overriddenPayloads?.[key]
+
+            const overridenDetail = {
+                ...originalDetail,
+                enabled: finalEnabled,
+                // If the flag is not enabled, the variant should be undefined, even if the original has a variant value.
+                variant: finalEnabled ? (overrideVariant ?? originalDetail?.variant) : undefined,
+            }
+
+            // Keep track of the original enabled and variant values so we can send them in the $feature_flag_called event.
+            // This will be helpful for debugging and for understanding the impact of overrides.
+            if (finalEnabled !== originalDetail?.enabled) {
+                overridenDetail.original_enabled = originalDetail?.enabled
+            }
+
+            if (overrideVariant !== originalDetail?.variant) {
+                overridenDetail.original_variant = originalDetail?.variant
+            }
+
+            if (overridePayload) {
+                overridenDetail.metadata = {
+                    ...originalDetail?.metadata,
+                    payload: overridePayload,
+                    original_payload: originalDetail?.metadata?.payload,
+                }
+            }
+
+            finalDetails[key] = overridenDetail
+        }
+
+        if (!this._override_warning) {
+            logger.warn(' Overriding feature flag details!', {
+                flagDetails,
+                overriddenPayloads,
+                finalDetails,
+            })
+            this._override_warning = true
+        }
+        return finalDetails
     }
 
     getFlagVariants(): Record<string, string | boolean> {
@@ -344,7 +451,7 @@ export class PostHogFeatureFlags {
      *     if(posthog.getFeatureFlag('my-flag') === 'some-variant') { // do something }
      *
      * @param {Object|String} key Key of the feature flag.
-     * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
+     * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_called event to PostHog.
      */
     getFeatureFlag(key: string, options: { send_event?: boolean } = {}): boolean | string | undefined {
         if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
@@ -365,7 +472,9 @@ export class PostHogFeatureFlags {
                 }
                 this.instance.persistence?.register({ [FLAG_CALL_REPORTED]: flagCallReported })
 
-                this.instance.capture('$feature_flag_called', {
+                const flagDetails = this.getFeatureFlagDetails(key)
+
+                const properties: Record<string, any | undefined> = {
                     $feature_flag: key,
                     $feature_flag_response: flagValue,
                     $feature_flag_payload: this.getFeatureFlagPayload(key) || null,
@@ -375,10 +484,54 @@ export class PostHogFeatureFlags {
                         this.instance.config.bootstrap?.featureFlagPayloads?.[key] || null,
                     // If we haven't yet received a response from the /decide endpoint, we must have used the bootstrapped value
                     $used_bootstrap_value: !this._flagsLoadedFromRemote,
-                })
+                }
+
+                if (!isUndefined(flagDetails?.metadata?.version)) {
+                    properties.$feature_flag_version = flagDetails.metadata.version
+                }
+
+                const reason = flagDetails?.reason?.description ?? flagDetails?.reason?.code
+                if (reason) {
+                    properties.$feature_flag_reason = reason
+                }
+
+                if (flagDetails?.metadata?.id) {
+                    properties.$feature_flag_id = flagDetails.metadata.id
+                }
+
+                // It's possible that flag values were overridden by calling overrideFeatureFlags.
+                // We want to capture the original values in case someone forgets they were using overrides
+                // and is wondering why their app is acting weird.
+                if (!isUndefined(flagDetails?.original_variant) || !isUndefined(flagDetails?.original_enabled)) {
+                    properties.$feature_flag_original_response = !isUndefined(flagDetails.original_variant)
+                        ? flagDetails.original_variant
+                        : flagDetails.original_enabled
+                }
+
+                if (flagDetails?.metadata?.original_payload) {
+                    properties.$feature_flag_original_payload = flagDetails?.metadata?.original_payload
+                }
+
+                this.instance.capture('$feature_flag_called', properties)
             }
         }
         return flagValue
+    }
+
+    /*
+     * Retrieves the details for a feature flag.
+     *
+     * ### Usage:
+     *
+     *     const details = getFeatureFlagDetails("my-flag")
+     *     console.log(details.metadata.version)
+     *     console.log(details.reason)
+     *
+     * @param {String} key Key of the feature flag.
+     */
+    getFeatureFlagDetails(key: string): FeatureFlagDetail | undefined {
+        const details = this.getFlagsWithDetails()
+        return details[key]
     }
 
     getFeatureFlagPayload(key: string): JsonType {
@@ -452,7 +605,14 @@ export class PostHogFeatureFlags {
 
         const currentFlags = this.getFlagVariants()
         const currentFlagPayloads = this.getFlagPayloads()
-        parseFeatureFlagDecideResponse(response, this.instance.persistence, currentFlags, currentFlagPayloads)
+        const currentFlagDetails = this.getFlagsWithDetails()
+        parseFeatureFlagDecideResponse(
+            response,
+            this.instance.persistence,
+            currentFlags,
+            currentFlagPayloads,
+            currentFlagDetails
+        )
         this._fireFeatureFlagsCallbacks(errorsLoading)
     }
 
@@ -473,23 +633,23 @@ export class PostHogFeatureFlags {
      *
      * ### Usage:
      *
-     *     - posthog.feature_flags.overrideFeatureFlags(false) // clear all overrides
-     *     - posthog.feature_flags.overrideFeatureFlags(['beta-feature']) // enable flags
-     *     - posthog.feature_flags.overrideFeatureFlags({'beta-feature': 'variant'}) // set variants
-     *     - posthog.feature_flags.overrideFeatureFlags({ // set both flags and payloads
+     *     - posthog.featureFlags.overrideFeatureFlags(false) // clear all overrides
+     *     - posthog.featureFlags.overrideFeatureFlags(['beta-feature']) // enable flags
+     *     - posthog.featureFlags.overrideFeatureFlags({'beta-feature': 'variant'}) // set variants
+     *     - posthog.featureFlags.overrideFeatureFlags({ // set both flags and payloads
      *         flags: {'beta-feature': 'variant'},
      *         payloads: { 'beta-feature': { someData: true } }
      *       })
-     *     - posthog.feature_flags.overrideFeatureFlags({ // only override payloads
+     *     - posthog.featureFlags.overrideFeatureFlags({ // only override payloads
      *         payloads: { 'beta-feature': { someData: true } }
      *       })
      */
     overrideFeatureFlags(overrideOptions: OverrideFeatureFlagsOptions): void {
         if (!this.instance.__loaded || !this.instance.persistence) {
-            return logger.uninitializedWarning('posthog.feature_flags.overrideFeatureFlags')
+            return logger.uninitializedWarning('posthog.featureFlags.overrideFeatureFlags')
         }
 
-        // Clear all overrides if false, lets you do something like posthog.feature_flags.overrideFeatureFlags(false)
+        // Clear all overrides if false, lets you do something like posthog.featureFlags.overrideFeatureFlags(false)
         if (overrideOptions === false) {
             this.instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
             this.instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
@@ -505,7 +665,7 @@ export class PostHogFeatureFlags {
             const options = overrideOptions
             this._override_warning = Boolean(options.suppressWarning ?? false)
 
-            // Handle flags if provided, lets you do something like posthog.feature_flags.overrideFeatureFlags({flags: ['beta-feature']})
+            // Handle flags if provided, lets you do something like posthog.featureFlags.overrideFeatureFlags({flags: ['beta-feature']})
             if ('flags' in options) {
                 if (options.flags === false) {
                     this.instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
@@ -522,7 +682,7 @@ export class PostHogFeatureFlags {
                 }
             }
 
-            // Handle payloads independently, lets you do something like posthog.feature_flags.overrideFeatureFlags({payloads: { 'beta-feature': { someData: true } }})
+            // Handle payloads independently, lets you do something like posthog.featureFlags.overrideFeatureFlags({payloads: { 'beta-feature': { someData: true } }})
             if ('payloads' in options) {
                 if (options.payloads === false) {
                     this.instance.persistence.unregister(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)

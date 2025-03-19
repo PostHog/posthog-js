@@ -1336,6 +1336,7 @@ export interface DecideResponse extends RemoteConfig {
     featureFlagPayloads: Record<string, JsonType>
     errorsWhileComputingFlags: boolean
     requestId?: string
+    flags: Record<string, FeatureFlagDetail>
 }
 
 export type SiteAppGlobals = {
@@ -1375,6 +1376,33 @@ export type FeatureFlagsCallback = (
         errorsLoading?: boolean
     }
 ) => void
+
+export type FeatureFlagDetail = {
+    key: string
+    enabled: boolean
+    // Only used when overriding a flag payload.
+    original_enabled?: boolean | undefined
+    variant: string | undefined
+    // Only used when overriding a flag payload.
+    original_variant?: string | undefined
+    reason: EvaluationReason | undefined
+    metadata: FeatureFlagMetadata | undefined
+}
+
+export type FeatureFlagMetadata = {
+    id: number
+    version: number | undefined
+    description: string | undefined
+    payload: JsonType | undefined
+    // Only used when overriding a flag payload.
+    original_payload?: JsonType | undefined
+}
+
+export type EvaluationReason = {
+    code: string
+    condition_index: number | undefined
+    description: string | undefined
+}
 
 export type RemoteConfigFeatureFlagCallback = (payload: JsonType) => void
 
