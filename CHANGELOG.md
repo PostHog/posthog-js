@@ -1,3 +1,7 @@
+## 1.231.3 - 2025-03-19
+
+- fix: do not allow non string `$current_url`  to be provided (#1835)
+
 ## 1.231.2 - 2025-03-18
 
 - fix: check surveys timeout in the survey manager level (#1832)
