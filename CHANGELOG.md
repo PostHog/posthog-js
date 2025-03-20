@@ -1,3 +1,9 @@
+## 1.232.0 - 2025-03-20
+
+- feat: do not start recorder active-active (#1839)
+- chore(dev): add config to make debugging with vs code and the orta jest extension… (#1836)
+- feat(flags): Support `/decide?v=4` and include version info flag called events (#1837)
+
 ## 1.231.3 - 2025-03-19
 
 - fix: do not allow non string `$current_url`  to be provided (#1835)
