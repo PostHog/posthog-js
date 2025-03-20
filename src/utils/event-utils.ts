@@ -61,6 +61,11 @@ export const EVENT_TO_PERSON_PROPERTIES = [
     '$os_version',
     '$referring_domain',
     '$referrer',
+    '$screen_height',
+    '$screen_width',
+    '$viewport_height',
+    '$viewport_width',
+    '$raw_user_agent',
 ]
 
 export const MASKED = '<masked>'
