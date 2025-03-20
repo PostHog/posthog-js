@@ -65,6 +65,7 @@ export const EVENT_TO_PERSON_PROPERTIES = [
     '$screen_width',
     '$viewport_height',
     '$viewport_width',
+    '$raw_user_agent',
 ]
 
 export const MASKED = '<masked>'
