@@ -1,3 +1,7 @@
+## 1.232.1 - 2025-03-20
+
+- feat: Screen dimensions and UA as person property (#1840)
+
 ## 1.232.0 - 2025-03-20
 
 - feat: do not start recorder active-active (#1839)
