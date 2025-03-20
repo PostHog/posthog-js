@@ -60,6 +60,7 @@ export default function App({ Component, pageProps }: AppProps) {
                     script-src 'self' 'unsafe-eval' 'unsafe-inline' ${localhostDomain} https://*.posthog.com ${CDP_DOMAINS};
                     style-src 'self' 'unsafe-inline' ${localhostDomain} https://*.posthog.com;
                     img-src 'self' ${localhostDomain} https://*.posthog.com https://lottie.host https://cataas.com ${CDP_DOMAINS};
+                    worker-src 'self' blob:;
                 `}
                 />
             </Head>
