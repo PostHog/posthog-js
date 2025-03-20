@@ -391,13 +391,12 @@ export class PostHogFeatureFlags {
             data.disable_flags = true
         }
 
+        const eligibleForFlagsV2 = token === DEFAULT_POSTHOG_APP_API_KEY && this.instance.config.__preview_remote_config
+
         this._requestInFlight = true
         this.instance._send_request({
             method: 'POST',
-            url: this.instance.requestRouter.endpointFor(
-                'api',
-                token === DEFAULT_POSTHOG_APP_API_KEY ? '/flags/?v=2' : '/decide/?v=4'
-            ),
+            url: this.instance.requestRouter.endpointFor('api', eligibleForFlagsV2 ? '/flags/?v=2' : '/decide/?v=4'),
             data,
             compression: this.instance.config.disable_compression ? undefined : Compression.Base64,
             timeout: this.instance.config.feature_flag_request_timeout_ms,
