@@ -1,3 +1,7 @@
+## 1.232.2 - 2025-03-20
+
+- feat: Enjoy the benefits of `/decide?v=4` (#1838)
+
 ## 1.232.1 - 2025-03-20
 
 - feat: Screen dimensions and UA as person property (#1840)
