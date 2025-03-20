@@ -58,7 +58,7 @@ describe('request-router', () => {
         ['  https://app.posthog.com       ', 'https://us.i.posthog.com/'],
         ['https://example.com/', 'https://example.com/'],
     ])('should sanitize the api_host values for "%s"', (apiHost, expected) => {
-        expect(router(apiHost).endpointFor('api', '/decide?v=3')).toEqual(`${expected}decide?v=3`)
+        expect(router(apiHost).endpointFor('api', '/decide?v=4')).toEqual(`${expected}decide?v=4`)
     })
 
     it('should use the ui_host if provided', () => {
