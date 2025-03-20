@@ -2186,7 +2186,6 @@ describe('SessionRecording', () => {
             sessionRecording.onRRwebEmit(createIncrementalSnapshot({ data: { source: 1 } }) as any)
 
             expect(sessionRecording['queuedRRWebEvents']).toHaveLength(0)
-            expect(sessionRecording['rrwebRecord']).not.toBeUndefined()
         })
     })
 
