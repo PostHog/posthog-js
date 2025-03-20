@@ -22,6 +22,7 @@ import {
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
     FLAG_CALL_REPORTED,
+    DEFAULT_POSTHOG_APP_API_KEY,
 } from './constants'
 
 import { isArray, isUndefined } from './utils/type-utils'
@@ -395,7 +396,7 @@ export class PostHogFeatureFlags {
             method: 'POST',
             url: this.instance.requestRouter.endpointFor(
                 'api',
-                token === 'sTMFPsFhdP1Ssg' ? '/flags/?v=2' : '/decide/?v=4'
+                token === DEFAULT_POSTHOG_APP_API_KEY ? '/flags/?v=2' : '/decide/?v=4'
             ),
             data,
             compression: this.instance.config.disable_compression ? undefined : Compression.Base64,
@@ -416,6 +417,7 @@ export class PostHogFeatureFlags {
                 this._requestInFlight = false
 
                 if (!this._decideCalled) {
+                    // NB: this will be true if remote config is enabled, which it is for the default posthog app api key
                     this._decideCalled = true
                     this.instance._onRemoteConfig(response.json ?? {})
                 }
