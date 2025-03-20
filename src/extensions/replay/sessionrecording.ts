@@ -54,6 +54,10 @@ import { sampleOnProperty } from '../sampling'
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
 
+function getRRWebRecord(): rrwebRecord | undefined {
+    return assignableWindow?.__PosthogExtensions__?.rrweb?.record
+}
+
 type SessionStartReason =
     | 'sampling_overridden'
     | 'recording_initialized'
@@ -288,10 +292,6 @@ export class SessionRecording {
 
     private get sessionIdleThresholdMilliseconds(): number {
         return this.instance.config.session_recording.session_idle_threshold_ms || RECORDING_IDLE_THRESHOLD_MS
-    }
-
-    private get rrwebRecord(): rrwebRecord | undefined {
-        return assignableWindow?.__PosthogExtensions__?.rrweb?.record
     }
 
     public get started(): boolean {
@@ -795,7 +795,7 @@ export class SessionRecording {
 
         // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
         // imported), don't load script. Otherwise, remotely import recorder.js from cdn since it hasn't been loaded.
-        if (!this.rrwebRecord) {
+        if (!getRRWebRecord()) {
             assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, this.scriptName, (err) => {
                 if (err) {
                     return logger.error('could not load recorder', err)
@@ -923,11 +923,11 @@ export class SessionRecording {
     }
 
     private _tryAddCustomEvent(tag: string, payload: any): boolean {
-        return this._tryRRWebMethod(newQueuedEvent(() => this.rrwebRecord!.addCustomEvent(tag, payload)))
+        return this._tryRRWebMethod(newQueuedEvent(() => getRRWebRecord()!.addCustomEvent(tag, payload)))
     }
 
     private _tryTakeFullSnapshot(): boolean {
-        return this._tryRRWebMethod(newQueuedEvent(() => this.rrwebRecord!.takeFullSnapshot()))
+        return this._tryRRWebMethod(newQueuedEvent(() => getRRWebRecord()!.takeFullSnapshot()))
     }
 
     private _onScriptLoaded() {
@@ -977,7 +977,8 @@ export class SessionRecording {
             sessionRecordingOptions.blockSelector = this.masking.blockSelector ?? undefined
         }
 
-        if (!this.rrwebRecord) {
+        const rrwebRecord = getRRWebRecord()
+        if (!rrwebRecord) {
             logger.error(
                 'onScriptLoaded was called but rrwebRecord is not available. This indicates something has gone wrong.'
             )
@@ -986,7 +987,7 @@ export class SessionRecording {
 
         this.mutationRateLimiter =
             this.mutationRateLimiter ??
-            new MutationRateLimiter(this.rrwebRecord, {
+            new MutationRateLimiter(rrwebRecord, {
                 refillRate: this.instance.config.session_recording.__mutationRateLimiterRefillRate,
                 bucketSize: this.instance.config.session_recording.__mutationRateLimiterBucketSize,
                 onBlockedNode: (id, node) => {
@@ -1000,7 +1001,7 @@ export class SessionRecording {
             })
 
         const activePlugins = this._gatherRRWebPlugins()
-        this.stopRrweb = this.rrwebRecord({
+        this.stopRrweb = rrwebRecord({
             emit: (event) => {
                 this.onRRwebEmit(event)
             },
