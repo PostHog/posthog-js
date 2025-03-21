@@ -390,6 +390,10 @@ export class PostHogFeatureFlags {
             data.disable_flags = true
         }
 
+        // NB: flags v2 requires remote config to be enabled as well, since the idea is that we will skip calling /decide altogether
+        // (which remote config does) and just use the /flags endpoint.  May revisit this if we need to support flags v2 without remote config
+        // (e.g. we could call `/decide` with flags disabled for the data otherwise returned by remote config, and then still call
+        // `/flags/` to get the flag evaluation data).
         const eligibleForFlagsV2 =
             this.instance.config.__preview_flags_v2 && this.instance.config.__preview_remote_config
 
@@ -415,8 +419,8 @@ export class PostHogFeatureFlags {
 
                 this._requestInFlight = false
 
+                // NB: this block is only reached if this.instance.config.__preview_remote_config is false
                 if (!this._decideCalled) {
-                    // NB: this will be true if remote config is enabled, which it is for the default posthog app api key
                     this._decideCalled = true
                     this.instance._onRemoteConfig(response.json ?? {})
                 }
