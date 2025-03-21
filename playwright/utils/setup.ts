@@ -59,6 +59,7 @@ export async function start(
         editorParams: {},
         featureFlags: { 'session-recording-player': true },
         featureFlagPayloads: {},
+        flags: {},
         errorsWhileComputingFlags: false,
         toolbarParams: {},
         toolbarVersion: 'toolbar',

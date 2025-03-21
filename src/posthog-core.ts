@@ -22,7 +22,7 @@ import { WebVitalsAutocapture } from './extensions/web-vitals'
 import { Heatmaps } from './heatmaps'
 import { PageViewManager } from './page-view'
 import { PostHogExceptions } from './posthog-exceptions'
-import { PostHogFeatureFlags } from './posthog-featureflags'
+import { createFeatureFlagDetailsFromLegacyDecideResponse, PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import { PostHogSurveys } from './posthog-surveys'
 import { SurveyCallback } from './posthog-surveys-types'
@@ -533,7 +533,10 @@ export class PostHog {
                     return res
                 }, {})
 
-            this.featureFlags.receivedFeatureFlags({ featureFlags: activeFlags, featureFlagPayloads })
+            // Need to contruct a flagDetails object from the bootstrapped activeFlags and featureFlagPayloads
+            const flagDetails = createFeatureFlagDetailsFromLegacyDecideResponse(activeFlags, featureFlagPayloads)
+
+            this.featureFlags.receivedFeatureFlags({ flags: flagDetails })
         }
 
         if (this.config.__preview_experimental_cookieless_mode) {
@@ -2078,7 +2081,7 @@ export class PostHog {
     }
 
     /**
-     * Opt the user out of data capturing and cookies/localstorage for this PostHog instance.
+     * Opt the user out of data capturing and cookies/localstorage for this PostHog instance
      * If the config.opt_out_persistence_by_default is set to true, the SDK persistence will be disabled.
      *
      */

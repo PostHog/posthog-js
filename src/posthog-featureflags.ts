@@ -24,14 +24,13 @@ import {
     FLAG_CALL_REPORTED,
 } from './constants'
 
-import { isArray, isUndefined } from './utils/type-utils'
+import { isArray, isString, isUndefined } from './utils/type-utils'
 import { createLogger } from './utils/logger'
 
 const logger = createLogger('[FeatureFlags]')
 
 const PERSISTENCE_ACTIVE_FEATURE_FLAGS = '$active_feature_flags'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAGS = '$override_feature_flags'
-const PERSISTENCE_FEATURE_FLAG_PAYLOADS = '$feature_flag_payloads'
 const PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS = '$override_feature_flag_payloads'
 const PERSISTENCE_FEATURE_FLAG_REQUEST_ID = '$feature_flag_request_id'
 
@@ -45,17 +44,48 @@ export const filterActiveFeatureFlags = (featureFlags?: Record<string, string | 
     return activeFeatureFlags
 }
 
+/**
+ * Creates feature flag details from active flags and their payloads
+ * @param activeFlags Record of active feature flags and their values
+ * @param featureFlagPayloads Record of feature flag payloads
+ * @returns Record of feature flag details
+ */
+export const createFeatureFlagDetailsFromLegacyDecideResponse = (
+    activeFlags: Record<string, string | boolean>,
+    featureFlagPayloads: Record<string, JsonType>
+): Record<string, FeatureFlagDetail> => {
+    // Get the union of flag keys and payloads
+    const allKeys = new Set([...Object.keys(activeFlags), ...Object.keys(featureFlagPayloads)])
+    return Array.from(allKeys).reduce((res: Record<string, FeatureFlagDetail>, key) => {
+        res[key] = {
+            key: key,
+            enabled: isString(activeFlags[key])
+                ? true
+                : isUndefined(activeFlags[key])
+                  ? !!featureFlagPayloads[key] // If we override the payload, we should return true if they didn't override enabled.
+                  : activeFlags[key],
+            variant: isString(activeFlags[key]) ? activeFlags[key] : undefined,
+            reason: undefined,
+            metadata: {
+                id: undefined,
+                version: undefined,
+                description: undefined,
+                payload: featureFlagPayloads[key],
+            },
+        }
+        return res
+    }, {})
+}
+
 export const parseFeatureFlagDecideResponse = (
     response: Partial<DecideResponse>,
     persistence: PostHogPersistence,
     currentFlags: Record<string, string | boolean> = {},
-    currentFlagPayloads: Record<string, JsonType> = {},
     currentFlagDetails: Record<string, FeatureFlagDetail> = {}
 ) => {
     const normalizedResponse = normalizeDecideResponse(response)
     const flagDetails = normalizedResponse.flags
     const featureFlags = normalizedResponse.featureFlags
-    const flagPayloads = normalizedResponse.featureFlagPayloads
 
     if (!featureFlags) {
         return // <-- This early return means we don't update anything, which is good.
@@ -82,12 +112,10 @@ export const parseFeatureFlagDecideResponse = (
 
     // using the v2+ api
     let newFeatureFlags = featureFlags
-    let newFeatureFlagPayloads = flagPayloads
     let newFeatureFlagDetails = flagDetails
     if (response.errorsWhileComputingFlags) {
         // if not all flags were computed, we upsert flags instead of replacing them
         newFeatureFlags = { ...currentFlags, ...newFeatureFlags }
-        newFeatureFlagPayloads = { ...currentFlagPayloads, ...newFeatureFlagPayloads }
         newFeatureFlagDetails = { ...currentFlagDetails, ...newFeatureFlagDetails }
     }
 
@@ -95,13 +123,12 @@ export const parseFeatureFlagDecideResponse = (
         persistence.register({
             [PERSISTENCE_ACTIVE_FEATURE_FLAGS]: Object.keys(filterActiveFeatureFlags(newFeatureFlags)),
             [ENABLED_FEATURE_FLAGS]: newFeatureFlags || {},
-            [PERSISTENCE_FEATURE_FLAG_PAYLOADS]: newFeatureFlagPayloads || {},
             [PERSISTENCE_FEATURE_FLAG_DETAILS]: newFeatureFlagDetails || {},
             ...(requestId ? { [PERSISTENCE_FEATURE_FLAG_REQUEST_ID]: requestId } : {}),
         })
 }
 
-const normalizeDecideResponse = (response: Partial<DecideResponse>): Partial<DecideResponse> => {
+export const normalizeDecideResponse = (response: Partial<DecideResponse>): Partial<DecideResponse> => {
     const flagDetails = response['flags']
 
     if (flagDetails) {
@@ -111,14 +138,15 @@ const normalizeDecideResponse = (response: Partial<DecideResponse>): Partial<Dec
         response.featureFlags = Object.fromEntries(
             Object.keys(flagDetails).map((flag) => [flag, flagDetails[flag].variant ?? flagDetails[flag].enabled])
         )
-        // Map of flag keys to flag payloads: Record<string, JsonType>
-        response.featureFlagPayloads = Object.fromEntries(
-            Object.keys(flagDetails)
-                .filter((flag) => flagDetails[flag].enabled)
-                .filter((flag) => flagDetails[flag].metadata?.payload)
-                .map((flag) => [flag, flagDetails[flag].metadata?.payload])
-        )
     } else {
+        // This is a v=3 request. Let's normalize it to v=4 by constructing a flagDetails object from the featureFlags and featureFlagPayloads
+        // Need to contruct a flagDetails object from the bootstrapped activeFlags and featureFlagPayloads
+        response.flags = createFeatureFlagDetailsFromLegacyDecideResponse(
+            response['featureFlags'] || {},
+            response['featureFlagPayloads'] || {}
+        )
+        delete response['featureFlagPayloads']
+
         logger.warn(
             'Using an older version of the feature flags endpoint. Please upgrade your PostHog server to the latest version'
         )
@@ -286,7 +314,15 @@ export class PostHogFeatureFlags {
     }
 
     getFlagPayloads(): Record<string, JsonType> {
-        const flagPayloads = this.instance.get_property(PERSISTENCE_FEATURE_FLAG_PAYLOADS)
+        const flagDetails = this.instance.get_property(PERSISTENCE_FEATURE_FLAG_DETAILS)
+        // Map of flag keys to flag payloads: Record<string, JsonType>
+        const flagPayloads = Object.fromEntries(
+            Object.keys(flagDetails)
+                .filter((flag) => flagDetails[flag].enabled)
+                .filter((flag) => flagDetails[flag].metadata?.payload)
+                .map((flag) => [flag, flagDetails[flag].metadata?.payload])
+        )
+
         const overriddenPayloads = this.instance.get_property(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
 
         if (!overriddenPayloads) {
@@ -491,11 +527,11 @@ export class PostHogFeatureFlags {
                 }
 
                 const reason = flagDetails?.reason?.description ?? flagDetails?.reason?.code
-                if (reason) {
+                if (!isUndefined(reason)) {
                     properties.$feature_flag_reason = reason
                 }
 
-                if (flagDetails?.metadata?.id) {
+                if (!isUndefined(flagDetails?.metadata?.id)) {
                     properties.$feature_flag_id = flagDetails.metadata.id
                 }
 
@@ -508,7 +544,7 @@ export class PostHogFeatureFlags {
                         : flagDetails.original_enabled
                 }
 
-                if (flagDetails?.metadata?.original_payload) {
+                if (!isUndefined(flagDetails?.metadata?.original_payload)) {
                     properties.$feature_flag_original_payload = flagDetails?.metadata?.original_payload
                 }
 
@@ -604,15 +640,8 @@ export class PostHogFeatureFlags {
         this._hasLoadedFlags = true
 
         const currentFlags = this.getFlagVariants()
-        const currentFlagPayloads = this.getFlagPayloads()
         const currentFlagDetails = this.getFlagsWithDetails()
-        parseFeatureFlagDecideResponse(
-            response,
-            this.instance.persistence,
-            currentFlags,
-            currentFlagPayloads,
-            currentFlagDetails
-        )
+        parseFeatureFlagDecideResponse(response, this.instance.persistence, currentFlags, currentFlagDetails)
         this._fireFeatureFlagsCallbacks(errorsLoading)
     }
 
