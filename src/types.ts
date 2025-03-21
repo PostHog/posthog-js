@@ -1390,7 +1390,7 @@ export type FeatureFlagDetail = {
 }
 
 export type FeatureFlagMetadata = {
-    id: number
+    id: number | undefined
     version: number | undefined
     description: string | undefined
     payload: JsonType | undefined

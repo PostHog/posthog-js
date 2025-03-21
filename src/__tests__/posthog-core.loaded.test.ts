@@ -128,7 +128,23 @@ describe('loaded() with flags', () => {
                     featureFlags: { 'test-flag': true },
                 },
                 expectedCall: true,
-                expectedArgs: { featureFlags: { 'test-flag': true } },
+                expectedArgs: {
+                    featureFlags: { 'test-flag': true },
+                    flags: {
+                        'test-flag': {
+                            key: 'test-flag',
+                            enabled: true,
+                            variant: undefined,
+                            reason: undefined,
+                            metadata: {
+                                id: undefined,
+                                version: undefined,
+                                description: undefined,
+                                payload: undefined,
+                            },
+                        },
+                    },
+                },
             },
             {
                 name: 'processes feature flags when other resources are quota limited',
@@ -137,7 +153,24 @@ describe('loaded() with flags', () => {
                     featureFlags: { 'test-flag': true },
                 },
                 expectedCall: true,
-                expectedArgs: { quotaLimited: ['recordings'], featureFlags: { 'test-flag': true } },
+                expectedArgs: {
+                    quotaLimited: ['recordings'],
+                    featureFlags: { 'test-flag': true },
+                    flags: {
+                        'test-flag': {
+                            key: 'test-flag',
+                            enabled: true,
+                            variant: undefined,
+                            reason: undefined,
+                            metadata: {
+                                id: undefined,
+                                version: undefined,
+                                description: undefined,
+                                payload: undefined,
+                            },
+                        },
+                    },
+                },
             },
         ])('$name', async ({ response, expectedCall, expectedArgs }) => {
             instance._send_request = jest.fn(({ callback }) =>
