@@ -206,6 +206,29 @@ export interface DeadClickCandidate {
     absoluteDelayMs?: number
 }
 
+export type ExceptionAutoCaptureConfig = {
+    /**
+     * Determines whether PostHog should capture unhandled errors.
+     *
+     * @default true
+     */
+    capture_unhandled_errors: boolean
+
+    /**
+     * Determines whether PostHog should capture unhandled promise rejections.
+     *
+     * @default true
+     */
+    capture_unhandled_rejections: boolean
+
+    /**
+     * Determines whether PostHog should capture console errors.
+     *
+     * @default false
+     */
+    capture_console_errors: boolean
+}
+
 export type DeadClicksAutoCaptureConfig = {
     /**
      * We'll not consider a click to be a dead click, if it's followed by a scroll within `scroll_threshold_ms` milliseconds
@@ -802,9 +825,10 @@ export interface PostHogConfig {
     /**
      * Determines whether to capture exceptions.
      *
+     * @see {ExceptionAutoCaptureConfig}
      * @default undefined
      */
-    capture_exceptions?: boolean
+    capture_exceptions?: boolean | ExceptionAutoCaptureConfig
 
     /**
      * Determines whether to disable scroll properties.
