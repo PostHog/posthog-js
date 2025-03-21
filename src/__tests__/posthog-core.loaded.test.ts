@@ -41,7 +41,7 @@ describe('loaded() with flags', () => {
             expect(instance._send_request).toHaveBeenCalledTimes(1)
 
             expect(instance._send_request.mock.calls[0][0]).toMatchObject({
-                url: 'https://us.i.posthog.com/decide/?v=4',
+                url: 'https://us.i.posthog.com/decide/?v=3',
                 data: {
                     groups: { org: 'bazinga' },
                 },
@@ -64,7 +64,7 @@ describe('loaded() with flags', () => {
             expect(instance._send_request).toHaveBeenCalledTimes(1)
 
             expect(instance._send_request.mock.calls[0][0]).toMatchObject({
-                url: 'https://us.i.posthog.com/decide/?v=4',
+                url: 'https://us.i.posthog.com/decide/?v=3',
                 data: {
                     groups: { org: 'bazinga' },
                 },
@@ -77,7 +77,7 @@ describe('loaded() with flags', () => {
             expect(instance._send_request).toHaveBeenCalledTimes(2)
 
             expect(instance._send_request.mock.calls[1][0]).toMatchObject({
-                url: 'https://us.i.posthog.com/decide/?v=4',
+                url: 'https://us.i.posthog.com/decide/?v=3',
                 data: {
                     groups: { org: 'bazinga2' },
                 },
