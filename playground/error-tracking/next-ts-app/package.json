@@ -13,7 +13,7 @@
         "build-posthog": "cd ../../.. && NODE_ENV=dev pnpm i && pnpm run build"
     },
     "dependencies": {
-        "next": "15.2.1",
+        "next": "15.2.3",
         "posthog-js": "link:../../..",
         "react": "^19.0.0",
         "react-dom": "^19.0.0"
