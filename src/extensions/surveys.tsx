@@ -16,6 +16,7 @@ import { addEventListener } from '../utils'
 import { document as _document, window as _window } from '../utils/globals'
 import { createLogger } from '../utils/logger'
 import { isNull, isNumber } from '../utils/type-utils'
+import { uuidv7 } from '../uuidv7'
 import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import { Cancel } from './surveys/components/QuestionHeader'
@@ -723,6 +724,24 @@ export function SurveyPopup({
     const shouldShowConfirmation = isSurveySent || previewPageIndex === survey.questions.length
     const confirmationBoxLeftStyle = style?.left && isNumber(style?.left) ? { left: style.left - 40 } : {}
 
+    const surveyContextValue = useMemo(
+        () => ({
+            isPreviewMode,
+            previewPageIndex: previewPageIndex,
+            onPopupSurveyDismissed: () => {
+                dismissedSurveyEvent(survey, posthog, isPreviewMode)
+                onPopupSurveyDismissed()
+            },
+            isPopup: isPopup || false,
+            onPreviewSubmit,
+            onPopupSurveySent: () => {
+                onPopupSurveySent()
+            },
+            surveySubmissionId: uuidv7(),
+        }),
+        [isPreviewMode, previewPageIndex, onPopupSurveyDismissed, survey, posthog, uuidv7]
+    )
+
     if (isPreviewMode) {
         style = style || {}
         style.left = 'unset'
@@ -731,21 +750,7 @@ export function SurveyPopup({
     }
 
     return isPopupVisible ? (
-        <SurveyContext.Provider
-            value={{
-                isPreviewMode,
-                previewPageIndex: previewPageIndex,
-                onPopupSurveyDismissed: () => {
-                    dismissedSurveyEvent(survey, posthog, isPreviewMode)
-                    onPopupSurveyDismissed()
-                },
-                isPopup: isPopup || false,
-                onPreviewSubmit,
-                onPopupSurveySent: () => {
-                    onPopupSurveySent()
-                },
-            }}
-        >
+        <SurveyContext.Provider value={surveyContextValue}>
             {!shouldShowConfirmation ? (
                 <Questions
                     survey={survey}
@@ -783,8 +788,14 @@ export function Questions({
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
     )
     const [questionsResponses, setQuestionsResponses] = useState({})
-    const { previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit, onPopupSurveySent } =
-        useContext(SurveyContext)
+    const {
+        previewPageIndex,
+        onPopupSurveyDismissed,
+        isPopup,
+        onPreviewSubmit,
+        onPopupSurveySent,
+        surveySubmissionId,
+    } = useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
@@ -817,8 +828,15 @@ export function Questions({
         setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
 
         const nextStep = getNextSurveyStep(survey, displayQuestionIndex, res)
-        if (nextStep === SurveyQuestionBranchingType.End) {
-            sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
+        const isSurveyCompleted = nextStep === SurveyQuestionBranchingType.End
+        sendSurveyEvent({
+            responses: { ...questionsResponses, [responseKey]: res },
+            survey,
+            posthog,
+            isSurveyCompleted: isSurveyCompleted,
+            surveySubmissionId,
+        })
+        if (isSurveyCompleted) {
             onPopupSurveySent()
         } else {
             setCurrentQuestionIndex(nextStep)

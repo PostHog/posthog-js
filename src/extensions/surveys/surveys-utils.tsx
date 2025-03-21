@@ -16,7 +16,7 @@ const window = _window as Window & typeof globalThis
 const document = _document as Document
 const SurveySeenPrefix = 'seenSurvey_'
 
-const logger = createLogger('[Surveys]')
+const logger = createLogger('[Surveys Utils]')
 
 export const SURVEY_DEFAULT_Z_INDEX = 2147483647
 
@@ -563,19 +563,41 @@ export const createShadow = (styleSheet: string, surveyId: string, element?: Ele
     return shadow
 }
 
-export const sendSurveyEvent = (
-    responses: Record<string, string | number | string[] | null> = {},
-    survey: Survey,
+type SendSurveyEventArgs = {
+    responses: Record<string, string | number | string[] | null>
+    survey: Survey
     posthog?: PostHog
-) => {
+    isSurveyCompleted: boolean
+    surveySubmissionId: string
+}
+
+export const sendSurveyEvent = ({
+    responses,
+    survey,
+    posthog,
+    isSurveyCompleted,
+    surveySubmissionId,
+}: SendSurveyEventArgs) => {
     if (!posthog) {
         logger.error('[survey sent] event not captured, PostHog instance not found.')
         return
     }
+    if (!isSurveyCompleted && !survey.enable_partial_responses) {
+        return
+    }
     localStorage.setItem(getSurveySeenKey(survey), 'true')
+
+    logger.info('[PostHog Surveys] survey partial response payload', {
+        surveyId: survey.id,
+        surveyName: survey.name,
+        surveyCompleted: isSurveyCompleted,
+        surveySubmissionId,
+        responses,
+    })
 
     posthog.capture('survey sent', {
         $survey_name: survey.name,
+        $survey_completed: isSurveyCompleted,
         $survey_id: survey.id,
         $survey_iteration: survey.current_iteration,
         $survey_iteration_start_date: survey.current_iteration_start_date,
@@ -585,12 +607,16 @@ export const sendSurveyEvent = (
             index,
         })),
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
+        $survey_submission_id: surveySubmissionId,
         ...responses,
         $set: {
             [getSurveyInteractionProperty(survey, 'responded')]: true,
         },
     })
-    window.dispatchEvent(new Event('PHSurveySent'))
+
+    if (isSurveyCompleted) {
+        window.dispatchEvent(new Event('PHSurveySent'))
+    }
 }
 
 export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {
@@ -742,6 +768,7 @@ interface SurveyContextProps {
     isPopup: boolean
     onPreviewSubmit: (res: string | string[] | number | null) => void
     onPopupSurveySent: () => void
+    surveySubmissionId: string
 }
 
 export const SurveyContext = createContext<SurveyContextProps>({
@@ -751,6 +778,7 @@ export const SurveyContext = createContext<SurveyContextProps>({
     isPopup: true,
     onPreviewSubmit: () => {},
     onPopupSurveySent: () => {},
+    surveySubmissionId: '',
 })
 
 interface RenderProps {
