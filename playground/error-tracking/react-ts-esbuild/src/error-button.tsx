@@ -1,9 +1,5 @@
-import { posthog } from 'posthog-js'
-
 function throwException() {
-    const error = new Error('Exception created')
-    posthog.captureException(error)
-    throw error
+    throw new Error('Exception created')
 }
 
 export default function ErrorButton() {

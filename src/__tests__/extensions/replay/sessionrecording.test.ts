@@ -468,12 +468,18 @@ describe('SessionRecording', () => {
                 { maskAllInputs: false },
                 { maskAllInputs: false, maskTextSelector: '*' },
             ],
+            [
+                'mask inputs default is correct if client sets text selector    ',
+                undefined,
+                { maskTextSelector: '*' },
+                { maskAllInputs: true, maskTextSelector: '*' },
+            ],
         ])(
             '%s',
             (
                 _name: string,
                 serverConfig: { maskAllInputs?: boolean; maskTextSelector?: string } | undefined,
-                clientConfig: { maskAllInputs: boolean; maskTextSelector?: string } | undefined,
+                clientConfig: { maskAllInputs?: boolean; maskTextSelector?: string } | undefined,
                 expected: { maskAllInputs: boolean; maskTextSelector?: string } | undefined
             ) => {
                 posthog.persistence?.register({

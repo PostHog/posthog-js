@@ -907,7 +907,7 @@ export interface SessionRecordingOptions {
     /**
      * Derived from `rrweb.record` options
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
-     * @default 'ph-nocapture'
+     * @default 'ph-no-capture'
      */
     blockClass?: string | RegExp
 
@@ -923,7 +923,7 @@ export interface SessionRecordingOptions {
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
      * @default 'ph-ignore-input'
      */
-    ignoreClass?: string
+    ignoreClass?: string | RegExp
 
     /**
      * Derived from `rrweb.record` options
