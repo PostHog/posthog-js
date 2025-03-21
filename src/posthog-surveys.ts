@@ -67,6 +67,8 @@ export class PostHogSurveys {
     private _surveyManager: any
     private _isFetchingSurveys: boolean = false
     private _isInitializingSurveys: boolean = false
+    private _surveyCallbacks: SurveyCallback[] = []
+    private _errorsLoading: boolean = false
 
     constructor(private readonly instance: PostHog) {
         // we set this to undefined here because we need the persistence storage for this type
@@ -137,6 +139,9 @@ export class PostHogSurveys {
                         this._isInitializingSurveys = false
                         this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
                         logger.info('Surveys loaded successfully')
+                        
+                        // Once surveys are loaded, fetch and notify callbacks
+                        this.getSurveys(() => {})
                     })
                 } else {
                     logger.error('PostHog loadExternalDependency extension not found. Cannot load remote config.')
@@ -147,11 +152,60 @@ export class PostHogSurveys {
                 this._isInitializingSurveys = false
                 this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
                 logger.info('Surveys loaded successfully')
+                
+                // Once surveys are loaded, fetch and notify callbacks
+                this.getSurveys(() => {})
             }
         } catch (e) {
             logger.error('Error initializing surveys', e)
             this._isInitializingSurveys = false
             throw e
+        }
+    }
+
+    /**
+     * Register an event listener that runs when surveys are initialized or updated.
+     * If there are already surveys loaded, the listener is called immediately in addition to being called on future changes.
+     *
+     * ### Usage:
+     *
+     *     posthog.onSurveys(function(surveys, { errorsLoading }) {
+     *         // surveys are guaranteed to be available at this point
+     *         if (!errorsLoading) {
+     *             console.log('Successfully loaded', surveys.length, 'surveys')
+     *         }
+     *         
+     *         // You can work with all surveys
+     *         console.log('All available surveys:', surveys)
+     *         
+     *         // Or get active matching surveys
+     *         posthog.getActiveMatchingSurveys(function(activeMatchingSurveys) {
+     *             if (activeMatchingSurveys.length > 0) {
+     *                 posthog.renderSurvey(activeMatchingSurveys[0].id, '#survey-container')
+     *             }
+     *         })
+     *     })
+     *
+     * @param {Function} callback The callback function will be called when surveys are loaded or updated.
+     *                           It receives the array of all surveys and a context object with error status.
+     * @returns {Function} A function that can be called to unsubscribe the listener.
+     */
+    onSurveys(callback: SurveyCallback): () => void {
+        this._surveyCallbacks.push(callback)
+        
+        // If surveys are already loaded, call the callback immediately
+        const existingSurveys = this.instance.get_property(SURVEYS)
+        if (existingSurveys) {
+            callback(existingSurveys, { errorsLoading: this._errorsLoading })
+        } else if (this._surveyManager) {
+            // If survey manager is initialized but surveys aren't loaded yet,
+            // trigger a fetch
+            this.getSurveys(() => {})
+        }
+        
+        // Return unsubscribe function
+        return () => {
+            this._surveyCallbacks = this._surveyCallbacks.filter((cb: SurveyCallback) => cb !== callback)
         }
     }
 
@@ -184,9 +238,18 @@ export class PostHogSurveys {
                         this._isFetchingSurveys = false
                         const statusCode = response.statusCode
                         if (statusCode !== 200 || !response.json) {
+                            this._errorsLoading = true
                             logger.error(`Surveys API could not be loaded, status: ${statusCode}`)
-                            return callback([])
+                            
+                            // Call original callback with empty array and error status
+                            callback([], { errorsLoading: true })
+                            
+                            // Also notify registered callbacks about error
+                            this._notifySurveyCallbacks([], true)
+                            return
                         }
+                        
+                        this._errorsLoading = false
                         const surveys = response.json.surveys || []
 
                         const eventOrActionBasedSurveys = surveys.filter(
@@ -204,15 +267,39 @@ export class PostHogSurveys {
                         }
 
                         this.instance.persistence?.register({ [SURVEYS]: surveys })
-                        return callback(surveys)
+                        
+                        // Notify the original callback
+                        callback(surveys, { errorsLoading: false })
+                        
+                        // Notify all registered callbacks
+                        this._notifySurveyCallbacks(surveys, false)
                     },
                 })
             } catch (e) {
                 this._isFetchingSurveys = false
+                this._errorsLoading = true
+                
+                // Call original callback with empty array and error status
+                callback([], { errorsLoading: true })
+                
+                // Also notify registered callbacks about error
+                this._notifySurveyCallbacks([], true)
+                
                 throw e
             }
         } else {
-            return callback(existingSurveys)
+            callback(existingSurveys, { errorsLoading: this._errorsLoading })
+        }
+    }
+    
+    /** Helper method to notify all registered callbacks */
+    private _notifySurveyCallbacks(surveys: Survey[], errorsLoading: boolean = false): void {
+        for (const callback of this._surveyCallbacks) {
+            try {
+                callback(surveys, { errorsLoading })
+            } catch (error) {
+                logger.error('Error in survey callback', error)
+            }
         }
     }
 
