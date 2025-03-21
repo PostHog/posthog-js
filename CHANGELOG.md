@@ -1,3 +1,7 @@
+## 1.232.3 - 2025-03-21
+
+- Revert "feat: Enjoy the benefits of `/decide?v=4` (#1838)" (#1842)
+
 ## 1.232.2 - 2025-03-20
 
 - feat: Enjoy the benefits of `/decide?v=4` (#1838)
