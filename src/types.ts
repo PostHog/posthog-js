@@ -891,6 +891,12 @@ export interface PostHogConfig {
      * */
     __preview_experimental_cookieless_mode?: boolean
 
+    /**
+     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+     * Whether to use the new /flags/ endpoint
+     * */
+    __preview_flags_v2?: boolean
+
     // ------- RETIRED CONFIGS - NO REPLACEMENT OR USAGE -------
 
     /** @deprecated - NOT USED ANYMORE, kept here for backwards compatibility reasons */

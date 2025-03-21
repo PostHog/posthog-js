@@ -22,7 +22,6 @@ import {
     STORED_GROUP_PROPERTIES_KEY,
     STORED_PERSON_PROPERTIES_KEY,
     FLAG_CALL_REPORTED,
-    DEFAULT_POSTHOG_APP_API_KEY,
 } from './constants'
 
 import { isArray, isUndefined } from './utils/type-utils'
@@ -391,7 +390,8 @@ export class PostHogFeatureFlags {
             data.disable_flags = true
         }
 
-        const eligibleForFlagsV2 = token === DEFAULT_POSTHOG_APP_API_KEY && this.instance.config.__preview_remote_config
+        const eligibleForFlagsV2 =
+            this.instance.config.__preview_flags_v2 && this.instance.config.__preview_remote_config
 
         this._requestInFlight = true
         this.instance._send_request({
