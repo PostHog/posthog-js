@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom'
-import { fireEvent, render } from '@testing-library/preact'
+import { cleanup, fireEvent, render, screen } from '@testing-library/preact'
 import { SurveyPopup } from '../../../extensions/surveys'
 import { Survey, SurveyQuestionType, SurveyType } from '../../../posthog-surveys-types'
 
@@ -41,79 +41,47 @@ describe('SurveyPopup', () => {
 
     beforeEach(() => {
         // Reset DOM
-        document.getElementsByTagName('html')[0].innerHTML = ''
+        cleanup()
         localStorage.clear()
         jest.clearAllMocks()
     })
 
-    test('calls onCloseConfirmationMessage when X button is clicked', () => {
+    test('calls onCloseConfirmationMessage when X button is clicked in the confirmation message', () => {
         // Create a mock function to test if it gets called
         const mockOnCloseConfirmationMessage = jest.fn()
         const mockRemoveSurveyFromFocus = jest.fn()
-
-        // Create a custom wrapper to set isSurveySent to true
-        // This simulates the state after survey submission when confirmation message is shown
-        const SurveyWrapper = () => {
-            return (
-                <SurveyPopup
-                    survey={mockSurvey}
-                    removeSurveyFromFocus={mockRemoveSurveyFromFocus}
-                    isPopup={true}
-                    onCloseConfirmationMessage={mockOnCloseConfirmationMessage}
-                    // Force the confirmation message to show by providing props that match showConfirmation condition
-                    // In the component: const shouldShowConfirmation = isSurveySent || previewPageIndex === survey.questions.length
-                    previewPageIndex={mockSurvey.questions.length}
-                />
-            )
-        }
-
-        // Render the component
-        const { container } = render(<SurveyWrapper />)
-
-        // Find the X/Cancel button directly in the container
-        const cancelButton = container.querySelector('button.form-cancel[aria-label="Close survey"]')
-
+        render(
+            <SurveyPopup
+                survey={mockSurvey}
+                removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                isPopup={true}
+                onCloseConfirmationMessage={mockOnCloseConfirmationMessage}
+                // Force the confirmation message to show
+                previewPageIndex={mockSurvey.questions.length}
+            />
+        )
+        const cancelButton2 = screen.getByRole('button', { name: 'Close survey', hidden: true })
         // Click the cancel button
-        if (cancelButton) {
-            fireEvent.click(cancelButton)
-            // Verify that onCloseConfirmationMessage was called
-            expect(mockOnCloseConfirmationMessage).toHaveBeenCalledTimes(1)
-        } else {
-            expect(cancelButton).not.toBeNull() // Use expect instead of fail
-        }
+        fireEvent.click(cancelButton2)
+        // Verify that onCloseConfirmationMessage was called
+        expect(mockOnCloseConfirmationMessage).toHaveBeenCalledTimes(1)
     })
 
-    test('calls onCloseConfirmationMessage when Close button is clicked', () => {
-        // Create a mock function to test if it gets called
+    test('calls onCloseConfirmationMessage when survey is closed in the confirmation message', () => {
         const mockOnCloseConfirmationMessage = jest.fn()
         const mockRemoveSurveyFromFocus = jest.fn()
+        render(
+            <SurveyPopup
+                survey={mockSurvey}
+                removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                isPopup={true}
+                onCloseConfirmationMessage={mockOnCloseConfirmationMessage}
+                previewPageIndex={mockSurvey.questions.length}
+            />
+        )
 
-        // Create a custom wrapper with confirmation message showing
-        const SurveyWrapper = () => {
-            return (
-                <SurveyPopup
-                    survey={mockSurvey}
-                    removeSurveyFromFocus={mockRemoveSurveyFromFocus}
-                    isPopup={true}
-                    onCloseConfirmationMessage={mockOnCloseConfirmationMessage}
-                    previewPageIndex={mockSurvey.questions.length}
-                />
-            )
-        }
-
-        // Render the component
-        const { container } = render(<SurveyWrapper />)
-
-        // Find the Close button directly in the container (rather than in Shadow DOM)
-        const closeButton = container.querySelector('button.form-submit')
-
-        // Click the Close button
-        if (closeButton) {
-            fireEvent.click(closeButton)
-            // Verify that onCloseConfirmationMessage was called
-            expect(mockOnCloseConfirmationMessage).toHaveBeenCalledTimes(1)
-        } else {
-            expect(closeButton).not.toBeNull() // Use expect instead of fail
-        }
+        const closeButton = screen.getByRole('button', { name: /close/i })
+        fireEvent.click(closeButton)
+        expect(mockOnCloseConfirmationMessage).toHaveBeenCalledTimes(1)
     })
 })

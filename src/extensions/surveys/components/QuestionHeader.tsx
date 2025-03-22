@@ -36,7 +36,13 @@ export function Cancel({ onClick }: { onClick: () => void }) {
 
     return (
         <div className="cancel-btn-wrapper">
-            <button className="form-cancel" onClick={onClick} disabled={isPreviewMode} aria-label="Close survey">
+            <button
+                className="form-cancel"
+                onClick={onClick}
+                disabled={isPreviewMode}
+                aria-label="Close survey"
+                role="button"
+            >
                 {cancelSVG}
             </button>
         </div>
