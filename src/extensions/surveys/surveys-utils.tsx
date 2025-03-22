@@ -741,7 +741,6 @@ interface SurveyContextProps {
     onPopupSurveyDismissed: () => void
     isPopup: boolean
     onPreviewSubmit: (res: string | string[] | number | null) => void
-    onPopupSurveySent: () => void
 }
 
 export const SurveyContext = createContext<SurveyContextProps>({
@@ -750,7 +749,6 @@ export const SurveyContext = createContext<SurveyContextProps>({
     onPopupSurveyDismissed: () => {},
     isPopup: true,
     onPreviewSubmit: () => {},
-    onPopupSurveySent: () => {},
 })
 
 interface RenderProps {

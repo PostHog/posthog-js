@@ -31,6 +31,7 @@ export function BottomSection({
                 <button
                     className="form-submit"
                     disabled={submitDisabled}
+                    aria-label="Submit survey"
                     type="button"
                     style={isPopup ? { color: textColor } : {}}
                     onClick={() => {
