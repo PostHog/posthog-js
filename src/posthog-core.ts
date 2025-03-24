@@ -1331,8 +1331,7 @@ export class PostHog {
      *
      * Callback parameters:
      * - surveys: Survey[]: An array containing all survey objects fetched from PostHog
-     * - { errorsLoading }: { errorsLoading?: boolean }: An object indicating if an error occurred
-     *   during the request to load the surveys
+     * - { isLoaded, error }: { isLoaded: boolean, error?: string }: An object indicating if the surveys were loaded successfully
      *
      * @param {Function} callback The callback function will be called when surveys are loaded or updated.
      * @returns {Function} A function that can be called to unsubscribe the listener.

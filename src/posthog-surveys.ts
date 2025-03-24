@@ -193,6 +193,12 @@ export class PostHogSurveys {
      */
     onSurveysLoaded(callback: SurveyCallback): () => void {
         this._surveyCallbacks.push(callback)
+
+        if (this._surveyManager) {
+            this._notifySurveyCallbacks({
+                isLoaded: true,
+            })
+        }
         // Return unsubscribe function
         return () => {
             this._surveyCallbacks = this._surveyCallbacks.filter((cb: SurveyCallback) => cb !== callback)
