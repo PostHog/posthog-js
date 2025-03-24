@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "node",
+            "name": "vscode-jest-tests.v2",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "internalConsoleOptions": "neverOpen",
+            "runtimeExecutable": "pnpm",
+            "cwd": "${workspaceFolder}",
+            "args": [
+                "jest",
+                "-c",
+                "${workspaceRoot}/jest.config.js",
+                "--runInBand",
+                "--watchAll=false",
+                "--testNamePattern",
+                "${jest.testNamePattern}",
+                "--runTestsByPath",
+                "${jest.testFile}"
+            ]
+        }
+    ]
+}

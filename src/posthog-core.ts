@@ -863,6 +863,13 @@ export class PostHog {
             return
         }
 
+        if (properties?.$current_url && !isString(properties?.$current_url)) {
+            logger.error(
+                'Invalid `$current_url` property provided to `posthog.capture`. Input must be a string. Ignoring provided value.'
+            )
+            delete properties?.$current_url
+        }
+
         // update persistence
         this.sessionPersistence.update_search_keyword()
 
