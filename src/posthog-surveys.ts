@@ -172,9 +172,7 @@ export class PostHogSurveys {
     }
 
     /**
-     * Register an event listener that runs when surveys are initialized or updated.
-     * If there are already surveys loaded, the listener is called immediately in addition to being called on future changes.
-     *
+     * Register a callback that runs when surveys are initialized.
      * ### Usage:
      *
      *     posthog.onSurveysLoaded((surveys) => {
