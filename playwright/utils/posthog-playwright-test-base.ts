@@ -29,8 +29,14 @@ declare module '@playwright/test' {
         resetCapturedEvents(): Promise<void>
 
         capturedEvents(): Promise<CaptureResult[]>
-
-        waitingForNetworkCausedBy: (urlPatterns: (string | RegExp)[], action: () => Promise<void>) => Promise<void>
+        /**
+         * Runs the provided action, waiting for the network requests matching the provided url patterns to complete.
+         * Intended when running an action causes network requests that need to complete before we should continue.
+         */
+        waitingForNetworkCausedBy: (options: {
+            urlPatternsToWaitFor: (string | RegExp)[]
+            action: () => Promise<void>
+        }) => Promise<void>
 
         expectCapturedEventsToBe(expectedEvents: string[]): Promise<void>
     }
@@ -49,15 +55,15 @@ export const test = base.extend<{ mockStaticAssets: void; page: Page }>({
                 return (window as WindowWithPostHog).capturedEvents || []
             })
         }
-        page.waitingForNetworkCausedBy = async function (
-            urlPatterns: (string | RegExp)[],
+        page.waitingForNetworkCausedBy = async function (options: {
+            urlPatternsToWaitFor: (string | RegExp)[]
             action: () => Promise<void>
-        ) {
-            const responsePromises = urlPatterns.map((urlPattern) => {
+        }) {
+            const responsePromises = options.urlPatternsToWaitFor.map((urlPattern) => {
                 return this.waitForResponse(urlPattern)
             })
 
-            await action()
+            await options.action()
 
             // eslint-disable-next-line compat/compat
             await Promise.allSettled(responsePromises)
@@ -72,7 +78,6 @@ export const test = base.extend<{ mockStaticAssets: void; page: Page }>({
     },
     mockStaticAssets: [
         async ({ context }, use) => {
-            // also equivalent of cy.intercept('GET', '/surveys/*').as('surveys') ??
             void context.route('**/e/*', (route) => {
                 route.fulfill({
                     status: 200,

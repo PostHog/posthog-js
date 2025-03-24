@@ -1,10 +1,11 @@
 /* eslint-disable compat/compat */
 import { act, fireEvent, render, renderHook } from '@testing-library/preact'
 import {
+    SurveyManager,
+    SurveyPopup,
     generateSurveys,
     renderFeedbackWidgetPreview,
     renderSurveysPreview,
-    SurveyManager,
     useHideSurveyOnURLChange,
     usePopupVisibility,
 } from '../../extensions/surveys'
@@ -54,7 +55,7 @@ describe('survey display logic', () => {
                     scale: 10,
                     lowerBoundLabel: 'Not Satisfied',
                     upperBoundLabel: 'Very Satisfied',
-                    originalQuestionIndex: 0,
+                    id: 'question-a',
                 },
             ],
             appearance: null,
@@ -105,7 +106,7 @@ describe('usePopupVisibility', () => {
                 scale: 10,
                 lowerBoundLabel: 'Not Satisfied',
                 upperBoundLabel: 'Very Satisfied',
-                originalQuestionIndex: 0,
+                id: 'question-a',
             },
         ],
         appearance: {},
@@ -298,7 +299,7 @@ describe('SurveyManager', () => {
                         scale: 10,
                         lowerBoundLabel: 'Not Satisfied',
                         upperBoundLabel: 'Very Satisfied',
-                        originalQuestionIndex: 0,
+                        id: 'question-a',
                     },
                 ],
                 appearance: {},
@@ -406,7 +407,7 @@ describe('SurveyManager', () => {
                     scale: 10,
                     lowerBoundLabel: 'Not Satisfied',
                     upperBoundLabel: 'Very Satisfied',
-                    originalQuestionIndex: 0,
+                    id: 'question-a',
                 },
             ],
             appearance: {},
@@ -613,6 +614,7 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
             feature_flag_keys: null,
             linked_flag_key: null,
             targeting_flag_key: null,
+            internal_targeting_flag_key: null,
             appearance: {},
         }) as Survey
 
@@ -1071,6 +1073,81 @@ describe('useHideSurveyOnURLChange', () => {
     })
 })
 
+describe('onPopupSurveyDismissed callback', () => {
+    let posthog: PostHog
+
+    beforeEach(() => {
+        document.getElementsByTagName('html')[0].innerHTML = ''
+        localStorage.clear()
+        jest.clearAllMocks()
+
+        // Mock PostHog instance
+        posthog = {
+            capture: jest.fn(),
+            get_session_replay_url: jest.fn(),
+        } as unknown as PostHog
+    })
+
+    test('onPopupSurveyDismissed is called when Cancel button is clicked in SurveyPopup', () => {
+        // Create a simple survey for testing
+        const survey = {
+            id: 'test-survey',
+            name: 'Test Survey',
+            description: 'Test Survey Description',
+            type: SurveyType.Popover,
+            questions: [
+                {
+                    type: SurveyQuestionType.Open,
+                    question: 'What do you think?',
+                    description: '',
+                    id: 'question-a',
+                },
+            ],
+            start_date: new Date().toISOString(),
+            end_date: null,
+            feature_flag_keys: null,
+            linked_flag_key: null,
+            targeting_flag_key: null,
+            internal_targeting_flag_key: null,
+            appearance: {},
+            conditions: {
+                events: { values: [] },
+                actions: { values: [] },
+            },
+            current_iteration: 1,
+            current_iteration_start_date: new Date().toISOString(),
+        } as Survey
+
+        const onPopupSurveyDismissed = jest.fn()
+        const mockRemoveSurveyFromFocus = jest.fn()
+
+        // Render the SurveyPopup component with our mocked callback
+        render(
+            h(SurveyPopup, {
+                survey: survey,
+                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
+                isPopup: true,
+                onPopupSurveyDismissed: onPopupSurveyDismissed,
+                posthog: posthog,
+            })
+        )
+
+        // Find the Cancel button
+        const cancelButton = document.querySelector('.cancel-btn-wrapper')
+
+        // Verify the button exists
+        expect(cancelButton).not.toBeNull()
+
+        // Click the Cancel button
+        if (cancelButton) {
+            fireEvent.click(cancelButton)
+
+            // Verify our callback was called
+            expect(onPopupSurveyDismissed).toHaveBeenCalledTimes(1)
+        }
+    })
+})
+
 describe('preview renders', () => {
     beforeEach(() => {
         // we have to manually reset the DOM before each test
@@ -1302,14 +1379,14 @@ describe('preview renders', () => {
                         question: 'Question 1',
                         description: 'Description 1',
                         descriptionContentType: 'text',
-                        originalQuestionIndex: 0,
+                        id: 'question-a',
                     },
                     {
                         type: SurveyQuestionType.Open,
                         question: 'Question 2',
                         description: 'Description 2',
                         descriptionContentType: 'text',
-                        originalQuestionIndex: 1,
+                        id: 'question-b',
                     },
                 ],
                 appearance: {

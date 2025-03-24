@@ -31,10 +31,12 @@ import {
     dismissedSurveyEvent,
     getContrastingTextColor,
     getDisplayOrderQuestions,
+    getSurveyResponseKey,
     getSurveySeen,
     hasWaitPeriodPassed,
     sendSurveyEvent,
     style,
+    SURVEY_DEFAULT_Z_INDEX,
     SurveyContext,
 } from './surveys/surveys-utils'
 import { prepareStylesheet } from './utils/stylesheet-loader'
@@ -43,6 +45,10 @@ const logger = createLogger('[Surveys]')
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
+
+function getPosthogWidgetClass(surveyId: string) {
+    return `.PostHogWidget${surveyId}`
+}
 
 function getRatingBucketForResponseValue(responseValue: number, scale: number) {
     if (scale === 3) {
@@ -182,7 +188,7 @@ export class SurveyManager {
         const surveySeen = getSurveySeen(survey)
         if (!surveySeen) {
             this.addSurveyToFocus(survey.id)
-            const shadow = createShadow(style(survey?.appearance), survey.id)
+            const shadow = createShadow(style(survey?.appearance), survey.id, undefined, this.posthog)
             Preact.render(
                 <SurveyPopup
                     key={'popover-survey'}
@@ -197,10 +203,10 @@ export class SurveyManager {
     }
 
     private handleWidget = (survey: Survey): void => {
-        const shadow = createWidgetShadow(survey)
+        const shadow = createWidgetShadow(survey, this.posthog)
 
         const stylesheetContent = style(survey.appearance)
-        const stylesheet = prepareStylesheet(stylesheetContent, this.posthog)
+        const stylesheet = prepareStylesheet(document, stylesheetContent, this.posthog)
 
         if (stylesheet) {
             shadow.appendChild(stylesheet)
@@ -227,7 +233,7 @@ export class SurveyManager {
                 // we have to check if user selector already has a survey listener attached to it because we always have to check if it's on the page or not
                 if (!selectorOnPage.getAttribute('PHWidgetSurveyClickListener')) {
                     const surveyPopup = document
-                        .querySelector(`.PostHogWidget${survey.id}`)
+                        .querySelector(getPosthogWidgetClass(survey.id))
                         ?.shadowRoot?.querySelector(`.survey-form`) as HTMLFormElement
 
                     addEventListener(selectorOnPage, 'click', () => {
@@ -399,7 +405,7 @@ export const renderSurveysPreview = ({
     posthog?: PostHog
 }) => {
     const stylesheetContent = style(survey.appearance)
-    const stylesheet = prepareStylesheet(stylesheetContent, posthog)
+    const stylesheet = prepareStylesheet(document, stylesheetContent, posthog)
 
     // Remove previously attached <style>
     Array.from(parentElement.children).forEach((child) => {
@@ -449,7 +455,7 @@ export const renderFeedbackWidgetPreview = ({
     posthog?: PostHog
 }) => {
     const stylesheetContent = createWidgetStyle(survey.appearance?.widgetColor)
-    const stylesheet = prepareStylesheet(stylesheetContent, posthog)
+    const stylesheet = prepareStylesheet(document, stylesheetContent, posthog)
     if (stylesheet) {
         root.appendChild(stylesheet)
     }
@@ -604,6 +610,14 @@ export function usePopupVisibility(
                 sessionRecordingUrl: posthog.get_session_replay_url?.(),
             })
             localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
+            setTimeout(() => {
+                const inputField = document
+                    .querySelector(getPosthogWidgetClass(survey.id))
+                    ?.shadowRoot?.querySelector('textarea, input[type="text"]') as HTMLElement
+                if (inputField) {
+                    inputField.focus()
+                }
+            }, 100)
         }
 
         const handleShowSurveyWithDelay = () => {
@@ -655,6 +669,8 @@ interface SurveyPopupProps {
     removeSurveyFromFocus: (id: string) => void
     isPopup?: boolean
     onPreviewSubmit?: (res: string | string[] | number | null) => void
+    onPopupSurveyDismissed?: () => void
+    onPopupSurveySent?: () => void
 }
 
 export function SurveyPopup({
@@ -666,6 +682,8 @@ export function SurveyPopup({
     removeSurveyFromFocus,
     isPopup,
     onPreviewSubmit = () => {},
+    onPopupSurveyDismissed = () => {},
+    onPopupSurveySent = () => {},
 }: SurveyPopupProps) {
     const isPreviewMode = Number.isInteger(previewPageIndex)
     // NB: The client-side code passes the millisecondDelay in seconds, but setTimeout expects milliseconds, so we multiply by 1000
@@ -694,9 +712,15 @@ export function SurveyPopup({
             value={{
                 isPreviewMode,
                 previewPageIndex: previewPageIndex,
-                handleCloseSurveyPopup: () => dismissedSurveyEvent(survey, posthog, isPreviewMode),
+                onPopupSurveyDismissed: () => {
+                    dismissedSurveyEvent(survey, posthog, isPreviewMode)
+                    onPopupSurveyDismissed()
+                },
                 isPopup: isPopup || false,
                 onPreviewSubmit,
+                onPopupSurveySent: () => {
+                    onPopupSurveySent()
+                },
             }}
         >
             {!shouldShowConfirmation ? (
@@ -736,7 +760,7 @@ export function Questions({
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
     )
     const [questionsResponses, setQuestionsResponses] = useState({})
-    const { isPreviewMode, previewPageIndex, handleCloseSurveyPopup, isPopup, onPreviewSubmit } =
+    const { previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit, onPopupSurveySent } =
         useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
@@ -748,26 +772,31 @@ export function Questions({
 
     const onNextButtonClick = ({
         res,
-        originalQuestionIndex,
         displayQuestionIndex,
+        questionId,
     }: {
         res: string | string[] | number | null
-        originalQuestionIndex: number
         displayQuestionIndex: number
+        questionId?: string
     }) => {
         if (!posthog) {
             logger.error('onNextButtonClick called without a PostHog instance.')
             return
         }
 
-        const responseKey =
-            originalQuestionIndex === 0 ? `$survey_response` : `$survey_response_${originalQuestionIndex}`
+        if (!questionId) {
+            logger.error('onNextButtonClick called without a questionId.')
+            return
+        }
+
+        const responseKey = getSurveyResponseKey(questionId)
 
         setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
 
         const nextStep = getNextSurveyStep(survey, displayQuestionIndex, res)
         if (nextStep === SurveyQuestionBranchingType.End) {
             sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
+            onPopupSurveySent()
         } else {
             setCurrentQuestionIndex(nextStep)
         }
@@ -787,11 +816,7 @@ export function Questions({
             }
         >
             {surveyQuestions.map((question, displayQuestionIndex) => {
-                const { originalQuestionIndex } = question
-
-                const isVisible = isPreviewMode
-                    ? currentQuestionIndex === originalQuestionIndex
-                    : currentQuestionIndex === displayQuestionIndex
+                const isVisible = currentQuestionIndex === displayQuestionIndex
                 return (
                     isVisible && (
                         <div
@@ -806,7 +831,13 @@ export function Questions({
                                     : {}
                             }
                         >
-                            {isPopup && <Cancel onClick={() => handleCloseSurveyPopup()} />}
+                            {isPopup && (
+                                <Cancel
+                                    onClick={() => {
+                                        onPopupSurveyDismissed()
+                                    }}
+                                />
+                            )}
                             {getQuestionComponent({
                                 question,
                                 forceDisableHtml,
@@ -815,8 +846,8 @@ export function Questions({
                                 onSubmit: (res) =>
                                     onNextButtonClick({
                                         res,
-                                        originalQuestionIndex,
                                         displayQuestionIndex,
+                                        questionId: question.id,
                                     }),
                                 onPreviewSubmit,
                             })}
@@ -871,7 +902,73 @@ export function FeedbackWidget({
         if (survey.appearance?.widgetType === 'selector') {
             const widget = document.querySelector(survey.appearance.widgetSelector || '') ?? undefined
 
-            addEventListener(widget, 'click', () => {
+            addEventListener(widget, 'click', (event) => {
+                // Calculate position based on the selector button
+                const buttonRect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+                const viewportHeight = window.innerHeight
+
+                // Get survey width from maxWidth or default to 300px
+                const surveyWidth = parseInt(survey.appearance?.maxWidth || '300')
+
+                // Calculate horizontal center position of the button
+                const buttonCenterX = buttonRect.left + buttonRect.width / 2
+
+                // Calculate horizontal center position
+                let left = buttonCenterX - surveyWidth / 2
+
+                // Ensure the survey doesn't go off-screen horizontally
+                const rightEdge = left + surveyWidth
+                if (rightEdge > window.innerWidth) {
+                    left = window.innerWidth - surveyWidth - 20 // 20px padding from right edge
+                }
+                if (left < 20) {
+                    left = 20 // 20px padding from left edge
+                }
+
+                // Determine if we should show above or below
+                let showAbove = false
+
+                // Check if there's enough space below (need at least 300px)
+                // If not enough space below, show above
+                if (buttonRect.bottom + 300 > viewportHeight) {
+                    showAbove = true
+                }
+
+                // Simple spacing between button and survey
+                const spacing = 12
+
+                // Calculate positions
+                let topPosition
+
+                if (showAbove) {
+                    // Problem: When showing above, we're trying to position based on an estimated height,
+                    // but we don't know the actual height of the survey yet.
+                    // Solution: Instead of using top positioning for above, use bottom positioning
+                    // This will anchor the survey to the bottom edge at the button's top position
+                    topPosition = null // We'll use bottom positioning instead
+                } else {
+                    // When showing below, position the top of the survey below the button plus spacing
+                    topPosition = buttonRect.bottom + window.scrollY + spacing
+                }
+
+                // Set style overrides for positioning
+                setStyle({
+                    position: 'fixed',
+                    top: showAbove ? 'auto' : topPosition + 'px',
+                    left: left + 'px',
+                    right: 'auto',
+                    bottom: showAbove ? window.innerHeight - buttonRect.top + spacing + 'px' : 'auto',
+                    transform: 'none',
+                    border: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
+                    borderRadius: '10px',
+                    width: `${surveyWidth}px`,
+                    zIndex: SURVEY_DEFAULT_Z_INDEX,
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                    maxHeight: showAbove
+                        ? `calc(100vh - 40px - ${spacing * 2}px)`
+                        : `calc(100vh - ${topPosition}px - 20px)`,
+                })
+
                 setShowSurvey(!showSurvey)
             })
 
@@ -887,6 +984,10 @@ export function FeedbackWidget({
 
     if (!isFeedbackButtonVisible) {
         return null
+    }
+
+    const resetShowSurvey = () => {
+        setShowSurvey(false)
     }
 
     return (
@@ -911,6 +1012,8 @@ export function FeedbackWidget({
                     style={styleOverrides}
                     removeSurveyFromFocus={removeSurveyFromFocus}
                     isPopup={true}
+                    onPopupSurveyDismissed={resetShowSurvey}
+                    onPopupSurveySent={resetShowSurvey}
                 />
             )}
         </Preact.Fragment>

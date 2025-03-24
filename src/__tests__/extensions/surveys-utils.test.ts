@@ -1,4 +1,9 @@
-import { canActivateRepeatedly, hasEvents, hasWaitPeriodPassed } from '../../extensions/surveys/surveys-utils'
+import {
+    canActivateRepeatedly,
+    getFontFamily,
+    hasEvents,
+    hasWaitPeriodPassed,
+} from '../../extensions/surveys/surveys-utils'
 import { Survey, SurveySchedule, SurveyType } from '../../posthog-surveys-types'
 
 describe('hasWaitPeriodPassed', () => {
@@ -177,5 +182,23 @@ describe('canActivateRepeatedly', () => {
             },
         } as Pick<Survey, 'type' | 'schedule' | 'conditions'>
         expect(canActivateRepeatedly(survey)).toBe(false)
+    })
+})
+
+describe('getFontFamily', () => {
+    it('should return the default font family with fallbacks when no font family is provided', () => {
+        expect(getFontFamily()).toBe(
+            '-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"'
+        )
+    })
+
+    it('should return the provided font family with fallbacks when a custom font family is provided', () => {
+        expect(getFontFamily('Arial')).toBe(
+            'Arial, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"'
+        )
+    })
+
+    it('should return only "inherit" when "inherit" is provided as font family', () => {
+        expect(getFontFamily('inherit')).toBe('inherit')
     })
 })

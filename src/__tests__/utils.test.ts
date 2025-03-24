@@ -137,6 +137,34 @@ describe('utils', () => {
             [
                 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4590.2 Safari/537.36 Chrome-Lighthouse',
             ],
+            [
+                'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)',
+            ],
+            ['Buck/2.4.2; (+https://app.hypefactors.com/media-monitoring/about.html)'],
+
+            ['op3-fetcher/1.0 (bot; https://op3.dev)'],
+            ['ZoomBot (Linkbot 1.0 http://suite.seozoom.it/bot.html)'],
+            ['Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)'],
+            [
+                'Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.6943.53 Mobile Safari/537.36 (compatible; AdsBot-Google-Mobile; +http://www.google.com/mobile/adsbot.html)',
+            ],
+            [
+                'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Perplexity-User/1.0; +https://perplexity.ai/perplexitybot-user)',
+            ],
+            ['Mozilla/5.0 (compatible; DotBot/1.2; +https://opensiteexplorer.org/dotbot; help@moz.com)'],
+            [
+                'Mozilla/5.0 (compatible; archive.org_bot +http://archive.org/details/archive.org_bot) Zeno/002a12a warc/v0.8.70',
+            ],
+            ['Mozilla/5.0 (compatible; DataForSeoBot/1.0; +https://dataforseo.com/dataforseo-bot)'],
+            ['Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)'],
+            ['Mozilla/5.0 +https://podfollow.com/crawling podfollowbot/1.0'],
+            ['meta-externalagent/1.1 (+https://developers.facebook.com/docs/sharing/webmasters/crawler)'],
+            ['Mozilla/5.0 +https://chartable.com/crawler Trackable/0.1'],
+            ['Mozilla/5.0 (compatible; SnapchatAds/1.0; +https://businesshelp.snapchat.com/s/article/adsbot-crawler)'],
+            [
+                'Mozilla/5.0 (compatible; SeznamBot/4.0; +https://o-seznam.cz/napoveda/vyhledavani/en/seznambot-crawler/)',
+            ],
+            ['BrightEdge Crawler/1.0 (crawler@brightedge.com)'],
         ])('blocks based on user agent', (botString) => {
             expect(isBlockedUA(botString, [])).toBe(true)
             expect(isBlockedUA(botString.toLowerCase(), [])).toBe(true)

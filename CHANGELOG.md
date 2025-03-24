@@ -1,3 +1,103 @@
+## 1.230.2 - 2025-03-11
+
+- fix: simple loader race protection (#1804)
+- chore(err): add next template (typescript + app router) (#1807)
+
+## 1.230.1 - 2025-03-10
+
+- fix: handle non Error objects being passed to captureException (#1806)
+
+## 1.230.0 - 2025-03-10
+
+- feat: allow early access feature stage specification (#1805)
+
+## 1.229.5 - 2025-03-07
+
+- fix: Stop logging error when client is uninitialized (#1803)
+
+## 1.229.4 - 2025-03-07
+
+- chore: use quesiton ID instead of question index if it's available (#1764)
+
+## 1.229.3 - 2025-03-07
+
+- Reverse error message (#1795)
+
+## 1.229.2 - 2025-03-06
+
+- fix: make survey preview behave like the actual (#1799)
+- chore(err): add playground for error tracking (#1796)
+- chore: sourcemap sample app (#1782)
+- chore: refactor playwright helper for clarity (#1774)
+
+## 1.229.1 - 2025-03-06
+
+- fix: stop setting platform on sentry event (#1790)
+
+## 1.229.0 - 2025-03-06
+
+- feat: add chunk_id to stack frames (#1794)
+
+## 1.228.2 - 2025-03-06
+
+- chore(flags): support handling optional `requestId`s in `/decide` responses (#1793)
+
+## 1.228.1 - 2025-03-05
+
+- fix(flags): do not reset $anon_distinct_id after first decide call if advanced_disable_feature_flags_on_first_load is true (#1786)
+
+## 1.228.0 - 2025-03-05
+
+- fix: Fix site app loading (#1792)
+
+## 1.227.2 - 2025-03-05
+
+- feat: Block yet another semrush crawler/bot (#1791)
+
+## 1.227.1 - 2025-03-05
+
+- feat: posthog feature component should report variant too (#1783)
+- chore: image blocking example (#1789)
+- chore(): set all github actions to run on ubuntu-22.04 (#1784)
+- fix(flags): Make sure flags are loaded when identify is called (#1785)
+- fix(flags): pass along $initial_ person properties in decide requests automatically (#1781)
+- chore: Mark peerDependencies as optional (#1777)
+- feat: Make `getQueryParams` more resilient (#1778)
+
+## 1.227.0 - 2025-03-04
+
+- feat: support loading masking remotely (#1734)
+
+## 1.226.0 - 2025-03-04
+
+- feat(web-analytics): Add $session property with an object of props on session_id lifecycle (#1780)
+- feat: Block more bots (#1776)
+
+## 1.225.1 - 2025-03-03
+
+- fix: add semrush audit bot (#1775)
+- chore: add posthog built rrweb (#1770)
+
+## 1.225.0 - 2025-03-02
+
+- feat: better positioning for survey selectors (#1772)
+
+## 1.224.1 - 2025-02-27
+
+- fix: dont require double click to show feedback surveys (#1767)
+
+## 1.224.0 - 2025-02-27
+
+- feat(feature-flags): support quota limiting for feature flags (#1758)
+
+## 1.223.5 - 2025-02-26
+
+- fix: nonce missing style script (#1765)
+
+## 1.223.4 - 2025-02-25
+
+- fix: support inherit font family on surveys (#1763)
+
 ## 1.223.3 - 2025-02-23
 
 - fix: dont show survey on url change, only hide it (#1761)

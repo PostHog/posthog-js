@@ -1,6 +1,6 @@
+import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 import { expect, test } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
-import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 
 const startOptions = {
     options: {},
@@ -14,6 +14,7 @@ const openTextQuestion = {
     type: 'open',
     question: 'What feedback do you have for us?',
     description: 'plain text description',
+    id: 'open_text_1',
 }
 
 const linkQuestionWithHTMLContentType = {
@@ -22,6 +23,7 @@ const linkQuestionWithHTMLContentType = {
     link: 'https://posthog.com',
     description: '<h2>html description</h2>',
     descriptionContentType: 'html',
+    id: 'link_html_1',
 }
 
 const linkQuestionWithNoContentType = {
@@ -29,6 +31,7 @@ const linkQuestionWithNoContentType = {
     question: 'Book an interview with us',
     link: 'https://posthog.com',
     description: '<h2>html description</h2>',
+    id: 'link_no_content_1',
 }
 
 const linkQuestionWithTextContentType = {
@@ -37,6 +40,7 @@ const linkQuestionWithTextContentType = {
     link: 'https://posthog.com',
     description: '<h2>html description</h2>',
     descriptionContentType: 'text',
+    id: 'link_text_1',
 }
 
 const appearanceWithThanks = {

@@ -10,12 +10,29 @@ import {
 } from '../../posthog-surveys-types'
 import { document as _document, window as _window } from '../../utils/globals'
 import { createLogger } from '../../utils/logger'
+import { prepareStylesheet } from '../utils/stylesheet-loader'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 const SurveySeenPrefix = 'seenSurvey_'
 
 const logger = createLogger('[Surveys]')
+
+export const SURVEY_DEFAULT_Z_INDEX = 2147483647
+
+export function getFontFamily(fontFamily?: string): string {
+    if (fontFamily === 'inherit') {
+        return 'inherit'
+    }
+
+    const defaultFontStack =
+        'BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"'
+    return fontFamily ? `${fontFamily}, ${defaultFontStack}` : `-apple-system, ${defaultFontStack}`
+}
+
+export function getSurveyResponseKey(questionId: string) {
+    return `$survey_response_${questionId}`
+}
 
 export const style = (appearance: SurveyAppearance | null) => {
     const positions = {
@@ -33,11 +50,11 @@ export const style = (appearance: SurveyAppearance | null) => {
               bottom: 0px;
               color: black;
               font-weight: normal;
-              font-family: ${appearance?.fontFamily || '-apple-system'}, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+              font-family: ${getFontFamily(appearance?.fontFamily)};
               text-align: left;
               max-width: ${parseInt(appearance?.maxWidth || '300')}px;
               width: 100%;
-              z-index: ${parseInt(appearance?.zIndex || '99999')};
+              z-index: ${parseInt(appearance?.zIndex || SURVEY_DEFAULT_Z_INDEX.toString())};
               border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
               border-bottom: 0px;
               ${positions[appearance?.position || 'right'] || 'right: 30px;'}
@@ -60,14 +77,14 @@ export const style = (appearance: SurveyAppearance | null) => {
           }
 
           .form-submit[disabled] {
-              opacity: 0.6;
+              opacity: ${appearance?.disabledButtonOpacity || '0.6'};
               filter: grayscale(50%);
               cursor: not-allowed;
           }
           .survey-form textarea {
               color: #2d2d2d;
               font-size: 14px;
-              font-family: ${appearance?.fontFamily || '-apple-system'}, BlinkMacSystemFont, "Inter", "Segoe UI", "Roboto", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+              font-family: ${getFontFamily(appearance?.fontFamily)};
               background: white;
               color: black;
               outline: none;
@@ -532,15 +549,15 @@ export const defaultSurveyAppearance: SurveyAppearance = {
 
 export const defaultBackgroundColor = '#eeeded'
 
-export const createShadow = (styleSheet: string, surveyId: string, element?: Element) => {
+export const createShadow = (styleSheet: string, surveyId: string, element?: Element, posthog?: PostHog) => {
     const div = document.createElement('div')
     div.className = `PostHogSurvey${surveyId}`
     const shadow = div.attachShadow({ mode: 'open' })
     if (styleSheet) {
-        const styleElement = Object.assign(document.createElement('style'), {
-            innerText: styleSheet,
-        })
-        shadow.appendChild(styleElement)
+        const styleElement = prepareStylesheet(document, styleSheet, posthog)
+        if (styleElement) {
+            shadow.appendChild(styleElement)
+        }
     }
     ;(element ? element : document.body).appendChild(div)
     return shadow
@@ -635,11 +652,6 @@ export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string
 }
 
 export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
-    // retain the original questionIndex so we can correlate values in the webapp
-    survey.questions.forEach((question, idx) => {
-        question.originalQuestionIndex = idx
-    })
-
     if (!survey.appearance || !survey.appearance.shuffleQuestions) {
         return survey.questions
     }
@@ -722,17 +734,19 @@ export const hasWaitPeriodPassed = (
 interface SurveyContextProps {
     isPreviewMode: boolean
     previewPageIndex: number | undefined
-    handleCloseSurveyPopup: () => void
+    onPopupSurveyDismissed: () => void
     isPopup: boolean
     onPreviewSubmit: (res: string | string[] | number | null) => void
+    onPopupSurveySent: () => void
 }
 
 export const SurveyContext = createContext<SurveyContextProps>({
     isPreviewMode: false,
     previewPageIndex: 0,
-    handleCloseSurveyPopup: () => {},
+    onPopupSurveyDismissed: () => {},
     isPopup: true,
     onPreviewSubmit: () => {},
+    onPopupSurveySent: () => {},
 })
 
 interface RenderProps {

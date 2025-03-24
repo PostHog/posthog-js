@@ -41,11 +41,16 @@ export const formDataToQuery = function (formdata: Record<string, any> | FormDat
     return tph_arr.join(arg_separator)
 }
 
+// NOTE: Once we get rid of IE11/op_mini we can start using URLSearchParams
 export const getQueryParam = function (url: string, param: string): string {
     const withoutHash: string = url.split('#')[0] || ''
-    const queryParams: string = withoutHash.split('?')[1] || ''
 
-    const queryParts = queryParams.split('&')
+    // Split only on the first ? to sort problem out for those with multiple ?s
+    // and then remove them
+    const queryParams: string = withoutHash.split(/\?(.*)/)[1] || ''
+    const cleanedQueryParams = queryParams.replace(/^\?+/g, '')
+
+    const queryParts = cleanedQueryParams.split('&')
     let keyValuePair
 
     for (let i = 0; i < queryParts.length; i++) {
