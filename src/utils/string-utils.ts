@@ -1,6 +1,6 @@
 export function includes(str: string, needle: string): boolean
 export function includes<T>(arr: T[], needle: T): boolean
-export function includes<T = any>(str: T[] | string, needle: string): boolean {
+export function includes(str: unknown[] | string, needle: unknown): boolean {
     return (str as any).indexOf(needle) !== -1
 }
 
