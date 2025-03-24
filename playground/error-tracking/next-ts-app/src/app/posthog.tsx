@@ -6,7 +6,7 @@ export function PosthogProvider({ children, debug = false }: { children: React.R
     useEffect(() => {
         posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY || '', {
             api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'http://localhost:8010',
-            autocapture: false,
+            autocapture: true,
         })
         if (debug) {
             posthog.debug()

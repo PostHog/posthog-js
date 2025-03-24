@@ -9,10 +9,8 @@ settings.yml
 debug.log
 *.swp
 *.swo
-node_modules/*
-*.code-workspace
 node_modules
-.vscode/*
+*.code-workspace
 .mypy_cache
 package-lock.json
 .idea

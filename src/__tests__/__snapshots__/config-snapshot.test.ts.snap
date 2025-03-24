@@ -219,7 +219,8 @@ exports[`config snapshot for PostHogConfig 1`] = `
     ],
     \\"ignoreClass\\": [
       \\"undefined\\",
-      \\"string\\"
+      \\"string\\",
+      \\"RegExp\\"
     ],
     \\"maskTextClass\\": [
       \\"undefined\\",

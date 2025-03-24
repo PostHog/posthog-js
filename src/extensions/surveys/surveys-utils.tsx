@@ -579,7 +579,11 @@ export const sendSurveyEvent = (
         $survey_id: survey.id,
         $survey_iteration: survey.current_iteration,
         $survey_iteration_start_date: survey.current_iteration_start_date,
-        $survey_questions: survey.questions.map((question) => question.question),
+        $survey_questions: survey.questions.map((question, index) => ({
+            id: question.id,
+            question: question.question,
+            index,
+        })),
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
         ...responses,
         $set: {
@@ -737,7 +741,6 @@ interface SurveyContextProps {
     onPopupSurveyDismissed: () => void
     isPopup: boolean
     onPreviewSubmit: (res: string | string[] | number | null) => void
-    onPopupSurveySent: () => void
 }
 
 export const SurveyContext = createContext<SurveyContextProps>({
@@ -746,7 +749,6 @@ export const SurveyContext = createContext<SurveyContextProps>({
     onPopupSurveyDismissed: () => {},
     isPopup: true,
     onPreviewSubmit: () => {},
-    onPopupSurveySent: () => {},
 })
 
 interface RenderProps {

@@ -171,6 +171,23 @@ test.describe('surveys - core display logic', () => {
         expect(surveySent!.properties['$survey_id']).toEqual('12345')
         expect(surveySent!.properties[getSurveyResponseKey('open_text_1')]).toEqual('Great job!')
         expect(surveySent!.properties[getSurveyResponseKey('nps_rating_1')]).toBeNull()
+        expect(surveySent!.properties['$survey_questions']).toEqual([
+            {
+                id: 'multiple_choice_1',
+                question: 'Which types of content would you like to see more of?',
+                index: 0,
+            },
+            {
+                id: 'open_text_1',
+                question: 'What feedback do you have for us?',
+                index: 1,
+            },
+            {
+                id: 'nps_rating_1',
+                question: 'Would you recommend surveys?',
+                index: 2,
+            },
+        ])
     })
 
     test('multiple choice questions with open choice', async ({ page, context }) => {
@@ -211,6 +228,13 @@ test.describe('surveys - core display logic', () => {
         ])
         const surveySent = captures.find((c) => c.event === 'survey sent')
         expect(surveySent!.properties[getSurveyResponseKey('multiple_choice_1')]).toEqual(['Tutorials', 'Newsletters'])
+        expect(surveySent!.properties['$survey_questions']).toEqual([
+            {
+                id: 'multiple_choice_1',
+                question: 'Which types of content would you like to see more of?',
+                index: 0,
+            },
+        ])
     })
 
     test('single choice questions with open choice', async ({ page, context }) => {
@@ -257,5 +281,12 @@ test.describe('surveys - core display logic', () => {
         ])
         const surveySent = captures.find((c) => c.event === 'survey sent')
         expect(surveySent!.properties[getSurveyResponseKey('single_choice_1')]).toEqual('Product engineer')
+        expect(surveySent!.properties['$survey_questions']).toEqual([
+            {
+                id: 'single_choice_1',
+                question: 'What is your occupation?',
+                index: 0,
+            },
+        ])
     })
 })

@@ -54,6 +54,10 @@ import { sampleOnProperty } from '../sampling'
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
 
+function getRRWebRecord(): rrwebRecord | undefined {
+    return assignableWindow?.__PosthogExtensions__?.rrweb?.record
+}
+
 type SessionStartReason =
     | 'sampling_overridden'
     | 'recording_initialized'
@@ -256,7 +260,7 @@ export class SessionRecording {
     private _captureStarted: boolean
     private stopRrweb: listenerHandler | undefined
     private receivedDecide: boolean
-    private isIdle = false
+    private isIdle: boolean | 'unknown' = 'unknown'
 
     private _linkedFlagSeen: boolean = false
     private _lastActivityTimestamp: number = Date.now()
@@ -288,10 +292,6 @@ export class SessionRecording {
 
     private get sessionIdleThresholdMilliseconds(): number {
         return this.instance.config.session_recording.session_idle_threshold_ms || RECORDING_IDLE_THRESHOLD_MS
-    }
-
-    private get rrwebRecord(): rrwebRecord | undefined {
-        return assignableWindow?.__PosthogExtensions__?.rrweb?.record
     }
 
     public get started(): boolean {
@@ -386,20 +386,25 @@ export class SessionRecording {
             : undefined
     }
 
-    private get masking(): Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector'> | undefined {
+    private get masking():
+        | Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector' | 'blockSelector'>
+        | undefined {
         const masking_server_side = this.instance.get_property(SESSION_RECORDING_MASKING)
         const masking_client_side = {
             maskAllInputs: this.instance.config.session_recording?.maskAllInputs,
             maskTextSelector: this.instance.config.session_recording?.maskTextSelector,
+            blockSelector: this.instance.config.session_recording?.blockSelector,
         }
 
         const maskAllInputs = masking_client_side?.maskAllInputs ?? masking_server_side?.maskAllInputs
         const maskTextSelector = masking_client_side?.maskTextSelector ?? masking_server_side?.maskTextSelector
+        const blockSelector = masking_client_side?.blockSelector ?? masking_server_side?.blockSelector
 
-        return !isUndefined(maskAllInputs) || !isUndefined(maskTextSelector)
+        return !isUndefined(maskAllInputs) || !isUndefined(maskTextSelector) || !isUndefined(blockSelector)
             ? {
                   maskAllInputs: maskAllInputs ?? true,
                   maskTextSelector,
+                  blockSelector,
               }
             : undefined
     }
@@ -790,7 +795,7 @@ export class SessionRecording {
 
         // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
         // imported), don't load script. Otherwise, remotely import recorder.js from cdn since it hasn't been loaded.
-        if (!this.rrwebRecord) {
+        if (!getRRWebRecord()) {
             assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, this.scriptName, (err) => {
                 if (err) {
                     return logger.error('could not load recorder', err)
@@ -858,13 +863,18 @@ export class SessionRecording {
         if (isUserInteraction) {
             this._lastActivityTimestamp = event.timestamp
             if (this.isIdle) {
+                const idleWasUnknown = this.isIdle === 'unknown'
                 // Remove the idle state
                 this.isIdle = false
-                this._tryAddCustomEvent('sessionNoLongerIdle', {
-                    reason: 'user activity',
-                    type: event.type,
-                })
-                returningFromIdle = true
+                // if the idle state was unknown, we don't want to add an event, since we're just in bootup
+                // whereas if it was true, we know we've been idle for a while, and we can mark ourselves as returning from idle
+                if (!idleWasUnknown) {
+                    this._tryAddCustomEvent('sessionNoLongerIdle', {
+                        reason: 'user activity',
+                        type: event.type,
+                    })
+                    returningFromIdle = true
+                }
             }
         }
 
@@ -913,11 +923,11 @@ export class SessionRecording {
     }
 
     private _tryAddCustomEvent(tag: string, payload: any): boolean {
-        return this._tryRRWebMethod(newQueuedEvent(() => this.rrwebRecord!.addCustomEvent(tag, payload)))
+        return this._tryRRWebMethod(newQueuedEvent(() => getRRWebRecord()!.addCustomEvent(tag, payload)))
     }
 
     private _tryTakeFullSnapshot(): boolean {
-        return this._tryRRWebMethod(newQueuedEvent(() => this.rrwebRecord!.takeFullSnapshot()))
+        return this._tryRRWebMethod(newQueuedEvent(() => getRRWebRecord()!.takeFullSnapshot()))
     }
 
     private _onScriptLoaded() {
@@ -964,9 +974,11 @@ export class SessionRecording {
         if (this.masking) {
             sessionRecordingOptions.maskAllInputs = this.masking.maskAllInputs ?? true
             sessionRecordingOptions.maskTextSelector = this.masking.maskTextSelector ?? undefined
+            sessionRecordingOptions.blockSelector = this.masking.blockSelector ?? undefined
         }
 
-        if (!this.rrwebRecord) {
+        const rrwebRecord = getRRWebRecord()
+        if (!rrwebRecord) {
             logger.error(
                 'onScriptLoaded was called but rrwebRecord is not available. This indicates something has gone wrong.'
             )
@@ -975,7 +987,7 @@ export class SessionRecording {
 
         this.mutationRateLimiter =
             this.mutationRateLimiter ??
-            new MutationRateLimiter(this.rrwebRecord, {
+            new MutationRateLimiter(rrwebRecord, {
                 refillRate: this.instance.config.session_recording.__mutationRateLimiterRefillRate,
                 bucketSize: this.instance.config.session_recording.__mutationRateLimiterBucketSize,
                 onBlockedNode: (id, node) => {
@@ -989,7 +1001,7 @@ export class SessionRecording {
             })
 
         const activePlugins = this._gatherRRWebPlugins()
-        this.stopRrweb = this.rrwebRecord({
+        this.stopRrweb = rrwebRecord({
             emit: (event) => {
                 this.onRRwebEmit(event)
             },
@@ -999,7 +1011,8 @@ export class SessionRecording {
 
         // We reset the last activity timestamp, resetting the idle timer
         this._lastActivityTimestamp = Date.now()
-        this.isIdle = false
+        // stay unknown if we're not sure if we're idle or not
+        this.isIdle = isBoolean(this.isIdle) ? this.isIdle : 'unknown'
 
         this._tryAddCustomEvent('$session_options', {
             sessionRecordingOptions,
@@ -1016,7 +1029,7 @@ export class SessionRecording {
             clearInterval(this._fullSnapshotTimer)
         }
         // we don't schedule snapshots while idle
-        if (this.isIdle) {
+        if (this.isIdle === true) {
             return
         }
 
@@ -1103,7 +1116,8 @@ export class SessionRecording {
         this._updateWindowAndSessionIds(event)
 
         // When in an idle state we keep recording, but don't capture the events,
-        if (this.isIdle && !isSessionIdleEvent(event)) {
+        // we don't want to return early if idle is 'unknown'
+        if (this.isIdle === true && !isSessionIdleEvent(event)) {
             return
         }
 

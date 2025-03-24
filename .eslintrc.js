@@ -12,6 +12,7 @@ const rules = {
     'no-empty': 'off',
     'no-console': 'error',
     'no-only-tests/no-only-tests': 'error',
+    'posthog-js/no-external-replay-imports': 'error',
 }
 
 const extend = [
@@ -77,6 +78,7 @@ module.exports = {
                 ...rules,
                 'no-console': 'off',
                 'no-restricted-globals': 'off',
+                'compat/compat': 'off',
             },
         },
         {

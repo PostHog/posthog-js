@@ -79,6 +79,50 @@ describe('featureflags', () => {
         expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
     })
 
+    it('should return flag details from persistence even if decide endpoint was not hit', () => {
+        instance.persistence.register({
+            $feature_flag_details: {
+                'beta-feature': {
+                    key: 'beta-feature',
+                    enabled: true,
+                    variant: 'beta-variant-1',
+                    reason: {
+                        code: 'test-reason',
+                        condition_index: 1,
+                        description: undefined,
+                    },
+                    metadata: {
+                        version: 4,
+                        payload: { payload: 'test' },
+                        id: 1,
+                        description: 'test-description',
+                    },
+                },
+            },
+            $override_feature_flags: false,
+        })
+        featureFlags._hasLoadedFlags = false
+
+        expect(featureFlags.getFlagsWithDetails()).toEqual({
+            'beta-feature': {
+                key: 'beta-feature',
+                enabled: true,
+                variant: 'beta-variant-1',
+                reason: {
+                    code: 'test-reason',
+                    condition_index: 1,
+                    description: undefined,
+                },
+                metadata: {
+                    version: 4,
+                    payload: { payload: 'test' },
+                    id: 1,
+                    description: 'test-description',
+                },
+            },
+        })
+    })
+
     it('should warn if decide endpoint was not hit and no flags exist', () => {
         ;(window as any).POSTHOG_DEBUG = true
         featureFlags._hasLoadedFlags = false
@@ -301,6 +345,79 @@ describe('featureflags', () => {
                 })
             })
 
+            it('supports basic flag details overrides with warning behavior', () => {
+                instance.persistence.props = {
+                    $feature_flag_details: {
+                        'beta-feature': {
+                            key: 'beta-feature',
+                            enabled: true,
+                            variant: 'beta-variant-1',
+                            reason: {
+                                code: 'test-reason',
+                                condition_index: 1,
+                                description: undefined,
+                            },
+                            metadata: undefined,
+                        },
+                        'alpha-feature-2': {
+                            key: 'alpha-feature-2',
+                            enabled: true,
+                            variant: undefined,
+                            reason: undefined,
+                            metadata: { payload: 200 },
+                        },
+                    },
+                }
+
+                // Test default warning behavior
+                featureFlags.overrideFeatureFlags({
+                    flags: {
+                        'beta-feature': false,
+                    },
+                })
+
+                expect(featureFlags.getFeatureFlagDetails('beta-feature')).toEqual({
+                    key: 'beta-feature',
+                    enabled: false,
+                    original_enabled: true,
+                    variant: undefined,
+                    original_variant: 'beta-variant-1',
+                    reason: {
+                        code: 'test-reason',
+                        condition_index: 1,
+                        description: undefined,
+                    },
+                    metadata: undefined,
+                })
+                expect(window.console.warn).toHaveBeenCalledWith(
+                    '[PostHog.js] [FeatureFlags]',
+                    ' Overriding feature flags!',
+                    expect.any(Object)
+                )
+
+                // Test suppressed warning behavior
+                mockWarn.mockClear()
+                featureFlags.overrideFeatureFlags({
+                    flags: {
+                        'alpha-feature-2': false,
+                    },
+                    suppressWarning: true,
+                })
+
+                expect(window.console.warn).not.toHaveBeenCalledWith(
+                    '[PostHog.js] [FeatureFlags]',
+                    ' Overriding feature flags!'
+                )
+                expect(featureFlags.getFeatureFlagDetails('alpha-feature-2')).toEqual({
+                    key: 'alpha-feature-2',
+                    enabled: false,
+                    original_enabled: true,
+                    variant: undefined,
+                    reason: undefined,
+                    metadata: { payload: 200 },
+                })
+            })
+
             it('supports payload overrides', () => {
                 // Test with warning suppressed
                 featureFlags.overrideFeatureFlags({
@@ -338,6 +455,55 @@ describe('featureflags', () => {
                     ' Overriding feature flag payloads!',
                     expect.any(Object)
                 )
+            })
+
+            it('supports payload overrides with details', () => {
+                instance.persistence.props = {
+                    $feature_flag_details: {
+                        'beta-feature': {
+                            key: 'beta-feature',
+                            enabled: true,
+                            variant: 'beta-variant-1',
+                            reason: {
+                                code: 'test-reason',
+                                condition_index: 1,
+                                description: undefined,
+                            },
+                            metadata: {
+                                version: 4,
+                                payload: { payload: 'test' },
+                                id: 1,
+                                description: 'test-description',
+                            },
+                        },
+                    },
+                }
+
+                featureFlags.overrideFeatureFlags({
+                    payloads: {
+                        'beta-feature': { data: 'overridden' },
+                    },
+                })
+
+                expect(featureFlags.getFlagsWithDetails()).toEqual({
+                    'beta-feature': {
+                        key: 'beta-feature',
+                        enabled: true,
+                        variant: 'beta-variant-1',
+                        reason: {
+                            code: 'test-reason',
+                            condition_index: 1,
+                            description: undefined,
+                        },
+                        metadata: {
+                            version: 4,
+                            payload: { data: 'overridden' },
+                            original_payload: { payload: 'test' },
+                            id: 1,
+                            description: 'test-description',
+                        },
+                    },
+                })
             })
 
             it('clears overrides when passed false', () => {
@@ -380,6 +546,85 @@ describe('featureflags', () => {
                     $feature_flag_bootstrapped_response: null,
                     $feature_flag_bootstrapped_payload: null,
                     $used_bootstrap_value: true,
+                })
+            })
+
+            it('includes original values in feature flag called event when details are available', () => {
+                instance.persistence.props = {
+                    $feature_flag_details: {
+                        'beta-feature': {
+                            key: 'beta-feature',
+                            enabled: false,
+                            variant: undefined,
+                            reason: undefined,
+                            metadata: {
+                                payload: { status: 'original' },
+                            },
+                        },
+                        'alpha-feature-2': {
+                            key: 'alpha-feature-2',
+                            enabled: false,
+                            variant: undefined,
+                            reason: undefined,
+                            metadata: undefined,
+                        },
+                        'multivariate-flag': {
+                            key: 'multivariate-flag',
+                            enabled: true,
+                            variant: 'multivariate-variant-1',
+                            reason: undefined,
+                            metadata: undefined,
+                        },
+                    },
+                }
+                featureFlags.overrideFeatureFlags({
+                    flags: { 'beta-feature': true, 'alpha-feature-2': 'variant-1', 'multivariate-flag': false },
+                    payloads: { 'beta-feature': { overridden: { status: 'overridden' } } },
+                })
+                featureFlags._hasLoadedFlags = true
+
+                featureFlags.getFeatureFlag('beta-feature')
+
+                expect(instance.capture).toHaveBeenCalledWith('$feature_flag_called', {
+                    $feature_flag: 'beta-feature',
+                    $feature_flag_response: true,
+                    $feature_flag_payload: { overridden: { status: 'overridden' } },
+                    $feature_flag_bootstrapped_response: null,
+                    $feature_flag_bootstrapped_payload: null,
+                    $used_bootstrap_value: true,
+                    $feature_flag_original_response: false,
+                    $feature_flag_original_payload: { status: 'original' },
+                    $feature_flag_request_id: undefined,
+                })
+
+                instance.capture.mockClear()
+
+                featureFlags.getFeatureFlag('alpha-feature-2')
+
+                expect(instance.capture).toHaveBeenCalledWith('$feature_flag_called', {
+                    $feature_flag: 'alpha-feature-2',
+                    $feature_flag_response: 'variant-1',
+                    $feature_flag_payload: null,
+                    $feature_flag_bootstrapped_response: null,
+                    $feature_flag_bootstrapped_payload: null,
+                    $used_bootstrap_value: true,
+                    $feature_flag_original_response: false,
+                    $feature_flag_request_id: undefined,
+                })
+
+                instance.capture.mockClear()
+
+                featureFlags.getFeatureFlag('multivariate-flag')
+
+                expect(instance.capture).toHaveBeenCalledWith('$feature_flag_called', {
+                    $feature_flag: 'multivariate-flag',
+                    $feature_flag_response: false,
+                    $feature_flag_payload: null,
+                    $feature_flag_bootstrapped_response: null,
+                    $feature_flag_bootstrapped_payload: null,
+                    $used_bootstrap_value: true,
+                    $feature_flag_original_response: 'multivariate-variant-1',
+                    $feature_flag_request_id: undefined,
                 })
             })
         })
@@ -1060,7 +1305,7 @@ describe('featureflags', () => {
         })
     })
 
-    describe('when subsequent decide calls return partial results', () => {
+    describe('when subsequent decide v3 calls return partial results', () => {
         beforeEach(() => {
             instance._send_request = jest.fn().mockImplementation(({ callback }) =>
                 callback({
@@ -1085,6 +1330,81 @@ describe('featureflags', () => {
                 'x-flag': 'x-value',
                 'feature-1': false,
                 'disabled-flag': false,
+            })
+        })
+    })
+
+    describe('when subsequent decide v4 calls return partial results', () => {
+        beforeEach(() => {
+            // Need to register v4 flags to test v4 behavior.
+            instance.persistence.register({
+                $feature_flag_payloads: {
+                    'beta-feature': {
+                        some: 'payload',
+                    },
+                    'alpha-feature-2': 200,
+                },
+                $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
+                $enabled_feature_flags: {
+                    'beta-feature': true,
+                    'alpha-feature-2': true,
+                    'multivariate-flag': 'variant-1',
+                    'disabled-flag': false,
+                },
+                $feature_flag_details: {
+                    'beta-feature': {
+                        key: 'beta-feature',
+                        enabled: true,
+                        variant: undefined,
+                        metadata: { payload: { some: 'payload' } },
+                    },
+                    'alpha-feature-2': {
+                        key: 'alpha-feature-2',
+                        enabled: true,
+                        variant: undefined,
+                        metadata: { payload: 200 },
+                    },
+                    'multivariate-flag': {
+                        key: 'multivariate-flag',
+                        enabled: true,
+                        variant: 'variant-1',
+                        metadata: { payload: undefined },
+                    },
+                    'disabled-flag': {
+                        key: 'disabled-flag',
+                        enabled: false,
+                        variant: undefined,
+                        metadata: undefined,
+                    },
+                },
+                $override_feature_flags: false,
+            })
+            instance._send_request = jest.fn().mockImplementation(({ callback }) =>
+                callback({
+                    statusCode: 200,
+                    json: {
+                        flags: {
+                            'x-flag': { key: 'x-flag', enabled: true, variant: 'x-value', metadata: undefined },
+                            'feature-1': { key: 'feature-1', enabled: false, variant: undefined, metadata: undefined },
+                        },
+                        errorsWhileComputingFlags: true,
+                    },
+                })
+            )
+        })
+
+        it('should return combined results', () => {
+            featureFlags.reloadFeatureFlags()
+
+            jest.runAllTimers()
+
+            expect(featureFlags.getFlagVariants()).toEqual({
+                'alpha-feature-2': true,
+                'beta-feature': true,
+                'disabled-flag': false,
+                'feature-1': false,
+                'multivariate-flag': 'variant-1',
+                'x-flag': 'x-value',
             })
         })
     })
@@ -1266,6 +1586,49 @@ describe('featureflags', () => {
             )
         })
 
+        it('includes version in feature flag called event', () => {
+            // Setup flags with requestId
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                requestId: TEST_REQUEST_ID,
+                flags: {
+                    'test-flag': {
+                        key: 'test-flag',
+                        id: 23,
+                        enabled: true,
+                        variant: 'variant-1',
+                        reason: {
+                            description: 'Matched condition set 1',
+                            code: 'test-code',
+                            condition_index: 1,
+                        },
+                        metadata: {
+                            id: 23,
+                            version: 42,
+                        },
+                    },
+                },
+            })
+            featureFlags._hasLoadedFlags = true
+
+            // Test flag call
+            featureFlags.getFeatureFlag('test-flag')
+
+            // Verify capture call includes requestId
+            expect(instance.capture).toHaveBeenCalledWith(
+                '$feature_flag_called',
+                expect.objectContaining({
+                    $feature_flag: 'test-flag',
+                    $feature_flag_response: 'variant-1',
+                    $feature_flag_request_id: TEST_REQUEST_ID,
+                    $feature_flag_version: 42,
+                    $feature_flag_reason: 'Matched condition set 1',
+                    $feature_flag_id: 23,
+                })
+            )
+        })
+
         it('updates requestId when new decide response is received', () => {
             // First decide response
             featureFlags.receivedFeatureFlags({
@@ -1319,6 +1682,8 @@ describe('parseFeatureFlagDecideResponse', () => {
                 'alpha-feature-2': 'fake-payload',
             },
         }
+        jest.spyOn(window.console, 'warn').mockImplementation()
+
         parseFeatureFlagDecideResponse(decideResponse, persistence)
 
         expect(persistence.register).toHaveBeenCalledWith({
@@ -1332,12 +1697,205 @@ describe('parseFeatureFlagDecideResponse', () => {
                 'beta-feature': 300,
                 'alpha-feature-2': 'fake-payload',
             },
+            $feature_flag_details: {},
+        })
+        expect(window.console.warn).toHaveBeenCalledWith(
+            '[PostHog.js] [FeatureFlags]',
+            'Using an older version of the feature flags endpoint. Please upgrade your PostHog server to the latest version'
+        )
+    })
+
+    it('enables feature flag details from decide v3^ response', () => {
+        const decideResponse = {
+            featureFlags: {
+                'beta-feature': true,
+                'alpha-feature-2': true,
+                'multivariate-flag': 'variant-1',
+            },
+            featureFlagPayloads: {
+                'beta-feature': 300,
+                'alpha-feature-2': '"fake-payload"',
+            },
+        }
+        jest.spyOn(window.console, 'warn').mockImplementation()
+
+        parseFeatureFlagDecideResponse(decideResponse, persistence)
+
+        expect(persistence.register).toHaveBeenCalledWith({
+            $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
+            $enabled_feature_flags: {
+                'beta-feature': true,
+                'alpha-feature-2': true,
+                'multivariate-flag': 'variant-1',
+            },
+            $feature_flag_payloads: {
+                'beta-feature': 300,
+                'alpha-feature-2': '"fake-payload"',
+            },
+            $feature_flag_details: {},
+        })
+        expect(window.console.warn).toHaveBeenCalledWith(
+            '[PostHog.js] [FeatureFlags]',
+            'Using an older version of the feature flags endpoint. Please upgrade your PostHog server to the latest version'
+        )
+    })
+
+    it('enables feature flag details from decide v4^ response', () => {
+        const decideResponse = {
+            flags: {
+                'beta-feature': {
+                    key: 'beta-feature',
+                    enabled: true,
+                    variant: 'beta-variant-1',
+                    reason: {
+                        code: 'test-reason',
+                        condition_index: 1,
+                        description: undefined,
+                    },
+                    metadata: {
+                        version: 2,
+                        payload: 300,
+                        id: 1,
+                        description: 'test-description',
+                    },
+                },
+                'alpha-feature': {
+                    key: 'alpha-feature',
+                    enabled: true,
+                    variant: undefined,
+                    reason: {
+                        code: 'test-reason',
+                        condition_index: 1,
+                        description: undefined,
+                    },
+                    metadata: {
+                        version: 21,
+                        payload: undefined,
+                        id: 2,
+                        description: 'test-description',
+                    },
+                },
+                'multivariate-flag': {
+                    key: 'multivariate-flag',
+                    enabled: true,
+                    variant: 'multi-variant-2',
+                    reason: {
+                        code: 'test-reason',
+                        condition_index: 1,
+                        description: undefined,
+                    },
+                    metadata: {
+                        version: 32,
+                        payload: '"fake-payload"',
+                        id: 3,
+                        description: 'test-description',
+                    },
+                },
+                'disabled-feature': {
+                    key: 'disabled-feature',
+                    enabled: false,
+                    variant: undefined,
+                    reason: {
+                        code: 'no_matching_condition',
+                        condition_index: undefined,
+                        description: undefined,
+                    },
+                    metadata: {
+                        version: 9,
+                        payload: undefined,
+                        id: 4,
+                        description: 'not ready yet',
+                    },
+                },
+            },
+        }
+        parseFeatureFlagDecideResponse(decideResponse, persistence)
+
+        expect(persistence.register).toHaveBeenCalledWith({
+            $active_feature_flags: ['beta-feature', 'alpha-feature', 'multivariate-flag'],
+            $enabled_feature_flags: {
+                'alpha-feature': true,
+                'beta-feature': 'beta-variant-1',
+                'disabled-feature': false,
+                'multivariate-flag': 'multi-variant-2',
+            },
+            $feature_flag_payloads: {
+                'beta-feature': 300,
+                'multivariate-flag': '"fake-payload"',
+            },
+            $feature_flag_details: {
+                'beta-feature': {
+                    key: 'beta-feature',
+                    enabled: true,
+                    variant: 'beta-variant-1',
+                    reason: {
+                        code: 'test-reason',
+                        condition_index: 1,
+                        description: undefined,
+                    },
+                    metadata: {
+                        version: 2,
+                        payload: 300,
+                        id: 1,
+                        description: 'test-description',
+                    },
+                },
+                'alpha-feature': {
+                    key: 'alpha-feature',
+                    enabled: true,
+                    variant: undefined,
+                    reason: {
+                        code: 'test-reason',
+                        condition_index: 1,
+                        description: undefined,
+                    },
+                    metadata: {
+                        version: 21,
+                        payload: undefined,
+                        id: 2,
+                        description: 'test-description',
+                    },
+                },
+                'multivariate-flag': {
+                    key: 'multivariate-flag',
+                    enabled: true,
+                    variant: 'multi-variant-2',
+                    reason: {
+                        code: 'test-reason',
+                        condition_index: 1,
+                        description: undefined,
+                    },
+                    metadata: {
+                        version: 32,
+                        payload: '"fake-payload"',
+                        id: 3,
+                        description: 'test-description',
+                    },
+                },
+                'disabled-feature': {
+                    key: 'disabled-feature',
+                    enabled: false,
+                    variant: undefined,
+                    reason: {
+                        code: 'no_matching_condition',
+                        condition_index: undefined,
+                        description: undefined,
+                    },
+                    metadata: {
+                        version: 9,
+                        payload: undefined,
+                        id: 4,
+                        description: 'not ready yet',
+                    },
+                },
+            },
         })
     })
 
     it('enables feature flags from decide response (v1 backwards compatibility)', () => {
         // checks that nothing fails when asking for ?v=2 and getting a ?v=1 response
         const decideResponse = { featureFlags: ['beta-feature', 'alpha-feature-2'] }
+        jest.spyOn(window.console, 'warn').mockImplementation()
 
         // @ts-expect-error testing backwards compatibility
         parseFeatureFlagDecideResponse(decideResponse, persistence)
@@ -1346,25 +1904,88 @@ describe('parseFeatureFlagDecideResponse', () => {
             $active_feature_flags: ['beta-feature', 'alpha-feature-2'],
             $enabled_feature_flags: { 'beta-feature': true, 'alpha-feature-2': true },
         })
+        expect(window.console.warn).toHaveBeenCalledWith(
+            '[PostHog.js] [FeatureFlags]',
+            'v1 of the feature flags endpoint is deprecated. Please use the latest version.'
+        )
     })
 
     it('doesnt remove existing feature flags when no flags are returned', () => {
+        jest.spyOn(window.console, 'warn').mockImplementation()
         parseFeatureFlagDecideResponse({}, persistence)
 
         expect(persistence.register).not.toHaveBeenCalled()
         expect(persistence.unregister).not.toHaveBeenCalled()
     })
 
-    it('parses the requestId from the decide response', () => {
+    it('parses the requestId from the decide v3 response', () => {
         const decideResponse = {
             featureFlags: { 'test-flag': true },
             requestId: 'test-request-id-123',
         }
+        jest.spyOn(window.console, 'warn').mockImplementation()
+
         parseFeatureFlagDecideResponse(decideResponse, persistence)
 
         expect(persistence.register).toHaveBeenCalledWith({
             $active_feature_flags: ['test-flag'],
             $enabled_feature_flags: { 'test-flag': true },
+            $feature_flag_details: {},
+            $feature_flag_payloads: {},
+            $feature_flag_request_id: 'test-request-id-123',
+        })
+        expect(window.console.warn).toHaveBeenCalledWith(
+            '[PostHog.js] [FeatureFlags]',
+            'Using an older version of the feature flags endpoint. Please upgrade your PostHog server to the latest version'
+        )
+    })
+
+    it('parses the requestId from the decide v4 response', () => {
+        const decideResponse = {
+            flags: {
+                'test-flag': {
+                    key: 'test-flag',
+                    enabled: true,
+                    variant: undefined,
+                    reason: {
+                        code: 'test-reason',
+                        condition_index: 1,
+                        description: undefined,
+                    },
+                    metadata: {
+                        version: 4,
+                        payload: undefined,
+                        id: 1,
+                        description: 'test-description',
+                    },
+                },
+            },
+            requestId: 'test-request-id-123',
+        }
+
+        parseFeatureFlagDecideResponse(decideResponse, persistence)
+
+        expect(persistence.register).toHaveBeenCalledWith({
+            $active_feature_flags: ['test-flag'],
+            $enabled_feature_flags: { 'test-flag': true },
+            $feature_flag_details: {
+                'test-flag': {
+                    key: 'test-flag',
+                    enabled: true,
+                    variant: undefined,
+                    reason: {
+                        code: 'test-reason',
+                        condition_index: 1,
+                        description: undefined,
+                    },
+                    metadata: {
+                        version: 4,
+                        payload: undefined,
+                        id: 1,
+                        description: 'test-description',
+                    },
+                },
+            },
             $feature_flag_payloads: {},
             $feature_flag_request_id: 'test-request-id-123',
         })

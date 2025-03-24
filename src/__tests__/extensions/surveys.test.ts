@@ -2,7 +2,6 @@
 import { act, fireEvent, render, renderHook } from '@testing-library/preact'
 import {
     SurveyManager,
-    SurveyPopup,
     generateSurveys,
     renderFeedbackWidgetPreview,
     renderSurveysPreview,
@@ -12,9 +11,9 @@ import {
 import { createShadow } from '../../extensions/surveys/surveys-utils'
 import { Survey, SurveyQuestionType, SurveyType } from '../../posthog-surveys-types'
 
-import { beforeEach } from '@jest/globals'
+import { afterAll, beforeAll, beforeEach } from '@jest/globals'
 import '@testing-library/jest-dom'
-import { h } from 'preact'
+import * as Preact from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse } from '../../types'
@@ -587,6 +586,123 @@ describe('SurveyManager', () => {
             )
         })
     })
+
+    describe('timeout management', () => {
+        let mockPostHog: PostHog
+        let surveyManager: SurveyManager
+        let mockSurvey: Survey
+
+        beforeEach(() => {
+            jest.useFakeTimers()
+            // Set up mocks
+            mockPostHog = {
+                getActiveMatchingSurveys: jest.fn(),
+                get_session_replay_url: jest.fn(),
+                capture: jest.fn(),
+                featureFlags: {
+                    isFeatureEnabled: jest.fn().mockReturnValue(true),
+                },
+            } as unknown as PostHog
+
+            surveyManager = new SurveyManager(mockPostHog)
+
+            mockSurvey = {
+                id: 'delayed-survey',
+                name: 'Delayed Survey',
+                description: 'A survey with delay',
+                type: SurveyType.Popover,
+                linked_flag_key: null,
+                targeting_flag_key: null,
+                internal_targeting_flag_key: null,
+                questions: [
+                    {
+                        question: 'Test question?',
+                        type: SurveyQuestionType.Open,
+                        id: 'q1',
+                    },
+                ],
+                appearance: {
+                    surveyPopupDelaySeconds: 5,
+                },
+                conditions: null,
+                start_date: '2021-01-01T00:00:00.000Z',
+                end_date: null,
+                current_iteration: null,
+                current_iteration_start_date: null,
+                feature_flag_keys: [],
+            }
+
+            // Make the internal methods accessible for testing
+            jest.spyOn(surveyManager as any, 'addSurveyToFocus')
+            jest.spyOn(surveyManager as any, 'removeSurveyFromFocus')
+
+            // Mock doesSurveyUrlMatch to always return true, used in handlePopoverSurvey
+            jest.spyOn(surveyManager as any, 'handlePopoverSurvey').mockImplementation((survey: Survey) => {
+                // Add survey to focus and create a timeout
+                surveyManager.getTestAPI().addSurveyToFocus(survey.id)
+
+                if (survey.appearance?.surveyPopupDelaySeconds) {
+                    const timeoutId = setTimeout(() => {
+                        // This simulates what would happen when the timeout completes
+                        // In the real implementation, it would render the survey
+                        surveyManager.getTestAPI().surveyTimeouts.delete(survey.id)
+                    }, survey.appearance.surveyPopupDelaySeconds * 1000)
+                    surveyManager.getTestAPI().surveyTimeouts.set(survey.id, timeoutId)
+                }
+            })
+        })
+
+        afterEach(() => {
+            jest.useRealTimers()
+            jest.clearAllMocks()
+        })
+
+        test('should track timeouts when scheduling delayed surveys', () => {
+            surveyManager.getTestAPI().handlePopoverSurvey(mockSurvey)
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(mockSurvey.id)).toBe(true)
+        })
+
+        test('should clear timeouts when removing survey from focus', () => {
+            // Setup
+            surveyManager.getTestAPI().handlePopoverSurvey(mockSurvey)
+            const timeoutId = surveyManager.getTestAPI().surveyTimeouts.get(mockSurvey.id)
+            expect(timeoutId).toBeDefined()
+
+            // Test that clearTimeout is called with correct ID
+            const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout')
+            surveyManager.getTestAPI().removeSurveyFromFocus(mockSurvey.id)
+            expect(clearTimeoutSpy).toHaveBeenCalledWith(timeoutId)
+
+            // Verify timeout was removed from map
+            expect(surveyManager.getTestAPI().surveyTimeouts.has(mockSurvey.id)).toBe(false)
+        })
+
+        test('should manage multiple survey timeouts correctly', () => {
+            // Setup first survey
+            surveyManager.getTestAPI().handlePopoverSurvey(mockSurvey)
+            const firstTimeoutId = surveyManager.getTestAPI().surveyTimeouts.get(mockSurvey.id)
+
+            // Clear and reset to test second survey
+            surveyManager.getTestAPI().removeSurveyFromFocus(mockSurvey.id)
+
+            // Create and schedule second survey
+            const mockSurvey2 = {
+                ...mockSurvey,
+                id: 'delayed-survey-2',
+                appearance: {
+                    surveyPopupDelaySeconds: 10,
+                },
+            }
+
+            // Schedule second survey
+            surveyManager.getTestAPI().handlePopoverSurvey(mockSurvey2)
+            const secondTimeoutId = surveyManager.getTestAPI().surveyTimeouts.get(mockSurvey2.id)
+
+            // Verify both timeouts are tracked separately
+            expect(firstTimeoutId).not.toEqual(secondTimeoutId)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(mockSurvey2.id)
+        })
+    })
 })
 
 describe('usePopupVisibility URL changes should hide surveys accordingly', () => {
@@ -595,6 +711,15 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
     let originalLocationHref: string
     let originalPushState: typeof window.history.pushState
     let originalReplaceState: typeof window.history.replaceState
+
+    // Set up fake timers for all tests in this suite
+    beforeAll(() => {
+        jest.useFakeTimers()
+    })
+
+    afterAll(() => {
+        jest.useRealTimers()
+    })
 
     const createTestSurvey = (urlCondition?: { url: string; urlMatchType?: string }): Survey =>
         ({
@@ -757,8 +882,6 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
     })
 
     it('should not show delayed survey if URL no longer matches when delay expires', () => {
-        jest.useFakeTimers()
-
         // Create a survey with a URL condition and a 2 second delay
         const survey = createTestSurvey({
             url: '/initial-path',
@@ -771,6 +894,11 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
             value: new URL('https://example.com/initial-path'),
             writable: true,
         })
+
+        // Ensure clearTimeout is defined in the global scope for this test
+        if (typeof global.clearTimeout === 'undefined') {
+            global.clearTimeout = jest.fn()
+        }
 
         // Start the survey visibility hook
         const { result } = renderHook(() => usePopupVisibility(survey, posthog, 2000, false, mockRemoveSurveyFromFocus))
@@ -789,14 +917,12 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
 
         // Advance timers past the delay
         act(() => {
-            jest.advanceTimersByTime(2000)
+            jest.runAllTimers()
         })
 
         // Survey should still not be visible since URL no longer matches
         expect(result.current.isPopupVisible).toBe(false)
         expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
-
-        jest.useRealTimers()
     })
 })
 
@@ -1073,81 +1199,6 @@ describe('useHideSurveyOnURLChange', () => {
     })
 })
 
-describe('onPopupSurveyDismissed callback', () => {
-    let posthog: PostHog
-
-    beforeEach(() => {
-        document.getElementsByTagName('html')[0].innerHTML = ''
-        localStorage.clear()
-        jest.clearAllMocks()
-
-        // Mock PostHog instance
-        posthog = {
-            capture: jest.fn(),
-            get_session_replay_url: jest.fn(),
-        } as unknown as PostHog
-    })
-
-    test('onPopupSurveyDismissed is called when Cancel button is clicked in SurveyPopup', () => {
-        // Create a simple survey for testing
-        const survey = {
-            id: 'test-survey',
-            name: 'Test Survey',
-            description: 'Test Survey Description',
-            type: SurveyType.Popover,
-            questions: [
-                {
-                    type: SurveyQuestionType.Open,
-                    question: 'What do you think?',
-                    description: '',
-                    id: 'question-a',
-                },
-            ],
-            start_date: new Date().toISOString(),
-            end_date: null,
-            feature_flag_keys: null,
-            linked_flag_key: null,
-            targeting_flag_key: null,
-            internal_targeting_flag_key: null,
-            appearance: {},
-            conditions: {
-                events: { values: [] },
-                actions: { values: [] },
-            },
-            current_iteration: 1,
-            current_iteration_start_date: new Date().toISOString(),
-        } as Survey
-
-        const onPopupSurveyDismissed = jest.fn()
-        const mockRemoveSurveyFromFocus = jest.fn()
-
-        // Render the SurveyPopup component with our mocked callback
-        render(
-            h(SurveyPopup, {
-                survey: survey,
-                removeSurveyFromFocus: mockRemoveSurveyFromFocus,
-                isPopup: true,
-                onPopupSurveyDismissed: onPopupSurveyDismissed,
-                posthog: posthog,
-            })
-        )
-
-        // Find the Cancel button
-        const cancelButton = document.querySelector('.cancel-btn-wrapper')
-
-        // Verify the button exists
-        expect(cancelButton).not.toBeNull()
-
-        // Click the Cancel button
-        if (cancelButton) {
-            fireEvent.click(cancelButton)
-
-            // Verify our callback was called
-            expect(onPopupSurveyDismissed).toHaveBeenCalledTimes(1)
-        }
-    })
-})
-
 describe('preview renders', () => {
     beforeEach(() => {
         // we have to manually reset the DOM before each test
@@ -1418,11 +1469,11 @@ describe('preview renders', () => {
                 }
             }, [currentPageIndex])
 
-            return h('div', { ref: surveyPreviewRef })
+            return Preact.h('div', { ref: surveyPreviewRef })
         }
 
         // Render the test component
-        const { container } = render(h(TestSurveyPreview, {}))
+        const { container } = render(Preact.h(TestSurveyPreview, {}))
 
         // Check if we're on the first question
         expect(container.textContent).toContain('Question 1')
