@@ -1,3 +1,7 @@
+## 1.232.5 - 2025-03-24
+
+- fix: Switch from regex to trim (#1847)
+
 ## 1.232.4 - 2025-03-21
 
 - Revert "Revert "feat: Enjoy the benefits of `/decide?v=4` (#1838)" (#1842)" (#1843)
