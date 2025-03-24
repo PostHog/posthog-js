@@ -1,3 +1,4 @@
+import { SurveySchedule } from '../../src/posthog-surveys-types'
 import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 import { expect, test } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
@@ -209,5 +210,75 @@ test.describe('surveys - feedback widget', () => {
             'background-color',
             white
         )
+    })
+
+    test('renders survey with schedule always and allows multiple submissions', async ({ page, context }) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+            await route.fulfill({
+                json: {
+                    surveys: [
+                        {
+                            id: '123',
+                            name: 'Test survey',
+                            type: 'widget',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [openTextQuestion],
+                            appearance: {
+                                widgetLabel: 'Feedback',
+                                widgetType: 'tab',
+                                displayThankYouMessage: true,
+                            },
+                            conditions: {
+                                url: null,
+                                selector: null,
+                                scrolled: null,
+                            },
+                            schedule: SurveySchedule.Always,
+                        },
+                    ],
+                },
+            })
+        })
+
+        await start(startOptions, page, context)
+        await surveysAPICall
+
+        // 1. Check that the survey widget is rendered
+        await expect(page.locator('.PostHogWidget123').locator('.ph-survey-widget-tab')).toBeVisible()
+
+        // 2. Open the survey
+        await page.locator('.PostHogWidget123').locator('.ph-survey-widget-tab').click()
+        await expect(page.locator('.PostHogWidget123').locator('.survey-form')).toBeVisible()
+
+        // 3. Answer the survey
+        await page.locator('.PostHogWidget123').locator('.survey-form').locator('textarea').fill('first submission')
+        await page.locator('.PostHogWidget123').locator('.survey-form').locator('.form-submit').click()
+
+        // 4. Check for thank you message
+        await expect(page.locator('.PostHogWidget123').locator('.thank-you-message-header')).toBeVisible()
+        await expect(page.locator('.PostHogWidget123').locator('.thank-you-message-header')).toHaveText('Thank you!')
+
+        // Verify the event was sent
+        await pollUntilEventCaptured(page, 'survey sent')
+
+        // 5. Close the thank you message and click the survey tab again
+        await page.locator('.PostHogWidget123').locator('.form-submit').click()
+        await expect(page.locator('.PostHogWidget123').locator('.survey-form')).not.toBeVisible()
+
+        // Open the survey again
+        await page.locator('.PostHogWidget123').locator('.ph-survey-widget-tab').click()
+
+        // 6. Verify survey is rendered again
+        await expect(page.locator('.PostHogWidget123').locator('.survey-form')).toBeVisible()
+
+        // Submit again with different text
+        await page.locator('.PostHogWidget123').locator('.survey-form').locator('textarea').fill('second submission')
+        await page.locator('.PostHogWidget123').locator('.survey-form').locator('.form-submit').click()
+
+        // Verify thank you message appears again
+        await expect(page.locator('.PostHogWidget123').locator('.thank-you-message-header')).toBeVisible()
+
+        // Verify second event was sent
+        await pollUntilEventCaptured(page, 'survey sent')
     })
 })
