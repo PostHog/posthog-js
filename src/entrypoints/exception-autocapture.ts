@@ -49,12 +49,12 @@ const wrapUnhandledRejection = (captureFn: (props: Properties) => void) => {
 const wrapConsoleError = (captureFn: (props: Properties) => void) => {
     const con = console as any
     if (!con) {
-        logger.info('window not available, cannot wrap onUnhandledRejection')
+        logger.info('console not available, cannot wrap console.error')
     }
 
     const originalConsoleError = con.error
 
-    con.error = function (...args: any[]): boolean {
+    con.error = function (...args: any[]): void {
         const event = args.join(' ')
         const error = args.find((arg) => arg instanceof Error)
         const errorProperties = error
