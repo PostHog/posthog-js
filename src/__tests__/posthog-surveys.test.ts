@@ -142,6 +142,49 @@ describe('posthog-surveys', () => {
 
                 expect(surveys['_isInitializingSurveys']).toBe(false)
             })
+
+            it('should call the callback with the surveys when they are loaded', () => {
+                surveys['_decideServerResponse'] = true
+                mockGenerateSurveys.mockReturnValue({})
+                const callback = jest.fn()
+                const mockSurveys = [{ id: 'test-survey' }]
+                mockPostHog.get_property.mockReturnValue(mockSurveys)
+
+                surveys.onSurveysLoaded(callback)
+                surveys.loadIfEnabled()
+
+                expect(surveys['_isInitializingSurveys']).toBe(false)
+                expect(callback).toHaveBeenCalledWith(mockSurveys, {
+                    isLoaded: true,
+                })
+                expect(callback).toHaveBeenCalledTimes(1)
+
+                surveys.loadIfEnabled()
+                // callback is only called once, even if surveys are loaded again
+                expect(callback).toHaveBeenCalledTimes(1)
+            })
+
+            it('should call the callback with an error when surveys are not loaded', () => {
+                surveys['_decideServerResponse'] = true
+                mockGenerateSurveys.mockImplementation(() => {
+                    throw new Error('Error initializing surveys')
+                })
+                const callback = jest.fn()
+
+                surveys.onSurveysLoaded(callback)
+                expect(() => surveys.loadIfEnabled()).toThrow('Error initializing surveys')
+
+                expect(surveys['_isInitializingSurveys']).toBe(false)
+                expect(callback).toHaveBeenCalledWith([], {
+                    isLoaded: false,
+                    error: 'Error initializing surveys',
+                })
+                expect(callback).toHaveBeenCalledTimes(1)
+
+                surveys.loadIfEnabled()
+                // callback is only called once, even if surveys are loaded again
+                expect(callback).toHaveBeenCalledTimes(1)
+            })
         })
 
         describe('getSurveys', () => {
