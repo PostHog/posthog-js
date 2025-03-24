@@ -35,7 +35,7 @@ export class ExceptionObserver {
 
         if (isObject(providedConfig)) {
             config = { ...config, ...providedConfig }
-        } else if (this.remoteEnabled || (isBoolean(providedConfig) && providedConfig)) {
+        } else if ((isBoolean(providedConfig) && providedConfig) || this.remoteEnabled) {
             config = { ...config, capture_unhandled_errors: true, capture_unhandled_rejections: true }
         }
 
@@ -80,7 +80,7 @@ export class ExceptionObserver {
     }
 
     private startCapturing = () => {
-        if (!window || !this.isEnabled || this.hasHandlers) {
+        if (!window || !this.isEnabled) {
             return
         }
 
