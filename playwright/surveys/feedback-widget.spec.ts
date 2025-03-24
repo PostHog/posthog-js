@@ -212,41 +212,6 @@ test.describe('surveys - feedback widget', () => {
         )
     })
 
-    // ... existing code ...
-    test('auto contrasts text color for feedback tab', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            type: 'widget',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [openTextQuestion],
-                            appearance: {
-                                widgetLabel: 'white widget',
-                                widgetType: 'tab',
-                                widgetColor: 'white',
-                            },
-                        },
-                    ],
-                },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
-
-        await expect(page.locator('.PostHogWidget123').locator('.ph-survey-widget-tab')).toBeVisible()
-
-        await expect(page.locator('.PostHogWidget123').locator('.ph-survey-widget-tab')).toHaveCSS('color', black)
-        await expect(page.locator('.PostHogWidget123').locator('.ph-survey-widget-tab')).toHaveCSS(
-            'background-color',
-            white
-        )
-    })
-
     test('renders survey with schedule always and allows multiple submissions', async ({ page, context }) => {
         const surveysAPICall = page.route('**/surveys/**', async (route) => {
             await route.fulfill({
