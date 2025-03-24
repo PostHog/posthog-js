@@ -138,14 +138,9 @@ export class PostHogSurveys {
                         this._isInitializingSurveys = false
                         this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
                         logger.info('Surveys loaded successfully')
-
-                        // run all the registered callbacks
                         this._notifySurveyCallbacks({
                             isLoaded: true,
                         })
-
-                        // Once surveys are loaded, fetch and notify callbacks
-                        this.getSurveys(() => {})
                     })
                 } else {
                     const error = 'PostHog loadExternalDependency extension not found. Cannot load remote config.'
