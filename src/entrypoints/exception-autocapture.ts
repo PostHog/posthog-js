@@ -54,7 +54,7 @@ const wrapConsoleError = (captureFn: (props: Properties) => void) => {
 
     const originalConsoleError = con.error
 
-    con.error = function (...args: any[]): boolean {
+    con.error = function (...args: any[]): void {
         const event = args.join(' ')
         const error = args.find((arg) => arg instanceof Error)
         const errorProperties = error
