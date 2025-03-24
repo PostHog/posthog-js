@@ -1324,21 +1324,21 @@ export class PostHog {
     /*
      * Register an event listener that runs when surveys become available or when they change.
      * If there are surveys, the listener is called immediately in addition to being called on future changes.
-     * 
+     *
      * ### Usage:
      *
      *     posthog.onSurveys(function(surveys, { errorsLoading }) { // do something })
      *
      * Callback parameters:
      * - surveys: Survey[]: An array containing all survey objects fetched from PostHog
-     * - { errorsLoading }: { errorsLoading?: boolean }: An object indicating if an error occurred 
+     * - { errorsLoading }: { errorsLoading?: boolean }: An object indicating if an error occurred
      *   during the request to load the surveys
      *
      * @param {Function} callback The callback function will be called when surveys are loaded or updated.
      * @returns {Function} A function that can be called to unsubscribe the listener.
      */
     onSurveys(callback: SurveyCallback): () => void {
-        return this.surveys.onSurveys(callback)
+        return this.surveys.onSurveysLoaded(callback)
     }
 
     /*
