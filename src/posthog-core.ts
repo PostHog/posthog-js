@@ -1812,11 +1812,18 @@ export class PostHog {
             }
             if (this.config.debug) {
                 Config.DEBUG = true
-                logger.info('set_config', {
-                    config,
-                    oldConfig,
-                    newConfig: { ...this.config },
-                })
+                logger.info(
+                    'set_config',
+                    JSON.stringify(
+                        {
+                            config,
+                            oldConfig,
+                            newConfig: { ...this.config },
+                        },
+                        null,
+                        2
+                    )
+                )
             }
 
             this.sessionRecording?.startIfEnabledOrStop()
