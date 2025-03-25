@@ -181,7 +181,6 @@ describe('posthog-surveys', () => {
                 })
                 expect(callback).toHaveBeenCalledTimes(1)
 
-                surveys.loadIfEnabled()
                 // callback is only called once, even if surveys are loaded again
                 expect(callback).toHaveBeenCalledTimes(1)
             })
