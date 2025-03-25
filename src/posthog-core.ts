@@ -1326,16 +1326,16 @@ export class PostHog {
      *
      * ### Usage:
      *
-     *     posthog.onSurveys((surveys, context) => { // do something })
+     *     posthog.onSurveysLoaded((surveys, context) => { // do something })
      *
      * Callback parameters:
-     * - surveys: Survey[]: An array containing all survey objects fetched from PostHog
+     * - surveys: Survey[]: An array containing all survey objects fetched from PostHog using the getSurveys method
      * - context: { isLoaded: boolean, error?: string }: An object indicating if the surveys were loaded successfully
      *
      * @param {Function} callback The callback function will be called when surveys are loaded or updated.
      * @returns {Function} A function that can be called to unsubscribe the listener.
      */
-    onSurveys(callback: SurveyCallback): () => void {
+    onSurveysLoaded(callback: SurveyCallback): () => void {
         return this.surveys.onSurveysLoaded(callback)
     }
 
