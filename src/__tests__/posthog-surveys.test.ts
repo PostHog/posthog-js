@@ -201,7 +201,9 @@ describe('posthog-surveys', () => {
                 surveys.getSurveys(mockCallback)
 
                 expect(mockPostHog._send_request).not.toHaveBeenCalled()
-                expect(mockCallback).toHaveBeenCalledWith(mockSurveys)
+                expect(mockCallback).toHaveBeenCalledWith(mockSurveys, {
+                    isLoaded: true,
+                })
                 expect(surveys['_isFetchingSurveys']).toBe(false)
             })
 
@@ -211,7 +213,10 @@ describe('posthog-surveys', () => {
                 surveys.getSurveys(mockCallback)
 
                 expect(mockPostHog._send_request).not.toHaveBeenCalled()
-                expect(mockCallback).toHaveBeenCalledWith([])
+                expect(mockCallback).toHaveBeenCalledWith([], {
+                    isLoaded: false,
+                    error: 'Surveys are already being loaded',
+                })
             })
 
             it('should reset _isFetchingSurveys after successful API call', () => {
@@ -222,7 +227,9 @@ describe('posthog-surveys', () => {
                 surveys.getSurveys(mockCallback)
 
                 expect(surveys['_isFetchingSurveys']).toBe(false)
-                expect(mockCallback).toHaveBeenCalledWith(mockSurveys)
+                expect(mockCallback).toHaveBeenCalledWith(mockSurveys, {
+                    isLoaded: true,
+                })
                 expect(mockPostHog.persistence?.register).toHaveBeenCalledWith({ [SURVEYS]: mockSurveys })
             })
 
@@ -234,7 +241,10 @@ describe('posthog-surveys', () => {
                 surveys.getSurveys(mockCallback)
 
                 expect(surveys['_isFetchingSurveys']).toBe(false)
-                expect(mockCallback).toHaveBeenCalledWith([])
+                expect(mockCallback).toHaveBeenCalledWith([], {
+                    isLoaded: false,
+                    error: 'Surveys API could not be loaded, status: 500',
+                })
             })
 
             it('should reset _isFetchingSurveys when API call throws error', () => {
@@ -256,7 +266,10 @@ describe('posthog-surveys', () => {
                 surveys.getSurveys(mockCallback)
 
                 expect(surveys['_isFetchingSurveys']).toBe(false)
-                expect(mockCallback).toHaveBeenCalledWith([])
+                expect(mockCallback).toHaveBeenCalledWith([], {
+                    isLoaded: false,
+                    error: 'Surveys API could not be loaded, status: 0',
+                })
             })
 
             it('should handle delayed successful responses correctly', () => {
@@ -281,7 +294,9 @@ describe('posthog-surveys', () => {
                 jest.advanceTimersByTime(100)
 
                 expect(surveys['_isFetchingSurveys']).toBe(false)
-                expect(mockCallback).toHaveBeenCalledWith(delayedSurveys)
+                expect(mockCallback).toHaveBeenCalledWith(delayedSurveys, {
+                    isLoaded: true,
+                })
                 expect(mockPostHog.persistence?.register).toHaveBeenCalledWith({ [SURVEYS]: delayedSurveys })
             })
 
