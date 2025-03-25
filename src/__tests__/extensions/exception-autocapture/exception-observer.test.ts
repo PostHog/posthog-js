@@ -65,7 +65,7 @@ describe('Exception Observer', () => {
         exceptionObserver['stopCapturing']()
     })
 
-    describe('when enabled', () => {
+    describe('when enabled remotely', () => {
         beforeEach(() => {
             exceptionObserver.onRemoteConfig({ autocaptureExceptions: true } as DecideResponse)
         })
@@ -163,7 +163,7 @@ describe('Exception Observer', () => {
             expect(request.batchKey).toBe('exceptionEvent')
         })
 
-        it('should instrument handlers when started', () => {
+        it('does not start if disabled locally', () => {
             posthog.config.capture_exceptions = false
             exceptionObserver = new ExceptionObserver(posthog)
 

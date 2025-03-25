@@ -4,7 +4,7 @@ import { ExceptionAutoCaptureConfig, Properties, RemoteConfig } from '../../type
 
 import { createLogger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
-import { isBoolean, isObject, isUndefined } from '../../utils/type-utils'
+import { isObject, isUndefined } from '../../utils/type-utils'
 
 const logger = createLogger('[ExceptionAutocapture]')
 
@@ -19,14 +19,13 @@ export class ExceptionObserver {
     constructor(instance: PostHog) {
         this.instance = instance
         this.remoteEnabled = !!this.instance.persistence?.props[EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]
-        this.config = this.asRequiredConfig(this.instance.config.capture_exceptions)
+        this.config = this.requiredConfig()
 
         this.startIfEnabled()
     }
 
-    private asRequiredConfig(
-        providedConfig?: ExceptionAutoCaptureConfig | boolean
-    ): Required<ExceptionAutoCaptureConfig> {
+    private requiredConfig(): Required<ExceptionAutoCaptureConfig> {
+        const providedConfig = this.instance.config.capture_exceptions
         let config = {
             capture_unhandled_errors: false,
             capture_unhandled_rejections: false,
@@ -35,7 +34,7 @@ export class ExceptionObserver {
 
         if (isObject(providedConfig)) {
             config = { ...config, ...providedConfig }
-        } else if ((isBoolean(providedConfig) && providedConfig) || this.remoteEnabled) {
+        } else if (isUndefined(providedConfig) ? this.remoteEnabled : providedConfig) {
             config = { ...config, capture_unhandled_errors: true, capture_unhandled_rejections: true }
         }
 
@@ -126,6 +125,7 @@ export class ExceptionObserver {
 
         // store this in-memory in case persistence is disabled
         this.remoteEnabled = !!autocaptureExceptionsResponse || false
+        this.config = this.requiredConfig()
 
         if (this.instance.persistence) {
             this.instance.persistence.register({
