@@ -446,7 +446,8 @@ exports[`config snapshot for PostHogConfig 1`] = `
   \\"capture_exceptions\\": [
     \\"undefined\\",
     \\"false\\",
-    \\"true\\"
+    \\"true\\",
+    \\"ExceptionAutoCaptureConfig\\"
   ],
   \\"disable_scroll_properties\\": [
     \\"undefined\\",
