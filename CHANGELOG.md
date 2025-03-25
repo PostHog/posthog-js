@@ -1,3 +1,7 @@
+## 1.232.7 - 2025-03-25
+
+- chore: add onSurveysLoaded listener (#1834)
+
 ## 1.232.6 - 2025-03-24
 
 
