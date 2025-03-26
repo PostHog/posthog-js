@@ -7,10 +7,11 @@ import { RestRequest } from 'msw'
 import { decompressSync, strFromU8 } from 'fflate'
 
 // the request bodies in a store that we can inspect within tests.
-const capturedRequests: { '/e/': any[]; '/engage/': any[]; '/decide/': any[] } = {
+const capturedRequests: { '/e/': any[]; '/engage/': any[]; '/decide/': any[]; '/flags/': any[] } = {
     '/e/': [],
     '/engage/': [],
     '/decide/': [],
+    '/flags/': [],
 }
 
 const handleRequest = (group: string) => (req: RestRequest, res: ResponseComposition, ctx: RestContext) => {
@@ -49,6 +50,9 @@ const server = setupServer(
     }),
     rest.post('http://localhost/decide/', (req, res, ctx) => {
         return handleRequest('/decide/')(req, res, ctx)
+    }),
+    rest.post('http://localhost/flags/', (req, res, ctx) => {
+        return handleRequest('/flags/')(req, res, ctx)
     })
 )
 
@@ -66,6 +70,7 @@ export const getRequests = (token: string) => {
         '/e/': capturedRequests['/e/'].filter((request) => request.properties.token === token),
         '/engage/': capturedRequests['/engage/'].filter((request) => request.properties.token === token),
         '/decide/': capturedRequests['/decide/'].filter((request) => request.token === token),
+        '/flags/': capturedRequests['/flags/'].filter((request) => request.token === token),
     }
 }
 
@@ -78,6 +83,9 @@ export const resetRequests = (token: string) => {
             (request) => request.properties.token !== token
         )),
         '/decide/': (capturedRequests['/decide/'] = capturedRequests['/decide/'].filter(
+            (request) => request.token !== token
+        )),
+        '/flags/': (capturedRequests['/flags/'] = capturedRequests['/flags/'].filter(
             (request) => request.token !== token
         )),
     })

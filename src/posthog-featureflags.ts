@@ -390,10 +390,17 @@ export class PostHogFeatureFlags {
             data.disable_flags = true
         }
 
+        // NB: flags v2 requires remote config to be enabled as well, since the idea is that we will skip calling /decide altogether
+        // (which remote config does) and just use the /flags endpoint.  May revisit this if we need to support flags v2 without remote config
+        // (e.g. we could call `/decide` with flags disabled for the data otherwise returned by remote config, and then still call
+        // `/flags/` to get the flag evaluation data).
+        const eligibleForFlagsV2 =
+            this.instance.config.__preview_flags_v2 && this.instance.config.__preview_remote_config
+
         this._requestInFlight = true
         this.instance._send_request({
             method: 'POST',
-            url: this.instance.requestRouter.endpointFor('api', '/decide/?v=4'),
+            url: this.instance.requestRouter.endpointFor('api', eligibleForFlagsV2 ? '/flags/?v=2' : '/decide/?v=4'),
             data,
             compression: this.instance.config.disable_compression ? undefined : Compression.Base64,
             timeout: this.instance.config.feature_flag_request_timeout_ms,
@@ -412,6 +419,7 @@ export class PostHogFeatureFlags {
 
                 this._requestInFlight = false
 
+                // NB: this block is only reached if this.instance.config.__preview_remote_config is false
                 if (!this._decideCalled) {
                     this._decideCalled = true
                     this.instance._onRemoteConfig(response.json ?? {})
