@@ -1,3 +1,7 @@
+## 1.233.1 - 2025-03-26
+
+- Send timezone to flags v2 (#1849)
+
 ## 1.233.0 - 2025-03-26
 
 - feat: capture console errors (#1771)
