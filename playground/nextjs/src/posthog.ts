@@ -67,6 +67,7 @@ if (typeof window !== 'undefined') {
         opt_in_site_apps: true,
         __preview_remote_config: true,
         __preview_experimental_cookieless_mode: false,
+        __preview_flags_v2: true,
         ...configForConsent(),
     })
     // Help with debugging

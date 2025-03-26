@@ -502,6 +502,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"false\\",
     \\"true\\"
   ],
+  \\"__preview_flags_v2\\": [
+    \\"undefined\\",
+    \\"false\\",
+    \\"true\\"
+  ],
   \\"api_method\\": [
     \\"undefined\\",
     \\"string\\"

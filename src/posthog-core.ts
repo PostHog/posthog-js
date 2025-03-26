@@ -1322,6 +1322,24 @@ export class PostHog {
     }
 
     /*
+     * Register an event listener that runs when surveys are loaded.
+     *
+     * ### Usage:
+     *
+     *     posthog.onSurveysLoaded((surveys, context) => { // do something })
+     *
+     * Callback parameters:
+     * - surveys: Survey[]: An array containing all survey objects fetched from PostHog using the getSurveys method
+     * - context: { isLoaded: boolean, error?: string }: An object indicating if the surveys were loaded successfully
+     *
+     * @param {Function} callback The callback function will be called when surveys are loaded or updated.
+     * @returns {Function} A function that can be called to unsubscribe the listener.
+     */
+    onSurveysLoaded(callback: SurveyCallback): () => void {
+        return this.surveys.onSurveysLoaded(callback)
+    }
+
+    /*
      * Register an event listener that runs whenever the session id or window id change.
      * If there is already a session id, the listener is called immediately in addition to being called on future changes.
      *
@@ -1794,11 +1812,18 @@ export class PostHog {
             }
             if (this.config.debug) {
                 Config.DEBUG = true
-                logger.info('set_config', {
-                    config,
-                    oldConfig,
-                    newConfig: { ...this.config },
-                })
+                logger.info(
+                    'set_config',
+                    JSON.stringify(
+                        {
+                            config,
+                            oldConfig,
+                            newConfig: { ...this.config },
+                        },
+                        null,
+                        2
+                    )
+                )
             }
 
             this.sessionRecording?.startIfEnabledOrStop()
