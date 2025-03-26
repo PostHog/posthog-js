@@ -1,3 +1,8 @@
+## 1.233.0 - 2025-03-26
+
+- feat: capture console errors (#1771)
+- chore(flags): use the new `/flags` endpoint to manage flag evaluation for team 2 (#1841)
+
 ## 1.232.7 - 2025-03-25
 
 - chore: add onSurveysLoaded listener (#1834)
