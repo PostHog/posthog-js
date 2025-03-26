@@ -46,9 +46,36 @@ const wrapUnhandledRejection = (captureFn: (props: Properties) => void) => {
     }
 }
 
+const wrapConsoleError = (captureFn: (props: Properties) => void) => {
+    const con = console as any
+    if (!con) {
+        logger.info('console not available, cannot wrap console.error')
+    }
+
+    const originalConsoleError = con.error
+
+    con.error = function (...args: any[]): void {
+        const event = args.join(' ')
+        const error = args.find((arg) => arg instanceof Error)
+        const errorProperties = error
+            ? errorToProperties({ event, error })
+            : errorToProperties({ event }, { syntheticException: new Error('PostHog syntheticException') })
+
+        captureFn(errorProperties)
+        return originalConsoleError?.(...args)
+    }
+    con.error.__POSTHOG_INSTRUMENTED__ = true
+
+    return () => {
+        delete con.error?.__POSTHOG_INSTRUMENTED__
+        con.error = originalConsoleError
+    }
+}
+
 const posthogErrorWrappingFunctions = {
     wrapOnError,
     wrapUnhandledRejection,
+    wrapConsoleError,
 }
 
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
