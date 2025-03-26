@@ -1591,11 +1591,6 @@ export type CapturedNetworkRequest = Writable<Omit<PerformanceEntry, 'toJSON'>> 
     isInitial?: boolean
 }
 
-export type ErrorConversionArgs = {
-    event: string | Event
-    error?: Error
-}
-
 export type ErrorEventArgs = [
     event: string | Event,
     source?: string | undefined,
@@ -1603,16 +1598,6 @@ export type ErrorEventArgs = [
     colno?: number | undefined,
     error?: Error | undefined,
 ]
-
-export type ErrorMetadata = {
-    handled?: boolean
-    synthetic?: boolean
-    syntheticException?: Error
-    overrideExceptionType?: string
-    overrideExceptionMessage?: string
-    defaultExceptionType?: string
-    defaultExceptionMessage?: string
-}
 
 // levels originally copied from Sentry to work with the sentry integration
 // and to avoid relying on a frequently changing @sentry/types dependency

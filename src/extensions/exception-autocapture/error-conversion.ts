@@ -11,9 +11,23 @@ import {
 import { defaultStackParser, StackFrame, StackParser } from './stack-trace'
 
 import { isEmptyString, isString, isUndefined } from '../../utils/type-utils'
-import { ErrorConversionArgs, ErrorEventArgs, ErrorMetadata, SeverityLevel, severityLevels } from '../../types'
+import { ErrorEventArgs, SeverityLevel, severityLevels } from '../../types'
 import { getFilenameToChunkIdMap } from './chunk-ids'
 
+type ErrorConversionArgs = {
+    event: string | Event
+    error?: Error
+}
+
+type ErrorMetadata = {
+    handled?: boolean
+    synthetic?: boolean
+    syntheticException?: Error
+    overrideExceptionType?: string
+    overrideExceptionMessage?: string
+    defaultExceptionType?: string
+    defaultExceptionMessage?: string
+}
 export interface ErrorProperties {
     $exception_list: Exception[]
     $exception_level?: SeverityLevel

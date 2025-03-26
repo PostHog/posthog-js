@@ -80,7 +80,6 @@ const posthogErrorWrappingFunctions = {
 
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
 assignableWindow.__PosthogExtensions__.errorWrappingFunctions = posthogErrorWrappingFunctions
-assignableWindow.__PosthogExtensions__.parseErrorAsProperties = errorToProperties
 
 // we used to put these on window, and now we put them on __PosthogExtensions__
 // but that means that old clients which lazily load this extension are looking in the wrong place
@@ -88,6 +87,5 @@ assignableWindow.__PosthogExtensions__.parseErrorAsProperties = errorToPropertie
 // so we also put them directly on the window
 // when 1.161.1 is the oldest version seen in production we can remove this
 assignableWindow.posthogErrorWrappingFunctions = posthogErrorWrappingFunctions
-assignableWindow.parseErrorAsProperties = errorToProperties
 
 export default posthogErrorWrappingFunctions
