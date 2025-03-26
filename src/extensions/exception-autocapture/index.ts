@@ -42,7 +42,11 @@ export class ExceptionObserver {
     }
 
     public get isEnabled(): boolean {
-        return Object.values(this.config).some((v) => v)
+        return (
+            this.config.capture_console_errors ||
+            this.config.capture_unhandled_errors ||
+            this.config.capture_unhandled_rejections
+        )
     }
 
     get hasHandlers() {
