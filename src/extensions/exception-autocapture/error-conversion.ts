@@ -131,7 +131,7 @@ function errorPropertiesFromError(error: Error, metadata?: ErrorMetadata): Error
         : extractMessage(error)
 
     // Ensure the exception message is a string
-    exceptionMessage = typeof exceptionMessage === 'string' ? exceptionMessage : String(exceptionMessage)
+    exceptionMessage = String(exceptionMessage || '')
 
     return {
         $exception_list: [
