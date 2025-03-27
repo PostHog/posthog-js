@@ -219,7 +219,8 @@ exports[`config snapshot for PostHogConfig 1`] = `
     ],
     \\"ignoreClass\\": [
       \\"undefined\\",
-      \\"string\\"
+      \\"string\\",
+      \\"RegExp\\"
     ],
     \\"maskTextClass\\": [
       \\"undefined\\",
@@ -445,7 +446,8 @@ exports[`config snapshot for PostHogConfig 1`] = `
   \\"capture_exceptions\\": [
     \\"undefined\\",
     \\"false\\",
-    \\"true\\"
+    \\"true\\",
+    \\"ExceptionAutoCaptureConfig\\"
   ],
   \\"disable_scroll_properties\\": [
     \\"undefined\\",
@@ -497,6 +499,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"true\\"
   ],
   \\"__preview_experimental_cookieless_mode\\": [
+    \\"undefined\\",
+    \\"false\\",
+    \\"true\\"
+  ],
+  \\"__preview_flags_v2\\": [
     \\"undefined\\",
     \\"false\\",
     \\"true\\"

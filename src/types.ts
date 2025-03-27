@@ -207,6 +207,29 @@ export interface DeadClickCandidate {
     absoluteDelayMs?: number
 }
 
+export type ExceptionAutoCaptureConfig = {
+    /**
+     * Determines whether PostHog should capture unhandled errors.
+     *
+     * @default true
+     */
+    capture_unhandled_errors: boolean
+
+    /**
+     * Determines whether PostHog should capture unhandled promise rejections.
+     *
+     * @default true
+     */
+    capture_unhandled_rejections: boolean
+
+    /**
+     * Determines whether PostHog should capture console errors.
+     *
+     * @default false
+     */
+    capture_console_errors: boolean
+}
+
 export type DeadClicksAutoCaptureConfig = {
     /**
      * We'll not consider a click to be a dead click, if it's followed by a scroll within `scroll_threshold_ms` milliseconds
@@ -803,9 +826,10 @@ export interface PostHogConfig {
     /**
      * Determines whether to capture exceptions.
      *
+     * @see {ExceptionAutoCaptureConfig}
      * @default undefined
      */
-    capture_exceptions?: boolean
+    capture_exceptions?: boolean | ExceptionAutoCaptureConfig
 
     /**
      * Determines whether to disable scroll properties.
@@ -892,6 +916,12 @@ export interface PostHogConfig {
      * */
     __preview_experimental_cookieless_mode?: boolean
 
+    /**
+     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+     * Whether to use the new /flags/ endpoint
+     * */
+    __preview_flags_v2?: boolean
+
     // ------- RETIRED CONFIGS - NO REPLACEMENT OR USAGE -------
 
     /** @deprecated - NOT USED ANYMORE, kept here for backwards compatibility reasons */
@@ -908,7 +938,7 @@ export interface SessionRecordingOptions {
     /**
      * Derived from `rrweb.record` options
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
-     * @default 'ph-nocapture'
+     * @default 'ph-no-capture'
      */
     blockClass?: string | RegExp
 
@@ -924,7 +954,7 @@ export interface SessionRecordingOptions {
      * @see https://github.com/rrweb-io/rrweb/blob/master/guide.md
      * @default 'ph-ignore-input'
      */
-    ignoreClass?: string
+    ignoreClass?: string | RegExp
 
     /**
      * Derived from `rrweb.record` options
@@ -1337,6 +1367,7 @@ export interface DecideResponse extends RemoteConfig {
     featureFlagPayloads: Record<string, JsonType>
     errorsWhileComputingFlags: boolean
     requestId?: string
+    flags: Record<string, FeatureFlagDetail>
 }
 
 export type SiteAppGlobals = {
@@ -1376,6 +1407,33 @@ export type FeatureFlagsCallback = (
         errorsLoading?: boolean
     }
 ) => void
+
+export type FeatureFlagDetail = {
+    key: string
+    enabled: boolean
+    // Only used when overriding a flag payload.
+    original_enabled?: boolean | undefined
+    variant: string | undefined
+    // Only used when overriding a flag payload.
+    original_variant?: string | undefined
+    reason: EvaluationReason | undefined
+    metadata: FeatureFlagMetadata | undefined
+}
+
+export type FeatureFlagMetadata = {
+    id: number
+    version: number | undefined
+    description: string | undefined
+    payload: JsonType | undefined
+    // Only used when overriding a flag payload.
+    original_payload?: JsonType | undefined
+}
+
+export type EvaluationReason = {
+    code: string
+    condition_index: number | undefined
+    description: string | undefined
+}
 
 export type RemoteConfigFeatureFlagCallback = (payload: JsonType) => void
 
@@ -1534,11 +1592,6 @@ export type CapturedNetworkRequest = Writable<Omit<PerformanceEntry, 'toJSON'>> 
     isInitial?: boolean
 }
 
-export type ErrorConversionArgs = {
-    event: string | Event
-    error?: Error
-}
-
 export type ErrorEventArgs = [
     event: string | Event,
     source?: string | undefined,
@@ -1546,16 +1599,6 @@ export type ErrorEventArgs = [
     colno?: number | undefined,
     error?: Error | undefined,
 ]
-
-export type ErrorMetadata = {
-    handled?: boolean
-    synthetic?: boolean
-    syntheticException?: Error
-    overrideExceptionType?: string
-    overrideExceptionMessage?: string
-    defaultExceptionType?: string
-    defaultExceptionMessage?: string
-}
 
 // levels originally copied from Sentry to work with the sentry integration
 // and to avoid relying on a frequently changing @sentry/types dependency

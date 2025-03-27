@@ -468,13 +468,35 @@ describe('SessionRecording', () => {
                 { maskAllInputs: false },
                 { maskAllInputs: false, maskTextSelector: '*' },
             ],
+            [
+                'mask inputs default is correct if client sets text selector',
+                undefined,
+                { maskTextSelector: '*' },
+                { maskAllInputs: true, maskTextSelector: '*' },
+            ],
+            [
+                'can set blockSelector to img',
+                undefined,
+                { blockSelector: 'img' },
+                { maskAllInputs: true, maskTextSelector: undefined, blockSelector: 'img' },
+            ],
+            [
+                'can set blockSelector to some other selector',
+                undefined,
+                { blockSelector: 'div' },
+                { maskAllInputs: true, maskTextSelector: undefined, blockSelector: 'div' },
+            ],
         ])(
             '%s',
             (
                 _name: string,
-                serverConfig: { maskAllInputs?: boolean; maskTextSelector?: string } | undefined,
-                clientConfig: { maskAllInputs: boolean; maskTextSelector?: string } | undefined,
-                expected: { maskAllInputs: boolean; maskTextSelector?: string } | undefined
+                serverConfig:
+                    | { maskAllInputs?: boolean; maskTextSelector?: string; blockSelector?: string }
+                    | undefined,
+                clientConfig:
+                    | { maskAllInputs?: boolean; maskTextSelector?: string; blockSelector?: string }
+                    | undefined,
+                expected: { maskAllInputs: boolean; maskTextSelector?: string; blockSelector?: string } | undefined
             ) => {
                 posthog.persistence?.register({
                     [SESSION_RECORDING_MASKING]: serverConfig,
@@ -482,6 +504,7 @@ describe('SessionRecording', () => {
 
                 posthog.config.session_recording.maskAllInputs = clientConfig?.maskAllInputs
                 posthog.config.session_recording.maskTextSelector = clientConfig?.maskTextSelector
+                posthog.config.session_recording.blockSelector = clientConfig?.blockSelector
 
                 expect(sessionRecording['masking']).toEqual(expected)
             }
@@ -1455,7 +1478,7 @@ describe('SessionRecording', () => {
     describe('idle timeouts', () => {
         let startingTimestamp = -1
 
-        function emitInactiveEvent(activityTimestamp: number, expectIdle: boolean = false) {
+        function emitInactiveEvent(activityTimestamp: number, expectIdle: boolean | 'unknown' = false) {
             const snapshotEvent = {
                 event: 123,
                 type: INCREMENTAL_SNAPSHOT_EVENT_TYPE,
@@ -1515,6 +1538,29 @@ describe('SessionRecording', () => {
 
         afterEach(() => {
             jest.useRealTimers()
+        })
+
+        it('starts neither idle nor active', () => {
+            expect(sessionRecording['isIdle']).toEqual('unknown')
+        })
+
+        it('does not emit events until after first active event', () => {
+            const a = emitInactiveEvent(startingTimestamp + 100, 'unknown')
+            const b = emitInactiveEvent(startingTimestamp + 110, 'unknown')
+            const c = emitInactiveEvent(startingTimestamp + 120, 'unknown')
+            _emit(createFullSnapshot({}), 'unknown')
+            expect(sessionRecording['isIdle']).toEqual('unknown')
+            expect(posthog.capture).not.toHaveBeenCalled()
+
+            const d = emitActiveEvent(startingTimestamp + 200)
+            expect(sessionRecording['isIdle']).toEqual(false)
+            // but all events are buffered
+            expect(sessionRecording['buffer']).toEqual({
+                data: [a, b, c, createFullSnapshot({}), d],
+                sessionId: sessionId,
+                size: 442,
+                windowId: expect.any(String),
+            })
         })
 
         it('does not emit plugin events when idle', () => {
@@ -2140,7 +2186,6 @@ describe('SessionRecording', () => {
             sessionRecording.onRRwebEmit(createIncrementalSnapshot({ data: { source: 1 } }) as any)
 
             expect(sessionRecording['queuedRRWebEvents']).toHaveLength(0)
-            expect(sessionRecording['rrwebRecord']).not.toBeUndefined()
         })
     })
 
@@ -2232,6 +2277,9 @@ describe('SessionRecording', () => {
             posthog.config.session_recording.compress_events = true
             sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
             sessionRecording.startIfEnabledOrStop()
+            // need to have active event to start recording
+            _emit(createIncrementalSnapshot({ type: 3 }))
+            sessionRecording['_flushBuffer']()
         })
 
         it('compresses full snapshot data', () => {

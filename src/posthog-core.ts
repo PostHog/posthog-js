@@ -13,6 +13,7 @@ import {
 } from './constants'
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { ExceptionObserver } from './extensions/exception-autocapture'
+import { errorToProperties } from './extensions/exception-autocapture/error-conversion'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
@@ -863,6 +864,13 @@ export class PostHog {
             return
         }
 
+        if (properties?.$current_url && !isString(properties?.$current_url)) {
+            logger.error(
+                'Invalid `$current_url` property provided to `posthog.capture`. Input must be a string. Ignoring provided value.'
+            )
+            delete properties?.$current_url
+        }
+
         // update persistence
         this.sessionPersistence.update_search_keyword()
 
@@ -1312,6 +1320,24 @@ export class PostHog {
      */
     onFeatureFlags(callback: FeatureFlagsCallback): () => void {
         return this.featureFlags.onFeatureFlags(callback)
+    }
+
+    /*
+     * Register an event listener that runs when surveys are loaded.
+     *
+     * ### Usage:
+     *
+     *     posthog.onSurveysLoaded((surveys, context) => { // do something })
+     *
+     * Callback parameters:
+     * - surveys: Survey[]: An array containing all survey objects fetched from PostHog using the getSurveys method
+     * - context: { isLoaded: boolean, error?: string }: An object indicating if the surveys were loaded successfully
+     *
+     * @param {Function} callback The callback function will be called when surveys are loaded or updated.
+     * @returns {Function} A function that can be called to unsubscribe the listener.
+     */
+    onSurveysLoaded(callback: SurveyCallback): () => void {
+        return this.surveys.onSurveysLoaded(callback)
     }
 
     /*
@@ -1787,11 +1813,18 @@ export class PostHog {
             }
             if (this.config.debug) {
                 Config.DEBUG = true
-                logger.info('set_config', {
-                    config,
-                    oldConfig,
-                    newConfig: { ...this.config },
-                })
+                logger.info(
+                    'set_config',
+                    JSON.stringify(
+                        {
+                            config,
+                            oldConfig,
+                            newConfig: { ...this.config },
+                        },
+                        null,
+                        2
+                    )
+                )
             }
 
             this.sessionRecording?.startIfEnabledOrStop()
@@ -1864,37 +1897,16 @@ export class PostHog {
     /** Capture a caught exception manually */
     captureException(error: unknown, additionalProperties?: Properties): void {
         const syntheticException = new Error('PostHog syntheticException')
-        const properties: Properties = isFunction(assignableWindow.__PosthogExtensions__?.parseErrorAsProperties)
-            ? {
-                  ...assignableWindow.__PosthogExtensions__.parseErrorAsProperties(
-                      isError(error) ? { error, event: error.message } : { event: error as Event | string },
-                      // create synthetic error to get stack in cases where user input does not contain one
-                      // creating the exceptions soon into our code as possible means we should only have to
-                      // remove a single frame (this 'captureException' method) from the resultant stack
-                      { syntheticException }
-                  ),
-                  ...additionalProperties,
-              }
-            : {
-                  $exception_level: 'error',
-                  $exception_list: [
-                      {
-                          type: isError(error) ? error.name : 'Error',
-                          value: isError(error)
-                              ? error.message
-                              : isObject(error) && 'message' in error
-                                ? String(error.message)
-                                : String(error),
-                          mechanism: {
-                              handled: true,
-                              synthetic: false,
-                          },
-                      },
-                  ],
-                  ...additionalProperties,
-              }
-
-        this.exceptions.sendExceptionEvent(properties)
+        this.exceptions.sendExceptionEvent({
+            ...errorToProperties(
+                isError(error) ? { error, event: error.message } : { event: error as Event | string },
+                // create synthetic error to get stack in cases where user input does not contain one
+                // creating the exceptions soon into our code as possible means we should only have to
+                // remove a single frame (this 'captureException' method) from the resultant stack
+                { syntheticException }
+            ),
+            ...additionalProperties,
+        })
     }
 
     /**
