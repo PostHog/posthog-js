@@ -62,7 +62,6 @@ export function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
 }
 
 export class PostHogSurveys {
-    private _decideServerResponse?: boolean
     private _hasSurveys?: boolean
     public _surveyEventReceiver: SurveyEventReceiver | null
     private _surveyManager: any
@@ -81,14 +80,14 @@ export class PostHogSurveys {
         const surveys = response['surveys']
         if (isArray(surveys)) {
             this._hasSurveys = surveys.length > 0
-            this._decideServerResponse = true
         } else if (isBoolean(surveys)) {
             this._hasSurveys = surveys
-            this._decideServerResponse = true
+        } else {
+            logger.warn('Decide not loaded yet. Not loading surveys.')
         }
 
-        if (this._decideServerResponse) {
-            logger.info(`decideServerResponse set to ${this._decideServerResponse}, hasSurveys: ${this._hasSurveys}`)
+        if (this._hasSurveys) {
+            logger.info(`decide response received, hasSurveys: ${this._hasSurveys}`)
             this.loadIfEnabled()
         }
     }
@@ -121,11 +120,6 @@ export class PostHogSurveys {
 
         if (!phExtensions) {
             logger.error('PostHog Extensions not found.')
-            return
-        }
-
-        if (!this._decideServerResponse) {
-            logger.warn('Decide not loaded yet. Not loading surveys.')
             return
         }
 
