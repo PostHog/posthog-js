@@ -78,16 +78,16 @@ export class PostHogSurveys {
     onRemoteConfig(response: RemoteConfig) {
         // only load surveys if they are enabled and there are surveys to load
         const surveys = response['surveys']
-        if (!isNullish(surveys)) {
-            if (isArray(surveys)) {
-                this._hasSurveys = surveys.length > 0
-            } else if (isBoolean(surveys)) {
-                this._hasSurveys = surveys
-            }
+        if (isArray(surveys)) {
+            this._hasSurveys = surveys.length > 0
             this._decideServerResponse = true
+        } else if (isBoolean(surveys)) {
+            this._hasSurveys = surveys
+            this._decideServerResponse = true
+        }
 
+        if (this._decideServerResponse) {
             logger.info(`decideServerResponse set to ${this._decideServerResponse}, hasSurveys: ${this._hasSurveys}`)
-
             this.loadIfEnabled()
         }
     }
@@ -116,11 +116,6 @@ export class PostHogSurveys {
             return
         }
 
-        if (!this._hasSurveys) {
-            logger.info('No surveys to load.')
-            return
-        }
-
         const phExtensions = assignableWindow?.__PosthogExtensions__
 
         if (!phExtensions) {
@@ -130,6 +125,11 @@ export class PostHogSurveys {
 
         if (!this._decideServerResponse) {
             logger.warn('Decide not loaded yet. Not loading surveys.')
+            return
+        }
+
+        if (!this._hasSurveys) {
+            logger.info('No surveys to load.')
             return
         }
 

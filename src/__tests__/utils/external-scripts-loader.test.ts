@@ -43,7 +43,7 @@ describe('external-scripts-loader', () => {
             const scripts = document!.getElementsByTagName('script')
             expect(scripts.length).toBe(1)
             expect(scripts[0].src).toMatchInlineSnapshot(`"https://us-assets.i.posthog.com/static/recorder.js?v=1.0.0"`)
-            
+
             // Verify both callbacks are called when script loads
             const event = new Event('test')
             scripts[0].onload!(event)
