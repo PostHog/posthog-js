@@ -13,6 +13,7 @@ import {
 } from './constants'
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { ExceptionObserver } from './extensions/exception-autocapture'
+import { errorToProperties } from './extensions/exception-autocapture/error-conversion'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
@@ -1896,37 +1897,16 @@ export class PostHog {
     /** Capture a caught exception manually */
     captureException(error: unknown, additionalProperties?: Properties): void {
         const syntheticException = new Error('PostHog syntheticException')
-        const properties: Properties = isFunction(assignableWindow.__PosthogExtensions__?.parseErrorAsProperties)
-            ? {
-                  ...assignableWindow.__PosthogExtensions__.parseErrorAsProperties(
-                      isError(error) ? { error, event: error.message } : { event: error as Event | string },
-                      // create synthetic error to get stack in cases where user input does not contain one
-                      // creating the exceptions soon into our code as possible means we should only have to
-                      // remove a single frame (this 'captureException' method) from the resultant stack
-                      { syntheticException }
-                  ),
-                  ...additionalProperties,
-              }
-            : {
-                  $exception_level: 'error',
-                  $exception_list: [
-                      {
-                          type: isError(error) ? error.name : 'Error',
-                          value: isError(error)
-                              ? error.message
-                              : isObject(error) && 'message' in error
-                                ? String(error.message)
-                                : String(error),
-                          mechanism: {
-                              handled: true,
-                              synthetic: false,
-                          },
-                      },
-                  ],
-                  ...additionalProperties,
-              }
-
-        this.exceptions.sendExceptionEvent(properties)
+        this.exceptions.sendExceptionEvent({
+            ...errorToProperties(
+                isError(error) ? { error, event: error.message } : { event: error as Event | string },
+                // create synthetic error to get stack in cases where user input does not contain one
+                // creating the exceptions soon into our code as possible means we should only have to
+                // remove a single frame (this 'captureException' method) from the resultant stack
+                { syntheticException }
+            ),
+            ...additionalProperties,
+        })
     }
 
     /**
