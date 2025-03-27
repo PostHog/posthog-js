@@ -118,10 +118,6 @@ interface SpecificQuestionBranching {
     index: number
 }
 
-export interface SurveyResponse {
-    surveys: Survey[]
-}
-
 export type SurveyCallback = (surveys: Survey[], context?: { isLoaded: boolean; error?: string }) => void
 
 export type SurveyMatchType = 'regex' | 'not_regex' | 'exact' | 'is_not' | 'icontains' | 'not_icontains'

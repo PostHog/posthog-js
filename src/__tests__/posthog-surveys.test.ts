@@ -109,7 +109,7 @@ describe('posthog-surveys', () => {
 
             it('should set isInitializingSurveys to false after successful initialization', () => {
                 // Set decide server response
-                surveys['_decideServerResponse'] = true
+                surveys['_hasSurveys'] = true
                 mockGenerateSurveys.mockReturnValue({})
 
                 surveys.loadIfEnabled()
@@ -119,7 +119,7 @@ describe('posthog-surveys', () => {
 
             it('should set isInitializingSurveys to false after failed initialization', () => {
                 // Set decide server response
-                surveys['_decideServerResponse'] = true
+                surveys['_hasSurveys'] = true
                 mockGenerateSurveys.mockImplementation(() => {
                     throw new Error('Test error')
                 })
@@ -130,7 +130,7 @@ describe('posthog-surveys', () => {
 
             it('should set isInitializingSurveys to false when loadExternalDependency fails', () => {
                 // Set decide server response but no generateSurveys
-                surveys['_decideServerResponse'] = true
+                surveys['_hasSurveys'] = true
                 mockGenerateSurveys = undefined
                 assignableWindow.__PosthogExtensions__.generateSurveys = undefined
 
@@ -144,7 +144,7 @@ describe('posthog-surveys', () => {
             })
 
             it('should call the callback with the surveys when they are loaded', () => {
-                surveys['_decideServerResponse'] = true
+                surveys['_hasSurveys'] = true
                 mockGenerateSurveys.mockReturnValue({})
                 const callback = jest.fn()
                 const mockSurveys = [{ id: 'test-survey' }]
@@ -165,7 +165,7 @@ describe('posthog-surveys', () => {
             })
 
             it('should call the callback with an error when surveys are not loaded', () => {
-                surveys['_decideServerResponse'] = true
+                surveys['_hasSurveys'] = true
                 mockGenerateSurveys.mockImplementation(() => {
                     throw new Error('Error initializing surveys')
                 })
