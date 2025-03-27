@@ -86,8 +86,8 @@ export class PostHogSurveys {
             logger.warn('Decide not loaded yet. Not loading surveys.')
         }
 
+        logger.info(`decide response received, hasSurveys: ${this._hasSurveys}`)
         if (this._hasSurveys) {
-            logger.info(`decide response received, hasSurveys: ${this._hasSurveys}`)
             this.loadIfEnabled()
         }
     }
