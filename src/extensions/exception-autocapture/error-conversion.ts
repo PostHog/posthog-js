@@ -155,7 +155,7 @@ export function extractMessage(err: Error & { message: { error?: Error } }): str
     const message = err.message
 
     if (message.error && typeof message.error.message === 'string') {
-        return message.error.message
+        return String(message.error.message)
     }
 
     return String(message)
