@@ -126,9 +126,12 @@ function errorPropertiesFromError(error: Error, metadata?: ErrorMetadata): Error
     const synthetic = metadata?.synthetic ?? false
 
     const exceptionType = metadata?.overrideExceptionType ? metadata.overrideExceptionType : error.name
-    const exceptionMessage = metadata?.overrideExceptionMessage
+    let exceptionMessage = metadata?.overrideExceptionMessage
         ? metadata.overrideExceptionMessage
         : extractMessage(error)
+
+    // Ensure the exception message is a string
+    exceptionMessage = typeof exceptionMessage === 'string' ? exceptionMessage : String(exceptionMessage)
 
     return {
         $exception_list: [
