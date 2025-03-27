@@ -8,7 +8,7 @@ import { assignableWindow, document, userAgent, window } from './utils/globals'
 import { createLogger } from './utils/logger'
 import { isMatchingRegex } from './utils/regex-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
-import { isNullish, isArray, isUndefined } from './utils/type-utils'
+import { isNullish, isArray } from './utils/type-utils'
 
 const logger = createLogger('[Surveys]')
 
@@ -78,7 +78,7 @@ export class PostHogSurveys {
     onRemoteConfig(response: RemoteConfig) {
         // only load surveys if they are enabled and there are surveys to load
         const surveys = response['surveys']
-        if (isUndefined(surveys)) {
+        if (isNullish(surveys)) {
             return logger.warn('Decide not loaded yet. Not loading surveys.')
         }
         const isArrayResponse = isArray(surveys)
