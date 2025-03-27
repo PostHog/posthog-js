@@ -1,3 +1,7 @@
+## 1.234.0 - 2025-03-27
+
+- feat: always include stack trace parsing (#1850)
+
 ## 1.233.1 - 2025-03-26
 
 - Send timezone to flags v2 (#1849)
