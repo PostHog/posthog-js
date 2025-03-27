@@ -72,6 +72,14 @@ export default function Home() {
                 <button className="ph-no-capture">Ignore certain elements</button>
 
                 <button
+                    onClick={() => {
+                        posthog?.reloadFeatureFlags()
+                    }}
+                >
+                    Reload feature flags
+                </button>
+
+                <button
                     onClick={() =>
                         posthog?.setPersonProperties({
                             email: `user-${randomID()}@posthog.com`,
