@@ -1,6 +1,7 @@
 import type { recordOptions } from './extensions/replay/types/rrweb'
 import type { SegmentAnalytics } from './extensions/segment-integration'
 import { PostHog } from './posthog-core'
+import { Survey } from './posthog-surveys-types'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -1310,7 +1311,7 @@ export interface RemoteConfig {
     /**
      * Whether surveys are enabled
      */
-    surveys?: boolean
+    surveys?: boolean | Survey[]
 
     /**
      * Parameters for the toolbar

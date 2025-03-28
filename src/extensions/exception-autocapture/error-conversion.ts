@@ -24,7 +24,6 @@ type ErrorMetadata = {
     synthetic?: boolean
     syntheticException?: Error
     overrideExceptionType?: string
-    overrideExceptionMessage?: string
     defaultExceptionType?: string
     defaultExceptionMessage?: string
 }
@@ -126,9 +125,7 @@ function errorPropertiesFromError(error: Error, metadata?: ErrorMetadata): Error
     const synthetic = metadata?.synthetic ?? false
 
     const exceptionType = metadata?.overrideExceptionType ? metadata.overrideExceptionType : error.name
-    const exceptionMessage = metadata?.overrideExceptionMessage
-        ? metadata.overrideExceptionMessage
-        : extractMessage(error)
+    const exceptionMessage = extractMessage(error)
 
     return {
         $exception_list: [
@@ -158,10 +155,10 @@ export function extractMessage(err: Error & { message: { error?: Error } }): str
     const message = err.message
 
     if (message.error && typeof message.error.message === 'string') {
-        return message.error.message
+        return String(message.error.message)
     }
 
-    return message
+    return String(message)
 }
 
 function errorPropertiesFromString(candidate: string, metadata?: ErrorMetadata): ErrorProperties {
@@ -172,11 +169,7 @@ function errorPropertiesFromString(candidate: string, metadata?: ErrorMetadata):
     const exceptionType = metadata?.overrideExceptionType
         ? metadata.overrideExceptionType
         : (metadata?.defaultExceptionType ?? 'Error')
-    const exceptionMessage = metadata?.overrideExceptionMessage
-        ? metadata.overrideExceptionMessage
-        : candidate
-          ? candidate
-          : metadata?.defaultExceptionMessage
+    const exceptionMessage = candidate ? candidate : metadata?.defaultExceptionMessage
 
     const exception: Exception = {
         type: exceptionType,
@@ -243,9 +236,7 @@ function errorPropertiesFromObject(candidate: Record<string, unknown>, metadata?
         : isEvent(candidate)
           ? candidate.constructor.name
           : 'Error'
-    const exceptionMessage = metadata?.overrideExceptionMessage
-        ? metadata.overrideExceptionMessage
-        : `Non-Error ${'exception'} captured with keys: ${extractExceptionKeysForMessage(candidate)}`
+    const exceptionMessage = `Non-Error 'exception' captured with keys: ${extractExceptionKeysForMessage(candidate)}`
 
     const exception: Exception = {
         type: exceptionType,
@@ -283,7 +274,7 @@ export function errorToProperties({ error, event }: ErrorConversionArgs, metadat
         const domException = candidate as unknown as DOMException
 
         if (isErrorWithStack(candidate)) {
-            errorProperties = errorPropertiesFromError(candidate as Error, metadata)
+            errorProperties = errorPropertiesFromError(candidate, metadata)
         } else {
             const name = domException.name || (isDOMError(domException) ? 'DOMError' : 'DOMException')
             const message = domException.message ? `${name}: ${domException.message}` : name

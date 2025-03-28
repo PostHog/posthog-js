@@ -8,7 +8,7 @@ import { assignableWindow, document, userAgent, window } from './utils/globals'
 import { createLogger } from './utils/logger'
 import { isMatchingRegex } from './utils/regex-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
-import { isNullish } from './utils/type-utils'
+import { isNullish, isArray } from './utils/type-utils'
 
 const logger = createLogger('[Surveys]')
 
@@ -62,7 +62,7 @@ export function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
 }
 
 export class PostHogSurveys {
-    private _decideServerResponse?: boolean
+    private _hasSurveys?: boolean
     public _surveyEventReceiver: SurveyEventReceiver | null
     private _surveyManager: any
     private _isFetchingSurveys: boolean = false
@@ -76,10 +76,17 @@ export class PostHogSurveys {
     }
 
     onRemoteConfig(response: RemoteConfig) {
-        this._decideServerResponse = !!response['surveys']
-        logger.info(`decideServerResponse set to ${this._decideServerResponse}`)
-
-        this.loadIfEnabled()
+        // only load surveys if they are enabled and there are surveys to load
+        const surveys = response['surveys']
+        if (isNullish(surveys)) {
+            return logger.warn('Decide not loaded yet. Not loading surveys.')
+        }
+        const isArrayResponse = isArray(surveys)
+        this._hasSurveys = isArrayResponse ? surveys.length > 0 : surveys
+        logger.info(`decide response received, hasSurveys: ${this._hasSurveys}`)
+        if (this._hasSurveys) {
+            this.loadIfEnabled()
+        }
     }
 
     reset(): void {
@@ -113,8 +120,8 @@ export class PostHogSurveys {
             return
         }
 
-        if (!this._decideServerResponse) {
-            logger.warn('Decide not loaded yet. Not loading surveys.')
+        if (!this._hasSurveys) {
+            logger.info('No surveys to load.')
             return
         }
 

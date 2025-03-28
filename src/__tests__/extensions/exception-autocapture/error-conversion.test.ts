@@ -54,7 +54,7 @@ describe('Error conversion', () => {
             $exception_list: [
                 {
                     type: 'Error',
-                    value: 'Non-Error exception captured with keys: foo, string',
+                    value: "Non-Error 'exception' captured with keys: foo, string",
                     mechanism: { synthetic: true, handled: true },
                 },
             ],
@@ -68,7 +68,7 @@ describe('Error conversion', () => {
             $exception_list: [
                 {
                     type: 'MouseEvent',
-                    value: 'Non-Error exception captured with keys: isTrusted',
+                    value: "Non-Error 'exception' captured with keys: isTrusted",
                     mechanism: { synthetic: true, handled: true },
                 },
             ],
