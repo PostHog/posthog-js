@@ -12,8 +12,6 @@ type AlreadyInitialized =
       }
     | false
 
-type WithOptionalChildren<T> = T & { children?: React.ReactNode | undefined }
-
 /**
  * Props for the PostHogProvider component.
  * This is a discriminated union type that ensures mutually exclusive props:
@@ -21,7 +19,7 @@ type WithOptionalChildren<T> = T & { children?: React.ReactNode | undefined }
  * - If `client` is provided, `apiKey` and `options` must not be provided
  * - If `apiKey` is provided, `client` must not be provided, and `options` is optional
  */
-type PostHogProviderProps =
+export type PostHogProviderProps =
     | { client: PostHog; apiKey?: never; options?: never }
     | { apiKey: string; options?: Partial<PostHogConfig>; client?: never }
 
@@ -40,7 +38,7 @@ type PostHogProviderProps =
  * have changed and only call `posthogJs.set_config` if they have, but it's better to
  * avoid unnecessary re-renders in the first place.
  */
-export function PostHogProvider({ children, client, apiKey, options }: WithOptionalChildren<PostHogProviderProps>) {
+export function PostHogProvider({ children, client, apiKey, options }: React.PropsWithChildren<PostHogProviderProps>) {
     // Used to detect if the client was already initialized
     // This is used to prevent double initialization when running under React.StrictMode
     // We're not storing a simple boolean here because we want to be able to detect if the
