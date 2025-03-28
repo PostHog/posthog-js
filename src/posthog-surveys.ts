@@ -386,15 +386,17 @@ export class PostHogSurveys {
         return assignableWindow.__PosthogExtensions__.canActivateRepeatedly(survey)
     }
 
-    canRenderSurvey(surveyId: string): SurveyRenderReason {
+    canRenderSurvey(surveyId: string): SurveyRenderReason | null {
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return { visible: false }
         }
-        let renderReason: SurveyRenderReason = { visible: false }
+        let renderReason: SurveyRenderReason | null = null
         this.getSurveys((surveys) => {
             const survey = surveys.filter((x) => x.id === surveyId)[0]
-            renderReason = { ...this._surveyManager.canRenderSurvey(survey) }
+            if (survey) {
+                renderReason = { ...this._surveyManager.canRenderSurvey(survey) }
+            }
         })
         return renderReason
     }

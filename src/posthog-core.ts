@@ -1373,7 +1373,7 @@ export class PostHog {
     }
 
     /** Checks the feature flags associated with this Survey to see if the survey can be rendered. */
-    canRenderSurvey(surveyId: string): SurveyRenderReason {
+    canRenderSurvey(surveyId: string): SurveyRenderReason | null {
         return this.surveys.canRenderSurvey(surveyId)
     }
 
