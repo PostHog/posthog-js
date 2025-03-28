@@ -1,14 +1,14 @@
 import { SURVEYS } from './constants'
 import { getSurveySeenStorageKeys } from './extensions/surveys/surveys-utils'
 import { PostHog } from './posthog-core'
-import { Survey, SurveyCallback, SurveyMatchType } from './posthog-surveys-types'
+import { Survey, SurveyCallback, SurveyMatchType, SurveyRenderReason } from './posthog-surveys-types'
 import { RemoteConfig } from './types'
 import { Info } from './utils/event-utils'
 import { assignableWindow, document, userAgent, window } from './utils/globals'
 import { createLogger } from './utils/logger'
 import { isMatchingRegex } from './utils/regex-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
-import { isNullish, isArray } from './utils/type-utils'
+import { isArray, isNullish } from './utils/type-utils'
 
 const logger = createLogger('[Surveys]')
 
@@ -386,15 +386,17 @@ export class PostHogSurveys {
         return assignableWindow.__PosthogExtensions__.canActivateRepeatedly(survey)
     }
 
-    canRenderSurvey(surveyId: string) {
+    canRenderSurvey(surveyId: string): SurveyRenderReason {
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
-            return
+            return { visible: false }
         }
+        let renderReason: SurveyRenderReason = { visible: false }
         this.getSurveys((surveys) => {
             const survey = surveys.filter((x) => x.id === surveyId)[0]
-            this._surveyManager.canRenderSurvey(survey)
+            renderReason = { ...this._surveyManager.canRenderSurvey(survey) }
         })
+        return renderReason
     }
 
     renderSurvey(surveyId: string, selector: string) {
