@@ -75,19 +75,14 @@ export class ExceptionObserver {
     }
 
     private startCapturing = () => {
-        if (!window || !this.isEnabled) {
+        if (!window || !this.isEnabled || !assignableWindow.__PosthogExtensions__?.errorWrappingFunctions) {
             return
         }
 
-        const wrapOnError = assignableWindow.__PosthogExtensions__?.errorWrappingFunctions?.wrapOnError
+        const wrapOnError = assignableWindow.__PosthogExtensions__.errorWrappingFunctions.wrapOnError
         const wrapUnhandledRejection =
-            assignableWindow.__PosthogExtensions__?.errorWrappingFunctions?.wrapUnhandledRejection
-        const wrapConsoleError = assignableWindow.__PosthogExtensions__?.errorWrappingFunctions?.wrapConsoleError
-
-        if (!wrapOnError || !wrapUnhandledRejection || !wrapConsoleError) {
-            logger.error('failed to load error wrapping functions - cannot start')
-            return
-        }
+            assignableWindow.__PosthogExtensions__.errorWrappingFunctions.wrapUnhandledRejection
+        const wrapConsoleError = assignableWindow.__PosthogExtensions__.errorWrappingFunctions.wrapConsoleError
 
         try {
             if (!this.unwrapOnError && this.config.capture_unhandled_errors) {
