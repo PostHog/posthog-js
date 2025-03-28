@@ -49,23 +49,15 @@ export class ExceptionObserver {
         )
     }
 
-    get hasHandlers() {
-        return (
-            !isUndefined(this.unwrapOnError) &&
-            !isUndefined(this.unwrapUnhandledRejection) &&
-            !isUndefined(this.unwrapConsoleError)
-        )
-    }
-
     startIfEnabled(): void {
-        if (this.isEnabled && !this.hasHandlers) {
-            logger.info('enabled, starting...')
+        if (this.isEnabled) {
+            logger.info('enabled')
             this.loadScript(this.startCapturing)
         }
     }
 
     private loadScript(cb: () => void): void {
-        if (this.hasHandlers) {
+        if (assignableWindow.__PosthogExtensions__?.errorWrappingFunctions) {
             // already loaded
             cb()
         }
@@ -98,13 +90,13 @@ export class ExceptionObserver {
         }
 
         try {
-            if (!this.unwrapOnError) {
+            if (!this.unwrapOnError && this.config.capture_unhandled_errors) {
                 this.unwrapOnError = wrapOnError(this.captureException.bind(this))
             }
-            if (!this.unwrapUnhandledRejection) {
+            if (!this.unwrapUnhandledRejection && this.config.capture_unhandled_rejections) {
                 this.unwrapUnhandledRejection = wrapUnhandledRejection(this.captureException.bind(this))
             }
-            if (!this.unwrapConsoleError) {
+            if (!this.unwrapConsoleError && this.config.capture_console_errors) {
                 this.unwrapConsoleError = wrapConsoleError(this.captureException.bind(this))
             }
         } catch (e) {
