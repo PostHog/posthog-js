@@ -45,6 +45,12 @@ describe('Exception Observer', () => {
         assignableWindow.__PosthogExtensions__.errorWrappingFunctions = posthogErrorWrappingFunctions
     }
 
+    const expectNoHandlers = () => {
+        expect((window?.console?.error as any)?.__POSTHOG_INSTRUMENTED__).toBeUndefined()
+        expect((window?.onerror as any)?.__POSTHOG_INSTRUMENTED__).toBeUndefined()
+        expect((window?.onunhandledrejection as any)?.__POSTHOG_INSTRUMENTED__).toBeUndefined()
+    }
+
     beforeEach(async () => {
         loadScriptMock.mockImplementation((_ph, _path, callback) => {
             addErrorWrappingFlagToWindow()
@@ -70,21 +76,17 @@ describe('Exception Observer', () => {
             exceptionObserver.onRemoteConfig({ autocaptureExceptions: true } as DecideResponse)
         })
 
-        it('should instrument handlers when started', () => {
-            expect(exceptionObserver.hasHandlers).toBe(true)
+        it('should instrument enabled handlers only when started', () => {
             expect(exceptionObserver.isEnabled).toBe(true)
 
+            expect((window?.console?.error as any).__POSTHOG_INSTRUMENTED__).toBeUndefined()
             expect((window?.onerror as any).__POSTHOG_INSTRUMENTED__).toBe(true)
             expect((window?.onunhandledrejection as any).__POSTHOG_INSTRUMENTED__).toBe(true)
         })
 
         it('should remove instrument handlers when stopped', () => {
             exceptionObserver['stopCapturing']()
-
-            expect((window?.onerror as any)?.__POSTHOG_INSTRUMENTED__).not.toBeDefined()
-            expect((window?.onunhandledrejection as any)?.__POSTHOG_INSTRUMENTED__).not.toBeDefined()
-
-            expect(exceptionObserver.hasHandlers).toBe(false)
+            expectNoHandlers()
         })
 
         it('captures an event when an error is thrown', () => {
@@ -166,8 +168,6 @@ describe('Exception Observer', () => {
         it('does not start if disabled locally', () => {
             posthog.config.capture_exceptions = false
             exceptionObserver = new ExceptionObserver(posthog)
-
-            expect(exceptionObserver.hasHandlers).toBe(false)
             expect(exceptionObserver.isEnabled).toBe(false)
         })
     })
@@ -232,9 +232,9 @@ describe('Exception Observer', () => {
     describe('when no decide response', () => {
         it('cannot be started', () => {
             expect(exceptionObserver.isEnabled).toBe(false)
-            expect(exceptionObserver.hasHandlers).toBe(false)
+            expectNoHandlers()
             exceptionObserver['startCapturing']()
-            expect(exceptionObserver.hasHandlers).toBe(false)
+            expectNoHandlers()
         })
     })
 
@@ -245,9 +245,9 @@ describe('Exception Observer', () => {
 
         it('cannot be started', () => {
             expect(exceptionObserver.isEnabled).toBe(false)
-            expect(exceptionObserver.hasHandlers).toBe(false)
+            expectNoHandlers()
             exceptionObserver['startCapturing']()
-            expect(exceptionObserver.hasHandlers).toBe(false)
+            expectNoHandlers()
         })
     })
 })
