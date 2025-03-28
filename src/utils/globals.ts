@@ -1,7 +1,14 @@
+import { ErrorProperties } from '../extensions/exception-autocapture/error-conversion'
 import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
-import { DeadClicksAutoCaptureConfig, Properties, RemoteConfig, SiteAppLoader } from '../types'
-
+import {
+    DeadClicksAutoCaptureConfig,
+    ErrorConversionArgs,
+    ErrorMetadata,
+    Properties,
+    RemoteConfig,
+    SiteAppLoader,
+} from '../types'
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
  * like DOM, SSR, Web workers etc.
@@ -58,6 +65,7 @@ interface PostHogExtensions {
 
     loadSiteApp?: (posthog: PostHog, appUrl: string, callback: (error?: string | Event, event?: Event) => void) => void
 
+    parseErrorAsProperties?: ({ error, event }: ErrorConversionArgs, metadata?: ErrorMetadata) => ErrorProperties
     errorWrappingFunctions?: {
         wrapOnError: (captureFn: (props: Properties) => void) => () => void
         wrapUnhandledRejection: (captureFn: (props: Properties) => void) => () => void
