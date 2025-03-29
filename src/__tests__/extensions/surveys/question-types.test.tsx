@@ -54,7 +54,7 @@ describe('MultipleChoiceQuestion', () => {
 
             // Type in the open-ended input using its specific id
             const openInput = container.querySelector('#surveyQuestion1Choice3Open') as HTMLInputElement
-            fireEvent.change(openInput, { target: { value: 'Purple' } })
+            fireEvent.input(openInput, { target: { value: 'Purple' } })
 
             // Click submit
             fireEvent.click(getByText('Submit'))
@@ -118,7 +118,7 @@ describe('MultipleChoiceQuestion', () => {
 
             // Type in the open-ended input using its specific id
             const openInput = container.querySelector('#surveyQuestion1Choice3Open') as HTMLInputElement
-            fireEvent.change(openInput, { target: { value: 'Purple' } })
+            fireEvent.input(openInput, { target: { value: 'Purple' } })
 
             // Click submit
             fireEvent.click(getByText('Submit'))

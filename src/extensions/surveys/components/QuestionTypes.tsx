@@ -325,7 +325,7 @@ export function MultipleChoiceQuestion({
                                 id={`surveyQuestion${displayQuestionIndex}Choice${idx}`}
                                 name={`question${displayQuestionIndex}`}
                                 checked={isChecked}
-                                onChange={() => handleChoiceChange(choice, isOpenChoice)}
+                                onClick={() => handleChoiceChange(choice, isOpenChoice)}
                             />
                             <label
                                 htmlFor={`surveyQuestion${displayQuestionIndex}Choice${idx}`}
@@ -340,7 +340,7 @@ export function MultipleChoiceQuestion({
                                             id={`surveyQuestion${displayQuestionIndex}Choice${idx}Open`}
                                             name={`question${displayQuestionIndex}`}
                                             value={openEndedInput}
-                                            onChange={(e) => handleOpenEndedInputChange(e.currentTarget.value)}
+                                            onInput={(e) => handleOpenEndedInputChange(e.currentTarget.value)}
                                             onClick={(e) => {
                                                 // Ensure the checkbox/radio gets checked when clicking the input
                                                 if (!openChoiceSelected) {
