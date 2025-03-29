@@ -43,9 +43,9 @@ export default function SurveyForm() {
                 <button
                     onClick={() => {
                         const renderReason = posthog.canRenderSurvey(selectedSurvey)
-                        const message = renderReason.visible
+                        const message = renderReason?.visible
                             ? `Survey can be rendered: Yes`
-                            : `Survey cannot be rendered: ${renderReason.disabledReason || 'No reason provided'}`
+                            : `Survey cannot be rendered: ${renderReason?.disabledReason || 'No reason provided'}`
                         alert(message)
                     }}
                 >
