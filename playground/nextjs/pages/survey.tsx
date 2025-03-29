@@ -40,6 +40,17 @@ export default function SurveyForm() {
                 >
                     Render Survey below
                 </button>
+                <button
+                    onClick={() => {
+                        const renderReason = posthog.canRenderSurvey(selectedSurvey)
+                        const message = renderReason?.visible
+                            ? `Survey can be rendered: Yes`
+                            : `Survey cannot be rendered: ${renderReason?.disabledReason || 'No reason provided'}`
+                        alert(message)
+                    }}
+                >
+                    Check if survey can be rendered
+                </button>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
                 <div id="survey-container">
