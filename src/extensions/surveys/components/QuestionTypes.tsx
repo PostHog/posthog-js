@@ -218,6 +218,32 @@ export function RatingButton({
     )
 }
 
+function isSubmitDisabled(
+    selectedChoices: string | string[] | null,
+    openChoiceSelected: boolean,
+    openEndedInput: string,
+    optional: boolean
+): boolean {
+    if (optional) {
+        return false
+    }
+
+    if (isNull(selectedChoices)) {
+        return true
+    }
+
+    if (isArray(selectedChoices)) {
+        if (!openChoiceSelected && selectedChoices.length === 0) {
+            return true
+        }
+        if (openChoiceSelected && !openEndedInput && selectedChoices.length === 0) {
+            return true
+        }
+    }
+
+    return false
+}
+
 export function MultipleChoiceQuestion({
     question,
     forceDisableHtml,
@@ -337,16 +363,12 @@ export function MultipleChoiceQuestion({
             </div>
             <BottomSection
                 text={question.buttonText || 'Submit'}
-                submitDisabled={
-                    (isNull(selectedChoices) ||
-                        (isArray(selectedChoices) && !openChoiceSelected && selectedChoices.length === 0) ||
-                        (isArray(selectedChoices) &&
-                            openChoiceSelected &&
-                            !openEndedInput &&
-                            selectedChoices.length === 0 &&
-                            !question.optional)) &&
-                    !question.optional
-                }
+                submitDisabled={isSubmitDisabled(
+                    selectedChoices,
+                    openChoiceSelected,
+                    openEndedInput,
+                    !!question.optional
+                )}
                 appearance={appearance}
                 onSubmit={() => {
                     if (openChoiceSelected && question.type === SurveyQuestionType.MultipleChoice) {
