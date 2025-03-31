@@ -611,9 +611,7 @@ export class SessionRecording {
     }
 
     private _resetSampling() {
-        this.instance.persistence?.register({
-            [SESSION_RECORDING_IS_SAMPLED]: null,
-        })
+        this.instance.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
     }
 
     private makeSamplingDecision(sessionId: string): void {

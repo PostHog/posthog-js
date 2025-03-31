@@ -870,8 +870,8 @@ describe('SessionRecording', () => {
                     makeDecideResponse({ sessionRecording: { endpoint: '/s/', sampleRate: null } })
                 )
 
-                // then check that a session is no longer sampled out (i.e. storage is null not false)
-                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(null)
+                // then check that a session is no longer sampled out (i.e. storage is cleared not false)
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(undefined)
                 expect(sessionRecording['status']).toBe('active')
             })
 
@@ -883,8 +883,8 @@ describe('SessionRecording', () => {
                     makeDecideResponse({ sessionRecording: { endpoint: '/s/', sampleRate: null } })
                 )
 
-                // then check that a session is no longer sampled out (i.e. storage is null not false)
-                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(null)
+                // then check that a session is no longer sampled out (i.e. storage is cleared not false)
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(undefined)
                 expect(sessionRecording['status']).toBe('active')
 
                 // set sample rate to 0, i.e. no sessions will run
