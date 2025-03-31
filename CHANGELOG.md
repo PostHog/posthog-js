@@ -1,3 +1,7 @@
+## 1.234.3 - 2025-03-31
+
+
+
 ## 1.234.2 - 2025-03-28
 
 - fix: do not always wrap console.error (#1853)
