@@ -40,7 +40,13 @@ import {
 
 import { isBoolean, isFunction, isNullish, isNumber, isObject, isString, isUndefined } from '../../utils/type-utils'
 import { createLogger } from '../../utils/logger'
-import { assignableWindow, document, PostHogExtensionKind, window } from '../../utils/globals'
+import {
+    assignableWindow,
+    document,
+    LazyLoadedSessionRecordingSamplingInterface,
+    PostHogExtensionKind,
+    window,
+} from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
 import { MutationRateLimiter } from './mutation-rate-limiter'
@@ -49,7 +55,6 @@ import { clampToRange } from '../../utils/number-utils'
 import Config from '../../config'
 import { includes } from '../../utils/string-utils'
 import { addEventListener } from '../../utils'
-import { sampleOnProperty } from '../sampling'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
@@ -273,7 +278,8 @@ export class SessionRecording {
     private _removePageViewCaptureHook: (() => void) | undefined = undefined
     private _onSessionIdListener: (() => void) | undefined = undefined
     private _persistDecideOnSessionListener: (() => void) | undefined = undefined
-    private _samplingSessionListener: (() => void) | undefined = undefined
+
+    sampling: LazyLoadedSessionRecordingSamplingInterface | undefined
 
     // if pageview capture is disabled
     // then we can manually track href changes
@@ -313,11 +319,6 @@ export class SessionRecording {
         }
 
         return this.instance.config.session_recording?.full_snapshot_interval_millis ?? FIVE_MINUTES
-    }
-
-    private get isSampled(): boolean | null {
-        const currentValue = this.instance.get_property(SESSION_RECORDING_IS_SAMPLED)
-        return isBoolean(currentValue) ? currentValue : null
     }
 
     private get sessionDuration(): number | null {
@@ -409,11 +410,6 @@ export class SessionRecording {
             : undefined
     }
 
-    private get sampleRate(): number | null {
-        const rate = this.instance.get_property(SESSION_RECORDING_SAMPLE_RATE)
-        return isNumber(rate) ? rate : null
-    }
-
     private get minimumDuration(): number | null {
         const duration = this.instance.get_property(SESSION_RECORDING_MINIMUM_DURATION)
         return isNumber(duration) ? duration : null
@@ -434,7 +430,8 @@ export class SessionRecording {
 
         // if sampling is set and the session is already decided to not be sampled
         // then we should never be active
-        if (this.isSampled === false) {
+        // we also can't be active until the sampling is initialized
+        if (isNullish(this.sampling) || this.sampling.isSampled === false) {
             return 'disabled'
         }
 
@@ -450,8 +447,8 @@ export class SessionRecording {
             return 'buffering'
         }
 
-        if (isBoolean(this.isSampled)) {
-            return this.isSampled ? 'sampled' : 'disabled'
+        if (isBoolean(this.sampling.isSampled)) {
+            return this.sampling.isSampled ? 'sampled' : 'disabled'
         } else {
             return 'active'
         }
@@ -603,58 +600,13 @@ export class SessionRecording {
             this._removeEventTriggerCaptureHook = undefined
             this._onSessionIdListener?.()
             this._onSessionIdListener = undefined
-            this._samplingSessionListener?.()
-            this._samplingSessionListener = undefined
+            if (this.sampling) {
+                this.sampling.samplingSessionListener?.()
+                this.sampling.samplingSessionListener = undefined
+            }
 
             logger.info('stopped')
         }
-    }
-
-    private makeSamplingDecision(sessionId: string): void {
-        const sessionIdChanged = this.sessionId !== sessionId
-
-        // capture the current sample rate,
-        // because it is re-used multiple times
-        // and the bundler won't minimise any of the references
-        const currentSampleRate = this.sampleRate
-
-        if (!isNumber(currentSampleRate)) {
-            this.instance.persistence?.register({
-                [SESSION_RECORDING_IS_SAMPLED]: null,
-            })
-            return
-        }
-
-        const storedIsSampled = this.isSampled
-
-        /**
-         * if we get this far then we should make a sampling decision.
-         * When the session id changes or there is no stored sampling decision for this session id
-         * then we should make a new decision.
-         *
-         * Otherwise, we should use the stored decision.
-         */
-        const makeDecision = sessionIdChanged || !isBoolean(storedIsSampled)
-        const shouldSample = makeDecision ? sampleOnProperty(sessionId, currentSampleRate) : storedIsSampled
-
-        if (makeDecision) {
-            if (shouldSample) {
-                this._reportStarted('sampled')
-            } else {
-                logger.warn(
-                    `Sample rate (${currentSampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
-                )
-            }
-
-            this._tryAddCustomEvent('samplingDecisionMade', {
-                sampleRate: currentSampleRate,
-                isSampled: shouldSample,
-            })
-        }
-
-        this.instance.persistence?.register({
-            [SESSION_RECORDING_IS_SAMPLED]: shouldSample,
-        })
     }
 
     onRemoteConfig(response: RemoteConfig) {
@@ -667,7 +619,7 @@ export class SessionRecording {
             this._endpoint = response.sessionRecording?.endpoint
         }
 
-        this._setupSampling()
+        this.sampling?.onRemoteConfig(response)
 
         if (!isNullish(this._linkedFlag) && !this._linkedFlagSeen) {
             const linkedFlag = isString(this._linkedFlag) ? this._linkedFlag : this._linkedFlag.flag
@@ -705,10 +657,21 @@ export class SessionRecording {
      * This might be called more than once so needs to be idempotent
      */
     private _setupSampling() {
-        if (isNumber(this.sampleRate) && isNullish(this._samplingSessionListener)) {
-            this._samplingSessionListener = this.sessionManager.onSessionId((sessionId) => {
-                this.makeSamplingDecision(sessionId)
+        const sampling = this.sampling
+        if (!sampling) {
+            // this will be called after lazy loaded sampling is initialized
+            // so we can just return here
+            return
+        }
+
+        if (isNumber(sampling.sampleRate) && isNullish(sampling.samplingSessionListener)) {
+            sampling.samplingSessionListener = this.sessionManager.onSessionId((sessionId) => {
+                sampling.makeSamplingDecision(this.sessionId, sessionId)
             })
+        }
+
+        if (isNullish(sampling.sampleRate)) {
+            sampling.resetSampling()
         }
     }
 
@@ -801,6 +764,15 @@ export class SessionRecording {
                     return logger.error('could not load recorder', err)
                 }
 
+                const lazyLoadedSampling = assignableWindow.__PosthogExtensions__?.sessionRecording?.initSampling?.(
+                    this.instance
+                )
+                if (!lazyLoadedSampling) {
+                    // should we throw here?
+                    return logger.error('could not load lazy loaded sampling')
+                }
+
+                this.sampling = lazyLoadedSampling
                 this._onScriptLoaded()
             })
         } else {

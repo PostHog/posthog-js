@@ -49,6 +49,15 @@ export interface LazyLoadedDeadClicksAutocaptureInterface {
     stop: () => void
 }
 
+export interface LazyLoadedSessionRecordingSamplingInterface {
+    samplingSessionListener: (() => void) | undefined
+    get sampleRate(): number | null
+    get isSampled(): boolean | null
+    onRemoteConfig: (response: RemoteConfig) => void
+    makeSamplingDecision: (oldSessionId: string, sessionId: string) => boolean | null
+    resetSampling: () => void
+}
+
 interface PostHogExtensions {
     loadExternalDependency?: (
         posthog: PostHog,
@@ -81,6 +90,9 @@ interface PostHogExtensions {
         ph: PostHog,
         config: DeadClicksAutoCaptureConfig
     ) => LazyLoadedDeadClicksAutocaptureInterface
+    sessionRecording?: {
+        initSampling: (instance: PostHog) => LazyLoadedSessionRecordingSamplingInterface
+    }
 }
 
 const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win
