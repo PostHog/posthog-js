@@ -46,9 +46,10 @@ import {
     type metaEvent,
     type pluginEvent,
 } from '@rrweb/types'
-import Mock = jest.Mock
 import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
+import { SessionRecordingSampling } from '../../../extensions/replay/external/sampling'
+import Mock = jest.Mock
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -226,6 +227,9 @@ describe('SessionRecording', () => {
             rrwebPlugins: {
                 getRecordConsolePlugin: undefined,
                 getRecordNetworkPlugin: undefined,
+            },
+            sessionRecording: {
+                initSampling: (instance) => new SessionRecordingSampling(instance),
             },
         }
 
@@ -550,8 +554,7 @@ describe('SessionRecording', () => {
 
         it('sets the window event listeners', () => {
             //mock window add event listener to check if it is called
-            const addEventListener = jest.fn().mockImplementation(() => () => {})
-            window.addEventListener = addEventListener
+            window.addEventListener = jest.fn().mockImplementation(() => () => {})
 
             sessionRecording.startIfEnabledOrStop()
             expect(sessionRecording['_onBeforeUnload']).not.toBeNull()
@@ -682,10 +685,11 @@ describe('SessionRecording', () => {
         it('sample rate is null when decide does not return it', () => {
             sessionRecording.startIfEnabledOrStop()
             expect(loadScriptMock).toHaveBeenCalled()
-            expect(sessionRecording['isSampled']).toBe(null)
+            expect(sessionRecording.sampling?.isSampled).toBe(null)
 
             sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
-            expect(sessionRecording['isSampled']).toBe(null)
+            expect(sessionRecording.sampling?.sampleRate).toBe(null)
+            expect(sessionRecording.sampling?.isSampled).toBe(null)
         })
 
         it('stores true in persistence if recording is enabled from the server', () => {
@@ -744,7 +748,7 @@ describe('SessionRecording', () => {
                 })
             )
 
-            expect(sessionRecording['sampleRate']).toBe(0.7)
+            expect(sessionRecording.sampling.sampleRate).toBe(0.7)
             expect(posthog.get_property(SESSION_RECORDING_SAMPLE_RATE)).toBe(0.7)
         })
 
@@ -801,7 +805,7 @@ describe('SessionRecording', () => {
                     })
                 )
 
-                expect(sessionRecording['isSampled']).toStrictEqual(false)
+                expect(sessionRecording.sampling.isSampled).toStrictEqual(false)
             })
 
             it('does emit to capture if the sample rate is 1', () => {
@@ -818,7 +822,7 @@ describe('SessionRecording', () => {
                 _emit(createIncrementalSnapshot({ data: { source: 1 } }))
 
                 expect(sessionRecording['status']).toBe('sampled')
-                expect(sessionRecording['isSampled']).toStrictEqual(true)
+                expect(sessionRecording.sampling.isSampled).toStrictEqual(true)
 
                 // don't wait two seconds for the flush timer
                 sessionRecording['_flushBuffer']()
