@@ -714,9 +714,6 @@ export class SessionRecording {
                 this.makeSamplingDecision(sessionId)
             })
         }
-        if (isNullish(this.sampleRate)) {
-            this._resetSampling()
-        }
     }
 
     private _persistRemoteConfig(response: RemoteConfig): void {
@@ -727,6 +724,10 @@ export class SessionRecording {
                 const receivedSampleRate = response.sessionRecording?.sampleRate
 
                 const parsedSampleRate = isNullish(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
+                if (isNullish(parsedSampleRate)) {
+                    this._resetSampling()
+                }
+
                 const receivedMinimumDuration = response.sessionRecording?.minimumDurationMilliseconds
 
                 persistence.register({
