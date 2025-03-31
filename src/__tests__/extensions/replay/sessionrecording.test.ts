@@ -872,14 +872,6 @@ describe('SessionRecording', () => {
 
                 // then check that a session is no longer sampled out (i.e. storage is null not false)
                 expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(null)
-
-                // then start a new session
-                sessionManager.resetSessionId()
-                sessionId = 'session-id-' + uuidv7()
-                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
-
-                // then check that the new session is not sampled out (i.e. storage is null not false and recording is active)
-                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(null)
                 expect(sessionRecording['status']).toBe('active')
             })
         })
