@@ -874,6 +874,27 @@ describe('SessionRecording', () => {
                 expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(null)
                 expect(sessionRecording['status']).toBe('active')
             })
+
+            it('turning sample rate from null to 0, resets values as expected', () => {
+                sessionRecording.startIfEnabledOrStop()
+
+                // first turn sample rate to null
+                sessionRecording.onRemoteConfig(
+                    makeDecideResponse({ sessionRecording: { endpoint: '/s/', sampleRate: null } })
+                )
+
+                // then check that a session is no longer sampled out (i.e. storage is null not false)
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(null)
+                expect(sessionRecording['status']).toBe('active')
+
+                // set sample rate to 0, i.e. no sessions will run
+                sessionRecording.onRemoteConfig(
+                    makeDecideResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.00' } })
+                )
+                // then check that a session is sampled (i.e. storage is false not true or null)
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
+                expect(sessionRecording['status']).toBe('disabled')
+            })
         })
 
         describe('canvas', () => {
