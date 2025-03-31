@@ -854,6 +854,34 @@ describe('SessionRecording', () => {
                 expect(emitValues.filter((v) => v === 'sampled').length).toBeGreaterThan(30)
                 expect(emitValues.filter((v) => v === 'disabled').length).toBeGreaterThan(30)
             })
+
+            it('turning sample rate to null, means sessions are no longer sampled out', () => {
+                sessionRecording.startIfEnabledOrStop()
+                // set sample rate to 0, i.e. no sessions will run
+                sessionRecording.onRemoteConfig(
+                    makeDecideResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.00' } })
+                )
+                // then check that a session is sampled (i.e. storage is false not true or null)
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
+                expect(sessionRecording['status']).toBe('disabled')
+
+                // then turn sample rate to null
+                sessionRecording.onRemoteConfig(
+                    makeDecideResponse({ sessionRecording: { endpoint: '/s/', sampleRate: null } })
+                )
+
+                // then check that a session is no longer sampled out (i.e. storage is null not false)
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(null)
+
+                // then start a new session
+                sessionManager.resetSessionId()
+                sessionId = 'session-id-' + uuidv7()
+                _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+
+                // then check that the new session is not sampled out (i.e. storage is null not false and recording is active)
+                expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(null)
+                expect(sessionRecording['status']).toBe('active')
+            })
         })
 
         describe('canvas', () => {
