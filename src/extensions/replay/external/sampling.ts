@@ -38,12 +38,6 @@ export class SessionRecordingSampling implements LazyLoadedSessionRecordingSampl
         this.instance.persistence?.register({
             [SESSION_RECORDING_SAMPLE_RATE]: parsedSampleRate,
         })
-
-        if (isNumber(this.sampleRate) && isNullish(this.samplingSessionListener)) {
-            this._samplingSessionListener = this.sessionManager.onSessionId((oldSessionId, sessionId) => {
-                this.makeSamplingDecision(oldSessionId, sessionId)
-            })
-        }
     }
 
     resetSampling() {
