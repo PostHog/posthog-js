@@ -610,6 +610,10 @@ export class SessionRecording {
         }
     }
 
+    private _resetSampling() {
+        this.instance.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
+    }
+
     private makeSamplingDecision(sessionId: string): void {
         const sessionIdChanged = this.sessionId !== sessionId
 
@@ -619,9 +623,7 @@ export class SessionRecording {
         const currentSampleRate = this.sampleRate
 
         if (!isNumber(currentSampleRate)) {
-            this.instance.persistence?.register({
-                [SESSION_RECORDING_IS_SAMPLED]: null,
-            })
+            this._resetSampling()
             return
         }
 
@@ -720,6 +722,10 @@ export class SessionRecording {
                 const receivedSampleRate = response.sessionRecording?.sampleRate
 
                 const parsedSampleRate = isNullish(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
+                if (isNullish(parsedSampleRate)) {
+                    this._resetSampling()
+                }
+
                 const receivedMinimumDuration = response.sessionRecording?.minimumDurationMilliseconds
 
                 persistence.register({
