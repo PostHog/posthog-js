@@ -389,13 +389,15 @@ export class PostHogSurveys {
     canRenderSurvey(surveyId: string): SurveyRenderReason | null {
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
-            return { visible: false }
+            return { visible: false, disabledReason: 'SDK is not enabled or survey functionality is not yet loaded' }
         }
         let renderReason: SurveyRenderReason | null = null
         this.getSurveys((surveys) => {
             const survey = surveys.filter((x) => x.id === surveyId)[0]
             if (survey) {
                 renderReason = { ...this._surveyManager.canRenderSurvey(survey) }
+            } else {
+                renderReason = { visible: false, disabledReason: 'Survey not found' }
             }
         })
         return renderReason
