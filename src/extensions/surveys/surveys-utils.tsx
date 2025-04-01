@@ -336,10 +336,10 @@ export const style = (appearance: SurveyAppearance | null) => {
           }
           `
 
-    
-    return styles.replace(/[\n\r\t]+/g, ' ')  // remove newlines/tabs
-    .replace(/\s{2,}/g, ' ')     // collapse extra spaces
-    .trim()
+    return styles
+        .replace(/[\n\r\t]+/g, ' ') // remove newlines/tabs
+        .replace(/\s{2,}/g, ' ') // collapse extra spaces
+        .trim()
 }
 
 function nameToHex(name: string) {
