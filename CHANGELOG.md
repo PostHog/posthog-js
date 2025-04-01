@@ -1,3 +1,7 @@
+## 1.234.5 - 2025-04-01
+
+- fix: focus open input field on choice click (#1856)
+
 ## 1.234.4 - 2025-03-31
 
 
