@@ -5,7 +5,7 @@ import posthog from 'posthog-js'
 export default defineNuxtPlugin(() => {
     const runtimeConfig = useRuntimeConfig()
     const posthogClient = posthog.init(runtimeConfig.public.posthogPublicKey, {
-        api_host: runtimeConfig.public.posthogHost || 'https://us.i.posthog.com',
+        api_host: runtimeConfig.public.posthogHost,
         capture_pageview: false, // we add manual pageview capturing below
         capture_pageleave: true, // automatically capture a pageleave event when the user leaves the site or closes the tab
         loaded: (posthog) => {
