@@ -2,8 +2,8 @@
 export default defineNuxtConfig({
     runtimeConfig: {
         public: {
-            posthogPublicKey: '<ph_project_api_key>',
-            posthogHost: '<ph_client_api_host>',
+            posthogPublicKey: process.env.NUXT_PUBLIC_POSTHOG_KEY || '<ph_project_api_key>',
+            posthogHost: process.env.NUXT_PUBLIC_POSTHOG_HOST || '<ph_client_api_host>',
         },
     },
 
