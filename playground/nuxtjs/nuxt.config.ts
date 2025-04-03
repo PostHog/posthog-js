@@ -1,9 +1,9 @@
-// https://nuxt.com/docs/api/configuration/nuxt-config
+// Keep in sync with https://github.com/PostHog/posthog.com/blob/master/contents/docs/integrate/_snippets/install-nuxt.mdx
 export default defineNuxtConfig({
     runtimeConfig: {
         public: {
-            posthogPublicKey: '<posthog_project_api_key>',
-            posthogHost: '<posthog_instance_address>',
+            posthogPublicKey: '<ph_project_api_key>',
+            posthogHost: '<ph_client_api_host>',
         },
     },
 
