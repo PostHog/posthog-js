@@ -43,7 +43,8 @@ export const style = (appearance: SurveyAppearance | null) => {
             transform: translateX(-50%);
           `,
     }
-    return `
+
+    const styles = `
           .survey-form, .thank-you-message {
               position: fixed;
               margin: 0px;
@@ -334,6 +335,11 @@ export const style = (appearance: SurveyAppearance | null) => {
               margin-top: 14px;
           }
           `
+
+    return styles
+        .replace(/[\n\r\t]+/g, ' ') // remove newlines/tabs
+        .replace(/\s{2,}/g, ' ') // collapse extra spaces
+        .trim()
 }
 
 function nameToHex(name: string) {

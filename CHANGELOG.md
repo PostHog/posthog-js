@@ -1,3 +1,13 @@
+## 1.234.8 - 2025-04-04
+
+- chore: deduplicate all $set calls done from setPersonProperties (#1813)
+
+## 1.234.7 - 2025-04-03
+
+- fix: clean styles to prevent <br> tags (#1863)
+- docs: Keep nuxt examples in sync with nuxt playground (#1867)
+- Add autocapture playground page (#1864)
+
 ## 1.234.6 - 2025-04-01
 
 
