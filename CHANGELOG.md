@@ -1,3 +1,7 @@
+## 1.234.8 - 2025-04-04
+
+- chore: deduplicate all $set calls done from setPersonProperties (#1813)
+
 ## 1.234.7 - 2025-04-03
 
 - fix: clean styles to prevent <br> tags (#1863)
