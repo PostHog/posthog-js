@@ -927,9 +927,13 @@ export function FeedbackWidget({
                 // Calculate position based on the selector button
                 const buttonRect = (event.currentTarget as HTMLElement).getBoundingClientRect()
                 const viewportHeight = window.innerHeight
+                const viewportWidth = window.innerWidth
 
                 // Get survey width from maxWidth or default to 300px
                 const surveyWidth = parseInt(survey.appearance?.maxWidth || '300')
+
+                // Estimated minimum survey height (we don't know exact height yet)
+                const estimatedMinSurveyHeight = 250
 
                 // Calculate horizontal center position of the button
                 const buttonCenterX = buttonRect.left + buttonRect.width / 2
@@ -937,60 +941,46 @@ export function FeedbackWidget({
                 // Calculate horizontal center position
                 let left = buttonCenterX - surveyWidth / 2
 
-                // Ensure the survey doesn't go off-screen horizontally
-                const rightEdge = left + surveyWidth
-                if (rightEdge > window.innerWidth) {
-                    left = window.innerWidth - surveyWidth - 20 // 20px padding from right edge
+                // Ensure the survey doesn't go off-screen horizontally (with padding)
+                const horizontalPadding = 20
+                if (left + surveyWidth > viewportWidth - horizontalPadding) {
+                    left = viewportWidth - surveyWidth - horizontalPadding
                 }
-                if (left < 20) {
-                    left = 20 // 20px padding from left edge
-                }
-
-                // Determine if we should show above or below
-                let showAbove = false
-
-                // Check if there's enough space below (need at least 300px)
-                // If not enough space below, show above
-                if (buttonRect.bottom + 300 > viewportHeight) {
-                    showAbove = true
+                if (left < horizontalPadding) {
+                    left = horizontalPadding
                 }
 
                 // Simple spacing between button and survey
                 const spacing = 12
 
-                // Calculate positions
-                let topPosition
+                // Determine if we should show above or below
+                const spaceBelow = viewportHeight - buttonRect.bottom
+                const spaceAbove = buttonRect.top
 
-                if (showAbove) {
-                    // Problem: When showing above, we're trying to position based on an estimated height,
-                    // but we don't know the actual height of the survey yet.
-                    // Solution: Instead of using top positioning for above, use bottom positioning
-                    // This will anchor the survey to the bottom edge at the button's top position
-                    topPosition = null // We'll use bottom positioning instead
-                } else {
-                    // When showing below, position the top of the survey below the button plus spacing
-                    topPosition = buttonRect.bottom + window.scrollY + spacing
-                }
+                // Prefer below if there's enough space, otherwise try above
+                const showAbove = spaceBelow < estimatedMinSurveyHeight && spaceAbove > spaceBelow
+
+                // If both above and below have insufficient space, prefer below as fallback
+                // For positioning logic only - scrolling will still make it accessible
 
                 // Set style overrides for positioning
-                setStyle({
-                    position: 'fixed',
-                    top: showAbove ? 'auto' : topPosition + 'px',
+                setStyle((prev) => ({
+                    ...prev,
+                    position: 'fixed', // Fixed to viewport
+                    top: showAbove ? 'auto' : buttonRect.bottom + spacing + 'px',
                     left: left + 'px',
                     right: 'auto',
-                    bottom: showAbove ? window.innerHeight - buttonRect.top + spacing + 'px' : 'auto',
-                    transform: 'none',
-                    border: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
-                    borderRadius: '10px',
-                    width: `${surveyWidth}px`,
-                    zIndex: SURVEY_DEFAULT_Z_INDEX,
+                    bottom: showAbove ? viewportHeight - buttonRect.top + spacing + 'px' : 'auto',
                     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                    maxHeight: showAbove
-                        ? `calc(100vh - 40px - ${spacing * 2}px)`
-                        : `calc(100vh - ${topPosition}px - 20px)`,
-                })
+                    borderBottom: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
+                    borderRadius: '10px',
+                    zIndex: SURVEY_DEFAULT_Z_INDEX, // High z-index to ensure visibility
+                }))
 
                 setShowSurvey(!showSurvey)
+
+                // Prevent event from bubbling up to parent elements
+                event.stopPropagation()
             })
 
             widget?.setAttribute('PHWidgetSurveyClickListener', 'true')
