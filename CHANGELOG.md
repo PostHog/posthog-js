@@ -1,3 +1,7 @@
+## 1.234.9 - 2025-04-04
+
+- fix: survey feedback button anchoring to trigger (#1865)
+
 ## 1.234.8 - 2025-04-04
 
 - chore: deduplicate all $set calls done from setPersonProperties (#1813)
