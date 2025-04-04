@@ -156,6 +156,7 @@ export function getNextSurveyStep(
 export class SurveyManager {
     private posthog: PostHog
     private surveyInFocus: string | null
+    private surveyTimeouts: Map<string, NodeJS.Timeout> = new Map()
 
     constructor(posthog: PostHog) {
         this.posthog = posthog
@@ -177,6 +178,14 @@ export class SurveyManager {
         return true
     }
 
+    private clearSurveyTimeout(surveyId: string) {
+        const timeout = this.surveyTimeouts.get(surveyId)
+        if (timeout) {
+            clearTimeout(timeout)
+            this.surveyTimeouts.delete(surveyId)
+        }
+    }
+
     private handlePopoverSurvey = (survey: Survey): void => {
         const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
         const lastSeenSurveyDate = localStorage.getItem(`lastSeenSurveyDate`)
@@ -187,18 +196,39 @@ export class SurveyManager {
 
         const surveySeen = getSurveySeen(survey)
         if (!surveySeen) {
+            this.clearSurveyTimeout(survey.id)
             this.addSurveyToFocus(survey.id)
+            const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
             const shadow = createShadow(style(survey?.appearance), survey.id, undefined, this.posthog)
-            Preact.render(
-                <SurveyPopup
-                    key={'popover-survey'}
-                    posthog={this.posthog}
-                    survey={survey}
-                    removeSurveyFromFocus={this.removeSurveyFromFocus}
-                    isPopup={true}
-                />,
-                shadow
-            )
+            if (delaySeconds <= 0) {
+                return Preact.render(
+                    <SurveyPopup
+                        key={'popover-survey'}
+                        posthog={this.posthog}
+                        survey={survey}
+                        removeSurveyFromFocus={this.removeSurveyFromFocus}
+                        isPopup={true}
+                    />,
+                    shadow
+                )
+            }
+            const timeoutId = setTimeout(() => {
+                if (!doesSurveyUrlMatch(survey)) {
+                    return this.removeSurveyFromFocus(survey.id)
+                }
+                // rendering with surveyPopupDelaySeconds = 0 because we're already handling the timeout here
+                Preact.render(
+                    <SurveyPopup
+                        key={'popover-survey'}
+                        posthog={this.posthog}
+                        survey={{ ...survey, appearance: { ...survey.appearance, surveyPopupDelaySeconds: 0 } }}
+                        removeSurveyFromFocus={this.removeSurveyFromFocus}
+                        isPopup={true}
+                    />,
+                    shadow
+                )
+            }, delaySeconds * 1000)
+            this.surveyTimeouts.set(survey.id, timeoutId)
         }
     }
 
@@ -371,6 +401,7 @@ export class SurveyManager {
         if (this.surveyInFocus !== id) {
             logger.error(`Survey ${id} is not in focus. Cannot remove survey ${id}.`)
         }
+        this.clearSurveyTimeout(id)
         this.surveyInFocus = null
     }
 
@@ -380,6 +411,7 @@ export class SurveyManager {
             addSurveyToFocus: this.addSurveyToFocus,
             removeSurveyFromFocus: this.removeSurveyFromFocus,
             surveyInFocus: this.surveyInFocus,
+            surveyTimeouts: this.surveyTimeouts,
             canShowNextEventBasedSurvey: this.canShowNextEventBasedSurvey,
             handleWidget: this.handleWidget,
             handlePopoverSurvey: this.handlePopoverSurvey,
@@ -595,7 +627,6 @@ export function usePopupVisibility(
 
         const showSurvey = () => {
             // check if the url is still matching, necessary for delayed surveys, as the URL may have changed
-            // since the survey was scheduled to appear
             if (!doesSurveyUrlMatch(survey)) {
                 return
             }
@@ -620,33 +651,25 @@ export function usePopupVisibility(
             }, 100)
         }
 
-        const handleShowSurveyWithDelay = () => {
-            const timeoutId = setTimeout(() => {
-                showSurvey()
-            }, millisecondDelay)
+        addEventListener(window, 'PHSurveyClosed', handleSurveyClosed)
+        addEventListener(window, 'PHSurveySent', handleSurveySent)
 
+        if (millisecondDelay > 0) {
+            // This path is only used for direct usage of SurveyPopup,
+            // not for surveys managed by SurveyManager
+            const timeoutId = setTimeout(showSurvey, millisecondDelay)
             return () => {
                 clearTimeout(timeoutId)
                 window.removeEventListener('PHSurveyClosed', handleSurveyClosed)
                 window.removeEventListener('PHSurveySent', handleSurveySent)
             }
-        }
-
-        const handleShowSurveyImmediately = () => {
+        } else {
+            // This is the path used for surveys managed by SurveyManager
             showSurvey()
             return () => {
                 window.removeEventListener('PHSurveyClosed', handleSurveyClosed)
                 window.removeEventListener('PHSurveySent', handleSurveySent)
             }
-        }
-
-        addEventListener(window, 'PHSurveyClosed', handleSurveyClosed)
-        addEventListener(window, 'PHSurveySent', handleSurveySent)
-
-        if (millisecondDelay > 0) {
-            return handleShowSurveyWithDelay()
-        } else {
-            return handleShowSurveyImmediately()
         }
     }, [])
 
@@ -670,7 +693,7 @@ interface SurveyPopupProps {
     isPopup?: boolean
     onPreviewSubmit?: (res: string | string[] | number | null) => void
     onPopupSurveyDismissed?: () => void
-    onPopupSurveySent?: () => void
+    onCloseConfirmationMessage?: () => void
 }
 
 export function SurveyPopup({
@@ -683,7 +706,7 @@ export function SurveyPopup({
     isPopup,
     onPreviewSubmit = () => {},
     onPopupSurveyDismissed = () => {},
-    onPopupSurveySent = () => {},
+    onCloseConfirmationMessage = () => {},
 }: SurveyPopupProps) {
     const isPreviewMode = Number.isInteger(previewPageIndex)
     // NB: The client-side code passes the millisecondDelay in seconds, but setTimeout expects milliseconds, so we multiply by 1000
@@ -718,9 +741,6 @@ export function SurveyPopup({
                 },
                 isPopup: isPopup || false,
                 onPreviewSubmit,
-                onPopupSurveySent: () => {
-                    onPopupSurveySent()
-                },
             }}
         >
             {!shouldShowConfirmation ? (
@@ -738,7 +758,10 @@ export function SurveyPopup({
                     contentType={survey.appearance?.thankYouMessageDescriptionContentType}
                     appearance={survey.appearance || defaultSurveyAppearance}
                     styleOverrides={{ ...style, ...confirmationBoxLeftStyle }}
-                    onClose={() => setIsPopupVisible(false)}
+                    onClose={() => {
+                        setIsPopupVisible(false)
+                        onCloseConfirmationMessage()
+                    }}
                 />
             )}
         </SurveyContext.Provider>
@@ -760,8 +783,7 @@ export function Questions({
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
     )
     const [questionsResponses, setQuestionsResponses] = useState({})
-    const { previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit, onPopupSurveySent } =
-        useContext(SurveyContext)
+    const { previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit } = useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
@@ -796,7 +818,6 @@ export function Questions({
         const nextStep = getNextSurveyStep(survey, displayQuestionIndex, res)
         if (nextStep === SurveyQuestionBranchingType.End) {
             sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
-            onPopupSurveySent()
         } else {
             setCurrentQuestionIndex(nextStep)
         }
@@ -1013,7 +1034,7 @@ export function FeedbackWidget({
                     removeSurveyFromFocus={removeSurveyFromFocus}
                     isPopup={true}
                     onPopupSurveyDismissed={resetShowSurvey}
-                    onPopupSurveySent={resetShowSurvey}
+                    onCloseConfirmationMessage={resetShowSurvey}
                 />
             )}
         </Preact.Fragment>

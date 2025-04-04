@@ -13,6 +13,7 @@ import {
 } from './constants'
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { ExceptionObserver } from './extensions/exception-autocapture'
+import { errorToProperties } from './extensions/exception-autocapture/error-conversion'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
@@ -25,7 +26,7 @@ import { PostHogExceptions } from './posthog-exceptions'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import { PostHogSurveys } from './posthog-surveys'
-import { SurveyCallback } from './posthog-surveys-types'
+import { SurveyCallback, SurveyRenderReason } from './posthog-surveys-types'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
@@ -863,6 +864,13 @@ export class PostHog {
             return
         }
 
+        if (properties?.$current_url && !isString(properties?.$current_url)) {
+            logger.error(
+                'Invalid `$current_url` property provided to `posthog.capture`. Input must be a string. Ignoring provided value.'
+            )
+            delete properties?.$current_url
+        }
+
         // update persistence
         this.sessionPersistence.update_search_keyword()
 
@@ -1315,6 +1323,24 @@ export class PostHog {
     }
 
     /*
+     * Register an event listener that runs when surveys are loaded.
+     *
+     * ### Usage:
+     *
+     *     posthog.onSurveysLoaded((surveys, context) => { // do something })
+     *
+     * Callback parameters:
+     * - surveys: Survey[]: An array containing all survey objects fetched from PostHog using the getSurveys method
+     * - context: { isLoaded: boolean, error?: string }: An object indicating if the surveys were loaded successfully
+     *
+     * @param {Function} callback The callback function will be called when surveys are loaded or updated.
+     * @returns {Function} A function that can be called to unsubscribe the listener.
+     */
+    onSurveysLoaded(callback: SurveyCallback): () => void {
+        return this.surveys.onSurveysLoaded(callback)
+    }
+
+    /*
      * Register an event listener that runs whenever the session id or window id change.
      * If there is already a session id, the listener is called immediately in addition to being called on future changes.
      *
@@ -1347,8 +1373,8 @@ export class PostHog {
     }
 
     /** Checks the feature flags associated with this Survey to see if the survey can be rendered. */
-    canRenderSurvey(surveyId: string): void {
-        this.surveys.canRenderSurvey(surveyId)
+    canRenderSurvey(surveyId: string): SurveyRenderReason | null {
+        return this.surveys.canRenderSurvey(surveyId)
     }
 
     /**
@@ -1792,11 +1818,18 @@ export class PostHog {
             }
             if (this.config.debug) {
                 Config.DEBUG = true
-                logger.info('set_config', {
-                    config,
-                    oldConfig,
-                    newConfig: { ...this.config },
-                })
+                logger.info(
+                    'set_config',
+                    JSON.stringify(
+                        {
+                            config,
+                            oldConfig,
+                            newConfig: { ...this.config },
+                        },
+                        null,
+                        2
+                    )
+                )
             }
 
             this.sessionRecording?.startIfEnabledOrStop()
@@ -1869,37 +1902,16 @@ export class PostHog {
     /** Capture a caught exception manually */
     captureException(error: unknown, additionalProperties?: Properties): void {
         const syntheticException = new Error('PostHog syntheticException')
-        const properties: Properties = isFunction(assignableWindow.__PosthogExtensions__?.parseErrorAsProperties)
-            ? {
-                  ...assignableWindow.__PosthogExtensions__.parseErrorAsProperties(
-                      isError(error) ? { error, event: error.message } : { event: error as Event | string },
-                      // create synthetic error to get stack in cases where user input does not contain one
-                      // creating the exceptions soon into our code as possible means we should only have to
-                      // remove a single frame (this 'captureException' method) from the resultant stack
-                      { syntheticException }
-                  ),
-                  ...additionalProperties,
-              }
-            : {
-                  $exception_level: 'error',
-                  $exception_list: [
-                      {
-                          type: isError(error) ? error.name : 'Error',
-                          value: isError(error)
-                              ? error.message
-                              : isObject(error) && 'message' in error
-                                ? String(error.message)
-                                : String(error),
-                          mechanism: {
-                              handled: true,
-                              synthetic: false,
-                          },
-                      },
-                  ],
-                  ...additionalProperties,
-              }
-
-        this.exceptions.sendExceptionEvent(properties)
+        this.exceptions.sendExceptionEvent({
+            ...errorToProperties(
+                isError(error) ? { error, event: error.message } : { event: error as Event | string },
+                // create synthetic error to get stack in cases where user input does not contain one
+                // creating the exceptions soon into our code as possible means we should only have to
+                // remove a single frame (this 'captureException' method) from the resultant stack
+                { syntheticException }
+            ),
+            ...additionalProperties,
+        })
     }
 
     /**

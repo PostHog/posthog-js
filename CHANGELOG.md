@@ -1,3 +1,100 @@
+## 1.234.7 - 2025-04-03
+
+- fix: clean styles to prevent <br> tags (#1863)
+- docs: Keep nuxt examples in sync with nuxt playground (#1867)
+- Add autocapture playground page (#1864)
+
+## 1.234.6 - 2025-04-01
+
+
+
+## 1.234.5 - 2025-04-01
+
+- fix: focus open input field on choice click (#1856)
+
+## 1.234.4 - 2025-03-31
+
+
+
+## 1.234.3 - 2025-03-31
+
+
+
+## 1.234.2 - 2025-03-28
+
+- fix: do not always wrap console.error (#1853)
+- fix(err): message must always be a string (#1852)
+
+## 1.234.1 - 2025-03-27
+
+
+
+## 1.234.0 - 2025-03-27
+
+- feat: always include stack trace parsing (#1850)
+
+## 1.233.1 - 2025-03-26
+
+- Send timezone to flags v2 (#1849)
+
+## 1.233.0 - 2025-03-26
+
+- feat: capture console errors (#1771)
+- chore(flags): use the new `/flags` endpoint to manage flag evaluation for team 2 (#1841)
+
+## 1.232.7 - 2025-03-25
+
+- chore: add onSurveysLoaded listener (#1834)
+
+## 1.232.6 - 2025-03-24
+
+
+
+## 1.232.5 - 2025-03-24
+
+- fix: Switch from regex to trim (#1847)
+
+## 1.232.4 - 2025-03-21
+
+- Revert "Revert "feat: Enjoy the benefits of `/decide?v=4` (#1838)" (#1842)" (#1843)
+
+## 1.232.3 - 2025-03-21
+
+- Revert "feat: Enjoy the benefits of `/decide?v=4` (#1838)" (#1842)
+
+## 1.232.2 - 2025-03-20
+
+- feat: Enjoy the benefits of `/decide?v=4` (#1838)
+
+## 1.232.1 - 2025-03-20
+
+- feat: Screen dimensions and UA as person property (#1840)
+
+## 1.232.0 - 2025-03-20
+
+- feat: do not start recorder active-active (#1839)
+- chore(dev): add config to make debugging with vs code and the orta jest extension… (#1836)
+- feat(flags): Support `/decide?v=4` and include version info flag called events (#1837)
+
+## 1.231.3 - 2025-03-19
+
+- fix: do not allow non string `$current_url`  to be provided (#1835)
+
+## 1.231.2 - 2025-03-18
+
+- fix: check surveys timeout in the survey manager level (#1832)
+
+## 1.231.1 - 2025-03-18
+
+- chore: update posthog rrweb (#1831)
+- chore: add a regression example for toolbar z-index highlighting (#1827)
+
+## 1.231.0 - 2025-03-14
+
+- feat: no recording blob urls (#1768)
+- chore: update changelog (#1824)
+- feat: remote image masking (#1826)
+
 ## 1.230.4 - 2025-03-13
 
 - chore: allow push to main in GH actions (#1825)
@@ -5,8 +102,10 @@
 
 ## 1.230.3 - 2025-03-13
 
-This version doesn't exist but we did fail to publish it, since then patch version bump has been failing
-We have skipped this version
+- fix: session recording class type and typo (#1815)
+- chore: update web vitals (#1820)
+- fix: default mask all inputs must be defined (#1819)
+- fix(err): fix hosts, linting and documentation (#1818)
 
 ## 1.230.2 - 2025-03-11
 

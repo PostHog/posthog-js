@@ -14,13 +14,13 @@
     "scripts": {
         "prebuild": "npm run clean",
         "start": "tsc-watch",
-        "clean": "rimraf -r dist",
+        "clean": "rimraf dist",
         "build": "pnpm clean && cross-env NODE_ENV=production rollup -c rollup.config.ts",
         "test": "jest",
         "test:debug": "jest --runInBand",
         "prepublishOnly": "pnpm test && pnpm build",
         "link-posthog-js": "pnpm link ..",
-        "clean-node-modules": "rimraf -r node_modules && pnpm run link-posthog-js"
+        "clean-node-modules": "rimraf node_modules && pnpm run link-posthog-js"
     },
     "main": "dist/umd/index.js",
     "module": "dist/esm/index.js",

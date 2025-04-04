@@ -1,46 +1,63 @@
 import { assignableWindow, window } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
-import { Properties, RemoteConfig } from '../../types'
+import { ExceptionAutoCaptureConfig, Properties, RemoteConfig } from '../../types'
 
 import { createLogger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
-import { isBoolean, isUndefined } from '../../utils/type-utils'
+import { isObject, isUndefined } from '../../utils/type-utils'
 
 const logger = createLogger('[ExceptionAutocapture]')
 
 export class ExceptionObserver {
     instance: PostHog
     remoteEnabled: boolean | undefined
+    config: Required<ExceptionAutoCaptureConfig>
     private unwrapOnError: (() => void) | undefined
     private unwrapUnhandledRejection: (() => void) | undefined
+    private unwrapConsoleError: (() => void) | undefined
 
     constructor(instance: PostHog) {
         this.instance = instance
         this.remoteEnabled = !!this.instance.persistence?.props[EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]
+        this.config = this.requiredConfig()
 
         this.startIfEnabled()
     }
 
-    public get isEnabled(): boolean {
-        if (isBoolean(this.instance.config.capture_exceptions)) {
-            return this.instance.config.capture_exceptions
+    private requiredConfig(): Required<ExceptionAutoCaptureConfig> {
+        const providedConfig = this.instance.config.capture_exceptions
+        let config = {
+            capture_unhandled_errors: false,
+            capture_unhandled_rejections: false,
+            capture_console_errors: false,
         }
-        return this.remoteEnabled ?? false
+
+        if (isObject(providedConfig)) {
+            config = { ...config, ...providedConfig }
+        } else if (isUndefined(providedConfig) ? this.remoteEnabled : providedConfig) {
+            config = { ...config, capture_unhandled_errors: true, capture_unhandled_rejections: true }
+        }
+
+        return config
     }
 
-    get hasHandlers() {
-        return !isUndefined(this.unwrapOnError)
+    public get isEnabled(): boolean {
+        return (
+            this.config.capture_console_errors ||
+            this.config.capture_unhandled_errors ||
+            this.config.capture_unhandled_rejections
+        )
     }
 
     startIfEnabled(): void {
-        if (this.isEnabled && !this.hasHandlers) {
-            logger.info('enabled, starting...')
+        if (this.isEnabled) {
+            logger.info('enabled')
             this.loadScript(this.startCapturing)
         }
     }
 
     private loadScript(cb: () => void): void {
-        if (this.hasHandlers) {
+        if (assignableWindow.__PosthogExtensions__?.errorWrappingFunctions) {
             // already loaded
             cb()
         }
@@ -58,22 +75,25 @@ export class ExceptionObserver {
     }
 
     private startCapturing = () => {
-        if (!window || !this.isEnabled || this.hasHandlers) {
+        if (!window || !this.isEnabled || !assignableWindow.__PosthogExtensions__?.errorWrappingFunctions) {
             return
         }
 
-        const wrapOnError = assignableWindow.__PosthogExtensions__?.errorWrappingFunctions?.wrapOnError
+        const wrapOnError = assignableWindow.__PosthogExtensions__.errorWrappingFunctions.wrapOnError
         const wrapUnhandledRejection =
-            assignableWindow.__PosthogExtensions__?.errorWrappingFunctions?.wrapUnhandledRejection
-
-        if (!wrapOnError || !wrapUnhandledRejection) {
-            logger.error('failed to load error wrapping functions - cannot start')
-            return
-        }
+            assignableWindow.__PosthogExtensions__.errorWrappingFunctions.wrapUnhandledRejection
+        const wrapConsoleError = assignableWindow.__PosthogExtensions__.errorWrappingFunctions.wrapConsoleError
 
         try {
-            this.unwrapOnError = wrapOnError(this.captureException.bind(this))
-            this.unwrapUnhandledRejection = wrapUnhandledRejection(this.captureException.bind(this))
+            if (!this.unwrapOnError && this.config.capture_unhandled_errors) {
+                this.unwrapOnError = wrapOnError(this.captureException.bind(this))
+            }
+            if (!this.unwrapUnhandledRejection && this.config.capture_unhandled_rejections) {
+                this.unwrapUnhandledRejection = wrapUnhandledRejection(this.captureException.bind(this))
+            }
+            if (!this.unwrapConsoleError && this.config.capture_console_errors) {
+                this.unwrapConsoleError = wrapConsoleError(this.captureException.bind(this))
+            }
         } catch (e) {
             logger.error('failed to start', e)
             this.stopCapturing()
@@ -86,6 +106,9 @@ export class ExceptionObserver {
 
         this.unwrapUnhandledRejection?.()
         this.unwrapUnhandledRejection = undefined
+
+        this.unwrapConsoleError?.()
+        this.unwrapConsoleError = undefined
     }
 
     onRemoteConfig(response: RemoteConfig) {
@@ -93,6 +116,7 @@ export class ExceptionObserver {
 
         // store this in-memory in case persistence is disabled
         this.remoteEnabled = !!autocaptureExceptionsResponse || false
+        this.config = this.requiredConfig()
 
         if (this.instance.persistence) {
             this.instance.persistence.register({

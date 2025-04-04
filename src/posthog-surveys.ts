@@ -1,14 +1,14 @@
 import { SURVEYS } from './constants'
 import { getSurveySeenStorageKeys } from './extensions/surveys/surveys-utils'
 import { PostHog } from './posthog-core'
-import { Survey, SurveyCallback, SurveyMatchType } from './posthog-surveys-types'
+import { Survey, SurveyCallback, SurveyMatchType, SurveyRenderReason } from './posthog-surveys-types'
 import { RemoteConfig } from './types'
 import { Info } from './utils/event-utils'
 import { assignableWindow, document, userAgent, window } from './utils/globals'
 import { createLogger } from './utils/logger'
 import { isMatchingRegex } from './utils/regex-utils'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
-import { isNullish } from './utils/type-utils'
+import { isArray, isNullish } from './utils/type-utils'
 
 const logger = createLogger('[Surveys]')
 
@@ -62,11 +62,12 @@ export function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
 }
 
 export class PostHogSurveys {
-    private _decideServerResponse?: boolean
+    private _hasSurveys?: boolean
     public _surveyEventReceiver: SurveyEventReceiver | null
     private _surveyManager: any
     private _isFetchingSurveys: boolean = false
     private _isInitializingSurveys: boolean = false
+    private _surveyCallbacks: SurveyCallback[] = []
 
     constructor(private readonly instance: PostHog) {
         // we set this to undefined here because we need the persistence storage for this type
@@ -75,10 +76,17 @@ export class PostHogSurveys {
     }
 
     onRemoteConfig(response: RemoteConfig) {
-        this._decideServerResponse = !!response['surveys']
-        logger.info(`decideServerResponse set to ${this._decideServerResponse}`)
-
-        this.loadIfEnabled()
+        // only load surveys if they are enabled and there are surveys to load
+        const surveys = response['surveys']
+        if (isNullish(surveys)) {
+            return logger.warn('Decide not loaded yet. Not loading surveys.')
+        }
+        const isArrayResponse = isArray(surveys)
+        this._hasSurveys = isArrayResponse ? surveys.length > 0 : surveys
+        logger.info(`decide response received, hasSurveys: ${this._hasSurveys}`)
+        if (this._hasSurveys) {
+            this.loadIfEnabled()
+        }
     }
 
     reset(): void {
@@ -112,8 +120,8 @@ export class PostHogSurveys {
             return
         }
 
-        if (!this._decideServerResponse) {
-            logger.warn('Decide not loaded yet. Not loading surveys.')
+        if (!this._hasSurveys) {
+            logger.info('No surveys to load.')
             return
         }
 
@@ -137,21 +145,70 @@ export class PostHogSurveys {
                         this._isInitializingSurveys = false
                         this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
                         logger.info('Surveys loaded successfully')
+                        this._notifySurveyCallbacks({
+                            isLoaded: true,
+                        })
                     })
                 } else {
-                    logger.error('PostHog loadExternalDependency extension not found. Cannot load remote config.')
+                    const error = 'PostHog loadExternalDependency extension not found. Cannot load remote config.'
+                    logger.error(error)
                     this._isInitializingSurveys = false
+                    this._notifySurveyCallbacks({
+                        isLoaded: false,
+                        error,
+                    })
                 }
             } else {
                 this._surveyManager = generateSurveys(this.instance)
                 this._isInitializingSurveys = false
                 this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
                 logger.info('Surveys loaded successfully')
+                this._notifySurveyCallbacks({
+                    isLoaded: true,
+                })
             }
         } catch (e) {
             logger.error('Error initializing surveys', e)
             this._isInitializingSurveys = false
+            this._notifySurveyCallbacks({
+                isLoaded: false,
+                error: 'Error initializing surveys',
+            })
             throw e
+        }
+    }
+
+    /**
+     * Register a callback that runs when surveys are initialized.
+     * ### Usage:
+     *
+     *     posthog.onSurveysLoaded((surveys) => {
+     *         // You can work with all surveys
+     *         console.log('All available surveys:', surveys)
+     *
+     *         // Or get active matching surveys
+     *         posthog.getActiveMatchingSurveys((activeMatchingSurveys) => {
+     *             if (activeMatchingSurveys.length > 0) {
+     *                 posthog.renderSurvey(activeMatchingSurveys[0].id, '#survey-container')
+     *             }
+     *         })
+     *     })
+     *
+     * @param {Function} callback The callback function will be called when surveys are loaded or updated.
+     *                           It receives the array of all surveys and a context object with error status.
+     * @returns {Function} A function that can be called to unsubscribe the listener.
+     */
+    onSurveysLoaded(callback: SurveyCallback): () => void {
+        this._surveyCallbacks.push(callback)
+
+        if (this._surveyManager) {
+            this._notifySurveyCallbacks({
+                isLoaded: true,
+            })
+        }
+        // Return unsubscribe function
+        return () => {
+            this._surveyCallbacks = this._surveyCallbacks.filter((cb: SurveyCallback) => cb !== callback)
         }
     }
 
@@ -168,7 +225,10 @@ export class PostHogSurveys {
         if (!existingSurveys || forceReload) {
             // Prevent concurrent API calls
             if (this._isFetchingSurveys) {
-                return callback([])
+                return callback([], {
+                    isLoaded: false,
+                    error: 'Surveys are already being loaded',
+                })
             }
 
             try {
@@ -184,8 +244,12 @@ export class PostHogSurveys {
                         this._isFetchingSurveys = false
                         const statusCode = response.statusCode
                         if (statusCode !== 200 || !response.json) {
-                            logger.error(`Surveys API could not be loaded, status: ${statusCode}`)
-                            return callback([])
+                            const error = `Surveys API could not be loaded, status: ${statusCode}`
+                            logger.error(error)
+                            return callback([], {
+                                isLoaded: false,
+                                error,
+                            })
                         }
                         const surveys = response.json.surveys || []
 
@@ -204,7 +268,9 @@ export class PostHogSurveys {
                         }
 
                         this.instance.persistence?.register({ [SURVEYS]: surveys })
-                        return callback(surveys)
+                        return callback(surveys, {
+                            isLoaded: true,
+                        })
                     },
                 })
             } catch (e) {
@@ -212,7 +278,24 @@ export class PostHogSurveys {
                 throw e
             }
         } else {
-            return callback(existingSurveys)
+            return callback(existingSurveys, {
+                isLoaded: true,
+            })
+        }
+    }
+
+    /** Helper method to notify all registered callbacks */
+    private _notifySurveyCallbacks(context: { isLoaded: boolean; error?: string }): void {
+        for (const callback of this._surveyCallbacks) {
+            try {
+                if (!context.isLoaded) {
+                    callback([], context)
+                } else {
+                    this.getSurveys(callback)
+                }
+            } catch (error) {
+                logger.error('Error in survey callback', error)
+            }
         }
     }
 
@@ -303,15 +386,21 @@ export class PostHogSurveys {
         return assignableWindow.__PosthogExtensions__.canActivateRepeatedly(survey)
     }
 
-    canRenderSurvey(surveyId: string) {
+    canRenderSurvey(surveyId: string): SurveyRenderReason | null {
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
-            return
+            return { visible: false, disabledReason: 'SDK is not enabled or survey functionality is not yet loaded' }
         }
+        let renderReason: SurveyRenderReason | null = null
         this.getSurveys((surveys) => {
             const survey = surveys.filter((x) => x.id === surveyId)[0]
-            this._surveyManager.canRenderSurvey(survey)
+            if (survey) {
+                renderReason = { ...this._surveyManager.canRenderSurvey(survey) }
+            } else {
+                renderReason = { visible: false, disabledReason: 'Survey not found' }
+            }
         })
+        return renderReason
     }
 
     renderSurvey(surveyId: string, selector: string) {

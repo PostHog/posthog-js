@@ -1,6 +1,7 @@
 import type { recordOptions } from './extensions/replay/types/rrweb'
 import type { SegmentAnalytics } from './extensions/segment-integration'
 import { PostHog } from './posthog-core'
+import { Survey } from './posthog-surveys-types'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -204,6 +205,29 @@ export interface DeadClickCandidate {
     selectionChangedDelayMs?: number
     // if neither scroll nor mutation seen before threshold passed
     absoluteDelayMs?: number
+}
+
+export type ExceptionAutoCaptureConfig = {
+    /**
+     * Determines whether PostHog should capture unhandled errors.
+     *
+     * @default true
+     */
+    capture_unhandled_errors: boolean
+
+    /**
+     * Determines whether PostHog should capture unhandled promise rejections.
+     *
+     * @default true
+     */
+    capture_unhandled_rejections: boolean
+
+    /**
+     * Determines whether PostHog should capture console errors.
+     *
+     * @default false
+     */
+    capture_console_errors: boolean
 }
 
 export type DeadClicksAutoCaptureConfig = {
@@ -802,9 +826,10 @@ export interface PostHogConfig {
     /**
      * Determines whether to capture exceptions.
      *
+     * @see {ExceptionAutoCaptureConfig}
      * @default undefined
      */
-    capture_exceptions?: boolean
+    capture_exceptions?: boolean | ExceptionAutoCaptureConfig
 
     /**
      * Determines whether to disable scroll properties.
@@ -890,6 +915,12 @@ export interface PostHogConfig {
      * Whether to send a sentinel value for distinct id, device id, and session id, which will be replaced server-side by a cookieless hash
      * */
     __preview_experimental_cookieless_mode?: boolean
+
+    /**
+     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
+     * Whether to use the new /flags/ endpoint
+     * */
+    __preview_flags_v2?: boolean
 
     // ------- RETIRED CONFIGS - NO REPLACEMENT OR USAGE -------
 
@@ -1280,7 +1311,7 @@ export interface RemoteConfig {
     /**
      * Whether surveys are enabled
      */
-    surveys?: boolean
+    surveys?: boolean | Survey[]
 
     /**
      * Parameters for the toolbar
@@ -1336,6 +1367,7 @@ export interface DecideResponse extends RemoteConfig {
     featureFlagPayloads: Record<string, JsonType>
     errorsWhileComputingFlags: boolean
     requestId?: string
+    flags: Record<string, FeatureFlagDetail>
 }
 
 export type SiteAppGlobals = {
@@ -1375,6 +1407,33 @@ export type FeatureFlagsCallback = (
         errorsLoading?: boolean
     }
 ) => void
+
+export type FeatureFlagDetail = {
+    key: string
+    enabled: boolean
+    // Only used when overriding a flag payload.
+    original_enabled?: boolean | undefined
+    variant: string | undefined
+    // Only used when overriding a flag payload.
+    original_variant?: string | undefined
+    reason: EvaluationReason | undefined
+    metadata: FeatureFlagMetadata | undefined
+}
+
+export type FeatureFlagMetadata = {
+    id: number
+    version: number | undefined
+    description: string | undefined
+    payload: JsonType | undefined
+    // Only used when overriding a flag payload.
+    original_payload?: JsonType | undefined
+}
+
+export type EvaluationReason = {
+    code: string
+    condition_index: number | undefined
+    description: string | undefined
+}
 
 export type RemoteConfigFeatureFlagCallback = (payload: JsonType) => void
 
@@ -1533,11 +1592,6 @@ export type CapturedNetworkRequest = Writable<Omit<PerformanceEntry, 'toJSON'>> 
     isInitial?: boolean
 }
 
-export type ErrorConversionArgs = {
-    event: string | Event
-    error?: Error
-}
-
 export type ErrorEventArgs = [
     event: string | Event,
     source?: string | undefined,
@@ -1545,16 +1599,6 @@ export type ErrorEventArgs = [
     colno?: number | undefined,
     error?: Error | undefined,
 ]
-
-export type ErrorMetadata = {
-    handled?: boolean
-    synthetic?: boolean
-    syntheticException?: Error
-    overrideExceptionType?: string
-    overrideExceptionMessage?: string
-    defaultExceptionType?: string
-    defaultExceptionMessage?: string
-}
 
 // levels originally copied from Sentry to work with the sentry integration
 // and to avoid relying on a frequently changing @sentry/types dependency
