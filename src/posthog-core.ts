@@ -68,7 +68,7 @@ import {
 import { isLikelyBot } from './utils/blocked-uas'
 import { Info } from './utils/event-utils'
 import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
-import { getIdentifyHash } from './utils/identify-utils'
+import { getPersonPropertiesHash } from './utils/person-property-utils'
 import { logger } from './utils/logger'
 import { RequestRouter, RequestRouterRegion } from './utils/request-router'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
@@ -296,7 +296,7 @@ export class PostHog {
     analyticsDefaultEndpoint: string
     version = Config.LIB_VERSION
     _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
-    _cachedIdentify: string | null
+    _cachedPersonProperties: string | null
 
     SentryIntegration: typeof SentryIntegration
     sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
@@ -324,7 +324,7 @@ export class PostHog {
         this.analyticsDefaultEndpoint = '/e/'
         this._initialPageviewCaptured = false
         this._initialPersonProfilesConfig = null
-        this._cachedIdentify = null
+        this._cachedPersonProperties = null
         this.featureFlags = new PostHogFeatureFlags(this)
         this.toolbar = new Toolbar(this)
         this.scrollManager = new ScrollManager(this)
@@ -1495,24 +1495,21 @@ export class PostHog {
                 },
                 { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} }
             )
+
+            this._cachedPersonProperties = getPersonPropertiesHash(
+                new_distinct_id,
+                userPropertiesToSet,
+                userPropertiesToSetOnce
+            )
+
             // let the reload feature flag request know to send this previous distinct id
             // for flag consistency
             this.featureFlags.setAnonymousDistinctId(previous_distinct_id)
-
-            this._cachedIdentify = getIdentifyHash(new_distinct_id, userPropertiesToSet, userPropertiesToSetOnce)
         } else if (userPropertiesToSet || userPropertiesToSetOnce) {
             // If the distinct_id is not changing, but we have user properties to set, we can check if they have changed
             // and if so, send a $set event
 
-            if (
-                this._cachedIdentify !== getIdentifyHash(new_distinct_id, userPropertiesToSet, userPropertiesToSetOnce)
-            ) {
-                this.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce)
-
-                this._cachedIdentify = getIdentifyHash(new_distinct_id, userPropertiesToSet, userPropertiesToSetOnce)
-            } else {
-                logger.info('A duplicate posthog.identify call was made with the same properties. It has been ignored.')
-            }
+            this.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce)
         }
 
         // Reload active feature flags if the user identity changes.
@@ -1542,12 +1539,20 @@ export class PostHog {
             return
         }
 
+        const hash = getPersonPropertiesHash(this.get_distinct_id(), userPropertiesToSet, userPropertiesToSetOnce)
+
+        // if exactly this $set call has been sent before, don't send it again - determine based on hash of properties
+        if (this._cachedPersonProperties === hash) {
+            logger.info('A duplicate setPersonProperties call was made with the same properties. It has been ignored.')
+            return
+        }
+
         // Update current user properties
         this.setPersonPropertiesForFlags({ ...(userPropertiesToSetOnce || {}), ...(userPropertiesToSet || {}) })
 
-        // if exactly this $set call has been sent before, don't send it again - determine based on hash of properties
-
         this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
+
+        this._cachedPersonProperties = hash
     }
 
     /**
@@ -1655,7 +1660,7 @@ export class PostHog {
         this.surveys.reset()
         this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()
-        this._cachedIdentify = null
+        this._cachedPersonProperties = null
         if (this.config.__preview_experimental_cookieless_mode) {
             this.register_once(
                 {

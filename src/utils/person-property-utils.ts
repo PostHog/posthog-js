@@ -1,7 +1,7 @@
 import { jsonStringify } from '../request'
 import type { Properties } from '../types'
 
-export function getIdentifyHash(
+export function getPersonPropertiesHash(
     distinct_id: string,
     userPropertiesToSet?: Properties,
     userPropertiesToSetOnce?: Properties
