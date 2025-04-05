@@ -1,12 +1,12 @@
 import babel from '@rollup/plugin-babel'
 import replace from '@rollup/plugin-replace'
-import json from '@rollup/plugin-json'
 import resolve from '@rollup/plugin-node-resolve'
 import typescript from '@rollup/plugin-typescript'
 import { dts } from 'rollup-plugin-dts'
 import terser from '@rollup/plugin-terser'
 import { visualizer } from 'rollup-plugin-visualizer'
 import commonjs from '@rollup/plugin-commonjs'
+import { version } from './package.json' assert { type: 'json' }
 import fs from 'fs'
 import path from 'path'
 
@@ -14,6 +14,7 @@ const plugins = (es5, minimal) => [
     replace(
         minimal
             ? {
+                  BUILD_VERSION: JSON.stringify(version),
                   MINIMAL_BUILD: true,
                   'logger.debug': 'console.debug',
                   'logger.info': 'console.info',
@@ -22,12 +23,19 @@ const plugins = (es5, minimal) => [
                   preventAssignment: true,
               }
             : {
+                  BUILD_VERSION: JSON.stringify(version),
                   preventAssignment: true,
               }
     ),
-    json(),
     resolve({ browser: true }),
-    typescript({ sourceMap: true, outDir: './dist' }),
+    typescript({
+        sourceMap: true,
+        declaration: false,
+        outDir: './dist',
+        compilerOptions: {
+            target: 'ESNext',
+        },
+    }),
     commonjs(),
     babel({
         extensions: ['.js', '.jsx', '.ts', '.tsx'],
@@ -122,7 +130,7 @@ const entrypointTargets = entrypoints.map((file) => {
 const typeTargets = entrypoints
     .filter((file) => file.endsWith('.es.ts'))
     .map((file) => {
-        const source = `./lib/src/entrypoints/${file.replace('.ts', '.d.ts')}`
+        const source = `./lib/entrypoints/${file.replace('.ts', '.d.ts')}`
         /** @type {import('rollup').RollupOptions} */
         return {
             input: source,
@@ -133,7 +141,6 @@ const typeTargets = entrypoints
                 },
             ],
             plugins: [
-                json(),
                 dts({
                     exclude: [],
                 }),
