@@ -7,6 +7,7 @@ import terser from '@rollup/plugin-terser'
 import { visualizer } from 'rollup-plugin-visualizer'
 import commonjs from '@rollup/plugin-commonjs'
 import { version } from './package.json' assert { type: 'json' }
+import privatePrefixerTransformer from './plugins/ts-private-prefixer'
 import fs from 'fs'
 import path from 'path'
 
@@ -35,6 +36,13 @@ const plugins = (es5, minimal) => [
         compilerOptions: {
             target: 'ESNext',
         },
+        transformers: minimal
+            ? function (program) {
+                  return {
+                      before: [privatePrefixerTransformer(program)],
+                  }
+              }
+            : undefined,
     }),
     commonjs(),
     babel({
@@ -78,6 +86,13 @@ const plugins = (es5, minimal) => [
             ecma: es5 ? 5 : 6,
             drop_console: minimal ? ['log', 'info', 'warn', 'debug'] : false,
         },
+        mangle: minimal
+            ? {
+                  properties: {
+                      regex: /^_ಠ_ಠ_[\w_$]+/,
+                  },
+              }
+            : true,
     }),
 ]
 

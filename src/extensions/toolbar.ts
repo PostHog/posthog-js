@@ -24,7 +24,7 @@ enum ToolbarState {
 }
 
 export class Toolbar {
-    instance: PostHog
+    private instance: PostHog
 
     constructor(instance: PostHog) {
         this.instance = instance

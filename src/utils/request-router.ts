@@ -17,7 +17,7 @@ export type RequestRouterTarget = 'api' | 'ui' | 'assets'
 const ingestionDomain = 'i.posthog.com'
 
 export class RequestRouter {
-    instance: PostHog
+    private instance: PostHog
     private _regionCache: Record<string, RequestRouterRegion> = {}
 
     constructor(instance: PostHog) {

@@ -13,12 +13,12 @@ interface CaptureResponse {
 }
 
 export class RateLimiter {
-    instance: PostHog
+    private instance: PostHog
     serverLimits: Record<string, number> = {}
 
-    captureEventsPerSecond: number
-    captureEventsBurstLimit: number
-    lastEventRateLimited = false
+    private captureEventsPerSecond: number
+    private captureEventsBurstLimit: number
+    private lastEventRateLimited = false
 
     constructor(instance: PostHog) {
         this.instance = instance

@@ -289,19 +289,19 @@ export class PostHog {
     deadClicksAutocapture?: DeadClicksAutocapture
 
     _requestQueue?: RequestQueue
-    _retryQueue?: RetryQueue
+    private _retryQueue?: RetryQueue
     sessionRecording?: SessionRecording
     webPerformance = new DeprecatedWebPerformanceObserver()
 
-    _initialPageviewCaptured: boolean
-    _personProcessingSetOncePropertiesSent: boolean = false
-    _triggered_notifs: any
+    private _initialPageviewCaptured: boolean
+    private _personProcessingSetOncePropertiesSent: boolean = false
+    private _triggered_notifs: any
     compression?: Compression
-    __request_queue: QueuedRequestWithOptions[]
+    private __request_queue: QueuedRequestWithOptions[]
     analyticsDefaultEndpoint: string
     version = Config.LIB_VERSION
-    _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
-    _cachedPersonProperties: string | null
+    private _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
+    private _cachedPersonProperties: string | null
 
     SentryIntegration?: typeof SentryIntegration
     sentryIntegration?: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>

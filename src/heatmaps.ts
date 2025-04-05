@@ -45,11 +45,11 @@ function isValidMouseEvent(e: unknown): e is MouseEvent {
 }
 
 export class Heatmaps {
-    instance: PostHog
-    rageclicks = new RageClick()
-    _enabledServerSide: boolean = false
-    _initialized = false
-    _mouseMoveTimeout: ReturnType<typeof setTimeout> | undefined
+    private instance: PostHog
+    private rageclicks = new RageClick()
+    private _enabledServerSide: boolean = false
+    private _initialized = false
+    private _mouseMoveTimeout: ReturnType<typeof setTimeout> | undefined
 
     // TODO: Periodically flush this if no other event has taken care of it
     private buffer: HeatmapEventBuffer

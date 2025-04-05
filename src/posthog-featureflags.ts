@@ -153,9 +153,9 @@ export enum QuotaLimitedResource {
 }
 
 export class PostHogFeatureFlags {
-    _override_warning: boolean = false
-    featureFlagEventHandlers: FeatureFlagsCallback[]
-    $anon_distinct_id: string | undefined
+    private _override_warning: boolean = false
+    private featureFlagEventHandlers: FeatureFlagsCallback[]
+    private $anon_distinct_id: string | undefined
     private _hasLoadedFlags: boolean = false
     private _requestInFlight: boolean = false
     private _reloadingDisabled: boolean = false
