@@ -1,4 +1,5 @@
 import babel from '@rollup/plugin-babel'
+import replace from '@rollup/plugin-replace'
 import json from '@rollup/plugin-json'
 import resolve from '@rollup/plugin-node-resolve'
 import typescript from '@rollup/plugin-typescript'
@@ -9,7 +10,17 @@ import commonjs from '@rollup/plugin-commonjs'
 import fs from 'fs'
 import path from 'path'
 
-const plugins = (es5) => [
+const plugins = (es5, minimal) => [
+    replace(
+        minimal
+            ? {
+                  MINIMAL_BUILD: true,
+                  preventAssignment: true,
+              }
+            : {
+                  preventAssignment: true,
+              }
+    ),
     json(),
     resolve({ browser: true }),
     typescript({ sourceMap: true, outDir: './dist' }),
@@ -74,7 +85,7 @@ const entrypointTargets = entrypoints.map((file) => {
 
     const fileName = fileParts.join('.')
 
-    const pluginsForThisFile = plugins(fileName.includes('es5'))
+    const pluginsForThisFile = plugins(fileName.includes('es5'), fileName.includes('minimal'))
 
     // we're allowed to console log in this file :)
     // eslint-disable-next-line no-console

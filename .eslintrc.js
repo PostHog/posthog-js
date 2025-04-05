@@ -33,6 +33,11 @@ module.exports = {
         given: 'readonly',
         global: 'readonly',
         Buffer: 'readonly',
+<<<<<<< Updated upstream
+=======
+        MINIMAL_BUILD: 'readonly',
+        BUILD_VERSION: 'readonly',
+>>>>>>> Stashed changes
     },
     parser: '@typescript-eslint/parser',
     parserOptions: {

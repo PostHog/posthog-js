@@ -500,7 +500,7 @@ export class PostHogFeatureFlags {
                 }
 
                 if (!isUndefined(flagDetails?.metadata?.version)) {
-                    properties.$feature_flag_version = flagDetails.metadata.version
+                    properties.$feature_flag_version = flagDetails!.metadata!.version
                 }
 
                 const reason = flagDetails?.reason?.description ?? flagDetails?.reason?.code
@@ -516,9 +516,9 @@ export class PostHogFeatureFlags {
                 // We want to capture the original values in case someone forgets they were using overrides
                 // and is wondering why their app is acting weird.
                 if (!isUndefined(flagDetails?.original_variant) || !isUndefined(flagDetails?.original_enabled)) {
-                    properties.$feature_flag_original_response = !isUndefined(flagDetails.original_variant)
-                        ? flagDetails.original_variant
-                        : flagDetails.original_enabled
+                    properties.$feature_flag_original_response = !isUndefined(flagDetails?.original_variant)
+                        ? flagDetails!.original_variant
+                        : flagDetails!.original_enabled
                 }
 
                 if (flagDetails?.metadata?.original_payload) {

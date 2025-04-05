@@ -134,6 +134,6 @@ export class ExceptionObserver {
             this.instance.config.token
         }/person/${this.instance.get_distinct_id()}`
 
-        this.instance.exceptions.sendExceptionEvent(errorProperties)
+        this.instance.exceptions?.sendExceptionEvent(errorProperties)
     }
 }
