@@ -1266,6 +1266,10 @@ export class PostHog {
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
     getFeatureFlag(key: string, options?: { send_event?: boolean }): boolean | string | undefined {
+        if (MINIMAL_BUILD) {
+            return
+        }
+
         return this.featureFlags?.getFeatureFlag(key, options)
     }
 
@@ -1282,6 +1286,10 @@ export class PostHog {
      * @param {Object|String} prop Key of the feature flag.
      */
     getFeatureFlagPayload(key: string): JsonType {
+        if (MINIMAL_BUILD) {
+            return
+        }
+
         const payload = this.featureFlags?.getFeatureFlagPayload(key)
         try {
             return JSON.parse(payload as any)
@@ -1301,15 +1309,27 @@ export class PostHog {
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
     isFeatureEnabled(key: string, options?: { send_event: boolean }): boolean | undefined {
+        if (MINIMAL_BUILD) {
+            return
+        }
+
         return this.featureFlags?.isFeatureEnabled(key, options)
     }
 
     reloadFeatureFlags(): void {
+        if (MINIMAL_BUILD) {
+            return
+        }
+
         this.featureFlags?.reloadFeatureFlags()
     }
 
     /** Opt the user in or out of an early access feature. */
     updateEarlyAccessFeatureEnrollment(key: string, isEnrolled: boolean): void {
+        if (MINIMAL_BUILD) {
+            return
+        }
+
         this.featureFlags?.updateEarlyAccessFeatureEnrollment(key, isEnrolled)
     }
 
@@ -1319,6 +1339,10 @@ export class PostHog {
         force_reload = false,
         stages?: EarlyAccessFeatureStage[]
     ): void {
+        if (MINIMAL_BUILD) {
+            return
+        }
+
         return this.featureFlags?.getEarlyAccessFeatures(callback, force_reload, stages)
     }
 
@@ -1349,6 +1373,10 @@ export class PostHog {
      * @returns {Function} A function that can be called to unsubscribe the listener. Used by useEffect when the component unmounts.
      */
     onFeatureFlags(callback: FeatureFlagsCallback): () => void {
+        if (MINIMAL_BUILD) {
+            return __NOOP
+        }
+
         return this.featureFlags?.onFeatureFlags(callback) || __NOOP
     }
 
@@ -1367,6 +1395,10 @@ export class PostHog {
      * @returns {Function} A function that can be called to unsubscribe the listener.
      */
     onSurveysLoaded(callback: SurveyCallback): () => void {
+        if (MINIMAL_BUILD) {
+            return __NOOP
+        }
+
         return this.surveys?.onSurveysLoaded(callback) || __NOOP
     }
 
@@ -1389,21 +1421,37 @@ export class PostHog {
 
     /** Get list of all surveys. */
     getSurveys(callback: SurveyCallback, forceReload = false): void {
+        if (MINIMAL_BUILD) {
+            return
+        }
+
         this.surveys?.getSurveys(callback, forceReload)
     }
 
     /** Get surveys that should be enabled for the current user. */
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false): void {
+        if (MINIMAL_BUILD) {
+            return
+        }
+
         this.surveys?.getActiveMatchingSurveys(callback, forceReload)
     }
 
     /** Render a survey on a specific element. */
     renderSurvey(surveyId: string, selector: string): void {
+        if (MINIMAL_BUILD) {
+            return
+        }
+
         this.surveys?.renderSurvey(surveyId, selector)
     }
 
     /** Checks the feature flags associated with this Survey to see if the survey can be rendered. */
     canRenderSurvey(surveyId: string): SurveyRenderReason | null {
+        if (MINIMAL_BUILD) {
+            return null
+        }
+
         return this.surveys?.canRenderSurvey(surveyId) || null
     }
 
@@ -1644,10 +1692,18 @@ export class PostHog {
      * to update user properties.
      */
     setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
+        if (MINIMAL_BUILD) {
+            return
+        }
+
         this.featureFlags?.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
     }
 
     resetPersonPropertiesForFlags(): void {
+        if (MINIMAL_BUILD) {
+            return
+        }
+
         this.featureFlags?.resetPersonPropertiesForFlags()
     }
 
@@ -1660,6 +1716,10 @@ export class PostHog {
      *     setGroupPropertiesForFlags({'organization': { name: 'CYZ', employees: '11' } })
      */
     setGroupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags = true): void {
+        if (MINIMAL_BUILD) {
+            return
+        }
+
         if (!this._requirePersonProcessing('posthog.setGroupPropertiesForFlags')) {
             return
         }
@@ -1667,6 +1727,10 @@ export class PostHog {
     }
 
     resetGroupPropertiesForFlags(group_type?: string): void {
+        if (MINIMAL_BUILD) {
+            return
+        }
+
         this.featureFlags?.resetGroupPropertiesForFlags(group_type)
     }
 
@@ -1760,6 +1824,10 @@ export class PostHog {
      * @param options.timestampLookBack How many seconds to look back for the timestamp (defaults to 10)
      */
     get_session_replay_url(options?: { withTimestamp?: boolean; timestampLookBack?: number }): string {
+        if (MINIMAL_BUILD) {
+            return ''
+        }
+
         if (!this.sessionManager) {
             return ''
         }
@@ -1880,6 +1948,10 @@ export class PostHog {
     startSessionRecording(
         override?: { sampling?: boolean; linked_flag?: boolean; url_trigger?: true; event_trigger?: true } | true
     ): void {
+        if (MINIMAL_BUILD) {
+            return
+        }
+
         const overrideAll = override === true
         const overrideConfig = {
             sampling: overrideAll || !!override?.sampling,
@@ -1917,6 +1989,10 @@ export class PostHog {
      * disable_session_recording to true
      */
     stopSessionRecording(): void {
+        if (MINIMAL_BUILD) {
+            return
+        }
+
         this.set_config({ disable_session_recording: true })
     }
 
@@ -1925,11 +2001,19 @@ export class PostHog {
      * is currently running
      */
     sessionRecordingStarted(): boolean {
+        if (MINIMAL_BUILD) {
+            return false
+        }
+
         return !!this.sessionRecording?.started
     }
 
     /** Capture a caught exception manually */
     captureException(error: unknown, additionalProperties?: Properties): void {
+        if (MINIMAL_BUILD) {
+            return
+        }
+
         const syntheticException = new Error('PostHog syntheticException')
         this.exceptions?.sendExceptionEvent({
             ...errorToProperties(
@@ -1948,6 +2032,10 @@ export class PostHog {
      * @param toolbarParams
      */
     loadToolbar(params: ToolbarParams): boolean {
+        if (MINIMAL_BUILD) {
+            return false
+        }
+
         return !!this.toolbar?.loadToolbar(params)
     }
 
