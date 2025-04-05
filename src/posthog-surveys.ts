@@ -303,7 +303,7 @@ export class PostHogSurveys {
         if (!flagKey) {
             return true
         }
-        return this.instance.featureFlags.isFeatureEnabled(flagKey)
+        return !!this.instance.featureFlags?.isFeatureEnabled(flagKey)
     }
 
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false) {
@@ -373,7 +373,7 @@ export class PostHogSurveys {
             if (!key || !value) {
                 return true
             }
-            return this.instance.featureFlags.isFeatureEnabled(value)
+            return !!this.instance.featureFlags?.isFeatureEnabled(value)
         })
     }
 
@@ -383,7 +383,7 @@ export class PostHogSurveys {
             logger.warn('init was not called')
             return false // TODO does it make sense to have a default here?
         }
-        return assignableWindow.__PosthogExtensions__.canActivateRepeatedly(survey)
+        return assignableWindow.__PosthogExtensions__?.canActivateRepeatedly(survey)
     }
 
     canRenderSurvey(surveyId: string): SurveyRenderReason | null {

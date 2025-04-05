@@ -17,7 +17,6 @@
         "noUnusedParameters": true,
         "sourceMap": true,
         "inlineSources": true,
-        "resolveJsonModule": true,
         "downlevelIteration": true,
         "declaration": true,
         "jsx": "preserve",

@@ -315,7 +315,7 @@ export class SurveyManager {
         }
 
         const linkedFlagCheck = survey.linked_flag_key
-            ? this.posthog.featureFlags.isFeatureEnabled(survey.linked_flag_key)
+            ? !!this.posthog.featureFlags?.isFeatureEnabled(survey.linked_flag_key)
             : true
 
         if (!linkedFlagCheck) {
@@ -324,7 +324,7 @@ export class SurveyManager {
         }
 
         const targetingFlagCheck = survey.targeting_flag_key
-            ? this.posthog.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
+            ? !!this.posthog.featureFlags?.isFeatureEnabled(survey.targeting_flag_key)
             : true
 
         if (!targetingFlagCheck) {
@@ -333,7 +333,7 @@ export class SurveyManager {
         }
 
         const internalTargetingFlagCheck = survey.internal_targeting_flag_key
-            ? this.posthog.featureFlags.isFeatureEnabled(survey.internal_targeting_flag_key)
+            ? !!this.posthog.featureFlags?.isFeatureEnabled(survey.internal_targeting_flag_key)
             : true
 
         if (!internalTargetingFlagCheck) {

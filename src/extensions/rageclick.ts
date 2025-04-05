@@ -7,7 +7,7 @@ const RAGE_CLICK_TIMEOUT_MS = 1000
 const RAGE_CLICK_CLICK_COUNT = 3
 
 export default class RageClick {
-    clicks: { x: number; y: number; timestamp: number }[]
+    private clicks: { x: number; y: number; timestamp: number }[]
 
     constructor() {
         this.clicks = []

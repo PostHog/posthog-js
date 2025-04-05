@@ -30,7 +30,7 @@ interface PageViewEventProperties {
 
 export class PageViewManager {
     _currentPageview?: { timestamp: Date; pageViewId: string | undefined; pathname: string | undefined }
-    _instance: PostHog
+    private _instance: PostHog
 
     constructor(instance: PostHog) {
         this._instance = instance

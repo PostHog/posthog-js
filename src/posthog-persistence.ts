@@ -45,14 +45,14 @@ const parseName = (config: PostHogConfig): string => {
 export class PostHogPersistence {
     private config: PostHogConfig
     props: Properties
-    storage: PersistentStore
-    campaign_params_saved: boolean
-    name: string
+    private storage: PersistentStore
+    private campaign_params_saved: boolean
+    private name: string
     disabled: boolean | undefined
-    secure: boolean | undefined
-    expire_days: number | undefined
-    default_expiry: number | undefined
-    cross_subdomain: boolean | undefined
+    private secure: boolean | undefined
+    private expire_days: number | undefined
+    private default_expiry: number | undefined
+    private cross_subdomain: boolean | undefined
 
     constructor(config: PostHogConfig) {
         this.config = config
