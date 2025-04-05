@@ -15,6 +15,10 @@ const plugins = (es5, minimal) => [
         minimal
             ? {
                   MINIMAL_BUILD: true,
+                  'logger.debug': 'console.debug',
+                  'logger.info': 'console.info',
+                  'logger.warn': 'console.warn',
+                  'logger.error': 'console.warn', // Intentional, as console.error will not get dropped
                   preventAssignment: true,
               }
             : {
@@ -64,6 +68,7 @@ const plugins = (es5, minimal) => [
         compress: {
             // 5 is the default if unspecified
             ecma: es5 ? 5 : 6,
+            drop_console: minimal ? ['log', 'info', 'warn', 'debug'] : false,
         },
     }),
 ]
