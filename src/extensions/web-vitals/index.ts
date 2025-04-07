@@ -61,6 +61,7 @@ export class WebVitalsAutocapture {
         // Always disable web vitals if we're not on http or https
         const protocol = location?.protocol
         if (protocol !== 'http:' && protocol !== 'https:') {
+            logger.info('Web Vitals are disabled on non-http/https protocols')
             return false
         }
 
