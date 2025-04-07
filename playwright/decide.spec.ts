@@ -2,6 +2,7 @@ import { expect, test } from './utils/posthog-playwright-test-base'
 import { Request } from '@playwright/test'
 import { start } from './utils/setup'
 import { PostHog } from '../src/posthog-core'
+import { pollUntilCondition } from './utils/event-capture-utils'
 
 function getBase64EncodedPayloadFromBody(body: unknown): Record<string, any> {
     if (typeof body !== 'string') {
@@ -122,7 +123,8 @@ test.describe('decide', () => {
             },
         })
         // need a short delay so that the decide request can be captured into the decideRequests array
-        await page.waitForTimeout(1)
+        await pollUntilCondition(page, () => decideRequests.length >= 2)
+
         expect(decideRequests.length).toBe(2)
     })
 })
