@@ -211,7 +211,7 @@ describe('SessionRecording', () => {
         it('uses anyMatchSessionRecordingStatus when triggerMatching is "any"', () => {
             sessionRecording.onRemoteConfig(
                 makeDecideResponse({
-                    sessionRecording: { endpoint: '/s/', triggerMatching: 'any' },
+                    sessionRecording: { endpoint: '/s/', triggerMatchType: 'any' },
                 })
             )
             expect(sessionRecording['_statusMatcher']).toBe(anyMatchSessionRecordingStatus)
@@ -220,7 +220,7 @@ describe('SessionRecording', () => {
         it('uses allMatchSessionRecordingStatus when triggerMatching is not "all"', () => {
             sessionRecording.onRemoteConfig(
                 makeDecideResponse({
-                    sessionRecording: { endpoint: '/s/', triggerMatching: 'all' },
+                    sessionRecording: { endpoint: '/s/', triggerMatchType: 'all' },
                 })
             )
             expect(sessionRecording['_statusMatcher']).toBe(allMatchSessionRecordingStatus)

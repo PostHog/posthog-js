@@ -2532,7 +2532,7 @@ describe('SessionRecording', () => {
                         endpoint: '/s/',
                         eventTriggers: ['$exception'],
                         sampleRate: '0.00', // i.e. never send recording
-                        triggerMatching: 'all',
+                        triggerMatchType: 'all',
                     },
                 })
             )
