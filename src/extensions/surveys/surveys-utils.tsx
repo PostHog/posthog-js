@@ -666,7 +666,7 @@ export const hasEvents = (survey: Pick<Survey, 'conditions'>): boolean => {
     return survey.conditions?.events?.values?.length != undefined && survey.conditions?.events?.values?.length > 0
 }
 
-export const canActivateRepeatedly = (survey: Pick<Survey, 'schedule' | 'type' | 'conditions'>): boolean => {
+export const canActivateRepeatedly = (survey: Pick<Survey, 'schedule' | 'conditions'>): boolean => {
     return (
         !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey)) ||
         survey.schedule === SurveySchedule.Always
