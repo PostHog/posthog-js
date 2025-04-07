@@ -1306,6 +1306,7 @@ export interface RemoteConfig {
         scriptConfig?: { script?: string | undefined }
         urlBlocklist?: SessionRecordingUrlTrigger[]
         eventTriggers?: string[]
+        triggerMatching?: 'any' | 'all' | 'og'
     }
 
     /**
