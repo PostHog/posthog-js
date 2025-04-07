@@ -22,8 +22,8 @@ import { DecideResponse, PostHogConfig, Property } from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
 import {
     SessionRecording,
-    firstMatchSessionRecordingStatus,
-    originalSessionRecordingStatus,
+    anyMatchSessionRecordingStatus,
+    allMatchSessionRecordingStatus,
 } from '../../../extensions/replay/sessionrecording'
 import { assignableWindow, window } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
@@ -208,22 +208,22 @@ describe('SessionRecording', () => {
             expect(loadScriptMock).toHaveBeenCalledWith(posthog, 'experimental-recorder', expect.any(Function))
         })
 
-        it('uses firstMatchSessionRecordingStatus when triggerMatching is "any"', () => {
+        it('uses anyMatchSessionRecordingStatus when triggerMatching is "any"', () => {
             sessionRecording.onRemoteConfig(
                 makeDecideResponse({
                     sessionRecording: { endpoint: '/s/', triggerMatching: 'any' },
                 })
             )
-            expect(sessionRecording['_statusMatcher']).toBe(firstMatchSessionRecordingStatus)
+            expect(sessionRecording['_statusMatcher']).toBe(anyMatchSessionRecordingStatus)
         })
 
-        it('uses originalSessionRecordingStatus when triggerMatching is not "any"', () => {
+        it('uses allMatchSessionRecordingStatus when triggerMatching is not "all"', () => {
             sessionRecording.onRemoteConfig(
                 makeDecideResponse({
                     sessionRecording: { endpoint: '/s/', triggerMatching: 'all' },
                 })
             )
-            expect(sessionRecording['_statusMatcher']).toBe(originalSessionRecordingStatus)
+            expect(sessionRecording['_statusMatcher']).toBe(allMatchSessionRecordingStatus)
         })
 
         it('uses originalSessionRecordingStatus when triggerMatching is not specified', () => {
@@ -232,7 +232,7 @@ describe('SessionRecording', () => {
                     sessionRecording: { endpoint: '/s/' },
                 })
             )
-            expect(sessionRecording['_statusMatcher']).toBe(originalSessionRecordingStatus)
+            expect(sessionRecording['_statusMatcher']).toBe(anyMatchSessionRecordingStatus)
         })
 
         it('when the first event is a meta it does not take a manual full snapshot', () => {

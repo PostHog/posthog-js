@@ -367,7 +367,7 @@ export function originalSessionRecordingStatus(triggersStatus: RecordingTriggers
     }
 }
 
-export function firstMatchSessionRecordingStatus(triggersStatus: RecordingTriggersStatus): SessionRecordingStatus {
+export function anyMatchSessionRecordingStatus(triggersStatus: RecordingTriggersStatus): SessionRecordingStatus {
     if (!triggersStatus.receivedDecide) {
         return 'buffering'
     }
@@ -395,6 +395,57 @@ export function firstMatchSessionRecordingStatus(triggersStatus: RecordingTrigge
     }
 
     return originalSessionRecordingStatus(triggersStatus)
+}
+
+export function allMatchSessionRecordingStatus(triggersStatus: RecordingTriggersStatus): SessionRecordingStatus {
+    if (!triggersStatus.receivedDecide) {
+        return 'buffering'
+    }
+
+    if (!triggersStatus.isRecordingEnabled) {
+        return 'disabled'
+    }
+
+    if (triggersStatus.triggerMatching.urlBlocked) {
+        return 'paused'
+    }
+
+    const hasLinkedFlag = !isNullish(triggersStatus.linkedFlag)
+    const hasLinkedFlagSeen = triggersStatus.linkedFlagSeen
+
+    const hasTriggersConfigured =
+        triggersStatus.triggerMatching.triggerStatus(triggersStatus.sessionId) !== 'trigger_disabled'
+
+    const hasSamplingConfigured = isBoolean(triggersStatus.isSampled)
+
+    // TODO this has to be an AND match
+    const triggerMatches = triggersStatus.triggerMatching.triggerStatus(triggersStatus.sessionId)
+
+    if (hasLinkedFlag && !hasLinkedFlagSeen) {
+        return 'buffering'
+    }
+
+    if (hasTriggersConfigured && triggerMatches === 'trigger_pending') {
+        return 'buffering'
+    }
+
+    // sampling can't ever cause buffering, it's always determined right away or not configured
+
+    if (hasTriggersConfigured && triggerMatches === 'trigger_disabled') {
+        return 'disabled'
+    }
+
+    if (hasSamplingConfigured && triggersStatus.isSampled === false) {
+        return 'disabled'
+    }
+
+    // If sampling is configured and set to true, return sampled
+    if (triggersStatus.isSampled === true) {
+        return 'sampled'
+    }
+
+    // All configured matches are satisfied
+    return 'active'
 }
 
 export class SessionRecording implements RecordingTriggersStatus {
@@ -809,9 +860,12 @@ export class SessionRecording implements RecordingTriggersStatus {
         }
 
         if (response.sessionRecording?.triggerMatching === 'any') {
-            this._statusMatcher = firstMatchSessionRecordingStatus
+            this._statusMatcher = anyMatchSessionRecordingStatus
         } else if (response.sessionRecording?.triggerMatching === 'all') {
-            logger.warn('triggerMatching: all is not supported yet')
+            this._statusMatcher = allMatchSessionRecordingStatus
+        } else {
+            // default to the least restrictive
+            this._statusMatcher = anyMatchSessionRecordingStatus
         }
 
         this.triggerMatching.onRemoteConfig(response)
