@@ -2520,7 +2520,7 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toBe('active')
         })
 
-        it('never sends when sampling is false regardless of event triggers', async () => {
+        it('never sends data when sampling is false regardless of event triggers', async () => {
             // this is a regression test for https://posthoghelp.zendesk.com/agent/tickets/24373
             // where the buffered data was sent to capture when the event trigger fired
             // before the sample rate was taken into account
