@@ -29,6 +29,7 @@ export const PERSONAL_DATA_CAMPAIGN_PARAMS = [
     'rdt_cid', // reddit
     'epik', // pinterest
     'qclid', // quora
+    'sccid', // snapchat
     'irclid', // impact
     '_kx', // klaviyo
 ]
