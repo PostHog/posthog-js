@@ -2520,7 +2520,12 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toBe('active')
         })
 
-        it('disables recording when sampling rate is 0 regardless of event triggers', async () => {
+        it('never sends when sampling is false regardless of event triggers', async () => {
+            // this is a regression test for https://posthoghelp.zendesk.com/agent/tickets/24373
+            // where the buffered data was sent to capture when the event trigger fired
+            // before the sample rate was taken into account
+            // and then would immediately stop
+
             sessionRecording.onRemoteConfig(
                 makeDecideResponse({
                     sessionRecording: {
@@ -2532,7 +2537,16 @@ describe('SessionRecording', () => {
                 })
             )
 
+            expect(sessionRecording.status).toBe('buffering')
+            expect(sessionRecording['buffer'].data).toHaveLength(0)
+
+            // Emit some events before hitting event trigger
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+
+            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
             expect(sessionRecording.status).toBe('disabled')
+            expect(posthog.capture).not.toHaveBeenCalled()
         })
     })
 })
