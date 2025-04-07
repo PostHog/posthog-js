@@ -7,6 +7,7 @@ import {
     SurveyQuestionBranchingType,
     SurveyQuestionType,
     SurveyRenderReason,
+    SurveySchedule,
     SurveyType,
 } from '../posthog-surveys-types'
 
@@ -289,9 +290,19 @@ export class SurveyManager {
      * @returns The surveys sorted by their appearance delay
      */
     private sortSurveysByAppearanceDelay(surveys: Survey[]): Survey[] {
-        return surveys.sort(
-            (a, b) => (a.appearance?.surveyPopupDelaySeconds || 0) - (b.appearance?.surveyPopupDelaySeconds || 0)
-        )
+        return surveys.sort((a, b) => {
+            const aIsAlways = a.schedule === SurveySchedule.Always
+            const bIsAlways = b.schedule === SurveySchedule.Always
+
+            if (aIsAlways && !bIsAlways) {
+                return 1 // a comes after b
+            }
+            if (!aIsAlways && bIsAlways) {
+                return -1 // a comes before b
+            }
+            // If both are Always or neither is Always, sort by delay
+            return (a.appearance?.surveyPopupDelaySeconds || 0) - (b.appearance?.surveyPopupDelaySeconds || 0)
+        })
     }
 
     /**
