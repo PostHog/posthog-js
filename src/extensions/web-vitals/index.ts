@@ -3,7 +3,7 @@ import { RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { isBoolean, isNullish, isNumber, isObject, isUndefined } from '../../utils/type-utils'
 import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
-import { assignableWindow, window } from '../../utils/globals'
+import { assignableWindow, window, location } from '../../utils/globals'
 
 const logger = createLogger('[Web Vitals]')
 
@@ -58,6 +58,14 @@ export class WebVitalsAutocapture {
     }
 
     public get isEnabled(): boolean {
+        // Always disable web vitals if we're not on http or https
+        const protocol = location?.protocol
+        if (protocol !== 'http:' && protocol !== 'https:') {
+            logger.info('Web Vitals are disabled on non-http/https protocols')
+            return false
+        }
+
+        // Otherwise, check config
         const clientConfig = isObject(this.instance.config.capture_performance)
             ? this.instance.config.capture_performance.web_vitals
             : undefined
