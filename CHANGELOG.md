@@ -1,3 +1,8 @@
+## 1.234.10 - 2025-04-07
+
+- feat: Only capture vitals on http and https (#1873)
+- feat: Playwright tests should run over http rather than file (#1874)
+
 ## 1.234.9 - 2025-04-04
 
 - fix: survey feedback button anchoring to trigger (#1865)
