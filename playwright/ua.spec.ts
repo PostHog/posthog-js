@@ -11,7 +11,7 @@ const startOptions = {
         },
         capturePerformance: true,
     },
-    url: './playground/cypress-full/index.html',
+    url: '/playground/cypress-full/index.html',
 }
 
 test.describe('User Agent Blocking', () => {
