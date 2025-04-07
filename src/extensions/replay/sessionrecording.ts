@@ -639,9 +639,9 @@ export class SessionRecording implements RecordingTriggersStatus {
 
         this._setupSampling()
 
-        if (response.sessionRecording?.triggerMatching === 'any') {
+        if (response.sessionRecording?.triggerMatchType === 'any') {
             this._statusMatcher = anyMatchSessionRecordingStatus
-        } else if (response.sessionRecording?.triggerMatching === 'all') {
+        } else if (response.sessionRecording?.triggerMatchType === 'all') {
             this._statusMatcher = allMatchSessionRecordingStatus
         } else {
             // default to the least restrictive
