@@ -299,38 +299,67 @@ describe('web vitals', () => {
         expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
     })
 
-    it.each(['ftp:', 'ws:', 'wss:', 'chrome-extension:', 'chrome:', 'edge:', 'file:', 'about:', 'blob:'])(
-        'should not run on %s protocol',
-        async (protocol) => {
-            mockLocation.mockReturnValue({
-                protocol: protocol,
-                host: 'localhost',
-                pathname: '/',
-                search: '',
-                hash: '',
-                href: `${protocol}//localhost/`,
-            })
-
-            posthog = await createPosthogInstance(uuidv7(), {
-                before_send: beforeSendMock,
-                capture_performance: { web_vitals: true },
-            })
-
-            posthog.webVitalsAutocapture!.onRemoteConfig({
-                capturePerformance: { web_vitals: true },
-            } as DecideResponse)
-
-            expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
-        }
-    )
-    it.each(['http:', 'https:'])('should run on %s protocol', async (protocol) => {
+    it.each([
+        // hybrid app tools
+        'capacitor',
+        'capacitor-electron',
+        'tauri',
+        'ionic',
+        'wails',
+        'android-app',
+        'ms-appx-web',
+        // browser extensions
+        'chrome',
+        'chrome-extension',
+        'moz-extension',
+        'safari-web-extension',
+        'vscode-webview',
+        // local files
+        'file',
+        'blob',
+        'data',
+        'content',
+        'dfile',
+        'javascript',
+        'about',
+        'localhost',
+        // email clients
+        'ms-outlook',
+        'email',
+        // misc
+        'ws',
+        'wss',
+        'ftp',
+        'unknown',
+    ])('should not run on %s protocol', async (protocol) => {
         mockLocation.mockReturnValue({
-            protocol: protocol,
+            protocol: protocol + ':',
             host: 'localhost',
             pathname: '/',
             search: '',
             hash: '',
-            href: `${protocol}//localhost/`,
+            href: `${protocol}://localhost/`,
+        })
+
+        posthog = await createPosthogInstance(uuidv7(), {
+            before_send: beforeSendMock,
+            capture_performance: { web_vitals: true },
+        })
+
+        posthog.webVitalsAutocapture!.onRemoteConfig({
+            capturePerformance: { web_vitals: true },
+        } as DecideResponse)
+
+        expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
+    })
+    it.each(['http', 'https'])('should run on %s protocol', async (protocol) => {
+        mockLocation.mockReturnValue({
+            protocol: protocol + ':',
+            host: 'localhost',
+            pathname: '/',
+            search: '',
+            hash: '',
+            href: `${protocol}://localhost/`,
         })
 
         posthog = await createPosthogInstance(uuidv7(), {
