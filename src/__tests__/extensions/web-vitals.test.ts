@@ -9,6 +9,30 @@ import { DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, FIFTEEN_MINUTES_IN_MILLI
 
 jest.useFakeTimers()
 
+let mockLocation: jest.Mock
+
+jest.mock('../../utils/globals', () => {
+    const original = jest.requireActual('../../utils/globals')
+    mockLocation = jest.fn().mockReturnValue({
+        protocol: 'http:',
+        host: 'localhost',
+        pathname: '/',
+        search: '',
+        hash: '',
+        href: 'http://localhost/',
+    })
+    return {
+        ...original,
+        assignableWindow: {
+            ...original.assignableWindow,
+            __PosthogExtensions__: {},
+        },
+        get location() {
+            return mockLocation()
+        },
+    }
+})
+
 describe('web vitals', () => {
     let posthog: PostHog
     let beforeSendMock = jest.fn().mockImplementation((e) => e)
@@ -251,5 +275,49 @@ describe('web vitals', () => {
                 expect(posthog.webVitalsAutocapture!.isEnabled).toBe(expected)
             }
         )
+    })
+
+    it('should not run on file:// protocol', async () => {
+        mockLocation.mockReturnValue({
+            protocol: 'file:',
+            host: ' ',
+            pathname: '/Users/robbie/Desktop/test.html',
+            search: '',
+            hash: '',
+            href: 'file:///Users/robbie/Desktop/test.html',
+        })
+
+        posthog = await createPosthogInstance(uuidv7(), {
+            before_send: beforeSendMock,
+            capture_performance: { web_vitals: true },
+        })
+
+        posthog.webVitalsAutocapture!.onRemoteConfig({
+            capturePerformance: { web_vitals: true },
+        } as DecideResponse)
+
+        expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
+    })
+
+    it('should run on https:// protocol', async () => {
+        mockLocation.mockReturnValue({
+            protocol: 'https:',
+            host: 'localhost',
+            pathname: '/',
+            search: '',
+            hash: '',
+            href: 'https://localhost/',
+        })
+
+        posthog = await createPosthogInstance(uuidv7(), {
+            before_send: beforeSendMock,
+            capture_performance: { web_vitals: true },
+        })
+
+        posthog.webVitalsAutocapture!.onRemoteConfig({
+            capturePerformance: { web_vitals: true },
+        } as DecideResponse)
+
+        expect(posthog.webVitalsAutocapture!.isEnabled).toBe(true)
     })
 })
