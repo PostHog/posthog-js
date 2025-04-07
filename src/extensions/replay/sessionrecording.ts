@@ -247,7 +247,7 @@ function isRecordingPausedEvent(e: eventWithTime) {
     return e.type === EventType.Custom && e.data.tag === 'recording paused'
 }
 
-export class OriginalTriggerMatching {
+export class URLAndEventTriggerMatching {
     _urlTriggers: SessionRecordingUrlTrigger[] = []
     _urlBlocklist: SessionRecordingUrlTrigger[] = []
 
@@ -327,7 +327,7 @@ export interface RecordingTriggersStatus {
     get receivedDecide(): boolean
     get isRecordingEnabled(): false | true | undefined
     get isSampled(): false | true | null
-    get triggerMatching(): OriginalTriggerMatching
+    get triggerMatching(): URLAndEventTriggerMatching
     get linkedFlag(): string | FlagVariant | null
     get linkedFlagSeen(): boolean
     get sessionId(): string
@@ -445,8 +445,8 @@ export class SessionRecording implements RecordingTriggersStatus {
     private _persistDecideOnSessionListener: (() => void) | undefined = undefined
     private _samplingSessionListener: (() => void) | undefined = undefined
 
-    private _triggerMatching: OriginalTriggerMatching
-    get triggerMatching(): OriginalTriggerMatching {
+    private _triggerMatching: URLAndEventTriggerMatching
+    get triggerMatching(): URLAndEventTriggerMatching {
         return this._triggerMatching
     }
 
@@ -629,7 +629,7 @@ export class SessionRecording implements RecordingTriggersStatus {
             )
         }
 
-        this._triggerMatching = new OriginalTriggerMatching(this.instance)
+        this._triggerMatching = new URLAndEventTriggerMatching(this.instance)
     }
 
     private _onBeforeUnload = (): void => {

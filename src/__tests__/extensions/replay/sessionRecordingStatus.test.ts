@@ -1,5 +1,5 @@
 import {
-    OriginalTriggerMatching,
+    URLAndEventTriggerMatching,
     RecordingTriggersStatus,
     TriggerStatus,
     firstMatchSessionRecordingStatus,
@@ -15,7 +15,7 @@ describe('sessionRecordingStatus', () => {
             triggerMatching: {
                 urlBlocked: false,
                 triggerStatus: () => 'trigger_activated',
-            } as unknown as OriginalTriggerMatching,
+            } as unknown as URLAndEventTriggerMatching,
             sessionId: 'test-session',
             linkedFlag: null,
             linkedFlagSeen: true,
@@ -51,7 +51,7 @@ describe('sessionRecordingStatus', () => {
                 triggerMatching: {
                     ...defaultTriggersStatus.triggerMatching,
                     urlBlocked: true,
-                } as unknown as OriginalTriggerMatching,
+                } as unknown as URLAndEventTriggerMatching,
             })
             expect(status).toBe('paused')
         })
@@ -71,7 +71,7 @@ describe('sessionRecordingStatus', () => {
                 triggerMatching: {
                     ...defaultTriggersStatus.triggerMatching,
                     triggerStatus: () => 'trigger_pending' as TriggerStatus,
-                } as unknown as OriginalTriggerMatching,
+                } as unknown as URLAndEventTriggerMatching,
             })
             expect(status).toBe('buffering')
         })
@@ -97,7 +97,7 @@ describe('sessionRecordingStatus', () => {
                 triggerMatching: {
                     ...defaultTriggersStatus.triggerMatching,
                     urlBlocked: true,
-                } as unknown as OriginalTriggerMatching,
+                } as unknown as URLAndEventTriggerMatching,
             })
             expect(status).toBe('disabled')
         })
@@ -109,7 +109,7 @@ describe('sessionRecordingStatus', () => {
                 triggerMatching: {
                     ...defaultTriggersStatus.triggerMatching,
                     urlBlocked: true,
-                } as unknown as OriginalTriggerMatching,
+                } as unknown as URLAndEventTriggerMatching,
             })
             expect(status).toBe('disabled')
         })
@@ -132,7 +132,7 @@ describe('sessionRecordingStatus', () => {
             triggerMatching: {
                 urlBlocked: false,
                 triggerStatus: () => 'trigger_activated',
-            } as unknown as OriginalTriggerMatching,
+            } as unknown as URLAndEventTriggerMatching,
             sessionId: 'test-session',
             linkedFlag: null,
             linkedFlagSeen: true,
@@ -145,7 +145,7 @@ describe('sessionRecordingStatus', () => {
                 triggerMatching: {
                     ...defaultTriggersStatus.triggerMatching,
                     triggerStatus: () => 'trigger_activated',
-                } as unknown as OriginalTriggerMatching,
+                } as unknown as URLAndEventTriggerMatching,
             })
             expect(status).toBe('active')
         })
@@ -157,7 +157,7 @@ describe('sessionRecordingStatus', () => {
                 triggerMatching: {
                     ...defaultTriggersStatus.triggerMatching,
                     triggerStatus: () => 'trigger_activated',
-                } as unknown as OriginalTriggerMatching,
+                } as unknown as URLAndEventTriggerMatching,
             })
             expect(status).toBe('active')
         })
@@ -180,7 +180,7 @@ describe('sessionRecordingStatus', () => {
                 triggerMatching: {
                     ...defaultTriggersStatus.triggerMatching,
                     triggerStatus: () => 'not_triggered' as TriggerStatus,
-                } as unknown as OriginalTriggerMatching,
+                } as unknown as URLAndEventTriggerMatching,
             })
             expect(status).toBe('sampled')
         })
@@ -193,7 +193,7 @@ describe('sessionRecordingStatus', () => {
                 triggerMatching: {
                     ...defaultTriggersStatus.triggerMatching,
                     triggerStatus: () => 'trigger_pending',
-                } as unknown as OriginalTriggerMatching,
+                } as unknown as URLAndEventTriggerMatching,
             })
             expect(status).toBe('buffering')
         })
@@ -206,7 +206,7 @@ describe('sessionRecordingStatus', () => {
                 triggerMatching: {
                     ...defaultTriggersStatus.triggerMatching,
                     triggerStatus: () => 'trigger_disabled',
-                } as unknown as OriginalTriggerMatching,
+                } as unknown as URLAndEventTriggerMatching,
             })
             // nothing overriding the sampling decision
             expect(status).toBe('disabled')
@@ -221,7 +221,7 @@ describe('sessionRecordingStatus', () => {
                 triggerMatching: {
                     ...defaultTriggersStatus.triggerMatching,
                     triggerStatus: () => 'trigger_activated',
-                } as unknown as OriginalTriggerMatching,
+                } as unknown as URLAndEventTriggerMatching,
             })
             expect(status).toBe('disabled')
         })
@@ -235,7 +235,7 @@ describe('sessionRecordingStatus', () => {
                     ...defaultTriggersStatus.triggerMatching,
                     urlBlocked: true,
                     triggerStatus: () => 'trigger_activated',
-                } as unknown as OriginalTriggerMatching,
+                } as unknown as URLAndEventTriggerMatching,
             })
             expect(status).toBe('paused')
         })
