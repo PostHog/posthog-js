@@ -21,7 +21,6 @@ import type { recordOptions, rrwebRecord } from './types/rrweb'
 import { PostHog } from '../../posthog-core'
 import {
     CaptureResult,
-    FlagVariant,
     NetworkRecordOptions,
     NetworkRequest,
     Properties,
@@ -37,7 +36,7 @@ import {
     RecordPlugin,
 } from '@rrweb/types'
 
-import { isBoolean, isFunction, isNullish, isNumber, isObject, isString, isUndefined } from '../../utils/type-utils'
+import { isBoolean, isFunction, isNullish, isNumber, isObject, isUndefined } from '../../utils/type-utils'
 import { createLogger } from '../../utils/logger'
 import { assignableWindow, document, PostHogExtensionKind, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
@@ -53,6 +52,7 @@ import {
     allMatchSessionRecordingStatus,
     AndTriggerMatching,
     anyMatchSessionRecordingStatus,
+    LinkedFlagMatching,
     RecordingTriggersStatus,
     SessionRecordingStatus,
     TriggerStatusMatching,
@@ -262,11 +262,6 @@ export class SessionRecording implements RecordingTriggersStatus {
 
     private isIdle: boolean | 'unknown' = 'unknown'
 
-    private _linkedFlagSeen: boolean = false
-    get linkedFlagSeen(): boolean {
-        return this._linkedFlagSeen
-    }
-
     private _lastActivityTimestamp: number = Date.now()
     private windowId: string
 
@@ -275,9 +270,9 @@ export class SessionRecording implements RecordingTriggersStatus {
         return this._sessionId
     }
 
-    private _linkedFlag: string | FlagVariant | null = null
-    get linkedFlag(): string | FlagVariant | null {
-        return this._linkedFlag
+    private _linkedFlagMatching: LinkedFlagMatching
+    get linkedFlagMatching(): LinkedFlagMatching {
+        return this._linkedFlagMatching
     }
 
     private _urlTriggerMatching: URLTriggerMatching
@@ -478,7 +473,12 @@ export class SessionRecording implements RecordingTriggersStatus {
 
         this._urlTriggerMatching = new URLTriggerMatching(this.instance)
         this._eventTriggerMatching = new EventTriggerMatching(this.instance)
-        this._triggerMatching = new AndTriggerMatching([this._eventTriggerMatching, this._urlTriggerMatching])
+        this._linkedFlagMatching = new LinkedFlagMatching(this.instance)
+        this._triggerMatching = new AndTriggerMatching([
+            this._eventTriggerMatching,
+            this._urlTriggerMatching,
+            this._linkedFlagMatching,
+        ])
     }
 
     private _onBeforeUnload = (): void => {
@@ -633,29 +633,11 @@ export class SessionRecording implements RecordingTriggersStatus {
         this._tryAddCustomEvent('$remote_config_received', response)
         this._persistRemoteConfig(response)
 
-        this._linkedFlag = response.sessionRecording?.linkedFlag || null
-
         if (response.sessionRecording?.endpoint) {
             this._endpoint = response.sessionRecording?.endpoint
         }
 
         this._setupSampling()
-
-        if (!isNullish(this._linkedFlag) && !this._linkedFlagSeen) {
-            const linkedFlag = isString(this._linkedFlag) ? this._linkedFlag : this._linkedFlag.flag
-            const linkedVariant = isString(this._linkedFlag) ? null : this._linkedFlag.variant
-            this.instance.onFeatureFlags((_flags, variants) => {
-                const flagIsPresent = isObject(variants) && linkedFlag in variants
-                const linkedFlagMatches = linkedVariant ? variants[linkedFlag] === linkedVariant : flagIsPresent
-                if (linkedFlagMatches) {
-                    this._reportStarted('linked_flag_matched', {
-                        linkedFlag,
-                        linkedVariant,
-                    })
-                }
-                this._linkedFlagSeen = linkedFlagMatches
-            })
-        }
 
         if (response.sessionRecording?.triggerMatching === 'any') {
             this._statusMatcher = anyMatchSessionRecordingStatus
@@ -668,6 +650,12 @@ export class SessionRecording implements RecordingTriggersStatus {
 
         this.urlTriggerMatching.onRemoteConfig(response)
         this.eventTriggerMatching.onRemoteConfig(response)
+        this.linkedFlagMatching.onRemoteConfig(response, (flag, variant) => {
+            this._reportStarted('linked_flag_matched', {
+                flag,
+                variant,
+            })
+        })
 
         this.receivedDecide = true
         this.startIfEnabledOrStop()
@@ -1343,7 +1331,7 @@ export class SessionRecording implements RecordingTriggersStatus {
      * instead call `posthog.startSessionRecording({linked_flag: true})`
      * */
     public overrideLinkedFlag() {
-        this._linkedFlagSeen = true
+        this.linkedFlagMatching.linkedFlagSeen = true
         this._tryTakeFullSnapshot()
         this._reportStarted('linked_flag_overridden')
     }
