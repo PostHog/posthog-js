@@ -999,11 +999,9 @@ export function FeedbackWidget({
             return
         }
 
-        // Handle Tab positioning (remains the same)
         if (survey.appearance?.widgetType === 'tab') {
             if (widgetRef.current) {
                 const widgetPos = widgetRef.current.getBoundingClientRect()
-                // Use setStyleOverrides here for consistency, although this style isn't dynamic like the selector one
                 setStyleOverrides({
                     top: '50%',
                     left: parseInt(`${widgetPos.right - 360}`),
@@ -1013,9 +1011,6 @@ export function FeedbackWidget({
                 })
             }
         }
-        // REMOVED: Selector listener attachment logic is moved to SurveyManager
-
-        // Listen for the custom event dispatched by SurveyManager
         const handleShowSurvey = (event: Event) => {
             const customEvent = event as CustomEvent
             // Check if the event is for this specific survey instance
@@ -1039,7 +1034,7 @@ export function FeedbackWidget({
         survey.appearance?.widgetType,
         survey.appearance?.widgetSelector,
         survey.appearance?.borderColor,
-    ]) // Added dependencies
+    ])
 
     useHideSurveyOnURLChange({
         survey,
