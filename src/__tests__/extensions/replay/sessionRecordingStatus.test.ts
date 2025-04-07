@@ -1,15 +1,14 @@
 import {
-    URLAndEventTriggerMatching,
-    RecordingTriggersStatus,
-    originalSessionRecordingStatus,
     allMatchSessionRecordingStatus,
     anyMatchSessionRecordingStatus,
-} from '../../../extensions/replay/sessionrecording'
+    EventTriggerMatching,
+    RecordingTriggersStatus,
+    URLTriggerMatching,
+} from '../../../extensions/replay/triggerMatching'
 
 type TestConfig = {
     name: string
     config: Partial<RecordingTriggersStatus>
-    originalExpected: 'disabled' | 'sampled' | 'active' | 'buffering' | 'paused'
     anyMatchExpected: 'disabled' | 'sampled' | 'active' | 'buffering' | 'paused'
     allMatchExpected: 'disabled' | 'sampled' | 'active' | 'buffering' | 'paused'
 }
@@ -18,10 +17,15 @@ const defaultTriggersStatus: RecordingTriggersStatus = {
     receivedDecide: true,
     isRecordingEnabled: true,
     isSampled: undefined,
-    triggerMatching: {
-        urlBlocked: false,
+    urlTriggerMatching: {
+        onRemoteConfig: () => {},
         triggerStatus: () => 'trigger_disabled',
-    } as unknown as URLAndEventTriggerMatching,
+        urlBlocked: false,
+    } as unknown as URLTriggerMatching,
+    eventTriggerMatching: {
+        onRemoteConfig: () => {},
+        triggerStatus: () => 'trigger_disabled',
+    } as unknown as EventTriggerMatching,
     sessionId: 'test-session',
     linkedFlag: null,
     linkedFlagSeen: true,
@@ -32,26 +36,23 @@ const testCases: TestConfig[] = [
     {
         name: 'decide not received',
         config: { receivedDecide: false },
-        originalExpected: 'buffering',
         anyMatchExpected: 'buffering',
         allMatchExpected: 'buffering',
     },
     {
         name: 'recording disabled',
         config: { isRecordingEnabled: false },
-        originalExpected: 'disabled',
         anyMatchExpected: 'disabled',
         allMatchExpected: 'disabled',
     },
     {
         name: 'URL blocked',
         config: {
-            triggerMatching: {
-                ...defaultTriggersStatus.triggerMatching,
+            urlTriggerMatching: {
+                ...defaultTriggersStatus.urlTriggerMatching,
                 urlBlocked: true,
-            } as unknown as URLAndEventTriggerMatching,
+            } as unknown as URLTriggerMatching,
         },
-        originalExpected: 'paused',
         anyMatchExpected: 'paused',
         allMatchExpected: 'paused',
     },
@@ -60,21 +61,18 @@ const testCases: TestConfig[] = [
     {
         name: 'sampling false',
         config: { isSampled: false },
-        originalExpected: 'disabled',
         anyMatchExpected: 'disabled',
         allMatchExpected: 'disabled',
     },
     {
         name: 'sampling true',
         config: { isSampled: true },
-        originalExpected: 'sampled',
         anyMatchExpected: 'sampled',
         allMatchExpected: 'sampled',
     },
     {
         name: 'sampling undefined',
         config: { isSampled: undefined },
-        originalExpected: 'active',
         anyMatchExpected: 'active',
         allMatchExpected: 'active',
     },
@@ -83,21 +81,18 @@ const testCases: TestConfig[] = [
     {
         name: 'linked flag present but not seen',
         config: { linkedFlag: 'some-flag', linkedFlagSeen: false },
-        originalExpected: 'buffering',
         anyMatchExpected: 'buffering',
         allMatchExpected: 'buffering',
     },
     {
         name: 'linked flag present and seen',
         config: { linkedFlag: 'some-flag', linkedFlagSeen: true },
-        originalExpected: 'active',
         anyMatchExpected: 'active',
         allMatchExpected: 'active',
     },
     {
         name: 'linked flag not present',
         config: { linkedFlag: null },
-        originalExpected: 'active',
         anyMatchExpected: 'active',
         allMatchExpected: 'active',
     },
@@ -106,36 +101,33 @@ const testCases: TestConfig[] = [
     {
         name: 'trigger pending (means we have config but not yet matched)',
         config: {
-            triggerMatching: {
-                ...defaultTriggersStatus.triggerMatching,
+            urlTriggerMatching: {
+                ...defaultTriggersStatus.urlTriggerMatching,
                 triggerStatus: () => 'trigger_pending',
-            } as unknown as URLAndEventTriggerMatching,
+            } as unknown as URLTriggerMatching,
         },
-        originalExpected: 'buffering',
         anyMatchExpected: 'buffering',
         allMatchExpected: 'buffering',
     },
     {
         name: 'trigger disabled (means we do not have config)',
         config: {
-            triggerMatching: {
-                ...defaultTriggersStatus.triggerMatching,
+            urlTriggerMatching: {
+                ...defaultTriggersStatus.urlTriggerMatching,
                 triggerStatus: () => 'trigger_disabled',
-            } as unknown as URLAndEventTriggerMatching,
+            } as unknown as URLTriggerMatching,
         },
-        originalExpected: 'active', // nothing to match on, recording is active
         anyMatchExpected: 'active', // nothing to match on, recording is active
         allMatchExpected: 'active', // nothing to match on, recording is active
     },
     {
         name: 'trigger activated',
         config: {
-            triggerMatching: {
-                ...defaultTriggersStatus.triggerMatching,
+            urlTriggerMatching: {
+                ...defaultTriggersStatus.urlTriggerMatching,
                 triggerStatus: () => 'trigger_activated',
-            } as unknown as URLAndEventTriggerMatching,
+            } as unknown as URLTriggerMatching,
         },
-        originalExpected: 'active',
         anyMatchExpected: 'active',
         allMatchExpected: 'active',
     },
@@ -147,12 +139,11 @@ const testCases: TestConfig[] = [
             isSampled: false,
             linkedFlag: 'some-flag',
             linkedFlagSeen: true,
-            triggerMatching: {
-                ...defaultTriggersStatus.triggerMatching,
+            urlTriggerMatching: {
+                ...defaultTriggersStatus.urlTriggerMatching,
                 triggerStatus: () => 'trigger_activated',
-            } as unknown as URLAndEventTriggerMatching,
+            } as unknown as URLTriggerMatching,
         },
-        originalExpected: 'disabled',
         anyMatchExpected: 'active', // trigger activated, so sampling overridden
         allMatchExpected: 'disabled',
     },
@@ -162,12 +153,11 @@ const testCases: TestConfig[] = [
             isSampled: false,
             linkedFlag: 'some-flag',
             linkedFlagSeen: true,
-            triggerMatching: {
-                ...defaultTriggersStatus.triggerMatching,
+            urlTriggerMatching: {
+                ...defaultTriggersStatus.urlTriggerMatching,
                 triggerStatus: () => 'trigger_pending',
-            } as unknown as URLAndEventTriggerMatching,
+            } as unknown as URLTriggerMatching,
         },
-        originalExpected: 'disabled',
         anyMatchExpected: 'active', // flag is seen, so sampling overridden
         allMatchExpected: 'buffering',
     },
@@ -175,12 +165,11 @@ const testCases: TestConfig[] = [
         name: 'sampling true with pending trigger',
         config: {
             isSampled: true,
-            triggerMatching: {
-                ...defaultTriggersStatus.triggerMatching,
+            urlTriggerMatching: {
+                ...defaultTriggersStatus.urlTriggerMatching,
                 triggerStatus: () => 'trigger_pending',
-            } as unknown as URLAndEventTriggerMatching,
+            } as unknown as URLTriggerMatching,
         },
-        originalExpected: 'buffering',
         anyMatchExpected: 'sampled',
         allMatchExpected: 'buffering',
     },
@@ -190,30 +179,17 @@ const testCases: TestConfig[] = [
             isSampled: true,
             linkedFlag: 'some-flag',
             linkedFlagSeen: true,
-            triggerMatching: {
-                ...defaultTriggersStatus.triggerMatching,
+            urlTriggerMatching: {
+                ...defaultTriggersStatus.urlTriggerMatching,
                 triggerStatus: () => 'trigger_activated',
-            } as unknown as URLAndEventTriggerMatching,
+            } as unknown as URLTriggerMatching,
         },
-        originalExpected: 'sampled',
         anyMatchExpected: 'sampled',
         allMatchExpected: 'sampled',
     },
 ]
 
 describe('sessionRecordingStatus', () => {
-    describe('original behavior', () => {
-        testCases.forEach(({ name, config, originalExpected }) => {
-            it(`returns ${originalExpected} when ${name}`, () => {
-                const status = originalSessionRecordingStatus({
-                    ...defaultTriggersStatus,
-                    ...config,
-                })
-                expect(status).toBe(originalExpected)
-            })
-        })
-    })
-
     describe('first match behavior', () => {
         testCases.forEach(({ name, config, anyMatchExpected }) => {
             it(`returns ${anyMatchExpected} when ${name}`, () => {

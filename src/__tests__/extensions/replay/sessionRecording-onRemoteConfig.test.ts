@@ -20,11 +20,7 @@ import {
 import { PostHog } from '../../../posthog-core'
 import { DecideResponse, PostHogConfig, Property } from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
-import {
-    SessionRecording,
-    anyMatchSessionRecordingStatus,
-    allMatchSessionRecordingStatus,
-} from '../../../extensions/replay/sessionrecording'
+import { SessionRecording } from '../../../extensions/replay/sessionrecording'
 import { assignableWindow, window } from '../../../utils/globals'
 import { RequestRouter } from '../../../utils/request-router'
 import {
@@ -36,6 +32,10 @@ import {
 import Mock = jest.Mock
 import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
+import {
+    allMatchSessionRecordingStatus,
+    anyMatchSessionRecordingStatus,
+} from '../../../extensions/replay/triggerMatching'
 
 // Type and source defined here designate a non-user-generated recording event
 

@@ -27,7 +27,6 @@ import {
     Properties,
     RemoteConfig,
     type SessionRecordingOptions,
-    SessionRecordingUrlTrigger,
 } from '../../types'
 import {
     type customEvent,
@@ -50,6 +49,17 @@ import Config from '../../config'
 import { includes } from '../../utils/string-utils'
 import { addEventListener } from '../../utils'
 import { sampleOnProperty } from '../sampling'
+import {
+    allMatchSessionRecordingStatus,
+    AndTriggerMatching,
+    anyMatchSessionRecordingStatus,
+    RecordingTriggersStatus,
+    SessionRecordingStatus,
+    TriggerStatusMatching,
+    TriggerType,
+} from './triggerMatching'
+import { EventTriggerMatching } from './triggerMatching'
+import { URLTriggerMatching } from './triggerMatching'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
@@ -94,17 +104,6 @@ const ACTIVE_SOURCES = [
     IncrementalSource.MediaInteraction,
     IncrementalSource.Drag,
 ]
-
-export type TriggerType = 'url' | 'event'
-export type TriggerStatus = 'trigger_activated' | 'trigger_pending' | 'trigger_disabled'
-
-/**
- * Session recording starts in buffering mode while waiting for decide response
- * Once the response is received it might be disabled, active or sampled
- * When sampled that means a sample rate is set and the last time the session id was rotated
- * the sample rate determined this session should be sent to the server.
- */
-export type SessionRecordingStatus = 'disabled' | 'sampled' | 'active' | 'buffering' | 'paused'
 
 export interface SnapshotBuffer {
     size: number
@@ -229,17 +228,6 @@ function isSessionIdleEvent(e: eventWithTime): e is eventWithTime & customEvent 
     return e.type === EventType.Custom && e.data.tag === 'sessionIdle'
 }
 
-function sessionRecordingUrlTriggerMatches(url: string, triggers: SessionRecordingUrlTrigger[]) {
-    return triggers.some((trigger) => {
-        switch (trigger.matching) {
-            case 'regex':
-                return new RegExp(trigger.url).test(url)
-            default:
-                return false
-        }
-    })
-}
-
 /** When we put the recording into a paused state, we add a custom event.
  *  However in the paused state, events are dropped, and never make it to the buffer,
  *  so we need to manually let this one through */
@@ -247,212 +235,15 @@ function isRecordingPausedEvent(e: eventWithTime) {
     return e.type === EventType.Custom && e.data.tag === 'recording paused'
 }
 
-export class URLAndEventTriggerMatching {
-    _urlTriggers: SessionRecordingUrlTrigger[] = []
-    _urlBlocklist: SessionRecordingUrlTrigger[] = []
-
-    private _urlBlocked: boolean = false
-
-    get urlBlocked(): boolean {
-        return this._urlBlocked
-    }
-
-    set urlBlocked(value: boolean) {
-        this._urlBlocked = value
-    }
-
-    _eventTriggers: string[] = []
-
-    constructor(private readonly instance: PostHog) {}
-
-    onRemoteConfig(response: RemoteConfig) {
-        this._urlTriggers = response.sessionRecording?.urlTriggers || []
-        this._urlBlocklist = response.sessionRecording?.urlBlocklist || []
-        this._eventTriggers = response.sessionRecording?.eventTriggers || []
-    }
-
-    private urlTriggerStatus(sessionId: string): TriggerStatus {
-        if (this._urlTriggers.length === 0) {
-            return 'trigger_disabled'
-        }
-
-        const currentTriggerSession = this.instance?.get_property(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
-        return currentTriggerSession === sessionId ? 'trigger_activated' : 'trigger_pending'
-    }
-
-    private eventTriggerStatus(sessionId: string): TriggerStatus {
-        if (this._eventTriggers.length === 0) {
-            return 'trigger_disabled'
-        }
-
-        const currentTriggerSession = this.instance?.get_property(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
-        return currentTriggerSession === sessionId ? 'trigger_activated' : 'trigger_pending'
-    }
-
-    triggerStatus(sessionId: string): TriggerStatus {
-        const eventTriggerStatus = this.eventTriggerStatus(sessionId)
-        const urlTriggerStatus = this.urlTriggerStatus(sessionId)
-        const eitherIsActivated = eventTriggerStatus === 'trigger_activated' || urlTriggerStatus === 'trigger_activated'
-        const eitherIsPending = eventTriggerStatus === 'trigger_pending' || urlTriggerStatus === 'trigger_pending'
-        return eitherIsActivated ? 'trigger_activated' : eitherIsPending ? 'trigger_pending' : 'trigger_disabled'
-    }
-
-    checkUrlTriggerConditions(
-        onPause: () => void,
-        onResume: () => void,
-        onActivate: (triggerType: TriggerType) => void
-    ) {
-        if (typeof window === 'undefined' || !window.location.href) {
-            return
-        }
-
-        const url = window.location.href
-
-        const wasBlocked = this._urlBlocked
-        const isNowBlocked = sessionRecordingUrlTriggerMatches(url, this._urlBlocklist)
-
-        if (isNowBlocked && !wasBlocked) {
-            onPause()
-        } else if (!isNowBlocked && wasBlocked) {
-            onResume()
-        }
-
-        if (sessionRecordingUrlTriggerMatches(url, this._urlTriggers)) {
-            onActivate('url')
-        }
-    }
-}
-
-export interface RecordingTriggersStatus {
-    get receivedDecide(): boolean
-    get isRecordingEnabled(): false | true | undefined
-    get isSampled(): false | true | null
-    get triggerMatching(): URLAndEventTriggerMatching
-    get linkedFlag(): string | FlagVariant | null
-    get linkedFlagSeen(): boolean
-    get sessionId(): string
-}
-
-export function originalSessionRecordingStatus(triggersStatus: RecordingTriggersStatus): SessionRecordingStatus {
-    if (!triggersStatus.receivedDecide) {
-        return 'buffering'
-    }
-
-    if (!triggersStatus.isRecordingEnabled) {
-        return 'disabled'
-    }
-
-    // if sampling is set and the session is already decided to not be sampled
-    // then we should never be active
-    if (triggersStatus.isSampled === false) {
-        return 'disabled'
-    }
-
-    if (triggersStatus.triggerMatching.urlBlocked) {
-        return 'paused'
-    }
-
-    if (!isNullish(triggersStatus.linkedFlag) && !triggersStatus.linkedFlagSeen) {
-        return 'buffering'
-    }
-
-    if (triggersStatus.triggerMatching.triggerStatus(triggersStatus.sessionId) === 'trigger_pending') {
-        return 'buffering'
-    }
-
-    if (isBoolean(triggersStatus.isSampled)) {
-        return triggersStatus.isSampled ? 'sampled' : 'disabled'
-    } else {
-        return 'active'
-    }
-}
-
-export function anyMatchSessionRecordingStatus(triggersStatus: RecordingTriggersStatus): SessionRecordingStatus {
-    if (!triggersStatus.receivedDecide) {
-        return 'buffering'
-    }
-
-    if (!triggersStatus.isRecordingEnabled) {
-        return 'disabled'
-    }
-
-    const sampledActive = triggersStatus.isSampled === true
-    const linkedFlagActive = !isNullish(triggersStatus.linkedFlag) && triggersStatus.linkedFlagSeen
-    const triggerMatches = triggersStatus.triggerMatching.triggerStatus(triggersStatus.sessionId)
-
-    if (sampledActive || linkedFlagActive || triggerMatches === 'trigger_activated') {
-        if (triggersStatus.triggerMatching.urlBlocked) {
-            // must have previously started
-            return 'paused'
-        }
-        return sampledActive ? 'sampled' : 'active'
-    }
-
-    if (triggerMatches == 'trigger_pending') {
-        // even if sampled active is false, we should still be buffering
-        // since a pending trigger could override it
-        return 'buffering'
-    }
-
-    return originalSessionRecordingStatus(triggersStatus)
-}
-
-export function allMatchSessionRecordingStatus(triggersStatus: RecordingTriggersStatus): SessionRecordingStatus {
-    if (!triggersStatus.receivedDecide) {
-        return 'buffering'
-    }
-
-    if (!triggersStatus.isRecordingEnabled) {
-        return 'disabled'
-    }
-
-    if (triggersStatus.triggerMatching.urlBlocked) {
-        return 'paused'
-    }
-
-    const hasLinkedFlag = !isNullish(triggersStatus.linkedFlag)
-    const hasLinkedFlagSeen = triggersStatus.linkedFlagSeen
-
-    const hasTriggersConfigured =
-        triggersStatus.triggerMatching.triggerStatus(triggersStatus.sessionId) !== 'trigger_disabled'
-
-    const hasSamplingConfigured = isBoolean(triggersStatus.isSampled)
-
-    // TODO this has to be an AND match
-    const triggerMatches = triggersStatus.triggerMatching.triggerStatus(triggersStatus.sessionId)
-
-    if (hasLinkedFlag && !hasLinkedFlagSeen) {
-        return 'buffering'
-    }
-
-    if (hasTriggersConfigured && triggerMatches === 'trigger_pending') {
-        return 'buffering'
-    }
-
-    // sampling can't ever cause buffering, it's always determined right away or not configured
-
-    if (hasTriggersConfigured && triggerMatches === 'trigger_disabled') {
-        return 'disabled'
-    }
-
-    if (hasSamplingConfigured && triggersStatus.isSampled === false) {
-        return 'disabled'
-    }
-
-    // If sampling is configured and set to true, return sampled
-    if (triggersStatus.isSampled === true) {
-        return 'sampled'
-    }
-
-    // All configured matches are satisfied
-    return 'active'
-}
-
 export class SessionRecording implements RecordingTriggersStatus {
     private _endpoint: string
     private flushBufferTimer?: any
 
+    private _statusMatcher: (triggersStatus: RecordingTriggersStatus) => SessionRecordingStatus =
+        anyMatchSessionRecordingStatus
+
     private _receivedDecide: boolean = false
+
     private set receivedDecide(value: boolean) {
         this._receivedDecide = value
     }
@@ -489,19 +280,24 @@ export class SessionRecording implements RecordingTriggersStatus {
         return this._linkedFlag
     }
 
+    private _urlTriggerMatching: URLTriggerMatching
+    get urlTriggerMatching() {
+        return this._urlTriggerMatching
+    }
+
+    private _eventTriggerMatching: EventTriggerMatching
+    get eventTriggerMatching() {
+        return this._eventTriggerMatching
+    }
+
+    private _triggerMatching: TriggerStatusMatching
+
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
 
     private _removePageViewCaptureHook: (() => void) | undefined = undefined
     private _onSessionIdListener: (() => void) | undefined = undefined
     private _persistDecideOnSessionListener: (() => void) | undefined = undefined
     private _samplingSessionListener: (() => void) | undefined = undefined
-
-    private _triggerMatching: URLAndEventTriggerMatching
-    get triggerMatching(): URLAndEventTriggerMatching {
-        return this._triggerMatching
-    }
-
-    private _statusMatcher = originalSessionRecordingStatus
 
     // if pageview capture is disabled
     // then we can manually track href changes
@@ -530,7 +326,7 @@ export class SessionRecording implements RecordingTriggersStatus {
     }
 
     private get fullSnapshotIntervalMillis(): number {
-        if (this.triggerMatching.triggerStatus(this.sessionId) === 'trigger_pending') {
+        if (this._triggerMatching.triggerStatus(this.sessionId) === 'trigger_pending') {
             return ONE_MINUTE
         }
 
@@ -650,7 +446,7 @@ export class SessionRecording implements RecordingTriggersStatus {
             return 'buffering'
         }
 
-        return originalSessionRecordingStatus(this)
+        return this._statusMatcher(this)
     }
 
     constructor(private readonly instance: PostHog) {
@@ -680,7 +476,9 @@ export class SessionRecording implements RecordingTriggersStatus {
             )
         }
 
-        this._triggerMatching = new URLAndEventTriggerMatching(this.instance)
+        this._urlTriggerMatching = new URLTriggerMatching(this.instance)
+        this._eventTriggerMatching = new EventTriggerMatching(this.instance)
+        this._triggerMatching = new AndTriggerMatching([this._eventTriggerMatching, this._urlTriggerMatching])
     }
 
     private _onBeforeUnload = (): void => {
@@ -868,7 +666,8 @@ export class SessionRecording implements RecordingTriggersStatus {
             this._statusMatcher = anyMatchSessionRecordingStatus
         }
 
-        this.triggerMatching.onRemoteConfig(response)
+        this.urlTriggerMatching.onRemoteConfig(response)
+        this.eventTriggerMatching.onRemoteConfig(response)
 
         this.receivedDecide = true
         this.startIfEnabledOrStop()
@@ -1263,13 +1062,13 @@ export class SessionRecording implements RecordingTriggersStatus {
         }
 
         // Check if the URL matches any trigger patterns
-        this.triggerMatching.checkUrlTriggerConditions(
+        this.urlTriggerMatching.checkUrlTriggerConditions(
             () => this._pauseRecording(),
             () => this._resumeRecording(),
             (triggerType) => this._activateTrigger(triggerType)
         )
 
-        if (this.triggerMatching.urlBlocked && !isRecordingPausedEvent(rawEvent)) {
+        if (this.urlTriggerMatching.urlBlocked && !isRecordingPausedEvent(rawEvent)) {
             return
         }
 
@@ -1281,7 +1080,7 @@ export class SessionRecording implements RecordingTriggersStatus {
         // Clear the buffer if waiting for a trigger, and only keep data from after the current full snapshot
         if (
             rawEvent.type === EventType.FullSnapshot &&
-            this.triggerMatching.triggerStatus(this.sessionId) === 'trigger_pending'
+            this._triggerMatching.triggerStatus(this.sessionId) === 'trigger_pending'
         ) {
             this.clearBuffer()
         }
@@ -1472,7 +1271,7 @@ export class SessionRecording implements RecordingTriggersStatus {
     }
 
     private _activateTrigger(triggerType: TriggerType) {
-        if (this.triggerMatching.triggerStatus(this.sessionId) === 'trigger_pending') {
+        if (this._triggerMatching.triggerStatus(this.sessionId) === 'trigger_pending') {
             // status is stored separately for URL and event triggers
             this.instance?.persistence?.register({
                 [triggerType === 'url'
@@ -1487,7 +1286,7 @@ export class SessionRecording implements RecordingTriggersStatus {
 
     private _pauseRecording() {
         // we check _urlBlocked not status, since more than one thing can affect status
-        if (this.triggerMatching.urlBlocked) {
+        if (this.urlTriggerMatching.urlBlocked) {
             return
         }
 
@@ -1495,7 +1294,7 @@ export class SessionRecording implements RecordingTriggersStatus {
         // and we need to be sure that we don't record that page
         // so we might not get the below custom event but events will report the paused status
         // which will allow debugging of sessions that start on blocked pages
-        this.triggerMatching.urlBlocked = true
+        this.urlTriggerMatching.urlBlocked = true
 
         // Clear the snapshot timer since we don't want new snapshots while paused
         clearInterval(this._fullSnapshotTimer)
@@ -1506,11 +1305,11 @@ export class SessionRecording implements RecordingTriggersStatus {
 
     private _resumeRecording() {
         // we check _urlBlocked not status, since more than one thing can affect status
-        if (!this.triggerMatching.urlBlocked) {
+        if (!this.urlTriggerMatching.urlBlocked) {
             return
         }
 
-        this.triggerMatching.urlBlocked = false
+        this.urlTriggerMatching.urlBlocked = false
 
         this._tryTakeFullSnapshot()
         this._scheduleFullSnapshot()
@@ -1520,7 +1319,7 @@ export class SessionRecording implements RecordingTriggersStatus {
     }
 
     private _addEventTriggerListener() {
-        if (this.triggerMatching._eventTriggers.length === 0 || !isNullish(this._removeEventTriggerCaptureHook)) {
+        if (this.eventTriggerMatching._eventTriggers.length === 0 || !isNullish(this._removeEventTriggerCaptureHook)) {
             return
         }
 
@@ -1528,7 +1327,7 @@ export class SessionRecording implements RecordingTriggersStatus {
             // If anything could go wrong here it has the potential to block the main loop,
             // so we catch all errors.
             try {
-                if (this.triggerMatching._eventTriggers.includes(event.event)) {
+                if (this.eventTriggerMatching._eventTriggers.includes(event.event)) {
                     this._activateTrigger('event')
                 }
             } catch (e) {
