@@ -367,8 +367,8 @@ describe('SurveyManager', () => {
             .spyOn(surveyManager as any, 'handlePopoverSurvey')
             .mockImplementation(() => {})
         const handleWidgetMock = jest.spyOn(surveyManager as any, 'handleWidget').mockImplementation(() => {})
-        const handleWidgetSelectorMock = jest
-            .spyOn(surveyManager as any, 'handleWidgetSelector')
+        const manageWidgetSelectorListener = jest
+            .spyOn(surveyManager as any, 'manageWidgetSelectorListener')
             .mockImplementation(() => {})
         jest.spyOn(surveyManager as any, 'canShowNextEventBasedSurvey').mockReturnValue(true)
 
@@ -377,7 +377,7 @@ describe('SurveyManager', () => {
         expect(mockPostHog.getActiveMatchingSurveys).toHaveBeenCalled()
         expect(handlePopoverSurveyMock).toHaveBeenCalledWith(mockSurveys[0])
         expect(handleWidgetMock).not.toHaveBeenCalled()
-        expect(handleWidgetSelectorMock).not.toHaveBeenCalled()
+        expect(manageWidgetSelectorListener).not.toHaveBeenCalled()
     })
 
     test('handleWidget should render the widget correctly', () => {
