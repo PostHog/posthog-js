@@ -1,5 +1,5 @@
 import babel from '@rollup/plugin-babel'
-import json from '@rollup/plugin-json'
+import replace from '@rollup/plugin-replace'
 import resolve from '@rollup/plugin-node-resolve'
 import typescript from '@rollup/plugin-typescript'
 import { dts } from 'rollup-plugin-dts'
@@ -8,11 +8,15 @@ import { visualizer } from 'rollup-plugin-visualizer'
 import commonjs from '@rollup/plugin-commonjs'
 import fs from 'fs'
 import path from 'path'
+import { version } from './package.json' assert { type: 'json' }
 
 const plugins = (es5) => [
-    json(),
+    replace({
+        BUILD_VERSION: JSON.stringify(version),
+        preventAssignment: true,
+    }),
     resolve({ browser: true }),
-    typescript({ sourceMap: true, outDir: './dist' }),
+    typescript({ sourceMap: true, outDir: './dist', declaration: false }),
     commonjs(),
     babel({
         extensions: ['.js', '.jsx', '.ts', '.tsx'],
@@ -106,7 +110,7 @@ const entrypointTargets = entrypoints.map((file) => {
 const typeTargets = entrypoints
     .filter((file) => file.endsWith('.es.ts'))
     .map((file) => {
-        const source = `./lib/src/entrypoints/${file.replace('.ts', '.d.ts')}`
+        const source = `./lib/entrypoints/${file.replace('.ts', '.d.ts')}`
         /** @type {import('rollup').RollupOptions} */
         return {
             input: source,
@@ -117,7 +121,6 @@ const typeTargets = entrypoints
                 },
             ],
             plugins: [
-                json(),
                 dts({
                     exclude: [],
                 }),
