@@ -9,6 +9,7 @@ import {
     SurveyRenderReason,
     SurveySchedule,
     SurveyType,
+    SurveyWidgetType,
 } from '../posthog-surveys-types'
 import { addEventListener } from '../utils'
 
@@ -453,10 +454,13 @@ export class SurveyManager {
             nonAPISurveyQueue.forEach((survey) => {
                 // Widget Type Logic
                 if (survey.type === SurveyType.Widget) {
-                    if (survey.appearance?.widgetType === 'tab') {
+                    if (survey.appearance?.widgetType === SurveyWidgetType.Tab) {
                         // Render tab widget if not already present
                         this.handleWidget(survey)
-                    } else if (survey.appearance?.widgetType === 'selector' && survey.appearance?.widgetSelector) {
+                    } else if (
+                        survey.appearance?.widgetType === SurveyWidgetType.Selector &&
+                        survey.appearance?.widgetSelector
+                    ) {
                         activeSelectorSurveyIds.add(survey.id)
                         // Manage the listener attachment/detachment dynamically
                         this.manageWidgetSelectorListener(survey)

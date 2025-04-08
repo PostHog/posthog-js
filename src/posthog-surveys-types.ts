@@ -4,6 +4,12 @@
  * See https://github.com/PostHog/posthog-js/issues/698
  */
 
+export enum SurveyWidgetType {
+    Button = 'button',
+    Tab = 'tab',
+    Selector = 'selector',
+}
+
 export interface SurveyAppearance {
     // keep in sync with frontend/src/types.ts -> SurveyAppearance
     backgroundColor?: string
@@ -30,7 +36,7 @@ export interface SurveyAppearance {
     shuffleQuestions?: boolean
     surveyPopupDelaySeconds?: number
     // widget options
-    widgetType?: 'button' | 'tab' | 'selector'
+    widgetType?: SurveyWidgetType
     widgetSelector?: string
     widgetLabel?: string
     widgetColor?: string
