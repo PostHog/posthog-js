@@ -16,7 +16,14 @@ const plugins = (es5) => [
         preventAssignment: true,
     }),
     resolve({ browser: true }),
-    typescript({ sourceMap: true, outDir: './dist', declaration: false }),
+    typescript({
+        sourceMap: true,
+        outDir: './dist',
+        declaration: false,
+        compilerOptions: {
+            target: 'ESNext',
+        },
+    }),
     commonjs(),
     babel({
         extensions: ['.js', '.jsx', '.ts', '.tsx'],
