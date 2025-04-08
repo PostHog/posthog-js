@@ -9,7 +9,7 @@ import {
     usePopupVisibility,
 } from '../../extensions/surveys'
 import { createShadow } from '../../extensions/surveys/surveys-utils'
-import { Survey, SurveyQuestionType, SurveyType } from '../../posthog-surveys-types'
+import { Survey, SurveyQuestionType, SurveySchedule, SurveyType } from '../../posthog-surveys-types'
 
 import { afterAll, beforeAll, beforeEach } from '@jest/globals'
 import '@testing-library/jest-dom'
@@ -471,6 +471,26 @@ describe('SurveyManager', () => {
             { id: '2', appearance: { surveyPopupDelaySeconds: 2 } },
             { id: '1', appearance: { surveyPopupDelaySeconds: 5 } },
             { id: '4', appearance: { surveyPopupDelaySeconds: 8 } },
+        ])
+    })
+
+    test('sortSurveysByAppearanceDelay should sort Always surveys last', () => {
+        const surveys: Survey[] = [
+            { id: '1', appearance: { surveyPopupDelaySeconds: 5 }, schedule: 'event' },
+            { id: '2', appearance: { surveyPopupDelaySeconds: 2 }, schedule: SurveySchedule.Always },
+            { id: '3', appearance: {}, schedule: 'event' },
+            { id: '4', appearance: { surveyPopupDelaySeconds: 8 }, schedule: SurveySchedule.Always },
+            { id: '5', appearance: { surveyPopupDelaySeconds: 1 }, schedule: 'event' },
+        ] as unknown as Survey[]
+
+        const sortedSurveys = surveyManager.getTestAPI().sortSurveysByAppearanceDelay(surveys)
+
+        expect(sortedSurveys).toEqual([
+            { id: '3', appearance: {}, schedule: 'event' },
+            { id: '5', appearance: { surveyPopupDelaySeconds: 1 }, schedule: 'event' },
+            { id: '1', appearance: { surveyPopupDelaySeconds: 5 }, schedule: 'event' },
+            { id: '2', appearance: { surveyPopupDelaySeconds: 2 }, schedule: SurveySchedule.Always },
+            { id: '4', appearance: { surveyPopupDelaySeconds: 8 }, schedule: SurveySchedule.Always },
         ])
     })
 

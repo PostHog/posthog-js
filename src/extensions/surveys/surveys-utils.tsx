@@ -6,7 +6,6 @@ import {
     SurveyAppearance,
     SurveyQuestion,
     SurveySchedule,
-    SurveyType,
 } from '../../posthog-surveys-types'
 import { document as _document, window as _window } from '../../utils/globals'
 import { createLogger } from '../../utils/logger'
@@ -673,12 +672,11 @@ export const hasEvents = (survey: Pick<Survey, 'conditions'>): boolean => {
     return survey.conditions?.events?.values?.length != undefined && survey.conditions?.events?.values?.length > 0
 }
 
-export const canActivateRepeatedly = (survey: Pick<Survey, 'schedule' | 'type' | 'conditions'>): boolean => {
-    if (survey.schedule === SurveySchedule.Always && survey.type === SurveyType.Widget) {
-        return true
-    }
-
-    return !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey))
+export const canActivateRepeatedly = (survey: Pick<Survey, 'schedule' | 'conditions'>): boolean => {
+    return (
+        !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey)) ||
+        survey.schedule === SurveySchedule.Always
+    )
 }
 
 /**
