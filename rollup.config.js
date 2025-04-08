@@ -9,6 +9,7 @@ import { visualizer } from 'rollup-plugin-visualizer'
 import commonjs from '@rollup/plugin-commonjs'
 import fs from 'fs'
 import path from 'path'
+import privatePrefixerTransformer from './rollup-plugins/ts-private-prefixer'
 
 const plugins = (es5, minimal) => [
     json(),
@@ -25,7 +26,20 @@ const plugins = (es5, minimal) => [
             : {}
     ),
     resolve({ browser: true }),
-    typescript({ sourceMap: true, outDir: './dist' }),
+    typescript({
+        sourceMap: true,
+        outDir: './dist',
+        compilerOptions: {
+            target: 'ESNext',
+        },
+        transformers: minimal
+            ? function (program) {
+                  return {
+                      before: [privatePrefixerTransformer(program)],
+                  }
+              }
+            : undefined,
+    }),
     commonjs(),
     babel({
         extensions: ['.js', '.jsx', '.ts', '.tsx'],
