@@ -6,6 +6,6 @@
         "noImplicitReturns": false,
         "typeRoots": ["../../node_modules/@types", "../../src/types"]
     },
-    "include": ["./**/*.ts*"],
+    "include": ["./**/*.ts*", "../entrypoints/module.minimal.es.ts"],
     "exclude": []
 }
