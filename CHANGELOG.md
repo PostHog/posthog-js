@@ -1,3 +1,7 @@
+## 1.234.11 - 2025-04-08
+
+- chore: allow all surveys to be repeated if schedule is always (#1866)
+
 ## 1.234.10 - 2025-04-07
 
 - feat: Only capture vitals on http and https (#1873)
