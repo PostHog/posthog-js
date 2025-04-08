@@ -367,8 +367,8 @@ describe('SurveyManager', () => {
             .spyOn(surveyManager as any, 'handlePopoverSurvey')
             .mockImplementation(() => {})
         const handleWidgetMock = jest.spyOn(surveyManager as any, 'handleWidget').mockImplementation(() => {})
-        const handleWidgetSelectorMock = jest
-            .spyOn(surveyManager as any, 'handleWidgetSelector')
+        const manageWidgetSelectorListener = jest
+            .spyOn(surveyManager as any, 'manageWidgetSelectorListener')
             .mockImplementation(() => {})
         jest.spyOn(surveyManager as any, 'canShowNextEventBasedSurvey').mockReturnValue(true)
 
@@ -377,52 +377,65 @@ describe('SurveyManager', () => {
         expect(mockPostHog.getActiveMatchingSurveys).toHaveBeenCalled()
         expect(handlePopoverSurveyMock).toHaveBeenCalledWith(mockSurveys[0])
         expect(handleWidgetMock).not.toHaveBeenCalled()
-        expect(handleWidgetSelectorMock).not.toHaveBeenCalled()
+        expect(manageWidgetSelectorListener).not.toHaveBeenCalled()
     })
 
     test('handleWidget should render the widget correctly', () => {
-        const mockSurvey = mockSurveys[1]
-        const handleWidgetMock = jest.spyOn(surveyManager as any, 'handleWidget').mockImplementation(() => {})
-        surveyManager.getTestAPI().handleWidget(mockSurvey)
-        expect(handleWidgetMock).toHaveBeenCalledWith(mockSurvey)
-    })
-
-    test('handleWidgetSelector should set up the widget selector correctly', () => {
-        const mockSurvey: Survey = {
-            id: 'testSurvey1',
-            name: 'Test survey 1',
-            description: 'Test survey description 1',
+        // Add a minimal widget survey to the mock surveys array
+        mockSurveys.push({
+            id: 'widgetSurvey1',
+            name: 'Widget Survey',
+            description: 'A widget survey',
             type: SurveyType.Widget,
             linked_flag_key: null,
             targeting_flag_key: null,
             internal_targeting_flag_key: null,
-            questions: [
-                {
-                    question: 'How satisfied are you with our newest product?',
-                    description: 'This is a question description',
-                    descriptionContentType: 'text',
-                    type: SurveyQuestionType.Rating,
-                    display: 'number',
-                    scale: 10,
-                    lowerBoundLabel: 'Not Satisfied',
-                    upperBoundLabel: 'Very Satisfied',
-                    id: 'question-a',
-                },
-            ],
-            appearance: {},
+            questions: [],
+            appearance: { widgetType: 'tab' }, // Specify widget type
             conditions: null,
             start_date: '2021-01-01T00:00:00.000Z',
             end_date: null,
             current_iteration: null,
             current_iteration_start_date: null,
             feature_flag_keys: [],
+        })
+        const mockSurvey = mockSurveys[1]
+        const handleWidgetSpy = jest.spyOn(surveyManager as any, 'handleWidget')
+        surveyManager.getTestAPI().handleWidget(mockSurvey) // Call the actual method
+        expect(handleWidgetSpy).toHaveBeenCalledWith(mockSurvey)
+        // We can add more specific assertions here if needed, e.g., checking if the shadow DOM was created
+        // For now, just ensuring it was called seems sufficient for this test's scope.
+    })
+
+    test('manageWidgetSelectorListener should be called for selector widgets', () => {
+        const mockSurvey: Survey = {
+            id: 'selectorWidgetSurvey',
+            name: 'Selector Widget Survey',
+            description: 'A selector widget survey',
+            type: SurveyType.Widget,
+            questions: [],
+            appearance: {
+                widgetType: 'selector',
+                widgetSelector: '.my-selector',
+            },
+            conditions: null,
+            start_date: '2021-01-01T00:00:00.000Z',
+            end_date: null,
+            current_iteration: null,
+            current_iteration_start_date: null,
+            feature_flag_keys: [],
+            linked_flag_key: null,
+            targeting_flag_key: null,
+            internal_targeting_flag_key: null,
         }
-        document.body.innerHTML = '<div class="widget-selector"></div>'
-        const handleWidgetSelectorMock = jest
-            .spyOn(surveyManager as any, 'handleWidgetSelector')
-            .mockImplementation(() => {})
-        surveyManager.getTestAPI().handleWidgetSelector(mockSurvey)
-        expect(handleWidgetSelectorMock).toHaveBeenNthCalledWith(1, mockSurvey)
+        mockPostHog.getActiveMatchingSurveys = jest.fn((callback) => callback([mockSurvey]))
+        document.body.innerHTML = '<div class="my-selector">Click Me</div>'
+
+        const manageWidgetSelectorListenerSpy = jest.spyOn(surveyManager as any, 'manageWidgetSelectorListener')
+
+        surveyManager.callSurveysAndEvaluateDisplayLogic()
+
+        expect(manageWidgetSelectorListenerSpy).toHaveBeenCalledWith(mockSurvey)
     })
 
     test('callSurveysAndEvaluateDisplayLogic should not call surveys in focus', () => {

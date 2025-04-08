@@ -12,7 +12,7 @@
         "@react-router/node": "^7.5.0",
         "@react-router/serve": "^7.5.0",
         "isbot": "^5.1.17",
-        "posthog-js": "^1.234.10",
+        "posthog-js": "file:../../posthog-js",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
         "react-router": "^7.5.0"
