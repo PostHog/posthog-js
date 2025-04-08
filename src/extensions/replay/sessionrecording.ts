@@ -53,6 +53,7 @@ import {
     AndTriggerMatching,
     anyMatchSessionRecordingStatus,
     LinkedFlagMatching,
+    nullMatchSessionRecordingStatus,
     RecordingTriggersStatus,
     SessionRecordingStatus,
     TriggerStatusMatching,
@@ -240,7 +241,7 @@ export class SessionRecording implements RecordingTriggersStatus {
     private flushBufferTimer?: any
 
     private _statusMatcher: (triggersStatus: RecordingTriggersStatus) => SessionRecordingStatus =
-        anyMatchSessionRecordingStatus
+        nullMatchSessionRecordingStatus
 
     private _receivedDecide: boolean = false
 

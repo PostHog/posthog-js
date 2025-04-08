@@ -35,6 +35,7 @@ import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
 import {
     allMatchSessionRecordingStatus,
     anyMatchSessionRecordingStatus,
+    nullMatchSessionRecordingStatus,
 } from '../../../extensions/replay/triggerMatching'
 
 // Type and source defined here designate a non-user-generated recording event
@@ -197,6 +198,10 @@ describe('SessionRecording', () => {
     describe('onRemoteConfig()', () => {
         beforeEach(() => {
             jest.spyOn(sessionRecording, 'startIfEnabledOrStop')
+        })
+
+        it('has null status matcher before remote config', () => {
+            expect(sessionRecording['_statusMatcher']).toBe(nullMatchSessionRecordingStatus)
         })
 
         it('loads script based on script config', () => {

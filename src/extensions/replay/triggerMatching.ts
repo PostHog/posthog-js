@@ -202,6 +202,15 @@ export interface RecordingTriggersStatus {
     get sessionId(): string
 }
 
+// we need a no-op matcher before we can lazy load the other matches, since all matchers wait on remote config anyway
+export function nullMatchSessionRecordingStatus(triggersStatus: RecordingTriggersStatus): SessionRecordingStatus {
+    if (!triggersStatus.isRecordingEnabled) {
+        return 'disabled'
+    }
+
+    return 'buffering'
+}
+
 export function anyMatchSessionRecordingStatus(triggersStatus: RecordingTriggersStatus): SessionRecordingStatus {
     if (!triggersStatus.receivedDecide) {
         return 'buffering'
