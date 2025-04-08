@@ -1,3 +1,8 @@
+## 1.235.0 - 2025-04-08
+
+- fix: make survey widget with selector work with SPAs (#1877)
+- chore: add react router vite react playground (#1876)
+
 ## 1.234.11 - 2025-04-08
 
 - chore: allow all surveys to be repeated if schedule is always (#1866)
