@@ -9,7 +9,7 @@ export type Properties = Record<string, any>
 export type PostHogErrorBoundaryProps = {
     children: React.ReactNode
     fallback: React.ReactNode
-    additionalProperties?: Properties | ((properties: Properties, error: unknown) => Properties)
+    additionalProperties?: Properties | ((error: unknown) => Properties)
 }
 
 type PostHogErrorBoundaryState = {
@@ -46,7 +46,7 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
         })
         let currentProperties
         if (isFunction(additionalProperties)) {
-            currentProperties = additionalProperties({}, error)
+            currentProperties = additionalProperties(error)
         } else if (typeof additionalProperties === 'object') {
             currentProperties = additionalProperties
         }

@@ -69,6 +69,24 @@ describe('PostHogErrorBoundary component', () => {
         expect(console.warn).toHaveBeenCalledWith(__POSTHOG_ERROR_WARNING_MESSAGES.INVALID_FALLBACK)
     })
 
+    it('should add additional properties before sending event (as object)', () => {
+        const props = { team_id: '1234' }
+        given.render_with_error({ message: 'Kaboom', additionalProperties: props })
+        expect(given.posthog.captureException).toHaveBeenCalledWith(new Error('Kaboom'), props)
+    })
+
+    it('should add additional properties before sending event (as function)', () => {
+        const props = { team_id: '1234' }
+        given.render_with_error({
+            message: 'Kaboom',
+            additionalProperties: (err) => {
+                expect(err.message).toBe('Kaboom')
+                return props
+            },
+        })
+        expect(given.posthog.captureException).toHaveBeenCalledWith(new Error('Kaboom'), props)
+    })
+
     it('should render children without errors', () => {
         const { container } = given.render_without_error()
         expect(container.innerHTML).toBe('<div>Amazing content</div>')
