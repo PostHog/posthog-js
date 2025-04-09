@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { render } from '@testing-library/react'
 import { PostHogProvider } from '../../context'
-import { PostHogErrorBoundary } from '..'
+import { __POSTHOG_ERROR_WARNING_MESSAGES, PostHogErrorBoundary } from '..'
 
 describe('PostHogErrorBoundary component', () => {
     const originalError = console.error
@@ -43,16 +43,21 @@ describe('PostHogErrorBoundary component', () => {
         expect(console.error).toHaveBeenCalledTimes(2)
     })
 
-    it('should warn user when fallback is not valid', () => {
+    it('should warn user when fallback is not null', () => {
         const { container } = given.render({ fallback: null })
         expect(given.posthog.captureException).toHaveBeenCalledWith(new Error('Error'), undefined)
         expect(container.innerHTML).toBe('')
-        expect(console.warn).toHaveBeenCalledWith(
-            '[PostHog.js] Invalid fallback prop, provide a valid React element or a function that returns a valid React element.'
-        )
+        expect(console.warn).toHaveBeenCalledWith(__POSTHOG_ERROR_WARNING_MESSAGES.INVALID_FALLBACK)
     })
 
-    it('should add additional properties before sending event', () => {
+    it('should warn user when fallback is a string', () => {
+        const { container } = given.render({ fallback: 'hello' })
+        expect(given.posthog.captureException).toHaveBeenCalledWith(new Error('Error'), undefined)
+        expect(container.innerHTML).toBe('')
+        expect(console.warn).toHaveBeenCalledWith(__POSTHOG_ERROR_WARNING_MESSAGES.INVALID_FALLBACK)
+    })
+
+    it('should add additional properties to event', () => {
         const props = { team_id: '1234' }
         given.render({ message: 'Kaboom', additionalProperties: props })
         expect(given.posthog.captureException).toHaveBeenCalledWith(new Error('Kaboom'), props)
