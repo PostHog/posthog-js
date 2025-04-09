@@ -42,7 +42,7 @@ export const style = (appearance: SurveyAppearance | null) => {
             left: 50%;
             transform: translateX(-50%);
           `,
-        [SurveyPosition.NextToTrigger]: '',
+        [SurveyPosition.NextToTrigger]: 'right: 30px;',
     }
 
     const styles = `
