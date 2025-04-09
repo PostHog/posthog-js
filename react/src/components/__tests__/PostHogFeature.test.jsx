@@ -46,7 +46,7 @@ describe('PostHogFeature component', () => {
                 }
             }
             callback(activeFlags)
-            return () => { }
+            return () => {}
         },
         capture: jest.fn(),
     }))
