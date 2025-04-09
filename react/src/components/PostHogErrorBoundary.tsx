@@ -4,9 +4,12 @@ import React from 'react'
 import { PostHog, PostHogContext } from '../context'
 import { isFunction } from '../utils/type-utils'
 
+export type Properties = Record<string, any>
+
 export type PostHogErrorBoundaryProps = {
     children: React.ReactNode
     fallback: React.ReactNode
+    additionalProperties?: Properties | ((properties: Properties, error: unknown) => Properties)
 }
 
 type PostHogErrorBoundaryState = {
@@ -29,12 +32,19 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
 
     componentDidCatch(error: unknown, errorInfo: React.ErrorInfo) {
         const { client } = this.context as { client: PostHog }
+        const { additionalProperties } = this.props
         const { componentStack } = errorInfo
         this.setState({
             error,
             componentStack,
         })
-        client.captureException(error)
+        let currentProperties
+        if (isFunction(additionalProperties)) {
+            currentProperties = additionalProperties({}, error)
+        } else if (typeof additionalProperties === 'object') {
+            currentProperties = additionalProperties
+        }
+        client.captureException(error, currentProperties)
     }
 
     render() {
@@ -43,7 +53,7 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
         const state = this.state
 
         if (!client) {
-            console.error('[PostHog.js] PostHogErrorBoundary must be used within a PostHogProvider')
+            console.warn('[PostHog.js] PostHogErrorBoundary must be used within a PostHogProvider')
         }
 
         if (state.componentStack == null) {
