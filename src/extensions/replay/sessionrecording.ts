@@ -1440,7 +1440,7 @@ export class SessionRecording {
             $sdk_debug_replay_internal_buffer_length: this.buffer.data.length,
             $sdk_debug_replay_internal_buffer_size: this.buffer.size,
             $sdk_debug_current_session_duration: this.sessionDuration,
-            $sdk_debug_session_start: isNullish(sessionStartTimestamp) ? 'no start timestamp' : sessionStartTimestamp,
+            $sdk_debug_session_start: sessionStartTimestamp,
         }
     }
 }
