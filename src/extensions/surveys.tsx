@@ -3,7 +3,6 @@ import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { PostHog } from '../posthog-core'
 import {
     Survey,
-    SurveyAppearance,
     SurveyPosition,
     SurveyQuestion,
     SurveyQuestionBranchingType,
@@ -22,6 +21,7 @@ import { createWidgetStyle, retrieveWidgetShadow } from './surveys-widget'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import { Cancel } from './surveys/components/QuestionHeader'
 import {
+    CommonQuestionProps,
     LinkQuestion,
     MultipleChoiceQuestion,
     OpenTextQuestion,
@@ -918,9 +918,11 @@ export function Questions({
     )
     // Initialize responses from sessionStorage or empty object
     const [questionsResponses, setQuestionsResponses] = useState(() => {
-        const initialResponses = getInProgressSurveyState(survey)?.responses || {}
-        logger.info(`Survey ${survey.id} initial responses: ${JSON.stringify(initialResponses)}`)
-        return initialResponses
+        const inProgressSurveyData = getInProgressSurveyState(survey)
+        if (inProgressSurveyData?.responses) {
+            logger.info('Survey is already in progress, filling in initial responses')
+        }
+        return inProgressSurveyData?.responses || {}
     })
     const { previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit, surveySubmissionId } =
         useContext(SurveyContext)
@@ -1031,6 +1033,9 @@ export function Questions({
                                         questionId: question.id,
                                     }),
                                 onPreviewSubmit,
+                                initialValue: question.id
+                                    ? questionsResponses[getSurveyResponseKey(question.id)]
+                                    : undefined,
                             })}
                         </div>
                     )
@@ -1148,13 +1153,9 @@ export function FeedbackWidget({
     )
 }
 
-interface GetQuestionComponentProps {
+interface GetQuestionComponentProps extends CommonQuestionProps {
     question: SurveyQuestion
-    forceDisableHtml: boolean
     displayQuestionIndex: number
-    appearance: SurveyAppearance
-    onSubmit: (res: string | string[] | number | null) => void
-    onPreviewSubmit: (res: string | string[] | number | null) => void
 }
 
 const getQuestionComponent = ({
@@ -1164,6 +1165,7 @@ const getQuestionComponent = ({
     appearance,
     onSubmit,
     onPreviewSubmit,
+    initialValue,
 }: GetQuestionComponentProps): JSX.Element => {
     const questionComponents = {
         [SurveyQuestionType.Open]: OpenTextQuestion,
@@ -1183,6 +1185,7 @@ const getQuestionComponent = ({
         onSubmit: (res: string | string[] | number | null) => {
             onSubmit(res)
         },
+        initialValue,
     }
 
     const additionalProps: Record<SurveyQuestionType, any> = {

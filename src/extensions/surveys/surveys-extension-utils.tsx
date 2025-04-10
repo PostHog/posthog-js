@@ -12,21 +12,10 @@ import { document as _document, window as _window } from '../../utils/globals'
 import { SURVEY_LOGGER as logger } from '../../utils/survey-utils'
 import { isNullish } from '../../utils/type-utils'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
-// NOTE: Removed self-import of state helpers as they are defined below
-// import {
-//     clearInProgressSurveyState,
-//     getInProgressSurveyState,
-//     setInProgressSurveyState,
-// } from './surveys-utils'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
-
-// LocalStorage key prefix for marking surveys as seen/dismissed
-const SurveySeenPrefix = 'seenSurvey_'
-// SessionStorage key prefix for tracking in-progress surveys
-const SurveyInProgressPrefix = 'inProgressSurvey_'
 
 export const SURVEY_DEFAULT_Z_INDEX = 2147483647
 
@@ -716,12 +705,6 @@ export const hasEvents = (survey: Pick<Survey, 'conditions'>): boolean => {
 export const canActivateRepeatedly = (
     survey: Pick<Survey, 'schedule' | 'conditions' | 'id' | 'current_iteration'>
 ): boolean => {
-    logger.info('canActivateRepeatedly', {
-        survey,
-        isSurveyInProgress: isSurveyInProgress(survey),
-        hasEventsAndRepeatedActivation: !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey)),
-        scheduleAlways: survey.schedule === SurveySchedule.Always,
-    })
     return (
         !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey)) ||
         survey.schedule === SurveySchedule.Always ||
@@ -744,6 +727,8 @@ export const getSurveySeen = (survey: Survey): boolean => {
 
     return false
 }
+
+const SurveySeenPrefix = 'seenSurvey_'
 
 export const getSurveySeenKey = (survey: Survey): string => {
     let surveySeenKey = `${SurveySeenPrefix}${survey.id}`
@@ -826,13 +811,13 @@ export const renderChildrenAsTextOrHtml = ({ component, children, renderAsHtml, 
           })
 }
 
-// ** In-Progress Survey State Management (using sessionStorage) **
-
 interface InProgressSurveyState {
     surveySubmissionId: string
     responses: Record<string, string | number | string[] | null>
     // NOTE: We might need currentQuestionIndex here later if restoring multi-page surveys
 }
+
+const SurveyInProgressPrefix = 'inProgressSurvey_'
 
 const getInProgressSurveyStateKey = (survey: Pick<Survey, 'id' | 'current_iteration'>): string => {
     let key = `${SurveyInProgressPrefix}${survey.id}`
@@ -879,5 +864,3 @@ export const clearInProgressSurveyState = (survey: Pick<Survey, 'id' | 'current_
         logger.error('Error clearing in-progress survey state from sessionStorage', e)
     }
 }
-
-// ** End In-Progress Survey State Management **
