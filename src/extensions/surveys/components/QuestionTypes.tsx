@@ -18,7 +18,7 @@ import {
     veryDissatisfiedEmoji,
     verySatisfiedEmoji,
 } from '../icons'
-import { getDisplayOrderChoices } from '../surveys-utils'
+import { getDisplayOrderChoices } from '../surveys-extension-utils'
 import { BottomSection } from './BottomSection'
 import { QuestionHeader } from './QuestionHeader'
 

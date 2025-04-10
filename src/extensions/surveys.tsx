@@ -1,8 +1,8 @@
 import { PostHog } from '../posthog-core'
-import { doesSurveyUrlMatch } from '../posthog-surveys'
 import {
     Survey,
     SurveyAppearance,
+    SurveyPosition,
     SurveyQuestion,
     SurveyQuestionBranchingType,
     SurveyQuestionType,
@@ -16,7 +16,7 @@ import { addEventListener } from '../utils'
 import * as Preact from 'preact'
 import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { document as _document, window as _window } from '../utils/globals'
-import { createLogger } from '../utils/logger'
+import { doesSurveyUrlMatch, SURVEY_LOGGER as logger } from '../utils/survey-utils'
 import { isNull, isNumber } from '../utils/type-utils'
 import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
@@ -40,9 +40,8 @@ import {
     style,
     SURVEY_DEFAULT_Z_INDEX,
     SurveyContext,
-} from './surveys/surveys-utils'
+} from './surveys/surveys-extension-utils'
 import { prepareStylesheet } from './utils/stylesheet-loader'
-const logger = createLogger('[Surveys]')
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -307,6 +306,15 @@ export class SurveyManager {
         if (!currentElement.hasAttribute('PHWidgetSurveyClickListener')) {
             const listener = (event: Event) => {
                 event.stopPropagation() // Prevent bubbling
+
+                if (survey.appearance?.position !== SurveyPosition.NextToTrigger) {
+                    window.dispatchEvent(
+                        new CustomEvent(DISPATCH_FEEDBACK_WIDGET_EVENT, {
+                            detail: { surveyId: survey.id, position: {} },
+                        })
+                    )
+                    return
+                }
 
                 const buttonRect = (event.currentTarget as HTMLElement).getBoundingClientRect()
                 const viewportHeight = window.innerHeight

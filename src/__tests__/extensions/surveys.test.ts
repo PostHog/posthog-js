@@ -8,8 +8,8 @@ import {
     useHideSurveyOnURLChange,
     usePopupVisibility,
 } from '../../extensions/surveys'
-import { createShadow } from '../../extensions/surveys/surveys-utils'
-import { Survey, SurveyQuestionType, SurveySchedule, SurveyType } from '../../posthog-surveys-types'
+import { createShadow } from '../../extensions/surveys/surveys-extension-utils'
+import { Survey, SurveyQuestionType, SurveySchedule, SurveyType, SurveyWidgetType } from '../../posthog-surveys-types'
 
 import { afterAll, beforeAll, beforeEach } from '@jest/globals'
 import '@testing-library/jest-dom'
@@ -391,7 +391,7 @@ describe('SurveyManager', () => {
             targeting_flag_key: null,
             internal_targeting_flag_key: null,
             questions: [],
-            appearance: { widgetType: 'tab' }, // Specify widget type
+            appearance: { widgetType: SurveyWidgetType.Tab }, // Specify widget type
             conditions: null,
             start_date: '2021-01-01T00:00:00.000Z',
             end_date: null,
@@ -415,7 +415,7 @@ describe('SurveyManager', () => {
             type: SurveyType.Widget,
             questions: [],
             appearance: {
-                widgetType: 'selector',
+                widgetType: SurveyWidgetType.Selector,
                 widgetSelector: '.my-selector',
             },
             conditions: null,
