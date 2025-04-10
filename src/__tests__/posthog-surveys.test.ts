@@ -10,6 +10,7 @@ jest.useFakeTimers()
 
 import { SURVEYS, SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
 import { SurveyManager } from '../extensions/surveys'
+import { getInProgressSurveyStateKey } from '../extensions/surveys/surveys-extension-utils'
 import { PostHog } from '../posthog-core'
 import { PostHogSurveys } from '../posthog-surveys'
 import { Survey, SurveySchedule, SurveyType } from '../posthog-surveys-types'
@@ -163,6 +164,20 @@ describe('posthog-surveys', () => {
                 decideResponse.featureFlags[survey.linked_flag_key] = true
                 decideResponse.featureFlags[survey.internal_targeting_flag_key] = false
                 const result = surveys['_checkSurveyEligibility'](repeatableSurvey.id)
+                expect(result.eligible).toBeTruthy()
+            })
+
+            it('can render a survey that is in progress', () => {
+                decideResponse.featureFlags[survey.targeting_flag_key] = true
+                decideResponse.featureFlags[survey.linked_flag_key] = true
+                decideResponse.featureFlags[survey.internal_targeting_flag_key] = false
+                localStorage.setItem(
+                    getInProgressSurveyStateKey(survey),
+                    JSON.stringify({
+                        surveySubmissionId: '123',
+                    })
+                )
+                const result = surveys['_checkSurveyEligibility'](survey.id)
                 expect(result.eligible).toBeTruthy()
             })
         })

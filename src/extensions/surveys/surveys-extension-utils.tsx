@@ -10,6 +10,7 @@ import {
 } from '../../posthog-surveys-types'
 import { document as _document, window as _window, userAgent } from '../../utils/globals'
 import { SURVEY_LOGGER as logger, SURVEY_SEEN_PREFIX } from '../../utils/survey-utils'
+import { isNullish } from '../../utils/type-utils'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
 
 import { SurveyMatchType } from '../../posthog-surveys-types'
@@ -574,14 +575,19 @@ export const createShadow = (styleSheet: string, surveyId: string, element?: Ele
 export const sendSurveyEvent = (
     responses: Record<string, string | number | string[] | null> = {},
     survey: Survey,
-    posthog?: PostHog
+    posthog?: PostHog,
+    surveySubmissionId?: string,
+    isSurveyCompleted?: boolean
 ) => {
     if (!posthog) {
         logger.error('[survey sent] event not captured, PostHog instance not found.')
         return
     }
+
+    // Mark as seen in localStorage regardless of completion status
     localStorage.setItem(getSurveySeenKey(survey), 'true')
 
+    // Send the event payload
     posthog.capture('survey sent', {
         $survey_name: survey.name,
         $survey_id: survey.id,
@@ -592,17 +598,33 @@ export const sendSurveyEvent = (
             question: question.question,
             index,
         })),
+        $survey_submission_id: surveySubmissionId, // Include the ID if available
+        $survey_completed: isSurveyCompleted,
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
         ...responses,
         $set: {
             [getSurveyInteractionProperty(survey, 'responded')]: true,
         },
     })
-    window.dispatchEvent(new Event('PHSurveySent'))
+
+    // Manage localStorage state based on completion
+    if (isSurveyCompleted) {
+        window.dispatchEvent(new Event('PHSurveySent'))
+        // Clear in-progress state on final completion
+        clearInProgressSurveyState(survey)
+    } else if (surveySubmissionId) {
+        // Set/Update in-progress state for partial submissions if ID exists
+        setInProgressSurveyState(survey, {
+            surveySubmissionId: surveySubmissionId,
+            responses: responses,
+        })
+    } else {
+        // Log if partial submission without ID - cannot save state
+        logger.error('[survey sent] surveySubmissionId is required to save partial submission state.')
+    }
 }
 
 export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {
-    // TODO: state management and unit tests for this would be nice
     if (!posthog) {
         logger.error('[survey dismissed] event not captured, PostHog instance not found.')
         return
@@ -610,6 +632,11 @@ export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly
     if (readOnly) {
         return
     }
+
+    // Mark as seen in localStorage
+    localStorage.setItem(getSurveySeenKey(survey), 'true')
+
+    // Send dismissal event
     posthog.capture('survey dismissed', {
         $survey_name: survey.name,
         $survey_id: survey.id,
@@ -620,8 +647,11 @@ export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly
             [getSurveyInteractionProperty(survey, 'dismissed')]: true,
         },
     })
-    localStorage.setItem(getSurveySeenKey(survey), 'true')
+
     window.dispatchEvent(new Event('PHSurveyClosed'))
+
+    // Clear in-progress state on dismissal
+    clearInProgressSurveyState(survey)
 }
 
 // Use the Fisher-yates algorithm to shuffle this array
@@ -675,10 +705,13 @@ export const hasEvents = (survey: Pick<Survey, 'conditions'>): boolean => {
     return survey.conditions?.events?.values?.length != undefined && survey.conditions?.events?.values?.length > 0
 }
 
-export const canActivateRepeatedly = (survey: Pick<Survey, 'schedule' | 'conditions'>): boolean => {
+export const canActivateRepeatedly = (
+    survey: Pick<Survey, 'schedule' | 'conditions' | 'id' | 'current_iteration'>
+): boolean => {
     return (
         !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey)) ||
-        survey.schedule === SurveySchedule.Always
+        survey.schedule === SurveySchedule.Always ||
+        isSurveyInProgress(survey)
     )
 }
 
@@ -736,6 +769,7 @@ interface SurveyContextProps {
     onPopupSurveyDismissed: () => void
     isPopup: boolean
     onPreviewSubmit: (res: string | string[] | number | null) => void
+    surveySubmissionId: string
 }
 
 export const SurveyContext = createContext<SurveyContextProps>({
@@ -744,6 +778,7 @@ export const SurveyContext = createContext<SurveyContextProps>({
     onPopupSurveyDismissed: () => {},
     isPopup: true,
     onPreviewSubmit: () => {},
+    surveySubmissionId: '',
 })
 
 interface RenderProps {
@@ -813,4 +848,58 @@ export function doesSurveyMatchSelector(survey: Survey): boolean {
         return true
     }
     return !!document?.querySelector(survey.conditions.selector)
+}
+
+interface InProgressSurveyState {
+    surveySubmissionId: string
+    responses: Record<string, string | number | string[] | null>
+    // NOTE: We might need currentQuestionIndex here later if restoring multi-page surveys
+}
+
+const SurveyInProgressPrefix = 'inProgressSurvey_'
+
+export const getInProgressSurveyStateKey = (survey: Pick<Survey, 'id' | 'current_iteration'>): string => {
+    let key = `${SurveyInProgressPrefix}${survey.id}`
+    if (survey.current_iteration && survey.current_iteration > 0) {
+        key = `${SurveyInProgressPrefix}${survey.id}_${survey.current_iteration}`
+    }
+    return key
+}
+
+export const setInProgressSurveyState = (
+    survey: Pick<Survey, 'id' | 'current_iteration'>,
+    state: InProgressSurveyState
+): void => {
+    try {
+        localStorage.setItem(getInProgressSurveyStateKey(survey), JSON.stringify(state))
+    } catch (e) {
+        logger.error('Error setting in-progress survey state in localStorage', e)
+    }
+}
+
+export const getInProgressSurveyState = (
+    survey: Pick<Survey, 'id' | 'current_iteration'>
+): InProgressSurveyState | null => {
+    try {
+        const stateString = localStorage.getItem(getInProgressSurveyStateKey(survey))
+        if (stateString) {
+            return JSON.parse(stateString) as InProgressSurveyState
+        }
+    } catch (e) {
+        logger.error('Error getting in-progress survey state from localStorage', e)
+    }
+    return null
+}
+
+const isSurveyInProgress = (survey: Pick<Survey, 'id' | 'current_iteration'>): boolean => {
+    const state = getInProgressSurveyState(survey)
+    return !isNullish(state?.surveySubmissionId)
+}
+
+export const clearInProgressSurveyState = (survey: Pick<Survey, 'id' | 'current_iteration'>): void => {
+    try {
+        localStorage.removeItem(getInProgressSurveyStateKey(survey))
+    } catch (e) {
+        logger.error('Error clearing in-progress survey state from localStorage', e)
+    }
 }

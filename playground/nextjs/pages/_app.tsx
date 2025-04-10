@@ -17,8 +17,8 @@ export default function App({ Component, pageProps }: AppProps) {
     const router = useRouter()
 
     const user = useUser()
-
     useEffect(() => {
+        // Use a type assertion to add the property to the window object
         ;(window as any).POSTHOG_DEBUG = true
         if (user) {
             posthogHelpers.setUser(user)
