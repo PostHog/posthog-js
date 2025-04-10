@@ -12,22 +12,18 @@ export class HistoryAutocapture {
     private _instance: PostHog
     private _initialized = false
     private _popstateListener: (() => void) | undefined
+    private _lastPathname: string | undefined
 
     constructor(instance: PostHog) {
         this._instance = instance
-        this.startIfEnabled()
+        this._lastPathname = window?.location?.pathname
     }
 
-    /**
-     * Whether history events capture is enabled based on client configuration
-     */
     public get isEnabled(): boolean {
-        return Boolean(this._instance.config.capture_history_events)
+        const config = this._instance.config.capture_history_events
+        return config === 'always' || config === 'pathname'
     }
 
-    /**
-     * Start monitoring History API based on configuration
-     */
     public startIfEnabled(): void {
         if (this.isEnabled && !this._initialized) {
             logger.info('History API monitoring enabled, starting...')
@@ -35,91 +31,89 @@ export class HistoryAutocapture {
         }
     }
 
-    /**
-     * Stop monitoring History API events and clean up listeners
-     */
     public stop(): void {
-        this._popstateListener?.()
+        if (this._popstateListener) {
+            this._popstateListener()
+        }
         this._popstateListener = undefined
-
         this._initialized = false
-
         logger.info('History API monitoring stopped')
     }
 
-    /**
-     * Set up listeners for History API methods to capture pageview events for SPA navigation
-     */
     public monitorHistoryChanges(): void {
         if (!window || !window.history) {
             return
         }
 
-        // Capture PostHog instance reference for use in closure
-        const instance = this._instance
-        const isEnabled = () => this.isEnabled
+        const instance = this
 
-        // Only patch if not already patched
         if (!(window.history.pushState as any)?.__posthog_wrapped__) {
             patch(window.history, 'pushState', (originalPushState: any) => {
                 return function (this: History, ...args: any[]) {
                     const result = originalPushState.apply(this, args)
-                    try {
-                        if (isEnabled()) {
-                            instance.capture('$pageview', { navigation_type: 'pushState' })
-                        }
-                    } catch (error) {
-                        logger.error('Error in patched pushState', error)
-                    }
+                    instance.capturePageview('pushState')
                     return result
                 }
             })
         }
 
-        // Only patch if not already patched
         if (!(window.history.replaceState as any)?.__posthog_wrapped__) {
             patch(window.history, 'replaceState', (originalReplaceState: any) => {
                 return function (this: History, ...args: any[]) {
                     const result = originalReplaceState.apply(this, args)
-                    try {
-                        if (isEnabled()) {
-                            instance.capture('$pageview', { navigation_type: 'replaceState' })
-                        }
-                    } catch (error) {
-                        logger.error('Error in patched replaceState', error)
-                    }
+                    instance.capturePageview('replaceState')
                     return result
                 }
             })
         }
 
-        // Listen for popstate events from the browser's back/forward buttons
         this._setupPopstateListener()
-
         this._initialized = true
     }
 
-    /**
-     * Set up listener for popstate events to capture browser back/forward navigation
-     */
+    private capturePageview(navigationType: 'pushState' | 'replaceState' | 'popstate'): void {
+        try {
+            if (this.shouldCaptureHistoryChange()) {
+                this._instance.capture('$pageview', { navigation_type: navigationType })
+            }
+        } catch (error) {
+            logger.error(`Error capturing ${navigationType} pageview`, error)
+        }
+    }
+
+    private shouldCaptureHistoryChange(): boolean {
+        const config = this._instance.config.capture_history_events
+
+        if (config === 'never') {
+            return false
+        }
+
+        if (config === 'always') {
+            return true
+        }
+
+        // If config is 'pathname', we only capture if the pathname changed
+        if (config === 'pathname') {
+            const currentPathname = window?.location?.pathname
+            if (currentPathname !== this._lastPathname) {
+                this._lastPathname = currentPathname
+                return true
+            }
+            return false
+        }
+
+        return false
+    }
+
     private _setupPopstateListener(): void {
         if (this._popstateListener) {
             return
         }
 
-        const handler = () => {
-            try {
-                if (this.isEnabled) {
-                    this._instance.capture('$pageview', { navigation_type: 'popstate' })
-                }
-            } catch (error) {
-                logger.error('Error handling popstate event', error)
-            }
-        }
+        const handler = () => this.capturePageview('popstate')
 
         addEventListener(window, 'popstate', handler)
 
-        // Create a function to remove the listener
         this._popstateListener = () => {
             if (window) {
                 window.removeEventListener('popstate', handler)
