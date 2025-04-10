@@ -3,6 +3,7 @@ import { doesSurveyUrlMatch } from '../posthog-surveys'
 import {
     Survey,
     SurveyAppearance,
+    SurveyPosition,
     SurveyQuestion,
     SurveyQuestionBranchingType,
     SurveyQuestionType,
@@ -307,6 +308,15 @@ export class SurveyManager {
         if (!currentElement.hasAttribute('PHWidgetSurveyClickListener')) {
             const listener = (event: Event) => {
                 event.stopPropagation() // Prevent bubbling
+
+                if (survey.appearance?.position !== SurveyPosition.NextToTrigger) {
+                    window.dispatchEvent(
+                        new CustomEvent(DISPATCH_FEEDBACK_WIDGET_EVENT, {
+                            detail: { surveyId: survey.id, position: {} },
+                        })
+                    )
+                    return
+                }
 
                 const buttonRect = (event.currentTarget as HTMLElement).getBoundingClientRect()
                 const viewportHeight = window.innerHeight

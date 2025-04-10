@@ -10,6 +10,13 @@ export enum SurveyWidgetType {
     Selector = 'selector',
 }
 
+export enum SurveyPosition {
+    Left = 'left',
+    Center = 'center',
+    Right = 'right',
+    NextToTrigger = 'next_to_trigger',
+}
+
 export interface SurveyAppearance {
     // keep in sync with frontend/src/types.ts -> SurveyAppearance
     backgroundColor?: string
@@ -31,7 +38,7 @@ export interface SurveyAppearance {
     thankYouMessageDescriptionContentType?: SurveyQuestionDescriptionContentType
     thankYouMessageCloseButtonText?: string
     borderColor?: string
-    position?: 'left' | 'right' | 'center'
+    position?: SurveyPosition
     placeholder?: string
     shuffleQuestions?: boolean
     surveyPopupDelaySeconds?: number
