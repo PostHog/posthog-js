@@ -20,7 +20,7 @@ test.describe('opting out', () => {
                     options: {
                         opt_out_capturing_by_default: true,
                     },
-                    url: './playground/cypress/index.html',
+                    url: '/playground/cypress/index.html',
                 },
                 page,
                 context
@@ -42,7 +42,7 @@ test.describe('opting out', () => {
                     options: {
                         opt_out_capturing_by_default: true,
                     },
-                    url: './playground/cypress/index.html',
+                    url: '/playground/cypress/index.html',
                 },
                 page,
                 context
@@ -67,7 +67,7 @@ test.describe('opting out', () => {
                         // start opted in!
                         opt_out_capturing_by_default: false,
                     },
-                    url: './playground/cypress/index.html',
+                    url: '/playground/cypress/index.html',
                 },
                 page,
                 context
@@ -90,7 +90,7 @@ test.describe('opting out', () => {
                     decideResponseOverrides: {
                         autocapture_opt_out: false,
                     },
-                    url: './playground/cypress/index.html',
+                    url: '/playground/cypress/index.html',
                 },
                 page,
                 context

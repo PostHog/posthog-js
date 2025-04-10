@@ -1,6 +1,6 @@
 import { expect, test } from './utils/posthog-playwright-test-base'
 import { start } from './utils/setup'
-import { pollUntilEventCaptured } from './utils/event-capture-utils'
+import { pollUntilCondition, pollUntilEventCaptured } from './utils/event-capture-utils'
 import { Request } from '@playwright/test'
 import { decompressSync, strFromU8 } from 'fflate'
 
@@ -22,7 +22,7 @@ const startOptions = {
         },
         capturePerformance: true,
     },
-    url: './playground/cypress/index.html',
+    url: '/playground/cypress/index.html',
 }
 
 test.describe('event capture', () => {
@@ -52,6 +52,7 @@ test.describe('event capture', () => {
 
         // Pageview will be sent immediately
         await pollUntilEventCaptured(page, '$pageview')
+        await pollUntilCondition(page, () => captureRequests.length > 0)
         expect(captureRequests.length).toEqual(1)
         const captureRequest = captureRequests[0]
         expect(captureRequest.headers()['content-type']).toEqual('text/plain')

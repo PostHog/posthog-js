@@ -33,7 +33,7 @@ export async function start(
             isAuthenticated: false,
             capturePerformance: true,
         },
-        url = './playground/cypress-full/index.html',
+        url = '/playground/cypress-full/index.html',
     }: {
         waitForDecide?: boolean
         initPosthog?: boolean

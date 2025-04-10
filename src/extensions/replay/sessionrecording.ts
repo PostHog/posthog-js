@@ -610,6 +610,10 @@ export class SessionRecording {
         }
     }
 
+    private _resetSampling() {
+        this.instance.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
+    }
+
     private makeSamplingDecision(sessionId: string): void {
         const sessionIdChanged = this.sessionId !== sessionId
 
@@ -619,9 +623,7 @@ export class SessionRecording {
         const currentSampleRate = this.sampleRate
 
         if (!isNumber(currentSampleRate)) {
-            this.instance.persistence?.register({
-                [SESSION_RECORDING_IS_SAMPLED]: null,
-            })
+            this._resetSampling()
             return
         }
 
@@ -720,6 +722,10 @@ export class SessionRecording {
                 const receivedSampleRate = response.sessionRecording?.sampleRate
 
                 const parsedSampleRate = isNullish(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
+                if (isNullish(parsedSampleRate)) {
+                    this._resetSampling()
+                }
+
                 const receivedMinimumDuration = response.sessionRecording?.minimumDurationMilliseconds
 
                 persistence.register({
@@ -1418,6 +1424,23 @@ export class SessionRecording {
         logger.info(startReason.replace('_', ' '), tagPayload)
         if (!includes(['recording_initialized', 'session_id_changed'], startReason)) {
             this._tryAddCustomEvent(startReason, tagPayload)
+        }
+    }
+
+    /*
+     * whenever we capture an event we add these properties to the event
+     * these are used to debug issues with the session recording
+     * when looking at the event feed for a session
+     */
+    get sdkDebugProperties(): Properties {
+        const { sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
+
+        return {
+            $recording_status: this.status,
+            $sdk_debug_replay_internal_buffer_length: this.buffer.data.length,
+            $sdk_debug_replay_internal_buffer_size: this.buffer.size,
+            $sdk_debug_current_session_duration: this.sessionDuration,
+            $sdk_debug_session_start: sessionStartTimestamp,
         }
     }
 }
