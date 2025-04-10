@@ -7,66 +7,30 @@ import { __POSTHOG_ERROR_WARNING_MESSAGES, PostHogErrorBoundary } from '..'
 import posthog from 'posthog-js'
 
 describe('PostHogErrorBoundary component', () => {
-    const originalError = console.error
-    const originalWarn = console.warn
+    mockFunction(console, 'error')
+    mockFunction(console, 'warn')
+    mockFunction(posthog, 'captureException')
 
-    beforeAll(() => {
-        console.error = jest.fn()
-        console.warn = jest.fn()
-    })
-
-    afterAll(() => {
-        console.error = originalError
-        console.warn = originalWarn
-    })
-
-    given(
-        'render_with_error',
-        () =>
-            ({ message = 'Error', fallback = <div></div>, additionalProperties } = {}) =>
-                render(
-                    <PostHogProvider client={given.posthog}>
-                        <PostHogErrorBoundary fallback={fallback} additionalProperties={additionalProperties}>
-                            <ComponentWithError message={message} />
-                        </PostHogErrorBoundary>
-                    </PostHogProvider>
-                )
-    )
-
-    given(
-        'render_without_error',
-        () => () =>
-            render(
-                <PostHogProvider client={given.posthog}>
-                    <PostHogErrorBoundary>
-                        <div>Amazing content</div>
-                    </PostHogErrorBoundary>
-                </PostHogProvider>
-            )
-    )
-
-    given('posthog', () => ({
-        captureException: jest.fn(),
-        capture: jest.fn(),
-    }))
+    given('render_with_error', () => (props) => render(<RenderWithError {...props} />))
+    given('render_without_error', () => () => render(<RenderWithoutError />))
 
     it('should call captureException with error message', () => {
         const { container } = given.render_with_error({ message: 'Test error', fallback: <div></div> })
-        expect(given.posthog.captureException).toHaveBeenCalledWith(new Error('Test error'), undefined)
+        expect(posthog.captureException).toHaveBeenCalledWith(new Error('Test error'), undefined)
         expect(container.innerHTML).toBe('<div></div>')
         expect(console.error).toHaveBeenCalledTimes(2)
     })
 
-    it('should warn user when fallback is not null', () => {
+    it('should warn user when fallback is null', () => {
         const { container } = given.render_with_error({ fallback: null })
-        expect(given.posthog.captureException).toHaveBeenCalledWith(new Error('Error'), undefined)
+        expect(posthog.captureException).toHaveBeenCalledWith(new Error('Error'), undefined)
         expect(container.innerHTML).toBe('')
         expect(console.warn).toHaveBeenCalledWith(__POSTHOG_ERROR_WARNING_MESSAGES.INVALID_FALLBACK)
     })
 
     it('should warn user when fallback is a string', () => {
         const { container } = given.render_with_error({ fallback: 'hello' })
-        expect(given.posthog.captureException).toHaveBeenCalledWith(new Error('Error'), undefined)
+        expect(posthog.captureException).toHaveBeenCalledWith(new Error('Error'), undefined)
         expect(container.innerHTML).toBe('')
         expect(console.warn).toHaveBeenCalledWith(__POSTHOG_ERROR_WARNING_MESSAGES.INVALID_FALLBACK)
     })
@@ -74,7 +38,7 @@ describe('PostHogErrorBoundary component', () => {
     it('should add additional properties before sending event (as object)', () => {
         const props = { team_id: '1234' }
         given.render_with_error({ message: 'Kaboom', additionalProperties: props })
-        expect(given.posthog.captureException).toHaveBeenCalledWith(new Error('Kaboom'), props)
+        expect(posthog.captureException).toHaveBeenCalledWith(new Error('Kaboom'), props)
     })
 
     it('should add additional properties before sending event (as function)', () => {
@@ -86,7 +50,7 @@ describe('PostHogErrorBoundary component', () => {
                 return props
             },
         })
-        expect(given.posthog.captureException).toHaveBeenCalledWith(new Error('Kaboom'), props)
+        expect(posthog.captureException).toHaveBeenCalledWith(new Error('Kaboom'), props)
     })
 
     it('should render children without errors', () => {
@@ -96,33 +60,13 @@ describe('PostHogErrorBoundary component', () => {
 })
 
 describe('captureException processing', () => {
-    const originalCapture = posthog.capture
-    const originalError = console.error
-    const originalWarn = console.warn
-
-    beforeAll(() => {
-        console.error = jest.fn()
-        console.warn = jest.fn()
-        posthog.capture = jest.fn()
-    })
-
-    afterAll(() => {
-        console.error = originalError
-        console.warn = originalWarn
-        posthog.capture = originalCapture
-    })
+    mockFunction(console, 'error')
+    mockFunction(console, 'warn')
+    mockFunction(posthog, 'capture')
 
     given(
         'render_with_error',
-        () =>
-            ({ additionalProperties } = {}) =>
-                render(
-                    <PostHogProvider client={given.posthog}>
-                        <PostHogErrorBoundary fallback={<div></div>} additionalProperties={additionalProperties}>
-                            <ComponentWithError message={'Kaboom'} />
-                        </PostHogErrorBoundary>
-                    </PostHogProvider>
-                )
+        () => () => render(<RenderWithError message={'Kaboom'} fallback={<div></div>} additionalProperties={{}} />)
     )
 
     it('should call capture with a stacktrace', () => {
@@ -136,6 +80,38 @@ describe('captureException processing', () => {
     })
 })
 
+function mockFunction(object, funcName) {
+    const originalFunc = object[funcName]
+
+    beforeAll(() => {
+        object[funcName] = jest.fn()
+    })
+
+    afterAll(() => {
+        object[funcName] = originalFunc
+    })
+}
+
 function ComponentWithError({ message }) {
     throw new Error(message)
+}
+
+function RenderWithError({ message = 'Error', fallback, additionalProperties }) {
+    return (
+        <PostHogProvider client={posthog}>
+            <PostHogErrorBoundary fallback={fallback} additionalProperties={additionalProperties}>
+                <ComponentWithError message={message} />
+            </PostHogErrorBoundary>
+        </PostHogProvider>
+    )
+}
+
+function RenderWithoutError({ additionalProperties }) {
+    return (
+        <PostHogProvider client={posthog}>
+            <PostHogErrorBoundary fallback={<div></div>} additionalProperties={additionalProperties}>
+                <div>Amazing content</div>
+            </PostHogErrorBoundary>
+        </PostHogProvider>
+    )
 }
