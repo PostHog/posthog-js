@@ -1,3 +1,7 @@
+## 1.235.3 - 2025-04-10
+
+- chore: rename survey extension utils and fix logging (#1889)
+
 ## 1.235.2 - 2025-04-10
 
 - fix: new survey position for feedback button (#1885)
