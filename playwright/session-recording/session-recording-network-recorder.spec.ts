@@ -78,7 +78,7 @@ test.beforeEach(async ({ context }) => {
                                 capturePerformance: true,
                                 autocapture_opt_out: true,
                             },
-                            url: './playground/cypress/index.html',
+                            url: '/playground/cypress/index.html',
                             runBeforePostHogInit: wrapInPageContext,
                             runAfterPostHogInit: wrapInPageContext,
                         },
@@ -129,7 +129,7 @@ test.beforeEach(async ({ context }) => {
                 const expectedCaptureds: [RegExp, string][] =
                     browserName === 'webkit'
                         ? [
-                              [/file:\/\/.*\/playground\/cypress\//, 'navigation'],
+                              [/http:\/\/localhost:\d+\/playground\/cypress\//, 'navigation'],
                               [/https:\/\/localhost:\d+\/static\/array.js/, 'script'],
                               // webkit isn't capturing this failed request in the pre-wrapped fetch performance observer records
                               // [/https:\/\/localhost:\d+\/array\/test%20token\/config.js/, 'script'],
@@ -147,14 +147,11 @@ test.beforeEach(async ({ context }) => {
                               // and a few milliseconds difference in timestamp on the previous one,
                               // they are identical but processed separately during capture
                               // so need to be de-duplicated during playback
-                              [/file:\/\/.*\/playground\/cypress\//, 'navigation'],
+                              [/http:\/\/localhost:\d+\/playground\/cypress\//, 'navigation'],
                           ]
                         : [
                               // firefox doesn't expose the file path presumably for security reasons
-                              [
-                                  browserName === 'firefox' ? /^document$/ : /file:\/\/.*\/playground\/cypress\//,
-                                  'navigation',
-                              ],
+                              [/http:\/\/localhost:\d+\/playground\/cypress\//, 'navigation'],
                               [/https:\/\/localhost:\d+\/static\/array.js/, 'script'],
                               [/https:\/\/localhost:\d+\/array\/test%20token\/config.js/, 'script'],
                               [

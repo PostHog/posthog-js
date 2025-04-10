@@ -9,7 +9,7 @@ const startOptions = {
         },
         capturePerformance: true,
     },
-    url: './playground/cypress/index.html',
+    url: '/playground/cypress/index.html',
 }
 
 test.describe('autocapture config', () => {

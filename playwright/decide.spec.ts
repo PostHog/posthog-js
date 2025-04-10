@@ -2,6 +2,7 @@ import { expect, test } from './utils/posthog-playwright-test-base'
 import { Request } from '@playwright/test'
 import { start } from './utils/setup'
 import { PostHog } from '../src/posthog-core'
+import { pollUntilCondition } from './utils/event-capture-utils'
 
 function getBase64EncodedPayloadFromBody(body: unknown): Record<string, any> {
     if (typeof body !== 'string') {
@@ -20,7 +21,7 @@ const startOptions = {
         },
         capturePerformance: true,
     },
-    url: './playground/cypress/index.html',
+    url: '/playground/cypress/index.html',
 }
 
 test.describe('decide', () => {
@@ -69,20 +70,20 @@ test.describe('decide', () => {
             distinct_id: 'new-id',
             person_properties: {
                 $initial__kx: null,
-                $initial_current_url: 'file:///home/runner/work/posthog-js/posthog-js/playground/cypress/index.html',
+                $initial_current_url: 'http://localhost:8082/playground/cypress/index.html',
                 $initial_dclid: null,
                 $initial_fbclid: null,
                 $initial_gad_source: null,
                 $initial_gbraid: null,
                 $initial_gclid: null,
                 $initial_gclsrc: null,
-                $initial_host: '',
+                $initial_host: 'localhost:8082',
                 $initial_igshid: null,
                 $initial_irclid: null,
                 $initial_li_fat_id: null,
                 $initial_mc_cid: null,
                 $initial_msclkid: null,
-                $initial_pathname: '/home/runner/work/posthog-js/posthog-js/playground/cypress/index.html',
+                $initial_pathname: '/playground/cypress/index.html',
                 $initial_rdt_cid: null,
                 $initial_referrer: '$direct',
                 $initial_referring_domain: '$direct',
@@ -122,7 +123,8 @@ test.describe('decide', () => {
             },
         })
         // need a short delay so that the decide request can be captured into the decideRequests array
-        await page.waitForTimeout(1)
+        await pollUntilCondition(page, () => decideRequests.length >= 2)
+
         expect(decideRequests.length).toBe(2)
     })
 })

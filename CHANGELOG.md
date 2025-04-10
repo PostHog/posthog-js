@@ -1,3 +1,51 @@
+## 1.235.1 - 2025-04-10
+
+- chore: even more replay debug signal (#1887)
+
+## 1.235.0 - 2025-04-08
+
+- fix: make survey widget with selector work with SPAs (#1877)
+- chore: add react router vite react playground (#1876)
+
+## 1.234.11 - 2025-04-08
+
+- chore: allow all surveys to be repeated if schedule is always (#1866)
+
+## 1.234.10 - 2025-04-07
+
+- feat: Only capture vitals on http and https (#1873)
+- feat: Playwright tests should run over http rather than file (#1874)
+
+## 1.234.9 - 2025-04-04
+
+- fix: survey feedback button anchoring to trigger (#1865)
+
+## 1.234.8 - 2025-04-04
+
+- chore: deduplicate all $set calls done from setPersonProperties (#1813)
+
+## 1.234.7 - 2025-04-03
+
+- fix: clean styles to prevent <br> tags (#1863)
+- docs: Keep nuxt examples in sync with nuxt playground (#1867)
+- Add autocapture playground page (#1864)
+
+## 1.234.6 - 2025-04-01
+
+
+
+## 1.234.5 - 2025-04-01
+
+- fix: focus open input field on choice click (#1856)
+
+## 1.234.4 - 2025-03-31
+
+
+
+## 1.234.3 - 2025-03-31
+
+
+
 ## 1.234.2 - 2025-03-28
 
 - fix: do not always wrap console.error (#1853)

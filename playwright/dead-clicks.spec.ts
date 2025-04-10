@@ -6,7 +6,7 @@ const startOptions = {
     options: {
         capture_dead_clicks: true,
     },
-    url: './playground/cypress/index.html',
+    url: '/playground/cypress/index.html',
 }
 
 test.describe('Dead clicks', () => {

@@ -10,7 +10,7 @@
     },
     "devDependencies": {
         "@types/node": "^18",
-        "nuxt": "^3.4.3"
+        "nuxt": "^3.16.2"
     },
     "dependencies": {
         "posthog-js": "file:../../dist/"
