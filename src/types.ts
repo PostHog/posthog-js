@@ -332,6 +332,14 @@ export interface PostHogConfig {
     rageclick: boolean
 
     /**
+     * Determines whether PostHog should automatically capture navigation events in single-page applications
+     * using the History API and emit them as pageviews.
+     *
+     * @default false
+     */
+    capture_history_events: boolean
+
+    /**
      * Determines if cookie should be set on the top level domain (example.com).
      * If PostHog-js is loaded on a subdomain (test.example.com), and `cross_subdomain_cookie` is set to false,
      * it'll set the cookie on the subdomain only (test.example.com).
@@ -1268,6 +1276,11 @@ export interface RemoteConfig {
      *     TODO: deprecate this so we make a new config that doesn't need this explanation
      */
     capturePerformance?: boolean | PerformanceCaptureConfig
+
+    /**
+     * Whether to capture History API events (pushState, replaceState, popstate)
+     */
+    captureHistoryEvents?: boolean
 
     /**
      * Whether we should use a custom endpoint for analytics

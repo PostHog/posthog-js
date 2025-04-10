@@ -88,6 +88,7 @@ import {
 } from './utils/type-utils'
 import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
+import { HistoryAutocapture } from './extensions/history-autocapture'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -146,6 +147,7 @@ export const defaultConfig = (): PostHogConfig => ({
     save_referrer: true,
     capture_pageview: true,
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
+    capture_history_events: false,
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     cookie_expiration: 365,
     upgrade: false,
@@ -282,6 +284,7 @@ export class PostHog {
     webVitalsAutocapture?: WebVitalsAutocapture
     exceptionObserver?: ExceptionObserver
     deadClicksAutocapture?: DeadClicksAutocapture
+    historyAutocapture?: HistoryAutocapture
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -335,7 +338,7 @@ export class PostHog {
         this.rateLimiter = new RateLimiter(this)
         this.requestRouter = new RequestRouter(this)
         this.consent = new ConsentManager(this)
-
+        this.historyAutocapture = new HistoryAutocapture(this)
         // NOTE: See the property definition for deprecation notice
         this.people = {
             set: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
@@ -488,6 +491,9 @@ export class PostHog {
 
         this.deadClicksAutocapture = new DeadClicksAutocapture(this, isDeadClicksEnabledForAutocapture)
         this.deadClicksAutocapture.startIfEnabled()
+
+        this.historyAutocapture = new HistoryAutocapture(this)
+        this.historyAutocapture.startIfEnabled()
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
