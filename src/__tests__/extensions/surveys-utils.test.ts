@@ -3,7 +3,7 @@ import {
     getFontFamily,
     hasEvents,
     hasWaitPeriodPassed,
-} from '../../extensions/surveys/surveys-utils'
+} from '../../extensions/surveys/surveys-extension-utils'
 import { Survey, SurveySchedule, SurveyType } from '../../posthog-surveys-types'
 
 describe('hasWaitPeriodPassed', () => {

@@ -1,4 +1,4 @@
-import { getSurveyResponseKey } from '../../src/extensions/surveys/surveys-utils'
+import { getSurveyResponseKey } from '../../src/extensions/surveys/surveys-extension-utils'
 import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 import { expect, test } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'

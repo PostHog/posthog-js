@@ -3,7 +3,7 @@ import { window } from '../../../utils/globals'
 import { SurveyAppearance } from '../../../posthog-surveys-types'
 
 import { useContext } from 'preact/hooks'
-import { SurveyContext, defaultSurveyAppearance, getContrastingTextColor } from '../surveys-utils'
+import { SurveyContext, defaultSurveyAppearance, getContrastingTextColor } from '../surveys-extension-utils'
 import { PostHogLogo } from './PostHogLogo'
 
 export function BottomSection({

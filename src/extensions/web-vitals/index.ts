@@ -68,7 +68,9 @@ export class WebVitalsAutocapture {
         // Otherwise, check config
         const clientConfig = isObject(this.instance.config.capture_performance)
             ? this.instance.config.capture_performance.web_vitals
-            : undefined
+            : isBoolean(this.instance.config.capture_performance)
+              ? this.instance.config.capture_performance
+              : undefined
         return isBoolean(clientConfig) ? clientConfig : this._enabledServerSide
     }
 

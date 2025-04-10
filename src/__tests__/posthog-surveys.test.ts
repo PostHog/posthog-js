@@ -10,8 +10,9 @@ jest.useFakeTimers()
 
 import { SURVEYS, SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
 import { PostHog } from '../posthog-core'
-import { doesSurveyUrlMatch, PostHogSurveys } from '../posthog-surveys'
+import { PostHogSurveys } from '../posthog-surveys'
 import { assignableWindow, window } from '../utils/globals'
+import { doesSurveyUrlMatch } from '../utils/survey-utils'
 
 describe('posthog-surveys', () => {
     describe('PostHogSurveys Class', () => {
