@@ -1,3 +1,7 @@
+## 1.235.4 - 2025-04-10
+
+- Fix web vitals running when capture_performance: false is set (#1890)
+
 ## 1.235.3 - 2025-04-10
 
 - chore: rename survey extension utils and fix logging (#1889)
