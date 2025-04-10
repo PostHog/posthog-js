@@ -14,7 +14,7 @@ export enum SurveyPosition {
     Left = 'left',
     Center = 'center',
     Right = 'right',
-    NextToTrigger = 'next to trigger',
+    NextToTrigger = 'next_to_trigger',
 }
 
 export interface SurveyAppearance {
