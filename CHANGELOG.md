@@ -1,3 +1,7 @@
+## 1.235.1 - 2025-04-10
+
+- chore: even more replay debug signal (#1887)
+
 ## 1.235.0 - 2025-04-08
 
 - fix: make survey widget with selector work with SPAs (#1877)
