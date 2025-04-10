@@ -282,4 +282,16 @@ test.describe('Session recording - array.js', () => {
             'session_id_changed'
         )
     })
+
+    test('adds debug properties to captured events', async ({ page }) => {
+        await page.evaluate(() => {
+            const ph = (window as WindowWithPostHog).posthog
+            ph!.capture('an_event')
+        })
+        const capturedEvents = await page.capturedEvents()
+        expect(capturedEvents[0]['event']).toBe('an_event')
+        expect(capturedEvents[0]['properties']['$session_recording_start_reason']).toEqual('recording_initialized')
+        expect(capturedEvents[0]['properties']['$sdk_debug_current_session_duration']).toEqual('active')
+        expect(capturedEvents[0]['properties']['$sdk_debug_session_start']).toEqual('active')
+    })
 })
