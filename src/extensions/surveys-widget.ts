@@ -7,9 +7,17 @@ import { prepareStylesheet } from './utils/stylesheet-loader'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const document = _document as Document
 
-export function createWidgetShadow(survey: Survey, posthog?: PostHog) {
+export function retrieveWidgetShadow(survey: Survey, posthog?: PostHog) {
+    const widgetClassName = `PostHogWidget${survey.id}`
+    const existingDiv = document.querySelector(`.${widgetClassName}`) as HTMLDivElement | null
+
+    if (existingDiv && existingDiv.shadowRoot) {
+        return existingDiv.shadowRoot
+    }
+
+    // If it doesn't exist, create it
     const div = document.createElement('div')
-    div.className = `PostHogWidget${survey.id}`
+    div.className = widgetClassName
     const shadow = div.attachShadow({ mode: 'open' })
     const widgetStyleSheet = createWidgetStyle(survey.appearance?.widgetColor)
 

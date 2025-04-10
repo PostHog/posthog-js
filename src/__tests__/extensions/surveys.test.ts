@@ -966,6 +966,12 @@ describe('useHideSurveyOnURLChange', () => {
     let mockRemoveSurveyFromFocus: jest.Mock
     let mockSetSurveyVisible: jest.Mock
 
+    const BASE_SURVEY = {
+        id: 'test-survey',
+        type: SurveyType.Popover,
+        appearance: {},
+    }
+
     beforeEach(() => {
         // Store original history methods
         originalPushState = window.history.pushState
@@ -997,7 +1003,7 @@ describe('useHideSurveyOnURLChange', () => {
 
     it('should not do anything in preview mode', () => {
         const survey = {
-            id: 'test-survey',
+            ...BASE_SURVEY,
             conditions: {
                 url: 'example.com',
                 urlMatchType: 'exact' as const,
@@ -1025,7 +1031,7 @@ describe('useHideSurveyOnURLChange', () => {
 
     it('should not do anything if no URL conditions are set', () => {
         const survey = {
-            id: 'test-survey',
+            ...BASE_SURVEY,
             conditions: {
                 events: null,
                 actions: null,
@@ -1051,7 +1057,7 @@ describe('useHideSurveyOnURLChange', () => {
 
     it('should handle pushState navigation', () => {
         const survey = {
-            id: 'test-survey',
+            ...BASE_SURVEY,
             conditions: {
                 url: 'example.com',
                 urlMatchType: 'exact' as const,
@@ -1079,7 +1085,7 @@ describe('useHideSurveyOnURLChange', () => {
 
     it('should handle replaceState navigation', () => {
         const survey = {
-            id: 'test-survey',
+            ...BASE_SURVEY,
             conditions: {
                 url: 'example.com',
                 urlMatchType: 'exact' as const,
@@ -1107,7 +1113,7 @@ describe('useHideSurveyOnURLChange', () => {
 
     it('should handle popstate events', () => {
         const survey = {
-            id: 'test-survey',
+            ...BASE_SURVEY,
             conditions: {
                 url: 'example.com',
                 urlMatchType: 'exact' as const,
@@ -1139,7 +1145,7 @@ describe('useHideSurveyOnURLChange', () => {
 
     it('should handle hashchange events', () => {
         const survey = {
-            id: 'test-survey',
+            ...BASE_SURVEY,
             conditions: {
                 url: 'example.com',
                 urlMatchType: 'exact' as const,
@@ -1171,7 +1177,7 @@ describe('useHideSurveyOnURLChange', () => {
 
     it('should clean up event listeners and history methods on unmount', () => {
         const survey = {
-            id: 'test-survey',
+            ...BASE_SURVEY,
             conditions: {
                 url: 'example.com',
                 urlMatchType: 'exact' as const,
@@ -1206,7 +1212,7 @@ describe('useHideSurveyOnURLChange', () => {
 
     it('should keep survey visible when URL still matches after navigation', () => {
         const survey = {
-            id: 'test-survey',
+            ...BASE_SURVEY,
             conditions: {
                 url: 'example.com',
                 urlMatchType: 'icontains' as const,
@@ -1521,7 +1527,8 @@ describe('preview renders', () => {
         })
 
         // Find and click the submit button (using button type="button" instead of form-submit class)
-        const submitButton = container.querySelector('button[type="button"]')
+        const submitButton = container.querySelectorAll('button[type="button"]')[1]
+
         console.log('Found submit button:', !!submitButton)
         console.log('Submit button text:', submitButton?.textContent)
 
