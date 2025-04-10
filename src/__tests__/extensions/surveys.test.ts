@@ -1527,7 +1527,8 @@ describe('preview renders', () => {
         })
 
         // Find and click the submit button (using button type="button" instead of form-submit class)
-        const submitButton = container.querySelector('button[type="button"]')
+        const submitButton = container.querySelectorAll('button[type="button"]')[1]
+
         console.log('Found submit button:', !!submitButton)
         console.log('Submit button text:', submitButton?.textContent)
 

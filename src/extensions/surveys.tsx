@@ -651,7 +651,6 @@ export function useHideSurveyOnURLChange({
         }
 
         const checkUrlMatch = () => {
-            logger.info(`Checking URL match for survey ${survey.id}`)
             const isSurveyTypeWidget = survey.type === SurveyType.Widget
             const doesSurveyMatchUrlCondition = doesSurveyUrlMatch(survey)
             const isSurveyWidgetTypeTab = survey.appearance?.widgetType === SurveyWidgetType.Tab && isSurveyTypeWidget
