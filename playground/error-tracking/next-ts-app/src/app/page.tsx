@@ -7,10 +7,10 @@ export default function Home() {
     return (
         <div>
             <main style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-                <Link href="./error?throw">Go to error</Link>
-                <button onClick={() => posthog.captureException(new Error('Programming error'))}>
-                    Capture Exception
-                </button>
+                <Link href="./error?messsage=Rendering%20Error">
+                    <button>Generate rendering error</button>
+                </Link>
+                <button onClick={() => posthog.captureException(new Error('Programming error'))}>Send error</button>
             </main>
         </div>
     )

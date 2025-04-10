@@ -1,21 +1,19 @@
 /* eslint-disable no-console */
 
 import React, { FunctionComponent } from 'react'
-import { type PostHog, PostHogContext } from '../context'
+import { PostHogContext } from '../context'
 import { isFunction } from '../utils/type-utils'
 
 export type Properties = Record<string, any>
 
-type FallbackProps = {
+export type PostHogErrorBoundaryFallbackProps = {
     error: unknown
     componentStack: string
 }
 
 export type PostHogErrorBoundaryProps = {
-    // Override client from PostHogProvider
-    client?: PostHog
     children?: React.ReactNode | (() => React.ReactNode)
-    fallback?: React.ReactNode | FunctionComponent<FallbackProps>
+    fallback?: React.ReactNode | FunctionComponent<PostHogErrorBoundaryFallbackProps>
     additionalProperties?: Properties | ((error: unknown) => Properties)
 }
 
@@ -32,9 +30,6 @@ const INITIAL_STATE: PostHogErrorBoundaryState = {
 export const __POSTHOG_ERROR_MESSAGES = {
     INVALID_FALLBACK:
         '[PostHog.js][PostHogErrorBoundary] Invalid fallback prop, provide a valid React element or a function that returns a valid React element.',
-    NO_CLIENT_FOUND: '[PostHog.js][PostHogErrorBoundary] No client provided, exception has not been caught.',
-    NO_CLIENT_PROVIDED:
-        '[PostHog.js][PostHogErrorBoundary] No client provided, use client props or PostHogProvider to initialize PostHog.',
 }
 
 export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryProps, PostHogErrorBoundaryState> {
@@ -45,17 +40,6 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
         this.state = INITIAL_STATE
     }
 
-    getLocalClient(): PostHog | undefined {
-        if (this.props.client) {
-            return this.props.client
-        }
-        const value = this.context
-        if (value && value.client) {
-            return value.client
-        }
-        return undefined
-    }
-
     componentDidCatch(error: unknown, errorInfo: React.ErrorInfo) {
         const { componentStack } = errorInfo
         const { additionalProperties } = this.props
@@ -63,26 +47,14 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
             error,
             componentStack,
         })
-
         let currentProperties
         if (isFunction(additionalProperties)) {
             currentProperties = additionalProperties(error)
         } else if (typeof additionalProperties === 'object') {
             currentProperties = additionalProperties
         }
-        const client = this.getLocalClient()
-        if (client) {
-            client.captureException(error, currentProperties)
-        } else {
-            console.error(__POSTHOG_ERROR_MESSAGES.NO_CLIENT_FOUND)
-        }
-    }
-
-    componentDidMount(): void {
-        const client = this.getLocalClient()
-        if (!client) {
-            console.warn(__POSTHOG_ERROR_MESSAGES.NO_CLIENT_PROVIDED)
-        }
+        const { client } = this.context
+        client.captureException(error, currentProperties)
     }
 
     public render(): React.ReactNode {
