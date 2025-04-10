@@ -9,6 +9,12 @@ import { isNullish } from '../../utils/type-utils'
 import { window } from '../../utils/globals'
 
 export type TriggerType = 'url' | 'event'
+/* 
+triggers can have one of three statuses:
+ * - trigger_activated: the trigger met conditions to start recording
+ * - trigger_pending: the trigger is present but the conditions are not yet met
+ * - trigger_disabled: the trigger is not present
+ */
 export type TriggerStatus = 'trigger_activated' | 'trigger_pending' | 'trigger_disabled'
 
 /**
@@ -60,10 +66,20 @@ export class AndTriggerMatching implements TriggerStatusMatching {
 
         // trigger_disabled means no config
         statuses.delete('trigger_disabled')
-        if (statuses.size === 0) {
-            return 'trigger_disabled'
+        switch (statuses.size) {
+            case 0:
+                return 'trigger_disabled'
+            case 1:
+                return Array.from(statuses)[0]
+            default:
+                return 'trigger_pending'
         }
-        return statuses.size === 1 ? Array.from(statuses)[0] : 'trigger_pending'
+    }
+}
+
+export class PendingTriggerMatching implements TriggerStatusMatching {
+    triggerStatus(): TriggerStatus {
+        return 'trigger_pending'
     }
 }
 
@@ -101,6 +117,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
         const urlTriggerStatus = this.urlTriggerStatus(sessionId)
         const eitherIsActivated = urlTriggerStatus === 'trigger_activated'
         const eitherIsPending = urlTriggerStatus === 'trigger_pending'
+
         return eitherIsActivated ? 'trigger_activated' : eitherIsPending ? 'trigger_pending' : 'trigger_disabled'
     }
 
@@ -294,12 +311,11 @@ export function allMatchSessionRecordingStatus(triggersStatus: RecordingTriggers
         return 'buffering'
     }
 
-    // sampling can't ever cause buffering, it's always determined right away or not configured
-
     if (hasTriggersConfigured && andTriggerMatch.triggerStatus(triggersStatus.sessionId) === 'trigger_disabled') {
         return 'disabled'
     }
 
+    // sampling can't ever cause buffering, it's always determined right away or not configured
     if (hasSamplingConfigured && triggersStatus.isSampled === false) {
         return 'disabled'
     }
