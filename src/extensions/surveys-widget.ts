@@ -1,7 +1,7 @@
 import { PostHog } from '../posthog-core'
 import { Survey } from '../posthog-surveys-types'
 import { document as _document } from '../utils/globals'
-import { SURVEY_DEFAULT_Z_INDEX } from './surveys/surveys-utils'
+import { SURVEY_DEFAULT_Z_INDEX } from './surveys/surveys-extension-utils'
 import { prepareStylesheet } from './utils/stylesheet-loader'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call

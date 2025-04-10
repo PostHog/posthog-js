@@ -9,14 +9,12 @@ import {
     SurveySchedule,
 } from '../../posthog-surveys-types'
 import { document as _document, window as _window } from '../../utils/globals'
-import { createLogger } from '../../utils/logger'
+import { SURVEY_LOGGER as logger } from '../../utils/survey-utils'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 const SurveySeenPrefix = 'seenSurvey_'
-
-const logger = createLogger('[Surveys]')
 
 export const SURVEY_DEFAULT_Z_INDEX = 2147483647
 

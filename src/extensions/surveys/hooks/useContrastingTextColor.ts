@@ -1,7 +1,7 @@
+import * as Preact from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { SurveyAppearance } from '../../../posthog-surveys-types'
-import * as Preact from 'preact'
-import { getTextColor } from '../surveys-utils'
+import { getTextColor } from '../surveys-extension-utils'
 
 export function useContrastingTextColor(options: {
     appearance: SurveyAppearance
