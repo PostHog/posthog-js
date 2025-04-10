@@ -1,14 +1,21 @@
 /* eslint-disable no-console */
 
-import React from 'react'
-import { PostHog, PostHogContext } from '../context'
+import React, { FunctionComponent } from 'react'
+import { type PostHog, PostHogContext } from '../context'
 import { isFunction } from '../utils/type-utils'
 
 export type Properties = Record<string, any>
 
+type FallbackProps = {
+    error: unknown
+    componentStack: string
+}
+
 export type PostHogErrorBoundaryProps = {
-    children: React.ReactNode
-    fallback: React.ReactNode
+    // Override client from PostHogProvider
+    client?: PostHog
+    children?: React.ReactNode | (() => React.ReactNode)
+    fallback?: React.ReactNode | FunctionComponent<FallbackProps>
     additionalProperties?: Properties | ((error: unknown) => Properties)
 }
 
@@ -22,10 +29,12 @@ const INITIAL_STATE: PostHogErrorBoundaryState = {
     error: null,
 }
 
-export const __POSTHOG_ERROR_WARNING_MESSAGES = {
+export const __POSTHOG_ERROR_MESSAGES = {
     INVALID_FALLBACK:
-        '[PostHog.js] Invalid fallback prop, provide a valid React element or a function that returns a valid React element.',
-    NO_POSTHOG_CONTEXT: '[PostHog.js] No PostHog context found, make sure you are using the PostHogProvider component.',
+        '[PostHog.js][PostHogErrorBoundary] Invalid fallback prop, provide a valid React element or a function that returns a valid React element.',
+    NO_CLIENT_FOUND: '[PostHog.js][PostHogErrorBoundary] No client provided, exception has not been caught.',
+    NO_CLIENT_PROVIDED:
+        '[PostHog.js][PostHogErrorBoundary] No client provided, use client props or PostHogProvider to initialize PostHog.',
 }
 
 export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryProps, PostHogErrorBoundaryState> {
@@ -36,49 +45,66 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
         this.state = INITIAL_STATE
     }
 
+    getLocalClient(): PostHog | undefined {
+        if (this.props.client) {
+            return this.props.client
+        }
+        const value = this.context
+        if (value && value.client) {
+            return value.client
+        }
+        return undefined
+    }
+
     componentDidCatch(error: unknown, errorInfo: React.ErrorInfo) {
-        const { client } = this.context as { client: PostHog }
-        const { additionalProperties } = this.props
         const { componentStack } = errorInfo
+        const { additionalProperties } = this.props
         this.setState({
             error,
             componentStack,
         })
+
         let currentProperties
         if (isFunction(additionalProperties)) {
             currentProperties = additionalProperties(error)
         } else if (typeof additionalProperties === 'object') {
             currentProperties = additionalProperties
         }
-        client.captureException(error, currentProperties)
+        const client = this.getLocalClient()
+        if (client) {
+            client.captureException(error, currentProperties)
+        } else {
+            console.error(__POSTHOG_ERROR_MESSAGES.NO_CLIENT_FOUND)
+        }
     }
 
-    render() {
-        const { children, fallback } = this.props
-        const { client } = this.context as { client: PostHog }
-        const state = this.state
-
+    componentDidMount(): void {
+        const client = this.getLocalClient()
         if (!client) {
-            console.warn(__POSTHOG_ERROR_WARNING_MESSAGES.NO_POSTHOG_CONTEXT)
+            console.warn(__POSTHOG_ERROR_MESSAGES.NO_CLIENT_PROVIDED)
         }
+    }
+
+    public render(): React.ReactNode {
+        const { children, fallback } = this.props
+        const state = this.state
 
         if (state.componentStack == null) {
             return isFunction(children) ? children() : children
         }
 
         const element = isFunction(fallback)
-            ? React.createElement(fallback, {
+            ? (React.createElement(fallback, {
                   error: state.error,
                   componentStack: state.componentStack,
-              })
+              }) as React.ReactNode)
             : fallback
 
         if (React.isValidElement(element)) {
-            return element
+            return element as React.ReactElement
         }
 
-        console.warn(__POSTHOG_ERROR_WARNING_MESSAGES.INVALID_FALLBACK)
-
-        return null
+        console.warn(__POSTHOG_ERROR_MESSAGES.INVALID_FALLBACK)
+        return <></>
     }
 }

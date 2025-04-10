@@ -1,2 +1,6 @@
 export * from './PostHogFeature'
-export * from './PostHogErrorBoundary'
+export {
+    PostHogErrorBoundary,
+    PostHogErrorBoundaryProps,
+    PostHogErrorBoundaryFallbackProps,
+} from './PostHogErrorBoundary'
