@@ -3,7 +3,7 @@ import '../helpers/mock-logger'
 import { createPosthogInstance } from '../helpers/posthog-instance'
 import { uuidv7 } from '../../uuidv7'
 import { PostHog } from '../../posthog-core'
-import { DecideResponse, PerformanceCaptureConfig, SupportedWebVitalsMetrics } from '../../types'
+import { DecideResponse, PerformanceCaptureConfig, RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
 import { assignableWindow } from '../../utils/globals'
 import { DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, FIFTEEN_MINUTES_IN_MILLIS } from '../../extensions/web-vitals'
 
@@ -277,6 +277,30 @@ describe('web vitals', () => {
         )
     })
 
+    it('should be disabled if capture_performance is set to false', async () => {
+        posthog = await createPosthogInstance(uuidv7(), {
+            before_send: beforeSendMock,
+            capture_performance: false,
+        })
+
+        expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
+    })
+
+    it('should be disabled if capture_performance is set to false even if enabled server-side', async () => {
+        posthog = await createPosthogInstance(uuidv7(), {
+            before_send: beforeSendMock,
+            capture_performance: false,
+        })
+
+        posthog.webVitalsAutocapture!.onRemoteConfig({
+            capturePerformance: {
+                web_vitals: true,
+            },
+        } as RemoteConfig)
+
+        expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
+    })
+
     it('should not run on file:// protocol', async () => {
         mockLocation.mockReturnValue({
             protocol: 'file:',
@@ -294,7 +318,7 @@ describe('web vitals', () => {
 
         posthog.webVitalsAutocapture!.onRemoteConfig({
             capturePerformance: { web_vitals: true },
-        } as DecideResponse)
+        } as RemoteConfig)
 
         expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
     })
@@ -348,7 +372,7 @@ describe('web vitals', () => {
 
         posthog.webVitalsAutocapture!.onRemoteConfig({
             capturePerformance: { web_vitals: true },
-        } as DecideResponse)
+        } as RemoteConfig)
 
         expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
     })
