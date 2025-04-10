@@ -461,6 +461,7 @@ describe('posthog core', () => {
                 $sdk_debug_replay_internal_buffer_length: 0,
                 $sdk_debug_replay_internal_buffer_size: 0,
                 $sdk_debug_retry_queue_size: 0,
+                $sdk_debug_current_session_duration: null,
             })
         })
 
@@ -488,6 +489,7 @@ describe('posthog core', () => {
                 $sdk_debug_replay_internal_buffer_length: 0,
                 $sdk_debug_replay_internal_buffer_size: 0,
                 $sdk_debug_retry_queue_size: 0,
+                $sdk_debug_current_session_duration: null,
             })
         })
 

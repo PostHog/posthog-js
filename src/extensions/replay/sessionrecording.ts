@@ -1426,4 +1426,21 @@ export class SessionRecording {
             this._tryAddCustomEvent(startReason, tagPayload)
         }
     }
+
+    /*
+     * whenever we capture an event we add these properties to the event
+     * these are used to debug issues with the session recording
+     * when looking at the event feed for a session
+     */
+    get sdkDebugProperties(): Properties {
+        const { sessionStartTimestamp } = this.sessionManager.checkAndGetSessionAndWindowId(true)
+
+        return {
+            $recording_status: this.status,
+            $sdk_debug_replay_internal_buffer_length: this.buffer.data.length,
+            $sdk_debug_replay_internal_buffer_size: this.buffer.size,
+            $sdk_debug_current_session_duration: this.sessionDuration,
+            $sdk_debug_session_start: sessionStartTimestamp,
+        }
+    }
 }
