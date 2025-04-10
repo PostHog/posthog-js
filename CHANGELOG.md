@@ -1,3 +1,8 @@
+## 1.235.5 - 2025-04-10
+
+- fix: survey feedback button not showing after url change (#1892)
+- chore: better license attribution (#1883)
+
 ## 1.235.4 - 2025-04-10
 
 - Fix web vitals running when capture_performance: false is set (#1890)
