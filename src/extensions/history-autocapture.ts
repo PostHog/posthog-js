@@ -5,27 +5,25 @@ import { logger } from '../utils/logger'
 import { patch } from './replay/rrweb-plugins/patch'
 
 /**
- * This class is used to capture pageview events when the user navigates using the history API (pushState, replaceState).
- * It is also used to capture pageview events when the user navigates using the browser's back/forward buttons.
+ * This class is used to capture pageview events when the user navigates using the history API (pushState, replaceState)
+ * and when the user navigates using the browser's back/forward buttons.
  */
 export class HistoryAutocapture {
     private _instance: PostHog
-    private _initialized = false
     private _popstateListener: (() => void) | undefined
-    private _lastPathname: string | undefined
+    private _lastPathname: string
 
     constructor(instance: PostHog) {
         this._instance = instance
-        this._lastPathname = window?.location?.pathname
+        this._lastPathname = window?.location?.pathname || ''
     }
 
     public get isEnabled(): boolean {
-        const config = this._instance.config.capture_history_events
-        return config === 'always' || config === 'pathname'
+        return !!this._instance.config.capture_history_events
     }
 
     public startIfEnabled(): void {
-        if (this.isEnabled && !this._initialized) {
+        if (this.isEnabled) {
             logger.info('History API monitoring enabled, starting...')
             this.monitorHistoryChanges()
         }
@@ -36,7 +34,6 @@ export class HistoryAutocapture {
             this._popstateListener()
         }
         this._popstateListener = undefined
-        this._initialized = false
         logger.info('History API monitoring stopped')
     }
 
@@ -45,64 +42,58 @@ export class HistoryAutocapture {
             return
         }
 
-        const instance = this
+        // Old fashioned, we could also use arrow functions but I think the closure for a patch is more reliable
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
+        const self = this
 
         if (!(window.history.pushState as any)?.__posthog_wrapped__) {
-            patch(window.history, 'pushState', (originalPushState: any) => {
-                return function (this: History, ...args: any[]) {
-                    const result = originalPushState.apply(this, args)
-                    instance.capturePageview('pushState')
-                    return result
+            patch(window.history, 'pushState', (originalPushState) => {
+                return function patchedPushState(
+                    this: History,
+                    state: any,
+                    title: string,
+                    url?: string | URL | null
+                ): void {
+                    ;(originalPushState as History['pushState']).call(this, state, title, url)
+                    self.capturePageview('pushState')
                 }
             })
         }
 
         if (!(window.history.replaceState as any)?.__posthog_wrapped__) {
-            patch(window.history, 'replaceState', (originalReplaceState: any) => {
-                return function (this: History, ...args: any[]) {
-                    const result = originalReplaceState.apply(this, args)
-                    instance.capturePageview('replaceState')
-                    return result
+            patch(window.history, 'replaceState', (originalReplaceState) => {
+                return function patchedReplaceState(
+                    this: History,
+                    state: any,
+                    title: string,
+                    url?: string | URL | null
+                ): void {
+                    ;(originalReplaceState as History['replaceState']).call(this, state, title, url)
+                    self.capturePageview('replaceState')
                 }
             })
         }
 
         this._setupPopstateListener()
-        this._initialized = true
     }
 
     private capturePageview(navigationType: 'pushState' | 'replaceState' | 'popstate'): void {
         try {
-            if (this.shouldCaptureHistoryChange()) {
+            const currentPathname = window?.location?.pathname
+
+            if (!currentPathname) {
+                return
+            }
+
+            // Only capture pageview if the pathname has changed and the feature is enabled
+            if (currentPathname !== this._lastPathname && this.isEnabled) {
                 this._instance.capture('$pageview', { navigation_type: navigationType })
             }
+
+            this._lastPathname = currentPathname
         } catch (error) {
             logger.error(`Error capturing ${navigationType} pageview`, error)
         }
-    }
-
-    private shouldCaptureHistoryChange(): boolean {
-        const config = this._instance.config.capture_history_events
-
-        if (config === 'never') {
-            return false
-        }
-
-        if (config === 'always') {
-            return true
-        }
-
-        // If config is 'pathname', we only capture if the pathname changed
-        if (config === 'pathname') {
-            const currentPathname = window?.location?.pathname
-            if (currentPathname !== this._lastPathname) {
-                this._lastPathname = currentPathname
-                return true
-            }
-            return false
-        }
-
-        return false
     }
 
     private _setupPopstateListener(): void {
@@ -110,10 +101,11 @@ export class HistoryAutocapture {
             return
         }
 
-        const handler = () => this.capturePageview('popstate')
+        const handler = () => {
+            this.capturePageview('popstate')
+        }
 
         addEventListener(window, 'popstate', handler)
-
         this._popstateListener = () => {
             if (window) {
                 window.removeEventListener('popstate', handler)

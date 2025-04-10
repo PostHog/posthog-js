@@ -334,13 +334,9 @@ export interface PostHogConfig {
     /**
      * Determines whether PostHog should automatically capture navigation events using the History API and emit them as pageviews.
      *
-     * - 'always': Capture all history changes (pathname, query parameters, and hash)
-     * - 'pathname': Only capture changes to the pathname, ignoring query parameters and hash changes
-     * - 'never': Disable history autocapture
-     *
-     * @default 'never'
+     * @default false
      */
-    capture_history_events: 'always' | 'pathname' | 'never'
+    capture_history_events: boolean
 
     /**
      * Determines if cookie should be set on the top level domain (example.com).
