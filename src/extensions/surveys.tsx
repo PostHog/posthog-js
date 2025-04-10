@@ -1,3 +1,5 @@
+import * as Preact from 'preact'
+import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { PostHog } from '../posthog-core'
 import {
     Survey,
@@ -12,12 +14,10 @@ import {
     SurveyWidgetType,
 } from '../posthog-surveys-types'
 import { addEventListener } from '../utils'
-
-import * as Preact from 'preact'
-import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { document as _document, window as _window } from '../utils/globals'
 import { doesSurveyUrlMatch, SURVEY_LOGGER as logger } from '../utils/survey-utils'
 import { isNull, isNumber } from '../utils/type-utils'
+import { uuidv7 } from '../uuidv7'
 import { createWidgetStyle, retrieveWidgetShadow } from './surveys-widget'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import { Cancel } from './surveys/components/QuestionHeader'
@@ -33,6 +33,7 @@ import {
     dismissedSurveyEvent,
     getContrastingTextColor,
     getDisplayOrderQuestions,
+    getInProgressSurveyState,
     getSurveyResponseKey,
     getSurveySeen,
     hasWaitPeriodPassed,
@@ -367,6 +368,14 @@ export class SurveyManager {
      */
     private sortSurveysByAppearanceDelay(surveys: Survey[]): Survey[] {
         return surveys.sort((a, b) => {
+            const isSurveyInProgressA = getInProgressSurveyState(a)
+            const isSurveyInProgressB = getInProgressSurveyState(b)
+            if (isSurveyInProgressA && !isSurveyInProgressB) {
+                return 1 // a comes after b
+            }
+            if (!isSurveyInProgressA && isSurveyInProgressB) {
+                return -1 // a comes before b
+            }
             const aIsAlways = a.schedule === SurveySchedule.Always
             const bIsAlways = b.schedule === SurveySchedule.Always
 
@@ -424,6 +433,16 @@ export class SurveyManager {
             : true
 
         if (!internalTargetingFlagCheck) {
+            // check if survey is in progress
+            const isSurveyInProgress = getInProgressSurveyState(survey)
+            if (isSurveyInProgress) {
+                renderReason.disabledReason = `survey is in progress`
+                return {
+                    visible: true,
+                    disabledReason: `survey is in progress, so it'll render again`,
+                }
+            }
+
             renderReason.disabledReason = `internal targeting feature flag ${survey.internal_targeting_flag_key} is false`
             return renderReason
         }
@@ -834,6 +853,21 @@ export function SurveyPopup({
     const shouldShowConfirmation = isSurveySent || previewPageIndex === survey.questions.length
     const confirmationBoxLeftStyle = style?.left && isNumber(style?.left) ? { left: style.left - 40 } : {}
 
+    const surveyContextValue = useMemo(() => {
+        const getInProgressSurvey = getInProgressSurveyState(survey)
+        return {
+            isPreviewMode,
+            previewPageIndex: previewPageIndex,
+            onPopupSurveyDismissed: () => {
+                dismissedSurveyEvent(survey, posthog, isPreviewMode)
+                onPopupSurveyDismissed()
+            },
+            isPopup: isPopup || false,
+            surveySubmissionId: getInProgressSurvey?.surveySubmissionId || uuidv7(),
+            onPreviewSubmit,
+        }
+    }, [isPreviewMode, previewPageIndex, isPopup, posthog, survey, onPopupSurveyDismissed, onPreviewSubmit])
+
     if (isPreviewMode) {
         style = style || {}
         style.left = 'unset'
@@ -842,18 +876,7 @@ export function SurveyPopup({
     }
 
     return isPopupVisible ? (
-        <SurveyContext.Provider
-            value={{
-                isPreviewMode,
-                previewPageIndex: previewPageIndex,
-                onPopupSurveyDismissed: () => {
-                    dismissedSurveyEvent(survey, posthog, isPreviewMode)
-                    onPopupSurveyDismissed()
-                },
-                isPopup: isPopup || false,
-                onPreviewSubmit,
-            }}
-        >
+        <SurveyContext.Provider value={surveyContextValue}>
             {!shouldShowConfirmation ? (
                 <Questions
                     survey={survey}
@@ -893,8 +916,14 @@ export function Questions({
     const textColor = getContrastingTextColor(
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
     )
-    const [questionsResponses, setQuestionsResponses] = useState({})
-    const { previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit } = useContext(SurveyContext)
+    // Initialize responses from sessionStorage or empty object
+    const [questionsResponses, setQuestionsResponses] = useState(() => {
+        const initialResponses = getInProgressSurveyState(survey)?.responses || {}
+        logger.info(`Survey ${survey.id} initial responses: ${JSON.stringify(initialResponses)}`)
+        return initialResponses
+    })
+    const { previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit, surveySubmissionId } =
+        useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
@@ -927,11 +956,30 @@ export function Questions({
         setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
 
         const nextStep = getNextSurveyStep(survey, displayQuestionIndex, res)
-        if (nextStep === SurveyQuestionBranchingType.End) {
-            sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
-        } else {
+        const isSurveyCompleted = nextStep === SurveyQuestionBranchingType.End
+
+        if (!isSurveyCompleted) {
             setCurrentQuestionIndex(nextStep)
+
+            if (survey.enable_partial_responses) {
+                sendSurveyEvent(
+                    { ...questionsResponses, [responseKey]: res },
+                    survey,
+                    posthog,
+                    surveySubmissionId,
+                    isSurveyCompleted
+                )
+            }
+            return
         }
+
+        sendSurveyEvent(
+            { ...questionsResponses, [responseKey]: res },
+            survey,
+            posthog,
+            surveySubmissionId,
+            isSurveyCompleted
+        )
     }
 
     return (
