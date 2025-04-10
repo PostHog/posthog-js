@@ -1,6 +1,8 @@
 // Portions of this file are derived from getsentry/sentry-javascript by Software, Inc. dba Sentry
 // Licensed under the MIT License
 
+// 💖 open source
+
 // This was originally forked from https://github.com/csnover/TraceKit, and was largely
 // re-written as part of raven - js.
 //
