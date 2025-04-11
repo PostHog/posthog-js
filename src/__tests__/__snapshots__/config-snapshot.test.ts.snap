@@ -53,10 +53,6 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"false\\",
     \\"true\\"
   ],
-  \\"capture_history_events\\": [
-    \\"false\\",
-    \\"true\\"
-  ],
   \\"cross_subdomain_cookie\\": [
     \\"false\\",
     \\"true\\"
@@ -100,7 +96,8 @@ exports[`config snapshot for PostHogConfig 1`] = `
   ],
   \\"capture_pageview\\": [
     \\"false\\",
-    \\"true\\"
+    \\"true\\",
+    \\"\\\\\\"history_change\\\\\\"\\"
   ],
   \\"capture_pageleave\\": [
     \\"false\\",

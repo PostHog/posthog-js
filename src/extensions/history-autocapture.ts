@@ -7,6 +7,9 @@ import { patch } from './replay/rrweb-plugins/patch'
 /**
  * This class is used to capture pageview events when the user navigates using the history API (pushState, replaceState)
  * and when the user navigates using the browser's back/forward buttons.
+ *
+ * The behavior is controlled by the `capture_pageview` configuration option:
+ * - When set to `'history_change'`, this class will capture pageviews on history API changes
  */
 export class HistoryAutocapture {
     private _instance: PostHog
@@ -19,7 +22,7 @@ export class HistoryAutocapture {
     }
 
     public get isEnabled(): boolean {
-        return !!this._instance.config.capture_history_events
+        return this._instance.config.capture_pageview === 'history_change'
     }
 
     public startIfEnabled(): void {

@@ -35,7 +35,7 @@ describe('HistoryAutocapture', () => {
         posthog = {
             capture,
             config: {
-                capture_history_events: true,
+                capture_pageview: 'history_change',
             },
             pageViewManager: {
                 doPageView: pageViewManagerDoPageView,
@@ -63,23 +63,29 @@ describe('HistoryAutocapture', () => {
             expect((window.history.replaceState as any).__posthog_wrapped__).toBe(true)
         })
 
-        it('should be enabled with true option', () => {
-            posthog.config.capture_history_events = true
+        it('should NOT be enabled with true option for backwards compatibility', () => {
+            posthog.config.capture_pageview = true
             const historyAutocaptureEnabled = new HistoryAutocapture(posthog)
-            expect(historyAutocaptureEnabled.isEnabled).toBe(true)
+            expect(historyAutocaptureEnabled.isEnabled).toBe(false)
         })
 
         it('should be disabled with false option', () => {
-            posthog.config.capture_history_events = false
+            posthog.config.capture_pageview = false
             const historyAutocaptureDisabled = new HistoryAutocapture(posthog)
             expect(historyAutocaptureDisabled.isEnabled).toBe(false)
+        })
+
+        it('should be enabled with history_change option', () => {
+            posthog.config.capture_pageview = 'history_change'
+            const historyAutocaptureEnabled = new HistoryAutocapture(posthog)
+            expect(historyAutocaptureEnabled.isEnabled).toBe(true)
         })
 
         it('should not setup event listeners if feature is disabled', () => {
             window.history.pushState = originalPushState
             window.history.replaceState = originalReplaceState
 
-            posthog.config.capture_history_events = false
+            posthog.config.capture_pageview = false
             const historyAutocaptureDisabled = new HistoryAutocapture(posthog)
             historyAutocaptureDisabled.startIfEnabled()
 
@@ -121,9 +127,9 @@ describe('HistoryAutocapture', () => {
             expect(capture).not.toHaveBeenCalled()
         })
 
-        it('should not capture pageview when capture_history_events is disabled', () => {
+        it('should not capture pageview when capture_pageview is disabled', () => {
             historyAutocapture.stop()
-            posthog.config.capture_history_events = false
+            posthog.config.capture_pageview = false
             historyAutocapture = new HistoryAutocapture(posthog)
             historyAutocapture.startIfEnabled()
 
