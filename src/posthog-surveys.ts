@@ -253,7 +253,7 @@ export class PostHogSurveys {
         if (!flagKey) {
             return true
         }
-        return this.instance.featureFlags.isFeatureEnabled(flagKey)
+        return !!this.instance.featureFlags.isFeatureEnabled(flagKey)
     }
 
     private isSurveyConditionMatched(survey: Survey): boolean {
