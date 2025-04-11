@@ -1,7 +1,7 @@
 import { SURVEYS } from './constants'
 import { getSurveySeenStorageKeys } from './extensions/surveys/surveys-extension-utils'
 import { PostHog } from './posthog-core'
-import { Survey, SurveyCallback, SurveyRenderReason, SurveyRenderReasonCallback } from './posthog-surveys-types'
+import { Survey, SurveyCallback, SurveyRenderReason } from './posthog-surveys-types'
 import { RemoteConfig } from './types'
 import { assignableWindow, document } from './utils/globals'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
@@ -350,20 +350,26 @@ export class PostHogSurveys {
         return renderReason
     }
 
-    canRenderSurveyAsync(surveyId: string, callback: SurveyRenderReasonCallback, forceReload = false) {
+    canRenderSurveyAsync(surveyId: string, forceReload: boolean): Promise<SurveyRenderReason> {
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
-            callback({ visible: false, disabledReason: 'SDK is not enabled or survey functionality is not yet loaded' })
-            return
+            return Promise.resolve({
+                visible: false,
+                disabledReason: 'SDK is not enabled or survey functionality is not yet loaded',
+            })
         }
-        this.getSurveys((surveys) => {
-            const survey = surveys.filter((x) => x.id === surveyId)[0]
-            if (survey) {
-                callback({ ...this._surveyManager.canRenderSurvey(survey) })
-            } else {
-                callback({ visible: false, disabledReason: 'Survey not found' })
-            }
-        }, forceReload)
+        // Using Promise to wrap the callback-based getSurveys method
+        // eslint-disable-next-line compat/compat
+        return new Promise<SurveyRenderReason>((resolve) => {
+            this.getSurveys((surveys) => {
+                const survey = surveys.filter((x) => x.id === surveyId)[0]
+                if (survey) {
+                    resolve({ ...this._surveyManager.canRenderSurvey(survey) })
+                } else {
+                    resolve({ visible: false, disabledReason: 'Survey not found' })
+                }
+            }, forceReload)
+        })
     }
 
     renderSurvey(surveyId: string, selector: string) {

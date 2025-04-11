@@ -26,7 +26,7 @@ import { PostHogExceptions } from './posthog-exceptions'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import { PostHogSurveys } from './posthog-surveys'
-import { SurveyCallback, SurveyRenderReason, SurveyRenderReasonCallback } from './posthog-surveys-types'
+import { SurveyCallback, SurveyRenderReason } from './posthog-surveys-types'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
@@ -1373,7 +1373,7 @@ export class PostHog {
     /**
      * Checks the feature flags associated with this Survey to see if the survey can be rendered.
      *
-     * This method is deprecated because it's synchronous and won't return the correct result if the survey is not loaded.
+     * This method is deprecated because it's synchronous and won't return the correct result if surveys are not loaded.
      * @deprecated Use `canRenderSurveyAsync` instead.
      * @param surveyId The ID of the survey to check.
      * @returns A SurveyRenderReason object indicating if the survey can be rendered.
@@ -1385,11 +1385,11 @@ export class PostHog {
     /**
      * Checks the feature flags associated with this Survey to see if the survey can be rendered.
      * @param surveyId The ID of the survey to check.
-     * @param callback A callback function that will be called with the SurveyRenderReason object indicating if the survey can be rendered.
      * @param forceReload If true, the survey will be reloaded from the server, Default: false
+     * @returns A SurveyRenderReason object indicating if the survey can be rendered.
      */
-    canRenderSurveyAsync(surveyId: string, callback: SurveyRenderReasonCallback, forceReload = false) {
-        this.surveys.canRenderSurveyAsync(surveyId, callback, forceReload)
+    canRenderSurveyAsync(surveyId: string, forceReload = false): Promise<SurveyRenderReason> {
+        return this.surveys.canRenderSurveyAsync(surveyId, forceReload)
     }
 
     /**
