@@ -9,9 +9,9 @@ import { isObject, isUndefined } from '../../utils/type-utils'
 const logger = createLogger('[ExceptionAutocapture]')
 
 export class ExceptionObserver {
-    instance: PostHog
-    remoteEnabled: boolean | undefined
-    config: Required<ExceptionAutoCaptureConfig>
+    private instance: PostHog
+    private remoteEnabled: boolean | undefined
+    private config: Required<ExceptionAutoCaptureConfig>
     private unwrapOnError: (() => void) | undefined
     private unwrapUnhandledRejection: (() => void) | undefined
     private unwrapConsoleError: (() => void) | undefined
@@ -134,6 +134,6 @@ export class ExceptionObserver {
             this.instance.config.token
         }/person/${this.instance.get_distinct_id()}`
 
-        this.instance.exceptions.sendExceptionEvent(errorProperties)
+        this.instance.exceptions?.sendExceptionEvent(errorProperties)
     }
 }

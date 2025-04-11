@@ -1,18 +1,49 @@
 import babel from '@rollup/plugin-babel'
-import json from '@rollup/plugin-json'
+import replace from '@rollup/plugin-replace'
 import resolve from '@rollup/plugin-node-resolve'
 import typescript from '@rollup/plugin-typescript'
 import { dts } from 'rollup-plugin-dts'
 import terser from '@rollup/plugin-terser'
 import { visualizer } from 'rollup-plugin-visualizer'
 import commonjs from '@rollup/plugin-commonjs'
+import { version } from './package.json' assert { type: 'json' }
+import privatePrefixerTransformer from './plugins/ts-private-prefixer'
 import fs from 'fs'
 import path from 'path'
 
-const plugins = (es5) => [
-    json(),
+const plugins = (es5, minimal) => [
+    replace(
+        minimal
+            ? {
+                  BUILD_VERSION: JSON.stringify(version),
+                  MINIMAL_BUILD: true,
+                  'logger.debug': 'console.debug',
+                  'logger.info': 'console.info',
+                  'logger.warn': 'console.warn',
+                  'logger.error': 'console.warn', // Intentional, as console.error will not get dropped
+                  preventAssignment: true,
+              }
+            : {
+                  BUILD_VERSION: JSON.stringify(version),
+                  preventAssignment: true,
+              }
+    ),
     resolve({ browser: true }),
-    typescript({ sourceMap: true, outDir: './dist' }),
+    typescript({
+        sourceMap: true,
+        declaration: false,
+        outDir: './dist',
+        compilerOptions: {
+            target: 'ESNext',
+        },
+        transformers: minimal
+            ? function (program) {
+                  return {
+                      before: [privatePrefixerTransformer(program)],
+                  }
+              }
+            : undefined,
+    }),
     commonjs(),
     babel({
         extensions: ['.js', '.jsx', '.ts', '.tsx'],
@@ -53,7 +84,15 @@ const plugins = (es5) => [
         compress: {
             // 5 is the default if unspecified
             ecma: es5 ? 5 : 6,
+            drop_console: minimal ? ['log', 'info', 'warn', 'debug'] : false,
         },
+        mangle: minimal
+            ? {
+                  properties: {
+                      regex: /^_ಠ_ಠ_[\w_$]+/,
+                  },
+              }
+            : true,
     }),
 ]
 
@@ -74,7 +113,7 @@ const entrypointTargets = entrypoints.map((file) => {
 
     const fileName = fileParts.join('.')
 
-    const pluginsForThisFile = plugins(fileName.includes('es5'))
+    const pluginsForThisFile = plugins(fileName.includes('es5'), fileName.includes('minimal'))
 
     // we're allowed to console log in this file :)
     // eslint-disable-next-line no-console
@@ -106,7 +145,7 @@ const entrypointTargets = entrypoints.map((file) => {
 const typeTargets = entrypoints
     .filter((file) => file.endsWith('.es.ts'))
     .map((file) => {
-        const source = `./lib/src/entrypoints/${file.replace('.ts', '.d.ts')}`
+        const source = `./lib/entrypoints/${file.replace('.ts', '.d.ts')}`
         /** @type {import('rollup').RollupOptions} */
         return {
             input: source,
@@ -117,7 +156,6 @@ const typeTargets = entrypoints
                 },
             ],
             plugins: [
-                json(),
                 dts({
                     exclude: [],
                 }),

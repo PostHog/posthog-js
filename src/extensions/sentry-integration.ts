@@ -135,7 +135,7 @@ export function createEventProcessor(
                 event.event_id
         }
 
-        _posthog.exceptions.sendExceptionEvent(data)
+        _posthog.exceptions?.sendExceptionEvent(data)
 
         return event
     }

@@ -229,12 +229,12 @@ export function autocapturePropertiesForElement(
 }
 
 export class Autocapture {
-    instance: PostHog
-    _initialized: boolean = false
-    _isDisabledServerSide: boolean | null = null
-    _elementSelectors: Set<string> | null
-    rageclicks = new RageClick()
-    _elementsChainAsString = false
+    private instance: PostHog
+    private _initialized: boolean = false
+    private _isDisabledServerSide: boolean | null = null
+    private _elementSelectors: Set<string> | null
+    private rageclicks = new RageClick()
+    private _elementsChainAsString = false
 
     constructor(instance: PostHog) {
         this.instance = instance
