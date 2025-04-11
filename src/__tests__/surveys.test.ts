@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 
 import { SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
-import { generateSurveys, getNextSurveyStep } from '../extensions/surveys'
+import { generateSurveys, getNextSurveyStep, SurveyManager } from '../extensions/surveys'
 import {
     canActivateRepeatedly,
     getDisplayOrderChoices,
@@ -46,6 +46,7 @@ describe('surveys', () => {
 
     const firstSurveys: Survey[] = [
         {
+            id: 'first-survey',
             name: 'first survey',
             description: 'first survey description',
             type: SurveyType.Popover,
@@ -212,6 +213,7 @@ describe('surveys', () => {
         instance.surveys = surveys
         // all being squashed into a mock posthog so...
         instance.getActiveMatchingSurveys = instance.surveys.getActiveMatchingSurveys.bind(instance.surveys)
+        instance.canRenderSurveyAsync = instance.surveys.canRenderSurveyAsync.bind(instance.surveys)
 
         // mock loadIfEnabled so posthog.surveys.loadIfEnabled() doesn't call _send_request
         // and it instantiates the survey event receiver
@@ -220,6 +222,8 @@ describe('surveys', () => {
             surveys._surveyEventReceiver = new SurveyEventReceiver(instance)
         })
         surveys.loadIfEnabled = loadIfEnabledMock
+        const surveyManager = new SurveyManager(instance)
+        ;(surveys as any)._surveyManager = surveyManager
 
         Object.defineProperty(window, 'location', {
             configurable: true,
@@ -321,6 +325,18 @@ describe('surveys', () => {
             expect(data).toEqual([])
         })
         expect(instance._send_request).not.toHaveBeenCalled()
+    })
+
+    it('can render survey async', async () => {
+        const result = await surveys.canRenderSurveyAsync(firstSurveys[0].id, true)
+
+        expect(result.visible).toBeTruthy()
+    })
+
+    it('cannot render survey async', async () => {
+        const result = await surveys.canRenderSurveyAsync('i dont exist', true)
+
+        expect(result.visible).toBeFalsy()
     })
 
     describe('getActiveMatchingSurveys', () => {
