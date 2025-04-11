@@ -255,6 +255,9 @@ describe('SurveyPopup', () => {
             responses: { $survey_response_q1: 'Partial answer' },
         }
         mockedGetInProgressSurveyState.mockReturnValue(existingState)
+        mockedDismissedSurveyEvent.mockImplementation(() => {
+            window.dispatchEvent(new Event('PHSurveyClosed'))
+        })
 
         render(
             <SurveyPopup
@@ -273,8 +276,5 @@ describe('SurveyPopup', () => {
         await waitFor(() => expect(screen.queryByRole('form')).not.toBeInTheDocument())
 
         expect(mockedDismissedSurveyEvent).toHaveBeenCalledWith(mockSurvey, mockPosthog, false)
-
-        // We've verified dismissedSurveyEvent was called,
-        // implicitly testing that clearInProgressSurveyState would be called internally.
     })
 })
