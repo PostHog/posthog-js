@@ -1,5 +1,5 @@
 import { SURVEYS } from './constants'
-import { getSurveySeenStorageKeys } from './extensions/surveys/surveys-extension-utils'
+import { getInProgressSurveyState, getSurveySeenStorageKeys } from './extensions/surveys/surveys-extension-utils'
 import { PostHog } from './posthog-core'
 import { Survey, SurveyCallback, SurveyRenderReason } from './posthog-surveys-types'
 import { RemoteConfig } from './types'
@@ -253,6 +253,12 @@ export class PostHogSurveys {
         return this.instance.featureFlags.isFeatureEnabled(flagKey)
     }
 
+    private _isSurveyInProgress(survey: Pick<Survey, 'id' | 'current_iteration'>): boolean {
+        // Check sessionStorage to see if the survey was already started in this session
+        const inProgressState = getInProgressSurveyState(survey)
+        return !!inProgressState
+    }
+
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false) {
         this.getSurveys((surveys) => {
             const activeSurveys = surveys.filter((survey) => {
@@ -292,12 +298,14 @@ export class PostHogSurveys {
                 const eventBasedTargetingFlagCheck =
                     hasEvents || hasActions ? activatedSurveys?.includes(survey.id) : true
 
-                const overrideInternalTargetingFlagCheck = this._canActivateRepeatedly(survey)
-                const internalTargetingFlagCheck =
-                    overrideInternalTargetingFlagCheck ||
-                    this.isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key)
+                // Check if survey is already in progress OR can be activated repeatedly OR internal flag is enabled
+                const isInProgress = this._isSurveyInProgress(survey)
+                const canActivateRepeatedly = this._canActivateRepeatedly(survey)
+                const internalTargetingFlagEnabled = this.isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key)
+                const internalTargetingFlagCheck = isInProgress || canActivateRepeatedly || internalTargetingFlagEnabled
 
                 const flagsCheck = this.checkFlags(survey)
+
                 return (
                     linkedFlagCheck &&
                     targetingFlagCheck &&
