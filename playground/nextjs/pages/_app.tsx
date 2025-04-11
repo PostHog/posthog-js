@@ -1,16 +1,15 @@
 import '@/styles/globals.css'
 
-import { useEffect } from 'react'
 import type { AppProps } from 'next/app'
 import { useRouter } from 'next/router'
+import { useEffect } from 'react'
 
-import { PostHogProvider } from 'posthog-js/react'
 import { CookieBanner } from '@/src/CookieBanner'
-import { posthog } from '@/src/posthog'
-import Head from 'next/head'
 import { PageHeader } from '@/src/Header'
 import { useUser } from '@/src/auth'
-import { posthogHelpers } from '@/src/posthog'
+import { posthog, posthogHelpers } from '@/src/posthog'
+import Head from 'next/head'
+import { PostHogProvider } from 'posthog-js/react'
 
 const CDP_DOMAINS = ['https://*.redditstatic.com', 'https://*.reddit.com'].join(' ')
 
@@ -20,6 +19,7 @@ export default function App({ Component, pageProps }: AppProps) {
     const user = useUser()
 
     useEffect(() => {
+        ;(window as any).POSTHOG_DEBUG = true
         if (user) {
             posthogHelpers.setUser(user)
         }

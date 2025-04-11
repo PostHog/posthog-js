@@ -1,9 +1,10 @@
-import { Survey } from '../posthog-surveys-types'
 import { SURVEYS_ACTIVATED } from '../constants'
+import { Survey } from '../posthog-surveys-types'
 
-import { CaptureResult } from '../types'
 import { ActionMatcher } from '../extensions/surveys/action-matcher'
 import { PostHog } from '../posthog-core'
+import { CaptureResult } from '../types'
+import { SURVEY_LOGGER as logger } from './survey-utils'
 import { isUndefined } from './type-utils'
 
 export class SurveyEventReceiver {
@@ -116,6 +117,11 @@ export class SurveyEventReceiver {
             existingActivatedSurveys.length > 0
         ) {
             // remove survey that from activatedSurveys here.
+            logger.info('survey event matched, removing survey from activated surveys', {
+                event,
+                eventPayload,
+                existingActivatedSurveys,
+            })
             const surveyId = eventPayload?.properties?.$survey_id
             if (surveyId) {
                 const index = existingActivatedSurveys.indexOf(surveyId)
@@ -126,6 +132,10 @@ export class SurveyEventReceiver {
             }
         } else {
             if (this.eventToSurveys.has(event)) {
+                logger.info('survey event matched, updating activated surveys', {
+                    event,
+                    surveys: this.eventToSurveys.get(event),
+                })
                 this._updateActivatedSurveys(existingActivatedSurveys.concat(this.eventToSurveys.get(event) || []))
             }
         }
