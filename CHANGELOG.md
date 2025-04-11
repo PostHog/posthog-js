@@ -1,3 +1,8 @@
+## 1.235.6 - 2025-04-11
+
+- feat: Improve how PostHogProvider works with SSR (#1893)
+- feat(err): add react error boundary (#1884)
+
 ## 1.235.5 - 2025-04-10
 
 - fix: survey feedback button not showing after url change (#1892)
