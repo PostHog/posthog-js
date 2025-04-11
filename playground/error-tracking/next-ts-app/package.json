@@ -9,12 +9,12 @@
         "lint": "next lint",
         "inject": "posthog-cli sourcemap inject --directory ./.next/static/chunks",
         "upload": "posthog-cli sourcemap upload --directory ./.next/static/chunks",
-        "link-posthog": "pnpm link ../../..",
-        "build-posthog": "cd ../../.. && NODE_ENV=dev pnpm i && pnpm run build"
+        "build-posthog": "cd ../../.. && NODE_ENV=dev pnpm i && pnpm run build",
+        "preinstall": "pnpm run build-posthog"
     },
     "dependencies": {
         "next": "15.2.1",
-        "posthog-js": "link:../../..",
+        "posthog-js": "file:../../..",
         "react": "^19.0.0",
         "react-dom": "^19.0.0"
     },
