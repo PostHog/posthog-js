@@ -5,12 +5,10 @@ import React, { useEffect, useMemo, useRef } from 'react'
 import { PostHog, PostHogContext } from './PostHogContext'
 import { isDeepEqual } from '../utils/object-utils'
 
-type AlreadyInitialized =
-    | {
-          previousAPIKey: string
-          previousOptions: Partial<PostHogConfig>
-      }
-    | false
+interface PreviousInitialization {
+    apiKey: string
+    options: Partial<PostHogConfig>
+}
 
 type WithOptionalChildren<T> = T & { children?: React.ReactNode | undefined }
 
@@ -45,7 +43,7 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
     // This is used to prevent double initialization when running under React.StrictMode
     // We're not storing a simple boolean here because we want to be able to detect if the
     // apiKey or options have changed.
-    const alreadyInitializedRef = useRef<AlreadyInitialized>(false)
+    const previousInitializationRef = useRef<PreviousInitialization | null>(null)
 
     const posthog = useMemo(() => {
         if (client) {
@@ -80,9 +78,9 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
             // if the user has passed their own client, assume they will also handle calling init().
             return
         }
-        const alreadyInitialized = alreadyInitializedRef.current
+        const previousInitialization = previousInitializationRef.current
 
-        if (!alreadyInitialized) {
+        if (!previousInitialization) {
             // If it's the first time running this, but it has been loaded elsewhere, warn the user about it.
             if (posthogJs.__loaded) {
                 console.warn('[PostHog.js] `posthog` was already loaded elsewhere. This may cause issues.')
@@ -93,9 +91,9 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
 
             // Keep track of whether the client was already initialized
             // This is used to prevent double initialization when running under React.StrictMode, and to know when options change
-            alreadyInitializedRef.current = {
-                previousAPIKey: apiKey,
-                previousOptions: options ?? {},
+            previousInitializationRef.current = {
+                apiKey: apiKey,
+                options: options ?? {},
             }
         } else {
             // If the client was already initialized, we might still end up running the effect again for a few reasons:
@@ -106,7 +104,7 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
             // Changing the apiKey isn't well supported and we'll simply log a message suggesting them
             // to take control of the `client` initialization themselves. This is tricky to handle
             // ourselves because we wouldn't know if we should call `.reset()` or not, for example.
-            if (apiKey !== alreadyInitialized.previousAPIKey) {
+            if (apiKey !== previousInitialization.apiKey) {
                 console.warn(
                     "[PostHog.js] You have provided a different `apiKey` to `PostHogProvider` than the one that was already initialized. This is not supported by our provider and we'll keep using the previous key. If you need to toggle between API Keys you need to control the `client` yourself and pass it in as a prop rather than an `apiKey` prop."
                 )
@@ -114,14 +112,14 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
 
             // Changing options is better supported because we can just call `posthogJs.set_config(options)`
             // and they'll be good to go with their new config. The SDK will know how to handle the changes.
-            if (options && !isDeepEqual(options, alreadyInitialized.previousOptions)) {
+            if (options && !isDeepEqual(options, previousInitialization.options)) {
                 posthogJs.set_config(options)
             }
 
             // Keep track of the possibly-new set of apiKey and options
-            alreadyInitializedRef.current = {
-                previousAPIKey: apiKey,
-                previousOptions: options ?? {},
+            previousInitializationRef.current = {
+                apiKey: apiKey,
+                options: options ?? {},
             }
         }
     }, [client, apiKey, JSON.stringify(options)]) // Stringify options to be a stable reference
