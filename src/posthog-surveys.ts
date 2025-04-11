@@ -5,7 +5,15 @@ import { Survey, SurveyCallback, SurveyRenderReason } from './posthog-surveys-ty
 import { RemoteConfig } from './types'
 import { assignableWindow, document } from './utils/globals'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
-import { doesSurveyDeviceTypesMatch, doesSurveyUrlMatch, SURVEY_LOGGER as logger } from './utils/survey-utils'
+import {
+    doesSurveyActivateByAction,
+    doesSurveyActivateByEvent,
+    doesSurveyDeviceTypesMatch,
+    doesSurveyMatchSelector,
+    doesSurveyUrlMatch,
+    isSurveyRunning,
+    SURVEY_LOGGER as logger,
+} from './utils/survey-utils'
 import { isArray, isNullish } from './utils/type-utils'
 
 export class PostHogSurveys {
@@ -202,12 +210,8 @@ export class PostHogSurveys {
 
                         const eventOrActionBasedSurveys = surveys.filter(
                             (survey: Survey) =>
-                                (survey.conditions?.events &&
-                                    survey.conditions?.events?.values &&
-                                    survey.conditions?.events?.values?.length > 0) ||
-                                (survey.conditions?.actions &&
-                                    survey.conditions?.actions?.values &&
-                                    survey.conditions?.actions?.values?.length > 0)
+                                isSurveyRunning(survey) &&
+                                (doesSurveyActivateByEvent(survey) || doesSurveyActivateByAction(survey))
                         )
 
                         if (eventOrActionBasedSurveys.length > 0) {
@@ -250,60 +254,75 @@ export class PostHogSurveys {
         if (!flagKey) {
             return true
         }
-        return this.instance.featureFlags.isFeatureEnabled(flagKey)
+        return !!this.instance.featureFlags.isFeatureEnabled(flagKey)
+    }
+
+    private isSurveyConditionMatched(survey: Survey): boolean {
+        if (!survey.conditions) {
+            return true
+        }
+        return doesSurveyUrlMatch(survey) && doesSurveyDeviceTypesMatch(survey) && doesSurveyMatchSelector(survey)
+    }
+
+    /**
+     * 'Link feature flag' field in the survey form. If the feature flag is enabled, this will return true.
+     * @param survey
+     */
+    private isSurveyLinkedFlagEnabled(survey: Survey): boolean {
+        return this.isSurveyFeatureFlagEnabled(survey.linked_flag_key)
+    }
+
+    /**
+     * 'Properties' field in the survey form. Creates a special feature flag that can be used to target
+     * users based on properties, which are defined in the Survey.
+     * @param survey
+     */
+    private isSurveyTargetingFlagEnabled(survey: Survey): boolean {
+        return this.isSurveyFeatureFlagEnabled(survey.targeting_flag_key)
+    }
+
+    /**
+     * Each survey has a unique internal targeting feature flag, which checks if the survey has been shown to
+     * a user and if they interacted with it (either by completing it or dismissing it).
+     * @param survey
+     */
+    private isSurveyInternalTargetingFlagEnabled(survey: Survey): boolean {
+        return this.isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key)
+    }
+
+    /**
+     * Some surveys can be answered multiple times. This methods checks if the survey was already answered
+     * OR if the survey can be repeated.
+     * @param survey
+     */
+    private isInternalFlagEnabledOrCanActivateRepeatedly(survey: Survey): boolean {
+        return this._canActivateRepeatedly(survey) || this.isSurveyInternalTargetingFlagEnabled(survey)
+    }
+
+    /**
+     * Surveys can be activated by events or actions. This method checks if the survey has events and actions,
+     * and if so, it checks if the survey has been activated.
+     * @param survey
+     */
+    private hasActionOrEventTriggeredSurvey(survey: Survey): boolean {
+        if (!doesSurveyActivateByEvent(survey) && !doesSurveyActivateByAction(survey)) {
+            return true
+        }
+        const surveysActivatedByEventsOrActions: string[] | undefined = this._surveyEventReceiver?.getSurveys()
+        return !!surveysActivatedByEventsOrActions?.includes(survey.id)
     }
 
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false) {
         this.getSurveys((surveys) => {
-            const activeSurveys = surveys.filter((survey) => {
-                return !!(survey.start_date && !survey.end_date)
-            })
+            const activeSurveys = surveys.filter((survey) => isSurveyRunning(survey))
 
-            const conditionMatchedSurveys = activeSurveys.filter((survey) => {
-                if (!survey.conditions) {
-                    return true
-                }
+            const conditionMatchedSurveys = activeSurveys.filter((survey) => this.isSurveyConditionMatched(survey))
 
-                const urlCheck = doesSurveyUrlMatch(survey)
-                const selectorCheck = survey.conditions?.selector
-                    ? document?.querySelector(survey.conditions.selector)
-                    : true
-                const deviceTypeCheck = doesSurveyDeviceTypesMatch(survey)
-                return urlCheck && selectorCheck && deviceTypeCheck
-            })
-
-            // get all the surveys that have been activated so far with user actions.
-            const activatedSurveys: string[] | undefined = this._surveyEventReceiver?.getSurveys()
             const targetingMatchedSurveys = conditionMatchedSurveys.filter((survey) => {
-                if (
-                    !survey.linked_flag_key &&
-                    !survey.targeting_flag_key &&
-                    !survey.internal_targeting_flag_key &&
-                    !survey.feature_flag_keys?.length
-                ) {
-                    return true
-                }
-                const linkedFlagCheck = this.isSurveyFeatureFlagEnabled(survey.linked_flag_key)
-                const targetingFlagCheck = this.isSurveyFeatureFlagEnabled(survey.targeting_flag_key)
-
-                const hasEvents = (survey.conditions?.events?.values?.length ?? 0) > 0
-                const hasActions = (survey.conditions?.actions?.values?.length ?? 0) > 0
-
-                const eventBasedTargetingFlagCheck =
-                    hasEvents || hasActions ? activatedSurveys?.includes(survey.id) : true
-
-                const overrideInternalTargetingFlagCheck = this._canActivateRepeatedly(survey)
-                const internalTargetingFlagCheck =
-                    overrideInternalTargetingFlagCheck ||
-                    this.isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key)
-
-                const flagsCheck = this.checkFlags(survey)
                 return (
-                    linkedFlagCheck &&
-                    targetingFlagCheck &&
-                    internalTargetingFlagCheck &&
-                    eventBasedTargetingFlagCheck &&
-                    flagsCheck
+                    this.canRenderSuveyReason(survey).visible &&
+                    this.hasActionOrEventTriggeredSurvey(survey) &&
+                    this.checkFlags(survey)
                 )
             })
 
@@ -333,21 +352,60 @@ export class PostHogSurveys {
         return assignableWindow.__PosthogExtensions__.canActivateRepeatedly(survey)
     }
 
-    canRenderSurvey(surveyId: string): SurveyRenderReason | null {
+    getSurveyById(surveyId: string): Survey | null {
+        let survey: Survey | null = null
+        this.getSurveys((surveys) => {
+            survey = surveys.find((x) => x.id === surveyId) ?? null
+        })
+        return survey
+    }
+
+    private canRenderSuveyReason(survey: Survey): SurveyRenderReason {
+        const renderReason: SurveyRenderReason = { visible: true }
+
+        if (isSurveyRunning(survey)) {
+            renderReason.visible = false
+            renderReason.disabledReason = `Survey is not running. It was completed on ${survey.end_date}`
+            return renderReason
+        }
+
+        if (!this.isSurveyLinkedFlagEnabled(survey)) {
+            renderReason.visible = false
+            renderReason.disabledReason = `Survey linked feature flag is not enabled`
+            return renderReason
+        }
+
+        if (!this.isSurveyTargetingFlagEnabled(survey)) {
+            renderReason.visible = false
+            renderReason.disabledReason = `Survey targeting feature flag is not enabled`
+            return renderReason
+        }
+
+        if (!this.isSurveyInternalTargetingFlagEnabled(survey)) {
+            if (this.isInternalFlagEnabledOrCanActivateRepeatedly(survey)) {
+                renderReason.visible = true
+                renderReason.disabledReason =
+                    'Survey was already answered (dismissed or completed), but it can activate repeatedly'
+                return renderReason
+            }
+            renderReason.visible = false
+            renderReason.disabledReason = 'Internal targeting flag is not enabled'
+            return renderReason
+        }
+
+        return renderReason
+    }
+
+    canRenderSurvey(surveyId: string): SurveyRenderReason {
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return { visible: false, disabledReason: 'SDK is not enabled or survey functionality is not yet loaded' }
         }
-        let renderReason: SurveyRenderReason | null = null
-        this.getSurveys((surveys) => {
-            const survey = surveys.filter((x) => x.id === surveyId)[0]
-            if (survey) {
-                renderReason = { ...this._surveyManager.canRenderSurvey(survey) }
-            } else {
-                renderReason = { visible: false, disabledReason: 'Survey not found' }
-            }
-        })
-        return renderReason
+        const survey = this.getSurveyById(surveyId)
+        if (!survey) {
+            return { visible: false, disabledReason: 'Survey not found' }
+        }
+        return this.canRenderSuveyReason(survey)
     }
 
     renderSurvey(surveyId: string, selector: string) {
@@ -355,9 +413,12 @@ export class PostHogSurveys {
             logger.warn('init was not called')
             return
         }
-        this.getSurveys((surveys) => {
-            const survey = surveys.filter((x) => x.id === surveyId)[0]
-            this._surveyManager.renderSurvey(survey, document?.querySelector(selector))
-        })
+        const survey = this.getSurveyById(surveyId)
+        if (!survey) {
+            logger.warn('Survey not found')
+            return
+        }
+
+        this._surveyManager.renderSurvey(survey, document?.querySelector(selector))
     }
 }
