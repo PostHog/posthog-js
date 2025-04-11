@@ -419,10 +419,14 @@ export interface PostHogConfig {
 
     /**
      * Determines whether PostHog should capture pageview events automatically.
+     * Can be:
+     * - `true`: Capture regular pageviews (default)
+     * - `false`: Don't capture any pageviews
+     * - `'history_change'`: Only capture pageviews on history API changes (pushState, replaceState, popstate)
      *
      * @default true
      */
-    capture_pageview: boolean
+    capture_pageview: boolean | 'history_change'
 
     /**
      * Determines whether PostHog should capture pageleave events.
