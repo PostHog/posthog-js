@@ -176,62 +176,61 @@ export class PostHogSurveys {
         }
 
         const existingSurveys = this.instance.get_property(SURVEYS)
-
-        if (!existingSurveys || forceReload) {
-            // Prevent concurrent API calls
-            if (this._isFetchingSurveys) {
-                return callback([], {
-                    isLoaded: false,
-                    error: 'Surveys are already being loaded',
-                })
-            }
-
-            try {
-                this._isFetchingSurveys = true
-                this.instance._send_request({
-                    url: this.instance.requestRouter.endpointFor(
-                        'api',
-                        `/api/surveys/?token=${this.instance.config.token}`
-                    ),
-                    method: 'GET',
-                    timeout: this.instance.config.surveys_request_timeout_ms,
-                    callback: (response) => {
-                        this._isFetchingSurveys = false
-                        const statusCode = response.statusCode
-                        if (statusCode !== 200 || !response.json) {
-                            const error = `Surveys API could not be loaded, status: ${statusCode}`
-                            logger.error(error)
-                            return callback([], {
-                                isLoaded: false,
-                                error,
-                            })
-                        }
-                        const surveys = response.json.surveys || []
-
-                        const eventOrActionBasedSurveys = surveys.filter(
-                            (survey: Survey) =>
-                                isSurveyRunning(survey) &&
-                                (doesSurveyActivateByEvent(survey) || doesSurveyActivateByAction(survey))
-                        )
-
-                        if (eventOrActionBasedSurveys.length > 0) {
-                            this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
-                        }
-
-                        this.instance.persistence?.register({ [SURVEYS]: surveys })
-                        return callback(surveys, {
-                            isLoaded: true,
-                        })
-                    },
-                })
-            } catch (e) {
-                this._isFetchingSurveys = false
-                throw e
-            }
-        } else {
+        if (existingSurveys && !forceReload) {
             return callback(existingSurveys, {
                 isLoaded: true,
             })
+        }
+
+        // Prevent concurrent API calls
+        if (this._isFetchingSurveys) {
+            return callback([], {
+                isLoaded: false,
+                error: 'Surveys are already being loaded',
+            })
+        }
+
+        try {
+            this._isFetchingSurveys = true
+            this.instance._send_request({
+                url: this.instance.requestRouter.endpointFor(
+                    'api',
+                    `/api/surveys/?token=${this.instance.config.token}`
+                ),
+                method: 'GET',
+                timeout: this.instance.config.surveys_request_timeout_ms,
+                callback: (response) => {
+                    this._isFetchingSurveys = false
+                    const statusCode = response.statusCode
+                    if (statusCode !== 200 || !response.json) {
+                        const error = `Surveys API could not be loaded, status: ${statusCode}`
+                        logger.error(error)
+                        return callback([], {
+                            isLoaded: false,
+                            error,
+                        })
+                    }
+                    const surveys = response.json.surveys || []
+
+                    const eventOrActionBasedSurveys = surveys.filter(
+                        (survey: Survey) =>
+                            isSurveyRunning(survey) &&
+                            (doesSurveyActivateByEvent(survey) || doesSurveyActivateByAction(survey))
+                    )
+
+                    if (eventOrActionBasedSurveys.length > 0) {
+                        this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
+                    }
+
+                    this.instance.persistence?.register({ [SURVEYS]: surveys })
+                    return callback(surveys, {
+                        isLoaded: true,
+                    })
+                },
+            })
+        } catch (e) {
+            this._isFetchingSurveys = false
+            throw e
         }
     }
 
@@ -254,7 +253,7 @@ export class PostHogSurveys {
         if (!flagKey) {
             return true
         }
-        return !!this.instance.featureFlags.isFeatureEnabled(flagKey)
+        return this.instance.featureFlags.isFeatureEnabled(flagKey)
     }
 
     private isSurveyConditionMatched(survey: Survey): boolean {
@@ -363,7 +362,7 @@ export class PostHogSurveys {
     private canRenderSuveyReason(survey: Survey): SurveyRenderReason {
         const renderReason: SurveyRenderReason = { visible: true }
 
-        if (isSurveyRunning(survey)) {
+        if (!isSurveyRunning(survey)) {
             renderReason.visible = false
             renderReason.disabledReason = `Survey is not running. It was completed on ${survey.end_date}`
             return renderReason

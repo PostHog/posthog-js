@@ -73,6 +73,7 @@ describe('surveys', () => {
             id: 'first-survey',
             description: 'first survey description',
             type: SurveyType.Popover,
+            start_date: new Date().toISOString(),
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
             conditions: {
                 events: {
@@ -98,6 +99,7 @@ describe('surveys', () => {
             id: 'second-survey',
             description: 'second survey description',
             type: SurveyType.Popover,
+            start_date: new Date().toISOString(),
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a moblin?' }],
         } as unknown as Survey,
         {
@@ -105,6 +107,7 @@ describe('surveys', () => {
             id: 'third-survey',
             description: 'third survey description',
             type: SurveyType.Popover,
+            start_date: new Date().toISOString(),
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
             conditions: {
                 events: {
@@ -729,8 +732,6 @@ describe('surveys', () => {
         })
 
         it('returns event based surveys that observed an event', () => {
-            // TODO this test fails when run in isolation
-
             surveysResponse = {
                 surveys: [surveyWithEnabledInternalFlag, surveyWithEvents],
             }
