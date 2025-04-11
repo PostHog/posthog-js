@@ -6,6 +6,7 @@
 
 import posthogJS, { PostHog, PostHogConfig } from 'posthog-js'
 import { User } from './auth'
+import { BootstrapConfig } from '../../../src/types'
 
 export const PERSON_PROCESSING_MODE: 'always' | 'identified_only' | 'never' =
     (process.env.NEXT_PUBLIC_POSTHOG_PERSON_PROCESSING_MODE as any) || 'identified_only'
@@ -51,8 +52,23 @@ export const updatePostHogConsent = (consentGiven: boolean) => {
 }
 
 if (typeof window !== 'undefined') {
+    const searchParams = new URLSearchParams(window.location.search)
+    const bootstrapDistinctId = searchParams.get('__ph_distinct_id')
+    const bootstrapIsIdentified = searchParams.get('__ph_is_identified')
+    const bootstrapSessionId = searchParams.get('__ph_session_id')
+
+    let bootstrap: BootstrapConfig | undefined
+    if (bootstrapDistinctId && bootstrapIsIdentified && bootstrapSessionId) {
+        bootstrap = {
+            distinctID: bootstrapDistinctId,
+            isIdentifiedID: bootstrapIsIdentified === 'true',
+            sessionID: bootstrapSessionId,
+        }
+    }
+
     posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY || '', {
         api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com',
+        bootstrap,
         session_recording: {
             recordCrossOriginIframes: true,
             blockSelector: '.ph-block-image',
