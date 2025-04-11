@@ -327,10 +327,16 @@ describe('surveys', () => {
         expect(instance._send_request).not.toHaveBeenCalled()
     })
 
-    it('cannot render completed surveys', async () => {
+    it('can render survey async', async () => {
         const result = await surveys.canRenderSurveyAsync(firstSurveys[0].id, true)
 
         expect(result.visible).toBeTruthy()
+    })
+
+    it('cannot render survey async', async () => {
+        const result = await surveys.canRenderSurveyAsync('i dont exist', true)
+
+        expect(result.visible).toBeFalsy()
     })
 
     describe('getActiveMatchingSurveys', () => {
