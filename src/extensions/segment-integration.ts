@@ -68,7 +68,7 @@ const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
         logger.warn('This browser does not have Promise support, and can not use the segment integration')
     }
 
-    const enrichEvent = (ctx: SegmentContext, eventName: string | undefined) => {
+    const enrichEvent = (ctx: SegmentContext, eventName: string | undefined, checkIdentity: boolean) => {
         if (!eventName) {
             return ctx
         }
@@ -77,7 +77,8 @@ const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
             logger.info('No userId set, resetting PostHog')
             posthog.reset()
         }
-        if (ctx.event.userId && ctx.event.userId !== posthog.get_distinct_id()) {
+
+        if (checkIdentity && ctx.event.userId && ctx.event.userId !== posthog.get_distinct_id()) {
             logger.info('UserId set, identifying with PostHog')
             posthog.identify(ctx.event.userId)
         }
@@ -99,10 +100,10 @@ const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
         // check and early return above
         // eslint-disable-next-line compat/compat
         load: () => Promise.resolve(),
-        track: (ctx) => enrichEvent(ctx, ctx.event.event),
-        page: (ctx) => enrichEvent(ctx, '$pageview'),
-        identify: (ctx) => enrichEvent(ctx, '$identify'),
-        screen: (ctx) => enrichEvent(ctx, '$screen'),
+        track: (ctx) => enrichEvent(ctx, ctx.event.event, false),
+        page: (ctx) => enrichEvent(ctx, '$pageview', false),
+        identify: (ctx) => enrichEvent(ctx, '$identify', true),
+        screen: (ctx) => enrichEvent(ctx, '$screen', false),
     }
 }
 
