@@ -48,7 +48,6 @@ export function PostHogProvider({ children, client, apiKey, options }: WithOptio
     const alreadyInitializedRef = useRef<AlreadyInitialized>(false)
 
     const posthog = useMemo(() => {
-        console.log('useMemo', { client, apiKey, options, alreadyInitializedRef })
         if (client) {
             if (apiKey) {
                 console.warn(
