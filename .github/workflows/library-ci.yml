@@ -30,8 +30,23 @@ jobs:
             - uses: actions/setup-node@v4
               with:
                 node-version: '18'
+
             - run: pnpm install
             - run: pnpm build
+
+            - name: Upload bundle size visualization
+              uses: actions/upload-artifact@v4
+              with:
+                name: array.js.stats.html
+                path: stats/array.js.stats.html
+
+            - name: Comment with artifact link
+              uses: peter-evans/create-or-update-comment@v4
+              with:
+                issue-number: ${{ github.event.pull_request.number }}
+                body: |
+                  [See bundle size visualization](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts)
+
             - name: Install Playwright Browsers
               run: pnpm exec playwright install --with-deps
             - name: Run Playwright tests
