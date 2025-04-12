@@ -41,14 +41,14 @@ jobs:
         with:
           issue-number: ${{ github.event.pull_request.number }}
           comment-author: 'github-actions[bot]'
-          body-includes: Download bundle size visualisation
+          body-includes: Download bundle size visualization
       - name: Create or update artifact link comment
         uses: peter-evans/create-or-update-comment@v4
         with:
           comment-id: ${{ steps.fc.outputs.comment-id }}
           issue-number: ${{ github.event.pull_request.number }}
           body: |
-            [Download bundle size visualisation](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts/${{ steps.viz-upload.outputs.artifact-id }})
+            [Download bundle size visualization](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts/${{ steps.viz-upload.outputs.artifact-id }})
           edit-mode: replace
 
       - uses: preactjs/compressed-size-action@v2
