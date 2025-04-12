@@ -8,12 +8,13 @@
  */
 
 import { _copyAndTruncateStrings, isCrossDomainCookie } from '../utils'
-import { Info } from '../utils/event-utils'
 import { isLikelyBot, DEFAULT_BLOCKED_UA_STRS, isBlockedUA, NavigatorUAData } from '../utils/blocked-uas'
 import { expect } from '@jest/globals'
 
 import { _base64Encode } from '../utils/encode-utils'
 import { getPersonPropertiesHash } from '../utils/person-property-utils'
+import { detectDeviceType } from '../utils/user-agent-utils'
+import { getEventProperties } from '../utils/event-utils'
 
 function userAgentFor(botString: string) {
     const randOne = (Math.random() + 1).toString(36).substring(7)
@@ -95,12 +96,12 @@ describe('utils', () => {
             }
 
             for (const [userAgent, deviceType] of Object.entries(deviceTypes)) {
-                expect(Info.deviceType(userAgent)).toEqual(deviceType)
+                expect(detectDeviceType(userAgent)).toEqual(deviceType)
             }
         })
 
         it('properties', () => {
-            const properties = Info.properties()
+            const properties = getEventProperties()
 
             expect(properties['$lib']).toEqual('web')
             expect(properties['$device_type']).toEqual('Desktop')

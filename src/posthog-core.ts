@@ -66,7 +66,6 @@ import {
     safewrapClass,
 } from './utils'
 import { isLikelyBot } from './utils/blocked-uas'
-import { Info } from './utils/event-utils'
 import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
 import { getPersonPropertiesHash } from './utils/person-property-utils'
 import { logger } from './utils/logger'
@@ -88,6 +87,7 @@ import {
 } from './utils/type-utils'
 import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
+import { getEventProperties } from './utils/event-utils'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -991,10 +991,10 @@ export class PostHog {
             return properties
         }
 
-        const infoProperties = Info.properties({
-            maskPersonalDataProperties: this.config.mask_personal_data_properties,
-            customPersonalDataProperties: this.config.custom_personal_data_properties,
-        })
+        const infoProperties = getEventProperties(
+            this.config.mask_personal_data_properties,
+            this.config.custom_personal_data_properties
+        )
 
         if (this.sessionManager) {
             const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
