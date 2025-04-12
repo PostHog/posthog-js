@@ -36,6 +36,7 @@ jobs:
 
             - name: Upload bundle size visualization
               uses: actions/upload-artifact@v4
+              id: viz-upload
               with:
                 name: array.js.stats.html
                 path: stats/array.js.stats.html
@@ -45,7 +46,7 @@ jobs:
               with:
                 issue-number: ${{ github.event.pull_request.number }}
                 body: |
-                  [See bundle size visualization](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts)
+                    [View bundle size viz](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts/${{ steps.viz-upload.outputs.artifact-id }})
 
             - name: Install Playwright Browsers
               run: pnpm exec playwright install --with-deps
