@@ -19,7 +19,6 @@ jobs:
                 cache: 'pnpm'
             - run: pnpm install
             - run: pnpm build
-
             - run: pnpm test:unit
 
     integration:
@@ -31,10 +30,8 @@ jobs:
             - uses: actions/setup-node@v4
               with:
                 node-version: '18'
-
             - run: pnpm install
             - run: pnpm build
-
             - name: Install Playwright Browsers
               run: pnpm exec playwright install --with-deps
             - name: Run Playwright tests
