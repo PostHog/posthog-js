@@ -46,7 +46,8 @@ jobs:
               with:
                 issue-number: ${{ github.event.pull_request.number }}
                 body: |
-                    [View bundle size viz](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts/${{ steps.viz-upload.outputs.artifact-id }})
+                    [Downlod bundle size visualisation](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts/${{ steps.viz-upload.outputs.artifact-id }})
+                edit-mode: replace
 
             - name: Install Playwright Browsers
               run: pnpm exec playwright install --with-deps
