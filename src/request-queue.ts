@@ -8,34 +8,34 @@ export const DEFAULT_FLUSH_INTERVAL_MS = 3000
 
 export class RequestQueue {
     // We start in a paused state and only start flushing when enabled by the parent
-    private isPaused: boolean = true
-    private queue: QueuedRequestWithOptions[] = []
-    private flushTimeout?: ReturnType<typeof setTimeout>
-    private flushTimeoutMs: number
-    private sendRequest: (req: QueuedRequestWithOptions) => void
+    private _isPaused: boolean = true
+    private _queue: QueuedRequestWithOptions[] = []
+    private _flushTimeout?: ReturnType<typeof setTimeout>
+    private _flushTimeoutMs: number
+    private _sendRequest: (req: QueuedRequestWithOptions) => void
 
     constructor(sendRequest: (req: QueuedRequestWithOptions) => void, config?: RequestQueueConfig) {
-        this.flushTimeoutMs = clampToRange(
+        this._flushTimeoutMs = clampToRange(
             config?.flush_interval_ms || DEFAULT_FLUSH_INTERVAL_MS,
             250,
             5000,
             'flush interval',
             DEFAULT_FLUSH_INTERVAL_MS
         )
-        this.sendRequest = sendRequest
+        this._sendRequest = sendRequest
     }
 
     enqueue(req: QueuedRequestWithOptions): void {
-        this.queue.push(req)
+        this._queue.push(req)
 
-        if (!this.flushTimeout) {
-            this.setFlushTimeout()
+        if (!this._flushTimeout) {
+            this._setFlushTimeout()
         }
     }
 
     unload(): void {
-        this.clearFlushTimeout()
-        const requests = this.queue.length > 0 ? this.formatQueue() : {}
+        this._clearFlushTimeout()
+        const requests = this._queue.length > 0 ? this._formatQueue() : {}
         const requestValues = Object.values(requests)
 
         // Always force events to be sent before recordings, as events are more important, and recordings are bigger and thus less likely to arrive
@@ -44,23 +44,23 @@ export class RequestQueue {
             ...requestValues.filter((r) => r.url.indexOf('/e') !== 0),
         ]
         sortedRequests.map((req) => {
-            this.sendRequest({ ...req, transport: 'sendBeacon' })
+            this._sendRequest({ ...req, transport: 'sendBeacon' })
         })
     }
 
     enable(): void {
-        this.isPaused = false
-        this.setFlushTimeout()
+        this._isPaused = false
+        this._setFlushTimeout()
     }
 
-    private setFlushTimeout(): void {
-        if (this.isPaused) {
+    private _setFlushTimeout(): void {
+        if (this._isPaused) {
             return
         }
-        this.flushTimeout = setTimeout(() => {
-            this.clearFlushTimeout()
-            if (this.queue.length > 0) {
-                const requests = this.formatQueue()
+        this._flushTimeout = setTimeout(() => {
+            this._clearFlushTimeout()
+            if (this._queue.length > 0) {
+                const requests = this._formatQueue()
                 for (const key in requests) {
                     const req = requests[key]
                     const now = new Date().getTime()
@@ -71,20 +71,20 @@ export class RequestQueue {
                             delete data['timestamp']
                         })
                     }
-                    this.sendRequest(req)
+                    this._sendRequest(req)
                 }
             }
-        }, this.flushTimeoutMs)
+        }, this._flushTimeoutMs)
     }
 
-    private clearFlushTimeout(): void {
-        clearTimeout(this.flushTimeout)
-        this.flushTimeout = undefined
+    private _clearFlushTimeout(): void {
+        clearTimeout(this._flushTimeout)
+        this._flushTimeout = undefined
     }
 
-    private formatQueue(): Record<string, QueuedRequestWithOptions> {
+    private _formatQueue(): Record<string, QueuedRequestWithOptions> {
         const requests: Record<string, QueuedRequestWithOptions> = {}
-        each(this.queue, (request: QueuedRequestWithOptions) => {
+        each(this._queue, (request: QueuedRequestWithOptions) => {
             const req = request
             const key = (req ? req.batchKey : null) || req.url
             if (isUndefined(requests[key])) {
@@ -95,7 +95,7 @@ export class RequestQueue {
             requests[key].data?.push(req.data)
         })
 
-        this.queue = []
+        this._queue = []
         return requests
     }
 }

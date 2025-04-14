@@ -13,6 +13,15 @@ const rules = {
     'no-console': 'error',
     'no-only-tests/no-only-tests': 'error',
     'posthog-js/no-external-replay-imports': 'error',
+    '@typescript-eslint/naming-convention': [
+        'error',
+        {
+            selector: ['memberLike'],
+            modifiers: ['private'],
+            format: null,
+            leadingUnderscore: 'require',
+        },
+    ],
 }
 
 const extend = [
@@ -38,6 +47,7 @@ module.exports = {
     parserOptions: {
         ecmaVersion: 2018,
         sourceType: 'module',
+        project: './tsconfig.json',
     },
     plugins: [
         'prettier',
@@ -80,6 +90,19 @@ module.exports = {
                 'no-restricted-globals': 'off',
                 'compat/compat': 'off',
             },
+            parserOptions: {
+                project: './src/__tests__/tsconfig.json',
+            },
+        },
+        {
+            files: ['**/*.js'],
+            parserOptions: {
+                project: null, // <- prevents the TS parser from trying to parse it with type info
+            },
+            rules: {
+                ...rules,
+                '@typescript-eslint/naming-convention': 'off',
+            },
         },
         {
             files: 'react/src/**/',
@@ -118,7 +141,10 @@ module.exports = {
                 'posthog-js/no-direct-array-check': 'off',
                 'posthog-js/no-direct-undefined-check': 'off',
                 'posthog-js/no-direct-null-check': 'off',
-                'compat/compat': 'off',
+                '@typescript-eslint/naming-convention': 'off',
+            },
+            parserOptions: {
+                project: null,
             },
         },
         {

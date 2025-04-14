@@ -1009,7 +1009,7 @@ export class PostHog {
             if (this.sessionRecording) {
                 extend(properties, this.sessionRecording.sdkDebugProperties)
             }
-            properties['$sdk_debug_retry_queue_size'] = this._retryQueue?.['queue']?.length
+            properties['$sdk_debug_retry_queue_size'] = this._retryQueue?.length
         } catch (e: any) {
             properties['$sdk_debug_error_capturing_properties'] = String(e)
         }

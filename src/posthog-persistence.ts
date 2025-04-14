@@ -49,7 +49,7 @@ const parseName = (config: PostHogConfig): string => {
  * @constructor
  */
 export class PostHogPersistence {
-    private config: PostHogConfig
+    private _config: PostHogConfig
     props: Properties
     storage: PersistentStore
     campaign_params_saved: boolean
@@ -61,11 +61,11 @@ export class PostHogPersistence {
     cross_subdomain: boolean | undefined
 
     constructor(config: PostHogConfig) {
-        this.config = config
+        this._config = config
         this.props = {}
         this.campaign_params_saved = false
         this.name = parseName(config)
-        this.storage = this.buildStorage(config)
+        this.storage = this._buildStorage(config)
         this.load()
         if (config.debug) {
             logger.info('Persistence loaded', config['persistence'], { ...this.props })
@@ -74,7 +74,7 @@ export class PostHogPersistence {
         this.save()
     }
 
-    private buildStorage(config: PostHogConfig) {
+    private _buildStorage(config: PostHogConfig) {
         if (
             CASE_INSENSITIVE_PERSISTENCE_TYPES.indexOf(
                 config['persistence'].toLowerCase() as Lowercase<PostHogConfig['persistence']>
@@ -146,7 +146,7 @@ export class PostHogPersistence {
         if (this.disabled) {
             return
         }
-        this.storage.set(this.name, this.props, this.expire_days, this.cross_subdomain, this.secure, this.config.debug)
+        this.storage.set(this.name, this.props, this.expire_days, this.cross_subdomain, this.secure, this._config.debug)
     }
 
     remove(): void {
@@ -229,9 +229,9 @@ export class PostHogPersistence {
     update_campaign_params(): void {
         if (!this.campaign_params_saved) {
             const campaignParams = getCampaignParams(
-                this.config.custom_campaign_params,
-                this.config.mask_personal_data_properties,
-                this.config.custom_personal_data_properties
+                this._config.custom_campaign_params,
+                this._config.mask_personal_data_properties,
+                this._config.custom_personal_data_properties
             )
             // only save campaign params if there were any
             if (!isEmptyObject(stripEmptyProperties(campaignParams))) {
@@ -257,8 +257,8 @@ export class PostHogPersistence {
         this.register_once(
             {
                 [INITIAL_PERSON_INFO]: getPersonInfo(
-                    this.config.mask_personal_data_properties,
-                    this.config.custom_personal_data_properties
+                    this._config.mask_personal_data_properties,
+                    this._config.custom_personal_data_properties
                 ),
             },
             undefined
@@ -316,7 +316,7 @@ export class PostHogPersistence {
 
         if (config.persistence !== oldConfig.persistence) {
             // If the persistence type has changed, we need to migrate the data.
-            const newStore = this.buildStorage(config)
+            const newStore = this._buildStorage(config)
             const props = this.props
 
             // clear the old store

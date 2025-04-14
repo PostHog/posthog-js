@@ -42,13 +42,13 @@ export class DeadClicksAutocapture {
 
     public startIfEnabled() {
         if (this.isEnabled(this)) {
-            this.loadScript(() => {
-                this.start()
+            this._loadScript(() => {
+                this._start()
             })
         }
     }
 
-    private loadScript(cb: () => void): void {
+    private _loadScript(cb: () => void): void {
         if (assignableWindow.__PosthogExtensions__?.initDeadClicksAutocapture) {
             // already loaded
             cb()
@@ -66,7 +66,7 @@ export class DeadClicksAutocapture {
         )
     }
 
-    private start() {
+    private _start() {
         if (!document) {
             logger.error('`document` not found. Cannot start.')
             return

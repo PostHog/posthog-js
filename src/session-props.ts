@@ -41,7 +41,7 @@ const generateSessionSourceParams = (posthog?: PostHog): LegacySessionSourceProp
 }
 
 export class SessionPropsManager {
-    private readonly instance: PostHog
+    private readonly _instance: PostHog
     private readonly _sessionIdManager: SessionIdManager
     private readonly _persistence: PostHogPersistence
     private readonly _sessionSourceParamGenerator: (
@@ -54,7 +54,7 @@ export class SessionPropsManager {
         persistence: PostHogPersistence,
         sessionSourceParamGenerator?: (instance?: PostHog) => LegacySessionSourceProps | CurrentSessionSourceProps
     ) {
-        this.instance = instance
+        this._instance = instance
         this._sessionIdManager = sessionIdManager
         this._persistence = persistence
         this._sessionSourceParamGenerator = sessionSourceParamGenerator || generateSessionSourceParams
@@ -74,7 +74,7 @@ export class SessionPropsManager {
 
         const newProps: StoredSessionSourceProps = {
             sessionId,
-            props: this._sessionSourceParamGenerator(this.instance),
+            props: this._sessionSourceParamGenerator(this._instance),
         }
         this._persistence.register({ [CLIENT_SESSION_PROPS]: newProps })
     }

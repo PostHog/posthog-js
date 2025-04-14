@@ -101,18 +101,18 @@ describe('SiteApps', () => {
         })
 
         it('initializes missedInvocations, loaded, appsLoading correctly', () => {
-            expect(siteAppsInstance['bufferedInvocations']).toEqual([])
+            expect(siteAppsInstance['_bufferedInvocations']).toEqual([])
             expect(siteAppsInstance.apps).toEqual({})
         })
     })
 
     describe('init', () => {
         it('adds eventCollector as a capture hook', () => {
-            expect(siteAppsInstance['stopBuffering']).toBeUndefined()
+            expect(siteAppsInstance['_stopBuffering']).toBeUndefined()
             siteAppsInstance.init()
 
             expect(posthog._addCaptureHook).toHaveBeenCalledWith(expect.any(Function))
-            expect(siteAppsInstance['stopBuffering']).toEqual(expect.any(Function))
+            expect(siteAppsInstance['_stopBuffering']).toEqual(expect.any(Function))
         })
 
         it('does not add eventCollector as a capture hook if disabled', () => {
@@ -120,7 +120,7 @@ describe('SiteApps', () => {
             siteAppsInstance.init()
 
             expect(posthog._addCaptureHook).not.toHaveBeenCalled()
-            expect(siteAppsInstance['stopBuffering']).toBeUndefined()
+            expect(siteAppsInstance['_stopBuffering']).toBeUndefined()
         })
     })
 
@@ -132,7 +132,7 @@ describe('SiteApps', () => {
         it('collects events if enabled after init', () => {
             emitCaptureEvent?.('test_event', { event: 'test_event', properties: { prop1: 'value1' } } as any)
 
-            expect(siteAppsInstance['bufferedInvocations']).toMatchInlineSnapshot(`
+            expect(siteAppsInstance['_bufferedInvocations']).toMatchInlineSnapshot(`
                 Array [
                   Object {
                     "event": Object {
@@ -153,13 +153,13 @@ describe('SiteApps', () => {
         })
 
         it('trims missedInvocations to last 990 when exceeding 1000', () => {
-            siteAppsInstance['bufferedInvocations'] = new Array(1000).fill({})
+            siteAppsInstance['_bufferedInvocations'] = new Array(1000).fill({})
 
             emitCaptureEvent?.('test_event', { event: 'test_event', properties: { prop1: 'value1' } } as any)
 
-            expect(siteAppsInstance['bufferedInvocations'].length).toBe(991)
-            expect(siteAppsInstance['bufferedInvocations'][0]).toEqual({})
-            expect(siteAppsInstance['bufferedInvocations'][990]).toMatchObject({ event: { event: 'test_event' } })
+            expect(siteAppsInstance['_bufferedInvocations'].length).toBe(991)
+            expect(siteAppsInstance['_bufferedInvocations'][0]).toEqual({})
+            expect(siteAppsInstance['_bufferedInvocations'][990]).toMatchObject({ event: { event: 'test_event' } })
         })
     })
 
@@ -232,7 +232,7 @@ describe('SiteApps', () => {
             siteAppsInstance.onRemoteConfig({} as RemoteConfig)
 
             expect(removeCaptureHook).toHaveBeenCalled()
-            expect(siteAppsInstance['stopBuffering']).toBeUndefined()
+            expect(siteAppsInstance['_stopBuffering']).toBeUndefined()
             expect(assignableWindow.__PosthogExtensions__?.loadSiteApp).not.toHaveBeenCalled()
         })
 
@@ -246,7 +246,7 @@ describe('SiteApps', () => {
             } as RemoteConfig)
 
             expect(removeCaptureHook).toHaveBeenCalled()
-            expect(siteAppsInstance['stopBuffering']).toBeUndefined()
+            expect(siteAppsInstance['_stopBuffering']).toBeUndefined()
             expect(assignableWindow.__PosthogExtensions__?.loadSiteApp).not.toHaveBeenCalled()
         })
 
@@ -282,7 +282,7 @@ describe('SiteApps', () => {
             } as RemoteConfig)
 
             expect(removeCaptureHook).toHaveBeenCalled()
-            expect(siteAppsInstance['stopBuffering']).toBeUndefined()
+            expect(siteAppsInstance['_stopBuffering']).toBeUndefined()
             expect(assignableWindow.__PosthogExtensions__?.loadSiteApp).toHaveBeenCalledTimes(2)
             expect(assignableWindow.__PosthogExtensions__?.loadSiteApp).toHaveBeenCalledWith(
                 posthog,
@@ -406,7 +406,7 @@ describe('SiteApps', () => {
             emitCaptureEvent?.('test_event1', { event: 'test_event1' } as any)
             siteAppsInstance.onRemoteConfig({} as RemoteConfig)
             emitCaptureEvent?.('test_event2', { event: 'test_event2' } as any)
-            expect(siteAppsInstance['bufferedInvocations'].length).toBe(2)
+            expect(siteAppsInstance['_bufferedInvocations'].length).toBe(2)
             appConfigs[0].callback(true)
 
             expect(siteAppsInstance.apps['1'].processEvent).toHaveBeenCalledTimes(2)
@@ -422,13 +422,13 @@ describe('SiteApps', () => {
             init()
             emitCaptureEvent?.('test_event1', { event: 'test_event1' } as any)
             emitCaptureEvent?.('test_event2', { event: 'test_event2' } as any)
-            expect(siteAppsInstance['bufferedInvocations'].length).toBe(2)
+            expect(siteAppsInstance['_bufferedInvocations'].length).toBe(2)
 
             siteAppsInstance.onRemoteConfig({} as RemoteConfig)
             appConfigs[0].callback(true)
-            expect(siteAppsInstance['bufferedInvocations'].length).toBe(2)
+            expect(siteAppsInstance['_bufferedInvocations'].length).toBe(2)
             appConfigs[1].callback(true)
-            expect(siteAppsInstance['bufferedInvocations'].length).toBe(0)
+            expect(siteAppsInstance['_bufferedInvocations'].length).toBe(0)
 
             expect(siteAppsInstance.apps['1'].processEvent).toHaveBeenCalledTimes(2)
             expect(siteAppsInstance.apps['2'].processEvent).toHaveBeenCalledTimes(2)
@@ -440,10 +440,10 @@ describe('SiteApps', () => {
             })
             emitCaptureEvent?.('test_event1', { event: 'test_event1' } as any)
             emitCaptureEvent?.('test_event2', { event: 'test_event2' } as any)
-            expect(siteAppsInstance['bufferedInvocations'].length).toBe(2)
+            expect(siteAppsInstance['_bufferedInvocations'].length).toBe(2)
 
             siteAppsInstance.onRemoteConfig({} as RemoteConfig)
-            expect(siteAppsInstance['bufferedInvocations'].length).toBe(0)
+            expect(siteAppsInstance['_bufferedInvocations'].length).toBe(0)
 
             expect(siteAppsInstance.apps['1'].processEvent).toHaveBeenCalledTimes(2)
             expect(siteAppsInstance.apps['2'].processEvent).toHaveBeenCalledTimes(2)

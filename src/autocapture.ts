@@ -241,7 +241,7 @@ export class Autocapture {
         this._elementSelectors = null
     }
 
-    private get config(): AutocaptureConfig {
+    private get _config(): AutocaptureConfig {
         const config = isObject(this.instance.config.autocapture) ? this.instance.config.autocapture : {}
         // precompile the regex
         config.url_allowlist = config.url_allowlist?.map((url) => new RegExp(url))
@@ -272,7 +272,7 @@ export class Autocapture {
         addEventListener(document, 'change', handler, { capture: true })
         addEventListener(document, 'click', handler, { capture: true })
 
-        if (this.config.capture_copied_text) {
+        if (this._config.capture_copied_text) {
             const copiedTextHandler = (e: Event) => {
                 e = e || window?.event
                 this._captureEvent(e, COPY_AUTOCAPTURE_EVENT)
@@ -369,7 +369,7 @@ export class Autocapture {
             shouldCaptureDomEvent(
                 target,
                 e,
-                this.config,
+                this._config,
                 // mostly this method cares about the target element, but in the case of copy events,
                 // we want some of the work this check does without insisting on the target element's type
                 isCopyAutocapture,
@@ -382,7 +382,7 @@ export class Autocapture {
                 e,
                 maskAllElementAttributes: this.instance.config.mask_all_element_attributes,
                 maskAllText: this.instance.config.mask_all_text,
-                elementAttributeIgnoreList: this.config.element_attribute_ignorelist,
+                elementAttributeIgnoreList: this._config.element_attribute_ignorelist,
                 elementsChainAsString: this._elementsChainAsString,
             })
 
