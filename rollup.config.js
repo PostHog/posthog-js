@@ -54,16 +54,17 @@ const plugins = (es5) => [
         compress: {
             ecma: es5 ? 5 : 6,
         },
-        mangle: es5
-            ? false // don't mangle for the ES5 build, it introduces some helpers which don't work well with mangling
-            : {
-                  // Note:
-                  // PROPERTY MANGLING CAN BREAK YOUR CODE
-                  // But we use it anyway because it's incredible for bundle size, you just need to develop with it in mind.
-                  // Any properties that start with _ will be mangled, which can be a problem if anything with that pattern is
-                  // part of the public interface, or if any API responses we use matches that regex.
-                  // Fix specific instances of this by adding the property to the reserved list.
-                  properties: {
+        mangle: {
+            // Note:
+            // PROPERTY MANGLING CAN BREAK YOUR CODE
+            // But we use it anyway because it's incredible for bundle size, you just need to develop with it in mind.
+            // Any properties that start with _ will be mangled, which can be a problem if anything with that pattern is
+            // part of the public interface, or if any API responses we use matches that regex.
+            // Fix specific instances of this by adding the property to the reserved list.
+            // Don't mangle properties in the es5 build, as it relies on helpers with don't work well with mangling.
+            properties: es5
+                ? false
+                : {
                       regex: /^_(?!_)/, // only mangle properties that start with a single _
                       reserved: [
                           // list any exceptions that shouldn't be mangled, and please add an explanation:
@@ -114,6 +115,9 @@ const plugins = (es5) => [
                           'captureException',
                           'posthog',
 
+                          // URL parameters
+                          '__posthog_debug',
+
                           // Helpers added by the es5 build. We don't use this, but they can be a starting point if we try to get the es5 build mangled in the future
                           '_invoke',
                           '__proto__',
@@ -122,7 +126,7 @@ const plugins = (es5) => [
                           '_classCallCheck',
                       ],
                   },
-              },
+        },
     }),
 ]
 
