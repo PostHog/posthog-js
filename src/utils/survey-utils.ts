@@ -1,8 +1,8 @@
 import { Survey, SurveyMatchType } from '../posthog-surveys-types'
-import { Info } from '../utils/event-utils'
 import { document, userAgent, window } from '../utils/globals'
 import { createLogger } from '../utils/logger'
 import { isMatchingRegex } from '../utils/regex-utils'
+import { detectDeviceType } from './user-agent-utils'
 
 export const SURVEY_LOGGER = createLogger('[Surveys]')
 
@@ -41,7 +41,8 @@ export function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
     if (!userAgent) {
         return false
     }
-    const deviceType = Info.deviceType(userAgent)
+
+    const deviceType = detectDeviceType(userAgent)
     return surveyValidationMap[defaultMatchType(survey.conditions?.deviceTypesMatchType)](
         survey.conditions.deviceTypes,
         deviceType

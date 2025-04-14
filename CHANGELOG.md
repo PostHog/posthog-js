@@ -1,3 +1,10 @@
+## 1.236.0 - 2025-04-14
+
+- chore: add canRenderSurveyAsync (#1891)
+- feat: capture pinterest, snapchat, and quora click ids (#1872)
+- chore: Generate bundle size viz (#1899)
+- Make react router playground handle pageviews on route change (#1895)
+
 ## 1.235.6 - 2025-04-11
 
 - feat: Improve how PostHogProvider works with SSR (#1893)

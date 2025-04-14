@@ -13,7 +13,13 @@ import {
 } from './constants'
 
 import { isEmptyObject, isObject, isUndefined } from './utils/type-utils'
-import { Info } from './utils/event-utils'
+import {
+    getCampaignParams,
+    getInitialPersonPropsFromInfo,
+    getPersonInfo,
+    getReferrerInfo,
+    getSearchInfo,
+} from './utils/event-utils'
 import { logger } from './utils/logger'
 import { stripLeadingDollar } from './utils/string-utils'
 
@@ -222,11 +228,11 @@ export class PostHogPersistence {
 
     update_campaign_params(): void {
         if (!this.campaign_params_saved) {
-            const campaignParams = Info.campaignParams({
-                customTrackedParams: this.config.custom_campaign_params,
-                maskPersonalDataProperties: this.config.mask_personal_data_properties,
-                customPersonalDataProperties: this.config.custom_personal_data_properties,
-            })
+            const campaignParams = getCampaignParams(
+                this.config.custom_campaign_params,
+                this.config.mask_personal_data_properties,
+                this.config.custom_personal_data_properties
+            )
             // only save campaign params if there were any
             if (!isEmptyObject(stripEmptyProperties(campaignParams))) {
                 this.register(campaignParams)
@@ -235,11 +241,11 @@ export class PostHogPersistence {
         }
     }
     update_search_keyword(): void {
-        this.register(Info.searchInfo())
+        this.register(getSearchInfo())
     }
 
     update_referrer_info(): void {
-        this.register_once(Info.referrerInfo(), undefined)
+        this.register_once(getReferrerInfo(), undefined)
     }
 
     set_initial_person_info(): void {
@@ -250,10 +256,10 @@ export class PostHogPersistence {
 
         this.register_once(
             {
-                [INITIAL_PERSON_INFO]: Info.personInfo({
-                    maskPersonalDataProperties: this.config.mask_personal_data_properties,
-                    customPersonalDataProperties: this.config.custom_personal_data_properties,
-                }),
+                [INITIAL_PERSON_INFO]: getPersonInfo(
+                    this.config.mask_personal_data_properties,
+                    this.config.custom_personal_data_properties
+                ),
             },
             undefined
         )
@@ -281,7 +287,7 @@ export class PostHogPersistence {
         })
         const initialPersonInfo = this.props[INITIAL_PERSON_INFO]
         if (initialPersonInfo) {
-            const initialPersonProps = Info.initialPersonPropsFromInfo(initialPersonInfo)
+            const initialPersonProps = getInitialPersonPropsFromInfo(initialPersonInfo)
             extend(p, initialPersonProps)
         }
 

@@ -66,7 +66,6 @@ import {
     safewrapClass,
 } from './utils'
 import { isLikelyBot } from './utils/blocked-uas'
-import { Info } from './utils/event-utils'
 import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
 import { getPersonPropertiesHash } from './utils/person-property-utils'
 import { logger } from './utils/logger'
@@ -88,6 +87,7 @@ import {
 } from './utils/type-utils'
 import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
+import { getEventProperties } from './utils/event-utils'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -991,10 +991,10 @@ export class PostHog {
             return properties
         }
 
-        const infoProperties = Info.properties({
-            maskPersonalDataProperties: this.config.mask_personal_data_properties,
-            customPersonalDataProperties: this.config.custom_personal_data_properties,
-        })
+        const infoProperties = getEventProperties(
+            this.config.mask_personal_data_properties,
+            this.config.custom_personal_data_properties
+        )
 
         if (this.sessionManager) {
             const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
@@ -1370,9 +1370,26 @@ export class PostHog {
         this.surveys.renderSurvey(surveyId, selector)
     }
 
-    /** Checks the feature flags associated with this Survey to see if the survey can be rendered. */
+    /**
+     * Checks the feature flags associated with this Survey to see if the survey can be rendered.
+     *
+     * This method is deprecated because it's synchronous and won't return the correct result if surveys are not loaded.
+     * @deprecated Use `canRenderSurveyAsync` instead.
+     * @param surveyId The ID of the survey to check.
+     * @returns A SurveyRenderReason object indicating if the survey can be rendered.
+     */
     canRenderSurvey(surveyId: string): SurveyRenderReason | null {
         return this.surveys.canRenderSurvey(surveyId)
+    }
+
+    /**
+     * Checks the feature flags associated with this Survey to see if the survey can be rendered.
+     * @param surveyId The ID of the survey to check.
+     * @param forceReload If true, the survey will be reloaded from the server, Default: false
+     * @returns A SurveyRenderReason object indicating if the survey can be rendered.
+     */
+    canRenderSurveyAsync(surveyId: string, forceReload = false): Promise<SurveyRenderReason> {
+        return this.surveys.canRenderSurveyAsync(surveyId, forceReload)
     }
 
     /**
