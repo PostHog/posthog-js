@@ -171,13 +171,7 @@ export function getReferrerInfo(): Record<string, any> {
     }
 }
 
-export function getPersonInfo({
-    maskPersonalDataProperties,
-    customPersonalDataProperties,
-}: {
-    maskPersonalDataProperties?: boolean
-    customPersonalDataProperties?: string[]
-} = {}) {
+export function getPersonInfo(maskPersonalDataProperties?: boolean, customPersonalDataProperties?: string[]) {
     const paramsToMask = maskPersonalDataProperties
         ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
         : []

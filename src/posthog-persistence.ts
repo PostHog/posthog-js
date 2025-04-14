@@ -256,10 +256,10 @@ export class PostHogPersistence {
 
         this.register_once(
             {
-                [INITIAL_PERSON_INFO]: getPersonInfo({
-                    maskPersonalDataProperties: this.config.mask_personal_data_properties,
-                    customPersonalDataProperties: this.config.custom_personal_data_properties,
-                }),
+                [INITIAL_PERSON_INFO]: getPersonInfo(
+                    this.config.mask_personal_data_properties,
+                    this.config.custom_personal_data_properties
+                ),
             },
             undefined
         )

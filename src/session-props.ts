@@ -37,10 +37,7 @@ interface StoredSessionSourceProps {
 }
 
 const generateSessionSourceParams = (posthog?: PostHog): LegacySessionSourceProps | CurrentSessionSourceProps => {
-    return getPersonInfo({
-        maskPersonalDataProperties: posthog?.config.mask_personal_data_properties,
-        customPersonalDataProperties: posthog?.config.custom_personal_data_properties,
-    })
+    return getPersonInfo(posthog?.config.mask_personal_data_properties, posthog?.config.custom_personal_data_properties)
 }
 
 export class SessionPropsManager {
