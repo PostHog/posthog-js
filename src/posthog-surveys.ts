@@ -312,6 +312,10 @@ export class PostHogSurveys {
         })
     }
 
+    private _isSurveysLoaded(): boolean {
+        return !isNullish(this._surveyManager)
+    }
+
     // this method is lazily loaded onto the window to avoid loading preact and other dependencies if surveys is not enabled
     private _canActivateRepeatedly(survey: Survey) {
         if (isNullish(assignableWindow.__PosthogExtensions__?.canActivateRepeatedly)) {
@@ -334,6 +338,9 @@ export class PostHogSurveys {
      * This is used by both getActiveMatchingSurveys and the public canRenderSurvey.
      */
     checkSurveyEligibility(surveyId: string | Survey): { eligible: boolean; reason?: string } {
+        if (!this._isSurveysLoaded()) {
+            return { eligible: false, reason: 'Surveys are not loaded' }
+        }
         const survey = typeof surveyId === 'string' ? this._getSurveyById(surveyId) : surveyId
         if (!survey) {
             return { eligible: false, reason: 'Survey not found' }
@@ -368,7 +375,7 @@ export class PostHogSurveys {
     }
 
     canRenderSurvey(surveyId: string): SurveyRenderReason {
-        if (isNullish(this._surveyManager)) {
+        if (!this._isSurveysLoaded()) {
             logger.warn('init was not called')
             return { visible: false, disabledReason: 'SDK is not enabled or survey functionality is not yet loaded' }
         }
@@ -396,7 +403,7 @@ export class PostHogSurveys {
     }
 
     renderSurvey(surveyId: string, selector: string) {
-        if (isNullish(this._surveyManager)) {
+        if (!this._isSurveysLoaded()) {
             logger.warn('init was not called')
             return
         }
