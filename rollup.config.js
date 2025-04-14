@@ -82,6 +82,9 @@ const plugins = (es5) => [
                           '_forceAllowLocalhostNetworkCapture',
                           '_is_bot',
                           '__ph_loaded',
+                          '_sessionActivityTimestamp',
+                          '_sessionStartTimestamp',
+                          '_sessionTimeoutMs',
 
                           // set on global window object (the ones using __ are not mangled anyway BUT be abundantly cautious)
                           '_POSTHOG_REMOTE_CONFIG',
@@ -109,6 +112,7 @@ const plugins = (es5) => [
                           'getSurveys',
                           'getActiveMatchingSurveys',
                           'captureException',
+                          'posthog',
 
                           // Helpers added by the es5 build. We don't use this, but they can be a starting point if we try to get the es5 build mangled in the future
                           '_invoke',
