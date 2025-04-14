@@ -50,9 +50,10 @@ const plugins = (es5) => [
         ],
     }),
     terser({
-        ecma: es5 ? 5 : 6,
         toplevel: true,
-        compress: true,
+        compress: {
+            ecma: es5 ? 5 : 6,
+        },
         mangle: {
             // Note:
             // PROPERTY MANGLING CAN BREAK YOUR CODE
@@ -61,8 +62,18 @@ const plugins = (es5) => [
             // part of the public interface, or if any API responses we use matches that regex.
             // Fix specific instances of this by adding the property to the reserved list.
             properties: {
-                regex: /^_(?!preview)/, // only mangle properties that start with _ and not with _preview
-                reserved: [],
+                regex: /^_(?!_)/, // only mangle properties that start with a single _
+                // list any exceptions that shouldn't be mangled, and please add an explanation:
+                reserved: [
+                    // referenced in snippet, MUST be preserved
+                    '_i',
+                    '__SV',
+                    // part of setup/teardown code, preserve these out of caution
+                    '_init',
+                    '_dom_loaded',
+                    '_execute_array',
+                    '_handle_unload',
+                ],
             },
         },
     }),
