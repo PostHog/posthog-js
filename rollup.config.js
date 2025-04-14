@@ -55,7 +55,7 @@ const plugins = (es5) => [
             ecma: es5 ? 5 : 6,
         },
         mangle: es5
-            ? false
+            ? false // don't mangle for the ES5 build, it introduces some helpers which don't work well with mangling
             : {
                   // Note:
                   // PROPERTY MANGLING CAN BREAK YOUR CODE
@@ -65,24 +65,29 @@ const plugins = (es5) => [
                   // Fix specific instances of this by adding the property to the reserved list.
                   properties: {
                       regex: /^_(?!_)/, // only mangle properties that start with a single _
-                      // list any exceptions that shouldn't be mangled, and please add an explanation:
                       reserved: [
+                          // list any exceptions that shouldn't be mangled, and please add an explanation:
+
                           // referenced in snippet, MUST be preserved
                           '_i',
                           '__SV',
+
                           // part of setup/teardown code, preserve these out of caution
                           '_init',
                           '_dom_loaded',
                           '_execute_array',
                           '_handle_unload',
+
                           // playwright uses these
                           '_forceAllowLocalhostNetworkCapture',
                           '_is_bot',
                           '__ph_loaded',
+
                           // set on global window object (these all use __ so are not mangled anyway BUT be abundantly cautious)
                           '__POSTHOG_INSTRUMENTED__',
                           '__PosthogExtensions__',
                           '__posthog_wrapped__',
+
                           // part of the public API (doesn't start with _ so are not mangled anyway BUT be abundantly cautious)
                           'capture',
                           'identify',
@@ -102,6 +107,13 @@ const plugins = (es5) => [
                           'getSurveys',
                           'getActiveMatchingSurveys',
                           'captureException',
+
+                          // Helpers added by the es5 build. We don't use this, but they can be a starting point if we try to get the es5 build mangled in the future
+                          '_invoke',
+                          '__proto__',
+                          '__await',
+                          '_createClass',
+                          '_classCallCheck',
                       ],
                   },
               },
