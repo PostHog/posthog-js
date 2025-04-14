@@ -26,6 +26,7 @@ const plugins = (es5) => [
             [
                 '@babel/preset-env',
                 {
+                    loose: true,
                     targets: es5
                         ? [
                               '> 0.5%, last 2 versions, Firefox ESR, not dead',
@@ -49,10 +50,20 @@ const plugins = (es5) => [
         ],
     }),
     terser({
+        ecma: es5 ? 5 : 6,
         toplevel: true,
-        compress: {
-            // 5 is the default if unspecified
-            ecma: es5 ? 5 : 6,
+        compress: true,
+        mangle: {
+            // Note:
+            // PROPERTY MANGLING CAN BREAK YOUR CODE
+            // But we use it anyway because it's incredible for bundle size, you just need to develop with it in mind.
+            // Any properties that start with _ will be mangled, which can be a problem if anything with that pattern is
+            // part of the public interface, or if any API responses we use matches that regex.
+            // Fix specific instances of this by adding the property to the reserved list.
+            properties: {
+                regex: /^_(?!preview)/, // only mangle properties that start with _ and not with _preview
+                reserved: [],
+            },
         },
     }),
 ]
@@ -99,7 +110,10 @@ const entrypointTargets = entrypoints.map((file) => {
                 ...(format === 'cjs' ? { exports: 'auto' } : {}),
             },
         ],
-        plugins: [...pluginsForThisFile, visualizer({ filename: `bundle-stats-${fileName}.html`, gzipSize: true })],
+        plugins: [
+            ...pluginsForThisFile,
+            visualizer({ filename: `bundle-stats-${fileName}.mangled.html`, gzipSize: true }),
+        ],
     }
 })
 
