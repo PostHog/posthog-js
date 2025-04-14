@@ -85,7 +85,7 @@ export class RemoteConfigLoader {
         if (config.hasFeatureFlags !== false) {
             // If the config has feature flags, we need to call decide to get the feature flags
             // This completely separates it from the config logic which is good in terms of separation of concerns
-            this.instance.featureFlags.ensureFlagsLoaded()
+            this.instance.featureFlags?.ensureFlagsLoaded()
         }
     }
 }

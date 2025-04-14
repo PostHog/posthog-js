@@ -2,7 +2,7 @@
 import { PostHogFeature, useActiveFeatureFlags, usePostHog } from 'posthog-js/react'
 import { useEffect, useState } from 'react'
 import { cookieConsentGiven, PERSON_PROCESSING_MODE } from '@/src/posthog'
-import { setAllPersonProfilePropertiesAsPersonPropertiesForFlags } from 'posthog-js/lib/src/customizations'
+import { setAllPersonProfilePropertiesAsPersonPropertiesForFlags } from 'posthog-js/lib/customizations'
 import { STORED_PERSON_PROPERTIES_KEY } from '../../../src/constants'
 
 export default function Home() {

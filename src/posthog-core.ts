@@ -89,6 +89,11 @@ import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { getEventProperties } from './utils/event-utils'
 
+/**
+ * Set by @rollup/plugin-replace at build-time
+ */
+declare const MINIMAL_BUILD: boolean;
+
 /*
 SIMPLE STYLE GUIDE:
 
@@ -263,11 +268,11 @@ export class PostHog {
     rateLimiter: RateLimiter
     scrollManager: ScrollManager
     pageViewManager: PageViewManager
-    featureFlags: PostHogFeatureFlags
-    surveys: PostHogSurveys
-    experiments: WebExperiments
-    toolbar: Toolbar
-    exceptions: PostHogExceptions
+    featureFlags?: PostHogFeatureFlags
+    surveys?: PostHogSurveys
+    experiments?: WebExperiments
+    toolbar?: Toolbar
+    exceptions?: PostHogExceptions
     consent: ConsentManager
 
     // These are instance-specific state created after initialisation
@@ -284,22 +289,22 @@ export class PostHog {
     deadClicksAutocapture?: DeadClicksAutocapture
 
     _requestQueue?: RequestQueue
-    _retryQueue?: RetryQueue
+    private _retryQueue?: RetryQueue
     sessionRecording?: SessionRecording
     webPerformance = new DeprecatedWebPerformanceObserver()
 
-    _initialPageviewCaptured: boolean
-    _personProcessingSetOncePropertiesSent: boolean = false
-    _triggered_notifs: any
+    private _initialPageviewCaptured: boolean
+    private _personProcessingSetOncePropertiesSent: boolean = false
+    private _triggered_notifs: any
     compression?: Compression
-    __request_queue: QueuedRequestWithOptions[]
+    private __request_queue: QueuedRequestWithOptions[]
     analyticsDefaultEndpoint: string
     version = Config.LIB_VERSION
-    _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
-    _cachedPersonProperties: string | null
+    private _initialPersonProfilesConfig: 'always' | 'never' | 'identified_only' | null
+    private _cachedPersonProperties: string | null
 
-    SentryIntegration: typeof SentryIntegration
-    sentryIntegration: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
+    SentryIntegration?: typeof SentryIntegration
+    sentryIntegration?: (options?: SentryIntegrationOptions) => ReturnType<typeof sentryIntegration>
 
     private _internalEventEmitter = new SimpleEventEmitter()
 
@@ -317,21 +322,32 @@ export class PostHog {
     constructor() {
         this.config = defaultConfig()
 
-        this.SentryIntegration = SentryIntegration
-        this.sentryIntegration = (options?: SentryIntegrationOptions) => sentryIntegration(this, options)
+        if (!MINIMAL_BUILD) {
+            this.SentryIntegration = SentryIntegration
+            this.sentryIntegration = (options?: SentryIntegrationOptions) => sentryIntegration(this, options)
+        }
+
         this.__request_queue = []
         this.__loaded = false
         this.analyticsDefaultEndpoint = '/e/'
         this._initialPageviewCaptured = false
         this._initialPersonProfilesConfig = null
         this._cachedPersonProperties = null
-        this.featureFlags = new PostHogFeatureFlags(this)
-        this.toolbar = new Toolbar(this)
+
+        if (!MINIMAL_BUILD) {
+            this.featureFlags = new PostHogFeatureFlags(this)
+            this.toolbar = new Toolbar(this)
+        }
+
         this.scrollManager = new ScrollManager(this)
         this.pageViewManager = new PageViewManager(this)
-        this.surveys = new PostHogSurveys(this)
-        this.experiments = new WebExperiments(this)
-        this.exceptions = new PostHogExceptions(this)
+
+        if (!MINIMAL_BUILD) {
+            this.surveys = new PostHogSurveys(this)
+            this.experiments = new WebExperiments(this)
+            this.exceptions = new PostHogExceptions(this)
+        }
+
         this.rateLimiter = new RateLimiter(this)
         this.requestRouter = new RequestRouter(this)
         this.consent = new ConsentManager(this)
@@ -460,12 +476,16 @@ export class PostHog {
             this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
         }
 
-        new TracingHeaders(this).startIfEnabledOrStop()
+        if (!MINIMAL_BUILD) {
+            new TracingHeaders(this).startIfEnabledOrStop()
+        }
 
-        this.siteApps = new SiteApps(this)
-        this.siteApps?.init()
+        if (!MINIMAL_BUILD) {
+            this.siteApps = new SiteApps(this)
+            this.siteApps.init()
+        }
 
-        if (!this.config.__preview_experimental_cookieless_mode) {
+        if (!MINIMAL_BUILD && !this.config.__preview_experimental_cookieless_mode) {
             this.sessionRecording = new SessionRecording(this)
             this.sessionRecording.startIfEnabledOrStop()
         }
@@ -474,20 +494,30 @@ export class PostHog {
             this.scrollManager.startMeasuringScrollPosition()
         }
 
-        this.autocapture = new Autocapture(this)
-        this.autocapture.startIfEnabled()
-        this.surveys.loadIfEnabled()
+        if (!MINIMAL_BUILD) {
+            this.autocapture = new Autocapture(this)
+            this.autocapture.startIfEnabled()
+            this.surveys?.loadIfEnabled()
+        }
 
-        this.heatmaps = new Heatmaps(this)
-        this.heatmaps.startIfEnabled()
+        if (!MINIMAL_BUILD) {
+            this.heatmaps = new Heatmaps(this)
+            this.heatmaps.startIfEnabled()
+        }
 
-        this.webVitalsAutocapture = new WebVitalsAutocapture(this)
+        if (!MINIMAL_BUILD) {
+            this.webVitalsAutocapture = new WebVitalsAutocapture(this)
+        }
 
-        this.exceptionObserver = new ExceptionObserver(this)
-        this.exceptionObserver.startIfEnabled()
+        if (!MINIMAL_BUILD) {
+            this.exceptionObserver = new ExceptionObserver(this)
+            this.exceptionObserver.startIfEnabled()
+        }
 
-        this.deadClicksAutocapture = new DeadClicksAutocapture(this, isDeadClicksEnabledForAutocapture)
-        this.deadClicksAutocapture.startIfEnabled()
+        if (!MINIMAL_BUILD) {
+            this.deadClicksAutocapture = new DeadClicksAutocapture(this, isDeadClicksEnabledForAutocapture)
+            this.deadClicksAutocapture.startIfEnabled()
+        }
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
@@ -534,7 +564,7 @@ export class PostHog {
                     return res
                 }, {})
 
-            this.featureFlags.receivedFeatureFlags({ featureFlags: activeFlags, featureFlagPayloads })
+            this.featureFlags?.receivedFeatureFlags({ featureFlags: activeFlags, featureFlagPayloads })
         }
 
         if (this.config.__preview_experimental_cookieless_mode) {
@@ -569,7 +599,7 @@ export class PostHog {
             passive: false,
         })
 
-        this.toolbar.maybeLoadToolbar()
+        this.toolbar?.maybeLoadToolbar()
 
         // We want to avoid promises for IE11 compatibility, so we use callbacks here
         if (config.segment) {
@@ -616,7 +646,7 @@ export class PostHog {
         this.sessionRecording?.onRemoteConfig(config)
         this.autocapture?.onRemoteConfig(config)
         this.heatmaps?.onRemoteConfig(config)
-        this.surveys.onRemoteConfig(config)
+        this.surveys?.onRemoteConfig(config)
         this.webVitalsAutocapture?.onRemoteConfig(config)
         this.exceptionObserver?.onRemoteConfig(config)
         this.deadClicksAutocapture?.onRemoteConfig(config)
@@ -643,7 +673,7 @@ export class PostHog {
         }
 
         new RemoteConfigLoader(this).load()
-        this.featureFlags.decide()
+        this.featureFlags?.decide()
     }
 
     _start_queue_if_opted_in(): void {
@@ -1234,7 +1264,11 @@ export class PostHog {
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
     getFeatureFlag(key: string, options?: { send_event?: boolean }): boolean | string | undefined {
-        return this.featureFlags.getFeatureFlag(key, options)
+        if (MINIMAL_BUILD) {
+            return
+        }
+
+        return this.featureFlags?.getFeatureFlag(key, options)
     }
 
     /*
@@ -1250,7 +1284,11 @@ export class PostHog {
      * @param {Object|String} prop Key of the feature flag.
      */
     getFeatureFlagPayload(key: string): JsonType {
-        const payload = this.featureFlags.getFeatureFlagPayload(key)
+        if (MINIMAL_BUILD) {
+            return
+        }
+
+        const payload = this.featureFlags?.getFeatureFlagPayload(key)
         try {
             return JSON.parse(payload as any)
         } catch {
@@ -1269,16 +1307,28 @@ export class PostHog {
      * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
      */
     isFeatureEnabled(key: string, options?: { send_event: boolean }): boolean | undefined {
-        return this.featureFlags.isFeatureEnabled(key, options)
+        if (MINIMAL_BUILD) {
+            return
+        }
+
+        return this.featureFlags?.isFeatureEnabled(key, options)
     }
 
     reloadFeatureFlags(): void {
-        this.featureFlags.reloadFeatureFlags()
+        if (MINIMAL_BUILD) {
+            return
+        }
+
+        this.featureFlags?.reloadFeatureFlags()
     }
 
     /** Opt the user in or out of an early access feature. */
     updateEarlyAccessFeatureEnrollment(key: string, isEnrolled: boolean): void {
-        this.featureFlags.updateEarlyAccessFeatureEnrollment(key, isEnrolled)
+        if (MINIMAL_BUILD) {
+            return
+        }
+
+        this.featureFlags?.updateEarlyAccessFeatureEnrollment(key, isEnrolled)
     }
 
     /** Get the list of early access features. To check enrollment status, use `isFeatureEnabled`. */
@@ -1287,7 +1337,11 @@ export class PostHog {
         force_reload = false,
         stages?: EarlyAccessFeatureStage[]
     ): void {
-        return this.featureFlags.getEarlyAccessFeatures(callback, force_reload, stages)
+        if (MINIMAL_BUILD) {
+            return
+        }
+
+        return this.featureFlags?.getEarlyAccessFeatures(callback, force_reload, stages)
     }
 
     /**
@@ -1317,7 +1371,11 @@ export class PostHog {
      * @returns {Function} A function that can be called to unsubscribe the listener. Used by useEffect when the component unmounts.
      */
     onFeatureFlags(callback: FeatureFlagsCallback): () => void {
-        return this.featureFlags.onFeatureFlags(callback)
+        if (MINIMAL_BUILD) {
+            return __NOOP
+        }
+
+        return this.featureFlags?.onFeatureFlags(callback) || __NOOP
     }
 
     /*
@@ -1335,7 +1393,11 @@ export class PostHog {
      * @returns {Function} A function that can be called to unsubscribe the listener.
      */
     onSurveysLoaded(callback: SurveyCallback): () => void {
-        return this.surveys.onSurveysLoaded(callback)
+        if (MINIMAL_BUILD) {
+            return __NOOP
+        }
+
+        return this.surveys?.onSurveysLoaded(callback) || __NOOP
     }
 
     /*
@@ -1357,17 +1419,29 @@ export class PostHog {
 
     /** Get list of all surveys. */
     getSurveys(callback: SurveyCallback, forceReload = false): void {
-        this.surveys.getSurveys(callback, forceReload)
+        if (MINIMAL_BUILD) {
+            return
+        }
+
+        this.surveys?.getSurveys(callback, forceReload)
     }
 
     /** Get surveys that should be enabled for the current user. */
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false): void {
-        this.surveys.getActiveMatchingSurveys(callback, forceReload)
+        if (MINIMAL_BUILD) {
+            return
+        }
+
+        this.surveys?.getActiveMatchingSurveys(callback, forceReload)
     }
 
     /** Render a survey on a specific element. */
     renderSurvey(surveyId: string, selector: string): void {
-        this.surveys.renderSurvey(surveyId, selector)
+        if (MINIMAL_BUILD) {
+            return
+        }
+
+        this.surveys?.renderSurvey(surveyId, selector)
     }
 
     /**
@@ -1379,7 +1453,11 @@ export class PostHog {
      * @returns A SurveyRenderReason object indicating if the survey can be rendered.
      */
     canRenderSurvey(surveyId: string): SurveyRenderReason | null {
-        return this.surveys.canRenderSurvey(surveyId)
+        if (MINIMAL_BUILD) {
+            return null
+        }
+
+        return this.surveys?.canRenderSurvey(surveyId) || null
     }
 
     /**
@@ -1519,7 +1597,7 @@ export class PostHog {
 
             // let the reload feature flag request know to send this previous distinct id
             // for flag consistency
-            this.featureFlags.setAnonymousDistinctId(previous_distinct_id)
+            this.featureFlags?.setAnonymousDistinctId(previous_distinct_id)
         } else if (userPropertiesToSet || userPropertiesToSetOnce) {
             // If the distinct_id is not changing, but we have user properties to set, we can check if they have changed
             // and if so, send a $set event
@@ -1629,11 +1707,19 @@ export class PostHog {
      * to update user properties.
      */
     setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
-        this.featureFlags.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
+        if (MINIMAL_BUILD) {
+            return
+        }
+
+        this.featureFlags?.setPersonPropertiesForFlags(properties, reloadFeatureFlags)
     }
 
     resetPersonPropertiesForFlags(): void {
-        this.featureFlags.resetPersonPropertiesForFlags()
+        if (MINIMAL_BUILD) {
+            return
+        }
+
+        this.featureFlags?.resetPersonPropertiesForFlags()
     }
 
     /**
@@ -1645,14 +1731,22 @@ export class PostHog {
      *     setGroupPropertiesForFlags({'organization': { name: 'CYZ', employees: '11' } })
      */
     setGroupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags = true): void {
+        if (MINIMAL_BUILD) {
+            return
+        }
+
         if (!this._requirePersonProcessing('posthog.setGroupPropertiesForFlags')) {
             return
         }
-        this.featureFlags.setGroupPropertiesForFlags(properties, reloadFeatureFlags)
+        this.featureFlags?.setGroupPropertiesForFlags(properties, reloadFeatureFlags)
     }
 
     resetGroupPropertiesForFlags(group_type?: string): void {
-        this.featureFlags.resetGroupPropertiesForFlags(group_type)
+        if (MINIMAL_BUILD) {
+            return
+        }
+
+        this.featureFlags?.resetGroupPropertiesForFlags(group_type)
     }
 
     /**
@@ -1672,7 +1766,7 @@ export class PostHog {
         this.consent.reset()
         this.persistence?.clear()
         this.sessionPersistence?.clear()
-        this.surveys.reset()
+        this.surveys?.reset()
         this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()
         this._cachedPersonProperties = null
@@ -1733,7 +1827,6 @@ export class PostHog {
      * NOTE: This should only be used for informative purposes.
      * Any actual internal use case for the session_id should be handled by the sessionManager.
      */
-
     get_session_id(): string {
         return this.sessionManager?.checkAndGetSessionAndWindowId(true).sessionId ?? ''
     }
@@ -1746,6 +1839,10 @@ export class PostHog {
      * @param options.timestampLookBack How many seconds to look back for the timestamp (defaults to 10)
      */
     get_session_replay_url(options?: { withTimestamp?: boolean; timestampLookBack?: number }): string {
+        if (MINIMAL_BUILD) {
+            return ''
+        }
+
         if (!this.sessionManager) {
             return ''
         }
@@ -1850,7 +1947,7 @@ export class PostHog {
             this.sessionRecording?.startIfEnabledOrStop()
             this.autocapture?.startIfEnabled()
             this.heatmaps?.startIfEnabled()
-            this.surveys.loadIfEnabled()
+            this.surveys?.loadIfEnabled()
             this._sync_opt_out_with_persistence()
         }
     }
@@ -1866,6 +1963,10 @@ export class PostHog {
     startSessionRecording(
         override?: { sampling?: boolean; linked_flag?: boolean; url_trigger?: true; event_trigger?: true } | true
     ): void {
+        if (MINIMAL_BUILD) {
+            return
+        }
+
         const overrideAll = override === true
         const overrideConfig = {
             sampling: overrideAll || !!override?.sampling,
@@ -1903,6 +2004,10 @@ export class PostHog {
      * disable_session_recording to true
      */
     stopSessionRecording(): void {
+        if (MINIMAL_BUILD) {
+            return
+        }
+
         this.set_config({ disable_session_recording: true })
     }
 
@@ -1911,13 +2016,21 @@ export class PostHog {
      * is currently running
      */
     sessionRecordingStarted(): boolean {
+        if (MINIMAL_BUILD) {
+            return false
+        }
+
         return !!this.sessionRecording?.started
     }
 
     /** Capture a caught exception manually */
     captureException(error: unknown, additionalProperties?: Properties): void {
+        if (MINIMAL_BUILD) {
+            return
+        }
+
         const syntheticException = new Error('PostHog syntheticException')
-        this.exceptions.sendExceptionEvent({
+        this.exceptions?.sendExceptionEvent({
             ...errorToProperties(
                 isError(error) ? { error, event: error.message } : { event: error as Event | string },
                 // create synthetic error to get stack in cases where user input does not contain one
@@ -1933,9 +2046,12 @@ export class PostHog {
      * returns a boolean indicating whether the toolbar loaded
      * @param toolbarParams
      */
-
     loadToolbar(params: ToolbarParams): boolean {
-        return this.toolbar.loadToolbar(params)
+        if (MINIMAL_BUILD) {
+            return false
+        }
+
+        return !!this.toolbar?.loadToolbar(params)
     }
 
     /**
