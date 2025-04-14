@@ -183,7 +183,7 @@ export class SiteApps {
             return
         }
 
-        // NOTE: Below his is now only the fallback for legacy site app support. Once we have fully removed to the remote config loader we can get rid of this
+        // NOTE: Below this is now only the fallback for legacy site app support. Once we have fully removed to the remote config loader we can get rid of this
 
         this._stopBuffering?.()
 
