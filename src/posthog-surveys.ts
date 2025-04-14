@@ -321,7 +321,7 @@ export class PostHogSurveys {
         return assignableWindow.__PosthogExtensions__.canActivateRepeatedly(survey)
     }
 
-    getSurveyById(surveyId: string): Survey | null {
+    private _getSurveyById(surveyId: string): Survey | null {
         let survey: Survey | null = null
         this.getSurveys((surveys) => {
             survey = surveys.find((x) => x.id === surveyId) ?? null
@@ -334,7 +334,7 @@ export class PostHogSurveys {
      * This is used by both getActiveMatchingSurveys and the public canRenderSurvey.
      */
     checkSurveyEligibility(surveyId: string | Survey): { eligible: boolean; reason?: string } {
-        const survey = typeof surveyId === 'string' ? this.getSurveyById(surveyId) : surveyId
+        const survey = typeof surveyId === 'string' ? this._getSurveyById(surveyId) : surveyId
         if (!survey) {
             return { eligible: false, reason: 'Survey not found' }
         }
@@ -400,7 +400,7 @@ export class PostHogSurveys {
             logger.warn('init was not called')
             return
         }
-        const survey = this.getSurveyById(surveyId)
+        const survey = this._getSurveyById(surveyId)
         if (!survey) {
             logger.warn('Survey not found')
             return
