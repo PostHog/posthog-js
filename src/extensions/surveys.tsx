@@ -1,8 +1,8 @@
 import { PostHog } from '../posthog-core'
-import { doesSurveyUrlMatch } from '../posthog-surveys'
 import {
     Survey,
     SurveyAppearance,
+    SurveyPosition,
     SurveyQuestion,
     SurveyQuestionBranchingType,
     SurveyQuestionType,
@@ -16,9 +16,9 @@ import { addEventListener } from '../utils'
 import * as Preact from 'preact'
 import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { document as _document, window as _window } from '../utils/globals'
-import { createLogger } from '../utils/logger'
+import { doesSurveyUrlMatch, SURVEY_LOGGER as logger } from '../utils/survey-utils'
 import { isNull, isNumber } from '../utils/type-utils'
-import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
+import { createWidgetStyle, retrieveWidgetShadow } from './surveys-widget'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import { Cancel } from './surveys/components/QuestionHeader'
 import {
@@ -40,9 +40,8 @@ import {
     style,
     SURVEY_DEFAULT_Z_INDEX,
     SurveyContext,
-} from './surveys/surveys-utils'
+} from './surveys/surveys-extension-utils'
 import { prepareStylesheet } from './utils/stylesheet-loader'
-const logger = createLogger('[Surveys]')
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -239,26 +238,23 @@ export class SurveyManager {
 
     private handleWidget = (survey: Survey): void => {
         // Ensure widget container exists if it doesn't
-        if (document.querySelectorAll(getPosthogWidgetClass(survey.id)).length === 0) {
-            const shadow = createWidgetShadow(survey, this.posthog)
+        const shadow = retrieveWidgetShadow(survey, this.posthog)
+        const stylesheetContent = style(survey.appearance)
+        const stylesheet = prepareStylesheet(document, stylesheetContent, this.posthog)
 
-            const stylesheetContent = style(survey.appearance)
-            const stylesheet = prepareStylesheet(document, stylesheetContent, this.posthog)
-
-            if (stylesheet) {
-                shadow.appendChild(stylesheet)
-            }
-
-            Preact.render(
-                <FeedbackWidget
-                    key={'feedback-survey-' + survey.id} // Use unique key
-                    posthog={this.posthog}
-                    survey={survey}
-                    removeSurveyFromFocus={this.removeSurveyFromFocus}
-                />,
-                shadow
-            )
+        if (stylesheet) {
+            shadow.appendChild(stylesheet)
         }
+
+        Preact.render(
+            <FeedbackWidget
+                key={'feedback-survey-' + survey.id} // Use unique key
+                posthog={this.posthog}
+                survey={survey}
+                removeSurveyFromFocus={this.removeSurveyFromFocus}
+            />,
+            shadow
+        )
     }
 
     private removeWidgetSelectorListener = (surveyId: string): void => {
@@ -307,6 +303,15 @@ export class SurveyManager {
         if (!currentElement.hasAttribute('PHWidgetSurveyClickListener')) {
             const listener = (event: Event) => {
                 event.stopPropagation() // Prevent bubbling
+
+                if (survey.appearance?.position !== SurveyPosition.NextToTrigger) {
+                    window.dispatchEvent(
+                        new CustomEvent(DISPATCH_FEEDBACK_WIDGET_EVENT, {
+                            detail: { surveyId: survey.id, position: {} },
+                        })
+                    )
+                    return
+                }
 
                 const buttonRect = (event.currentTarget as HTMLElement).getBoundingClientRect()
                 const viewportHeight = window.innerHeight
@@ -618,7 +623,7 @@ export function generateSurveys(posthog: PostHog) {
 }
 
 type UseHideSurveyOnURLChangeProps = {
-    survey: Pick<Survey, 'id' | 'conditions'>
+    survey: Pick<Survey, 'id' | 'conditions' | 'type' | 'appearance'>
     removeSurveyFromFocus: (id: string) => void
     setSurveyVisible: (visible: boolean) => void
     isPreviewMode?: boolean
@@ -646,11 +651,21 @@ export function useHideSurveyOnURLChange({
         }
 
         const checkUrlMatch = () => {
-            const urlCheck = doesSurveyUrlMatch(survey)
-            if (!urlCheck) {
-                setSurveyVisible(false)
-                return removeSurveyFromFocus(survey.id)
+            const isSurveyTypeWidget = survey.type === SurveyType.Widget
+            const doesSurveyMatchUrlCondition = doesSurveyUrlMatch(survey)
+            const isSurveyWidgetTypeTab = survey.appearance?.widgetType === SurveyWidgetType.Tab && isSurveyTypeWidget
+
+            if (doesSurveyMatchUrlCondition) {
+                if (isSurveyWidgetTypeTab) {
+                    logger.info(`Showing survey ${survey.id} because it is a feedback button tab and URL matches`)
+                    setSurveyVisible(true)
+                }
+                return
             }
+
+            logger.info(`Hiding survey ${survey.id} because URL does not match`)
+            setSurveyVisible(false)
+            return removeSurveyFromFocus(survey.id)
         }
 
         // Listen for browser back/forward browser history changes
@@ -922,6 +937,7 @@ export function Questions({
     return (
         <form
             className="survey-form"
+            name="surveyForm"
             style={
                 isPopup
                     ? {

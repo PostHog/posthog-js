@@ -26,7 +26,7 @@ import {
 
 import { isArray, isUndefined } from './utils/type-utils'
 import { createLogger } from './utils/logger'
-import { Info } from './utils/event-utils'
+import { getTimezone } from './utils/event-utils'
 
 const logger = createLogger('[FeatureFlags]')
 
@@ -399,7 +399,7 @@ export class PostHogFeatureFlags {
             this.instance.config.__preview_flags_v2 && this.instance.config.__preview_remote_config
 
         if (eligibleForFlagsV2) {
-            data.timezone = Info.timezone()
+            data.timezone = getTimezone()
         }
 
         this._requestInFlight = true

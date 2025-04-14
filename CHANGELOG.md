@@ -1,3 +1,36 @@
+## 1.236.0 - 2025-04-14
+
+- chore: add canRenderSurveyAsync (#1891)
+- feat: capture pinterest, snapchat, and quora click ids (#1872)
+- chore: Generate bundle size viz (#1899)
+- Make react router playground handle pageviews on route change (#1895)
+
+## 1.235.6 - 2025-04-11
+
+- feat: Improve how PostHogProvider works with SSR (#1893)
+- feat(err): add react error boundary (#1884)
+
+## 1.235.5 - 2025-04-10
+
+- fix: survey feedback button not showing after url change (#1892)
+- chore: better license attribution (#1883)
+
+## 1.235.4 - 2025-04-10
+
+- Fix web vitals running when capture_performance: false is set (#1890)
+
+## 1.235.3 - 2025-04-10
+
+- chore: rename survey extension utils and fix logging (#1889)
+
+## 1.235.2 - 2025-04-10
+
+- fix: new survey position for feedback button (#1885)
+
+## 1.235.1 - 2025-04-10
+
+- chore: even more replay debug signal (#1887)
+
 ## 1.235.0 - 2025-04-08
 
 - fix: make survey widget with selector work with SPAs (#1877)

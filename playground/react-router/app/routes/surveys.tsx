@@ -1,8 +1,6 @@
 import { Link } from 'react-router'
-import type { Route } from './+types/home'
 
-// eslint-disable-next-line no-empty-pattern
-export function meta({}: Route.MetaArgs) {
+export function meta() {
     return [{ title: 'Surveys' }, { name: 'description', content: 'Surveys' }]
 }
 

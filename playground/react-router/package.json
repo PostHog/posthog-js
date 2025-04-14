@@ -4,15 +4,17 @@
     "type": "module",
     "scripts": {
         "build": "react-router build",
-        "dev": "react-router dev",
+        "dev": "pnpm run build-posthog-js && pnpm link-posthog-js && react-router dev",
         "start": "react-router-serve ./build/server/index.js",
-        "typecheck": "react-router typegen && tsc"
+        "typecheck": "react-router typegen && tsc",
+        "build-posthog-js": "cd ../../ && NODE_ENV=dev pnpm i && pnpm run build",
+        "link-posthog-js": "pnpm link ../.."
     },
     "dependencies": {
         "@react-router/node": "^7.5.0",
         "@react-router/serve": "^7.5.0",
         "isbot": "^5.1.17",
-        "posthog-js": "file:../../posthog-js",
+        "posthog-js": "file:../../dist/",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
         "react-router": "^7.5.0"
@@ -28,5 +30,10 @@
         "typescript": "^5.7.2",
         "vite": "^5.4.11",
         "vite-tsconfig-paths": "^5.1.4"
+    },
+    "pnpm": {
+        "overrides": {
+            "posthog-js": "link:../.."
+        }
     }
 }

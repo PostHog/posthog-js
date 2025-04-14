@@ -99,7 +99,7 @@ const entrypointTargets = entrypoints.map((file) => {
                 ...(format === 'cjs' ? { exports: 'auto' } : {}),
             },
         ],
-        plugins: [...pluginsForThisFile, visualizer({ filename: `bundle-stats-${fileName}.html` })],
+        plugins: [...pluginsForThisFile, visualizer({ filename: `bundle-stats-${fileName}.html`, gzipSize: true })],
     }
 })
 
