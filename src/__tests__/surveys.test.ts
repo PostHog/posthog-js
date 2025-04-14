@@ -6,7 +6,7 @@ import {
     canActivateRepeatedly,
     getDisplayOrderChoices,
     getDisplayOrderQuestions,
-} from '../extensions/surveys/surveys-utils'
+} from '../extensions/surveys/surveys-extension-utils'
 import { PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { PostHogSurveys } from '../posthog-surveys'

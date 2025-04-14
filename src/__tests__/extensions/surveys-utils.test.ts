@@ -3,7 +3,7 @@ import {
     getFontFamily,
     hasEvents,
     hasWaitPeriodPassed,
-} from '../../extensions/surveys/surveys-utils'
+} from '../../extensions/surveys/surveys-extension-utils'
 import { Survey, SurveySchedule, SurveyType } from '../../posthog-surveys-types'
 
 describe('hasWaitPeriodPassed', () => {
@@ -121,22 +121,12 @@ describe('hasEvents', () => {
 })
 
 describe('canActivateRepeatedly', () => {
-    it('should return true when survey is a Widget type with Always schedule', () => {
+    it('should return true when survey the schedule is Always', () => {
         const survey = {
-            type: SurveyType.Widget,
             schedule: SurveySchedule.Always,
             conditions: undefined,
         } as Pick<Survey, 'type' | 'schedule' | 'conditions'>
         expect(canActivateRepeatedly(survey)).toBe(true)
-    })
-
-    it('should return false when survey is not a Widget type with Always schedule', () => {
-        const survey = {
-            type: SurveyType.Popover,
-            schedule: SurveySchedule.Always,
-            conditions: undefined,
-        } as Pick<Survey, 'type' | 'schedule' | 'conditions'>
-        expect(canActivateRepeatedly(survey)).toBe(false)
     })
 
     it('should return false when survey has no events', () => {

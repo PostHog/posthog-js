@@ -4,19 +4,17 @@ import {
     MultipleSurveyQuestion,
     Survey,
     SurveyAppearance,
+    SurveyPosition,
     SurveyQuestion,
     SurveySchedule,
-    SurveyType,
 } from '../../posthog-surveys-types'
 import { document as _document, window as _window } from '../../utils/globals'
-import { createLogger } from '../../utils/logger'
+import { SURVEY_LOGGER as logger } from '../../utils/survey-utils'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 const SurveySeenPrefix = 'seenSurvey_'
-
-const logger = createLogger('[Surveys]')
 
 export const SURVEY_DEFAULT_Z_INDEX = 2147483647
 
@@ -36,12 +34,13 @@ export function getSurveyResponseKey(questionId: string) {
 
 export const style = (appearance: SurveyAppearance | null) => {
     const positions = {
-        left: 'left: 30px;',
-        right: 'right: 30px;',
-        center: `
+        [SurveyPosition.Left]: 'left: 30px;',
+        [SurveyPosition.Right]: 'right: 30px;',
+        [SurveyPosition.Center]: `
             left: 50%;
             transform: translateX(-50%);
           `,
+        [SurveyPosition.NextToTrigger]: 'right: 30px;',
     }
 
     const styles = `
@@ -58,7 +57,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               z-index: ${parseInt(appearance?.zIndex || SURVEY_DEFAULT_Z_INDEX.toString())};
               border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
               border-bottom: 0px;
-              ${positions[appearance?.position || 'right'] || 'right: 30px;'}
+              ${appearance?.position ? positions[appearance.position] : positions[SurveyPosition.Right]}
               flex-direction: column;
               background: ${appearance?.backgroundColor || '#eeeded'};
               border-top-left-radius: 10px;
@@ -550,7 +549,7 @@ export const defaultSurveyAppearance: SurveyAppearance = {
     whiteLabel: false,
     displayThankYouMessage: true,
     thankYouMessageHeader: 'Thank you for your feedback!',
-    position: 'right',
+    position: SurveyPosition.Right,
 }
 
 export const defaultBackgroundColor = '#eeeded'
@@ -673,12 +672,11 @@ export const hasEvents = (survey: Pick<Survey, 'conditions'>): boolean => {
     return survey.conditions?.events?.values?.length != undefined && survey.conditions?.events?.values?.length > 0
 }
 
-export const canActivateRepeatedly = (survey: Pick<Survey, 'schedule' | 'type' | 'conditions'>): boolean => {
-    if (survey.schedule === SurveySchedule.Always && survey.type === SurveyType.Widget) {
-        return true
-    }
-
-    return !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey))
+export const canActivateRepeatedly = (survey: Pick<Survey, 'schedule' | 'conditions'>): boolean => {
+    return (
+        !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey)) ||
+        survey.schedule === SurveySchedule.Always
+    )
 }
 
 /**

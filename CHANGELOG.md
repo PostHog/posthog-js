@@ -1,3 +1,43 @@
+## 1.235.6 - 2025-04-11
+
+- feat: Improve how PostHogProvider works with SSR (#1893)
+- feat(err): add react error boundary (#1884)
+
+## 1.235.5 - 2025-04-10
+
+- fix: survey feedback button not showing after url change (#1892)
+- chore: better license attribution (#1883)
+
+## 1.235.4 - 2025-04-10
+
+- Fix web vitals running when capture_performance: false is set (#1890)
+
+## 1.235.3 - 2025-04-10
+
+- chore: rename survey extension utils and fix logging (#1889)
+
+## 1.235.2 - 2025-04-10
+
+- fix: new survey position for feedback button (#1885)
+
+## 1.235.1 - 2025-04-10
+
+- chore: even more replay debug signal (#1887)
+
+## 1.235.0 - 2025-04-08
+
+- fix: make survey widget with selector work with SPAs (#1877)
+- chore: add react router vite react playground (#1876)
+
+## 1.234.11 - 2025-04-08
+
+- chore: allow all surveys to be repeated if schedule is always (#1866)
+
+## 1.234.10 - 2025-04-07
+
+- feat: Only capture vitals on http and https (#1873)
+- feat: Playwright tests should run over http rather than file (#1874)
+
 ## 1.234.9 - 2025-04-04
 
 - fix: survey feedback button anchoring to trigger (#1865)

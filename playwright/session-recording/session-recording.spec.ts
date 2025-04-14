@@ -282,4 +282,21 @@ test.describe('Session recording - array.js', () => {
             'session_id_changed'
         )
     })
+
+    test('adds debug properties to captured events', async ({ page }) => {
+        // make sure recording is running
+        await ensureActivitySendsSnapshots(page, ['$remote_config_received', '$session_options', '$posthog_config'])
+
+        await page.evaluate(() => {
+            const ph = (window as WindowWithPostHog).posthog
+            ph!.capture('an_event')
+        })
+        const capturedEvents = await page.capturedEvents()
+        const targetEvent = capturedEvents.find((e) => e.event === 'an_event')
+        expect(targetEvent).toBeDefined()
+
+        expect(targetEvent!['properties']['$session_recording_start_reason']).toEqual('recording_initialized')
+        expect(targetEvent!['properties']['$sdk_debug_current_session_duration']).toBeDefined()
+        expect(targetEvent!['properties']['$sdk_debug_session_start']).toBeDefined()
+    })
 })

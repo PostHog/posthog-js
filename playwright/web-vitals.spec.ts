@@ -11,7 +11,7 @@ const startOptions = {
     decideResponseOverrides: {
         capturePerformance: true,
     },
-    url: './playground/cypress/index.html',
+    url: '/playground/cypress/index.html',
 }
 
 test.describe('Web Vitals', () => {

@@ -2,7 +2,7 @@ import { h } from 'preact'
 import { useContext } from 'preact/hooks'
 import { SurveyQuestionDescriptionContentType } from '../../../posthog-surveys-types'
 import { cancelSVG } from '../icons'
-import { SurveyContext, defaultSurveyAppearance, renderChildrenAsTextOrHtml } from '../surveys-utils'
+import { SurveyContext, defaultSurveyAppearance, renderChildrenAsTextOrHtml } from '../surveys-extension-utils'
 
 export function QuestionHeader({
     question,
@@ -41,6 +41,7 @@ export function Cancel({ onClick }: { onClick: () => void }) {
                 onClick={onClick}
                 disabled={isPreviewMode}
                 aria-label="Close survey"
+                type="button"
                 role="button"
             >
                 {cancelSVG}

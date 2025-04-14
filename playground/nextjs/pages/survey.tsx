@@ -29,7 +29,7 @@ export default function SurveyForm() {
     return (
         <>
             <div className="flex items-center gap-2 flex-wrap">
-                <button className="survey-feedback-button">Feedback</button>
+                <button id="feedback-button">Feedback</button>
                 <select value={selectedSurvey} onChange={handleChange}>
                     <option value="">Select a survey</option>
                     {arraySurveyItems}
@@ -66,7 +66,7 @@ export default function SurveyForm() {
             {/* Bottom feedback button */}
             <div style={{ padding: '20px', textAlign: 'center', borderTop: '1px solid #eee' }}>
                 <button
-                    className="survey-feedback-button"
+                    id="feedback-button-bottom"
                     style={{
                         padding: '10px 20px',
                         background: '#1D4AFF',
