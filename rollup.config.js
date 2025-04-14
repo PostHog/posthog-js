@@ -73,6 +73,9 @@ const plugins = (es5) => [
                           '_i',
                           '__SV',
 
+                          // used in decide request, MUST be preserved
+                          '_',
+
                           // part of setup/teardown code, preserve these out of caution
                           '_init',
                           '_dom_loaded',
@@ -172,10 +175,7 @@ const entrypointTargets = entrypoints.map((file) => {
                 ...(format === 'cjs' ? { exports: 'auto' } : {}),
             },
         ],
-        plugins: [
-            ...pluginsForThisFile,
-            visualizer({ filename: `bundle-stats-${fileName}.mangled.html`, gzipSize: true }),
-        ],
+        plugins: [...pluginsForThisFile, visualizer({ filename: `bundle-stats-${fileName}.html`, gzipSize: true })],
     }
 })
 
