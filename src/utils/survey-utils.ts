@@ -60,10 +60,6 @@ export function isSurveyRunning(survey: Survey): boolean {
     return !!(survey.start_date && !survey.end_date)
 }
 
-export function doesSurveyActivateByEvent(survey: Pick<Survey, 'conditions'>): boolean {
-    return survey.conditions?.events?.values?.length != undefined && survey.conditions?.events?.values?.length > 0
-}
+return !!survey.conditions?.events?.values?.length
 
-export function doesSurveyActivateByAction(survey: Pick<Survey, 'conditions'>): boolean {
-    return survey.conditions?.actions?.values?.length != undefined && survey.conditions?.actions?.values?.length > 0
-}
+return !!survey.conditions?.actions?.values?.length
