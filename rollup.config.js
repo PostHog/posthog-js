@@ -83,12 +83,14 @@ const plugins = (es5) => [
                           '_is_bot',
                           '__ph_loaded',
 
-                          // set on global window object (these all use __ so are not mangled anyway BUT be abundantly cautious)
+                          // set on global window object (the ones using __ are not mangled anyway BUT be abundantly cautious)
+                          '_POSTHOG_REMOTE_CONFIG',
                           '__POSTHOG_INSTRUMENTED__',
                           '__PosthogExtensions__',
                           '__posthog_wrapped__',
+                          '__Posthog__',
 
-                          // part of the public API (doesn't start with _ so are not mangled anyway BUT be abundantly cautious)
+                          // part of the public API (none start with _ so are not mangled anyway BUT be abundantly cautious)
                           'capture',
                           'identify',
                           'alias',
