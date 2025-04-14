@@ -50,6 +50,7 @@ describe('surveys', () => {
             name: 'first survey',
             description: 'first survey description',
             type: SurveyType.Popover,
+            start_date: new Date().toISOString(),
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
         } as unknown as Survey,
     ]
@@ -333,6 +334,7 @@ describe('surveys', () => {
     it('can render survey async', async () => {
         const result = await surveys.canRenderSurveyAsync(firstSurveys[0].id, true)
 
+        expect(result.disabledReason).toBeUndefined()
         expect(result.visible).toBeTruthy()
     })
 
