@@ -431,7 +431,7 @@ export interface PostHogConfig {
     /**
      * Determines whether PostHog should capture pageleave events.
      * If set to `true`, it will capture pageleave events for all pages.
-     * If set to `'if_capture_pageview'`, it will only capture pageleave events if `capture_pageview` is also set to `true`.
+     * If set to `'if_capture_pageview'`, it will only capture pageleave events if `capture_pageview` is also set to `true` or `'history_change'`.
      *
      * @default 'if_capture_pageview'
      */
