@@ -73,6 +73,14 @@ const plugins = (es5) => [
                     '_dom_loaded',
                     '_execute_array',
                     '_handle_unload',
+                    // playwright uses these
+                    '_forceAllowLocalhostNetworkCapture',
+                    '_is_bot',
+                    '__ph_loaded',
+                    // set on global window object (these all use __ so are not mangled anyway BUT be abundantly cautious)
+                    '__POSTHOG_INSTRUMENTED__',
+                    '__PosthogExtensions__',
+                    '__posthog_wrapped__',
                 ],
             },
         },
