@@ -17,26 +17,26 @@ export enum ConsentStatus {
  * ConsentManager provides tools for managing user consent as configured by the application.
  */
 export class ConsentManager {
-    private _storage?: PersistentStore
+    private _persistentStore?: PersistentStore
 
-    constructor(private instance: PostHog) {}
+    constructor(private _instance: PostHog) {}
 
-    private get config() {
-        return this.instance.config
+    private get _config() {
+        return this._instance.config
     }
 
     public get consent(): ConsentStatus {
-        if (this.getDnt()) {
+        if (this._getDnt()) {
             return ConsentStatus.DENIED
         }
 
-        return this.storedConsent
+        return this._storedConsent
     }
 
     public isOptedOut() {
         return (
             this.consent === ConsentStatus.DENIED ||
-            (this.consent === ConsentStatus.PENDING && this.config.opt_out_capturing_by_default)
+            (this.consent === ConsentStatus.PENDING && this._config.opt_out_capturing_by_default)
         )
     }
 
@@ -45,50 +45,50 @@ export class ConsentManager {
     }
 
     public optInOut(isOptedIn: boolean) {
-        this.storage.set(
-            this.storageKey,
+        this._storage.set(
+            this._storageKey,
             isOptedIn ? 1 : 0,
-            this.config.cookie_expiration,
-            this.config.cross_subdomain_cookie,
-            this.config.secure_cookie
+            this._config.cookie_expiration,
+            this._config.cross_subdomain_cookie,
+            this._config.secure_cookie
         )
     }
 
     public reset() {
-        this.storage.remove(this.storageKey, this.config.cross_subdomain_cookie)
+        this._storage.remove(this._storageKey, this._config.cross_subdomain_cookie)
     }
 
-    private get storageKey() {
-        const { token, opt_out_capturing_cookie_prefix } = this.instance.config
+    private get _storageKey() {
+        const { token, opt_out_capturing_cookie_prefix } = this._instance.config
         return (opt_out_capturing_cookie_prefix || OPT_OUT_PREFIX) + token
     }
 
-    private get storedConsent(): ConsentStatus {
-        const value = this.storage.get(this.storageKey)
+    private get _storedConsent(): ConsentStatus {
+        const value = this._storage.get(this._storageKey)
         return value === '1' ? ConsentStatus.GRANTED : value === '0' ? ConsentStatus.DENIED : ConsentStatus.PENDING
     }
 
-    private get storage() {
-        if (!this._storage) {
-            const persistenceType = this.config.opt_out_capturing_persistence_type
-            this._storage = persistenceType === 'localStorage' ? localStore : cookieStore
+    private get _storage() {
+        if (!this._persistentStore) {
+            const persistenceType = this._config.opt_out_capturing_persistence_type
+            this._persistentStore = persistenceType === 'localStorage' ? localStore : cookieStore
             const otherStorage = persistenceType === 'localStorage' ? cookieStore : localStore
 
-            if (otherStorage.get(this.storageKey)) {
-                if (!this._storage.get(this.storageKey)) {
+            if (otherStorage.get(this._storageKey)) {
+                if (!this._persistentStore.get(this._storageKey)) {
                     // This indicates we have moved to a new storage format so we migrate the value over
-                    this.optInOut(otherStorage.get(this.storageKey) === '1')
+                    this.optInOut(otherStorage.get(this._storageKey) === '1')
                 }
 
-                otherStorage.remove(this.storageKey, this.config.cross_subdomain_cookie)
+                otherStorage.remove(this._storageKey, this._config.cross_subdomain_cookie)
             }
         }
 
-        return this._storage
+        return this._persistentStore
     }
 
-    private getDnt(): boolean {
-        if (!this.config.respect_dnt) {
+    private _getDnt(): boolean {
+        if (!this._config.respect_dnt) {
             return false
         }
         return !!find(

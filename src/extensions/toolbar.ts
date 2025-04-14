@@ -31,11 +31,11 @@ export class Toolbar {
     }
 
     // NOTE: We store the state of the toolbar in the global scope to avoid multiple instances of the SDK loading the toolbar
-    private setToolbarState(state: ToolbarState) {
+    private _setToolbarState(state: ToolbarState) {
         assignableWindow['ph_toolbar_state'] = state
     }
 
-    private getToolbarState(): ToolbarState {
+    private _getToolbarState(): ToolbarState {
         return assignableWindow['ph_toolbar_state'] ?? ToolbarState.UNINITIALIZED
     }
 
@@ -160,26 +160,26 @@ export class Toolbar {
             })
         )
 
-        if (this.getToolbarState() === ToolbarState.LOADED) {
+        if (this._getToolbarState() === ToolbarState.LOADED) {
             this._callLoadToolbar(toolbarParams)
-        } else if (this.getToolbarState() === ToolbarState.UNINITIALIZED) {
+        } else if (this._getToolbarState() === ToolbarState.UNINITIALIZED) {
             // only load the toolbar once, even if there are multiple instances of PostHogLib
-            this.setToolbarState(ToolbarState.LOADING)
+            this._setToolbarState(ToolbarState.LOADING)
 
             assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'toolbar', (err) => {
                 if (err) {
                     logger.error('[Toolbar] Failed to load', err)
-                    this.setToolbarState(ToolbarState.UNINITIALIZED)
+                    this._setToolbarState(ToolbarState.UNINITIALIZED)
                     return
                 }
-                this.setToolbarState(ToolbarState.LOADED)
+                this._setToolbarState(ToolbarState.LOADED)
                 this._callLoadToolbar(toolbarParams)
             })
 
             // Turbolinks doesn't fire an onload event but does replace the entire body, including the toolbar.
             // Thus, we ensure the toolbar is only loaded inside the body, and then reloaded on turbolinks:load.
             addEventListener(window, 'turbolinks:load', () => {
-                this.setToolbarState(ToolbarState.UNINITIALIZED)
+                this._setToolbarState(ToolbarState.UNINITIALIZED)
                 this.loadToolbar(toolbarParams)
             })
         }

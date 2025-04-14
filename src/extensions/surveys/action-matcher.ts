@@ -7,39 +7,39 @@ import { window } from '../../utils/globals'
 import { isMatchingRegex } from '../../utils/regex-utils'
 
 export class ActionMatcher {
-    private readonly actionRegistry?: Set<SurveyActionType>
-    private readonly instance?: PostHog
-    private readonly actionEvents: Set<string>
+    private readonly _actionRegistry?: Set<SurveyActionType>
+    private readonly _instance?: PostHog
+    private readonly _actionEvents: Set<string>
     private _debugEventEmitter = new SimpleEventEmitter()
 
     constructor(instance?: PostHog) {
-        this.instance = instance
-        this.actionEvents = new Set<string>()
-        this.actionRegistry = new Set<SurveyActionType>()
+        this._instance = instance
+        this._actionEvents = new Set<string>()
+        this._actionRegistry = new Set<SurveyActionType>()
     }
 
     init() {
-        if (!isUndefined(this.instance?._addCaptureHook)) {
+        if (!isUndefined(this._instance?._addCaptureHook)) {
             const matchEventToAction = (eventName: string, eventPayload: any) => {
                 this.on(eventName, eventPayload)
             }
-            this.instance?._addCaptureHook(matchEventToAction)
+            this._instance?._addCaptureHook(matchEventToAction)
         }
     }
 
     register(actions: SurveyActionType[]): void {
-        if (isUndefined(this.instance?._addCaptureHook)) {
+        if (isUndefined(this._instance?._addCaptureHook)) {
             return
         }
 
         actions.forEach((action) => {
-            this.actionRegistry?.add(action)
+            this._actionRegistry?.add(action)
             action.steps?.forEach((step) => {
-                this.actionEvents?.add(step?.event || '')
+                this._actionEvents?.add(step?.event || '')
             })
         })
 
-        if (this.instance?.autocapture) {
+        if (this._instance?.autocapture) {
             const selectorsToWatch: Set<string> = new Set<string>()
             actions.forEach((action) => {
                 action.steps?.forEach((step) => {
@@ -48,7 +48,7 @@ export class ActionMatcher {
                     }
                 })
             })
-            this.instance?.autocapture.setElementSelectors(selectorsToWatch)
+            this._instance?.autocapture.setElementSelectors(selectorsToWatch)
         }
     }
 
@@ -57,13 +57,13 @@ export class ActionMatcher {
             return
         }
 
-        if (!this.actionEvents.has(eventName) && !this.actionEvents.has(<string>eventPayload?.event)) {
+        if (!this._actionEvents.has(eventName) && !this._actionEvents.has(<string>eventPayload?.event)) {
             return
         }
 
-        if (this.actionRegistry && this.actionRegistry?.size > 0) {
-            this.actionRegistry.forEach((action) => {
-                if (this.checkAction(eventPayload, action)) {
+        if (this._actionRegistry && this._actionRegistry?.size > 0) {
+            this._actionRegistry.forEach((action) => {
+                if (this._checkAction(eventPayload, action)) {
                     this._debugEventEmitter.emit('actionCaptured', action.name)
                 }
             })
@@ -74,13 +74,13 @@ export class ActionMatcher {
         this.onAction('actionCaptured', (data) => callback(data))
     }
 
-    private checkAction(event?: CaptureResult, action?: SurveyActionType): boolean {
+    private _checkAction(event?: CaptureResult, action?: SurveyActionType): boolean {
         if (action?.steps == null) {
             return false
         }
 
         for (const step of action.steps) {
-            if (this.checkStep(event, step)) {
+            if (this._checkStep(event, step)) {
                 return true
             }
         }
@@ -92,11 +92,13 @@ export class ActionMatcher {
         return this._debugEventEmitter.on(event, cb)
     }
 
-    private checkStep = (event?: CaptureResult, step?: ActionStepType): boolean => {
-        return this.checkStepEvent(event, step) && this.checkStepUrl(event, step) && this.checkStepElement(event, step)
+    private _checkStep = (event?: CaptureResult, step?: ActionStepType): boolean => {
+        return (
+            this._checkStepEvent(event, step) && this._checkStepUrl(event, step) && this._checkStepElement(event, step)
+        )
     }
 
-    private checkStepEvent = (event?: CaptureResult, step?: ActionStepType): boolean => {
+    private _checkStepEvent = (event?: CaptureResult, step?: ActionStepType): boolean => {
         // CHECK CONDITIONS, OTHERWISE SKIPPED
         if (step?.event && event?.event !== step?.event) {
             return false // EVENT NAME IS A MISMATCH
@@ -104,21 +106,21 @@ export class ActionMatcher {
         return true
     }
 
-    private checkStepUrl(event?: CaptureResult, step?: ActionStepType): boolean {
+    private _checkStepUrl(event?: CaptureResult, step?: ActionStepType): boolean {
         // CHECK CONDITIONS, OTHERWISE SKIPPED
         if (step?.url) {
             const eventUrl = event?.properties?.$current_url
             if (!eventUrl || typeof eventUrl !== 'string') {
                 return false // URL IS UNKNOWN
             }
-            if (!ActionMatcher.matchString(eventUrl, step?.url, step?.url_matching || 'contains')) {
+            if (!ActionMatcher._matchString(eventUrl, step?.url, step?.url_matching || 'contains')) {
                 return false // URL IS A MISMATCH
             }
         }
         return true
     }
 
-    private static matchString(url: string, pattern: string, matching: ActionStepStringMatching): boolean {
+    private static _matchString(url: string, pattern: string, matching: ActionStepStringMatching): boolean {
         switch (matching) {
             case 'regex':
                 return !!window && isMatchingRegex(url, pattern)
@@ -127,7 +129,7 @@ export class ActionMatcher {
             case 'contains':
                 // Simulating SQL LIKE behavior (_ = any single character, % = any zero or more characters)
                 // eslint-disable-next-line no-case-declarations
-                const adjustedRegExpStringPattern = ActionMatcher.escapeStringRegexp(pattern)
+                const adjustedRegExpStringPattern = ActionMatcher._escapeStringRegexp(pattern)
                     .replace(/_/g, '.')
                     .replace(/%/g, '.*')
                 return isMatchingRegex(url, adjustedRegExpStringPattern)
@@ -137,21 +139,21 @@ export class ActionMatcher {
         }
     }
 
-    private static escapeStringRegexp(pattern: string): string {
+    private static _escapeStringRegexp(pattern: string): string {
         // Escape characters with special meaning either inside or outside character sets.
         // Use a simple backslash escape when it’s always valid, and a `\xnn` escape when the simpler form would be disallowed by Unicode patterns’ stricter grammar.
         return pattern.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&').replace(/-/g, '\\x2d')
     }
 
-    private checkStepElement(event?: CaptureResult, step?: ActionStepType): boolean {
+    private _checkStepElement(event?: CaptureResult, step?: ActionStepType): boolean {
         // CHECK CONDITIONS, OTHERWISE SKIPPED
         if (step?.href || step?.tag_name || step?.text) {
-            const elements = this.getElementsList(event)
+            const elements = this._getElementsList(event)
             if (
                 !elements.some((element) => {
                     if (
                         step?.href &&
-                        !ActionMatcher.matchString(element.href || '', step?.href, step?.href_matching || 'exact')
+                        !ActionMatcher._matchString(element.href || '', step?.href, step?.href_matching || 'exact')
                     ) {
                         return false // ELEMENT HREF IS A MISMATCH
                     }
@@ -161,8 +163,12 @@ export class ActionMatcher {
                     if (
                         step?.text &&
                         !(
-                            ActionMatcher.matchString(element.text || '', step?.text, step?.text_matching || 'exact') ||
-                            ActionMatcher.matchString(
+                            ActionMatcher._matchString(
+                                element.text || '',
+                                step?.text,
+                                step?.text_matching || 'exact'
+                            ) ||
+                            ActionMatcher._matchString(
                                 element.$el_text || '',
                                 step?.text,
                                 step?.text_matching || 'exact'
@@ -192,7 +198,7 @@ export class ActionMatcher {
         return true
     }
 
-    private getElementsList(event?: CaptureResult): SurveyElement[] {
+    private _getElementsList(event?: CaptureResult): SurveyElement[] {
         if (event?.properties.$elements == null) {
             return []
         }

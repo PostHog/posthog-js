@@ -52,9 +52,9 @@ export class Heatmaps {
     _mouseMoveTimeout: ReturnType<typeof setTimeout> | undefined
 
     // TODO: Periodically flush this if no other event has taken care of it
-    private buffer: HeatmapEventBuffer
+    private _buffer: HeatmapEventBuffer
     private _flushInterval: ReturnType<typeof setInterval> | null = null
-    private deadClicksCapture: DeadClicksAutocapture | undefined
+    private _deadClicksCapture: DeadClicksAutocapture | undefined
 
     constructor(instance: PostHog) {
         this.instance = instance
@@ -92,10 +92,10 @@ export class Heatmaps {
             }
             logger.info('starting...')
             this._setupListeners()
-            this._flushInterval = setInterval(this.flush.bind(this), this.flushIntervalMilliseconds)
+            this._flushInterval = setInterval(this._flush.bind(this), this.flushIntervalMilliseconds)
         } else {
             clearInterval(this._flushInterval ?? undefined)
-            this.deadClicksCapture?.stop()
+            this._deadClicksCapture?.stop()
             this.getAndClearBuffer()
         }
     }
@@ -114,8 +114,8 @@ export class Heatmaps {
     }
 
     public getAndClearBuffer(): HeatmapEventBuffer {
-        const buffer = this.buffer
-        this.buffer = undefined
+        const buffer = this._buffer
+        this._buffer = undefined
         return buffer
     }
 
@@ -128,19 +128,19 @@ export class Heatmaps {
             return
         }
 
-        addEventListener(window, 'beforeunload', this.flush.bind(this))
+        addEventListener(window, 'beforeunload', this._flush.bind(this))
 
         addEventListener(document, 'click', (e) => this._onClick((e || window?.event) as MouseEvent), { capture: true })
         addEventListener(document, 'mousemove', (e) => this._onMouseMove((e || window?.event) as MouseEvent), {
             capture: true,
         })
 
-        this.deadClicksCapture = new DeadClicksAutocapture(
+        this._deadClicksCapture = new DeadClicksAutocapture(
             this.instance,
             isDeadClicksEnabledForHeatmaps,
             this._onDeadClick.bind(this)
         )
-        this.deadClicksCapture.startIfEnabled()
+        this._deadClicksCapture.startIfEnabled()
 
         this._initialized = true
     }
@@ -201,17 +201,17 @@ export class Heatmaps {
         // TODO we should be able to mask this
         const url = window.location.href
 
-        this.buffer = this.buffer || {}
+        this._buffer = this._buffer || {}
 
-        if (!this.buffer[url]) {
-            this.buffer[url] = []
+        if (!this._buffer[url]) {
+            this._buffer[url] = []
         }
 
-        this.buffer[url].push(properties)
+        this._buffer[url].push(properties)
     }
 
-    private flush(): void {
-        if (!this.buffer || isEmptyObject(this.buffer)) {
+    private _flush(): void {
+        if (!this._buffer || isEmptyObject(this._buffer)) {
             return
         }
 

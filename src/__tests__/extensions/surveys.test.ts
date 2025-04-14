@@ -315,10 +315,10 @@ describe('SurveyManager', () => {
     test('callSurveysAndEvaluateDisplayLogic should handle a single popover survey correctly', () => {
         mockPostHog.getActiveMatchingSurveys = jest.fn((callback) => callback([mockSurveys[0]]))
         const handlePopoverSurveyMock = jest
-            .spyOn(surveyManager as any, 'handlePopoverSurvey')
+            .spyOn(surveyManager as any, '_handlePopoverSurvey')
             .mockImplementation(() => {})
         const canShowNextEventBasedSurveyMock = jest
-            .spyOn(surveyManager as any, 'canShowNextEventBasedSurvey')
+            .spyOn(surveyManager as any, '_canShowNextEventBasedSurvey')
             .mockReturnValue(true)
 
         surveyManager.callSurveysAndEvaluateDisplayLogic()
@@ -364,13 +364,13 @@ describe('SurveyManager', () => {
         mockPostHog.getActiveMatchingSurveys = jest.fn((callback) => callback([mockSurveys[0]]))
 
         const handlePopoverSurveyMock = jest
-            .spyOn(surveyManager as any, 'handlePopoverSurvey')
+            .spyOn(surveyManager as any, '_handlePopoverSurvey')
             .mockImplementation(() => {})
-        const handleWidgetMock = jest.spyOn(surveyManager as any, 'handleWidget').mockImplementation(() => {})
+        const handleWidgetMock = jest.spyOn(surveyManager as any, '_handleWidget').mockImplementation(() => {})
         const manageWidgetSelectorListener = jest
-            .spyOn(surveyManager as any, 'manageWidgetSelectorListener')
+            .spyOn(surveyManager as any, '_manageWidgetSelectorListener')
             .mockImplementation(() => {})
-        jest.spyOn(surveyManager as any, 'canShowNextEventBasedSurvey').mockReturnValue(true)
+        jest.spyOn(surveyManager as any, '_canShowNextEventBasedSurvey').mockReturnValue(true)
 
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
@@ -400,7 +400,7 @@ describe('SurveyManager', () => {
             feature_flag_keys: [],
         })
         const mockSurvey = mockSurveys[1]
-        const handleWidgetSpy = jest.spyOn(surveyManager as any, 'handleWidget')
+        const handleWidgetSpy = jest.spyOn(surveyManager as any, '_handleWidget')
         surveyManager.getTestAPI().handleWidget(mockSurvey) // Call the actual method
         expect(handleWidgetSpy).toHaveBeenCalledWith(mockSurvey)
         // We can add more specific assertions here if needed, e.g., checking if the shadow DOM was created
@@ -431,7 +431,7 @@ describe('SurveyManager', () => {
         mockPostHog.getActiveMatchingSurveys = jest.fn((callback) => callback([mockSurvey]))
         document.body.innerHTML = '<div class="my-selector">Click Me</div>'
 
-        const manageWidgetSelectorListenerSpy = jest.spyOn(surveyManager as any, 'manageWidgetSelectorListener')
+        const manageWidgetSelectorListenerSpy = jest.spyOn(surveyManager as any, '_manageWidgetSelectorListener')
 
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
@@ -458,7 +458,7 @@ describe('SurveyManager', () => {
         expect(surveyManager.getTestAPI().surveyInFocus).toBe('survey1')
 
         const handlePopoverSurveyMock = jest
-            .spyOn(surveyManager as any, 'handlePopoverSurvey')
+            .spyOn(surveyManager as any, '_handlePopoverSurvey')
             .mockImplementation(() => {})
 
         surveyManager.getTestAPI().removeSurveyFromFocus('survey1')
@@ -666,11 +666,11 @@ describe('SurveyManager', () => {
             }
 
             // Make the internal methods accessible for testing
-            jest.spyOn(surveyManager as any, 'addSurveyToFocus')
-            jest.spyOn(surveyManager as any, 'removeSurveyFromFocus')
+            jest.spyOn(surveyManager as any, '_addSurveyToFocus')
+            jest.spyOn(surveyManager as any, '_removeSurveyFromFocus')
 
             // Mock doesSurveyUrlMatch to always return true, used in handlePopoverSurvey
-            jest.spyOn(surveyManager as any, 'handlePopoverSurvey').mockImplementation((survey: Survey) => {
+            jest.spyOn(surveyManager as any, '_handlePopoverSurvey').mockImplementation((survey: Survey) => {
                 // Add survey to focus and create a timeout
                 surveyManager.getTestAPI().addSurveyToFocus(survey.id)
 

@@ -34,28 +34,32 @@ interface RetryQueueElement {
 }
 
 export class RetryQueue {
-    private isPolling: boolean = false // flag to continue to recursively poll or not
-    private poller: number | undefined // to become interval for reference to clear later
-    private pollIntervalMs: number = 3000
-    private queue: RetryQueueElement[] = []
-    private areWeOnline: boolean
+    private _isPolling: boolean = false // flag to continue to recursively poll or not
+    private _poller: number | undefined // to become interval for reference to clear later
+    private _pollIntervalMs: number = 3000
+    private _queue: RetryQueueElement[] = []
+    private _areWeOnline: boolean
 
-    constructor(private instance: PostHog) {
-        this.queue = []
-        this.areWeOnline = true
+    constructor(private _instance: PostHog) {
+        this._queue = []
+        this._areWeOnline = true
 
         if (!isUndefined(window) && 'onLine' in window.navigator) {
-            this.areWeOnline = window.navigator.onLine
+            this._areWeOnline = window.navigator.onLine
 
             addEventListener(window, 'online', () => {
-                this.areWeOnline = true
-                this.flush()
+                this._areWeOnline = true
+                this._flush()
             })
 
             addEventListener(window, 'offline', () => {
-                this.areWeOnline = false
+                this._areWeOnline = false
             })
         }
+    }
+
+    get length() {
+        return this._queue.length
     }
 
     retriableRequest({ retriesPerformedSoFar, ...options }: RetriableRequestWithOptions): void {
@@ -63,12 +67,12 @@ export class RetryQueue {
             options.url = extendURLParams(options.url, { retry_count: retriesPerformedSoFar })
         }
 
-        this.instance._send_request({
+        this._instance._send_request({
             ...options,
             callback: (response) => {
                 if (response.statusCode !== 200 && (response.statusCode < 400 || response.statusCode >= 500)) {
                     if ((retriesPerformedSoFar ?? 0) < 10) {
-                        this.enqueue({
+                        this._enqueue({
                             retriesPerformedSoFar,
                             ...options,
                         })
@@ -81,14 +85,14 @@ export class RetryQueue {
         })
     }
 
-    private enqueue(requestOptions: RetriableRequestWithOptions): void {
+    private _enqueue(requestOptions: RetriableRequestWithOptions): void {
         const retriesPerformedSoFar = requestOptions.retriesPerformedSoFar || 0
         requestOptions.retriesPerformedSoFar = retriesPerformedSoFar + 1
 
         const msToNextRetry = pickNextRetryDelay(retriesPerformedSoFar)
         const retryAt = Date.now() + msToNextRetry
 
-        this.queue.push({ retryAt, requestOptions })
+        this._queue.push({ retryAt, requestOptions })
 
         let logMessage = `Enqueued failed request for retry in ${msToNextRetry}`
         if (!navigator.onLine) {
@@ -96,26 +100,26 @@ export class RetryQueue {
         }
         logger.warn(logMessage)
 
-        if (!this.isPolling) {
-            this.isPolling = true
-            this.poll()
+        if (!this._isPolling) {
+            this._isPolling = true
+            this._poll()
         }
     }
 
-    private poll(): void {
-        this.poller && clearTimeout(this.poller)
-        this.poller = setTimeout(() => {
-            if (this.areWeOnline && this.queue.length > 0) {
-                this.flush()
+    private _poll(): void {
+        this._poller && clearTimeout(this._poller)
+        this._poller = setTimeout(() => {
+            if (this._areWeOnline && this._queue.length > 0) {
+                this._flush()
             }
-            this.poll()
-        }, this.pollIntervalMs) as any as number
+            this._poll()
+        }, this._pollIntervalMs) as any as number
     }
 
-    private flush(): void {
+    private _flush(): void {
         const now = Date.now()
         const notToFlush: RetryQueueElement[] = []
-        const toFlush = this.queue.filter((item) => {
+        const toFlush = this._queue.filter((item) => {
             if (item.retryAt < now) {
                 return true
             }
@@ -123,7 +127,7 @@ export class RetryQueue {
             return false
         })
 
-        this.queue = notToFlush
+        this._queue = notToFlush
 
         if (toFlush.length > 0) {
             for (const { requestOptions } of toFlush) {
@@ -133,16 +137,16 @@ export class RetryQueue {
     }
 
     unload(): void {
-        if (this.poller) {
-            clearTimeout(this.poller)
-            this.poller = undefined
+        if (this._poller) {
+            clearTimeout(this._poller)
+            this._poller = undefined
         }
 
-        for (const { requestOptions } of this.queue) {
+        for (const { requestOptions } of this._queue) {
             try {
                 // we've had send beacon in place for at least 2 years
                 // eslint-disable-next-line compat/compat
-                this.instance._send_request({
+                this._instance._send_request({
                     ...requestOptions,
                     transport: 'sendBeacon',
                 })
@@ -152,6 +156,6 @@ export class RetryQueue {
                 logger.error(e)
             }
         }
-        this.queue = []
+        this._queue = []
     }
 }
