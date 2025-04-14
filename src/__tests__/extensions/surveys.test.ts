@@ -577,7 +577,7 @@ describe('SurveyManager', () => {
 
         it('cannot render completed surveys', () => {
             survey.end_date = new Date('11/10/2022').toISOString()
-            const result = surveyManager.canRenderSurvey(survey)
+            const result = surveyManager.canRenderSurvey(survey.id)
             expect(result.visible).toBeFalsy()
             expect(result.disabledReason).toEqual(`survey was completed on ${survey.end_date}`)
         })
@@ -585,7 +585,7 @@ describe('SurveyManager', () => {
         it('can only render popover surveys', () => {
             survey.type = SurveyType.API
 
-            const result = surveyManager.canRenderSurvey(survey)
+            const result = surveyManager.canRenderSurvey(survey.id)
             expect(result.visible).toBeFalsy()
             expect(result.disabledReason).toEqual('Only Popover survey types can be rendered')
         })
@@ -594,7 +594,7 @@ describe('SurveyManager', () => {
             decideResponse.featureFlags[survey.targeting_flag_key] = true
             decideResponse.featureFlags[survey.internal_targeting_flag_key] = true
             decideResponse.featureFlags[survey.linked_flag_key] = false
-            const result = surveyManager.canRenderSurvey(survey)
+            const result = surveyManager.canRenderSurvey(survey.id)
             expect(result.visible).toBeFalsy()
             expect(result.disabledReason).toEqual('linked feature flag linked-flag-key is false')
         })
@@ -603,7 +603,7 @@ describe('SurveyManager', () => {
             decideResponse.featureFlags[survey.linked_flag_key] = true
             decideResponse.featureFlags[survey.internal_targeting_flag_key] = true
             decideResponse.featureFlags[survey.targeting_flag_key] = false
-            const result = surveyManager.canRenderSurvey(survey)
+            const result = surveyManager.canRenderSurvey(survey.id)
             expect(result.visible).toBeFalsy()
             expect(result.disabledReason).toEqual('targeting feature flag targeting-flag-key is false')
         })
@@ -612,7 +612,7 @@ describe('SurveyManager', () => {
             decideResponse.featureFlags[survey.targeting_flag_key] = true
             decideResponse.featureFlags[survey.linked_flag_key] = true
             decideResponse.featureFlags[survey.internal_targeting_flag_key] = false
-            const result = surveyManager.canRenderSurvey(survey)
+            const result = surveyManager.canRenderSurvey(survey.id)
             expect(result.visible).toBeFalsy()
             expect(result.disabledReason).toEqual(
                 'internal targeting feature flag internal_targeting_flag_key is false'

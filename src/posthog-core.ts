@@ -66,9 +66,10 @@ import {
     safewrapClass,
 } from './utils'
 import { isLikelyBot } from './utils/blocked-uas'
+import { getEventProperties } from './utils/event-utils'
 import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
-import { getPersonPropertiesHash } from './utils/person-property-utils'
 import { logger } from './utils/logger'
+import { getPersonPropertiesHash } from './utils/person-property-utils'
 import { RequestRouter, RequestRouterRegion } from './utils/request-router'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
 import { includes, isDistinctIdStringLike } from './utils/string-utils'
@@ -87,7 +88,6 @@ import {
 } from './utils/type-utils'
 import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
-import { getEventProperties } from './utils/event-utils'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -1363,6 +1363,10 @@ export class PostHog {
     /** Get surveys that should be enabled for the current user. */
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false): void {
         this.surveys.getActiveMatchingSurveys(callback, forceReload)
+    }
+
+    checkSurveyEligibility(surveyId: string): { eligible: boolean; reason?: string } {
+        return this.surveys.checkSurveyEligibility(surveyId)
     }
 
     /** Render a survey on a specific element. */

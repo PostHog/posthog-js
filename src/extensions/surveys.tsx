@@ -386,50 +386,11 @@ export class SurveyManager {
      * @param survey
      * @param instance
      */
-    public canRenderSurvey = (survey: Survey): SurveyRenderReason => {
-        const renderReason: SurveyRenderReason = {
-            visible: false,
-        }
+    public canRenderSurvey = (surveyId: string): SurveyRenderReason => {
+        const eligibility = this.posthog.checkSurveyEligibility(surveyId)
 
-        if (survey.end_date) {
-            renderReason.disabledReason = `survey was completed on ${survey.end_date}`
-            return renderReason
-        }
-
-        if (survey.type != SurveyType.Popover) {
-            renderReason.disabledReason = `Only Popover survey types can be rendered`
-            return renderReason
-        }
-
-        const linkedFlagCheck = survey.linked_flag_key
-            ? this.posthog.featureFlags.isFeatureEnabled(survey.linked_flag_key)
-            : true
-
-        if (!linkedFlagCheck) {
-            renderReason.disabledReason = `linked feature flag ${survey.linked_flag_key} is false`
-            return renderReason
-        }
-
-        const targetingFlagCheck = survey.targeting_flag_key
-            ? this.posthog.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
-            : true
-
-        if (!targetingFlagCheck) {
-            renderReason.disabledReason = `targeting feature flag ${survey.targeting_flag_key} is false`
-            return renderReason
-        }
-
-        const internalTargetingFlagCheck = survey.internal_targeting_flag_key
-            ? this.posthog.featureFlags.isFeatureEnabled(survey.internal_targeting_flag_key)
-            : true
-
-        if (!internalTargetingFlagCheck) {
-            renderReason.disabledReason = `internal targeting feature flag ${survey.internal_targeting_flag_key} is false`
-            return renderReason
-        }
-
-        renderReason.visible = true
-        return renderReason
+        // Translate internal eligibility result to public SurveyRenderReason format
+        return { visible: eligibility.eligible, disabledReason: eligibility.reason }
     }
 
     public renderSurvey = (survey: Survey, selector: Element): void => {

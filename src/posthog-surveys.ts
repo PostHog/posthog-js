@@ -249,53 +249,24 @@ export class PostHogSurveys {
         }
     }
 
-    private isSurveyFeatureFlagEnabled(flagKey: string | null) {
+    private _isSurveyFeatureFlagEnabled(flagKey: string | null) {
         if (!flagKey) {
             return true
         }
         return !!this.instance.featureFlags.isFeatureEnabled(flagKey)
     }
 
-    private isSurveyConditionMatched(survey: Survey): boolean {
+    private _isSurveyConditionMatched(survey: Survey): boolean {
         if (!survey.conditions) {
             return true
         }
         return doesSurveyUrlMatch(survey) && doesSurveyDeviceTypesMatch(survey) && doesSurveyMatchSelector(survey)
     }
 
-    /**
-     * 'Link feature flag' field in the survey form. If the feature flag is enabled, this will return true.
-     * @param survey
-     */
-    private isSurveyLinkedFlagEnabled(survey: Survey): boolean {
-        return this.isSurveyFeatureFlagEnabled(survey.linked_flag_key)
-    }
-
-    /**
-     * 'Properties' field in the survey form. Creates a special feature flag that can be used to target
-     * users based on properties, which are defined in the Survey.
-     * @param survey
-     */
-    private isSurveyTargetingFlagEnabled(survey: Survey): boolean {
-        return this.isSurveyFeatureFlagEnabled(survey.targeting_flag_key)
-    }
-
-    /**
-     * Each survey has a unique internal targeting feature flag, which checks if the survey has been shown to
-     * a user and if they interacted with it (either by completing it or dismissing it).
-     * @param survey
-     */
-    private isSurveyInternalTargetingFlagEnabled(survey: Survey): boolean {
-        return this.isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key)
-    }
-
-    /**
-     * Some surveys can be answered multiple times. This methods checks if the survey was already answered
-     * OR if the survey can be repeated.
-     * @param survey
-     */
-    private isInternalFlagEnabledOrCanActivateRepeatedly(survey: Survey): boolean {
-        return this._canActivateRepeatedly(survey) || this.isSurveyInternalTargetingFlagEnabled(survey)
+    private _internalFlagCheckSatisfied(survey: Survey): boolean {
+        return (
+            this._canActivateRepeatedly(survey) || this._isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key)
+        )
     }
 
     /**
@@ -303,8 +274,9 @@ export class PostHogSurveys {
      * and if so, it checks if the survey has been activated.
      * @param survey
      */
-    private hasActionOrEventTriggeredSurvey(survey: Survey): boolean {
+    private _hasActionOrEventTriggeredSurvey(survey: Survey): boolean {
         if (!doesSurveyActivateByEvent(survey) && !doesSurveyActivateByAction(survey)) {
+            // If survey doesn't depend on events/actions, it's considered "triggered" by default
             return true
         }
         const surveysActivatedByEventsOrActions: string[] | undefined = this._surveyEventReceiver?.getSurveys()
@@ -313,19 +285,17 @@ export class PostHogSurveys {
 
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false) {
         this.getSurveys((surveys) => {
-            const activeSurveys = surveys.filter((survey) => isSurveyRunning(survey))
-
-            const conditionMatchedSurveys = activeSurveys.filter((survey) => this.isSurveyConditionMatched(survey))
-
-            const targetingMatchedSurveys = conditionMatchedSurveys.filter((survey) => {
+            const targetingMatchedSurveys = surveys.filter((survey) => {
+                const eligibility = this.checkSurveyEligibility(survey.id)
                 return (
-                    this.canRenderSuveyReason(survey).visible &&
-                    this.hasActionOrEventTriggeredSurvey(survey) &&
+                    eligibility.eligible &&
+                    this._isSurveyConditionMatched(survey) &&
+                    this._hasActionOrEventTriggeredSurvey(survey) &&
                     this.checkFlags(survey)
                 )
             })
 
-            return callback(targetingMatchedSurveys)
+            callback(targetingMatchedSurveys)
         }, forceReload)
     }
 
@@ -359,40 +329,42 @@ export class PostHogSurveys {
         return survey
     }
 
-    private canRenderSuveyReason(survey: Survey): SurveyRenderReason {
-        const renderReason: SurveyRenderReason = { visible: true }
+    /**
+     * Internal check for survey eligibility based on flags and running status.
+     * This is used by both getActiveMatchingSurveys and the public canRenderSurvey.
+     */
+    checkSurveyEligibility(surveyId: string): { eligible: boolean; reason?: string } {
+        const survey = typeof surveyId === 'string' ? this.getSurveyById(surveyId) : surveyId
+        if (!survey) {
+            return { eligible: false, reason: 'Survey not found' }
+        }
+        const eligibility = { eligible: true, reason: undefined as string | undefined }
 
         if (!isSurveyRunning(survey)) {
-            renderReason.visible = false
-            renderReason.disabledReason = `Survey is not running. It was completed on ${survey.end_date}`
-            return renderReason
+            eligibility.eligible = false
+            eligibility.reason = `Survey is not running. It was completed on ${survey.end_date}`
+            return eligibility
         }
 
-        if (!this.isSurveyLinkedFlagEnabled(survey)) {
-            renderReason.visible = false
-            renderReason.disabledReason = `Survey linked feature flag is not enabled`
-            return renderReason
+        if (!this._isSurveyFeatureFlagEnabled(survey.linked_flag_key)) {
+            eligibility.eligible = false
+            eligibility.reason = `Survey linked feature flag is not enabled`
+            return eligibility
         }
 
-        if (!this.isSurveyTargetingFlagEnabled(survey)) {
-            renderReason.visible = false
-            renderReason.disabledReason = `Survey targeting feature flag is not enabled`
-            return renderReason
+        if (!this._isSurveyFeatureFlagEnabled(survey.targeting_flag_key)) {
+            eligibility.eligible = false
+            eligibility.reason = `Survey targeting feature flag is not enabled`
+            return eligibility
         }
 
-        if (!this.isSurveyInternalTargetingFlagEnabled(survey)) {
-            if (this.isInternalFlagEnabledOrCanActivateRepeatedly(survey)) {
-                renderReason.visible = true
-                renderReason.disabledReason =
-                    'Survey was already answered (dismissed or completed), but it can activate repeatedly'
-                return renderReason
-            }
-            renderReason.visible = false
-            renderReason.disabledReason = 'Internal targeting flag is not enabled'
-            return renderReason
+        if (!this._internalFlagCheckSatisfied(survey)) {
+            eligibility.eligible = false
+            eligibility.reason = 'Survey internal targeting flag is not enabled and survey cannot activate repeatedly'
+            return eligibility
         }
 
-        return renderReason
+        return eligibility
     }
 
     canRenderSurvey(surveyId: string): SurveyRenderReason {
@@ -400,30 +372,24 @@ export class PostHogSurveys {
             logger.warn('init was not called')
             return { visible: false, disabledReason: 'SDK is not enabled or survey functionality is not yet loaded' }
         }
-        const survey = this.getSurveyById(surveyId)
-        if (!survey) {
-            return { visible: false, disabledReason: 'Survey not found' }
-        }
-        return this.canRenderSuveyReason(survey)
+        const eligibility = this.checkSurveyEligibility(surveyId)
+
+        // Translate internal eligibility result to public SurveyRenderReason format
+        return { visible: eligibility.eligible, disabledReason: eligibility.reason }
     }
 
     canRenderSurveyAsync(surveyId: string, forceReload: boolean): Promise<SurveyRenderReason> {
-        if (isNullish(this._surveyManager)) {
-            logger.warn('init was not called')
-            return Promise.resolve({
-                visible: false,
-                disabledReason: 'SDK is not enabled or survey functionality is not yet loaded',
-            })
-        }
+        // Ensure surveys are loaded before checking
         // Using Promise to wrap the callback-based getSurveys method
         // eslint-disable-next-line compat/compat
         return new Promise<SurveyRenderReason>((resolve) => {
             this.getSurveys((surveys) => {
-                const survey = surveys.filter((x) => x.id === surveyId)[0]
-                if (survey) {
-                    resolve({ ...this._surveyManager.canRenderSurvey(survey) })
-                } else {
+                const survey = surveys.find((x) => x.id === surveyId) ?? null
+                if (!survey) {
                     resolve({ visible: false, disabledReason: 'Survey not found' })
+                } else {
+                    const eligibility = this.checkSurveyEligibility(surveyId)
+                    resolve({ visible: eligibility.eligible, disabledReason: eligibility.reason })
                 }
             }, forceReload)
         })
