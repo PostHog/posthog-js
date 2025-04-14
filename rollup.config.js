@@ -55,13 +55,6 @@ const plugins = (es5) => [
             ecma: es5 ? 5 : 6,
         },
     }),
-    visualizer((outputOptions) => {
-        const fileName = path.join('./stats/', path.basename(outputOptions.file) + '.stats.html')
-        return {
-            filename: fileName,
-            gzipSize: true,
-        }
-    }), // should always be last
 ]
 
 const entrypoints = fs.readdirSync('./src/entrypoints')
@@ -106,7 +99,7 @@ const entrypointTargets = entrypoints.map((file) => {
                 ...(format === 'cjs' ? { exports: 'auto' } : {}),
             },
         ],
-        plugins: [...pluginsForThisFile, visualizer({ filename: `bundle-stats-${fileName}.html` })],
+        plugins: [...pluginsForThisFile, visualizer({ filename: `bundle-stats-${fileName}.html`, gzipSize: true })],
     }
 })
 
