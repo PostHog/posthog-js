@@ -350,6 +350,28 @@ export class PostHogSurveys {
         return renderReason
     }
 
+    canRenderSurveyAsync(surveyId: string, forceReload: boolean): Promise<SurveyRenderReason> {
+        if (isNullish(this._surveyManager)) {
+            logger.warn('init was not called')
+            return Promise.resolve({
+                visible: false,
+                disabledReason: 'SDK is not enabled or survey functionality is not yet loaded',
+            })
+        }
+        // Using Promise to wrap the callback-based getSurveys method
+        // eslint-disable-next-line compat/compat
+        return new Promise<SurveyRenderReason>((resolve) => {
+            this.getSurveys((surveys) => {
+                const survey = surveys.filter((x) => x.id === surveyId)[0]
+                if (survey) {
+                    resolve({ ...this._surveyManager.canRenderSurvey(survey) })
+                } else {
+                    resolve({ visible: false, disabledReason: 'Survey not found' })
+                }
+            }, forceReload)
+        })
+    }
+
     renderSurvey(surveyId: string, selector: string) {
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')

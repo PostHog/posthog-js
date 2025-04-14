@@ -1370,9 +1370,26 @@ export class PostHog {
         this.surveys.renderSurvey(surveyId, selector)
     }
 
-    /** Checks the feature flags associated with this Survey to see if the survey can be rendered. */
+    /**
+     * Checks the feature flags associated with this Survey to see if the survey can be rendered.
+     *
+     * This method is deprecated because it's synchronous and won't return the correct result if surveys are not loaded.
+     * @deprecated Use `canRenderSurveyAsync` instead.
+     * @param surveyId The ID of the survey to check.
+     * @returns A SurveyRenderReason object indicating if the survey can be rendered.
+     */
     canRenderSurvey(surveyId: string): SurveyRenderReason | null {
         return this.surveys.canRenderSurvey(surveyId)
+    }
+
+    /**
+     * Checks the feature flags associated with this Survey to see if the survey can be rendered.
+     * @param surveyId The ID of the survey to check.
+     * @param forceReload If true, the survey will be reloaded from the server, Default: false
+     * @returns A SurveyRenderReason object indicating if the survey can be rendered.
+     */
+    canRenderSurveyAsync(surveyId: string, forceReload = false): Promise<SurveyRenderReason> {
+        return this.surveys.canRenderSurveyAsync(surveyId, forceReload)
     }
 
     /**
