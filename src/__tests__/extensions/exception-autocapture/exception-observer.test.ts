@@ -68,7 +68,7 @@ describe('Exception Observer', () => {
     })
 
     afterEach(() => {
-        exceptionObserver['stopCapturing']()
+        exceptionObserver['_stopCapturing']()
     })
 
     describe('when enabled remotely', () => {
@@ -85,7 +85,7 @@ describe('Exception Observer', () => {
         })
 
         it('should remove instrument handlers when stopped', () => {
-            exceptionObserver['stopCapturing']()
+            exceptionObserver['_stopCapturing']()
             expectNoHandlers()
         })
 
@@ -217,13 +217,13 @@ describe('Exception Observer', () => {
         })
 
         it('should reinstate original onerror handler if one was present when wrapped', () => {
-            exceptionObserver['stopCapturing']()
+            exceptionObserver['_stopCapturing']()
 
             expect(window!.onerror).toBe(originalOnError)
         })
 
         it('should reinstate original onunhandledrejection handler if one was present when wrapped', () => {
-            exceptionObserver['stopCapturing']()
+            exceptionObserver['_stopCapturing']()
 
             expect(window!.onunhandledrejection).toBe(originalOnUnhandledRejection)
         })
@@ -233,7 +233,7 @@ describe('Exception Observer', () => {
         it('cannot be started', () => {
             expect(exceptionObserver.isEnabled).toBe(false)
             expectNoHandlers()
-            exceptionObserver['startCapturing']()
+            exceptionObserver['_startCapturing']()
             expectNoHandlers()
         })
     })
@@ -246,7 +246,7 @@ describe('Exception Observer', () => {
         it('cannot be started', () => {
             expect(exceptionObserver.isEnabled).toBe(false)
             expectNoHandlers()
-            exceptionObserver['startCapturing']()
+            exceptionObserver['_startCapturing']()
             expectNoHandlers()
         })
     })

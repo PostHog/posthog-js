@@ -58,7 +58,7 @@ export class RetryQueue {
         }
     }
 
-    get queueLength() {
+    get length() {
         return this._queue.length
     }
 
