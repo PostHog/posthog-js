@@ -117,6 +117,11 @@ const plugins = (es5) => [
                           'getActiveMatchingSurveys',
                           'captureException',
                           'posthog',
+                          'version',
+
+                          // possibly used by naughty users - we should decide if we want make these part of the public API, but be cautious for now
+                          '_isIdentified',
+                          '_is_bot',
 
                           // URL parameters
                           '__posthog_debug',
