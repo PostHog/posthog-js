@@ -54,55 +54,57 @@ const plugins = (es5) => [
         compress: {
             ecma: es5 ? 5 : 6,
         },
-        mangle: {
-            // Note:
-            // PROPERTY MANGLING CAN BREAK YOUR CODE
-            // But we use it anyway because it's incredible for bundle size, you just need to develop with it in mind.
-            // Any properties that start with _ will be mangled, which can be a problem if anything with that pattern is
-            // part of the public interface, or if any API responses we use matches that regex.
-            // Fix specific instances of this by adding the property to the reserved list.
-            properties: {
-                regex: /^_(?!_)/, // only mangle properties that start with a single _
-                // list any exceptions that shouldn't be mangled, and please add an explanation:
-                reserved: [
-                    // referenced in snippet, MUST be preserved
-                    '_i',
-                    '__SV',
-                    // part of setup/teardown code, preserve these out of caution
-                    '_init',
-                    '_dom_loaded',
-                    '_execute_array',
-                    '_handle_unload',
-                    // playwright uses these
-                    '_forceAllowLocalhostNetworkCapture',
-                    '_is_bot',
-                    '__ph_loaded',
-                    // set on global window object (these all use __ so are not mangled anyway BUT be abundantly cautious)
-                    '__POSTHOG_INSTRUMENTED__',
-                    '__PosthogExtensions__',
-                    '__posthog_wrapped__',
-                    // part of the public API (doesn't start with _ so are not mangled anyway BUT be abundantly cautious)
-                    'capture',
-                    'identify',
-                    'alias',
-                    'set',
-                    'set_once',
-                    'set_config',
-                    'register',
-                    'register_once',
-                    'unregister',
-                    'opt_out_capturing',
-                    'has_opted_out_capturing',
-                    'opt_in_capturing',
-                    'reset',
-                    'isFeatureEnabled',
-                    'onFeatureFlags',
-                    'getSurveys',
-                    'getActiveMatchingSurveys',
-                    'captureException',
-                ],
-            },
-        },
+        mangle: es5
+            ? false
+            : {
+                  // Note:
+                  // PROPERTY MANGLING CAN BREAK YOUR CODE
+                  // But we use it anyway because it's incredible for bundle size, you just need to develop with it in mind.
+                  // Any properties that start with _ will be mangled, which can be a problem if anything with that pattern is
+                  // part of the public interface, or if any API responses we use matches that regex.
+                  // Fix specific instances of this by adding the property to the reserved list.
+                  properties: {
+                      regex: /^_(?!_)/, // only mangle properties that start with a single _
+                      // list any exceptions that shouldn't be mangled, and please add an explanation:
+                      reserved: [
+                          // referenced in snippet, MUST be preserved
+                          '_i',
+                          '__SV',
+                          // part of setup/teardown code, preserve these out of caution
+                          '_init',
+                          '_dom_loaded',
+                          '_execute_array',
+                          '_handle_unload',
+                          // playwright uses these
+                          '_forceAllowLocalhostNetworkCapture',
+                          '_is_bot',
+                          '__ph_loaded',
+                          // set on global window object (these all use __ so are not mangled anyway BUT be abundantly cautious)
+                          '__POSTHOG_INSTRUMENTED__',
+                          '__PosthogExtensions__',
+                          '__posthog_wrapped__',
+                          // part of the public API (doesn't start with _ so are not mangled anyway BUT be abundantly cautious)
+                          'capture',
+                          'identify',
+                          'alias',
+                          'set',
+                          'set_once',
+                          'set_config',
+                          'register',
+                          'register_once',
+                          'unregister',
+                          'opt_out_capturing',
+                          'has_opted_out_capturing',
+                          'opt_in_capturing',
+                          'reset',
+                          'isFeatureEnabled',
+                          'onFeatureFlags',
+                          'getSurveys',
+                          'getActiveMatchingSurveys',
+                          'captureException',
+                      ],
+                  },
+              },
     }),
 ]
 
