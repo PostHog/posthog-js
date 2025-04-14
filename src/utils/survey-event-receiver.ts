@@ -111,7 +111,7 @@ export class SurveyEventReceiver {
 
     onEvent(event: string, eventPayload?: CaptureResult): void {
         const existingActivatedSurveys: string[] = this._instance?.persistence?.props[SURVEYS_ACTIVATED] || []
-        if (SURVEY_SHOWN_EVENT_NAME == event && eventPayload && existingActivatedSurveys.length > 0) {
+        if (SURVEY_SHOWN_EVENT_NAME === event && eventPayload && existingActivatedSurveys.length > 0) {
             // remove survey that from activatedSurveys here.
             const surveyId = eventPayload?.properties?.$survey_id
             if (surveyId) {
