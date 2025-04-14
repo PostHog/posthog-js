@@ -59,6 +59,7 @@ if (typeof window !== 'undefined') {
             ignoreClass: 'ph-ignore-image',
         },
         debug: true,
+        capture_pageview: 'history_change',
         disable_web_experiments: false,
         scroll_root_selector: ['#scroll_element', 'html'],
         persistence: cookieConsentGiven() ? 'localStorage+cookie' : 'memory',
