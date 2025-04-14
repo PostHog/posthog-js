@@ -424,7 +424,7 @@ export class PostHogFeatureFlags {
 
                 this._requestInFlight = false
 
-                // NB: this block is only reached if this.instance.config.__preview_remote_config is false
+                // NB: this block is only reached if this._instance.config.__preview_remote_config is false
                 if (!this._decideCalled) {
                     this._decideCalled = true
                     this._instance._onRemoteConfig(response.json ?? {})
