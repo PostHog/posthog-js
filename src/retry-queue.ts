@@ -58,6 +58,10 @@ export class RetryQueue {
         }
     }
 
+    get queueLength() {
+        return this._queue.length
+    }
+
     retriableRequest({ retriesPerformedSoFar, ...options }: RetriableRequestWithOptions): void {
         if (isNumber(retriesPerformedSoFar) && retriesPerformedSoFar > 0) {
             options.url = extendURLParams(options.url, { retry_count: retriesPerformedSoFar })

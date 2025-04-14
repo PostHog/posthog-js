@@ -17,7 +17,7 @@ export enum ConsentStatus {
  * ConsentManager provides tools for managing user consent as configured by the application.
  */
 export class ConsentManager {
-    private _storage?: PersistentStore
+    private _persistentStore?: PersistentStore
 
     constructor(private _instance: PostHog) {}
 
@@ -69,13 +69,13 @@ export class ConsentManager {
     }
 
     private get _storage() {
-        if (!this._storage) {
+        if (!this._persistentStore) {
             const persistenceType = this._config.opt_out_capturing_persistence_type
-            this._storage = persistenceType === 'localStorage' ? localStore : cookieStore
+            this._persistentStore = persistenceType === 'localStorage' ? localStore : cookieStore
             const otherStorage = persistenceType === 'localStorage' ? cookieStore : localStore
 
             if (otherStorage.get(this._storageKey)) {
-                if (!this._storage.get(this._storageKey)) {
+                if (!this._persistentStore.get(this._storageKey)) {
                     // This indicates we have moved to a new storage format so we migrate the value over
                     this.optInOut(otherStorage.get(this._storageKey) === '1')
                 }
@@ -84,7 +84,7 @@ export class ConsentManager {
             }
         }
 
-        return this._storage
+        return this._persistentStore
     }
 
     private _getDnt(): boolean {
