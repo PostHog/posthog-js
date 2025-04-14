@@ -32,19 +32,19 @@ export const webExperimentUrlValidationMap: Record<
 export class WebExperiments {
     private _flagToExperiments?: Map<string, WebExperiment>
 
-    constructor(private instance: PostHog) {
-        this.instance.onFeatureFlags((flags: string[]) => {
+    constructor(private _instance: PostHog) {
+        this._instance.onFeatureFlags((flags: string[]) => {
             this.onFeatureFlags(flags)
         })
     }
 
     onFeatureFlags(flags: string[]) {
         if (this._is_bot()) {
-            WebExperiments.logInfo('Refusing to render web experiment since the viewer is a likely bot')
+            WebExperiments._logInfo('Refusing to render web experiment since the viewer is a likely bot')
             return
         }
 
-        if (this.instance.config.disable_web_experiments) {
+        if (this._instance.config.disable_web_experiments) {
             return
         }
 
@@ -56,13 +56,13 @@ export class WebExperiments {
             return
         }
 
-        WebExperiments.logInfo('applying feature flags', flags)
+        WebExperiments._logInfo('applying feature flags', flags)
         flags.forEach((flag) => {
             if (this._flagToExperiments && this._flagToExperiments?.has(flag)) {
-                const selectedVariant = this.instance.getFeatureFlag(flag) as unknown as string
+                const selectedVariant = this._instance.getFeatureFlag(flag) as unknown as string
                 const webExperiment = this._flagToExperiments?.get(flag)
                 if (selectedVariant && webExperiment?.variants[selectedVariant]) {
-                    this.applyTransforms(
+                    this._applyTransforms(
                         webExperiment.name,
                         selectedVariant,
                         webExperiment.variants[selectedVariant].transforms
@@ -78,10 +78,10 @@ export class WebExperiments {
             const experimentID = getQueryParam(location?.search, '__experiment_id')
             const variant = getQueryParam(location?.search, '__experiment_variant')
             if (experimentID && variant) {
-                WebExperiments.logInfo(`previewing web experiments ${experimentID} && ${variant}`)
+                WebExperiments._logInfo(`previewing web experiments ${experimentID} && ${variant}`)
                 this.getWebExperiments(
                     (webExperiments) => {
-                        this.showPreviewWebExperiment(parseInt(experimentID), variant, webExperiments)
+                        this._showPreviewWebExperiment(parseInt(experimentID), variant, webExperiments)
                     },
                     false,
                     true
@@ -91,7 +91,7 @@ export class WebExperiments {
     }
 
     loadIfEnabled() {
-        if (this.instance.config.disable_web_experiments) {
+        if (this._instance.config.disable_web_experiments) {
             return
         }
 
@@ -100,13 +100,13 @@ export class WebExperiments {
 
     public getWebExperimentsAndEvaluateDisplayLogic = (forceReload: boolean = false): void => {
         this.getWebExperiments((webExperiments) => {
-            WebExperiments.logInfo(`retrieved web experiments from the server`)
+            WebExperiments._logInfo(`retrieved web experiments from the server`)
             this._flagToExperiments = new Map<string, WebExperiment>()
 
             webExperiments.forEach((webExperiment) => {
                 if (webExperiment.feature_flag_key) {
                     if (this._flagToExperiments) {
-                        WebExperiments.logInfo(
+                        WebExperiments._logInfo(
                             `setting flag key `,
                             webExperiment.feature_flag_key,
                             ` to web experiment `,
@@ -115,9 +115,9 @@ export class WebExperiments {
                         this._flagToExperiments?.set(webExperiment.feature_flag_key, webExperiment)
                     }
 
-                    const selectedVariant = this.instance.getFeatureFlag(webExperiment.feature_flag_key)
+                    const selectedVariant = this._instance.getFeatureFlag(webExperiment.feature_flag_key)
                     if (isString(selectedVariant) && webExperiment.variants[selectedVariant]) {
-                        this.applyTransforms(
+                        this._applyTransforms(
                             webExperiment.name,
                             selectedVariant,
                             webExperiment.variants[selectedVariant].transforms
@@ -126,9 +126,9 @@ export class WebExperiments {
                 } else if (webExperiment.variants) {
                     for (const variant in webExperiment.variants) {
                         const testVariant = webExperiment.variants[variant]
-                        const matchTest = WebExperiments.matchesTestVariant(testVariant)
+                        const matchTest = WebExperiments._matchesTestVariant(testVariant)
                         if (matchTest) {
-                            this.applyTransforms(webExperiment.name, variant, testVariant.transforms)
+                            this._applyTransforms(webExperiment.name, variant, testVariant.transforms)
                         }
                     }
                 }
@@ -137,19 +137,19 @@ export class WebExperiments {
     }
 
     public getWebExperiments(callback: WebExperimentsCallback, forceReload: boolean, previewing?: boolean) {
-        if (this.instance.config.disable_web_experiments && !previewing) {
+        if (this._instance.config.disable_web_experiments && !previewing) {
             return callback([])
         }
 
-        const existingWebExperiments = this.instance.get_property(WEB_EXPERIMENTS)
+        const existingWebExperiments = this._instance.get_property(WEB_EXPERIMENTS)
         if (existingWebExperiments && !forceReload) {
             return callback(existingWebExperiments)
         }
 
-        this.instance._send_request({
-            url: this.instance.requestRouter.endpointFor(
+        this._instance._send_request({
+            url: this._instance.requestRouter.endpointFor(
                 'api',
-                `/api/web_experiments/?token=${this.instance.config.token}`
+                `/api/web_experiments/?token=${this._instance.config.token}`
             ),
             method: 'GET',
             callback: (response) => {
@@ -162,27 +162,27 @@ export class WebExperiments {
         })
     }
 
-    private showPreviewWebExperiment(experimentID: number, variant: string, webExperiments: WebExperiment[]) {
+    private _showPreviewWebExperiment(experimentID: number, variant: string, webExperiments: WebExperiment[]) {
         const previewExperiments = webExperiments.filter((exp) => exp.id === experimentID)
         if (previewExperiments && previewExperiments.length > 0) {
-            WebExperiments.logInfo(
+            WebExperiments._logInfo(
                 `Previewing web experiment [${previewExperiments[0].name}] with variant [${variant}]`
             )
-            this.applyTransforms(
+            this._applyTransforms(
                 previewExperiments[0].name,
                 variant,
                 previewExperiments[0].variants[variant].transforms
             )
         }
     }
-    private static matchesTestVariant(testVariant: WebExperimentVariant) {
+    private static _matchesTestVariant(testVariant: WebExperimentVariant) {
         if (isNullish(testVariant.conditions)) {
             return false
         }
-        return WebExperiments.matchUrlConditions(testVariant) && WebExperiments.matchUTMConditions(testVariant)
+        return WebExperiments._matchUrlConditions(testVariant) && WebExperiments._matchUTMConditions(testVariant)
     }
 
-    private static matchUrlConditions(testVariant: WebExperimentVariant): boolean {
+    private static _matchUrlConditions(testVariant: WebExperimentVariant): boolean {
         if (isNullish(testVariant.conditions) || isNullish(testVariant.conditions?.url)) {
             return true
         }
@@ -205,7 +205,7 @@ export class WebExperiments {
         return window?.location
     }
 
-    private static matchUTMConditions(testVariant: WebExperimentVariant): boolean {
+    private static _matchUTMConditions(testVariant: WebExperimentVariant): boolean {
         if (isNullish(testVariant.conditions) || isNullish(testVariant.conditions?.utm)) {
             return true
         }
@@ -234,24 +234,24 @@ export class WebExperiments {
         return false
     }
 
-    private static logInfo(msg: string, ...args: any[]) {
+    private static _logInfo(msg: string, ...args: any[]) {
         logger.info(`[WebExperiments] ${msg}`, args)
     }
 
-    private applyTransforms(experiment: string, variant: string, transforms: WebExperimentTransform[]) {
+    private _applyTransforms(experiment: string, variant: string, transforms: WebExperimentTransform[]) {
         if (this._is_bot()) {
-            WebExperiments.logInfo('Refusing to render web experiment since the viewer is a likely bot')
+            WebExperiments._logInfo('Refusing to render web experiment since the viewer is a likely bot')
             return
         }
 
         if (variant === 'control') {
-            WebExperiments.logInfo('Control variants leave the page unmodified.')
+            WebExperiments._logInfo('Control variants leave the page unmodified.')
             return
         }
 
         transforms.forEach((transform) => {
             if (transform.selector) {
-                WebExperiments.logInfo(
+                WebExperiments._logInfo(
                     `applying transform of variant ${variant} for experiment ${experiment} `,
                     transform
                 )
@@ -273,8 +273,8 @@ export class WebExperiments {
     }
 
     _is_bot(): boolean | undefined {
-        if (navigator && this.instance) {
-            return isLikelyBot(navigator, this.instance.config.custom_blocked_useragents)
+        if (navigator && this._instance) {
+            return isLikelyBot(navigator, this._instance.config.custom_blocked_useragents)
         } else {
             return undefined
         }

@@ -18,16 +18,16 @@ export interface ScrollContext {
 
 // This class is responsible for tracking scroll events and maintaining the scroll context
 export class ScrollManager {
-    private context: ScrollContext | undefined
+    private _context: ScrollContext | undefined
 
-    constructor(private instance: PostHog) {}
+    constructor(private _instance: PostHog) {}
 
     getContext(): ScrollContext | undefined {
-        return this.context
+        return this._context
     }
 
     resetContext(): ScrollContext | undefined {
-        const ctx = this.context
+        const ctx = this._context
 
         // update the scroll properties for the new page, but wait until the next tick
         // of the event loop
@@ -37,8 +37,8 @@ export class ScrollManager {
     }
 
     private _updateScrollData = () => {
-        if (!this.context) {
-            this.context = {}
+        if (!this._context) {
+            this._context = {}
         }
 
         const el = this.scrollElement()
@@ -48,13 +48,13 @@ export class ScrollManager {
         const contentY = scrollY + (el?.clientHeight || 0)
         const contentHeight = el?.scrollHeight || 0
 
-        this.context.lastScrollY = Math.ceil(scrollY)
-        this.context.maxScrollY = Math.max(scrollY, this.context.maxScrollY ?? 0)
-        this.context.maxScrollHeight = Math.max(scrollHeight, this.context.maxScrollHeight ?? 0)
+        this._context.lastScrollY = Math.ceil(scrollY)
+        this._context.maxScrollY = Math.max(scrollY, this._context.maxScrollY ?? 0)
+        this._context.maxScrollHeight = Math.max(scrollHeight, this._context.maxScrollHeight ?? 0)
 
-        this.context.lastContentY = contentY
-        this.context.maxContentY = Math.max(contentY, this.context.maxContentY ?? 0)
-        this.context.maxContentHeight = Math.max(contentHeight, this.context.maxContentHeight ?? 0)
+        this._context.lastContentY = contentY
+        this._context.maxContentY = Math.max(contentY, this._context.maxContentY ?? 0)
+        this._context.maxContentHeight = Math.max(contentHeight, this._context.maxContentHeight ?? 0)
     }
 
     // `capture: true` is required to get scroll events for other scrollable elements
@@ -67,10 +67,10 @@ export class ScrollManager {
     }
 
     public scrollElement(): Element | undefined {
-        if (this.instance.config.scroll_root_selector) {
-            const selectors = isArray(this.instance.config.scroll_root_selector)
-                ? this.instance.config.scroll_root_selector
-                : [this.instance.config.scroll_root_selector]
+        if (this._instance.config.scroll_root_selector) {
+            const selectors = isArray(this._instance.config.scroll_root_selector)
+                ? this._instance.config.scroll_root_selector
+                : [this._instance.config.scroll_root_selector]
             for (const selector of selectors) {
                 const element = window?.document.querySelector(selector)
                 if (element) {
@@ -84,7 +84,7 @@ export class ScrollManager {
     }
 
     public scrollY(): number {
-        if (this.instance.config.scroll_root_selector) {
+        if (this._instance.config.scroll_root_selector) {
             const element = this.scrollElement()
             return (element && element.scrollTop) || 0
         } else {
@@ -93,7 +93,7 @@ export class ScrollManager {
     }
 
     public scrollX(): number {
-        if (this.instance.config.scroll_root_selector) {
+        if (this._instance.config.scroll_root_selector) {
             const element = this.scrollElement()
             return (element && element.scrollLeft) || 0
         } else {

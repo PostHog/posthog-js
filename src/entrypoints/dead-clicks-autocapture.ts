@@ -41,7 +41,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         __onCapture: defaultOnCapture,
     })
 
-    private asRequiredConfig(providedConfig?: DeadClicksAutoCaptureConfig): Required<DeadClicksAutoCaptureConfig> {
+    private _asRequiredConfig(providedConfig?: DeadClicksAutoCaptureConfig): Required<DeadClicksAutoCaptureConfig> {
         const defaultConfig = this._defaultConfig(providedConfig?.__onCapture || this._captureDeadClick.bind(this))
         return {
             element_attribute_ignorelist:
@@ -58,7 +58,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         readonly instance: PostHog,
         config?: DeadClicksAutoCaptureConfig
     ) {
-        this._config = this.asRequiredConfig(config)
+        this._config = this._asRequiredConfig(config)
         this._onCapture = this._config.__onCapture
     }
 
@@ -73,7 +73,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         if (!this._mutationObserver) {
             const NativeMutationObserver = getNativeMutationObserverImplementation(assignableWindow)
             this._mutationObserver = new NativeMutationObserver((mutations) => {
-                this.onMutation(mutations)
+                this._onMutation(mutations)
             })
             this._mutationObserver.observe(observerTarget, {
                 attributes: true,
@@ -93,7 +93,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    private onMutation(_mutations: MutationRecord[]): void {
+    private _onMutation(_mutations: MutationRecord[]): void {
         // we don't actually care about the content of the mutations, right now
         this._lastMutation = Date.now()
     }

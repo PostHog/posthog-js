@@ -128,9 +128,9 @@ export class UUID {
 
 /** Encapsulates the monotonic counter state. */
 class V7Generator {
-    private timestamp = 0
-    private counter = 0
-    private readonly random = new DefaultRandom()
+    private _timestamp = 0
+    private _counter = 0
+    private readonly _random = new DefaultRandom()
 
     /**
      * Generates a new UUIDv7 object from the current timestamp, or resets the
@@ -148,7 +148,7 @@ class V7Generator {
             return value
         } else {
             // reset state and resume
-            this.timestamp = 0
+            this._timestamp = 0
             const valueAfterReset = this.generateOrAbort()
             if (isUndefined(valueAfterReset)) {
                 throw new Error('Could not generate UUID after timestamp reset')
@@ -171,16 +171,16 @@ class V7Generator {
         const ROLLBACK_ALLOWANCE = 10_000 // 10 seconds
 
         const ts = Date.now()
-        if (ts > this.timestamp) {
-            this.timestamp = ts
-            this.resetCounter()
-        } else if (ts + ROLLBACK_ALLOWANCE > this.timestamp) {
+        if (ts > this._timestamp) {
+            this._timestamp = ts
+            this._resetCounter()
+        } else if (ts + ROLLBACK_ALLOWANCE > this._timestamp) {
             // go on with previous timestamp if new one is not much smaller
-            this.counter++
-            if (this.counter > MAX_COUNTER) {
+            this._counter++
+            if (this._counter > MAX_COUNTER) {
                 // increment timestamp at counter overflow
-                this.timestamp++
-                this.resetCounter()
+                this._timestamp++
+                this._resetCounter()
             }
         } else {
             // abort if clock went backwards to unbearable extent
@@ -188,16 +188,16 @@ class V7Generator {
         }
 
         return UUID.fromFieldsV7(
-            this.timestamp,
-            Math.trunc(this.counter / 2 ** 30),
-            this.counter & (2 ** 30 - 1),
-            this.random.nextUint32()
+            this._timestamp,
+            Math.trunc(this._counter / 2 ** 30),
+            this._counter & (2 ** 30 - 1),
+            this._random.nextUint32()
         )
     }
 
     /** Initializes the counter at a 42-bit random integer. */
-    private resetCounter(): void {
-        this.counter = this.random.nextUint32() * 0x400 + (this.random.nextUint32() & 0x3ff)
+    private _resetCounter(): void {
+        this._counter = this._random.nextUint32() * 0x400 + (this._random.nextUint32() & 0x3ff)
     }
 }
 
@@ -229,14 +229,14 @@ if (window && !isUndefined(window.crypto) && crypto.getRandomValues) {
  * environments as well as the waste of time and space for unused values.
  */
 class DefaultRandom {
-    private readonly buffer = new Uint32Array(8)
-    private cursor = Infinity
+    private readonly _buffer = new Uint32Array(8)
+    private _cursor = Infinity
     nextUint32(): number {
-        if (this.cursor >= this.buffer.length) {
-            getRandomValues(this.buffer)
-            this.cursor = 0
+        if (this._cursor >= this._buffer.length) {
+            getRandomValues(this._buffer)
+            this._cursor = 0
         }
-        return this.buffer[this.cursor++]
+        return this._buffer[this._cursor++]
     }
 }
 

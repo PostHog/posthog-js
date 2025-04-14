@@ -19,38 +19,38 @@ export class WebVitalsAutocapture {
     private _enabledServerSide: boolean = false
     private _initialized = false
 
-    private buffer: WebVitalsEventBuffer = { url: undefined, metrics: [], firstMetricTimestamp: undefined }
+    private _buffer: WebVitalsEventBuffer = { url: undefined, metrics: [], firstMetricTimestamp: undefined }
     private _delayedFlushTimer: ReturnType<typeof setTimeout> | undefined
 
-    constructor(private readonly instance: PostHog) {
-        this._enabledServerSide = !!this.instance.persistence?.props[WEB_VITALS_ENABLED_SERVER_SIDE]
+    constructor(private readonly _instance: PostHog) {
+        this._enabledServerSide = !!this._instance.persistence?.props[WEB_VITALS_ENABLED_SERVER_SIDE]
 
         this.startIfEnabled()
     }
 
     public get allowedMetrics(): SupportedWebVitalsMetrics[] {
         const clientConfigMetricAllowList: SupportedWebVitalsMetrics[] | undefined = isObject(
-            this.instance.config.capture_performance
+            this._instance.config.capture_performance
         )
-            ? this.instance.config.capture_performance?.web_vitals_allowed_metrics
+            ? this._instance.config.capture_performance?.web_vitals_allowed_metrics
             : undefined
         return !isUndefined(clientConfigMetricAllowList)
             ? clientConfigMetricAllowList
-            : this.instance.persistence?.props[WEB_VITALS_ALLOWED_METRICS] || ['CLS', 'FCP', 'INP', 'LCP']
+            : this._instance.persistence?.props[WEB_VITALS_ALLOWED_METRICS] || ['CLS', 'FCP', 'INP', 'LCP']
     }
 
     public get flushToCaptureTimeoutMs(): number {
-        const clientConfig: number | undefined = isObject(this.instance.config.capture_performance)
-            ? this.instance.config.capture_performance.web_vitals_delayed_flush_ms
+        const clientConfig: number | undefined = isObject(this._instance.config.capture_performance)
+            ? this._instance.config.capture_performance.web_vitals_delayed_flush_ms
             : undefined
         return clientConfig || DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS
     }
 
     public get _maxAllowedValue(): number {
         const configured =
-            isObject(this.instance.config.capture_performance) &&
-            isNumber(this.instance.config.capture_performance.__web_vitals_max_value)
-                ? this.instance.config.capture_performance.__web_vitals_max_value
+            isObject(this._instance.config.capture_performance) &&
+            isNumber(this._instance.config.capture_performance.__web_vitals_max_value)
+                ? this._instance.config.capture_performance.__web_vitals_max_value
                 : FIFTEEN_MINUTES_IN_MILLIS
         // you can set to 0 to disable the check or any value over ten seconds
         // 1 milli to 1 minute will be set to 15 minutes, cos that would be a silly low maximum
@@ -66,10 +66,10 @@ export class WebVitalsAutocapture {
         }
 
         // Otherwise, check config
-        const clientConfig = isObject(this.instance.config.capture_performance)
-            ? this.instance.config.capture_performance.web_vitals
-            : isBoolean(this.instance.config.capture_performance)
-              ? this.instance.config.capture_performance
+        const clientConfig = isObject(this._instance.config.capture_performance)
+            ? this._instance.config.capture_performance.web_vitals
+            : isBoolean(this._instance.config.capture_performance)
+              ? this._instance.config.capture_performance
               : undefined
         return isBoolean(clientConfig) ? clientConfig : this._enabledServerSide
     }
@@ -77,7 +77,7 @@ export class WebVitalsAutocapture {
     public startIfEnabled(): void {
         if (this.isEnabled && !this._initialized) {
             logger.info('enabled, starting...')
-            this.loadScript(this._startCapturing)
+            this._loadScript(this._startCapturing)
         }
     }
 
@@ -88,12 +88,12 @@ export class WebVitalsAutocapture {
             ? response.capturePerformance.web_vitals_allowed_metrics
             : undefined
 
-        if (this.instance.persistence) {
-            this.instance.persistence.register({
+        if (this._instance.persistence) {
+            this._instance.persistence.register({
                 [WEB_VITALS_ENABLED_SERVER_SIDE]: webVitalsOptIn,
             })
 
-            this.instance.persistence.register({
+            this._instance.persistence.register({
                 [WEB_VITALS_ALLOWED_METRICS]: allowedMetrics,
             })
         }
@@ -103,12 +103,12 @@ export class WebVitalsAutocapture {
         this.startIfEnabled()
     }
 
-    private loadScript(cb: () => void): void {
+    private _loadScript(cb: () => void): void {
         if (assignableWindow.__PosthogExtensions__?.postHogWebVitalsCallbacks) {
             // already loaded
             cb()
         }
-        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'web-vitals', (err) => {
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, 'web-vitals', (err) => {
             if (err) {
                 logger.error('failed to load script', err)
                 return
@@ -128,13 +128,13 @@ export class WebVitalsAutocapture {
 
     private _flushToCapture = () => {
         clearTimeout(this._delayedFlushTimer)
-        if (this.buffer.metrics.length === 0) {
+        if (this._buffer.metrics.length === 0) {
             return
         }
 
-        this.instance.capture(
+        this._instance.capture(
             '$web_vitals',
-            this.buffer.metrics.reduce(
+            this._buffer.metrics.reduce(
                 (acc, metric) => ({
                     ...acc,
                     // the entire event so we can use it in the future e.g. includes google's rating
@@ -144,17 +144,17 @@ export class WebVitalsAutocapture {
                 {}
             )
         )
-        this.buffer = { url: undefined, metrics: [], firstMetricTimestamp: undefined }
+        this._buffer = { url: undefined, metrics: [], firstMetricTimestamp: undefined }
     }
 
     private _addToBuffer = (metric: any) => {
-        const sessionIds = this.instance.sessionManager?.checkAndGetSessionAndWindowId(true)
+        const sessionIds = this._instance.sessionManager?.checkAndGetSessionAndWindowId(true)
         if (isUndefined(sessionIds)) {
             logger.error('Could not read session ID. Dropping metrics!')
             return
         }
 
-        this.buffer = this.buffer || { url: undefined, metrics: [], firstMetricTimestamp: undefined }
+        this._buffer = this._buffer || { url: undefined, metrics: [], firstMetricTimestamp: undefined }
 
         const $currentUrl = this._currentURL()
         if (isUndefined($currentUrl)) {
@@ -173,7 +173,7 @@ export class WebVitalsAutocapture {
             return
         }
 
-        const urlHasChanged = this.buffer.url !== $currentUrl
+        const urlHasChanged = this._buffer.url !== $currentUrl
 
         if (urlHasChanged) {
             // we need to send what we have
@@ -184,13 +184,13 @@ export class WebVitalsAutocapture {
             this._delayedFlushTimer = setTimeout(this._flushToCapture, this.flushToCaptureTimeoutMs)
         }
 
-        if (isUndefined(this.buffer.url)) {
-            this.buffer.url = $currentUrl
+        if (isUndefined(this._buffer.url)) {
+            this._buffer.url = $currentUrl
         }
 
-        this.buffer.firstMetricTimestamp = isUndefined(this.buffer.firstMetricTimestamp)
+        this._buffer.firstMetricTimestamp = isUndefined(this._buffer.firstMetricTimestamp)
             ? Date.now()
-            : this.buffer.firstMetricTimestamp
+            : this._buffer.firstMetricTimestamp
 
         if (metric.attribution && metric.attribution.interactionTargetElement) {
             // we don't want to send the entire element
@@ -200,7 +200,7 @@ export class WebVitalsAutocapture {
             metric.attribution.interactionTargetElement = undefined
         }
 
-        this.buffer.metrics.push({
+        this._buffer.metrics.push({
             ...metric,
             $current_url: $currentUrl,
             $session_id: sessionIds.sessionId,
@@ -208,7 +208,7 @@ export class WebVitalsAutocapture {
             timestamp: Date.now(),
         })
 
-        if (this.buffer.metrics.length === this.allowedMetrics.length) {
+        if (this._buffer.metrics.length === this.allowedMetrics.length) {
             // we have all allowed metrics
             this._flushToCapture()
         }
