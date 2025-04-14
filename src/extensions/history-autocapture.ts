@@ -58,7 +58,7 @@ export class HistoryAutocapture {
                     url?: string | URL | null
                 ): void {
                     ;(originalPushState as History['pushState']).call(this, state, title, url)
-                    self.capturePageview('pushState')
+                    self._capturePageview('pushState')
                 }
             })
         }
@@ -72,7 +72,7 @@ export class HistoryAutocapture {
                     url?: string | URL | null
                 ): void {
                     ;(originalReplaceState as History['replaceState']).call(this, state, title, url)
-                    self.capturePageview('replaceState')
+                    self._capturePageview('replaceState')
                 }
             })
         }
@@ -80,7 +80,7 @@ export class HistoryAutocapture {
         this._setupPopstateListener()
     }
 
-    private capturePageview(navigationType: 'pushState' | 'replaceState' | 'popstate'): void {
+    private _capturePageview(navigationType: 'pushState' | 'replaceState' | 'popstate'): void {
         try {
             const currentPathname = window?.location?.pathname
 
@@ -105,7 +105,7 @@ export class HistoryAutocapture {
         }
 
         const handler = () => {
-            this.capturePageview('popstate')
+            this._capturePageview('popstate')
         }
 
         addEventListener(window, 'popstate', handler)
