@@ -54,17 +54,16 @@ const plugins = (es5) => [
         compress: {
             ecma: es5 ? 5 : 6,
         },
-        mangle: {
-            // Note:
-            // PROPERTY MANGLING CAN BREAK YOUR CODE
-            // But we use it anyway because it's incredible for bundle size, you just need to develop with it in mind.
-            // Any properties that start with _ will be mangled, which can be a problem if anything with that pattern is
-            // part of the public interface, or if any API responses we use matches that regex.
-            // Fix specific instances of this by adding the property to the reserved list.
-            // Don't mangle properties in the es5 build, as it relies on helpers with don't work well with mangling.
-            properties: es5
-                ? false
-                : {
+        mangle: es5
+            ? undefined // Don't mangle properties in the es5 build, as it relies on helpers with don't work well with mangling.
+            : {
+                  // Note:
+                  // PROPERTY MANGLING CAN BREAK YOUR CODE
+                  // But we use it anyway because it's incredible for bundle size, you just need to develop with it in mind.
+                  // Any properties that start with _ will be mangled, which can be a problem if anything with that pattern is
+                  // part of the public interface, or if any API responses we use matches that regex.
+                  // Fix specific instances of this by adding the property to the reserved list.
+                  properties: {
                       regex: /^_(?!_)/, // only mangle properties that start with a single _
                       reserved: [
                           // list any exceptions that shouldn't be mangled, and please add an explanation:
@@ -134,7 +133,7 @@ const plugins = (es5) => [
                           '_classCallCheck',
                       ],
                   },
-        },
+              },
     }),
 ]
 
