@@ -93,9 +93,11 @@ import { WebExperiments } from './web-experiments'
 /*
 SIMPLE STYLE GUIDE:
 
-this.x === public function
-this._x === internal - only use within this file
-this.__x === private - only use within the class
+Use TypeScript accessibility modifiers, e.g. private/protected
+
+If something is not part of the public interface:
+* prefix it with _ to allow mangling
+* prefix it with __ to disable mangling, but signal that it is internal
 
 Globals should be all caps
 */
