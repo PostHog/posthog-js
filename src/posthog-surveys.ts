@@ -286,7 +286,7 @@ export class PostHogSurveys {
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false) {
         this.getSurveys((surveys) => {
             const targetingMatchedSurveys = surveys.filter((survey) => {
-                const eligibility = this.checkSurveyEligibility(survey.id)
+                const eligibility = this.checkSurveyEligibility(survey)
                 return (
                     eligibility.eligible &&
                     this._isSurveyConditionMatched(survey) &&
@@ -333,7 +333,7 @@ export class PostHogSurveys {
      * Internal check for survey eligibility based on flags and running status.
      * This is used by both getActiveMatchingSurveys and the public canRenderSurvey.
      */
-    checkSurveyEligibility(surveyId: string): { eligible: boolean; reason?: string } {
+    checkSurveyEligibility(surveyId: string | Survey): { eligible: boolean; reason?: string } {
         const survey = typeof surveyId === 'string' ? this.getSurveyById(surveyId) : surveyId
         if (!survey) {
             return { eligible: false, reason: 'Survey not found' }
@@ -388,7 +388,7 @@ export class PostHogSurveys {
                 if (!survey) {
                     resolve({ visible: false, disabledReason: 'Survey not found' })
                 } else {
-                    const eligibility = this.checkSurveyEligibility(surveyId)
+                    const eligibility = this.checkSurveyEligibility(survey)
                     resolve({ visible: eligibility.eligible, disabledReason: eligibility.reason })
                 }
             }, forceReload)
