@@ -12,8 +12,8 @@ import { isNullish, isString } from './utils/type-utils'
 import { getQueryParam } from './utils/request-utils'
 import { isMatchingRegex } from './utils/regex-utils'
 import { logger } from './utils/logger'
-import { Info } from './utils/event-utils'
 import { isLikelyBot } from './utils/blocked-uas'
+import { getCampaignParams } from './utils/event-utils'
 
 export const webExperimentUrlValidationMap: Record<
     WebExperimentUrlMatchType,
@@ -209,7 +209,7 @@ export class WebExperiments {
         if (isNullish(testVariant.conditions) || isNullish(testVariant.conditions?.utm)) {
             return true
         }
-        const campaignParams = Info.campaignParams()
+        const campaignParams = getCampaignParams()
         if (campaignParams['utm_source']) {
             // eslint-disable-next-line compat/compat
             const utmCampaignMatched = testVariant.conditions?.utm?.utm_campaign

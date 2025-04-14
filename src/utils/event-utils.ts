@@ -1,4 +1,4 @@
-import { getQueryParam, convertToURL, maskQueryParams } from './request-utils'
+import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
 import { isNull } from './type-utils'
 import { Properties } from '../types'
 import Config from '../config'
@@ -73,261 +73,205 @@ export const EVENT_TO_PERSON_PROPERTIES = [
 
 export const MASKED = '<masked>'
 
-export const Info = {
-    campaignParams: function ({
-        customTrackedParams,
-        maskPersonalDataProperties,
-        customPersonalDataProperties,
-    }: {
-        customTrackedParams?: string[]
-        maskPersonalDataProperties?: boolean
-        customPersonalDataProperties?: string[] | undefined
-    } = {}): Record<string, string> {
-        if (!document) {
-            return {}
-        }
+export function getCampaignParams(
+    customTrackedParams?: string[],
+    maskPersonalDataProperties?: boolean,
+    customPersonalDataProperties?: string[] | undefined
+): Record<string, string> {
+    if (!document) {
+        return {}
+    }
 
-        const paramsToMask = maskPersonalDataProperties
-            ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
-            : []
+    const paramsToMask = maskPersonalDataProperties
+        ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
+        : []
 
-        return this._campaignParamsFromUrl(maskQueryParams(document.URL, paramsToMask, MASKED), customTrackedParams)
-    },
+    return _getCampaignParamsFromUrl(maskQueryParams(document.URL, paramsToMask, MASKED), customTrackedParams)
+}
 
-    _campaignParamsFromUrl: function (url: string, customParams?: string[]): Record<string, string> {
-        const campaign_keywords = CAMPAIGN_PARAMS.concat(customParams || [])
+function _getCampaignParamsFromUrl(url: string, customParams?: string[]): Record<string, string> {
+    const campaign_keywords = CAMPAIGN_PARAMS.concat(customParams || [])
 
-        const params: Record<string, any> = {}
-        each(campaign_keywords, function (kwkey) {
-            const kw = getQueryParam(url, kwkey)
-            params[kwkey] = kw ? kw : null
-        })
+    const params: Record<string, any> = {}
+    each(campaign_keywords, function (kwkey) {
+        const kw = getQueryParam(url, kwkey)
+        params[kwkey] = kw ? kw : null
+    })
 
-        return params
-    },
+    return params
+}
 
-    _searchEngine: function (referrer: string): string | null {
-        if (!referrer) {
-            return null
+function _getSearchEngine(referrer: string): string | null {
+    if (!referrer) {
+        return null
+    } else {
+        if (referrer.search(URL_REGEX_PREFIX + 'google.([^/?]*)') === 0) {
+            return 'google'
+        } else if (referrer.search(URL_REGEX_PREFIX + 'bing.com') === 0) {
+            return 'bing'
+        } else if (referrer.search(URL_REGEX_PREFIX + 'yahoo.com') === 0) {
+            return 'yahoo'
+        } else if (referrer.search(URL_REGEX_PREFIX + 'duckduckgo.com') === 0) {
+            return 'duckduckgo'
         } else {
-            if (referrer.search(URL_REGEX_PREFIX + 'google.([^/?]*)') === 0) {
-                return 'google'
-            } else if (referrer.search(URL_REGEX_PREFIX + 'bing.com') === 0) {
-                return 'bing'
-            } else if (referrer.search(URL_REGEX_PREFIX + 'yahoo.com') === 0) {
-                return 'yahoo'
-            } else if (referrer.search(URL_REGEX_PREFIX + 'duckduckgo.com') === 0) {
-                return 'duckduckgo'
-            } else {
-                return null
-            }
+            return null
         }
-    },
+    }
+}
 
-    _searchInfoFromReferrer: function (referrer: string): Record<string, any> {
-        const search = Info._searchEngine(referrer)
-        const param = search != 'yahoo' ? 'q' : 'p'
-        const ret: Record<string, any> = {}
+function _getSearchInfoFromReferrer(referrer: string): Record<string, any> {
+    const search = _getSearchEngine(referrer)
+    const param = search != 'yahoo' ? 'q' : 'p'
+    const ret: Record<string, any> = {}
 
-        if (!isNull(search)) {
-            ret['$search_engine'] = search
+    if (!isNull(search)) {
+        ret['$search_engine'] = search
 
-            const keyword = document ? getQueryParam(document.referrer, param) : ''
-            if (keyword.length) {
-                ret['ph_keyword'] = keyword
-            }
+        const keyword = document ? getQueryParam(document.referrer, param) : ''
+        if (keyword.length) {
+            ret['ph_keyword'] = keyword
         }
+    }
 
-        return ret
-    },
+    return ret
+}
 
-    searchInfo: function (): Record<string, any> {
-        const referrer = document?.referrer
-        if (!referrer) {
-            return {}
+export function getSearchInfo(): Record<string, any> {
+    const referrer = document?.referrer
+    if (!referrer) {
+        return {}
+    }
+    return _getSearchInfoFromReferrer(referrer)
+}
+
+export function getBrowserLanguage(): string | undefined {
+    return (
+        navigator.language || // Any modern browser
+        (navigator as Record<string, any>).userLanguage // IE11
+    )
+}
+
+export function getBrowserLanguagePrefix(): string | undefined {
+    const lang = getBrowserLanguage()
+    return typeof lang === 'string' ? lang.split('-')[0] : undefined
+}
+
+export function getReferrer(): string {
+    return document?.referrer || '$direct'
+}
+
+export function getReferringDomain(): string {
+    if (!document?.referrer) {
+        return '$direct'
+    }
+    return convertToURL(document.referrer)?.host || '$direct'
+}
+
+export function getReferrerInfo(): Record<string, any> {
+    return {
+        $referrer: getReferrer(),
+        $referring_domain: getReferringDomain(),
+    }
+}
+
+export function getPersonInfo(maskPersonalDataProperties?: boolean, customPersonalDataProperties?: string[]) {
+    const paramsToMask = maskPersonalDataProperties
+        ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
+        : []
+    const url = location?.href.substring(0, 1000)
+    // we're being a bit more economical with bytes here because this is stored in the cookie
+    return {
+        r: getReferrer().substring(0, 1000),
+        u: url ? maskQueryParams(url, paramsToMask, MASKED) : undefined,
+    }
+}
+
+export function getPersonPropsFromInfo(info: Record<string, any>): Record<string, any> {
+    const { r: referrer, u: url } = info
+    const referring_domain =
+        referrer == null ? undefined : referrer == '$direct' ? '$direct' : convertToURL(referrer)?.host
+
+    const props: Record<string, string | undefined> = {
+        $referrer: referrer,
+        $referring_domain: referring_domain,
+    }
+    if (url) {
+        props['$current_url'] = url
+        const location = convertToURL(url)
+        props['$host'] = location?.host
+        props['$pathname'] = location?.pathname
+        const campaignParams = _getCampaignParamsFromUrl(url)
+        extend(props, campaignParams)
+    }
+    if (referrer) {
+        const searchInfo = _getSearchInfoFromReferrer(referrer)
+        extend(props, searchInfo)
+    }
+    return props
+}
+
+export function getInitialPersonPropsFromInfo(info: Record<string, any>): Record<string, any> {
+    const personProps = getPersonPropsFromInfo(info)
+    const props: Record<string, any> = {}
+    each(personProps, function (val: any, key: string) {
+        props[`$initial_${stripLeadingDollar(key)}`] = val
+    })
+    return props
+}
+
+export function getTimezone(): string | undefined {
+    try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone
+    } catch {
+        return undefined
+    }
+}
+
+export function getTimezoneOffset(): number | undefined {
+    try {
+        return new Date().getTimezoneOffset()
+    } catch {
+        return undefined
+    }
+}
+
+export function getEventProperties(
+    maskPersonalDataProperties?: boolean,
+    customPersonalDataProperties?: string[]
+): Properties {
+    if (!userAgent) {
+        return {}
+    }
+    const paramsToMask = maskPersonalDataProperties
+        ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
+        : []
+    const [os_name, os_version] = detectOS(userAgent)
+    return extend(
+        stripEmptyProperties({
+            $os: os_name,
+            $os_version: os_version,
+            $browser: detectBrowser(userAgent, navigator.vendor),
+            $device: detectDevice(userAgent),
+            $device_type: detectDeviceType(userAgent),
+            $timezone: getTimezone(),
+            $timezone_offset: getTimezoneOffset(),
+        }),
+        {
+            $current_url: maskQueryParams(location?.href, paramsToMask, MASKED),
+            $host: location?.host,
+            $pathname: location?.pathname,
+            $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,
+            $browser_version: detectBrowserVersion(userAgent, navigator.vendor),
+            $browser_language: getBrowserLanguage(),
+            $browser_language_prefix: getBrowserLanguagePrefix(),
+            $screen_height: window?.screen.height,
+            $screen_width: window?.screen.width,
+            $viewport_height: window?.innerHeight,
+            $viewport_width: window?.innerWidth,
+            $lib: 'web',
+            $lib_version: Config.LIB_VERSION,
+            $insert_id: Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10),
+            $time: Date.now() / 1000, // epoch time in seconds
         }
-        return this._searchInfoFromReferrer(referrer)
-    },
-
-    /**
-     * This function detects which browser is running this script.
-     * The order of the checks are important since many user agents
-     * include keywords used in later checks.
-     */
-    browser: detectBrowser,
-
-    /**
-     * This function detects which browser version is running this script,
-     * parsing major and minor version (e.g., 42.1). User agent strings from:
-     * http://www.useragentstring.com/pages/useragentstring.php
-     *
-     * `navigator.vendor` is passed in and used to help with detecting certain browsers
-     * NB `navigator.vendor` is deprecated and not present in every browser
-     */
-    browserVersion: detectBrowserVersion,
-
-    browserLanguage: function (): string | undefined {
-        return (
-            navigator.language || // Any modern browser
-            (navigator as Record<string, any>).userLanguage // IE11
-        )
-    },
-
-    browserLanguagePrefix: function (): string | undefined {
-        const browserLanguage = this.browserLanguage()
-        return typeof browserLanguage === 'string' ? browserLanguage.split('-')[0] : undefined
-    },
-
-    os: detectOS,
-
-    device: detectDevice,
-
-    deviceType: detectDeviceType,
-
-    referrer: function (): string {
-        return document?.referrer || '$direct'
-    },
-
-    referringDomain: function (): string {
-        if (!document?.referrer) {
-            return '$direct'
-        }
-        return convertToURL(document.referrer)?.host || '$direct'
-    },
-
-    referrerInfo: function (): Record<string, any> {
-        return {
-            $referrer: this.referrer(),
-            $referring_domain: this.referringDomain(),
-        }
-    },
-
-    personInfo: function ({
-        maskPersonalDataProperties,
-        customPersonalDataProperties,
-    }: {
-        maskPersonalDataProperties?: boolean
-        customPersonalDataProperties?: string[]
-    } = {}) {
-        const paramsToMask = maskPersonalDataProperties
-            ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
-            : []
-        const url = location?.href.substring(0, 1000)
-        // we're being a bit more economical with bytes here because this is stored in the cookie
-        return {
-            r: this.referrer().substring(0, 1000),
-            u: url ? maskQueryParams(url, paramsToMask, MASKED) : undefined,
-        }
-    },
-
-    personPropsFromInfo: function (info: Record<string, any>): Record<string, any> {
-        const { r: referrer, u: url } = info
-        const referring_domain =
-            referrer == null ? undefined : referrer == '$direct' ? '$direct' : convertToURL(referrer)?.host
-
-        const props: Record<string, string | undefined> = {
-            $referrer: referrer,
-            $referring_domain: referring_domain,
-        }
-        if (url) {
-            props['$current_url'] = url
-            const location = convertToURL(url)
-            props['$host'] = location?.host
-            props['$pathname'] = location?.pathname
-            const campaignParams = this._campaignParamsFromUrl(url)
-            extend(props, campaignParams)
-        }
-        if (referrer) {
-            const searchInfo = this._searchInfoFromReferrer(referrer)
-            extend(props, searchInfo)
-        }
-        return props
-    },
-
-    initialPersonPropsFromInfo: function (info: Record<string, any>): Record<string, any> {
-        const personProps = this.personPropsFromInfo(info)
-        const props: Record<string, any> = {}
-        each(personProps, function (val: any, key: string) {
-            props[`$initial_${stripLeadingDollar(key)}`] = val
-        })
-        return props
-    },
-
-    timezone: function (): string | undefined {
-        try {
-            return Intl.DateTimeFormat().resolvedOptions().timeZone
-        } catch {
-            return undefined
-        }
-    },
-
-    timezoneOffset: function (): number | undefined {
-        try {
-            return new Date().getTimezoneOffset()
-        } catch {
-            return undefined
-        }
-    },
-
-    properties: function ({
-        maskPersonalDataProperties,
-        customPersonalDataProperties,
-    }: {
-        maskPersonalDataProperties?: boolean
-        customPersonalDataProperties?: string[]
-    } = {}): Properties {
-        if (!userAgent) {
-            return {}
-        }
-        const paramsToMask = maskPersonalDataProperties
-            ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
-            : []
-        const [os_name, os_version] = Info.os(userAgent)
-        return extend(
-            stripEmptyProperties({
-                $os: os_name,
-                $os_version: os_version,
-                $browser: Info.browser(userAgent, navigator.vendor),
-                $device: Info.device(userAgent),
-                $device_type: Info.deviceType(userAgent),
-                $timezone: Info.timezone(),
-                $timezone_offset: Info.timezoneOffset(),
-            }),
-            {
-                $current_url: maskQueryParams(location?.href, paramsToMask, MASKED),
-                $host: location?.host,
-                $pathname: location?.pathname,
-                $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,
-                $browser_version: Info.browserVersion(userAgent, navigator.vendor),
-                $browser_language: Info.browserLanguage(),
-                $browser_language_prefix: Info.browserLanguagePrefix(),
-                $screen_height: window?.screen.height,
-                $screen_width: window?.screen.width,
-                $viewport_height: window?.innerHeight,
-                $viewport_width: window?.innerWidth,
-                $lib: 'web',
-                $lib_version: Config.LIB_VERSION,
-                $insert_id: Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10),
-                $time: Date.now() / 1000, // epoch time in seconds
-            }
-        )
-    },
-
-    people_properties: function (): Properties {
-        if (!userAgent) {
-            return {}
-        }
-
-        const [os_name, os_version] = Info.os(userAgent)
-        return extend(
-            stripEmptyProperties({
-                $os: os_name,
-                $os_version: os_version,
-                $browser: Info.browser(userAgent, navigator.vendor),
-            }),
-            {
-                $browser_version: Info.browserVersion(userAgent, navigator.vendor),
-            }
-        )
-    },
+    )
 }
