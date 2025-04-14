@@ -12,7 +12,6 @@ describe('RetryQueue', () => {
 
     beforeEach(() => {
         retryQueue = new RetryQueue(mockPosthog as any)
-        retryQueue = retryQueue as any
 
         jest.useFakeTimers()
         jest.setSystemTime(now)
