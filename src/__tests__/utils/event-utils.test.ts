@@ -1,6 +1,6 @@
 import {
-    browserLanguage,
-    browserLanguagePrefix,
+    getBrowserLanguage,
+    getBrowserLanguagePrefix,
     getEventProperties,
     getTimezone,
     getTimezoneOffset,
@@ -71,12 +71,12 @@ describe(`event-utils`, () => {
         })
 
         it('should compute browser language', () => {
-            const language = browserLanguage()
+            const language = getBrowserLanguage()
             expect(language).toBe('pt-BR')
         })
 
         it('should compute browser language prefix', () => {
-            const languagePrefix = browserLanguagePrefix()
+            const languagePrefix = getBrowserLanguagePrefix()
             expect(languagePrefix).toBe('pt')
         })
     })

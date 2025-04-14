@@ -1,4 +1,4 @@
-import { getQueryParam, convertToURL, maskQueryParams } from './request-utils'
+import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
 import { isNull } from './type-utils'
 import { Properties } from '../types'
 import Config from '../config'
@@ -83,10 +83,10 @@ export function getCampaignParams(
         ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
         : []
 
-    return _campaignParamsFromUrl(maskQueryParams(document.URL, paramsToMask, MASKED), customTrackedParams)
+    return _getCampaignParamsFromUrl(maskQueryParams(document.URL, paramsToMask, MASKED), customTrackedParams)
 }
 
-function _campaignParamsFromUrl(url: string, customParams?: string[]): Record<string, string> {
+function _getCampaignParamsFromUrl(url: string, customParams?: string[]): Record<string, string> {
     const campaign_keywords = CAMPAIGN_PARAMS.concat(customParams || [])
 
     const params: Record<string, any> = {}
@@ -98,7 +98,7 @@ function _campaignParamsFromUrl(url: string, customParams?: string[]): Record<st
     return params
 }
 
-function _searchEngine(referrer: string): string | null {
+function _getSearchEngine(referrer: string): string | null {
     if (!referrer) {
         return null
     } else {
@@ -116,8 +116,8 @@ function _searchEngine(referrer: string): string | null {
     }
 }
 
-function _searchInfoFromReferrer(referrer: string): Record<string, any> {
-    const search = _searchEngine(referrer)
+function _getSearchInfoFromReferrer(referrer: string): Record<string, any> {
+    const search = _getSearchEngine(referrer)
     const param = search != 'yahoo' ? 'q' : 'p'
     const ret: Record<string, any> = {}
 
@@ -133,23 +133,23 @@ function _searchInfoFromReferrer(referrer: string): Record<string, any> {
     return ret
 }
 
-export function searchInfo(): Record<string, any> {
+export function getSearchInfo(): Record<string, any> {
     const referrer = document?.referrer
     if (!referrer) {
         return {}
     }
-    return _searchInfoFromReferrer(referrer)
+    return _getSearchInfoFromReferrer(referrer)
 }
 
-export function browserLanguage(): string | undefined {
+export function getBrowserLanguage(): string | undefined {
     return (
         navigator.language || // Any modern browser
         (navigator as Record<string, any>).userLanguage // IE11
     )
 }
 
-export function browserLanguagePrefix(): string | undefined {
-    const lang = browserLanguage()
+export function getBrowserLanguagePrefix(): string | undefined {
+    const lang = getBrowserLanguage()
     return typeof lang === 'string' ? lang.split('-')[0] : undefined
 }
 
@@ -164,14 +164,14 @@ export function getReferringDomain(): string {
     return convertToURL(document.referrer)?.host || '$direct'
 }
 
-export function referrerInfo(): Record<string, any> {
+export function getReferrerInfo(): Record<string, any> {
     return {
         $referrer: getReferrer(),
         $referring_domain: getReferringDomain(),
     }
 }
 
-export function personInfo({
+export function getPersonInfo({
     maskPersonalDataProperties,
     customPersonalDataProperties,
 }: {
@@ -189,7 +189,7 @@ export function personInfo({
     }
 }
 
-export function personPropsFromInfo(info: Record<string, any>): Record<string, any> {
+export function getPersonPropsFromInfo(info: Record<string, any>): Record<string, any> {
     const { r: referrer, u: url } = info
     const referring_domain =
         referrer == null ? undefined : referrer == '$direct' ? '$direct' : convertToURL(referrer)?.host
@@ -203,18 +203,18 @@ export function personPropsFromInfo(info: Record<string, any>): Record<string, a
         const location = convertToURL(url)
         props['$host'] = location?.host
         props['$pathname'] = location?.pathname
-        const campaignParams = _campaignParamsFromUrl(url)
+        const campaignParams = _getCampaignParamsFromUrl(url)
         extend(props, campaignParams)
     }
     if (referrer) {
-        const searchInfo = _searchInfoFromReferrer(referrer)
+        const searchInfo = _getSearchInfoFromReferrer(referrer)
         extend(props, searchInfo)
     }
     return props
 }
 
-export function initialPersonPropsFromInfo(info: Record<string, any>): Record<string, any> {
-    const personProps = personPropsFromInfo(info)
+export function getInitialPersonPropsFromInfo(info: Record<string, any>): Record<string, any> {
+    const personProps = getPersonPropsFromInfo(info)
     const props: Record<string, any> = {}
     each(personProps, function (val: any, key: string) {
         props[`$initial_${stripLeadingDollar(key)}`] = val
@@ -265,8 +265,8 @@ export function getEventProperties(
             $pathname: location?.pathname,
             $raw_user_agent: userAgent.length > 1000 ? userAgent.substring(0, 997) + '...' : userAgent,
             $browser_version: detectBrowserVersion(userAgent, navigator.vendor),
-            $browser_language: browserLanguage(),
-            $browser_language_prefix: browserLanguagePrefix(),
+            $browser_language: getBrowserLanguage(),
+            $browser_language_prefix: getBrowserLanguagePrefix(),
             $screen_height: window?.screen.height,
             $screen_width: window?.screen.width,
             $viewport_height: window?.innerHeight,
@@ -275,24 +275,6 @@ export function getEventProperties(
             $lib_version: Config.LIB_VERSION,
             $insert_id: Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10),
             $time: Date.now() / 1000, // epoch time in seconds
-        }
-    )
-}
-
-export function people_properties(): Properties {
-    if (!userAgent) {
-        return {}
-    }
-
-    const [os_name, os_version] = detectOS(userAgent)
-    return extend(
-        stripEmptyProperties({
-            $os: os_name,
-            $os_version: os_version,
-            $browser: detectBrowser(userAgent, navigator.vendor),
-        }),
-        {
-            $browser_version: detectBrowserVersion(userAgent, navigator.vendor),
         }
     )
 }

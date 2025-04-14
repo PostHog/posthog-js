@@ -15,10 +15,10 @@ import {
 import { isEmptyObject, isObject, isUndefined } from './utils/type-utils'
 import {
     getCampaignParams,
-    initialPersonPropsFromInfo,
-    personInfo,
-    referrerInfo,
-    searchInfo,
+    getInitialPersonPropsFromInfo,
+    getPersonInfo,
+    getReferrerInfo,
+    getSearchInfo,
 } from './utils/event-utils'
 import { logger } from './utils/logger'
 import { stripLeadingDollar } from './utils/string-utils'
@@ -241,11 +241,11 @@ export class PostHogPersistence {
         }
     }
     update_search_keyword(): void {
-        this.register(searchInfo())
+        this.register(getSearchInfo())
     }
 
     update_referrer_info(): void {
-        this.register_once(referrerInfo(), undefined)
+        this.register_once(getReferrerInfo(), undefined)
     }
 
     set_initial_person_info(): void {
@@ -256,7 +256,7 @@ export class PostHogPersistence {
 
         this.register_once(
             {
-                [INITIAL_PERSON_INFO]: personInfo({
+                [INITIAL_PERSON_INFO]: getPersonInfo({
                     maskPersonalDataProperties: this.config.mask_personal_data_properties,
                     customPersonalDataProperties: this.config.custom_personal_data_properties,
                 }),
@@ -287,7 +287,7 @@ export class PostHogPersistence {
         })
         const initialPersonInfo = this.props[INITIAL_PERSON_INFO]
         if (initialPersonInfo) {
-            const initialPersonProps = initialPersonPropsFromInfo(initialPersonInfo)
+            const initialPersonProps = getInitialPersonPropsFromInfo(initialPersonInfo)
             extend(p, initialPersonProps)
         }
 

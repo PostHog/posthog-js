@@ -4,7 +4,7 @@ import {
     getCampaignParams,
     EVENT_TO_PERSON_PROPERTIES,
     getEventProperties,
-    referrerInfo,
+    getReferrerInfo,
 } from '../utils/event-utils'
 import { each, extend } from '../utils'
 import { includes } from '../utils/string-utils'
@@ -21,7 +21,7 @@ export const setAllPersonProfilePropertiesAsPersonPropertiesForFlags = (posthog:
             posthog.config.mask_personal_data_properties,
             posthog.config.custom_personal_data_properties
         ),
-        referrerInfo()
+        getReferrerInfo()
     )
     const personProperties: Record<string, string> = {}
     each(allProperties, function (v, k: string) {

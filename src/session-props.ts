@@ -8,7 +8,7 @@
  * properties (such as browser, OS, etc) here, as usually getting the current value of those from event properties is
  * sufficient.
  */
-import { personInfo, personPropsFromInfo } from './utils/event-utils'
+import { getPersonInfo, getPersonPropsFromInfo } from './utils/event-utils'
 import type { SessionIdManager } from './sessionid'
 import type { PostHogPersistence } from './posthog-persistence'
 import { CLIENT_SESSION_PROPS } from './constants'
@@ -37,7 +37,7 @@ interface StoredSessionSourceProps {
 }
 
 const generateSessionSourceParams = (posthog?: PostHog): LegacySessionSourceProps | CurrentSessionSourceProps => {
-    return personInfo({
+    return getPersonInfo({
         maskPersonalDataProperties: posthog?.config.mask_personal_data_properties,
         customPersonalDataProperties: posthog?.config.custom_personal_data_properties,
     })
@@ -88,7 +88,7 @@ export class SessionPropsManager {
             return {}
         }
         if ('r' in p) {
-            return personPropsFromInfo(p)
+            return getPersonPropsFromInfo(p)
         } else {
             return {
                 $referring_domain: p.referringDomain,
