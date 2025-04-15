@@ -73,7 +73,7 @@ export class PostHogSurveys {
             if (generateSurveys) {
                 // Surveys code is already loaded
                 this._completeSurveyInitialization(generateSurveys)
-                return // Exit early, finally will still run
+                return
             }
 
             // If we reach here, surveys code is not loaded yet
@@ -81,7 +81,7 @@ export class PostHogSurveys {
             if (!loadExternalDependency) {
                 // Cannot load surveys code
                 this._handleSurveyLoadError('PostHog loadExternalDependency extension not found.')
-                return // Exit early, finally will still run
+                return
             }
 
             // If we reach here, we need to load the dependency
@@ -92,12 +92,9 @@ export class PostHogSurveys {
                     // Need to get the function reference again inside the callback
                     this._completeSurveyInitialization(phExtensions.generateSurveys)
                 }
-                // Note: No return here, the function finishes after the callback logic
             })
         } catch (e) {
             this._handleSurveyLoadError('Error initializing surveys', e)
-            // Decide whether to re-throw. Currently, the original code re-throws.
-            // Consider if just logging and notifying callbacks is sufficient.
             throw e
         } finally {
             // Ensure the flag is always reset
