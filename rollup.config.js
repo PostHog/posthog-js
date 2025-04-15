@@ -195,7 +195,7 @@ const plugins = (es5) => [
                         names,
                     },
                     null,
-                    2
+                    4
                 )
             )
         },
