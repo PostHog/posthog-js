@@ -19,6 +19,7 @@ jobs:
                 cache: 'pnpm'
             - run: pnpm install
             - run: pnpm build
+            - run: git diff --exit-code # fail if e.g. the mangled properties list has changed, see rollup.config.js
             - run: pnpm test:unit
 
     integration:
