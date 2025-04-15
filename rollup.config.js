@@ -125,6 +125,9 @@ const plugins = (es5) => [
                           // URL parameters
                           '__posthog_debug',
 
+                          // attribution params, not used in a way that would be mangled but be cautious
+                          '_kx',
+
                           // Helpers added by the es5 build. We don't use this, but they can be a starting point if we try to get the es5 build mangled in the future
                           '_invoke',
                           '__proto__',
