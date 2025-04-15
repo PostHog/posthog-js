@@ -54,6 +54,9 @@ const plugins = (es5) => [
         compress: {
             ecma: es5 ? 5 : 6,
         },
+        format: {
+            comments: false,
+        },
         mangle: es5
             ? true // Don't mangle properties in the es5 build, as it relies on helpers which don't work well with mangling.
             : {
