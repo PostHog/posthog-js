@@ -107,6 +107,7 @@ describe('posthog-surveys', () => {
             beforeEach(() => {
                 // mock getSurveys response
                 mockPostHog.get_property.mockReturnValue([survey])
+                surveys['_surveyManager'] = {}
             })
 
             it('cannot render completed surveys', () => {
