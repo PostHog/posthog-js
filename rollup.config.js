@@ -55,7 +55,7 @@ const plugins = (es5) => [
             ecma: es5 ? 5 : 6,
         },
         mangle: es5
-            ? undefined // Don't mangle properties in the es5 build, as it relies on helpers which don't work well with mangling.
+            ? true // Don't mangle properties in the es5 build, as it relies on helpers which don't work well with mangling.
             : {
                   // Note:
                   // PROPERTY MANGLING CAN BREAK YOUR CODE
