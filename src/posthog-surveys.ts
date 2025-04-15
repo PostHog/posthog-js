@@ -43,32 +43,26 @@ export class PostHogSurveys {
     }
 
     loadIfEnabled() {
+        // Initial guard clauses
         if (this._surveyManager) {
-            // Surveys already loaded.
             return
-        }
-
+        } // Already loaded
         if (this._isInitializingSurveys) {
             logger.info('Already initializing surveys, skipping...')
             return
         }
-
-        const disableSurveys = this._instance.config.disable_surveys
-
-        if (disableSurveys) {
+        if (this._instance.config.disable_surveys) {
             logger.info('Disabled. Not loading surveys.')
+            return
+        }
+        if (!this._hasSurveys) {
+            logger.info('No surveys to load.')
             return
         }
 
         const phExtensions = assignableWindow?.__PosthogExtensions__
-
         if (!phExtensions) {
             logger.error('PostHog Extensions not found.')
-            return
-        }
-
-        if (!this._hasSurveys) {
-            logger.info('No surveys to load.')
             return
         }
 
@@ -76,53 +70,50 @@ export class PostHogSurveys {
 
         try {
             const generateSurveys = phExtensions.generateSurveys
-
-            if (!generateSurveys) {
-                const loadExternalDependency = phExtensions.loadExternalDependency
-
-                if (loadExternalDependency) {
-                    loadExternalDependency(this._instance, 'surveys', (err) => {
-                        if (err || !phExtensions.generateSurveys) {
-                            logger.error('Could not load surveys script', err)
-                            this._isInitializingSurveys = false
-                            return
-                        }
-
-                        this._surveyManager = phExtensions.generateSurveys(this._instance)
-                        this._isInitializingSurveys = false
-                        this._surveyEventReceiver = new SurveyEventReceiver(this._instance)
-                        logger.info('Surveys loaded successfully')
-                        this._notifySurveyCallbacks({
-                            isLoaded: true,
-                        })
-                    })
-                } else {
-                    const error = 'PostHog loadExternalDependency extension not found. Cannot load remote config.'
-                    logger.error(error)
-                    this._isInitializingSurveys = false
-                    this._notifySurveyCallbacks({
-                        isLoaded: false,
-                        error,
-                    })
-                }
-            } else {
-                this._surveyManager = generateSurveys(this._instance)
-                this._isInitializingSurveys = false
-                this._surveyEventReceiver = new SurveyEventReceiver(this._instance)
-                logger.info('Surveys loaded successfully')
-                this._notifySurveyCallbacks({
-                    isLoaded: true,
-                })
+            if (generateSurveys) {
+                // Surveys code is already loaded
+                this._completeSurveyInitialization(generateSurveys)
+                return
             }
-        } catch (e) {
-            logger.error('Error initializing surveys', e)
-            this._isInitializingSurveys = false
-            this._notifySurveyCallbacks({
-                isLoaded: false,
-                error: 'Error initializing surveys',
+
+            // If we reach here, surveys code is not loaded yet
+            const loadExternalDependency = phExtensions.loadExternalDependency
+            if (!loadExternalDependency) {
+                // Cannot load surveys code
+                this._handleSurveyLoadError('PostHog loadExternalDependency extension not found.')
+                return
+            }
+
+            // If we reach here, we need to load the dependency
+            loadExternalDependency(this._instance, 'surveys', (err) => {
+                if (err || !phExtensions.generateSurveys) {
+                    this._handleSurveyLoadError('Could not load surveys script', err)
+                } else {
+                    // Need to get the function reference again inside the callback
+                    this._completeSurveyInitialization(phExtensions.generateSurveys)
+                }
             })
+        } catch (e) {
+            this._handleSurveyLoadError('Error initializing surveys', e)
             throw e
+        } finally {
+            // Ensure the flag is always reset
+            this._isInitializingSurveys = false
         }
+    }
+
+    /** Helper to finalize survey initialization */
+    private _completeSurveyInitialization(generateSurveysFn: (instance: PostHog) => any): void {
+        this._surveyManager = generateSurveysFn(this._instance)
+        this._surveyEventReceiver = new SurveyEventReceiver(this._instance)
+        logger.info('Surveys loaded successfully')
+        this._notifySurveyCallbacks({ isLoaded: true })
+    }
+
+    /** Helper to handle errors during survey loading */
+    private _handleSurveyLoadError(message: string, error?: any): void {
+        logger.error(message, error)
+        this._notifySurveyCallbacks({ isLoaded: false, error: message })
     }
 
     /**
