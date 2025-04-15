@@ -82,6 +82,12 @@ const plugins = (es5) => [
                           // used in decide request, MUST be preserved
                           '_',
 
+                          // used in config
+                          '_url',
+                          '_batchKey',
+                          '_noTruncate',
+                          '_onCapture',
+
                           // part of setup/teardown code, preserve these out of caution
                           '_init',
                           '_dom_loaded',
@@ -102,6 +108,8 @@ const plugins = (es5) => [
                           '__PosthogExtensions__',
                           '__posthog_wrapped__',
                           '__Posthog__',
+                          '_patchFetch',
+                          '_patchXHR',
 
                           // part of the public API (none start with _ so are not mangled anyway BUT be abundantly cautious)
                           'capture',
@@ -136,6 +144,7 @@ const plugins = (es5) => [
                           '_kx',
 
                           // used in rrweb source
+                          '_rrweb',
                           '_root',
                           '_css',
                           '_opts',
@@ -168,6 +177,11 @@ const plugins = (es5) => [
                           '__esModule',
                           '__publicField2',
                           '__symbol__',
+
+                          // found in terser-mangled-names.json and couldn't attribute source, so preserve out of caution,
+                          '_sb',
+                          '_mirror',
+                          '_map',
                       ],
                   },
               },
