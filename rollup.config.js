@@ -196,7 +196,7 @@ const plugins = (es5) => [
                     },
                     null,
                     4
-                )
+                ) + '\n'
             )
         },
     },
