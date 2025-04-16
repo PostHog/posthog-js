@@ -9,6 +9,8 @@ import commonjs from '@rollup/plugin-commonjs'
 import fs from 'fs'
 import path from 'path'
 
+// eslint-disable-next-line no-undef
+const WRITE_MANGLED_PROPERTIES = process.env.WRITE_MANGLED_PROPERTIES
 const nameCachePath = './terser-mangled-names.json'
 let nameCache = {}
 
@@ -53,7 +55,7 @@ const plugins = (es5) => [
         ],
     }),
     terser({
-        nameCache,
+        nameCache: WRITE_MANGLED_PROPERTIES ? nameCache : undefined, // using a shared nameCache leads to race conditions and broken builds, so don't use in general, only when writing the mangled names
         toplevel: true,
         compress: {
             ecma: es5 ? 5 : 6,
@@ -189,12 +191,16 @@ const plugins = (es5) => [
     {
         name: 'save-terser-mangled-names',
         writeBundle() {
-            const names = Object.keys(nameCache.props.props).map((n) => {
-                if (n.startsWith('$')) {
-                    return n.slice(1)
-                } else {
-                    throw new Error('Unexpected format: ' + n)
+            if (!WRITE_MANGLED_PROPERTIES) {
+                return
+            }
+
+            const names = Object.keys(nameCache.props.props).map((k) => {
+                // strip leading dollar to make operating on terser-mangled-names.json easier
+                if (!k.startsWith('$')) {
+                    throw new Error('Unexpected format')
                 }
+                return k.substring(1)
             })
             names.sort()
             // save the props section to a file
