@@ -48,6 +48,12 @@ describe(`event-utils`, () => {
             const properties = getEventProperties(true, ['other'])
             expect(properties['$current_url']).toEqual('https://www.example.com/path?gclid=<masked>&other=<masked>')
         })
+
+        it('should have timezone and timezone offset', () => {
+            const properties = getEventProperties()
+            expect(properties['$timezone']).toBeTruthy()
+            expect(properties['$timezone_offset']).toBeTruthy()
+        })
     })
 
     describe('timezones', () => {
