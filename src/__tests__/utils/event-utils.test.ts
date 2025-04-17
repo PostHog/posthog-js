@@ -51,8 +51,8 @@ describe(`event-utils`, () => {
 
         it('should have timezone and timezone offset', () => {
             const properties = getEventProperties()
-            expect(properties['$timezone']).toBeTruthy()
-            expect(properties['$timezone_offset']).toBeTruthy()
+            expect(properties).toHaveProperty('$timezone')
+            expect(properties).toHaveProperty('$timezone_offset')
         })
     })
 
