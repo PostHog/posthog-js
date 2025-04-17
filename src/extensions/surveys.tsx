@@ -110,7 +110,13 @@ export function getNextSurveyStep(
         if (question.type === SurveyQuestionType.SingleChoice) {
             // :KLUDGE: for now, look up the choiceIndex based on the response
             // TODO: once QuestionTypes.MultipleChoiceQuestion is refactored, pass the selected choiceIndex into this method
-            const selectedChoiceIndex = question.choices.indexOf(`${response}`)
+            let selectedChoiceIndex = question.choices.indexOf(`${response}`)
+
+            if (selectedChoiceIndex === -1 && question.hasOpenChoice) {
+                // if the response is not found in the choices, it must be the open choice,
+                // which is always the last choice
+                selectedChoiceIndex = question.choices.length - 1
+            }
 
             if (question.branching?.responseValues?.hasOwnProperty(selectedChoiceIndex)) {
                 const nextStep = question.branching.responseValues[selectedChoiceIndex]
