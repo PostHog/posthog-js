@@ -96,7 +96,8 @@ exports[`config snapshot for PostHogConfig 1`] = `
   ],
   \\"capture_pageview\\": [
     \\"false\\",
-    \\"true\\"
+    \\"true\\",
+    \\"\\\\\\"history_change\\\\\\"\\"
   ],
   \\"capture_pageleave\\": [
     \\"false\\",
