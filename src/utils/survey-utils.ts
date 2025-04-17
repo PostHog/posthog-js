@@ -1,5 +1,5 @@
 import { Survey, SurveyMatchType } from '../posthog-surveys-types'
-import { userAgent, window } from '../utils/globals'
+import { document, userAgent, window } from '../utils/globals'
 import { createLogger } from '../utils/logger'
 import { isMatchingRegex } from '../utils/regex-utils'
 import { detectDeviceType } from './user-agent-utils'
@@ -47,4 +47,23 @@ export function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
         survey.conditions.deviceTypes,
         deviceType
     )
+}
+
+export function doesSurveyMatchSelector(survey: Survey): boolean {
+    if (!survey.conditions?.selector) {
+        return true
+    }
+    return !!document?.querySelector(survey.conditions.selector)
+}
+
+export function isSurveyRunning(survey: Survey): boolean {
+    return !!(survey.start_date && !survey.end_date)
+}
+
+export function doesSurveyActivateByEvent(survey: Pick<Survey, 'conditions'>): boolean {
+    return !!survey.conditions?.events?.values?.length
+}
+
+export function doesSurveyActivateByAction(survey: Pick<Survey, 'conditions'>): boolean {
+    return !!survey.conditions?.actions?.values?.length
 }

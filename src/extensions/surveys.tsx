@@ -6,7 +6,6 @@ import {
     SurveyQuestion,
     SurveyQuestionBranchingType,
     SurveyQuestionType,
-    SurveyRenderReason,
     SurveySchedule,
     SurveyType,
     SurveyWidgetType,
@@ -385,57 +384,6 @@ export class SurveyManager {
             // If both are Always or neither is Always, sort by delay
             return (a.appearance?.surveyPopupDelaySeconds || 0) - (b.appearance?.surveyPopupDelaySeconds || 0)
         })
-    }
-
-    /**
-     * Checks the feature flags associated with this Survey to see if the survey can be rendered.
-     * @param survey
-     * @param instance
-     */
-    public canRenderSurvey = (survey: Survey): SurveyRenderReason => {
-        const renderReason: SurveyRenderReason = {
-            visible: false,
-        }
-
-        if (survey.end_date) {
-            renderReason.disabledReason = `survey was completed on ${survey.end_date}`
-            return renderReason
-        }
-
-        if (survey.type != SurveyType.Popover) {
-            renderReason.disabledReason = `Only Popover survey types can be rendered`
-            return renderReason
-        }
-
-        const linkedFlagCheck = survey.linked_flag_key
-            ? this._posthog.featureFlags.isFeatureEnabled(survey.linked_flag_key)
-            : true
-
-        if (!linkedFlagCheck) {
-            renderReason.disabledReason = `linked feature flag ${survey.linked_flag_key} is false`
-            return renderReason
-        }
-
-        const targetingFlagCheck = survey.targeting_flag_key
-            ? this._posthog.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
-            : true
-
-        if (!targetingFlagCheck) {
-            renderReason.disabledReason = `targeting feature flag ${survey.targeting_flag_key} is false`
-            return renderReason
-        }
-
-        const internalTargetingFlagCheck = survey.internal_targeting_flag_key
-            ? this._posthog.featureFlags.isFeatureEnabled(survey.internal_targeting_flag_key)
-            : true
-
-        if (!internalTargetingFlagCheck) {
-            renderReason.disabledReason = `internal targeting feature flag ${survey.internal_targeting_flag_key} is false`
-            return renderReason
-        }
-
-        renderReason.visible = true
-        return renderReason
     }
 
     public renderSurvey = (survey: Survey, selector: Element): void => {

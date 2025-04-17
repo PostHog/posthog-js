@@ -50,6 +50,7 @@ describe('surveys', () => {
             name: 'first survey',
             description: 'first survey description',
             type: SurveyType.Popover,
+            start_date: new Date().toISOString(),
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
         } as unknown as Survey,
     ]
@@ -74,6 +75,7 @@ describe('surveys', () => {
             id: 'first-survey',
             description: 'first survey description',
             type: SurveyType.Popover,
+            start_date: new Date().toISOString(),
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
             conditions: {
                 events: {
@@ -99,6 +101,7 @@ describe('surveys', () => {
             id: 'second-survey',
             description: 'second survey description',
             type: SurveyType.Popover,
+            start_date: new Date().toISOString(),
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a moblin?' }],
         } as unknown as Survey,
         {
@@ -106,6 +109,7 @@ describe('surveys', () => {
             id: 'third-survey',
             description: 'third survey description',
             type: SurveyType.Popover,
+            start_date: new Date().toISOString(),
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
             conditions: {
                 events: {
@@ -330,6 +334,7 @@ describe('surveys', () => {
     it('can render survey async', async () => {
         const result = await surveys.canRenderSurveyAsync(firstSurveys[0].id, true)
 
+        expect(result.disabledReason).toBeUndefined()
         expect(result.visible).toBeTruthy()
     })
 
@@ -745,8 +750,6 @@ describe('surveys', () => {
         })
 
         it('returns event based surveys that observed an event', () => {
-            // TODO this test fails when run in isolation
-
             surveysResponse = {
                 surveys: [surveyWithEnabledInternalFlag, surveyWithEvents],
             }
