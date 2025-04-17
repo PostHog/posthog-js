@@ -1,3 +1,7 @@
+## 1.236.2 - 2025-04-17
+
+- fix response based branching for open choice questions (#1907)
+
 ## 1.236.1 - 2025-04-15
 
 - chore: refactor survey loadIfEnabled (#1903)
