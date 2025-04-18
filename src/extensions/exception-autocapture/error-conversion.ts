@@ -145,7 +145,7 @@ function exceptionFromError(error: Error, metadata?: ErrorMetadata): Exception {
 
 function exceptionListFromError(error: Error, metadata?: ErrorMetadata): ErrorProperties['$exception_list'] {
     const exception = exceptionFromError(error, metadata)
-    if (error.cause && isError(error.cause)) {
+    if (error.cause && isError(error.cause) && error.cause !== error) {
         // Cause could be an object or a string
         // For now we only support error causes
         // See: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error/cause
