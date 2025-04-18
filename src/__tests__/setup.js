@@ -1,3 +1,5 @@
+global.BUILD_VERSION = '1.2.3'
+
 beforeEach(() => {
     // eslint-disable-next-line no-console
     console.error = (...args) => {
