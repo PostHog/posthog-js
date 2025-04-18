@@ -1,7 +1,7 @@
 import { Breaker, Properties } from '../types'
 import { nativeForEach, nativeIndexOf } from './globals'
 import { logger } from './logger'
-import { hasOwnProperty, isArray, isFormData, isNull, isNullish, isString } from './type-utils'
+import { hasOwnProperty, isArray, isFormData, isNull, isNullish, isNumber, isString } from './type-utils'
 
 const breaker: Breaker = {}
 
@@ -140,7 +140,7 @@ export const safewrapClass = function (klass: Function, functions: string[]): vo
 export const stripEmptyProperties = function (p: Properties): Properties {
     const ret: Properties = {}
     each(p, function (v, k) {
-        if (isString(v) && v.length > 0) {
+        if ((isString(v) && v.length > 0) || isNumber(v)) {
             ret[k] = v
         }
     })
