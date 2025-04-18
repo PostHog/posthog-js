@@ -1,3 +1,5 @@
+global.MINIMAL_BUILD = false
+
 beforeEach(() => {
     // eslint-disable-next-line no-console
     console.error = (...args) => {

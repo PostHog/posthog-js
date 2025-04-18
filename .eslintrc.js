@@ -42,6 +42,7 @@ module.exports = {
         given: 'readonly',
         global: 'readonly',
         Buffer: 'readonly',
+        MINIMAL_BUILD: 'readonly',
     },
     parser: '@typescript-eslint/parser',
     parserOptions: {
