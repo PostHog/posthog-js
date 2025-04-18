@@ -35,7 +35,7 @@ export function getSurveyResponseKey(questionId: string) {
 export const style = (appearance: SurveyAppearance | null) => {
     const positions = {
         [SurveyPosition.Left]: 'left: 30px;',
-        [SurveyPosition.Right]: 'right: 30px;',
+        [SurveyPosition.Right]: 'right: 60px;',
         [SurveyPosition.Center]: `
             left: 50%;
             transform: translateX(-50%);

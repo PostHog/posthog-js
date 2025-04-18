@@ -90,6 +90,41 @@ test.describe('surveys - feedback widget', () => {
         await pollUntilEventCaptured(page, 'survey sent')
     })
 
+    test('displays feedback tab in a responsive manner ', async ({ page, context }) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+            await route.fulfill({
+                json: {
+                    surveys: [
+                        {
+                            id: '123',
+                            name: 'Test survey',
+                            type: 'widget',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [
+                                { type: 'open', question: 'Feedback for us?', description: 'tab feedback widget' },
+                            ],
+                            appearance: {
+                                widgetLabel: 'Feedback',
+                                widgetType: 'tab',
+                                displayThankYouMessage: true,
+                                thankyouMessageHeader: 'Thanks!',
+                                thankyouMessageBody: 'We appreciate your feedback.',
+                            },
+                        },
+                    ],
+                },
+            })
+        })
+
+        await start(startOptions, page, context)
+        await surveysAPICall
+
+        await page.locator('.PostHogWidget123').locator('.ph-survey-widget-tab').click()
+        await page.setViewportSize({ width: 375, height: 667 })
+
+        await expect(page.locator('.PostHogWidget123').locator('.survey-form')).toBeInViewport()
+    })
+
     test('widgetType is custom selector', async ({ page, context }) => {
         const surveysAPICall = page.route('**/surveys/**', async (route) => {
             await route.fulfill({
