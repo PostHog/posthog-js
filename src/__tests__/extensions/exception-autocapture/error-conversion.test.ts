@@ -199,7 +199,7 @@ describe('Error conversion', () => {
         expect(errorProperties.$exception_list[0].mechanism.handled).toEqual(false)
     })
 
-    it('should uses cause when it is an error', () => {
+    it('should use cause when it is an error', () => {
         class CustomError extends Error {
             constructor(message: string) {
                 super(message)
