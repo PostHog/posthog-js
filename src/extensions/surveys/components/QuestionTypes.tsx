@@ -49,7 +49,14 @@ export function OpenTextQuestion({
                 backgroundColor={appearance.backgroundColor}
                 forceDisableHtml={forceDisableHtml}
             />
-            <textarea rows={4} placeholder={appearance?.placeholder} onInput={(e) => setText(e.currentTarget.value)} />
+            <textarea
+                rows={4}
+                placeholder={appearance?.placeholder}
+                onInput={(e) => {
+                    setText(e.currentTarget.value)
+                    e.stopPropagation()
+                }}
+            />
             <BottomSection
                 text={question.buttonText || 'Submit'}
                 submitDisabled={!text && !question.optional}
@@ -291,10 +298,11 @@ export function MultipleChoiceQuestion({
         }
     }
 
-    const handleOpenEndedInputChange = (value: string) => {
-        setOpenEndedInput(value)
+    const handleOpenEndedInputChange = (e: React.FormEvent<HTMLInputElement>) => {
+        e.stopPropagation()
+        setOpenEndedInput(e.currentTarget.value)
         if (question.type === SurveyQuestionType.SingleChoice) {
-            setSelectedChoices(value)
+            setSelectedChoices(e.currentTarget.value)
         }
     }
 
@@ -340,7 +348,7 @@ export function MultipleChoiceQuestion({
                                             id={`surveyQuestion${displayQuestionIndex}Choice${idx}Open`}
                                             name={`question${displayQuestionIndex}`}
                                             value={openEndedInput}
-                                            onInput={(e) => handleOpenEndedInputChange(e.currentTarget.value)}
+                                            onInput={(e) => handleOpenEndedInputChange(e)}
                                             onClick={(e) => {
                                                 // Ensure the checkbox/radio gets checked when clicking the input
                                                 if (!openChoiceSelected) {
