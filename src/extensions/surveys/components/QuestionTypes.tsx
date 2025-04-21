@@ -56,6 +56,9 @@ export function OpenTextQuestion({
                     setText(e.currentTarget.value)
                     e.stopPropagation()
                 }}
+                onKeyDown={(e) => {
+                    e.stopPropagation()
+                }}
             />
             <BottomSection
                 text={question.buttonText || 'Submit'}
@@ -348,6 +351,9 @@ export function MultipleChoiceQuestion({
                                             id={`surveyQuestion${displayQuestionIndex}Choice${idx}Open`}
                                             name={`question${displayQuestionIndex}`}
                                             value={openEndedInput}
+                                            onKeyDown={(e) => {
+                                                e.stopPropagation()
+                                            }}
                                             onInput={(e) => handleOpenEndedInputChange(e)}
                                             onClick={(e) => {
                                                 // Ensure the checkbox/radio gets checked when clicking the input
