@@ -242,7 +242,6 @@ export class PostHogSurveys {
             logger.warn('init was not called')
             return
         }
-
         return this._surveyManager.getActiveMatchingSurveys(callback, forceReload)
     }
 
@@ -316,7 +315,6 @@ export class PostHogSurveys {
             logger.warn('Survey not found')
             return
         }
-
         this._surveyManager.renderSurvey(survey, document?.querySelector(selector))
     }
 }
