@@ -123,8 +123,8 @@ importers:
         specifier: ^17.0.1
         version: 17.0.1
       '@types/web':
-        specifier: ^0.0.154
-        version: 0.0.154
+        specifier: ^0.0.222
+        version: 0.0.222
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.29.1
         version: 8.29.1(@typescript-eslint/parser@8.29.1(eslint@8.57.0)(typescript@5.5.4))(eslint@8.57.0)(typescript@5.5.4)
@@ -1708,8 +1708,8 @@ packages:
   '@types/stack-utils@2.0.1':
     resolution: {integrity: sha512-Hl219/BT5fLAaz6NDkSuhzasy49dwQS/DSdu4MdggFB8zcXv7vflBI3xp7FEmkmdDkBUI2bPUNeMttp2knYdxw==}
 
-  '@types/web@0.0.154':
-    resolution: {integrity: sha512-Tc10Nkpbb8AgM3iGnrvpKVb6x8pzrZpMCPqMJe8htXoEdNDKojEevNAkCjxkjCLZF2p1ZB+gknAwdbkypxwxKg==}
+  '@types/web@0.0.222':
+    resolution: {integrity: sha512-vBvVv2L5ArWQenebQiUCtZNpL4mguLCbrZ8aqzVCundYRvwZZzlqBP7EEpoUszLnztmzWmBxQ4+4nHAMFlfYlA==}
 
   '@types/yargs-parser@15.0.0':
     resolution: {integrity: sha512-FA/BWv8t8ZWJ+gEOnLLd8ygxH/2UFbAvgEonyfN6yWGLKc7zVjbpl2Y4CTjid9h2RfgPP6SEt6uHwEOply00yw==}
@@ -7519,7 +7519,7 @@ snapshots:
 
   '@types/stack-utils@2.0.1': {}
 
-  '@types/web@0.0.154': {}
+  '@types/web@0.0.222': {}
 
   '@types/yargs-parser@15.0.0': {}
 
