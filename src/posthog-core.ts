@@ -14,6 +14,7 @@ import {
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { ExceptionObserver } from './extensions/exception-autocapture'
 import { errorToProperties } from './extensions/exception-autocapture/error-conversion'
+import { HistoryAutocapture } from './extensions/history-autocapture'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
@@ -144,7 +145,7 @@ export const defaultConfig = (): PostHogConfig => ({
     custom_campaign_params: [],
     custom_blocked_useragents: [],
     save_referrer: true,
-    capture_pageview: true,
+    capture_pageview: true, // can be true, false, or 'history-change'
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     cookie_expiration: 365,
@@ -282,6 +283,7 @@ export class PostHog {
     webVitalsAutocapture?: WebVitalsAutocapture
     exceptionObserver?: ExceptionObserver
     deadClicksAutocapture?: DeadClicksAutocapture
+    historyAutocapture?: HistoryAutocapture
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -335,7 +337,6 @@ export class PostHog {
         this.rateLimiter = new RateLimiter(this)
         this.requestRouter = new RequestRouter(this)
         this.consent = new ConsentManager(this)
-
         // NOTE: See the property definition for deprecation notice
         this.people = {
             set: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
@@ -488,6 +489,9 @@ export class PostHog {
 
         this.deadClicksAutocapture = new DeadClicksAutocapture(this, isDeadClicksEnabledForAutocapture)
         this.deadClicksAutocapture.startIfEnabled()
+
+        this.historyAutocapture = new HistoryAutocapture(this)
+        this.historyAutocapture.startIfEnabled()
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
@@ -2012,7 +2016,8 @@ export class PostHog {
     _shouldCapturePageleave(): boolean {
         return (
             this.config.capture_pageleave === true ||
-            (this.config.capture_pageleave === 'if_capture_pageview' && this.config.capture_pageview)
+            (this.config.capture_pageleave === 'if_capture_pageview' &&
+                (this.config.capture_pageview === true || this.config.capture_pageview === 'history_change'))
         )
     }
 

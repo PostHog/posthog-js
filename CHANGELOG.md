@@ -1,3 +1,18 @@
+## 1.236.3 - 2025-04-21
+
+- fix: timezone offset property not being sent (#1908)
+- fix(err): add support for error causes (#1909)
+
+## 1.236.2 - 2025-04-17
+
+- fix response based branching for open choice questions (#1907)
+
+## 1.236.1 - 2025-04-15
+
+- chore: refactor survey loadIfEnabled (#1903)
+- feat: Enforce that private members of classes start with an underscore (#1901)
+- chore: Remove giant Info object (#1900)
+
 ## 1.236.0 - 2025-04-14
 
 - chore: add canRenderSurveyAsync (#1891)

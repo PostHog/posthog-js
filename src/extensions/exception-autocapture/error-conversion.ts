@@ -121,7 +121,7 @@ function getSkipFirstStackStringLines(ex: Error): number {
     return 0
 }
 
-function errorPropertiesFromError(error: Error, metadata?: ErrorMetadata): ErrorProperties {
+function exceptionFromError(error: Error, metadata?: ErrorMetadata): Exception {
     const frames = parseStackFrames(error)
 
     const handled = metadata?.handled ?? true
@@ -129,22 +129,40 @@ function errorPropertiesFromError(error: Error, metadata?: ErrorMetadata): Error
 
     const exceptionType = metadata?.overrideExceptionType ? metadata.overrideExceptionType : error.name
     const exceptionMessage = extractMessage(error)
-
     return {
-        $exception_list: [
-            {
-                type: exceptionType,
-                value: exceptionMessage,
-                stacktrace: {
-                    frames,
-                    type: 'raw',
-                },
-                mechanism: {
-                    handled,
-                    synthetic,
-                },
-            },
-        ],
+        type: exceptionType,
+        value: exceptionMessage,
+        stacktrace: {
+            frames,
+            type: 'raw',
+        },
+        mechanism: {
+            handled,
+            synthetic,
+        },
+    }
+}
+
+function exceptionListFromError(error: Error, metadata?: ErrorMetadata): ErrorProperties['$exception_list'] {
+    const exception = exceptionFromError(error, metadata)
+    if (error.cause && isError(error.cause) && error.cause !== error) {
+        // Cause could be an object or a string
+        // For now we only support error causes
+        // See: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error/cause
+        return [
+            exception,
+            ...exceptionListFromError(error.cause, {
+                handled: metadata?.handled,
+                synthetic: metadata?.synthetic,
+            }),
+        ]
+    }
+    return [exception]
+}
+
+function errorPropertiesFromError(error: Error, metadata?: ErrorMetadata): ErrorProperties {
+    return {
+        $exception_list: exceptionListFromError(error, metadata),
         $exception_level: 'error',
     }
 }
