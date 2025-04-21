@@ -1,3 +1,8 @@
+## 1.236.3 - 2025-04-21
+
+- fix: timezone offset property not being sent (#1908)
+- fix(err): add support for error causes (#1909)
+
 ## 1.236.2 - 2025-04-17
 
 - fix response based branching for open choice questions (#1907)
