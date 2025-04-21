@@ -254,23 +254,15 @@ export class PostHogSurveys {
         return survey
     }
 
-    /**
-     * Internal check for survey eligibility based on flags and running status.
-     * This is used by both getActiveMatchingSurveys and the public canRenderSurvey.
-     */
-    checkSurveyEligibility(surveyId: string | Survey): { eligible: boolean; reason?: string } {
+    private _checkSurveyEligibility(surveyId: string | Survey): { eligible: boolean; reason?: string } {
         if (isNullish(this._surveyManager)) {
-            return { eligible: false, reason: 'Surveys are not loaded' }
+            return { eligible: false, reason: 'SDK is not enabled or survey functionality is not yet loaded' }
         }
         const survey = typeof surveyId === 'string' ? this._getSurveyById(surveyId) : surveyId
         if (!survey) {
             return { eligible: false, reason: 'Survey not found' }
         }
-        const eligibility = this._surveyManager.checkSurveyEligibility(survey)
-        if (!eligibility) {
-            return { eligible: false, reason: 'Survey eligibility check failed' }
-        }
-        return eligibility
+        return this._surveyManager.checkSurveyEligibility(survey)
     }
 
     canRenderSurvey(surveyId: string): SurveyRenderReason {
@@ -278,7 +270,7 @@ export class PostHogSurveys {
             logger.warn('init was not called')
             return { visible: false, disabledReason: 'SDK is not enabled or survey functionality is not yet loaded' }
         }
-        const eligibility = this.checkSurveyEligibility(surveyId)
+        const eligibility = this._checkSurveyEligibility(surveyId)
 
         return { visible: eligibility.eligible, disabledReason: eligibility.reason }
     }
@@ -301,7 +293,7 @@ export class PostHogSurveys {
                 if (!survey) {
                     resolve({ visible: false, disabledReason: 'Survey not found' })
                 } else {
-                    const eligibility = this.checkSurveyEligibility(survey)
+                    const eligibility = this._checkSurveyEligibility(survey)
                     resolve({ visible: eligibility.eligible, disabledReason: eligibility.reason })
                 }
             }, forceReload)
