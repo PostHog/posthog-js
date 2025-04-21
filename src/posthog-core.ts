@@ -1365,10 +1365,6 @@ export class PostHog {
         this.surveys.getActiveMatchingSurveys(callback, forceReload)
     }
 
-    checkSurveyEligibility(surveyId: string): { eligible: boolean; reason?: string } {
-        return this.surveys.checkSurveyEligibility(surveyId)
-    }
-
     /** Render a survey on a specific element. */
     renderSurvey(surveyId: string, selector: string): void {
         this.surveys.renderSurvey(surveyId, selector)

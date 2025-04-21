@@ -8,9 +8,13 @@ import {
     SurveyQuestion,
     SurveySchedule,
 } from '../../posthog-surveys-types'
-import { document as _document, window as _window } from '../../utils/globals'
+import { document as _document, window as _window, userAgent } from '../../utils/globals'
 import { SURVEY_LOGGER as logger } from '../../utils/survey-utils'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
+
+import { SurveyMatchType } from '../../posthog-surveys-types'
+import { isMatchingRegex } from '../../utils/regex-utils'
+import { detectDeviceType } from '../../utils/user-agent-utils'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
@@ -772,4 +776,54 @@ export const renderChildrenAsTextOrHtml = ({ component, children, renderAsHtml, 
               children,
               style,
           })
+}
+
+const surveyValidationMap: Record<SurveyMatchType, (targets: string[], value: string) => boolean> = {
+    icontains: (targets, value) => targets.some((target) => value.toLowerCase().includes(target.toLowerCase())),
+    not_icontains: (targets, value) => targets.every((target) => !value.toLowerCase().includes(target.toLowerCase())),
+    regex: (targets, value) => targets.some((target) => isMatchingRegex(value, target)),
+    not_regex: (targets, value) => targets.every((target) => !isMatchingRegex(value, target)),
+    exact: (targets, value) => targets.some((target) => value === target),
+    is_not: (targets, value) => targets.every((target) => value !== target),
+}
+
+function defaultMatchType(matchType?: SurveyMatchType): SurveyMatchType {
+    return matchType ?? 'icontains'
+}
+
+// use urlMatchType to validate url condition, fallback to contains for backwards compatibility
+export function doesSurveyUrlMatch(survey: Pick<Survey, 'conditions'>): boolean {
+    if (!survey.conditions?.url) {
+        return true
+    }
+    // if we dont know the url, assume it is not a match
+    const href = window?.location?.href
+    if (!href) {
+        return false
+    }
+    const targets = [survey.conditions.url]
+    return surveyValidationMap[defaultMatchType(survey.conditions?.urlMatchType)](targets, href)
+}
+
+export function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
+    if (!survey.conditions?.deviceTypes || survey.conditions?.deviceTypes.length === 0) {
+        return true
+    }
+    // if we dont know the device type, assume it is not a match
+    if (!userAgent) {
+        return false
+    }
+
+    const deviceType = detectDeviceType(userAgent)
+    return surveyValidationMap[defaultMatchType(survey.conditions?.deviceTypesMatchType)](
+        survey.conditions.deviceTypes,
+        deviceType
+    )
+}
+
+export function doesSurveyMatchSelector(survey: Survey): boolean {
+    if (!survey.conditions?.selector) {
+        return true
+    }
+    return !!document?.querySelector(survey.conditions.selector)
 }

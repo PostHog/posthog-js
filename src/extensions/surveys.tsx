@@ -2,6 +2,7 @@ import { PostHog } from '../posthog-core'
 import {
     Survey,
     SurveyAppearance,
+    SurveyCallback,
     SurveyPosition,
     SurveyQuestion,
     SurveyQuestionBranchingType,
@@ -15,7 +16,12 @@ import { addEventListener } from '../utils'
 import * as Preact from 'preact'
 import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { document as _document, window as _window } from '../utils/globals'
-import { doesSurveyUrlMatch, SURVEY_LOGGER as logger } from '../utils/survey-utils'
+import {
+    doesSurveyActivateByAction,
+    doesSurveyActivateByEvent,
+    isSurveyRunning,
+    SURVEY_LOGGER as logger,
+} from '../utils/survey-utils'
 import { isNull, isNumber } from '../utils/type-utils'
 import { createWidgetStyle, retrieveWidgetShadow } from './surveys-widget'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
@@ -27,9 +33,13 @@ import {
     RatingQuestion,
 } from './surveys/components/QuestionTypes'
 import {
+    canActivateRepeatedly,
     createShadow,
     defaultSurveyAppearance,
     dismissedSurveyEvent,
+    doesSurveyDeviceTypesMatch,
+    doesSurveyMatchSelector,
+    doesSurveyUrlMatch,
     getContrastingTextColor,
     getDisplayOrderQuestions,
     getSurveyResponseKey,
@@ -393,9 +403,101 @@ export class SurveyManager {
         )
     }
 
+    private _isSurveyFeatureFlagEnabled(flagKey: string | null) {
+        if (!flagKey) {
+            return true
+        }
+        return !!this._posthog.featureFlags.isFeatureEnabled(flagKey)
+    }
+
+    private _isSurveyConditionMatched(survey: Survey): boolean {
+        if (!survey.conditions) {
+            return true
+        }
+        return doesSurveyUrlMatch(survey) && doesSurveyDeviceTypesMatch(survey) && doesSurveyMatchSelector(survey)
+    }
+
+    private _internalFlagCheckSatisfied(survey: Survey): boolean {
+        return canActivateRepeatedly(survey) || this._isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key)
+    }
+
+    public checkSurveyEligibility(survey: Survey): { eligible: boolean; reason?: string } {
+        const eligibility = { eligible: true, reason: undefined as string | undefined }
+
+        if (!isSurveyRunning(survey)) {
+            eligibility.eligible = false
+            eligibility.reason = `Survey is not running. It was completed on ${survey.end_date}`
+            return eligibility
+        }
+
+        if (!this._isSurveyFeatureFlagEnabled(survey.linked_flag_key)) {
+            eligibility.eligible = false
+            eligibility.reason = `Survey linked feature flag is not enabled`
+            return eligibility
+        }
+
+        if (!this._isSurveyFeatureFlagEnabled(survey.targeting_flag_key)) {
+            eligibility.eligible = false
+            eligibility.reason = `Survey targeting feature flag is not enabled`
+            return eligibility
+        }
+
+        if (!this._internalFlagCheckSatisfied(survey)) {
+            eligibility.eligible = false
+            eligibility.reason = 'Survey internal targeting flag is not enabled and survey cannot activate repeatedly'
+            return eligibility
+        }
+
+        return eligibility
+    }
+
+    /**
+     * Surveys can be activated by events or actions. This method checks if the survey has events and actions,
+     * and if so, it checks if the survey has been activated.
+     * @param survey
+     */
+    private _hasActionOrEventTriggeredSurvey(survey: Survey): boolean {
+        if (!doesSurveyActivateByEvent(survey) && !doesSurveyActivateByAction(survey)) {
+            // If survey doesn't depend on events/actions, it's considered "triggered" by default
+            return true
+        }
+        const surveysActivatedByEventsOrActions: string[] | undefined =
+            this._posthog.surveys._surveyEventReceiver?.getSurveys()
+        return !!surveysActivatedByEventsOrActions?.includes(survey.id)
+    }
+
+    private _checkFlags(survey: Survey): boolean {
+        if (!survey.feature_flag_keys?.length) {
+            return true
+        }
+
+        return survey.feature_flag_keys.every(({ key, value }) => {
+            if (!key || !value) {
+                return true
+            }
+            return this._posthog.featureFlags.isFeatureEnabled(value)
+        })
+    }
+
+    public getActiveMatchingSurveys = (callback: SurveyCallback, forceReload = false): void => {
+        this._posthog?.surveys.getSurveys((surveys) => {
+            const targetingMatchedSurveys = surveys.filter((survey) => {
+                const eligibility = this.checkSurveyEligibility(survey)
+                return (
+                    eligibility.eligible &&
+                    this._isSurveyConditionMatched(survey) &&
+                    this._hasActionOrEventTriggeredSurvey(survey) &&
+                    this._checkFlags(survey)
+                )
+            })
+
+            callback(targetingMatchedSurveys)
+        }, forceReload)
+    }
+
     public callSurveysAndEvaluateDisplayLogic = (forceReload: boolean = false): void => {
-        this._posthog?.getActiveMatchingSurveys((surveys) => {
-            const nonAPISurveys = surveys.filter((survey) => survey.type !== 'api')
+        this.getActiveMatchingSurveys((surveys) => {
+            const nonAPISurveys = surveys.filter((survey) => survey.type !== SurveyType.API)
 
             // Create a queue of surveys sorted by their appearance delay.  We will evaluate the display logic
             // for each survey in the queue in order, and only display one survey at a time.

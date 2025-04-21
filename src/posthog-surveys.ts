@@ -8,9 +8,6 @@ import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import {
     doesSurveyActivateByAction,
     doesSurveyActivateByEvent,
-    doesSurveyDeviceTypesMatch,
-    doesSurveyMatchSelector,
-    doesSurveyUrlMatch,
     isSurveyRunning,
     SURVEY_LOGGER as logger,
 } from './utils/survey-utils'
@@ -249,80 +246,17 @@ export class PostHogSurveys {
         }
     }
 
-    private _isSurveyFeatureFlagEnabled(flagKey: string | null) {
-        if (!flagKey) {
-            return true
-        }
-        return !!this._instance.featureFlags.isFeatureEnabled(flagKey)
-    }
-
-    private _isSurveyConditionMatched(survey: Survey): boolean {
-        if (!survey.conditions) {
-            return true
-        }
-        return doesSurveyUrlMatch(survey) && doesSurveyDeviceTypesMatch(survey) && doesSurveyMatchSelector(survey)
-    }
-
-    private _internalFlagCheckSatisfied(survey: Survey): boolean {
-        return (
-            this._canActivateRepeatedly(survey) || this._isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key)
-        )
-    }
-
-    /**
-     * Surveys can be activated by events or actions. This method checks if the survey has events and actions,
-     * and if so, it checks if the survey has been activated.
-     * @param survey
-     */
-    private _hasActionOrEventTriggeredSurvey(survey: Survey): boolean {
-        if (!doesSurveyActivateByEvent(survey) && !doesSurveyActivateByAction(survey)) {
-            // If survey doesn't depend on events/actions, it's considered "triggered" by default
-            return true
-        }
-        const surveysActivatedByEventsOrActions: string[] | undefined = this._surveyEventReceiver?.getSurveys()
-        return !!surveysActivatedByEventsOrActions?.includes(survey.id)
-    }
-
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false) {
-        this.getSurveys((surveys) => {
-            const targetingMatchedSurveys = surveys.filter((survey) => {
-                const eligibility = this.checkSurveyEligibility(survey)
-                return (
-                    eligibility.eligible &&
-                    this._isSurveyConditionMatched(survey) &&
-                    this._hasActionOrEventTriggeredSurvey(survey) &&
-                    this.checkFlags(survey)
-                )
-            })
-
-            callback(targetingMatchedSurveys)
-        }, forceReload)
-    }
-
-    checkFlags(survey: Survey): boolean {
-        if (!survey.feature_flag_keys?.length) {
-            return true
+        if (!this._isSurveysLoaded()) {
+            logger.warn('init was not called')
+            return
         }
 
-        return survey.feature_flag_keys.every(({ key, value }) => {
-            if (!key || !value) {
-                return true
-            }
-            return this._instance.featureFlags.isFeatureEnabled(value)
-        })
+        return this._surveyManager.getActiveMatchingSurveys(callback, forceReload)
     }
 
     private _isSurveysLoaded(): boolean {
         return !isNullish(this._surveyManager)
-    }
-
-    // this method is lazily loaded onto the window to avoid loading preact and other dependencies if surveys is not enabled
-    private _canActivateRepeatedly(survey: Survey) {
-        if (isNullish(assignableWindow.__PosthogExtensions__?.canActivateRepeatedly)) {
-            logger.warn('init was not called')
-            return false // TODO does it make sense to have a default here?
-        }
-        return assignableWindow.__PosthogExtensions__.canActivateRepeatedly(survey)
     }
 
     private _getSurveyById(surveyId: string): Survey | null {
@@ -342,36 +276,7 @@ export class PostHogSurveys {
             return { eligible: false, reason: 'Surveys are not loaded' }
         }
         const survey = typeof surveyId === 'string' ? this._getSurveyById(surveyId) : surveyId
-        if (!survey) {
-            return { eligible: false, reason: 'Survey not found' }
-        }
-        const eligibility = { eligible: true, reason: undefined as string | undefined }
-
-        if (!isSurveyRunning(survey)) {
-            eligibility.eligible = false
-            eligibility.reason = `Survey is not running. It was completed on ${survey.end_date}`
-            return eligibility
-        }
-
-        if (!this._isSurveyFeatureFlagEnabled(survey.linked_flag_key)) {
-            eligibility.eligible = false
-            eligibility.reason = `Survey linked feature flag is not enabled`
-            return eligibility
-        }
-
-        if (!this._isSurveyFeatureFlagEnabled(survey.targeting_flag_key)) {
-            eligibility.eligible = false
-            eligibility.reason = `Survey targeting feature flag is not enabled`
-            return eligibility
-        }
-
-        if (!this._internalFlagCheckSatisfied(survey)) {
-            eligibility.eligible = false
-            eligibility.reason = 'Survey internal targeting flag is not enabled and survey cannot activate repeatedly'
-            return eligibility
-        }
-
-        return eligibility
+        return this._surveyManager.checkSurveyEligibility(survey)
     }
 
     canRenderSurvey(surveyId: string): SurveyRenderReason {
@@ -388,6 +293,14 @@ export class PostHogSurveys {
     canRenderSurveyAsync(surveyId: string, forceReload: boolean): Promise<SurveyRenderReason> {
         // Ensure surveys are loaded before checking
         // Using Promise to wrap the callback-based getSurveys method
+        if (!this._isSurveysLoaded()) {
+            logger.warn('init was not called')
+            return Promise.resolve({
+                visible: false,
+                disabledReason: 'SDK is not enabled or survey functionality is not yet loaded',
+            })
+        }
+
         // eslint-disable-next-line compat/compat
         return new Promise<SurveyRenderReason>((resolve) => {
             this.getSurveys((surveys) => {
