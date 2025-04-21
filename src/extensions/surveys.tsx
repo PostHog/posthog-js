@@ -246,10 +246,16 @@ export class SurveyManager {
         // Ensure widget container exists if it doesn't
         const shadow = retrieveWidgetShadow(survey, this._posthog)
         const stylesheetContent = style(survey.appearance)
-        const stylesheet = prepareStylesheet(document, stylesheetContent, this._posthog)
+        const styleId = 'ph-survey-widget-style' // Identifier for the style element
 
-        if (stylesheet) {
-            shadow.appendChild(stylesheet)
+        // Check if the stylesheet already exists
+        if (!shadow.querySelector(`style[data-style-id="${styleId}"]`)) {
+            const stylesheet = prepareStylesheet(document, stylesheetContent, this._posthog)
+
+            if (stylesheet) {
+                stylesheet.setAttribute('data-style-id', styleId) // Add identifier
+                shadow.appendChild(stylesheet)
+            }
         }
 
         Preact.render(
