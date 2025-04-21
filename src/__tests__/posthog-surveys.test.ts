@@ -124,7 +124,7 @@ describe('posthog-surveys', () => {
                     end_date: new Date('11/10/2022').toISOString(),
                 }
                 mockPostHog.get_property.mockReturnValue([completedSurvey])
-                const result = surveys.checkSurveyEligibility(survey.id)
+                const result = surveys['_checkSurveyEligibility'](survey.id)
                 expect(result.eligible).toBeFalsy()
                 expect(result.reason).toEqual(`Survey is not running. It was completed on ${completedSurvey.end_date}`)
             })
@@ -133,7 +133,7 @@ describe('posthog-surveys', () => {
                 decideResponse.featureFlags[survey.targeting_flag_key] = true
                 decideResponse.featureFlags[survey.internal_targeting_flag_key] = true
                 decideResponse.featureFlags[survey.linked_flag_key] = false
-                const result = surveys.checkSurveyEligibility(survey.id)
+                const result = surveys['_checkSurveyEligibility'](survey.id)
                 expect(result.eligible).toBeFalsy()
                 expect(result.reason).toEqual('Survey linked feature flag is not enabled')
             })
@@ -142,7 +142,7 @@ describe('posthog-surveys', () => {
                 decideResponse.featureFlags[survey.linked_flag_key] = true
                 decideResponse.featureFlags[survey.internal_targeting_flag_key] = true
                 decideResponse.featureFlags[survey.targeting_flag_key] = false
-                const result = surveys.checkSurveyEligibility(survey.id)
+                const result = surveys['_checkSurveyEligibility'](survey.id)
                 expect(result.eligible).toBeFalsy()
                 expect(result.reason).toEqual('Survey targeting feature flag is not enabled')
             })
@@ -151,7 +151,7 @@ describe('posthog-surveys', () => {
                 decideResponse.featureFlags[survey.targeting_flag_key] = true
                 decideResponse.featureFlags[survey.linked_flag_key] = true
                 decideResponse.featureFlags[survey.internal_targeting_flag_key] = false
-                const result = surveys.checkSurveyEligibility(survey.id)
+                const result = surveys['_checkSurveyEligibility'](survey.id)
                 expect(result.eligible).toBeFalsy()
                 expect(result.reason).toEqual(
                     'Survey internal targeting flag is not enabled and survey cannot activate repeatedly'
@@ -162,7 +162,7 @@ describe('posthog-surveys', () => {
                 decideResponse.featureFlags[survey.targeting_flag_key] = true
                 decideResponse.featureFlags[survey.linked_flag_key] = true
                 decideResponse.featureFlags[survey.internal_targeting_flag_key] = false
-                const result = surveys.checkSurveyEligibility(repeatableSurvey.id)
+                const result = surveys['_checkSurveyEligibility'](repeatableSurvey.id)
                 expect(result.eligible).toBeTruthy()
             })
         })
