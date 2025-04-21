@@ -9,9 +9,10 @@ jest.mock('../utils/logger', () => ({
 jest.useFakeTimers()
 
 import { SURVEYS, SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
+import { SurveyManager } from '../extensions/surveys'
 import { PostHog } from '../posthog-core'
 import { PostHogSurveys } from '../posthog-surveys'
-import { Survey, SurveyType } from '../posthog-surveys-types'
+import { Survey, SurveySchedule, SurveyType } from '../posthog-surveys-types'
 import { DecideResponse } from '../types'
 import { assignableWindow } from '../utils/globals'
 
@@ -35,6 +36,14 @@ describe('posthog-surveys', () => {
             internal_targeting_flag_key: 'internal_targeting_flag_key',
             start_date: new Date('10/10/2022').toISOString(),
         } as unknown as Survey
+
+        const repeatableSurvey: Survey = {
+            ...survey,
+            id: 'repeatable-survey',
+            name: 'repeatable survey',
+            type: SurveyType.Popover,
+            schedule: SurveySchedule.Always,
+        }
 
         const decideResponse = {
             featureFlags: {
@@ -105,8 +114,8 @@ describe('posthog-surveys', () => {
         describe('checkSurveyEligibility', () => {
             beforeEach(() => {
                 // mock getSurveys response
-                mockPostHog.get_property.mockReturnValue([survey])
-                surveys['_surveyManager'] = {}
+                mockPostHog.get_property.mockReturnValue([survey, repeatableSurvey])
+                surveys['_surveyManager'] = new SurveyManager(mockPostHog as PostHog)
             })
 
             it('cannot render completed surveys', () => {
@@ -153,8 +162,7 @@ describe('posthog-surveys', () => {
                 decideResponse.featureFlags[survey.targeting_flag_key] = true
                 decideResponse.featureFlags[survey.linked_flag_key] = true
                 decideResponse.featureFlags[survey.internal_targeting_flag_key] = false
-                assignableWindow.__PosthogExtensions__.canActivateRepeatedly = jest.fn().mockReturnValue(true)
-                const result = surveys.checkSurveyEligibility(survey.id)
+                const result = surveys.checkSurveyEligibility(repeatableSurvey.id)
                 expect(result.eligible).toBeTruthy()
             })
         })
@@ -162,7 +170,7 @@ describe('posthog-surveys', () => {
         describe('loadIfEnabled', () => {
             it('should not initialize if surveys are already loaded', () => {
                 // Set surveyManager to simulate already loaded state
-                surveys['_surveyManager'] = {}
+                surveys['_surveyManager'] = new SurveyManager(mockPostHog as PostHog)
                 surveys.loadIfEnabled()
 
                 expect(mockGenerateSurveys).not.toHaveBeenCalled()
@@ -215,7 +223,7 @@ describe('posthog-surveys', () => {
                 // Set decide server response
                 surveys['_hasSurveys'] = true
                 mockGenerateSurveys.mockImplementation(() => {
-                    throw new Error('Test error')
+                    throw Error('Test error')
                 })
 
                 expect(() => surveys.loadIfEnabled()).toThrow('Test error')

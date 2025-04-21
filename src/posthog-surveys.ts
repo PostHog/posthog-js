@@ -1,4 +1,5 @@
 import { SURVEYS } from './constants'
+import { SurveyManager } from './extensions/surveys'
 import { getSurveySeenStorageKeys } from './extensions/surveys/surveys-extension-utils'
 import { PostHog } from './posthog-core'
 import { Survey, SurveyCallback, SurveyRenderReason } from './posthog-surveys-types'
@@ -16,7 +17,7 @@ import { isArray, isNullish } from './utils/type-utils'
 export class PostHogSurveys {
     private _hasSurveys?: boolean
     public _surveyEventReceiver: SurveyEventReceiver | null
-    private _surveyManager: any
+    private _surveyManager: SurveyManager | null = null
     private _isFetchingSurveys: boolean = false
     private _isInitializingSurveys: boolean = false
     private _surveyCallbacks: SurveyCallback[] = []
@@ -238,15 +239,11 @@ export class PostHogSurveys {
     }
 
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false) {
-        if (!this._isSurveysLoaded()) {
+        if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return
         }
         return this._surveyManager.getActiveMatchingSurveys(callback, forceReload)
-    }
-
-    private _isSurveysLoaded(): boolean {
-        return !isNullish(this._surveyManager)
     }
 
     private _getSurveyById(surveyId: string): Survey | null {
@@ -262,28 +259,34 @@ export class PostHogSurveys {
      * This is used by both getActiveMatchingSurveys and the public canRenderSurvey.
      */
     checkSurveyEligibility(surveyId: string | Survey): { eligible: boolean; reason?: string } {
-        if (!this._isSurveysLoaded()) {
+        if (isNullish(this._surveyManager)) {
             return { eligible: false, reason: 'Surveys are not loaded' }
         }
         const survey = typeof surveyId === 'string' ? this._getSurveyById(surveyId) : surveyId
-        return this._surveyManager.checkSurveyEligibility(survey)
+        if (!survey) {
+            return { eligible: false, reason: 'Survey not found' }
+        }
+        const eligibility = this._surveyManager.checkSurveyEligibility(survey)
+        if (!eligibility) {
+            return { eligible: false, reason: 'Survey eligibility check failed' }
+        }
+        return eligibility
     }
 
     canRenderSurvey(surveyId: string): SurveyRenderReason {
-        if (!this._isSurveysLoaded()) {
+        if (!isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return { visible: false, disabledReason: 'SDK is not enabled or survey functionality is not yet loaded' }
         }
         const eligibility = this.checkSurveyEligibility(surveyId)
 
-        // Translate internal eligibility result to public SurveyRenderReason format
         return { visible: eligibility.eligible, disabledReason: eligibility.reason }
     }
 
     canRenderSurveyAsync(surveyId: string, forceReload: boolean): Promise<SurveyRenderReason> {
         // Ensure surveys are loaded before checking
         // Using Promise to wrap the callback-based getSurveys method
-        if (!this._isSurveysLoaded()) {
+        if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return Promise.resolve({
                 visible: false,
@@ -306,15 +309,20 @@ export class PostHogSurveys {
     }
 
     renderSurvey(surveyId: string, selector: string) {
-        if (!this._isSurveysLoaded()) {
+        if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return
         }
         const survey = this._getSurveyById(surveyId)
+        const elem = document?.querySelector(selector)
         if (!survey) {
             logger.warn('Survey not found')
             return
         }
-        this._surveyManager.renderSurvey(survey, document?.querySelector(selector))
+        if (!elem) {
+            logger.warn('Element not found')
+            return
+        }
+        this._surveyManager.renderSurvey(survey, elem)
     }
 }

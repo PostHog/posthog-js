@@ -574,6 +574,7 @@ export class SurveyManager {
             handlePopoverSurvey: this._handlePopoverSurvey,
             manageWidgetSelectorListener: this._manageWidgetSelectorListener,
             sortSurveysByAppearanceDelay: this._sortSurveysByAppearanceDelay,
+            checkFlags: this._checkFlags.bind(this),
         }
     }
 }
