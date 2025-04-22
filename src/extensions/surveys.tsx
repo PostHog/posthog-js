@@ -14,7 +14,7 @@ import {
 import { addEventListener } from '../utils'
 
 import * as Preact from 'preact'
-import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks'
+import { useContext, useEffect, useMemo, useState } from 'preact/hooks'
 import { document as _document, window as _window } from '../utils/globals'
 import { doesSurveyUrlMatch, SURVEY_LOGGER as logger } from '../utils/survey-utils'
 import { isNull, isNumber } from '../utils/type-utils'
@@ -1020,7 +1020,6 @@ export function FeedbackWidget({
     const [isFeedbackButtonVisible, setIsFeedbackButtonVisible] = useState(true)
     const [showSurvey, setShowSurvey] = useState(false)
     const [styleOverrides, setStyleOverrides] = useState<React.CSSProperties>({})
-    const widgetRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
         if (!posthog) {
@@ -1032,16 +1031,12 @@ export function FeedbackWidget({
         }
 
         if (survey.appearance?.widgetType === 'tab') {
-            if (widgetRef.current) {
-                const widgetPos = widgetRef.current.getBoundingClientRect()
-                setStyleOverrides({
-                    top: '50%',
-                    left: parseInt(`${widgetPos.right - 360}`),
-                    bottom: 'auto',
-                    borderRadius: 10,
-                    borderBottom: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
-                })
-            }
+            setStyleOverrides({
+                top: '50%',
+                bottom: 'auto',
+                borderRadius: 10,
+                borderBottom: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
+            })
         }
         const handleShowSurvey = (event: Event) => {
             const customEvent = event as CustomEvent
@@ -1087,7 +1082,6 @@ export function FeedbackWidget({
             {survey.appearance?.widgetType === 'tab' && (
                 <div
                     className="ph-survey-widget-tab"
-                    ref={widgetRef}
                     onClick={() => !readOnly && setShowSurvey(!showSurvey)}
                     style={{ color: getContrastingTextColor(survey.appearance.widgetColor) }}
                 >
