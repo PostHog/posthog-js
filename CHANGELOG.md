@@ -1,3 +1,11 @@
+## 1.236.5 - 2025-04-22
+
+- fix: dont propagate events in surveys (#1911)
+
+## 1.236.4 - 2025-04-21
+
+- fix: prevent multiple stylesheet creation for feedback survey (#1912)
+
 ## 1.236.3 - 2025-04-21
 
 - fix: timezone offset property not being sent (#1908)

@@ -14,7 +14,7 @@ import {
 import { addEventListener } from '../utils'
 
 import * as Preact from 'preact'
-import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks'
+import { useContext, useEffect, useMemo, useState } from 'preact/hooks'
 import { document as _document, window as _window } from '../utils/globals'
 import {
     doesSurveyActivateByAction,
@@ -255,10 +255,16 @@ export class SurveyManager {
         // Ensure widget container exists if it doesn't
         const shadow = retrieveWidgetShadow(survey, this._posthog)
         const stylesheetContent = style(survey.appearance)
-        const stylesheet = prepareStylesheet(document, stylesheetContent, this._posthog)
+        const WIDGET_STYLE_ID = 'ph-data-style-id'
 
-        if (stylesheet) {
-            shadow.appendChild(stylesheet)
+        // Check if the stylesheet already exists
+        if (!shadow.querySelector(`style[${WIDGET_STYLE_ID}="${WIDGET_STYLE_ID}"]`)) {
+            const stylesheet = prepareStylesheet(document, stylesheetContent, this._posthog)
+
+            if (stylesheet) {
+                stylesheet.setAttribute(WIDGET_STYLE_ID, WIDGET_STYLE_ID) // Add identifier
+                shadow.appendChild(stylesheet)
+            }
         }
 
         Preact.render(
@@ -1065,7 +1071,6 @@ export function FeedbackWidget({
     const [isFeedbackButtonVisible, setIsFeedbackButtonVisible] = useState(true)
     const [showSurvey, setShowSurvey] = useState(false)
     const [styleOverrides, setStyleOverrides] = useState<React.CSSProperties>({})
-    const widgetRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
         if (!posthog) {
@@ -1077,16 +1082,12 @@ export function FeedbackWidget({
         }
 
         if (survey.appearance?.widgetType === 'tab') {
-            if (widgetRef.current) {
-                const widgetPos = widgetRef.current.getBoundingClientRect()
-                setStyleOverrides({
-                    top: '50%',
-                    left: parseInt(`${widgetPos.right - 360}`),
-                    bottom: 'auto',
-                    borderRadius: 10,
-                    borderBottom: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
-                })
-            }
+            setStyleOverrides({
+                top: '50%',
+                bottom: 'auto',
+                borderRadius: 10,
+                borderBottom: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
+            })
         }
         const handleShowSurvey = (event: Event) => {
             const customEvent = event as CustomEvent
@@ -1132,7 +1133,6 @@ export function FeedbackWidget({
             {survey.appearance?.widgetType === 'tab' && (
                 <div
                     className="ph-survey-widget-tab"
-                    ref={widgetRef}
                     onClick={() => !readOnly && setShowSurvey(!showSurvey)}
                     style={{ color: getContrastingTextColor(survey.appearance.widgetColor) }}
                 >
