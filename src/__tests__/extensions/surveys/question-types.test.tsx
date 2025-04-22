@@ -1,6 +1,6 @@
 import { fireEvent, render } from '@testing-library/preact'
-import { MultipleChoiceQuestion } from '../../../extensions/surveys/components/QuestionTypes'
-import { MultipleSurveyQuestion, SurveyQuestionType } from '../../../posthog-surveys-types'
+import { MultipleChoiceQuestion, OpenTextQuestion } from '../../../extensions/surveys/components/QuestionTypes'
+import { BasicSurveyQuestion, MultipleSurveyQuestion, SurveyQuestionType } from '../../../posthog-surveys-types'
 
 describe('MultipleChoiceQuestion', () => {
     const mockAppearance = {
@@ -141,5 +141,73 @@ describe('MultipleChoiceQuestion', () => {
                 expect(document.activeElement).toBe(openInput)
             }, 0)
         })
+
+        it('does not propagate keydown events from open choice input', () => {
+            const parentKeyDownHandler = jest.fn()
+            const { container } = render(
+                <div onKeyDown={parentKeyDownHandler}>
+                    <MultipleChoiceQuestion {...baseProps} question={multipleChoiceQuestion} />
+                </div>
+            )
+
+            // Find the open-ended input using its specific ID
+            const openInput = container.querySelector('#surveyQuestion1Choice3Open') as HTMLInputElement
+            if (!openInput) {
+                throw new Error('Open choice input not found')
+            }
+
+            // Simulate typing 'C' into the open-ended input
+            fireEvent.keyDown(openInput, { key: 'C', code: 'KeyC' })
+
+            // Assert that the parent's keydown handler was NOT called
+            expect(parentKeyDownHandler).not.toHaveBeenCalled()
+        })
     })
+})
+
+describe('OpenTextQuestion', () => {
+    const mockAppearance = {
+        backgroundColor: '#fff',
+        submitButtonText: 'Submit',
+        placeholder: 'Enter your response',
+    }
+
+    const baseProps = {
+        forceDisableHtml: false,
+        appearance: mockAppearance,
+        onSubmit: jest.fn(),
+        onPreviewSubmit: jest.fn(),
+    }
+
+    const openTextQuestion: BasicSurveyQuestion = {
+        type: SurveyQuestionType.Open,
+        question: 'What is your feedback?',
+        description: 'Provide details below',
+        optional: false,
+    }
+
+    it('does not propagate keydown events', () => {
+        const parentKeyDownHandler = jest.fn()
+
+        // Render the component within a div that has a keydown listener
+        const { container } = render(
+            <div onKeyDown={parentKeyDownHandler}>
+                <OpenTextQuestion {...baseProps} question={openTextQuestion} />
+            </div>
+        )
+
+        const textarea = container.querySelector('textarea')
+
+        if (!textarea) {
+            throw new Error('Textarea not found')
+        }
+
+        // Simulate typing 'C' into the textarea
+        fireEvent.keyDown(textarea, { key: 'C', code: 'KeyC' })
+
+        // Assert that the parent's keydown handler was NOT called
+        expect(parentKeyDownHandler).not.toHaveBeenCalled()
+    })
+
+    // Add other tests for OpenTextQuestion if needed...
 })
