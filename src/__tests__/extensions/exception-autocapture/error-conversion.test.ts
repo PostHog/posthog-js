@@ -198,4 +198,50 @@ describe('Error conversion', () => {
         expect(errorProperties.$exception_list[0].mechanism.synthetic).toEqual(false)
         expect(errorProperties.$exception_list[0].mechanism.handled).toEqual(false)
     })
+
+    it('should use cause when it is an error', () => {
+        class CustomError extends Error {
+            constructor(message: string) {
+                super(message)
+                this.name = 'CustomError'
+            }
+        }
+        const originalError = new CustomError('my original error')
+        const error = new Error('my error', { cause: originalError })
+        const errorProperties: ErrorProperties = errorToProperties({ error, event: undefined })
+        expect(Object.keys(errorProperties)).toHaveLength(2)
+        expect(errorProperties.$exception_list[0].type).toEqual('Error')
+        expect(errorProperties.$exception_list[0].value).toEqual('my error')
+        expect(errorProperties.$exception_level).toEqual('error')
+        expect(errorProperties.$exception_list[0].mechanism.synthetic).toEqual(false)
+        expect(errorProperties.$exception_list[0].mechanism.handled).toEqual(true)
+        expect(errorProperties.$exception_list[1].type).toEqual('CustomError')
+        expect(errorProperties.$exception_list[1].value).toEqual('my original error')
+    })
+
+    it('should not use cause prop when it is a string', () => {
+        const originalError = 'original test'
+        const error = new Error('my error', { cause: originalError })
+        const errorProperties: ErrorProperties = errorToProperties({ error, event: undefined })
+        expect(Object.keys(errorProperties)).toHaveLength(2)
+        expect(errorProperties.$exception_list.length).toEqual(1)
+        expect(errorProperties.$exception_list[0].type).toEqual('Error')
+        expect(errorProperties.$exception_list[0].value).toEqual('my error')
+        expect(errorProperties.$exception_level).toEqual('error')
+        expect(errorProperties.$exception_list[0].mechanism.synthetic).toEqual(false)
+        expect(errorProperties.$exception_list[0].mechanism.handled).toEqual(true)
+    })
+
+    it('should forward synthetic and handled props when using cause', () => {
+        const originalError = new Error('my original error')
+        const error = new Error('my error', { cause: originalError })
+        const metadata = { handled: false, synthetic: false }
+        const errorProperties: ErrorProperties = errorToProperties({ error, event: undefined }, metadata)
+        expect(Object.keys(errorProperties)).toHaveLength(2)
+        expect(errorProperties.$exception_list.length).toEqual(2)
+        expect(errorProperties.$exception_list[0].mechanism.synthetic).toEqual(false)
+        expect(errorProperties.$exception_list[0].mechanism.handled).toEqual(false)
+        expect(errorProperties.$exception_list[1].mechanism.synthetic).toEqual(false)
+        expect(errorProperties.$exception_list[1].mechanism.handled).toEqual(false)
+    })
 })

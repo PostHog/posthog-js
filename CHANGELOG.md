@@ -1,3 +1,16 @@
+## 1.236.4 - 2025-04-21
+
+- fix: prevent multiple stylesheet creation for feedback survey (#1912)
+
+## 1.236.3 - 2025-04-21
+
+- fix: timezone offset property not being sent (#1908)
+- fix(err): add support for error causes (#1909)
+
+## 1.236.2 - 2025-04-17
+
+- fix response based branching for open choice questions (#1907)
+
 ## 1.236.1 - 2025-04-15
 
 - chore: refactor survey loadIfEnabled (#1903)

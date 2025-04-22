@@ -993,6 +993,32 @@ describe('surveys', () => {
             expect(getNextSurveyStep(survey, 0, 'Maybe')).toEqual(3)
         })
 
+        it('should branch out correctly based on a single choice response, with an open ended choice', () => {
+            survey.questions = [
+                {
+                    type: SurveyQuestionType.SingleChoice,
+                    question: 'Will you leave us a review?',
+                    choices: ['Yes', 'No', 'Maybe', 'Sometimes', 'Other'],
+                    branching: {
+                        type: SurveyQuestionBranchingType.ResponseBased,
+                        responseValues: {
+                            '0': 'end',
+                            '1': 1,
+                            '4': 'end',
+                        },
+                    },
+                    hasOpenChoice: true,
+                },
+                { type: SurveyQuestionType.Open, question: 'Why yes?' },
+                { type: SurveyQuestionType.Open, question: 'Why no?' },
+                { type: SurveyQuestionType.Open, question: 'Why maybe?' },
+            ] as unknown[] as SurveyQuestion[]
+            expect(getNextSurveyStep(survey, 0, 'Yes')).toEqual('end')
+            expect(getNextSurveyStep(survey, 0, 'No')).toEqual(1)
+            expect(getNextSurveyStep(survey, 0, 'Maybe')).toEqual(1)
+            expect(getNextSurveyStep(survey, 0, 'this is another answer')).toEqual('end')
+        })
+
         // Response-based branching, scale 1-3
         it('should branch out the negative/neutral/positive respondends correctly (scale 1-3)', () => {
             survey.questions = [

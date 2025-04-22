@@ -1,10 +1,9 @@
-import { PostHogProvider, usePostHog } from 'posthog-js/react'
+import { PostHogProvider } from 'posthog-js/react'
 import type { PostHogConfig } from 'posthog-js'
 
-import { isRouteErrorResponse, Links, Meta, Outlet, Scripts, ScrollRestoration, useLocation } from 'react-router'
+import { isRouteErrorResponse, Links, Meta, Outlet, Scripts, ScrollRestoration } from 'react-router'
 import type { Route } from './+types/root'
 import './app.css'
-import { useEffect } from 'react'
 
 export const links: Route.LinksFunction = () => [
     { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
@@ -40,7 +39,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 const posthogKey: string = import.meta.env.VITE_PUBLIC_POSTHOG_KEY!
 const posthogOptions: Partial<PostHogConfig> = {
     api_host: import.meta.env.VITE_PUBLIC_POSTHOG_HOST,
-    capture_pageview: false, // Disable automatic pageview capture, as we capture manually
+    capture_pageview: 'history_change',
     capture_pageleave: true,
     debug: true,
 }
@@ -54,12 +53,6 @@ export default function App() {
 }
 
 export function AppInner() {
-    const posthog = usePostHog()
-    const location = useLocation()
-    useEffect(() => {
-        posthog.capture('$pageview')
-    }, [posthog, location])
-
     return <Outlet />
 }
 
