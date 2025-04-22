@@ -312,7 +312,7 @@ export class PostHogSurveys {
             return
         }
         if (!elem) {
-            logger.warn('Element not found')
+            logger.warn('Survey element not found')
             return
         }
         this._surveyManager.renderSurvey(survey, elem)
