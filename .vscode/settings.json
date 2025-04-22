@@ -1,5 +1,8 @@
 {
     "jest.runMode": "on-demand",
     "jest.rootPath": "src",
-    "jest.jestCommandLine": "pnpm test:unit"
+    "jest.jestCommandLine": "pnpm test:unit",
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "never"
+    }
 }
