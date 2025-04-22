@@ -1,3 +1,7 @@
+## 1.236.5 - 2025-04-22
+
+- fix: dont propagate events in surveys (#1911)
+
 ## 1.236.4 - 2025-04-21
 
 - fix: prevent multiple stylesheet creation for feedback survey (#1912)
