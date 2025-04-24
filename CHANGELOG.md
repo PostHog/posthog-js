@@ -1,3 +1,9 @@
+## 1.236.6 - 2025-04-24
+
+- fix: refactor canRenderSurvey and move logic to SurveyManager (#1897)
+- chore: do not organize imports using VS Code functionality (#1914)
+- fix: make feedback tab survey display responsive (#1704)
+
 ## 1.236.5 - 2025-04-22
 
 - fix: dont propagate events in surveys (#1911)
