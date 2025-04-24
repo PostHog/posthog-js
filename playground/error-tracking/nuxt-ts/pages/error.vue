@@ -8,5 +8,5 @@ function throwError() {
     <h1>Error Page</h1>
     <p>Something went wrong</p>
     <NuxtLink to="/">Go back home</NuxtLink>
-    <button @click="throwError()">Hello World</button>
+    <button @click="throwError()">Throw Error</button>
 </template>
