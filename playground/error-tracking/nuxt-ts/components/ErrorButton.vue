@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const { $posthog } = useNuxtApp()
-async function captureException() {
+function captureException() {
     // manually capture exception
     $posthog().captureException(new Error('Nuxt manual error'))
 }
