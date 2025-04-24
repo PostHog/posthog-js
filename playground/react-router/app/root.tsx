@@ -1,5 +1,5 @@
-import { PostHogProvider } from 'posthog-js/react'
 import type { PostHogConfig } from 'posthog-js'
+import { PostHogProvider } from 'posthog-js/react'
 
 import { isRouteErrorResponse, Links, Meta, Outlet, Scripts, ScrollRestoration } from 'react-router'
 import type { Route } from './+types/root'

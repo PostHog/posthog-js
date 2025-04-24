@@ -14,6 +14,7 @@ import {
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { ExceptionObserver } from './extensions/exception-autocapture'
 import { errorToProperties } from './extensions/exception-autocapture/error-conversion'
+import { HistoryAutocapture } from './extensions/history-autocapture'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
@@ -66,9 +67,10 @@ import {
     safewrapClass,
 } from './utils'
 import { isLikelyBot } from './utils/blocked-uas'
+import { getEventProperties } from './utils/event-utils'
 import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
-import { getPersonPropertiesHash } from './utils/person-property-utils'
 import { logger } from './utils/logger'
+import { getPersonPropertiesHash } from './utils/person-property-utils'
 import { RequestRouter, RequestRouterRegion } from './utils/request-router'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
 import { includes, isDistinctIdStringLike } from './utils/string-utils'
@@ -87,8 +89,6 @@ import {
 } from './utils/type-utils'
 import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
-import { getEventProperties } from './utils/event-utils'
-import { HistoryAutocapture } from './extensions/history-autocapture'
 
 /*
 SIMPLE STYLE GUIDE:

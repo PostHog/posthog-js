@@ -1,17 +1,23 @@
 import { SURVEYS } from './constants'
+import { SurveyManager } from './extensions/surveys'
 import { getSurveySeenStorageKeys } from './extensions/surveys/surveys-extension-utils'
 import { PostHog } from './posthog-core'
 import { Survey, SurveyCallback, SurveyRenderReason } from './posthog-surveys-types'
 import { RemoteConfig } from './types'
 import { assignableWindow, document } from './utils/globals'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
-import { doesSurveyDeviceTypesMatch, doesSurveyUrlMatch, SURVEY_LOGGER as logger } from './utils/survey-utils'
+import {
+    doesSurveyActivateByAction,
+    doesSurveyActivateByEvent,
+    isSurveyRunning,
+    SURVEY_LOGGER as logger,
+} from './utils/survey-utils'
 import { isArray, isNullish } from './utils/type-utils'
 
 export class PostHogSurveys {
     private _hasSurveys?: boolean
     public _surveyEventReceiver: SurveyEventReceiver | null
-    private _surveyManager: any
+    private _surveyManager: SurveyManager | null = null
     private _isFetchingSurveys: boolean = false
     private _isInitializingSurveys: boolean = false
     private _surveyCallbacks: SurveyCallback[] = []
@@ -159,66 +165,61 @@ export class PostHogSurveys {
         }
 
         const existingSurveys = this._instance.get_property(SURVEYS)
-
-        if (!existingSurveys || forceReload) {
-            // Prevent concurrent API calls
-            if (this._isFetchingSurveys) {
-                return callback([], {
-                    isLoaded: false,
-                    error: 'Surveys are already being loaded',
-                })
-            }
-
-            try {
-                this._isFetchingSurveys = true
-                this._instance._send_request({
-                    url: this._instance.requestRouter.endpointFor(
-                        'api',
-                        `/api/surveys/?token=${this._instance.config.token}`
-                    ),
-                    method: 'GET',
-                    timeout: this._instance.config.surveys_request_timeout_ms,
-                    callback: (response) => {
-                        this._isFetchingSurveys = false
-                        const statusCode = response.statusCode
-                        if (statusCode !== 200 || !response.json) {
-                            const error = `Surveys API could not be loaded, status: ${statusCode}`
-                            logger.error(error)
-                            return callback([], {
-                                isLoaded: false,
-                                error,
-                            })
-                        }
-                        const surveys = response.json.surveys || []
-
-                        const eventOrActionBasedSurveys = surveys.filter(
-                            (survey: Survey) =>
-                                (survey.conditions?.events &&
-                                    survey.conditions?.events?.values &&
-                                    survey.conditions?.events?.values?.length > 0) ||
-                                (survey.conditions?.actions &&
-                                    survey.conditions?.actions?.values &&
-                                    survey.conditions?.actions?.values?.length > 0)
-                        )
-
-                        if (eventOrActionBasedSurveys.length > 0) {
-                            this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
-                        }
-
-                        this._instance.persistence?.register({ [SURVEYS]: surveys })
-                        return callback(surveys, {
-                            isLoaded: true,
-                        })
-                    },
-                })
-            } catch (e) {
-                this._isFetchingSurveys = false
-                throw e
-            }
-        } else {
+        if (existingSurveys && !forceReload) {
             return callback(existingSurveys, {
                 isLoaded: true,
             })
+        }
+
+        // Prevent concurrent API calls
+        if (this._isFetchingSurveys) {
+            return callback([], {
+                isLoaded: false,
+                error: 'Surveys are already being loaded',
+            })
+        }
+
+        try {
+            this._isFetchingSurveys = true
+            this._instance._send_request({
+                url: this._instance.requestRouter.endpointFor(
+                    'api',
+                    `/api/surveys/?token=${this._instance.config.token}`
+                ),
+                method: 'GET',
+                timeout: this._instance.config.surveys_request_timeout_ms,
+                callback: (response) => {
+                    this._isFetchingSurveys = false
+                    const statusCode = response.statusCode
+                    if (statusCode !== 200 || !response.json) {
+                        const error = `Surveys API could not be loaded, status: ${statusCode}`
+                        logger.error(error)
+                        return callback([], {
+                            isLoaded: false,
+                            error,
+                        })
+                    }
+                    const surveys = response.json.surveys || []
+
+                    const eventOrActionBasedSurveys = surveys.filter(
+                        (survey: Survey) =>
+                            isSurveyRunning(survey) &&
+                            (doesSurveyActivateByEvent(survey) || doesSurveyActivateByAction(survey))
+                    )
+
+                    if (eventOrActionBasedSurveys.length > 0) {
+                        this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
+                    }
+
+                    this._instance.persistence?.register({ [SURVEYS]: surveys })
+                    return callback(surveys, {
+                        isLoaded: true,
+                    })
+                },
+            })
+        } catch (e) {
+            this._isFetchingSurveys = false
+            throw e
         }
     }
 
@@ -237,111 +238,46 @@ export class PostHogSurveys {
         }
     }
 
-    private _isSurveyFeatureFlagEnabled(flagKey: string | null) {
-        if (!flagKey) {
-            return true
-        }
-        return this._instance.featureFlags.isFeatureEnabled(flagKey)
-    }
-
     getActiveMatchingSurveys(callback: SurveyCallback, forceReload = false) {
-        this.getSurveys((surveys) => {
-            const activeSurveys = surveys.filter((survey) => {
-                return !!(survey.start_date && !survey.end_date)
-            })
-
-            const conditionMatchedSurveys = activeSurveys.filter((survey) => {
-                if (!survey.conditions) {
-                    return true
-                }
-
-                const urlCheck = doesSurveyUrlMatch(survey)
-                const selectorCheck = survey.conditions?.selector
-                    ? document?.querySelector(survey.conditions.selector)
-                    : true
-                const deviceTypeCheck = doesSurveyDeviceTypesMatch(survey)
-                return urlCheck && selectorCheck && deviceTypeCheck
-            })
-
-            // get all the surveys that have been activated so far with user actions.
-            const activatedSurveys: string[] | undefined = this._surveyEventReceiver?.getSurveys()
-            const targetingMatchedSurveys = conditionMatchedSurveys.filter((survey) => {
-                if (
-                    !survey.linked_flag_key &&
-                    !survey.targeting_flag_key &&
-                    !survey.internal_targeting_flag_key &&
-                    !survey.feature_flag_keys?.length
-                ) {
-                    return true
-                }
-                const linkedFlagCheck = this._isSurveyFeatureFlagEnabled(survey.linked_flag_key)
-                const targetingFlagCheck = this._isSurveyFeatureFlagEnabled(survey.targeting_flag_key)
-
-                const hasEvents = (survey.conditions?.events?.values?.length ?? 0) > 0
-                const hasActions = (survey.conditions?.actions?.values?.length ?? 0) > 0
-
-                const eventBasedTargetingFlagCheck =
-                    hasEvents || hasActions ? activatedSurveys?.includes(survey.id) : true
-
-                const overrideInternalTargetingFlagCheck = this._canActivateRepeatedly(survey)
-                const internalTargetingFlagCheck =
-                    overrideInternalTargetingFlagCheck ||
-                    this._isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key)
-
-                const flagsCheck = this.checkFlags(survey)
-                return (
-                    linkedFlagCheck &&
-                    targetingFlagCheck &&
-                    internalTargetingFlagCheck &&
-                    eventBasedTargetingFlagCheck &&
-                    flagsCheck
-                )
-            })
-
-            return callback(targetingMatchedSurveys)
-        }, forceReload)
-    }
-
-    checkFlags(survey: Survey): boolean {
-        if (!survey.feature_flag_keys?.length) {
-            return true
-        }
-
-        return survey.feature_flag_keys.every(({ key, value }) => {
-            if (!key || !value) {
-                return true
-            }
-            return this._instance.featureFlags.isFeatureEnabled(value)
-        })
-    }
-
-    // this method is lazily loaded onto the window to avoid loading preact and other dependencies if surveys is not enabled
-    private _canActivateRepeatedly(survey: Survey) {
-        if (isNullish(assignableWindow.__PosthogExtensions__?.canActivateRepeatedly)) {
-            logger.warn('init was not called')
-            return false // TODO does it make sense to have a default here?
-        }
-        return assignableWindow.__PosthogExtensions__.canActivateRepeatedly(survey)
-    }
-
-    canRenderSurvey(surveyId: string): SurveyRenderReason | null {
         if (isNullish(this._surveyManager)) {
+            logger.warn('init was not called')
+            return
+        }
+        return this._surveyManager.getActiveMatchingSurveys(callback, forceReload)
+    }
+
+    private _getSurveyById(surveyId: string): Survey | null {
+        let survey: Survey | null = null
+        this.getSurveys((surveys) => {
+            survey = surveys.find((x) => x.id === surveyId) ?? null
+        })
+        return survey
+    }
+
+    private _checkSurveyEligibility(surveyId: string | Survey): { eligible: boolean; reason?: string } {
+        if (isNullish(this._surveyManager)) {
+            return { eligible: false, reason: 'SDK is not enabled or survey functionality is not yet loaded' }
+        }
+        const survey = typeof surveyId === 'string' ? this._getSurveyById(surveyId) : surveyId
+        if (!survey) {
+            return { eligible: false, reason: 'Survey not found' }
+        }
+        return this._surveyManager.checkSurveyEligibility(survey)
+    }
+
+    canRenderSurvey(surveyId: string): SurveyRenderReason {
+        if (!isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return { visible: false, disabledReason: 'SDK is not enabled or survey functionality is not yet loaded' }
         }
-        let renderReason: SurveyRenderReason | null = null
-        this.getSurveys((surveys) => {
-            const survey = surveys.filter((x) => x.id === surveyId)[0]
-            if (survey) {
-                renderReason = { ...this._surveyManager.canRenderSurvey(survey) }
-            } else {
-                renderReason = { visible: false, disabledReason: 'Survey not found' }
-            }
-        })
-        return renderReason
+        const eligibility = this._checkSurveyEligibility(surveyId)
+
+        return { visible: eligibility.eligible, disabledReason: eligibility.reason }
     }
 
     canRenderSurveyAsync(surveyId: string, forceReload: boolean): Promise<SurveyRenderReason> {
+        // Ensure surveys are loaded before checking
+        // Using Promise to wrap the callback-based getSurveys method
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return Promise.resolve({
@@ -349,15 +285,16 @@ export class PostHogSurveys {
                 disabledReason: 'SDK is not enabled or survey functionality is not yet loaded',
             })
         }
-        // Using Promise to wrap the callback-based getSurveys method
+
         // eslint-disable-next-line compat/compat
         return new Promise<SurveyRenderReason>((resolve) => {
             this.getSurveys((surveys) => {
-                const survey = surveys.filter((x) => x.id === surveyId)[0]
-                if (survey) {
-                    resolve({ ...this._surveyManager.canRenderSurvey(survey) })
-                } else {
+                const survey = surveys.find((x) => x.id === surveyId) ?? null
+                if (!survey) {
                     resolve({ visible: false, disabledReason: 'Survey not found' })
+                } else {
+                    const eligibility = this._checkSurveyEligibility(survey)
+                    resolve({ visible: eligibility.eligible, disabledReason: eligibility.reason })
                 }
             }, forceReload)
         })
@@ -368,9 +305,16 @@ export class PostHogSurveys {
             logger.warn('init was not called')
             return
         }
-        this.getSurveys((surveys) => {
-            const survey = surveys.filter((x) => x.id === surveyId)[0]
-            this._surveyManager.renderSurvey(survey, document?.querySelector(selector))
-        })
+        const survey = this._getSurveyById(surveyId)
+        const elem = document?.querySelector(selector)
+        if (!survey) {
+            logger.warn('Survey not found')
+            return
+        }
+        if (!elem) {
+            logger.warn('Survey element not found')
+            return
+        }
+        this._surveyManager.renderSurvey(survey, elem)
     }
 }

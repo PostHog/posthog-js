@@ -50,6 +50,7 @@ describe('surveys', () => {
             name: 'first survey',
             description: 'first survey description',
             type: SurveyType.Popover,
+            start_date: new Date().toISOString(),
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
         } as unknown as Survey,
     ]
@@ -74,6 +75,7 @@ describe('surveys', () => {
             id: 'first-survey',
             description: 'first survey description',
             type: SurveyType.Popover,
+            start_date: new Date().toISOString(),
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
             conditions: {
                 events: {
@@ -99,6 +101,7 @@ describe('surveys', () => {
             id: 'second-survey',
             description: 'second survey description',
             type: SurveyType.Popover,
+            start_date: new Date().toISOString(),
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a moblin?' }],
         } as unknown as Survey,
         {
@@ -106,6 +109,7 @@ describe('surveys', () => {
             id: 'third-survey',
             description: 'third survey description',
             type: SurveyType.Popover,
+            start_date: new Date().toISOString(),
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
             conditions: {
                 events: {
@@ -330,6 +334,7 @@ describe('surveys', () => {
     it('can render survey async', async () => {
         const result = await surveys.canRenderSurveyAsync(firstSurveys[0].id, true)
 
+        expect(result.disabledReason).toBeUndefined()
         expect(result.visible).toBeTruthy()
     })
 
@@ -745,8 +750,6 @@ describe('surveys', () => {
         })
 
         it('returns event based surveys that observed an event', () => {
-            // TODO this test fails when run in isolation
-
             surveysResponse = {
                 surveys: [surveyWithEnabledInternalFlag, surveyWithEvents],
             }
@@ -1329,65 +1332,6 @@ describe('surveys', () => {
             ] as unknown as SurveyQuestion[]
             expect(() => getNextSurveyStep(survey, 0, '2')).toThrow('The response type must be an integer')
             expect(() => getNextSurveyStep(survey, 0, 'some_string')).toThrow('The response type must be an integer')
-        })
-    })
-
-    describe('checkFlags', () => {
-        it('should return true when no feature flags are specified', () => {
-            const survey = { id: '123', questions: [] } as Survey
-            const result = surveys.checkFlags(survey)
-            expect(result).toBe(true)
-        })
-
-        it('should return true when all feature flags are enabled', () => {
-            const survey = {
-                id: '123',
-                questions: [],
-                feature_flag_keys: [
-                    { key: 'flag1', value: 'flag-1' },
-                    { key: 'flag2', value: 'flag-2' },
-                ],
-            } as Survey
-
-            jest.spyOn(instance.featureFlags, 'isFeatureEnabled').mockImplementation(() => true)
-
-            const result = surveys.checkFlags(survey)
-            expect(result).toBe(true)
-        })
-
-        it('should return false when any feature flag is disabled', () => {
-            const survey = {
-                id: '123',
-                questions: [],
-                feature_flag_keys: [
-                    { key: 'flag1', value: 'flag-1' },
-                    { key: 'flag2', value: 'flag-2' },
-                ],
-            } as Survey
-
-            jest.spyOn(instance.featureFlags, 'isFeatureEnabled').mockImplementation((flag) =>
-                flag === 'flag-1' ? true : false
-            )
-
-            const result = surveys.checkFlags(survey)
-            expect(result).toBe(false)
-        })
-
-        it('should ignore feature flags with missing key or value', () => {
-            const survey = {
-                id: '123',
-                questions: [],
-                feature_flag_keys: [
-                    { key: '', value: 'flag-1' },
-                    { key: 'flag2', value: '' },
-                    { key: 'flag3', value: 'flag-3' },
-                ],
-            } as Survey
-
-            jest.spyOn(instance.featureFlags, 'isFeatureEnabled').mockImplementation(() => true)
-
-            const result = surveys.checkFlags(survey)
-            expect(result).toBe(true)
         })
     })
 })

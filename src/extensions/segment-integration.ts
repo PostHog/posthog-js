@@ -19,9 +19,9 @@
 import { PostHog } from '../posthog-core'
 import { createLogger } from '../utils/logger'
 
-import { uuidv7 } from '../uuidv7'
-import { isFunction } from '../utils/type-utils'
 import { USER_STATE } from '../constants'
+import { isFunction } from '../utils/type-utils'
+import { uuidv7 } from '../uuidv7'
 
 const logger = createLogger('[SegmentIntegration]')
 

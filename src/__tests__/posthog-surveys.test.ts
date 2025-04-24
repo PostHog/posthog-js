@@ -9,10 +9,12 @@ jest.mock('../utils/logger', () => ({
 jest.useFakeTimers()
 
 import { SURVEYS, SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
+import { SurveyManager } from '../extensions/surveys'
 import { PostHog } from '../posthog-core'
 import { PostHogSurveys } from '../posthog-surveys'
-import { assignableWindow, window } from '../utils/globals'
-import { doesSurveyUrlMatch } from '../utils/survey-utils'
+import { Survey, SurveySchedule, SurveyType } from '../posthog-surveys-types'
+import { DecideResponse } from '../types'
+import { assignableWindow } from '../utils/globals'
 
 describe('posthog-surveys', () => {
     describe('PostHogSurveys Class', () => {
@@ -23,6 +25,37 @@ describe('posthog-surveys', () => {
         let surveys: PostHogSurveys
         let mockGenerateSurveys: jest.Mock
         let mockLoadExternalDependency: jest.Mock
+
+        const survey: Survey = {
+            id: 'completed-survey',
+            name: 'completed survey',
+            description: 'draft survey description',
+            type: SurveyType.Popover,
+            linked_flag_key: 'linked-flag-key',
+            targeting_flag_key: 'targeting-flag-key',
+            internal_targeting_flag_key: 'internal_targeting_flag_key',
+            start_date: new Date('10/10/2022').toISOString(),
+        } as unknown as Survey
+
+        const repeatableSurvey: Survey = {
+            ...survey,
+            id: 'repeatable-survey',
+            name: 'repeatable survey',
+            type: SurveyType.Popover,
+            schedule: SurveySchedule.Always,
+        }
+
+        const decideResponse = {
+            featureFlags: {
+                'linked-flag-key': true,
+                'survey-targeting-flag-key': true,
+                'linked-flag-key2': true,
+                'survey-targeting-flag-key2': false,
+                'enabled-internal-targeting-flag-key': true,
+                'disabled-internal-targeting-flag-key': false,
+            },
+            surveys: true,
+        } as unknown as DecideResponse
 
         beforeEach(() => {
             // Reset mocks
@@ -44,6 +77,17 @@ describe('posthog-surveys', () => {
                 },
                 _send_request: jest.fn(),
                 get_property: jest.fn(),
+                featureFlags: {
+                    _send_request: jest
+                        .fn()
+                        .mockImplementation(({ callback }) => callback({ statusCode: 200, json: decideResponse })),
+                    getFeatureFlag: jest
+                        .fn()
+                        .mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
+                    isFeatureEnabled: jest
+                        .fn()
+                        .mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
+                },
             } as unknown as PostHog & {
                 get_property: jest.Mock
                 _send_request: jest.Mock
@@ -58,6 +102,7 @@ describe('posthog-surveys', () => {
             assignableWindow.__PosthogExtensions__ = {
                 generateSurveys: mockGenerateSurveys,
                 loadExternalDependency: mockLoadExternalDependency,
+                canActivateRepeatedly: jest.fn().mockReturnValue(false),
             }
         })
 
@@ -66,10 +111,66 @@ describe('posthog-surveys', () => {
             delete assignableWindow.__PosthogExtensions__
         })
 
+        describe('checkSurveyEligibility', () => {
+            beforeEach(() => {
+                // mock getSurveys response
+                mockPostHog.get_property.mockReturnValue([survey, repeatableSurvey])
+                surveys['_surveyManager'] = new SurveyManager(mockPostHog as PostHog)
+            })
+
+            it('cannot render completed surveys', () => {
+                const completedSurvey = {
+                    ...survey,
+                    end_date: new Date('11/10/2022').toISOString(),
+                }
+                mockPostHog.get_property.mockReturnValue([completedSurvey])
+                const result = surveys['_checkSurveyEligibility'](survey.id)
+                expect(result.eligible).toBeFalsy()
+                expect(result.reason).toEqual(`Survey is not running. It was completed on ${completedSurvey.end_date}`)
+            })
+
+            it('cannot render survey if linked_flag is false', () => {
+                decideResponse.featureFlags[survey.targeting_flag_key] = true
+                decideResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                decideResponse.featureFlags[survey.linked_flag_key] = false
+                const result = surveys['_checkSurveyEligibility'](survey.id)
+                expect(result.eligible).toBeFalsy()
+                expect(result.reason).toEqual('Survey linked feature flag is not enabled')
+            })
+
+            it('cannot render survey if targeting_feature_flag is false', () => {
+                decideResponse.featureFlags[survey.linked_flag_key] = true
+                decideResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                decideResponse.featureFlags[survey.targeting_flag_key] = false
+                const result = surveys['_checkSurveyEligibility'](survey.id)
+                expect(result.eligible).toBeFalsy()
+                expect(result.reason).toEqual('Survey targeting feature flag is not enabled')
+            })
+
+            it('cannot render survey if internal_targeting_feature_flag is false', () => {
+                decideResponse.featureFlags[survey.targeting_flag_key] = true
+                decideResponse.featureFlags[survey.linked_flag_key] = true
+                decideResponse.featureFlags[survey.internal_targeting_flag_key] = false
+                const result = surveys['_checkSurveyEligibility'](survey.id)
+                expect(result.eligible).toBeFalsy()
+                expect(result.reason).toEqual(
+                    'Survey internal targeting flag is not enabled and survey cannot activate repeatedly'
+                )
+            })
+
+            it('can render if survey can activate repeatedly', () => {
+                decideResponse.featureFlags[survey.targeting_flag_key] = true
+                decideResponse.featureFlags[survey.linked_flag_key] = true
+                decideResponse.featureFlags[survey.internal_targeting_flag_key] = false
+                const result = surveys['_checkSurveyEligibility'](repeatableSurvey.id)
+                expect(result.eligible).toBeTruthy()
+            })
+        })
+
         describe('loadIfEnabled', () => {
             it('should not initialize if surveys are already loaded', () => {
                 // Set surveyManager to simulate already loaded state
-                surveys['_surveyManager'] = {}
+                surveys['_surveyManager'] = new SurveyManager(mockPostHog as PostHog)
                 surveys.loadIfEnabled()
 
                 expect(mockGenerateSurveys).not.toHaveBeenCalled()
@@ -122,7 +223,7 @@ describe('posthog-surveys', () => {
                 // Set decide server response
                 surveys['_hasSurveys'] = true
                 mockGenerateSurveys.mockImplementation(() => {
-                    throw new Error('Test error')
+                    throw Error('Test error')
                 })
 
                 expect(() => surveys.loadIfEnabled()).toThrow('Test error')
@@ -316,182 +417,6 @@ describe('posthog-surveys', () => {
                 surveys.getSurveys(mockCallback, true)
 
                 expect(mockPostHog._send_request).toHaveBeenCalled()
-            })
-        })
-    })
-
-    describe('doesSurveyUrlMatch', () => {
-        const mockWindowLocation = (href: string | undefined) => {
-            Object.defineProperty(window, 'location', {
-                value: { href },
-                writable: true,
-            })
-        }
-        beforeEach(() => {
-            // Reset window.location before each test
-            mockWindowLocation(undefined)
-        })
-
-        it('should return true when no URL conditions are set', () => {
-            const survey = { conditions: { events: null, actions: null } }
-            expect(doesSurveyUrlMatch(survey)).toBe(true)
-
-            const surveyWithNullConditions = { conditions: { url: null, events: null, actions: null } }
-            expect(doesSurveyUrlMatch(surveyWithNullConditions)).toBe(true)
-        })
-
-        it('should return false when window.location.href is not available', () => {
-            const survey = { conditions: { url: 'example.com', events: null, actions: null } }
-            expect(doesSurveyUrlMatch(survey)).toBe(false)
-        })
-
-        describe('URL matching types', () => {
-            beforeEach(() => {
-                mockWindowLocation('https://example.com/path')
-            })
-
-            it('should match using icontains (default) match type', () => {
-                const survey = { conditions: { url: 'example.com', events: null, actions: null } }
-                expect(doesSurveyUrlMatch(survey)).toBe(true)
-
-                const nonMatchingSurvey = { conditions: { url: 'nonexistent.com', events: null, actions: null } }
-                expect(doesSurveyUrlMatch(nonMatchingSurvey)).toBe(false)
-            })
-
-            it('should match using explicit icontains match type', () => {
-                const survey = {
-                    conditions: {
-                        url: 'example.com',
-                        urlMatchType: 'icontains' as const,
-                        events: null,
-                        actions: null,
-                    },
-                }
-                expect(doesSurveyUrlMatch(survey)).toBe(true)
-
-                const caseInsensitiveSurvey = {
-                    conditions: {
-                        url: 'EXAMPLE.COM',
-                        urlMatchType: 'icontains' as const,
-                        events: null,
-                        actions: null,
-                    },
-                }
-                expect(doesSurveyUrlMatch(caseInsensitiveSurvey)).toBe(true)
-            })
-
-            it('should match using not_icontains match type', () => {
-                const survey = {
-                    conditions: {
-                        url: 'nonexistent.com',
-                        urlMatchType: 'not_icontains' as const,
-                        events: null,
-                        actions: null,
-                    },
-                }
-                expect(doesSurveyUrlMatch(survey)).toBe(true)
-
-                const nonMatchingSurvey = {
-                    conditions: {
-                        url: 'example.com',
-                        urlMatchType: 'not_icontains' as const,
-                        events: null,
-                        actions: null,
-                    },
-                }
-                expect(doesSurveyUrlMatch(nonMatchingSurvey)).toBe(false)
-            })
-
-            it('should match using regex match type', () => {
-                const survey = {
-                    conditions: {
-                        url: '^https://.*\\.com/.*$',
-                        urlMatchType: 'regex' as const,
-                        events: null,
-                        actions: null,
-                    },
-                }
-                expect(doesSurveyUrlMatch(survey)).toBe(true)
-
-                const nonMatchingSurvey = {
-                    conditions: {
-                        url: '^https://.*\\.org/.*$',
-                        urlMatchType: 'regex' as const,
-                        events: null,
-                        actions: null,
-                    },
-                }
-                expect(doesSurveyUrlMatch(nonMatchingSurvey)).toBe(false)
-            })
-
-            it('should match using not_regex match type', () => {
-                const survey = {
-                    conditions: {
-                        url: '^https://.*\\.org/.*$',
-                        urlMatchType: 'not_regex' as const,
-                        events: null,
-                        actions: null,
-                    },
-                }
-                expect(doesSurveyUrlMatch(survey)).toBe(true)
-
-                const nonMatchingSurvey = {
-                    conditions: {
-                        url: '^https://.*\\.com/.*$',
-                        urlMatchType: 'not_regex' as const,
-                        events: null,
-                        actions: null,
-                    },
-                }
-                expect(doesSurveyUrlMatch(nonMatchingSurvey)).toBe(false)
-            })
-
-            it('should match using exact match type', () => {
-                mockWindowLocation('https://example.com')
-
-                const survey = {
-                    conditions: {
-                        url: 'https://example.com',
-                        urlMatchType: 'exact' as const,
-                        events: null,
-                        actions: null,
-                    },
-                }
-                expect(doesSurveyUrlMatch(survey)).toBe(true)
-
-                const nonMatchingSurvey = {
-                    conditions: {
-                        url: 'https://example.com/path',
-                        urlMatchType: 'exact' as const,
-                        events: null,
-                        actions: null,
-                    },
-                }
-                expect(doesSurveyUrlMatch(nonMatchingSurvey)).toBe(false)
-            })
-
-            it('should match using is_not match type', () => {
-                mockWindowLocation('https://example.com')
-
-                const survey = {
-                    conditions: {
-                        url: 'https://other.com',
-                        urlMatchType: 'is_not' as const,
-                        events: null,
-                        actions: null,
-                    },
-                }
-                expect(doesSurveyUrlMatch(survey)).toBe(true)
-
-                const nonMatchingSurvey = {
-                    conditions: {
-                        url: 'https://example.com',
-                        urlMatchType: 'is_not' as const,
-                        events: null,
-                        actions: null,
-                    },
-                }
-                expect(doesSurveyUrlMatch(nonMatchingSurvey)).toBe(false)
             })
         })
     })

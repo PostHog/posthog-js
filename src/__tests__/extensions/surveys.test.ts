@@ -68,7 +68,9 @@ describe('survey display logic', () => {
     ]
 
     const mockPostHog = {
-        getActiveMatchingSurveys: jest.fn().mockImplementation((callback) => callback(mockSurveys)),
+        surveys: {
+            getSurveys: jest.fn().mockImplementation((callback) => callback(mockSurveys)),
+        },
         get_session_replay_url: jest.fn(),
         capture: jest.fn().mockImplementation((eventName) => eventName),
     } as unknown as PostHog
@@ -77,11 +79,11 @@ describe('survey display logic', () => {
         jest.useFakeTimers()
         jest.spyOn(global, 'setInterval')
         generateSurveys(mockPostHog)
-        expect(mockPostHog.getActiveMatchingSurveys).toBeCalledTimes(1)
+        expect(mockPostHog.surveys.getSurveys).toBeCalledTimes(1)
         expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1000)
 
         jest.advanceTimersByTime(1000)
-        expect(mockPostHog.getActiveMatchingSurveys).toBeCalledTimes(2)
+        expect(mockPostHog.surveys.getSurveys).toBeCalledTimes(2)
         expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1000)
     })
 })
@@ -262,23 +264,6 @@ describe('SurveyManager', () => {
     } as unknown as DecideResponse
 
     beforeEach(() => {
-        mockPostHog = {
-            getActiveMatchingSurveys: jest.fn(),
-            get_session_replay_url: jest.fn(),
-            capture: jest.fn(),
-            featureFlags: {
-                _send_request: jest
-                    .fn()
-                    .mockImplementation(({ callback }) => callback({ statusCode: 200, json: decideResponse })),
-                getFeatureFlag: jest.fn().mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
-                isFeatureEnabled: jest
-                    .fn()
-                    .mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
-            },
-        } as unknown as PostHog
-
-        surveyManager = new SurveyManager(mockPostHog)
-
         mockSurveys = [
             {
                 id: 'testSurvey1',
@@ -310,6 +295,26 @@ describe('SurveyManager', () => {
                 feature_flag_keys: [],
             },
         ]
+
+        mockPostHog = {
+            getActiveMatchingSurveys: jest.fn(),
+            get_session_replay_url: jest.fn(),
+            capture: jest.fn(),
+            featureFlags: {
+                _send_request: jest
+                    .fn()
+                    .mockImplementation(({ callback }) => callback({ statusCode: 200, json: decideResponse })),
+                getFeatureFlag: jest.fn().mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
+                isFeatureEnabled: jest
+                    .fn()
+                    .mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
+            },
+            surveys: {
+                getSurveys: jest.fn().mockImplementation((callback) => callback(mockSurveys)),
+            },
+        } as unknown as PostHog
+
+        surveyManager = new SurveyManager(mockPostHog)
     })
 
     test('callSurveysAndEvaluateDisplayLogic should handle a single popover survey correctly', () => {
@@ -323,7 +328,7 @@ describe('SurveyManager', () => {
 
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
-        expect(mockPostHog.getActiveMatchingSurveys).toHaveBeenCalled()
+        expect(mockPostHog.surveys.getSurveys).toHaveBeenCalled()
         expect(handlePopoverSurveyMock).toHaveBeenCalledWith(mockSurveys[0])
         expect(canShowNextEventBasedSurveyMock).toHaveBeenCalled()
     })
@@ -361,8 +366,6 @@ describe('SurveyManager', () => {
     })
 
     test('callSurveysAndEvaluateDisplayLogic should handle popup surveys correctly', () => {
-        mockPostHog.getActiveMatchingSurveys = jest.fn((callback) => callback([mockSurveys[0]]))
-
         const handlePopoverSurveyMock = jest
             .spyOn(surveyManager as any, '_handlePopoverSurvey')
             .mockImplementation(() => {})
@@ -374,7 +377,7 @@ describe('SurveyManager', () => {
 
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
-        expect(mockPostHog.getActiveMatchingSurveys).toHaveBeenCalled()
+        expect(mockPostHog.surveys.getSurveys).toHaveBeenCalled()
         expect(handlePopoverSurveyMock).toHaveBeenCalledWith(mockSurveys[0])
         expect(handleWidgetMock).not.toHaveBeenCalled()
         expect(manageWidgetSelectorListener).not.toHaveBeenCalled()
@@ -428,7 +431,7 @@ describe('SurveyManager', () => {
             targeting_flag_key: null,
             internal_targeting_flag_key: null,
         }
-        mockPostHog.getActiveMatchingSurveys = jest.fn((callback) => callback([mockSurvey]))
+        mockPostHog.surveys.getSurveys = jest.fn((callback) => callback([mockSurvey]))
         document.body.innerHTML = '<div class="my-selector">Click Me</div>'
 
         const manageWidgetSelectorListenerSpy = jest.spyOn(surveyManager as any, '_manageWidgetSelectorListener')
@@ -439,22 +442,22 @@ describe('SurveyManager', () => {
     })
 
     test('callSurveysAndEvaluateDisplayLogic should not call surveys in focus', () => {
-        mockPostHog.getActiveMatchingSurveys = jest.fn((callback) => callback(mockSurveys))
+        mockPostHog.surveys.getSurveys = jest.fn((callback) => callback(mockSurveys))
 
         surveyManager.getTestAPI().addSurveyToFocus('survey1')
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
-        expect(mockPostHog.getActiveMatchingSurveys).toHaveBeenCalledTimes(1)
+        expect(mockPostHog.surveys.getSurveys).toHaveBeenCalledTimes(1)
         expect(surveyManager.getTestAPI().surveyInFocus).toBe('survey1')
     })
 
     test('surveyInFocus handling works correctly with in callSurveysAndEvaluateDisplayLogic', () => {
-        mockPostHog.getActiveMatchingSurveys = jest.fn((callback) => callback(mockSurveys))
+        mockPostHog.surveys.getSurveys = jest.fn((callback) => callback(mockSurveys))
 
         surveyManager.getTestAPI().addSurveyToFocus('survey1')
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
-        expect(mockPostHog.getActiveMatchingSurveys).toHaveBeenCalledTimes(1)
+        expect(mockPostHog.surveys.getSurveys).toHaveBeenCalledTimes(1)
         expect(surveyManager.getTestAPI().surveyInFocus).toBe('survey1')
 
         const handlePopoverSurveyMock = jest
@@ -464,7 +467,7 @@ describe('SurveyManager', () => {
         surveyManager.getTestAPI().removeSurveyFromFocus('survey1')
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
-        expect(mockPostHog.getActiveMatchingSurveys).toHaveBeenCalledTimes(2)
+        expect(mockPostHog.surveys.getSurveys).toHaveBeenCalledTimes(2)
         expect(surveyManager.getTestAPI().surveyInFocus).toBe(null)
         expect(handlePopoverSurveyMock).toHaveBeenCalledTimes(1)
     })
@@ -549,74 +552,6 @@ describe('SurveyManager', () => {
             expect(surveyDiv.getElementsByClassName('survey-question').length).toBe(1)
             const descriptionElement = surveyDiv.querySelector('.survey-question-description')
             expect(descriptionElement).not.toBeNull()
-        })
-    })
-
-    describe('canRenderSurvey', () => {
-        let surveyManager: SurveyManager
-
-        const survey: Survey = {
-            id: 'completed-survey',
-            name: 'completed survey',
-            description: 'draft survey description',
-            type: SurveyType.Popover,
-            linked_flag_key: 'linked-flag-key',
-            targeting_flag_key: 'targeting-flag-key',
-            internal_targeting_flag_key: 'internal_targeting_flag_key',
-            start_date: new Date('10/10/2022').toISOString(),
-        } as unknown as Survey
-
-        beforeEach(() => {
-            surveyManager = new SurveyManager(mockPostHog)
-            survey.end_date = undefined
-            survey.type = SurveyType.Popover
-            decideResponse.featureFlags[survey.targeting_flag_key] = true
-            decideResponse.featureFlags[survey.linked_flag_key] = true
-            decideResponse.featureFlags[survey.internal_targeting_flag_key] = true
-        })
-
-        it('cannot render completed surveys', () => {
-            survey.end_date = new Date('11/10/2022').toISOString()
-            const result = surveyManager.canRenderSurvey(survey)
-            expect(result.visible).toBeFalsy()
-            expect(result.disabledReason).toEqual(`survey was completed on ${survey.end_date}`)
-        })
-
-        it('can only render popover surveys', () => {
-            survey.type = SurveyType.API
-
-            const result = surveyManager.canRenderSurvey(survey)
-            expect(result.visible).toBeFalsy()
-            expect(result.disabledReason).toEqual('Only Popover survey types can be rendered')
-        })
-
-        it('cannot render survey if linked_flag is false', () => {
-            decideResponse.featureFlags[survey.targeting_flag_key] = true
-            decideResponse.featureFlags[survey.internal_targeting_flag_key] = true
-            decideResponse.featureFlags[survey.linked_flag_key] = false
-            const result = surveyManager.canRenderSurvey(survey)
-            expect(result.visible).toBeFalsy()
-            expect(result.disabledReason).toEqual('linked feature flag linked-flag-key is false')
-        })
-
-        it('cannot render survey if targeting_feature_flag is false', () => {
-            decideResponse.featureFlags[survey.linked_flag_key] = true
-            decideResponse.featureFlags[survey.internal_targeting_flag_key] = true
-            decideResponse.featureFlags[survey.targeting_flag_key] = false
-            const result = surveyManager.canRenderSurvey(survey)
-            expect(result.visible).toBeFalsy()
-            expect(result.disabledReason).toEqual('targeting feature flag targeting-flag-key is false')
-        })
-
-        it('cannot render survey if internal_targeting_feature_flag is false', () => {
-            decideResponse.featureFlags[survey.targeting_flag_key] = true
-            decideResponse.featureFlags[survey.linked_flag_key] = true
-            decideResponse.featureFlags[survey.internal_targeting_flag_key] = false
-            const result = surveyManager.canRenderSurvey(survey)
-            expect(result.visible).toBeFalsy()
-            expect(result.disabledReason).toEqual(
-                'internal targeting feature flag internal_targeting_flag_key is false'
-            )
         })
     })
 
@@ -734,6 +669,65 @@ describe('SurveyManager', () => {
             // Verify both timeouts are tracked separately
             expect(firstTimeoutId).not.toEqual(secondTimeoutId)
             expect(surveyManager.getTestAPI().surveyInFocus).toBe(mockSurvey2.id)
+        })
+    })
+
+    describe('checkFlags', () => {
+        it('should return true when no feature flags are specified', () => {
+            const survey = { id: '123', questions: [] } as Survey
+            const result = surveyManager.getTestAPI().checkFlags(survey)
+            expect(result).toBe(true)
+        })
+
+        it('should return true when all feature flags are enabled', () => {
+            const survey = {
+                id: '123',
+                questions: [],
+                feature_flag_keys: [
+                    { key: 'flag1', value: 'flag-1' },
+                    { key: 'flag2', value: 'flag-2' },
+                ],
+            } as Survey
+
+            jest.spyOn(mockPostHog.featureFlags, 'isFeatureEnabled').mockImplementation(() => true)
+
+            const result = surveyManager.getTestAPI().checkFlags(survey)
+            expect(result).toBe(true)
+        })
+
+        it('should return false when any feature flag is disabled', () => {
+            const survey = {
+                id: '123',
+                questions: [],
+                feature_flag_keys: [
+                    { key: 'flag1', value: 'flag-1' },
+                    { key: 'flag2', value: 'flag-2' },
+                ],
+            } as Survey
+
+            jest.spyOn(mockPostHog.featureFlags, 'isFeatureEnabled').mockImplementation((flag) =>
+                flag === 'flag-1' ? true : false
+            )
+
+            const result = surveyManager.getTestAPI().checkFlags(survey)
+            expect(result).toBe(false)
+        })
+
+        it('should ignore feature flags with missing key or value', () => {
+            const survey = {
+                id: '123',
+                questions: [],
+                feature_flag_keys: [
+                    { key: '', value: 'flag-1' },
+                    { key: 'flag2', value: '' },
+                    { key: 'flag3', value: 'flag-3' },
+                ],
+            } as Survey
+
+            jest.spyOn(mockPostHog.featureFlags, 'isFeatureEnabled').mockImplementation(() => true)
+
+            const result = surveyManager.getTestAPI().checkFlags(survey)
+            expect(result).toBe(true)
         })
     })
 })
