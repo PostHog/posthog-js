@@ -1,3 +1,7 @@
+## 1.236.7 - 2025-04-25
+
+- chore: survey 10kb win (#1921)
+
 ## 1.236.6 - 2025-04-24
 
 - fix: refactor canRenderSurvey and move logic to SurveyManager (#1897)
