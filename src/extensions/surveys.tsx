@@ -976,7 +976,7 @@ export function Questions({
     const textColor = getContrastingTextColor(
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
     )
-    // Initialize responses from sessionStorage or empty object
+    // Initialize responses from localStorage or empty object
     const [questionsResponses, setQuestionsResponses] = useState(() => {
         const inProgressSurveyData = getInProgressSurveyState(survey)
         if (inProgressSurveyData?.responses) {

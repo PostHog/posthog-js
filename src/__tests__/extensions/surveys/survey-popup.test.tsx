@@ -133,7 +133,7 @@ describe('SurveyPopup', () => {
     })
 
     // --- Tests for Partial Responses --- (Keep as is, except final submission test)
-    test('initializes with new submissionId and empty responses when no state in sessionStorage', () => {
+    test('initializes with new submissionId and empty responses when no state in localStorage', () => {
         mockedGetInProgressSurveyState.mockReturnValue(null)
         render(
             <SurveyPopup
@@ -149,7 +149,7 @@ describe('SurveyPopup', () => {
         expect(mockedUuidv7).toHaveBeenCalledTimes(1)
     })
 
-    test('initializes with existing submissionId and responses from sessionStorage', () => {
+    test('initializes with existing submissionId and responses from localStorage', () => {
         const existingState = {
             surveySubmissionId: 'existing-uuid-123',
             responses: { $survey_response_q1: 'Previous answer' },
@@ -169,7 +169,7 @@ describe('SurveyPopup', () => {
         expect(mockedUuidv7).not.toHaveBeenCalled()
     })
 
-    test('saves partial response to sessionStorage when moving to next question', () => {
+    test('saves partial response to localStorage when moving to next question', () => {
         const initialState = null
         const generatedId = 'newly-generated-id'
         mockedGetInProgressSurveyState.mockReturnValue(initialState)
@@ -201,7 +201,7 @@ describe('SurveyPopup', () => {
         expect(screen.getByText('Question 2')).toBeVisible()
     })
 
-    test('clears sessionStorage on final submission', async () => {
+    test('clears localStorage on final submission', async () => {
         const existingState = {
             surveySubmissionId: 'existing-uuid-final',
             responses: { $survey_response_q1: 'Answer Q1' },
@@ -249,7 +249,7 @@ describe('SurveyPopup', () => {
         // implicitly testing that clearInProgressSurveyState would be called internally.
     })
 
-    test('clears sessionStorage on dismissal', async () => {
+    test('clears localStorage on dismissal', async () => {
         const existingState = {
             surveySubmissionId: 'existing-uuid-dismiss',
             responses: { $survey_response_q1: 'Partial answer' },
