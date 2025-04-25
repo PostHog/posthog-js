@@ -1,7 +1,18 @@
-<script src="../../dist/array.js"></script>
-<script>
-    posthog.init('sTMFPsFhdP1Ssg', {api_host: 'http://127.0.0.1:8000', debug: true, persistence: 'memory', loaded: function(posthog) { posthog.identify('test')}})
-</script>
+<html>
+<head>
+    <script src="../../dist/array.js"></script>
+    <script>
+        posthog.init('sTMFPsFhdP1Ssg', {
+            api_host: 'http://127.0.0.1:8000',
+            debug: true,
+            persistence: 'memory',
+            advanced_disable_feature_flags_on_first_load: true,
+            loaded: function(posthog) {
+                //posthog.identify('test')
+            }
+        })
+    </script>
+</head>
 <h2>Demo site</h2>
 <button>Here's a button you could click if you want to</button><br /><br />
 <body class='asdlfkjj asdlfkj asdflkj asdflkj asdf'>
@@ -37,10 +48,10 @@
         posthog.onFeatureFlags(function(featureFlags) {
             console.log(featureFlags)
             if(posthog.isFeatureEnabled('beta-feature')) {
+                console.log('beta-feature enabled!')
                 document.getElementById('feature').style.display = 'block'
             }
         })
-
     </script>
-
 </body>
+</html>
