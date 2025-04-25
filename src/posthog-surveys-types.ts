@@ -199,6 +199,7 @@ export interface Survey {
     current_iteration: number | null
     current_iteration_start_date: string | null
     schedule?: SurveySchedule | null
+    enable_partial_responses?: boolean | null
 }
 
 export interface SurveyActionType {

@@ -14,3 +14,5 @@ export function doesSurveyActivateByEvent(survey: Pick<Survey, 'conditions'>): b
 export function doesSurveyActivateByAction(survey: Pick<Survey, 'conditions'>): boolean {
     return !!survey.conditions?.actions?.values?.length
 }
+
+export const SURVEY_SEEN_PREFIX = 'seenSurvey_'

@@ -9,7 +9,7 @@ import {
     SurveySchedule,
 } from '../../posthog-surveys-types'
 import { document as _document, window as _window, userAgent } from '../../utils/globals'
-import { SURVEY_LOGGER as logger } from '../../utils/survey-utils'
+import { SURVEY_LOGGER as logger, SURVEY_SEEN_PREFIX } from '../../utils/survey-utils'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
 
 import { SurveyMatchType } from '../../posthog-surveys-types'
@@ -18,7 +18,6 @@ import { detectDeviceType } from '../../utils/user-agent-utils'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
-const SurveySeenPrefix = 'seenSurvey_'
 
 export const SURVEY_DEFAULT_Z_INDEX = 2147483647
 
@@ -700,24 +699,12 @@ export const getSurveySeen = (survey: Survey): boolean => {
 }
 
 export const getSurveySeenKey = (survey: Survey): string => {
-    let surveySeenKey = `${SurveySeenPrefix}${survey.id}`
+    let surveySeenKey = `${SURVEY_SEEN_PREFIX}${survey.id}`
     if (survey.current_iteration && survey.current_iteration > 0) {
-        surveySeenKey = `${SurveySeenPrefix}${survey.id}_${survey.current_iteration}`
+        surveySeenKey = `${SURVEY_SEEN_PREFIX}${survey.id}_${survey.current_iteration}`
     }
 
     return surveySeenKey
-}
-
-export const getSurveySeenStorageKeys = (): string[] => {
-    const surveyKeys = []
-    for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i)
-        if (key?.startsWith(SurveySeenPrefix)) {
-            surveyKeys.push(key)
-        }
-    }
-
-    return surveyKeys
 }
 
 const getSurveyInteractionProperty = (survey: Survey, action: string): string => {
