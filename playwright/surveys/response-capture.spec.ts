@@ -274,7 +274,7 @@ test.describe('surveys - feedback widget', () => {
         )
     })
 
-    test('captures survey partially sent event', async ({ page, context }) => {
+    test('captures survey partially sent event then dismissed', async ({ page, context }) => {
         const surveysAPICall = page.route('**/surveys/**', async (route) => {
             await route.fulfill({
                 json: {
@@ -339,7 +339,7 @@ test.describe('surveys - feedback widget', () => {
             })
         )
 
-        await page.locator('.PostHogSurvey123 .form-submit').click()
+        await page.locator('.PostHogSurvey123 .cancel-btn-wrapper').click()
         await pollUntilEventCaptured(page, 'survey dismissed')
         const surveyDismissedEvent = await page
             .capturedEvents()
@@ -347,6 +347,9 @@ test.describe('surveys - feedback widget', () => {
         expect(surveyDismissedEvent!.properties).toEqual(
             expect.objectContaining({
                 $survey_id: '123',
+                $survey_partially_completed: true,
+                [getSurveyResponseKey('open_text_1')]: 'experiments is awesome!',
+                [getSurveyResponseKey('open_text_2')]: 'partial responses!',
             })
         )
     })
