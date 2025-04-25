@@ -1,6 +1,5 @@
 import { SURVEYS } from './constants'
 import { SurveyManager } from './extensions/surveys'
-import { getSurveySeenStorageKeys } from './extensions/surveys/surveys-extension-utils'
 import { PostHog } from './posthog-core'
 import { Survey, SurveyCallback, SurveyRenderReason } from './posthog-surveys-types'
 import { RemoteConfig } from './types'
@@ -11,6 +10,7 @@ import {
     doesSurveyActivateByEvent,
     isSurveyRunning,
     SURVEY_LOGGER as logger,
+    SURVEY_SEEN_PREFIX,
 } from './utils/survey-utils'
 import { isArray, isNullish } from './utils/type-utils'
 
@@ -44,7 +44,14 @@ export class PostHogSurveys {
 
     reset(): void {
         localStorage.removeItem('lastSeenSurveyDate')
-        const surveyKeys = getSurveySeenStorageKeys()
+        const surveyKeys = []
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i)
+            if (key?.startsWith(SURVEY_SEEN_PREFIX)) {
+                surveyKeys.push(key)
+            }
+        }
+
         surveyKeys.forEach((key) => localStorage.removeItem(key))
     }
 
