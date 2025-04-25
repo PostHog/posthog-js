@@ -593,10 +593,9 @@ export const sendSurveyEvent = (
         $survey_id: survey.id,
         $survey_iteration: survey.current_iteration,
         $survey_iteration_start_date: survey.current_iteration_start_date,
-        $survey_questions: survey.questions.map((question, index) => ({
+        $survey_questions: survey.questions.map((question) => ({
             id: question.id,
             question: question.question,
-            index,
         })),
         $survey_submission_id: surveySubmissionId, // Include the ID if available
         $survey_completed: isSurveyCompleted,
@@ -633,6 +632,8 @@ export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly
         return
     }
 
+    const inProgressSurvey = getInProgressSurveyState(survey)
+
     // Mark as seen in localStorage
     localStorage.setItem(getSurveySeenKey(survey), 'true')
 
@@ -642,7 +643,11 @@ export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly
         $survey_id: survey.id,
         $survey_iteration: survey.current_iteration,
         $survey_iteration_start_date: survey.current_iteration_start_date,
+        // check if the survey is partially completed
+        $survey_partially_completed:
+            Object.values(inProgressSurvey?.responses || {}).filter((resp) => !isNullish(resp)).length > 0,
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
+        ...inProgressSurvey?.responses,
         $set: {
             [getSurveyInteractionProperty(survey, 'dismissed')]: true,
         },
