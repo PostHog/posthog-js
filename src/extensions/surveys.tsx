@@ -23,7 +23,7 @@ import {
     SURVEY_LOGGER as logger,
 } from '../utils/survey-utils'
 import { isNull, isNumber } from '../utils/type-utils'
-import { createWidgetStyle, retrieveWidgetShadow } from './surveys-widget'
+import { retrieveWidgetShadow } from './surveys-widget'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import { Cancel } from './surveys/components/QuestionHeader'
 import {
@@ -42,15 +42,16 @@ import {
     doesSurveyUrlMatch,
     getContrastingTextColor,
     getDisplayOrderQuestions,
+    getFontFamily,
     getSurveyResponseKey,
     getSurveySeen,
     hasWaitPeriodPassed,
     sendSurveyEvent,
-    style,
     SURVEY_DEFAULT_Z_INDEX,
     SurveyContext,
 } from './surveys/surveys-extension-utils'
-import { prepareStylesheet } from './utils/stylesheet-loader'
+import surveyStyles from './surveys/surveys.css'
+import widgetStyles from './surveys/widget.css'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -218,7 +219,7 @@ export class SurveyManager {
             this._clearSurveyTimeout(survey.id)
             this._addSurveyToFocus(survey.id)
             const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
-            const shadow = createShadow(style(survey?.appearance), survey.id, undefined, this._posthog)
+            const shadow = createShadow(survey.id, survey.appearance)
             if (delaySeconds <= 0) {
                 return Preact.render(
                     <SurveyPopup
@@ -252,21 +253,21 @@ export class SurveyManager {
     }
 
     private _handleWidget = (survey: Survey): void => {
-        // Ensure widget container exists if it doesn't
-        const shadow = retrieveWidgetShadow(survey, this._posthog)
-        const stylesheetContent = style(survey.appearance)
-        const WIDGET_STYLE_ID = 'ph-data-style-id'
+        // Ensure widget shadow root exists and styles are applied
+        const shadow = retrieveWidgetShadow(survey)
 
-        // Check if the stylesheet already exists
-        if (!shadow.querySelector(`style[${WIDGET_STYLE_ID}="${WIDGET_STYLE_ID}"]`)) {
-            const stylesheet = prepareStylesheet(document, stylesheetContent, this._posthog)
+        // Remove old stylesheet logic
+        // const stylesheetContent = style(survey.appearance)
+        // const WIDGET_STYLE_ID = 'ph-data-style-id'
+        // if (!shadow.querySelector(`style[${WIDGET_STYLE_ID}="${WIDGET_STYLE_ID}"]`)) {
+        //     const stylesheet = prepareStylesheet(document, stylesheetContent, this._posthog)
+        //     if (stylesheet) {
+        //         stylesheet.setAttribute(WIDGET_STYLE_ID, WIDGET_STYLE_ID)
+        //         shadow.appendChild(stylesheet)
+        //     }
+        // }
 
-            if (stylesheet) {
-                stylesheet.setAttribute(WIDGET_STYLE_ID, WIDGET_STYLE_ID) // Add identifier
-                shadow.appendChild(stylesheet)
-            }
-        }
-
+        // Render the component into the prepared shadow root
         Preact.render(
             <FeedbackWidget
                 key={'feedback-survey-' + survey.id} // Use unique key
@@ -600,42 +601,88 @@ export const renderSurveysPreview = ({
     onPreviewSubmit?: (res: string | string[] | number | null) => void
     posthog?: PostHog
 }) => {
-    const stylesheetContent = style(survey.appearance)
-    const stylesheet = prepareStylesheet(document, stylesheetContent, posthog)
-
-    // Remove previously attached <style>
-    Array.from(parentElement.children).forEach((child) => {
-        if (child instanceof HTMLStyleElement) {
-            parentElement.removeChild(child)
-        }
-    })
-
-    if (stylesheet) {
-        parentElement.appendChild(stylesheet)
+    // Remove previous preview content (find the wrapper div)
+    const existingPreview = parentElement.querySelector('.PostHogSurveyPreviewHost')
+    if (existingPreview) {
+        parentElement.removeChild(existingPreview)
     }
 
-    const textColor = getContrastingTextColor(
-        survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor || 'white'
+    // Create a host element for styles and variables
+    const previewHost = document.createElement('div')
+    previewHost.className = 'PostHogSurveyPreviewHost' // Add class for potential selection/removal
+    previewHost.style.position = 'relative' // Contain the absolutely positioned popup
+
+    // Apply CSS variables to the host
+    const effectiveAppearance = { ...defaultSurveyAppearance, ...survey.appearance }
+    const hostStyle = previewHost.style
+
+    // Set variables similar to createShadow
+    hostStyle.setProperty('--ph-survey-font-family', getFontFamily(effectiveAppearance.fontFamily))
+    hostStyle.setProperty('--ph-survey-max-width', `${parseInt(effectiveAppearance.maxWidth || '300')}px`)
+    // Don't set z-index for preview
+    hostStyle.setProperty('--ph-survey-border-color', effectiveAppearance.borderColor || '#dcdcdc')
+    hostStyle.setProperty('--ph-survey-background-color', effectiveAppearance.backgroundColor ?? '#eeeded')
+    hostStyle.setProperty('--ph-survey-disabled-button-opacity', effectiveAppearance.disabledButtonOpacity || '0.6')
+    hostStyle.setProperty('--ph-survey-submit-button-color', effectiveAppearance.submitButtonColor || 'black')
+    hostStyle.setProperty(
+        '--ph-survey-submit-button-text-color',
+        getContrastingTextColor(effectiveAppearance.submitButtonColor || 'black')
+    )
+    hostStyle.setProperty('--ph-survey-rating-active-color', effectiveAppearance.ratingButtonActiveColor || 'black')
+    hostStyle.setProperty(
+        '--ph-survey-text-primary-color',
+        getContrastingTextColor(effectiveAppearance.backgroundColor ?? '#eeeded')
     )
 
+    if (effectiveAppearance.backgroundColor === 'white') {
+        hostStyle.setProperty('--ph-survey-input-background', '#f8f8f8')
+        hostStyle.setProperty('--ph-survey-choice-background', '#fdfdfd')
+        hostStyle.setProperty('--ph-survey-choice-background-hover', '#f9f9f9')
+    } else {
+        hostStyle.setProperty('--ph-survey-input-background', 'white')
+        hostStyle.setProperty('--ph-survey-choice-background', 'white')
+        hostStyle.setProperty('--ph-survey-choice-background-hover', '#fcfcfc')
+    }
+
+    // Inject static CSS into a style tag within the host
+    const styleElement = document.createElement('style')
+    styleElement.textContent = surveyStyles
+    previewHost.appendChild(styleElement)
+
+    // Append the host to the parent element provided
+    parentElement.appendChild(previewHost)
+
+    // Determine text color for the SurveyPopup style prop (legacy? check if needed)
+    const textColor = getContrastingTextColor(
+        survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
+    )
+
+    // Render the survey popup *inside* the host element
     Preact.render(
         <SurveyPopup
             key="surveys-render-preview"
             survey={survey}
+            posthog={posthog} // Pass posthog instance if needed
             forceDisableHtml={forceDisableHtml}
+            // Apply the specific preview styles directly to the SurveyPopup's form
             style={{
-                position: 'relative',
-                right: 0,
-                borderBottom: `1px solid ${survey.appearance?.borderColor}`,
+                position: 'relative', // Relative to the previewHost
+                display: 'block', // Ensure it takes space
+                bottom: 'auto', // Override fixed positioning from default styles
+                left: 'auto',
+                right: 'auto',
+                transform: 'none',
+                border: `1px solid ${survey.appearance?.borderColor || defaultSurveyAppearance.borderColor}`, // Add border for visibility
                 borderRadius: 10,
-                color: textColor,
+                color: textColor, // Apply text color based on background
+                margin: '10px', // Add some margin for spacing
             }}
             onPreviewSubmit={onPreviewSubmit}
             previewPageIndex={previewPageIndex}
-            removeSurveyFromFocus={() => {}}
-            isPopup={true}
+            removeSurveyFromFocus={() => {}} // No-op for preview
+            isPopup={false} // Treat preview rendering as non-popup regarding close button etc.
         />,
-        parentElement
+        previewHost // Render into the host div
     )
 }
 
@@ -650,21 +697,44 @@ export const renderFeedbackWidgetPreview = ({
     forceDisableHtml?: boolean
     posthog?: PostHog
 }) => {
-    const stylesheetContent = createWidgetStyle(survey.appearance?.widgetColor)
-    const stylesheet = prepareStylesheet(document, stylesheetContent, posthog)
-    if (stylesheet) {
-        root.appendChild(stylesheet)
+    // Remove previous preview content
+    const existingPreview = root.querySelector('.PostHogWidgetPreviewHost')
+    if (existingPreview) {
+        root.removeChild(existingPreview)
     }
 
+    // Create host element
+    const widgetPreviewHost = document.createElement('div')
+    widgetPreviewHost.className = 'PostHogWidgetPreviewHost'
+    widgetPreviewHost.style.position = 'relative' // Keep positioning context
+    widgetPreviewHost.style.height = '50px' // Give it some height for visibility
+
+    // Apply CSS variables
+    const widgetColor = survey.appearance?.widgetColor || '#e0a045' // Default from widget.css
+    widgetPreviewHost.style.setProperty('--ph-widget-color', widgetColor)
+    widgetPreviewHost.style.setProperty('--ph-widget-text-color', getContrastingTextColor(widgetColor))
+    widgetPreviewHost.style.setProperty('--ph-widget-z-index', SURVEY_DEFAULT_Z_INDEX.toString()) // Use default z-index
+
+    // Inject static styles
+    const styleElement = document.createElement('style')
+    styleElement.textContent = widgetStyles // Use imported widget styles
+    widgetPreviewHost.appendChild(styleElement)
+
+    // Append host to root
+    root.appendChild(widgetPreviewHost)
+
+    // Render component inside the host
     Preact.render(
         <FeedbackWidget
             key={'feedback-render-preview'}
             forceDisableHtml={forceDisableHtml}
             survey={survey}
             readOnly={true}
-            removeSurveyFromFocus={() => {}}
+            removeSurveyFromFocus={() => {}} // No-op for preview
+            // No style overrides needed here as positioning is handled by CSS
+            posthog={posthog} // Pass posthog if needed by FeedbackWidget
         />,
-        root
+        widgetPreviewHost // Render into the host div
     )
 }
 

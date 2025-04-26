@@ -1,0 +1,252 @@
+:host {
+    /* Define CSS Variables with defaults */
+    --ph-survey-font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Roboto', Helvetica, Arial,
+        sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+    --ph-survey-max-width: 300px;
+    --ph-survey-z-index: 2147483647;
+    --ph-survey-border-color: #dcdcdc;
+    --ph-survey-background-color: #eeeded;
+    --ph-survey-disabled-button-opacity: 0.6;
+    --ph-survey-submit-button-color: black;
+    --ph-survey-submit-button-text-color: white; /* Default, will be overridden based on button color */
+    --ph-survey-rating-active-color: black;
+    --ph-survey-text-primary-color: black; /* Default text color */
+    --ph-survey-text-secondary-color: #777;
+    --ph-survey-text-subtle-color: #939393;
+    --ph-survey-input-background: white;
+    --ph-survey-input-focus-shadow: rgba(0, 0, 0, 0.15);
+    --ph-survey-choice-background: white;
+    --ph-survey-choice-background-hover: #fcfcfc;
+    --ph-survey-choice-border-hover: rgba(0, 0, 0, 0.4);
+    --ph-survey-scrollbar-thumb-color: var(--ph-survey-border-color);
+    --ph-survey-scrollbar-track-color: var(--ph-survey-background-color);
+
+    /* Default positioning - applied via inline style on host based on appearance.position */
+}
+
+@keyframes ph-survey-fade-in-up {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* --- Exit Animation --- */
+@keyframes ph-survey-fade-out-down {
+    from {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+}
+
+/* --- Question Transition Animation --- */
+@keyframes ph-survey-question-fade-in {
+    from {
+        opacity: 0.5;
+        transform: translateX(15px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.survey-form,
+.thank-you-message {
+    /* Position is set via inline style on host */
+    position: fixed;
+    margin: 0;
+    bottom: 0;
+    color: var(--ph-survey-text-primary-color);
+    font-weight: normal;
+    font-family: var(--ph-survey-font-family);
+    text-align: left;
+    max-width: var(--ph-survey-max-width);
+    width: 100%;
+    z-index: var(--ph-survey-z-index);
+    border: 1px solid var(--ph-survey-border-color);
+    border-bottom: 0;
+    /* Positioning styles (left, right, transform) are applied via inline style to the host */
+    flex-direction: column;
+    background: var(--ph-survey-background-color);
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    animation: ph-survey-fade-in-up 0.3s ease-out forwards;
+}
+
+.survey-box,
+.thank-you-message-container {
+    padding: 20px 25px 10px;
+    display: flex;
+    flex-direction: column;
+    border-radius: 10px;
+}
+
+.thank-you-message-container .form-submit {
+    margin-top: 20px;
+    margin-bottom: 10px;
+}
+.thank-you-message-countdown {
+    margin-left: 6px;
+    font-size: 12px; /* Slightly smaller */
+    opacity: 0.7;
+}
+.bottom-section {
+    margin-top: 14px;
+}
+
+.multiple-choice-options .choice-option-open label {
+    padding-right: 30px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    max-width: 100%;
+}
+.multiple-choice-options .choice-option-open label span {
+    width: 100%;
+}
+.multiple-choice-options .choice-option-open input:disabled + label {
+    opacity: 0.6;
+}
+.multiple-choice-options input:checked + label input {
+    font-weight: bold;
+}
+.multiple-choice-options .choice-option:hover .choice-check {
+    opacity: 0.35; /* Subtle show on hover */
+}
+.multiple-choice-options input:checked + label + .choice-check {
+    opacity: 1 !important; /* Show fully when checked */
+}
+
+.multiple-choice-options {
+    margin-top: 13px;
+    font-size: 14px;
+}
+.survey-box:has(.survey-question:empty):not(:has(.survey-question-description)) .multiple-choice-options {
+    margin-top: 0;
+}
+.multiple-choice-options .choice-option {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    margin-bottom: 5px;
+    position: relative;
+}
+.multiple-choice-options > .choice-option:last-of-type {
+    margin-bottom: 0px;
+}
+.multiple-choice-options input {
+    cursor: pointer;
+    position: absolute;
+    opacity: 0;
+}
+.choice-check {
+    position: absolute;
+    right: 10px;
+    background: transparent; /* Changed */
+    transition: opacity 0.15s ease; /* Added */
+    opacity: 0; /* Hide by default */
+}
+.rating-options-emoji {
+    display: flex;
+    justify-content: space-between;
+}
+.ratings-emoji {
+    font-size: 16px;
+    background-color: transparent;
+    border: none;
+    padding: 0px;
+    transition: transform 0.15s ease; /* Added */
+}
+.ratings-emoji:hover {
+    cursor: pointer;
+    transform: scale(1.15); /* Added */
+}
+.ratings-emoji svg {
+    transition:
+        fill 0.15s ease,
+        transform 0.15s ease; /* Added */
+}
+.emoji-svg {
+    fill: '#939393';
+}
+.ratings-number {
+    font-size: 16px;
+    font-weight: 600;
+    padding: 8px 0px;
+    border: none;
+}
+.ratings-number:hover {
+    cursor: pointer;
+}
+.rating-options {
+    margin-top: 14px;
+}
+.question-textarea-wrapper {
+    display: flex;
+    flex-direction: column;
+}
+.footer-branding a {
+    /* Style link */
+    color: #555;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+.footer-branding a:hover {
+    color: black;
+}
+.cancel-btn-wrapper:hover {
+    /* Added */
+    transform: translate(50%, -50%) scale(1.1);
+}
+.bolded {
+    font-weight: 600;
+}
+.buttons {
+    display: flex;
+    justify-content: center;
+}
+.form-submit:not([disabled]):hover {
+    /* Added hover */
+    transform: scale(1.02);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+.form-submit:not([disabled]):active {
+    /* Added active */
+    transform: scale(0.98);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+.form-cancel {
+    display: flex;
+    float: right;
+    border: none;
+    background: none;
+    cursor: pointer;
+    transition: opacity 0.15s ease; /* Added */
+}
+.form-cancel:hover {
+    /* Added */
+    opacity: 0.7;
+}
+.survey-box:has(.survey-question:empty):not(:has(.survey-question-description)) textarea {
+    margin-top: 0;
+}
+.question-container {
+    animation: ph-survey-question-fade-in 0.25s ease-out forwards;
+}
+
+.thank-you-message {
+    text-align: center;
+    /* Entry animation handled by .survey-form */
+}

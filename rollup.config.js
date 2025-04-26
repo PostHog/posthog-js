@@ -6,12 +6,14 @@ import { dts } from 'rollup-plugin-dts'
 import terser from '@rollup/plugin-terser'
 import { visualizer } from 'rollup-plugin-visualizer'
 import commonjs from '@rollup/plugin-commonjs'
+import postcss from 'rollup-plugin-postcss'
 import fs from 'fs'
 import path from 'path'
 
 const plugins = (es5) => [
     json(),
     resolve({ browser: true }),
+    postcss(),
     typescript({ sourceMap: true, outDir: './dist' }),
     commonjs(),
     babel({

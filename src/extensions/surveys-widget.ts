@@ -1,58 +1,46 @@
-import { PostHog } from '../posthog-core'
 import { Survey } from '../posthog-surveys-types'
 import { document as _document } from '../utils/globals'
-import { SURVEY_DEFAULT_Z_INDEX } from './surveys/surveys-extension-utils'
-import { prepareStylesheet } from './utils/stylesheet-loader'
+import { SURVEY_DEFAULT_Z_INDEX, getContrastingTextColor } from './surveys/surveys-extension-utils'
+import widgetStyles from './surveys/widget.css'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const document = _document as Document
 
-export function retrieveWidgetShadow(survey: Survey, posthog?: PostHog) {
+export function retrieveWidgetShadow(survey: Survey) {
     const widgetClassName = `PostHogWidget${survey.id}`
     const existingDiv = document.querySelector(`.${widgetClassName}`) as HTMLDivElement | null
 
-    if (existingDiv && existingDiv.shadowRoot) {
+    if (existingDiv?.shadowRoot?.querySelector('style[data-ph-widget-style]')) {
+        const widgetColor = survey.appearance?.widgetColor || '#e0a045'
+        existingDiv.style.setProperty('--ph-widget-color', widgetColor)
+        existingDiv.style.setProperty('--ph-widget-text-color', getContrastingTextColor(widgetColor))
+        existingDiv.style.setProperty('--ph-widget-z-index', SURVEY_DEFAULT_Z_INDEX.toString())
         return existingDiv.shadowRoot
     }
 
-    // If it doesn't exist, create it
-    const div = document.createElement('div')
+    const div = existingDiv || document.createElement('div')
     div.className = widgetClassName
-    const shadow = div.attachShadow({ mode: 'open' })
-    const widgetStyleSheet = createWidgetStyle(survey.appearance?.widgetColor)
 
-    const stylesheet = prepareStylesheet(document, widgetStyleSheet, posthog)
-    if (stylesheet) {
-        shadow.append(stylesheet)
+    const widgetColor = survey.appearance?.widgetColor || '#e0a045'
+    div.style.setProperty('--ph-widget-color', widgetColor)
+    div.style.setProperty('--ph-widget-text-color', getContrastingTextColor(widgetColor))
+    div.style.setProperty('--ph-widget-z-index', SURVEY_DEFAULT_Z_INDEX.toString())
+
+    let shadow = div.shadowRoot
+    if (!shadow) {
+        shadow = div.attachShadow({ mode: 'open' })
     }
 
-    document.body.appendChild(div)
-    return shadow
-}
+    if (!shadow.querySelector('style[data-ph-widget-style]')) {
+        const styleElement = document.createElement('style')
+        styleElement.setAttribute('data-ph-widget-style', 'true')
+        styleElement.textContent = widgetStyles
+        shadow.prepend(styleElement)
+    }
 
-export function createWidgetStyle(widgetColor?: string) {
-    return `
-        .ph-survey-widget-tab {
-            position: fixed;
-            top: 50%;
-            right: 0;
-            background: ${widgetColor || '#e0a045'};
-            color: white;
-            transform: rotate(-90deg) translate(0, -100%);
-            transform-origin: right top;
-            min-width: 40px;
-            padding: 8px 12px;
-            font-weight: 500;
-            border-radius: 3px 3px 0 0;
-            text-align: center;
-            cursor: pointer;
-            z-index: ${SURVEY_DEFAULT_Z_INDEX};
-        }
-        .ph-survey-widget-tab:hover {
-            padding-bottom: 13px;
-        }
-        .ph-survey-widget-button {
-            position: fixed;
-        }
-    `
+    if (!existingDiv) {
+        document.body.appendChild(div)
+    }
+
+    return shadow
 }

@@ -10,7 +10,8 @@ import {
 } from '../../posthog-surveys-types'
 import { document as _document, window as _window, userAgent } from '../../utils/globals'
 import { SURVEY_LOGGER as logger, SURVEY_SEEN_PREFIX } from '../../utils/survey-utils'
-import { prepareStylesheet } from '../utils/stylesheet-loader'
+
+import surveyStyles from './surveys.css'
 
 import { SurveyMatchType } from '../../posthog-surveys-types'
 import { isMatchingRegex } from '../../utils/regex-utils'
@@ -35,570 +36,8 @@ export function getSurveyResponseKey(questionId: string) {
     return `$survey_response_${questionId}`
 }
 
-export const style = (appearance: SurveyAppearance | null) => {
-    const positions = {
-        [SurveyPosition.Left]: 'left: 30px;',
-        [SurveyPosition.Right]: 'right: 60px;',
-        [SurveyPosition.Center]: `
-            left: 50%;
-            transform: translateX(-50%);
-          `,
-        [SurveyPosition.NextToTrigger]: 'right: 30px;',
-    }
-
-    const defaultBorderColor = appearance?.borderColor || '#dcdcdc' // Lightened default
-
-    const styles = `
-          /* --- Entry Animation --- */
-          @keyframes ph-survey-fade-in-up {
-            from {
-              opacity: 0;
-              transform: translateY(10px);
-            }
-            to {
-              opacity: 1;
-              transform: translateY(0);
-            }
-          }
-
-          /* --- Exit Animation --- */
-          @keyframes ph-survey-fade-out-down {
-            from {
-              opacity: 1;
-              transform: translateY(0);
-            }
-            to {
-              opacity: 0;
-              transform: translateY(10px);
-            }
-          }
-
-          /* --- Question Transition Animation --- */
-          @keyframes ph-survey-question-fade-in {
-            from { opacity: .5; transform: translateX(15px); }
-            to { opacity: 1; transform: translateX(0); }
-          }
-
-          .survey-form, .thank-you-message {
-              position: fixed;
-              margin: 0px;
-              bottom: 0px;
-              color: black;
-              font-weight: normal;
-              font-family: ${getFontFamily(appearance?.fontFamily)};
-              text-align: left;
-              max-width: ${parseInt(appearance?.maxWidth || '300')}px;
-              width: 100%;
-              z-index: ${parseInt(appearance?.zIndex || SURVEY_DEFAULT_Z_INDEX.toString())};
-              border: 1px solid ${defaultBorderColor}; /* Updated */
-              border-bottom: 0px;
-              ${appearance?.position ? positions[appearance.position] : positions[SurveyPosition.Right]}
-              flex-direction: column;
-              background: ${appearance?.backgroundColor || '#eeeded'};
-              border-top-left-radius: 10px;
-              border-top-right-radius: 10px;
-              box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1); /* Updated */
-              animation: ph-survey-fade-in-up 0.3s ease-out forwards; /* Keep entry */
-          }
-
-          .survey-box, .thank-you-message-container {
-              padding: 20px 25px 10px;
-              display: flex;
-              flex-direction: column;
-              border-radius: 10px;
-          }
-
-          .question-container {
-              animation: ph-survey-question-fade-in 0.25s ease-out forwards;
-          }
-
-          .thank-you-message {
-              text-align: center;
-              /* Entry animation handled by .survey-form */
-          }
-
-          .form-submit[disabled] {
-              opacity: ${appearance?.disabledButtonOpacity || '0.6'};
-              filter: grayscale(50%);
-              cursor: not-allowed;
-              transform: none; /* Prevent hover/active transforms */
-          }
-          .survey-form textarea {
-              color: #2d2d2d;
-              @media (max-width: 768px) {
-                font-size: 1rem;
-              }
-              font-size: 14px;
-              font-family: ${getFontFamily(appearance?.fontFamily)};
-              background: ${appearance?.backgroundColor === 'white' ? '#f8f8f8' : 'white'}; /* Light background */
-              color: black;
-              outline: none;
-              padding: 12px; /* Increased padding */
-              border-radius: 6px; /* Consistent radius */
-              border: 1px solid ${defaultBorderColor}; /* Updated */
-              margin-top: 14px;
-              width: 100%;
-              box-sizing: border-box;
-              transition: border-color 0.2s ease, box-shadow 0.2s ease; /* Added transition */
-          }
-          .survey-form textarea:focus { /* Added focus style */
-              border-color: ${appearance?.submitButtonColor || 'black'};
-              box-shadow: 0 0 0 2px ${appearance?.submitButtonColor ? appearance.submitButtonColor + '40' : 'rgba(0, 0, 0, 0.15)'};
-          }
-          .survey-box:has(.survey-question:empty):not(:has(.survey-question-description)) textarea {
-              margin-top: 0;
-          }
-          .form-submit {
-              box-sizing: border-box;
-              margin: 0;
-              font-family: inherit;
-              overflow: visible;
-              text-transform: none;
-              position: relative;
-              display: inline-block;
-              font-weight: 700;
-              white-space: nowrap;
-              text-align: center;
-              border: 1px solid transparent; /* Updated */
-              cursor: pointer;
-              user-select: none;
-              touch-action: manipulation;
-              padding: 12px;
-              font-size: 14px;
-              border-radius: 6px; /* Consistent radius */
-              outline: 0;
-              background: ${appearance?.submitButtonColor || 'black'};
-              color: ${getContrastingTextColor(appearance?.submitButtonColor || 'black')} !important; /* Ensure text color contrasts */
-              text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.12);
-              box-shadow: 0 2px 0 rgba(0, 0, 0, 0.045);
-              width: 100%;
-              transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease; /* Added transition */
-          }
-          .form-submit:not([disabled]):hover { /* Added hover */
-            transform: scale(1.02);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-          }
-          .form-submit:not([disabled]):active { /* Added active */
-            transform: scale(0.98);
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-          }
-          .form-cancel {
-              display: flex;
-              float: right;
-              border: none;
-              background: none;
-              cursor: pointer;
-              transition: opacity 0.15s ease; /* Added */
-          }
-          .form-cancel:hover { /* Added */
-              opacity: 0.7;
-          }
-          .cancel-btn-wrapper {
-              position: absolute;
-              width: 35px;
-              height: 35px;
-              border-radius: 100%;
-              top: 0;
-              right: 0;
-              transform: translate(50%, -50%);
-              background: white;
-              border: 1px solid ${defaultBorderColor}; /* Updated */
-              display: flex;
-              justify-content: center;
-              align-items: center;
-              box-shadow: 0 1px 3px rgba(0,0,0,0.1); /* Subtle shadow */
-              transition: transform 0.15s ease; /* Added */
-          }
-          .cancel-btn-wrapper:hover { /* Added */
-            transform: translate(50%, -50%) scale(1.1);
-          }
-          .bolded { font-weight: 600; }
-          .buttons {
-              display: flex;
-              justify-content: center;
-          }
-          .footer-branding {
-              font-size: 10px; /* Updated */
-              margin-top: 12px; /* Increased slightly */
-              padding-bottom: 8px; /* Add padding */
-              text-align: center;
-              display: flex;
-              justify-content: center;
-              gap: 4px;
-              align-items: center;
-              font-weight: 500;
-              backgroundColor: ${appearance?.backgroundColor || 'transparent'};
-              text-decoration: none;
-              color: #777; /* Updated color */
-          }
-          .footer-branding a { /* Style link */
-            color: #555;
-            text-decoration: none;
-            transition: color 0.15s ease;
-          }
-          .footer-branding a:hover {
-            color: black;
-          }
-          .survey-question {
-              font-weight: 500;
-              font-size: 14px;
-              background: ${appearance?.backgroundColor || '#eeeded'};
-          }
-          .question-textarea-wrapper {
-              display: flex;
-              flex-direction: column;
-          }
-          .survey-question-description {
-              font-size: 13px;
-              padding-top: 5px;
-              background: ${appearance?.backgroundColor || '#eeeded'};
-          }
-          .ratings-number {
-              font-size: 16px;
-              font-weight: 600;
-              padding: 8px 0px;
-              border: none;
-          }
-          .ratings-number:hover {
-              cursor: pointer;
-          }
-          .rating-options {
-              margin-top: 14px;
-          }
-          .rating-options-number {
-              display: grid;
-              border-radius: 6px; /* Consistent radius */
-              overflow: hidden;
-              border: 1px solid ${defaultBorderColor}; /* Updated */
-          }
-          .rating-options-number > .ratings-number {
-              border-right: 1px solid ${appearance?.borderColor || defaultBorderColor}; /* Updated */
-          }
-          .rating-options-number > .ratings-number:last-of-type {
-              border-right: 0px;
-          }
-          .rating-options-number .rating-active {
-              background: ${appearance?.ratingButtonActiveColor || 'black'};
-          }
-          .rating-options-emoji {
-              display: flex;
-              justify-content: space-between;
-          }
-          .ratings-emoji {
-              font-size: 16px;
-              background-color: transparent;
-              border: none;
-              padding: 0px;
-              transition: transform 0.15s ease; /* Added */
-          }
-          .ratings-emoji:hover {
-              cursor: pointer;
-              transform: scale(1.15); /* Added */
-          }
-          .ratings-emoji svg {
-              transition: fill 0.15s ease, transform 0.15s ease; /* Added */
-          }
-          .emoji-svg {
-              fill: '#939393';
-          }
-          .rating-text {
-              display: flex;
-              flex-direction: row;
-              font-size: 11px;
-              justify-content: space-between;
-              margin-top: 6px;
-              background: ${appearance?.backgroundColor || '#eeeded'};
-              opacity: .60;
-          }
-          .limit-height {
-              max-height: 300px;
-              overflow: auto;
-              scrollbar-width: thin;
-              scrollbar-color: ${defaultBorderColor} ${appearance?.backgroundColor || '#eeeded'};
-          }
-          .multiple-choice-options {
-              margin-top: 13px;
-              font-size: 14px;
-          }
-          .survey-box:has(.survey-question:empty):not(:has(.survey-question-description)) .multiple-choice-options {
-              margin-top: 0;
-          }
-          .multiple-choice-options .choice-option {
-              display: flex;
-              align-items: center;
-              gap: 4px;
-              font-size: 13px;
-              cursor: pointer;
-              margin-bottom: 5px;
-              position: relative;
-          }
-          .multiple-choice-options > .choice-option:last-of-type {
-              margin-bottom: 0px;
-          }
-          .multiple-choice-options input {
-              cursor: pointer;
-              position: absolute;
-              opacity: 0;
-          }
-          .choice-check {
-              position: absolute;
-              right: 10px;
-              background: transparent; /* Changed */
-              transition: opacity 0.15s ease; /* Added */
-              opacity: 0; /* Hide by default */
-          }
-          .choice-check svg {
-              display: inline-block; /* Always display, control via opacity */
-              color: ${appearance?.submitButtonColor || 'black'}; /* Use theme color */
-          }
-          .multiple-choice-options .choice-option:hover .choice-check {
-             opacity: .35; /* Subtle show on hover */
-          }
-          .multiple-choice-options input:checked + label + .choice-check {
-              opacity: 1 !important; /* Show fully when checked */
-          }
-          .multiple-choice-options input:checked + label {
-              font-weight: bold;
-              border-color: ${appearance?.submitButtonColor || 'black'}; /* Use theme color for border */
-          }
-          .multiple-choice-options input:checked + label input {
-              font-weight: bold;
-          }
-          .multiple-choice-options label {
-              width: 100%;
-              cursor: pointer;
-              padding: 10px;
-              border: 1px solid ${defaultBorderColor}; /* Updated */
-              border-radius: 6px; /* Consistent radius */
-              background: ${appearance?.backgroundColor === 'white' ? '#fdfdfd' : 'white'}; /* Slightly off-white if main bg is white */
-              transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease; /* Added */
-          }
-          .multiple-choice-options label:hover {
-             border-color: rgba(0,0,0,.4); /* Darker border on hover */
-             background-color: ${appearance?.backgroundColor === 'white' ? '#f9f9f9' : '#fcfcfc'}; /* Slight bg change on hover */
-          }
-
-          .multiple-choice-options .choice-option-open label {
-              padding-right: 30px;
-              display: flex;
-              flex-wrap: wrap;
-              gap: 8px;
-              max-width: 100%;
-          }
-          .multiple-choice-options .choice-option-open label span {
-              width: 100%;
-          }
-          .multiple-choice-options .choice-option-open input:disabled + label {
-              opacity: 0.6;
-          }
-          .multiple-choice-options .choice-option-open label input {
-              position: relative;
-              opacity: 1;
-              flex-grow: 1;
-              border: 0;
-              outline: 0;
-              border-bottom: 1px solid ${defaultBorderColor}; /* Style open input */
-              background: transparent;
-              transition: border-color 0.2s ease;
-              padding: 4px 0;
-          }
-          .multiple-choice-options .choice-option-open label input:focus {
-             border-color: ${appearance?.submitButtonColor || 'black'};
-          }
-          .thank-you-message-body {
-              margin-top: 6px;
-              font-size: 14px;
-              background: ${appearance?.backgroundColor || '#eeeded'};
-              opacity: 0.9; /* Slightly less prominent */
-          }
-          .thank-you-message-header {
-              margin: 10px 0px 0px;
-              background: ${appearance?.backgroundColor || '#eeeded'};
-              font-weight: 600; /* Make header bolder */
-          }
-          .thank-you-message-container .form-submit {
-              margin-top: 20px;
-              margin-bottom: 10px;
-          }
-          .thank-you-message-countdown {
-              margin-left: 6px;
-              font-size: 12px; /* Slightly smaller */
-              opacity: 0.7;
-          }
-          .bottom-section {
-              margin-top: 14px;
-          }
-          `
-
-    const compiledStyles = styles
-        .replace(/[\n\r\t]+/g, ' ') // remove newlines/tabs
-        .replace(/\s{2,}/g, ' ') // collapse extra spaces
-        .trim()
-
-    // make compiledStyles a global variable
-    ;(window as any).compiledStyles = compiledStyles
-
-    return compiledStyles
-}
-
-function nameToHex(name: string) {
-    return {
-        aliceblue: '#f0f8ff',
-        antiquewhite: '#faebd7',
-        aqua: '#00ffff',
-        aquamarine: '#7fffd4',
-        azure: '#f0ffff',
-        beige: '#f5f5dc',
-        bisque: '#ffe4c4',
-        black: '#000000',
-        blanchedalmond: '#ffebcd',
-        blue: '#0000ff',
-        blueviolet: '#8a2be2',
-        brown: '#a52a2a',
-        burlywood: '#deb887',
-        cadetblue: '#5f9ea0',
-        chartreuse: '#7fff00',
-        chocolate: '#d2691e',
-        coral: '#ff7f50',
-        cornflowerblue: '#6495ed',
-        cornsilk: '#fff8dc',
-        crimson: '#dc143c',
-        cyan: '#00ffff',
-        darkblue: '#00008b',
-        darkcyan: '#008b8b',
-        darkgoldenrod: '#b8860b',
-        darkgray: '#a9a9a9',
-        darkgreen: '#006400',
-        darkkhaki: '#bdb76b',
-        darkmagenta: '#8b008b',
-        darkolivegreen: '#556b2f',
-        darkorange: '#ff8c00',
-        darkorchid: '#9932cc',
-        darkred: '#8b0000',
-        darksalmon: '#e9967a',
-        darkseagreen: '#8fbc8f',
-        darkslateblue: '#483d8b',
-        darkslategray: '#2f4f4f',
-        darkturquoise: '#00ced1',
-        darkviolet: '#9400d3',
-        deeppink: '#ff1493',
-        deepskyblue: '#00bfff',
-        dimgray: '#696969',
-        dodgerblue: '#1e90ff',
-        firebrick: '#b22222',
-        floralwhite: '#fffaf0',
-        forestgreen: '#228b22',
-        fuchsia: '#ff00ff',
-        gainsboro: '#dcdcdc',
-        ghostwhite: '#f8f8ff',
-        gold: '#ffd700',
-        goldenrod: '#daa520',
-        gray: '#808080',
-        green: '#008000',
-        greenyellow: '#adff2f',
-        honeydew: '#f0fff0',
-        hotpink: '#ff69b4',
-        'indianred ': '#cd5c5c',
-        indigo: '#4b0082',
-        ivory: '#fffff0',
-        khaki: '#f0e68c',
-        lavender: '#e6e6fa',
-        lavenderblush: '#fff0f5',
-        lawngreen: '#7cfc00',
-        lemonchiffon: '#fffacd',
-        lightblue: '#add8e6',
-        lightcoral: '#f08080',
-        lightcyan: '#e0ffff',
-        lightgoldenrodyellow: '#fafad2',
-        lightgrey: '#d3d3d3',
-        lightgreen: '#90ee90',
-        lightpink: '#ffb6c1',
-        lightsalmon: '#ffa07a',
-        lightseagreen: '#20b2aa',
-        lightskyblue: '#87cefa',
-        lightslategray: '#778899',
-        lightsteelblue: '#b0c4de',
-        lightyellow: '#ffffe0',
-        lime: '#00ff00',
-        limegreen: '#32cd32',
-        linen: '#faf0e6',
-        magenta: '#ff00ff',
-        maroon: '#800000',
-        mediumaquamarine: '#66cdaa',
-        mediumblue: '#0000cd',
-        mediumorchid: '#ba55d3',
-        mediumpurple: '#9370d8',
-        mediumseagreen: '#3cb371',
-        mediumslateblue: '#7b68ee',
-        mediumspringgreen: '#00fa9a',
-        mediumturquoise: '#48d1cc',
-        mediumvioletred: '#c71585',
-        midnightblue: '#191970',
-        mintcream: '#f5fffa',
-        mistyrose: '#ffe4e1',
-        moccasin: '#ffe4b5',
-        navajowhite: '#ffdead',
-        navy: '#000080',
-        oldlace: '#fdf5e6',
-        olive: '#808000',
-        olivedrab: '#6b8e23',
-        orange: '#ffa500',
-        orangered: '#ff4500',
-        orchid: '#da70d6',
-        palegoldenrod: '#eee8aa',
-        palegreen: '#98fb98',
-        paleturquoise: '#afeeee',
-        palevioletred: '#d87093',
-        papayawhip: '#ffefd5',
-        peachpuff: '#ffdab9',
-        peru: '#cd853f',
-        pink: '#ffc0cb',
-        plum: '#dda0dd',
-        powderblue: '#b0e0e6',
-        purple: '#800080',
-        red: '#ff0000',
-        rosybrown: '#bc8f8f',
-        royalblue: '#4169e1',
-        saddlebrown: '#8b4513',
-        salmon: '#fa8072',
-        sandybrown: '#f4a460',
-        seagreen: '#2e8b57',
-        seashell: '#fff5ee',
-        sienna: '#a0522d',
-        silver: '#c0c0c0',
-        skyblue: '#87ceeb',
-        slateblue: '#6a5acd',
-        slategray: '#708090',
-        snow: '#fffafa',
-        springgreen: '#00ff7f',
-        steelblue: '#4682b4',
-        tan: '#d2b48c',
-        teal: '#008080',
-        thistle: '#d8bfd8',
-        tomato: '#ff6347',
-        turquoise: '#40e0d0',
-        violet: '#ee82ee',
-        wheat: '#f5deb3',
-        white: '#ffffff',
-        whitesmoke: '#f5f5f5',
-        yellow: '#ffff00',
-        yellowgreen: '#9acd32',
-    }[name.toLowerCase()]
-}
-
-function hex2rgb(c: string) {
-    if (c[0] === '#') {
-        const hexColor = c.replace(/^#/, '')
-        const r = parseInt(hexColor.slice(0, 2), 16)
-        const g = parseInt(hexColor.slice(2, 4), 16)
-        const b = parseInt(hexColor.slice(4, 6), 16)
-        return 'rgb(' + r + ',' + g + ',' + b + ')'
-    }
-    return 'rgb(255, 255, 255)'
-}
-
 export function getContrastingTextColor(color: string = defaultBackgroundColor) {
-    let rgb
+    let rgb: string | undefined
     if (color[0] === '#') {
         rgb = hex2rgb(color)
     }
@@ -623,6 +62,7 @@ export function getContrastingTextColor(color: string = defaultBackgroundColor) 
     }
     return 'black'
 }
+
 export function getTextColor(el: HTMLElement) {
     const backgroundColor = window.getComputedStyle(el).backgroundColor
     if (backgroundColor === 'rgba(0, 0, 0, 0)') {
@@ -654,16 +94,67 @@ export const defaultSurveyAppearance: SurveyAppearance = {
 
 export const defaultBackgroundColor = '#eeeded'
 
-export const createShadow = (styleSheet: string, surveyId: string, element?: Element, posthog?: PostHog) => {
+export const createShadow = (surveyId: string, appearance?: SurveyAppearance | null, element?: Element) => {
     const div = document.createElement('div')
     div.className = `PostHogSurvey${surveyId}`
-    const shadow = div.attachShadow({ mode: 'open' })
-    if (styleSheet) {
-        const styleElement = prepareStylesheet(document, styleSheet, posthog)
-        if (styleElement) {
-            shadow.appendChild(styleElement)
-        }
+
+    // --- Apply CSS Variables and Positioning ---
+    const effectiveAppearance = { ...defaultSurveyAppearance, ...appearance }
+    const hostStyle = div.style
+
+    hostStyle.setProperty('--ph-survey-font-family', getFontFamily(effectiveAppearance.fontFamily))
+    hostStyle.setProperty('--ph-survey-max-width', `${parseInt(effectiveAppearance.maxWidth || '300')}px`)
+    hostStyle.setProperty(
+        '--ph-survey-z-index',
+        parseInt(effectiveAppearance.zIndex || SURVEY_DEFAULT_Z_INDEX.toString()).toString()
+    )
+    hostStyle.setProperty('--ph-survey-border-color', effectiveAppearance.borderColor || '#dcdcdc')
+    hostStyle.setProperty('--ph-survey-background-color', effectiveAppearance.backgroundColor || defaultBackgroundColor)
+    hostStyle.setProperty('--ph-survey-disabled-button-opacity', effectiveAppearance.disabledButtonOpacity || '0.6')
+    hostStyle.setProperty('--ph-survey-submit-button-color', effectiveAppearance.submitButtonColor || 'black')
+    hostStyle.setProperty(
+        '--ph-survey-submit-button-text-color',
+        getContrastingTextColor(effectiveAppearance.submitButtonColor || 'black')
+    )
+    hostStyle.setProperty('--ph-survey-rating-active-color', effectiveAppearance.ratingButtonActiveColor || 'black')
+    hostStyle.setProperty(
+        '--ph-survey-text-primary-color',
+        getContrastingTextColor(effectiveAppearance.backgroundColor || defaultBackgroundColor)
+    )
+
+    // Adjust input/choice background slightly if main background is white
+    if (effectiveAppearance.backgroundColor === 'white') {
+        hostStyle.setProperty('--ph-survey-input-background', '#f8f8f8')
+        hostStyle.setProperty('--ph-survey-choice-background', '#fdfdfd')
+        hostStyle.setProperty('--ph-survey-choice-background-hover', '#f9f9f9')
+    } else {
+        hostStyle.setProperty('--ph-survey-input-background', 'white') // Default if not white
+        hostStyle.setProperty('--ph-survey-choice-background', 'white') // Default if not white
+        hostStyle.setProperty('--ph-survey-choice-background-hover', '#fcfcfc') // Default if not white
     }
+
+    // Apply positioning directly via inline styles
+    const position = effectiveAppearance.position || SurveyPosition.Right
+    if (position === SurveyPosition.Left) {
+        hostStyle.left = '30px'
+    } else if (position === SurveyPosition.Center) {
+        hostStyle.left = '50%'
+        hostStyle.transform = 'translateX(-50%)'
+    } else {
+        // Right or NextToTrigger (defaults to Right)
+        hostStyle.right = '60px' // Keep default Right position
+        // NOTE: NextToTrigger might require different JS logic to position near the trigger element
+    }
+
+    // --- Attach Shadow DOM and Styles ---
+    const shadow = div.attachShadow({ mode: 'open' })
+
+    // Inject the imported CSS string into a <style> tag
+    const styleElement = document.createElement('style')
+    styleElement.textContent = surveyStyles
+    shadow.appendChild(styleElement)
+
+    // Append the host element to the document body or specified element
     ;(element ? element : document.body).appendChild(div)
     return shadow
 }
@@ -910,4 +401,175 @@ export function doesSurveyMatchSelector(survey: Survey): boolean {
         return true
     }
     return !!document?.querySelector(survey.conditions.selector)
+}
+
+function nameToHex(name: string): string | undefined {
+    // NOTE: Explicitly added return type and lowercase mapping
+    return {
+        aliceblue: '#f0f8ff',
+        antiquewhite: '#faebd7',
+        aqua: '#00ffff',
+        aquamarine: '#7fffd4',
+        azure: '#f0ffff',
+        beige: '#f5f5dc',
+        bisque: '#ffe4c4',
+        black: '#000000',
+        blanchedalmond: '#ffebcd',
+        blue: '#0000ff',
+        blueviolet: '#8a2be2',
+        brown: '#a52a2a',
+        burlywood: '#deb887',
+        cadetblue: '#5f9ea0',
+        chartreuse: '#7fff00',
+        chocolate: '#d2691e',
+        coral: '#ff7f50',
+        cornflowerblue: '#6495ed',
+        cornsilk: '#fff8dc',
+        crimson: '#dc143c',
+        cyan: '#00ffff',
+        darkblue: '#00008b',
+        darkcyan: '#008b8b',
+        darkgoldenrod: '#b8860b',
+        darkgray: '#a9a9a9',
+        darkgreen: '#006400',
+        darkkhaki: '#bdb76b',
+        darkmagenta: '#8b008b',
+        darkolivegreen: '#556b2f',
+        darkorange: '#ff8c00',
+        darkorchid: '#9932cc',
+        darkred: '#8b0000',
+        darksalmon: '#e9967a',
+        darkseagreen: '#8fbc8f',
+        darkslateblue: '#483d8b',
+        darkslategray: '#2f4f4f',
+        darkturquoise: '#00ced1',
+        darkviolet: '#9400d3',
+        deeppink: '#ff1493',
+        deepskyblue: '#00bfff',
+        dimgray: '#696969',
+        dodgerblue: '#1e90ff',
+        firebrick: '#b22222',
+        floralwhite: '#fffaf0',
+        forestgreen: '#228b22',
+        fuchsia: '#ff00ff',
+        gainsboro: '#dcdcdc',
+        ghostwhite: '#f8f8ff',
+        gold: '#ffd700',
+        goldenrod: '#daa520',
+        gray: '#808080',
+        green: '#008000',
+        greenyellow: '#adff2f',
+        honeydew: '#f0fff0',
+        hotpink: '#ff69b4',
+        'indianred ': '#cd5c5c', // Note: Trailing space in original?
+        indianred: '#cd5c5c', // Added without space for safety
+        indigo: '#4b0082',
+        ivory: '#fffff0',
+        khaki: '#f0e68c',
+        lavender: '#e6e6fa',
+        lavenderblush: '#fff0f5',
+        lawngreen: '#7cfc00',
+        lemonchiffon: '#fffacd',
+        lightblue: '#add8e6',
+        lightcoral: '#f08080',
+        lightcyan: '#e0ffff',
+        lightgoldenrodyellow: '#fafad2',
+        lightgrey: '#d3d3d3',
+        lightgreen: '#90ee90',
+        lightpink: '#ffb6c1',
+        lightsalmon: '#ffa07a',
+        lightseagreen: '#20b2aa',
+        lightskyblue: '#87cefa',
+        lightslategray: '#778899',
+        lightsteelblue: '#b0c4de',
+        lightyellow: '#ffffe0',
+        lime: '#00ff00',
+        limegreen: '#32cd32',
+        linen: '#faf0e6',
+        magenta: '#ff00ff',
+        maroon: '#800000',
+        mediumaquamarine: '#66cdaa',
+        mediumblue: '#0000cd',
+        mediumorchid: '#ba55d3',
+        mediumpurple: '#9370d8',
+        mediumseagreen: '#3cb371',
+        mediumslateblue: '#7b68ee',
+        mediumspringgreen: '#00fa9a',
+        mediumturquoise: '#48d1cc',
+        mediumvioletred: '#c71585',
+        midnightblue: '#191970',
+        mintcream: '#f5fffa',
+        mistyrose: '#ffe4e1',
+        moccasin: '#ffe4b5',
+        navajowhite: '#ffdead',
+        navy: '#000080',
+        oldlace: '#fdf5e6',
+        olive: '#808000',
+        olivedrab: '#6b8e23',
+        orange: '#ffa500',
+        orangered: '#ff4500',
+        orchid: '#da70d6',
+        palegoldenrod: '#eee8aa',
+        palegreen: '#98fb98',
+        paleturquoise: '#afeeee',
+        palevioletred: '#d87093',
+        papayawhip: '#ffefd5',
+        peachpuff: '#ffdab9',
+        peru: '#cd853f',
+        pink: '#ffc0cb',
+        plum: '#dda0dd',
+        powderblue: '#b0e0e6',
+        purple: '#800080',
+        red: '#ff0000',
+        rosybrown: '#bc8f8f',
+        royalblue: '#4169e1',
+        saddlebrown: '#8b4513',
+        salmon: '#fa8072',
+        sandybrown: '#f4a460',
+        seagreen: '#2e8b57',
+        seashell: '#fff5ee',
+        sienna: '#a0522d',
+        silver: '#c0c0c0',
+        skyblue: '#87ceeb',
+        slateblue: '#6a5acd',
+        slategray: '#708090',
+        snow: '#fffafa',
+        springgreen: '#00ff7f',
+        steelblue: '#4682b4',
+        tan: '#d2b48c',
+        teal: '#008080',
+        thistle: '#d8bfd8',
+        tomato: '#ff6347',
+        turquoise: '#40e0d0',
+        violet: '#ee82ee',
+        wheat: '#f5deb3',
+        white: '#ffffff',
+        whitesmoke: '#f5f5f5',
+        yellow: '#ffff00',
+        yellowgreen: '#9acd32',
+    }[name.toLowerCase()]
+}
+
+function hex2rgb(c: string): string {
+    // NOTE: Defaulting to white if parse fails
+    if (c?.[0] === '#') {
+        const hexColor = c.replace(/^#/, '')
+        if (hexColor.length === 6 || hexColor.length === 3) {
+            // Handle 3-digit hex
+            const fullHex =
+                hexColor.length === 3
+                    ? hexColor
+                          .split('')
+                          .map((char) => char + char)
+                          .join('')
+                    : hexColor
+            const r = parseInt(fullHex.slice(0, 2), 16)
+            const g = parseInt(fullHex.slice(2, 4), 16)
+            const b = parseInt(fullHex.slice(4, 6), 16)
+            if (!isNaN(r) && !isNaN(g) && !isNaN(b)) {
+                return 'rgb(' + r + ',' + g + ',' + b + ')'
+            }
+        }
+    }
+    return 'rgb(255, 255, 255)' // Default to white rgb
 }
