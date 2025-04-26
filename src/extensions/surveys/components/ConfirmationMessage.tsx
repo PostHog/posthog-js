@@ -1,5 +1,5 @@
 import { h } from 'preact'
-import { SurveyAppearance, SurveyQuestionDescriptionContentType } from '../../../posthog-surveys-types'
+import { Survey, SurveyAppearance, SurveyQuestionDescriptionContentType } from '../../../posthog-surveys-types'
 import {
     defaultSurveyAppearance,
     getContrastingTextColor,
@@ -18,7 +18,6 @@ export function ConfirmationMessage({
     forceDisableHtml,
     appearance,
     onClose,
-    styleOverrides,
 }: {
     header: string
     description: string
@@ -26,6 +25,7 @@ export function ConfirmationMessage({
     contentType?: SurveyQuestionDescriptionContentType
     appearance: SurveyAppearance
     onClose: () => void
+    survey: Survey
     styleOverrides?: React.CSSProperties
 }) {
     const textColor = getContrastingTextColor(appearance.backgroundColor || defaultSurveyAppearance.backgroundColor)
@@ -33,7 +33,7 @@ export function ConfirmationMessage({
     const { isPopup } = useContext(SurveyContext)
 
     return (
-        <div className="thank-you-message" style={{ ...styleOverrides }}>
+        <div className="thank-you-message">
             <div className="thank-you-message-container">
                 {isPopup && <Cancel onClick={() => onClose()} />}
                 <h3 className="thank-you-message-header" style={{ color: textColor }}>

@@ -28,13 +28,6 @@ describe('survey display logic', () => {
         jest.clearAllMocks()
     })
 
-    test('createShadow', () => {
-        const surveyId = 'randomSurveyId'
-        const mockShadow = createShadow(`.survey-${surveyId}-form {}`, surveyId)
-        expect(mockShadow.mode).toBe('open')
-        expect(mockShadow.host.className).toBe(`PostHogSurvey-${surveyId}`)
-    })
-
     const mockSurveys: Survey[] = [
         {
             id: 'testSurvey1',
@@ -66,6 +59,12 @@ describe('survey display logic', () => {
             feature_flag_keys: [],
         },
     ]
+
+    test('createShadow', () => {
+        const mockShadow = createShadow(mockSurveys[0])
+        expect(mockShadow.mode).toBe('open')
+        expect(mockShadow.host.className).toBe(`PostHogSurvey-${mockSurveys[0].id}`)
+    })
 
     const mockPostHog = {
         surveys: {
@@ -1524,7 +1523,7 @@ describe('preview renders', () => {
         })
 
         // Find and click the submit button (using button type="button" instead of form-submit class)
-        const submitButton = container.querySelectorAll('button[type="button"]')[1]
+        const submitButton = container.querySelector('button[type="button"]')
 
         console.log('Found submit button:', !!submitButton)
         console.log('Submit button text:', submitButton?.textContent)
