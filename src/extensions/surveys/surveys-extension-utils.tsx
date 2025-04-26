@@ -46,7 +46,39 @@ export const style = (appearance: SurveyAppearance | null) => {
         [SurveyPosition.NextToTrigger]: 'right: 30px;',
     }
 
+    const defaultBorderColor = appearance?.borderColor || '#dcdcdc' // Lightened default
+
     const styles = `
+          /* --- Entry Animation --- */
+          @keyframes ph-survey-fade-in-up {
+            from {
+              opacity: 0;
+              transform: translateY(10px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+
+          /* --- Exit Animation --- */
+          @keyframes ph-survey-fade-out-down {
+            from {
+              opacity: 1;
+              transform: translateY(0);
+            }
+            to {
+              opacity: 0;
+              transform: translateY(10px);
+            }
+          }
+
+          /* --- Question Transition Animation --- */
+          @keyframes ph-survey-question-fade-in {
+            from { opacity: .5; transform: translateX(15px); }
+            to { opacity: 1; transform: translateX(0); }
+          }
+
           .survey-form, .thank-you-message {
               position: fixed;
               margin: 0px;
@@ -58,14 +90,15 @@ export const style = (appearance: SurveyAppearance | null) => {
               max-width: ${parseInt(appearance?.maxWidth || '300')}px;
               width: 100%;
               z-index: ${parseInt(appearance?.zIndex || SURVEY_DEFAULT_Z_INDEX.toString())};
-              border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
+              border: 1px solid ${defaultBorderColor}; /* Updated */
               border-bottom: 0px;
               ${appearance?.position ? positions[appearance.position] : positions[SurveyPosition.Right]}
               flex-direction: column;
               background: ${appearance?.backgroundColor || '#eeeded'};
               border-top-left-radius: 10px;
               border-top-right-radius: 10px;
-              box-shadow: -6px 0 16px -8px rgb(0 0 0 / 8%), -9px 0 28px 0 rgb(0 0 0 / 5%), -12px 0 48px 16px rgb(0 0 0 / 3%);
+              box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1); /* Updated */
+              animation: ph-survey-fade-in-up 0.3s ease-out forwards; /* Keep entry */
           }
 
           .survey-box, .thank-you-message-container {
@@ -75,30 +108,42 @@ export const style = (appearance: SurveyAppearance | null) => {
               border-radius: 10px;
           }
 
+          .question-container {
+              animation: ph-survey-question-fade-in 0.25s ease-out forwards;
+          }
+
           .thank-you-message {
               text-align: center;
+              /* Entry animation handled by .survey-form */
           }
 
           .form-submit[disabled] {
               opacity: ${appearance?.disabledButtonOpacity || '0.6'};
               filter: grayscale(50%);
               cursor: not-allowed;
+              transform: none; /* Prevent hover/active transforms */
           }
           .survey-form textarea {
               color: #2d2d2d;
+              @media (max-width: 768px) {
+                font-size: 1rem;
+              }
               font-size: 14px;
               font-family: ${getFontFamily(appearance?.fontFamily)};
-              background: white;
+              background: ${appearance?.backgroundColor === 'white' ? '#f8f8f8' : 'white'}; /* Light background */
               color: black;
               outline: none;
-              padding-left: 10px;
-              padding-right: 10px;
-              padding-top: 10px;
-              border-radius: 6px;
-              border-color: ${appearance?.borderColor || '#c9c6c6'};
+              padding: 12px; /* Increased padding */
+              border-radius: 6px; /* Consistent radius */
+              border: 1px solid ${defaultBorderColor}; /* Updated */
               margin-top: 14px;
               width: 100%;
               box-sizing: border-box;
+              transition: border-color 0.2s ease, box-shadow 0.2s ease; /* Added transition */
+          }
+          .survey-form textarea:focus { /* Added focus style */
+              border-color: ${appearance?.submitButtonColor || 'black'};
+              box-shadow: 0 0 0 2px ${appearance?.submitButtonColor ? appearance.submitButtonColor + '40' : 'rgba(0, 0, 0, 0.15)'};
           }
           .survey-box:has(.survey-question:empty):not(:has(.survey-question-description)) textarea {
               margin-top: 0;
@@ -114,18 +159,28 @@ export const style = (appearance: SurveyAppearance | null) => {
               font-weight: 700;
               white-space: nowrap;
               text-align: center;
-              border: 1.5px solid transparent;
+              border: 1px solid transparent; /* Updated */
               cursor: pointer;
               user-select: none;
               touch-action: manipulation;
               padding: 12px;
               font-size: 14px;
-              border-radius: 6px;
+              border-radius: 6px; /* Consistent radius */
               outline: 0;
-              background: ${appearance?.submitButtonColor || 'black'} !important;
+              background: ${appearance?.submitButtonColor || 'black'};
+              color: ${getContrastingTextColor(appearance?.submitButtonColor || 'black')} !important; /* Ensure text color contrasts */
               text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.12);
               box-shadow: 0 2px 0 rgba(0, 0, 0, 0.045);
               width: 100%;
+              transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease; /* Added transition */
+          }
+          .form-submit:not([disabled]):hover { /* Added hover */
+            transform: scale(1.02);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+          }
+          .form-submit:not([disabled]):active { /* Added active */
+            transform: scale(0.98);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
           }
           .form-cancel {
               display: flex;
@@ -133,6 +188,10 @@ export const style = (appearance: SurveyAppearance | null) => {
               border: none;
               background: none;
               cursor: pointer;
+              transition: opacity 0.15s ease; /* Added */
+          }
+          .form-cancel:hover { /* Added */
+              opacity: 0.7;
           }
           .cancel-btn-wrapper {
               position: absolute;
@@ -143,10 +202,15 @@ export const style = (appearance: SurveyAppearance | null) => {
               right: 0;
               transform: translate(50%, -50%);
               background: white;
-              border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
+              border: 1px solid ${defaultBorderColor}; /* Updated */
               display: flex;
               justify-content: center;
               align-items: center;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.1); /* Subtle shadow */
+              transition: transform 0.15s ease; /* Added */
+          }
+          .cancel-btn-wrapper:hover { /* Added */
+            transform: translate(50%, -50%) scale(1.1);
           }
           .bolded { font-weight: 600; }
           .buttons {
@@ -154,18 +218,26 @@ export const style = (appearance: SurveyAppearance | null) => {
               justify-content: center;
           }
           .footer-branding {
-              font-size: 11px;
-              margin-top: 10px;
+              font-size: 10px; /* Updated */
+              margin-top: 12px; /* Increased slightly */
+              padding-bottom: 8px; /* Add padding */
               text-align: center;
               display: flex;
               justify-content: center;
               gap: 4px;
               align-items: center;
               font-weight: 500;
-              background: ${appearance?.backgroundColor || '#eeeded'};
+              backgroundColor: ${appearance?.backgroundColor || 'transparent'};
               text-decoration: none;
-              backgroundColor: ${appearance?.backgroundColor || '#eeeded'};
-              color: ${getContrastingTextColor(appearance?.backgroundColor || '#eeeded')};
+              color: #777; /* Updated color */
+          }
+          .footer-branding a { /* Style link */
+            color: #555;
+            text-decoration: none;
+            transition: color 0.15s ease;
+          }
+          .footer-branding a:hover {
+            color: black;
           }
           .survey-question {
               font-weight: 500;
@@ -195,12 +267,12 @@ export const style = (appearance: SurveyAppearance | null) => {
           }
           .rating-options-number {
               display: grid;
-              border-radius: 6px;
+              border-radius: 6px; /* Consistent radius */
               overflow: hidden;
-              border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
+              border: 1px solid ${defaultBorderColor}; /* Updated */
           }
           .rating-options-number > .ratings-number {
-              border-right: 1px solid ${appearance?.borderColor || '#c9c6c6'};
+              border-right: 1px solid ${appearance?.borderColor || defaultBorderColor}; /* Updated */
           }
           .rating-options-number > .ratings-number:last-of-type {
               border-right: 0px;
@@ -217,12 +289,14 @@ export const style = (appearance: SurveyAppearance | null) => {
               background-color: transparent;
               border: none;
               padding: 0px;
+              transition: transform 0.15s ease; /* Added */
           }
           .ratings-emoji:hover {
               cursor: pointer;
+              transform: scale(1.15); /* Added */
           }
-          .ratings-emoji.rating-active svg {
-              fill: ${appearance?.ratingButtonActiveColor || 'black'};
+          .ratings-emoji svg {
+              transition: fill 0.15s ease, transform 0.15s ease; /* Added */
           }
           .emoji-svg {
               fill: '#939393';
@@ -240,7 +314,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               max-height: 300px;
               overflow: auto;
               scrollbar-width: thin;
-              scrollbar-color: ${appearance?.borderColor || '#c9c6c6'} ${appearance?.backgroundColor || '#eeeded'};
+              scrollbar-color: ${defaultBorderColor} ${appearance?.backgroundColor || '#eeeded'};
           }
           .multiple-choice-options {
               margin-top: 13px;
@@ -269,22 +343,23 @@ export const style = (appearance: SurveyAppearance | null) => {
           .choice-check {
               position: absolute;
               right: 10px;
-              background: white;
+              background: transparent; /* Changed */
+              transition: opacity 0.15s ease; /* Added */
+              opacity: 0; /* Hide by default */
           }
           .choice-check svg {
-              display: none;
+              display: inline-block; /* Always display, control via opacity */
+              color: ${appearance?.submitButtonColor || 'black'}; /* Use theme color */
           }
-          .multiple-choice-options .choice-option:hover .choice-check svg {
-              display: inline-block;
-              opacity: .25;
+          .multiple-choice-options .choice-option:hover .choice-check {
+             opacity: .35; /* Subtle show on hover */
           }
-          .multiple-choice-options input:checked + label + .choice-check svg {
-              display: inline-block;
-              opacity: 100% !important;
+          .multiple-choice-options input:checked + label + .choice-check {
+              opacity: 1 !important; /* Show fully when checked */
           }
           .multiple-choice-options input:checked + label {
               font-weight: bold;
-              border: 1.5px solid rgba(0,0,0);
+              border-color: ${appearance?.submitButtonColor || 'black'}; /* Use theme color for border */
           }
           .multiple-choice-options input:checked + label input {
               font-weight: bold;
@@ -293,10 +368,16 @@ export const style = (appearance: SurveyAppearance | null) => {
               width: 100%;
               cursor: pointer;
               padding: 10px;
-              border: 1.5px solid rgba(0,0,0,.25);
-              border-radius: 4px;
-              background: white;
+              border: 1px solid ${defaultBorderColor}; /* Updated */
+              border-radius: 6px; /* Consistent radius */
+              background: ${appearance?.backgroundColor === 'white' ? '#fdfdfd' : 'white'}; /* Slightly off-white if main bg is white */
+              transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease; /* Added */
           }
+          .multiple-choice-options label:hover {
+             border-color: rgba(0,0,0,.4); /* Darker border on hover */
+             background-color: ${appearance?.backgroundColor === 'white' ? '#f9f9f9' : '#fcfcfc'}; /* Slight bg change on hover */
+          }
+
           .multiple-choice-options .choice-option-open label {
               padding-right: 30px;
               display: flex;
@@ -316,15 +397,24 @@ export const style = (appearance: SurveyAppearance | null) => {
               flex-grow: 1;
               border: 0;
               outline: 0;
+              border-bottom: 1px solid ${defaultBorderColor}; /* Style open input */
+              background: transparent;
+              transition: border-color 0.2s ease;
+              padding: 4px 0;
+          }
+          .multiple-choice-options .choice-option-open label input:focus {
+             border-color: ${appearance?.submitButtonColor || 'black'};
           }
           .thank-you-message-body {
               margin-top: 6px;
               font-size: 14px;
               background: ${appearance?.backgroundColor || '#eeeded'};
+              opacity: 0.9; /* Slightly less prominent */
           }
           .thank-you-message-header {
               margin: 10px 0px 0px;
               background: ${appearance?.backgroundColor || '#eeeded'};
+              font-weight: 600; /* Make header bolder */
           }
           .thank-you-message-container .form-submit {
               margin-top: 20px;
@@ -332,16 +422,23 @@ export const style = (appearance: SurveyAppearance | null) => {
           }
           .thank-you-message-countdown {
               margin-left: 6px;
+              font-size: 12px; /* Slightly smaller */
+              opacity: 0.7;
           }
           .bottom-section {
               margin-top: 14px;
           }
           `
 
-    return styles
+    const compiledStyles = styles
         .replace(/[\n\r\t]+/g, ' ') // remove newlines/tabs
         .replace(/\s{2,}/g, ' ') // collapse extra spaces
         .trim()
+
+    // make compiledStyles a global variable
+    ;(window as any).compiledStyles = compiledStyles
+
+    return compiledStyles
 }
 
 function nameToHex(name: string) {

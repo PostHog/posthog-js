@@ -829,8 +829,6 @@ export function usePopupVisibility(
         addEventListener(window, 'PHSurveySent', handleSurveySent)
 
         if (millisecondDelay > 0) {
-            // This path is only used for direct usage of SurveyPopup,
-            // not for surveys managed by SurveyManager
             const timeoutId = setTimeout(showSurvey, millisecondDelay)
             return () => {
                 clearTimeout(timeoutId)
@@ -838,14 +836,13 @@ export function usePopupVisibility(
                 window.removeEventListener('PHSurveySent', handleSurveySent)
             }
         } else {
-            // This is the path used for surveys managed by SurveyManager
             showSurvey()
             return () => {
                 window.removeEventListener('PHSurveyClosed', handleSurveyClosed)
                 window.removeEventListener('PHSurveySent', handleSurveySent)
             }
         }
-    }, [])
+    }, [posthog, isPreviewMode, survey, removeSurveyFromFocus])
 
     useHideSurveyOnURLChange({
         survey,
@@ -854,7 +851,7 @@ export function usePopupVisibility(
         isPreviewMode,
     })
 
-    return { isPopupVisible, isSurveySent, setIsPopupVisible }
+    return { isPopupVisible, isSurveySent }
 }
 
 interface SurveyPopupProps {
@@ -887,7 +884,7 @@ export function SurveyPopup({
     const surveyPopupDelayMilliseconds = survey.appearance?.surveyPopupDelaySeconds
         ? survey.appearance.surveyPopupDelaySeconds * 1000
         : 0
-    const { isPopupVisible, isSurveySent, setIsPopupVisible } = usePopupVisibility(
+    const { isPopupVisible, isSurveySent } = usePopupVisibility(
         survey,
         posthog,
         surveyPopupDelayMilliseconds,
@@ -904,7 +901,11 @@ export function SurveyPopup({
         style.transform = 'unset'
     }
 
-    return isPopupVisible ? (
+    if (!isPopupVisible) {
+        return null
+    }
+
+    return (
         <SurveyContext.Provider
             value={{
                 isPreviewMode,
@@ -933,13 +934,12 @@ export function SurveyPopup({
                     appearance={survey.appearance || defaultSurveyAppearance}
                     styleOverrides={{ ...style, ...confirmationBoxLeftStyle }}
                     onClose={() => {
-                        setIsPopupVisible(false)
                         onCloseConfirmationMessage()
                     }}
                 />
             )}
         </SurveyContext.Provider>
-    ) : null
+    )
 }
 
 export function Questions({
@@ -952,6 +952,8 @@ export function Questions({
     forceDisableHtml: boolean
     posthog?: PostHog
     styleOverrides?: React.CSSProperties
+    isExiting?: boolean
+    onAnimationEnd?: (event: React.AnimationEvent<HTMLFormElement>) => void
 }) {
     const textColor = getContrastingTextColor(
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
@@ -959,6 +961,8 @@ export function Questions({
     const [questionsResponses, setQuestionsResponses] = useState({})
     const { previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit } = useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
+    // Store previous index for potential exit animations (optional, simple fade-in for now)
+    // const [prevQuestionIndex, setPrevQuestionIndex] = useState<number | null>(null);
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
     // Sync preview state
@@ -1011,11 +1015,19 @@ export function Questions({
                     : {}
             }
         >
+            {isPopup && (
+                <Cancel
+                    onClick={() => {
+                        onPopupSurveyDismissed()
+                    }}
+                />
+            )}
             {surveyQuestions.map((question, displayQuestionIndex) => {
                 const isVisible = currentQuestionIndex === displayQuestionIndex
                 return (
                     isVisible && (
                         <div
+                            key={question.id}
                             className="survey-box"
                             style={
                                 isPopup
@@ -1027,13 +1039,6 @@ export function Questions({
                                     : {}
                             }
                         >
-                            {isPopup && (
-                                <Cancel
-                                    onClick={() => {
-                                        onPopupSurveyDismissed()
-                                    }}
-                                />
-                            )}
                             {getQuestionComponent({
                                 question,
                                 forceDisableHtml,
