@@ -20,7 +20,7 @@ import {
     isSurveyRunning,
     SURVEY_LOGGER as logger,
 } from '../utils/survey-utils'
-import { isNull, isNumber } from '../utils/type-utils'
+import { isNull, isNullish, isNumber } from '../utils/type-utils'
 import { uuidv7 } from '../uuidv7'
 import { createWidgetStyle, retrieveWidgetShadow } from './surveys-widget'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
@@ -439,7 +439,11 @@ export class SurveyManager {
     }
 
     private _internalFlagCheckSatisfied(survey: Survey): boolean {
-        return canActivateRepeatedly(survey) || this._isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key)
+        return (
+            canActivateRepeatedly(survey) ||
+            this._isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key) ||
+            isNullish(getInProgressSurveyState(survey))
+        )
     }
 
     public checkSurveyEligibility(survey: Survey): { eligible: boolean; reason?: string } {
@@ -464,15 +468,9 @@ export class SurveyManager {
         }
 
         if (!this._internalFlagCheckSatisfied(survey)) {
-            const isSurveyInProgress = getInProgressSurveyState(survey)
-            if (isSurveyInProgress) {
-                eligibility.eligible = true
-                eligibility.reason = `survey is in progress, so it'll render again`
-                return eligibility
-            }
-
             eligibility.eligible = false
-            eligibility.reason = 'Survey internal targeting flag is not enabled and survey cannot activate repeatedly'
+            eligibility.reason =
+                'Survey internal targeting flag is not enabled and survey cannot activate repeatedly and survey is not in progress'
             return eligibility
         }
 
