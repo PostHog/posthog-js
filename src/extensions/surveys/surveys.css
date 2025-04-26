@@ -72,14 +72,18 @@
     max-width: var(--ph-survey-max-width);
     width: 100%;
     z-index: var(--ph-survey-z-index);
-    border: 1px solid var(--ph-survey-border-color);
+    border: 1.5px solid var(--ph-survey-border-color); /* Updated border width */
     border-bottom: 0;
     /* Positioning styles (left, right, transform) are applied via inline style to the host */
     flex-direction: column;
     background: var(--ph-survey-background-color);
     border-top-left-radius: 10px;
     border-top-right-radius: 10px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    /* Updated box-shadow */
+    box-shadow:
+        -6px 0 16px -8px rgb(0 0 0 / 8%),
+        -9px 0 28px 0 rgb(0 0 0 / 5%),
+        -12px 0 48px 16px rgb(0 0 0 / 3%);
     animation: ph-survey-fade-in-up 0.3s ease-out forwards;
 }
 
@@ -249,4 +253,311 @@
 .thank-you-message {
     text-align: center;
     /* Entry animation handled by .survey-form */
+}
+
+.form-submit[disabled] {
+    opacity: var(--ph-survey-disabled-button-opacity);
+    filter: grayscale(50%); /* Added */
+    cursor: not-allowed; /* Added */
+}
+
+/* Added Textarea Styles */
+.survey-form textarea {
+    color: #2d2d2d; /* TODO: Consider a CSS variable? */
+    font-size: 14px;
+    font-family: var(--ph-survey-font-family);
+    background: var(--ph-survey-input-background);
+    outline: none;
+    padding: 10px;
+    border-radius: 6px;
+    border: 1.5px solid var(--ph-survey-border-color);
+    margin-top: 14px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.survey-box:has(.survey-question:empty):not(:has(.survey-question-description)) textarea {
+    margin-top: 0; /* Already exists, but kept for context */
+}
+
+/* Added Base Submit Button Styles */
+.form-submit {
+    box-sizing: border-box;
+    margin: 0;
+    font-family: inherit; /* Use host font-family */
+    overflow: visible;
+    text-transform: none;
+    position: relative;
+    display: inline-block;
+    font-weight: 700;
+    white-space: nowrap;
+    text-align: center;
+    border: 1.5px solid transparent;
+    cursor: pointer;
+    user-select: none;
+    touch-action: manipulation;
+    padding: 12px;
+    font-size: 14px;
+    border-radius: 6px;
+    outline: 0;
+    background: var(--ph-survey-submit-button-color);
+    color: var(--ph-survey-submit-button-text-color);
+    text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.12);
+    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.045);
+    width: 100%;
+    transition:
+        transform 0.15s ease,
+        box-shadow 0.15s ease; /* Added base transition */
+}
+
+.form-submit:not([disabled]):hover {
+    /* Added hover */
+    transform: scale(1.02);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+.form-submit:not([disabled]):active {
+    /* Added active */
+    transform: scale(0.98);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.form-cancel {
+    display: flex;
+    float: right; /* Ensure it floats right */
+    border: none;
+    background: none;
+    cursor: pointer;
+    transition: opacity 0.15s ease; /* Added */
+    padding: 0; /* Remove potential default padding */
+}
+.form-cancel:hover {
+    /* Added */
+    opacity: 0.7;
+}
+
+/* Added Cancel Button Wrapper */
+.cancel-btn-wrapper {
+    position: absolute;
+    width: 35px;
+    height: 35px;
+    border-radius: 100%;
+    top: 0;
+    right: 0;
+    transform: translate(50%, -50%);
+    background: white; /* Consider a variable? */
+    border: 1.5px solid var(--ph-survey-border-color);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer; /* Make wrapper clickable */
+    transition: transform 0.15s ease; /* Added base transition */
+}
+
+.cancel-btn-wrapper:hover {
+    /* Added */
+    transform: translate(50%, -50%) scale(1.1);
+}
+
+/* Added Footer Styles */
+.footer-branding {
+    font-size: 11px;
+    margin-top: 10px;
+    padding-bottom: 10px; /* Add padding for spacing */
+    text-align: center;
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    align-items: center;
+    font-weight: 500;
+    background: var(--ph-survey-background-color); /* Use variable */
+    text-decoration: none; /* Ensure no underline */
+    color: var(--ph-survey-text-subtle-color); /* Use subtle text color */
+}
+
+.footer-branding a {
+    /* Style link */
+    color: var(--ph-survey-text-subtle-color); /* Inherit color */
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+.footer-branding a:hover {
+    color: var(--ph-survey-text-primary-color); /* Use primary text color on hover */
+}
+
+.bolded {
+    font-weight: 600; /* Already exists, kept for context */
+}
+.buttons {
+    display: flex;
+    justify-content: center; /* Already exists, kept for context */
+}
+
+/* Added Survey Question Styles */
+.survey-question {
+    font-weight: 500;
+    font-size: 14px;
+    background: var(--ph-survey-background-color); /* Use variable */
+    margin-bottom: 5px; /* Add margin */
+}
+.survey-question-description {
+    font-size: 13px;
+    padding-top: 5px;
+    background: var(--ph-survey-background-color); /* Use variable */
+    color: var(--ph-survey-text-secondary-color); /* Use secondary color */
+}
+
+/* Added Rating Number Styles */
+.rating-options-number {
+    display: grid; /* Use grid for layout */
+    grid-auto-columns: 1fr; /* Equal columns */
+    grid-auto-flow: column; /* Arrange horizontally */
+    border-radius: 6px;
+    overflow: hidden; /* Clip corners */
+    border: 1.5px solid var(--ph-survey-border-color);
+    background: var(--ph-survey-input-background); /* Background for the container */
+}
+.rating-options-number > .ratings-number {
+    border-right: 1px solid var(--ph-survey-border-color); /* Add dividers */
+    text-align: center; /* Center numbers */
+    padding: 8px 4px; /* Adjust padding */
+    cursor: pointer; /* Add cursor */
+    transition:
+        background-color 0.15s ease,
+        color 0.15s ease; /* Add transitions */
+    background: transparent; /* Default background */
+    color: var(--ph-survey-text-primary-color); /* Default text color */
+    border-left: none; /* Remove default button border */
+    border-top: none;
+    border-bottom: none;
+}
+.rating-options-number > .ratings-number:last-of-type {
+    border-right: 0px; /* Remove last divider */
+}
+.rating-options-number .ratings-number.rating-active {
+    background: var(--ph-survey-rating-active-color); /* Active background */
+    color: var(--ph-survey-submit-button-text-color); /* Use contrasting text color for active */
+}
+
+/* Added Rating Emoji Active State */
+.ratings-emoji.rating-active svg {
+    fill: var(--ph-survey-rating-active-color);
+}
+
+/* Added Rating Text Labels */
+.rating-text {
+    display: flex;
+    flex-direction: row;
+    font-size: 11px;
+    justify-content: space-between;
+    margin-top: 6px;
+    background: var(--ph-survey-background-color); /* Use variable */
+    opacity: 0.6; /* Use opacity */
+    color: var(--ph-survey-text-secondary-color); /* Use secondary color */
+}
+
+/* Added Limit Height & Scrollbar */
+.limit-height {
+    max-height: 300px; /* Adjust as needed */
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin; /* Firefox */
+    scrollbar-color: var(--ph-survey-scrollbar-thumb-color) var(--ph-survey-scrollbar-track-color); /* Firefox */
+    padding-right: 5px; /* Add padding to avoid content touching scrollbar */
+}
+/* Webkit Scrollbar Styles */
+.limit-height::-webkit-scrollbar {
+    width: 8px; /* Width of the scrollbar */
+}
+.limit-height::-webkit-scrollbar-track {
+    background: var(--ph-survey-scrollbar-track-color); /* Track color */
+    border-radius: 4px;
+}
+.limit-height::-webkit-scrollbar-thumb {
+    background-color: var(--ph-survey-scrollbar-thumb-color); /* Thumb color */
+    border-radius: 4px;
+    border: 2px solid var(--ph-survey-scrollbar-track-color); /* Creates padding around thumb */
+}
+.limit-height::-webkit-scrollbar-thumb:hover {
+    background-color: var(--ph-survey-text-subtle-color); /* Darker thumb on hover */
+}
+
+/* Updated Multiple Choice Styles */
+.multiple-choice-options label {
+    width: 100%;
+    cursor: pointer;
+    padding: 10px;
+    border: 1.5px solid var(--ph-survey-choice-border-hover); /* Use hover border color for default */
+    border-radius: 4px;
+    background: var(--ph-survey-choice-background);
+    transition:
+        border-color 0.15s ease,
+        background-color 0.15s ease; /* Add transitions */
+    display: block; /* Ensure label takes full width */
+    position: relative; /* Needed for checkmark positioning */
+    box-sizing: border-box; /* Include padding/border in width */
+}
+.multiple-choice-options .choice-option:hover label {
+    background: var(--ph-survey-choice-background-hover);
+    border-color: var(--ph-survey-text-subtle-color); /* Darken border on hover */
+}
+
+.multiple-choice-options input:checked + label {
+    font-weight: bold;
+    border: 1.5px solid var(--ph-survey-rating-active-color); /* Use active color for border */
+    background: var(--ph-survey-choice-background); /* Keep background consistent */
+}
+
+.choice-check {
+    position: absolute;
+    right: 10px;
+    top: 50%; /* Center vertically */
+    transform: translateY(-50%); /* Adjust vertical centering */
+    background: transparent; /* Ensure no background */
+    transition: opacity 0.15s ease;
+    opacity: 0; /* Hide by default */
+    pointer-events: none; /* Prevent interaction */
+}
+.choice-check svg {
+    display: block; /* Make SVG visible */
+    fill: var(--ph-survey-rating-active-color); /* Color the checkmark */
+    width: 16px; /* Size the checkmark */
+    height: 16px;
+}
+.multiple-choice-options .choice-option:hover .choice-check {
+    opacity: 0.35; /* Subtle show on hover */
+}
+.multiple-choice-options input:checked + label + .choice-check {
+    opacity: 1 !important; /* Show fully when checked */
+}
+
+.multiple-choice-options .choice-option-open label input {
+    position: relative; /* Change from absolute */
+    opacity: 1;
+    flex-grow: 1;
+    border: 0;
+    outline: 0;
+    background: transparent; /* Inherit background */
+    font-family: inherit; /* Inherit font */
+    font-size: inherit; /* Inherit font size */
+    padding: 0; /* Remove padding */
+    margin-left: 5px; /* Add some space */
+    color: var(--ph-survey-text-primary-color); /* Use primary text color */
+}
+.multiple-choice-options .choice-option-open label input::placeholder {
+    color: var(--ph-survey-text-subtle-color); /* Style placeholder */
+}
+
+/* Added Thank You Message Styles */
+.thank-you-message-body {
+    margin-top: 6px;
+    font-size: 14px;
+    background: var(--ph-survey-background-color); /* Use variable */
+    color: var(--ph-survey-text-secondary-color); /* Use secondary color */
+}
+.thank-you-message-header {
+    margin: 10px 0px 0px;
+    background: var(--ph-survey-background-color); /* Use variable */
+    font-weight: 600; /* Add weight */
+    font-size: 16px; /* Increase size */
+    color: var(--ph-survey-text-primary-color); /* Use primary color */
 }

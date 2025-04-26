@@ -13,7 +13,7 @@ import path from 'path'
 const plugins = (es5) => [
     json(),
     resolve({ browser: true }),
-    postcss(),
+    postcss({ minimize: true }),
     typescript({ sourceMap: true, outDir: './dist' }),
     commonjs(),
     babel({

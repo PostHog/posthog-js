@@ -149,6 +149,9 @@ export const createShadow = (surveyId: string, appearance?: SurveyAppearance | n
     // --- Attach Shadow DOM and Styles ---
     const shadow = div.attachShadow({ mode: 'open' })
 
+    // Debug log using logger
+    logger.info('Survey Styles Content (first 100 chars): ', surveyStyles?.substring(0, 100) + '...')
+
     // Inject the imported CSS string into a <style> tag
     const styleElement = document.createElement('style')
     styleElement.textContent = surveyStyles
