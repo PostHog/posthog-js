@@ -7,13 +7,17 @@ import terser from '@rollup/plugin-terser'
 import { visualizer } from 'rollup-plugin-visualizer'
 import commonjs from '@rollup/plugin-commonjs'
 import postcss from 'rollup-plugin-postcss'
+import postcssImport from 'postcss-import'
 import fs from 'fs'
 import path from 'path'
 
 const plugins = (es5) => [
     json(),
     resolve({ browser: true }),
-    postcss({ minimize: true }),
+    postcss({
+        plugins: [postcssImport()],
+        minimize: true,
+    }),
     typescript({ sourceMap: true, outDir: './dist' }),
     commonjs(),
     babel({

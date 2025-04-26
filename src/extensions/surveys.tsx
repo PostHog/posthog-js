@@ -1035,6 +1035,14 @@ export function Questions({
     // const [prevQuestionIndex, setPrevQuestionIndex] = useState<number | null>(null);
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
+    const position = survey.appearance?.position || SurveyPosition.Right
+
+    const style = {
+        left: position === SurveyPosition.Left ? '30px' : position === SurveyPosition.Center ? '50%' : 'unset',
+        transform: position === SurveyPosition.Center ? 'translateX(-50%)' : 'unset',
+        right: position === SurveyPosition.Right ? '30px' : 'unset',
+    }
+
     // Sync preview state
     useEffect(() => {
         setCurrentQuestionIndex(previewPageIndex ?? 0)
@@ -1080,6 +1088,7 @@ export function Questions({
                     ? {
                           color: textColor,
                           borderColor: survey.appearance?.borderColor,
+                          ...style,
                           ...styleOverrides,
                       }
                     : {}

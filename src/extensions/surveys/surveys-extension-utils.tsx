@@ -94,13 +94,10 @@ export const defaultSurveyAppearance: SurveyAppearance = {
 
 export const defaultBackgroundColor = '#eeeded'
 
-export const createShadow = (surveyId: string, appearance?: SurveyAppearance | null, element?: Element) => {
-    const div = document.createElement('div')
-    div.className = `PostHogSurvey${surveyId}`
-
+export const addStylesToElement = (element: HTMLDivElement, appearance?: SurveyAppearance | null) => {
     // --- Apply CSS Variables and Positioning ---
     const effectiveAppearance = { ...defaultSurveyAppearance, ...appearance }
-    const hostStyle = div.style
+    const hostStyle = element.style
 
     hostStyle.setProperty('--ph-survey-font-family', getFontFamily(effectiveAppearance.fontFamily))
     hostStyle.setProperty('--ph-survey-max-width', `${parseInt(effectiveAppearance.maxWidth || '300')}px`)
@@ -132,19 +129,13 @@ export const createShadow = (surveyId: string, appearance?: SurveyAppearance | n
         hostStyle.setProperty('--ph-survey-choice-background', 'white') // Default if not white
         hostStyle.setProperty('--ph-survey-choice-background-hover', '#fcfcfc') // Default if not white
     }
+}
 
-    // Apply positioning directly via inline styles
-    const position = effectiveAppearance.position || SurveyPosition.Right
-    if (position === SurveyPosition.Left) {
-        hostStyle.left = '30px'
-    } else if (position === SurveyPosition.Center) {
-        hostStyle.left = '50%'
-        hostStyle.transform = 'translateX(-50%)'
-    } else {
-        // Right or NextToTrigger (defaults to Right)
-        hostStyle.right = '60px' // Keep default Right position
-        // NOTE: NextToTrigger might require different JS logic to position near the trigger element
-    }
+export const createShadow = (surveyId: string, appearance?: SurveyAppearance | null, element?: Element) => {
+    const div = document.createElement('div')
+    div.className = `PostHogSurvey${surveyId}`
+
+    addStylesToElement(div, appearance)
 
     // --- Attach Shadow DOM and Styles ---
     const shadow = div.attachShadow({ mode: 'open' })

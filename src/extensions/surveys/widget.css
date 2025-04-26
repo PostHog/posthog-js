@@ -1,4 +1,6 @@
 /* src/extensions/surveys/widget.css */
+@import './surveys.css';
+
 :host {
     /* Define CSS Variable for widget color */
     --ph-widget-color: #e0a045; /* Default color */

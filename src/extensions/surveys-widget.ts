@@ -1,6 +1,6 @@
 import { Survey } from '../posthog-surveys-types'
 import { document as _document } from '../utils/globals'
-import { SURVEY_DEFAULT_Z_INDEX, getContrastingTextColor } from './surveys/surveys-extension-utils'
+import { SURVEY_DEFAULT_Z_INDEX, addStylesToElement, getContrastingTextColor } from './surveys/surveys-extension-utils'
 import widgetStyles from './surveys/widget.css'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
@@ -20,6 +20,8 @@ export function retrieveWidgetShadow(survey: Survey) {
 
     const div = existingDiv || document.createElement('div')
     div.className = widgetClassName
+
+    addStylesToElement(div, survey.appearance)
 
     const widgetColor = survey.appearance?.widgetColor || '#e0a045'
     div.style.setProperty('--ph-widget-color', widgetColor)

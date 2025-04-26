@@ -20,8 +20,6 @@
     --ph-survey-choice-border-hover: rgba(0, 0, 0, 0.4);
     --ph-survey-scrollbar-thumb-color: var(--ph-survey-border-color);
     --ph-survey-scrollbar-track-color: var(--ph-survey-background-color);
-
-    /* Default positioning - applied via inline style on host based on appearance.position */
 }
 
 @keyframes ph-survey-fade-in-up {
@@ -274,6 +272,9 @@
     margin-top: 14px;
     width: 100%;
     box-sizing: border-box;
+    @media (max-width: 768px) {
+        font-size: 1rem;
+    }
 }
 
 .survey-box:has(.survey-question:empty):not(:has(.survey-question-description)) textarea {
@@ -320,7 +321,6 @@
     transform: scale(0.98);
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
-
 .form-cancel {
     display: flex;
     float: right; /* Ensure it floats right */
@@ -328,7 +328,7 @@
     background: none;
     cursor: pointer;
     transition: opacity 0.15s ease; /* Added */
-    padding: 0; /* Remove potential default padding */
+    padding: 12px;
 }
 .form-cancel:hover {
     /* Added */
@@ -419,7 +419,7 @@
 .rating-options-number > .ratings-number {
     border-right: 1px solid var(--ph-survey-border-color); /* Add dividers */
     text-align: center; /* Center numbers */
-    padding: 8px 4px; /* Adjust padding */
+    padding: 8px 0px; /* Adjust padding */
     cursor: pointer; /* Add cursor */
     transition:
         background-color 0.15s ease,
