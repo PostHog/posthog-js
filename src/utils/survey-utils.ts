@@ -16,3 +16,4 @@ export function doesSurveyActivateByAction(survey: Pick<Survey, 'conditions'>): 
 }
 
 export const SURVEY_SEEN_PREFIX = 'seenSurvey_'
+export const SURVEY_IN_PROGRESS_PREFIX = 'inProgressSurvey_'

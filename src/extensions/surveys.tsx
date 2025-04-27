@@ -20,7 +20,7 @@ import {
     isSurveyRunning,
     SURVEY_LOGGER as logger,
 } from '../utils/survey-utils'
-import { isNull, isNullish, isNumber } from '../utils/type-utils'
+import { isNull, isNumber } from '../utils/type-utils'
 import { uuidv7 } from '../uuidv7'
 import { createWidgetStyle, retrieveWidgetShadow } from './surveys-widget'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
@@ -46,6 +46,7 @@ import {
     getSurveyResponseKey,
     getSurveySeen,
     hasWaitPeriodPassed,
+    isSurveyInProgress,
     sendSurveyEvent,
     style,
     SURVEY_DEFAULT_Z_INDEX,
@@ -389,13 +390,13 @@ export class SurveyManager {
      */
     private _sortSurveysByAppearanceDelay(surveys: Survey[]): Survey[] {
         return surveys.sort((a, b) => {
-            const isSurveyInProgressA = getInProgressSurveyState(a)
-            const isSurveyInProgressB = getInProgressSurveyState(b)
+            const isSurveyInProgressA = isSurveyInProgress(a)
+            const isSurveyInProgressB = isSurveyInProgress(b)
             if (isSurveyInProgressA && !isSurveyInProgressB) {
-                return 1 // a comes after b
+                return -1 // a comes before b (in progress surveys first)
             }
             if (!isSurveyInProgressA && isSurveyInProgressB) {
-                return -1 // a comes before b
+                return 1 // a comes after b (in progress surveys first)
             }
             const aIsAlways = a.schedule === SurveySchedule.Always
             const bIsAlways = b.schedule === SurveySchedule.Always
@@ -442,7 +443,7 @@ export class SurveyManager {
         return (
             canActivateRepeatedly(survey) ||
             this._isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key) ||
-            isNullish(getInProgressSurveyState(survey))
+            isSurveyInProgress(survey)
         )
     }
 

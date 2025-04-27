@@ -9,7 +9,7 @@ import {
     SurveySchedule,
 } from '../../posthog-surveys-types'
 import { document as _document, window as _window, userAgent } from '../../utils/globals'
-import { SURVEY_LOGGER as logger, SURVEY_SEEN_PREFIX } from '../../utils/survey-utils'
+import { SURVEY_LOGGER as logger, SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../../utils/survey-utils'
 import { isNullish } from '../../utils/type-utils'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
 
@@ -861,12 +861,10 @@ interface InProgressSurveyState {
     // NOTE: We might need currentQuestionIndex here later if restoring multi-page surveys
 }
 
-const SurveyInProgressPrefix = 'inProgressSurvey_'
-
-export const getInProgressSurveyStateKey = (survey: Pick<Survey, 'id' | 'current_iteration'>): string => {
-    let key = `${SurveyInProgressPrefix}${survey.id}`
+const getInProgressSurveyStateKey = (survey: Pick<Survey, 'id' | 'current_iteration'>): string => {
+    let key = `${SURVEY_IN_PROGRESS_PREFIX}${survey.id}`
     if (survey.current_iteration && survey.current_iteration > 0) {
-        key = `${SurveyInProgressPrefix}${survey.id}_${survey.current_iteration}`
+        key = `${SURVEY_IN_PROGRESS_PREFIX}${survey.id}_${survey.current_iteration}`
     }
     return key
 }
@@ -896,7 +894,7 @@ export const getInProgressSurveyState = (
     return null
 }
 
-const isSurveyInProgress = (survey: Pick<Survey, 'id' | 'current_iteration'>): boolean => {
+export const isSurveyInProgress = (survey: Pick<Survey, 'id' | 'current_iteration'>): boolean => {
     const state = getInProgressSurveyState(survey)
     return !isNullish(state?.surveySubmissionId)
 }
