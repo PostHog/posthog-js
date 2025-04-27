@@ -32,7 +32,7 @@ describe('survey display logic', () => {
         const surveyId = 'randomSurveyId'
         const mockShadow = createShadow(`.survey-${surveyId}-form {}`, surveyId)
         expect(mockShadow.mode).toBe('open')
-        expect(mockShadow.host.className).toBe(`PostHogSurvey${surveyId}`)
+        expect(mockShadow.host.className).toBe(`PostHogSurvey-${surveyId}`)
     })
 
     const mockSurveys: Survey[] = [
@@ -145,7 +145,7 @@ describe('usePopupVisibility', () => {
     test('should hide popup when PHSurveyClosed event is dispatched', () => {
         const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey))
         act(() => {
-            window.dispatchEvent(new Event('PHSurveyClosed'))
+            window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: mockSurvey.id } }))
         })
         expect(result.current.isPopupVisible).toBe(false)
     })
@@ -161,7 +161,7 @@ describe('usePopupVisibility', () => {
 
         const { result } = renderHook(() => usePopupVisibility(mockSurvey, mockPostHog, 0, false, removeSurvey))
         act(() => {
-            window.dispatchEvent(new Event('PHSurveySent'))
+            window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: mockSurvey.id } }))
         })
 
         expect(result.current.isSurveySent).toBe(true)
