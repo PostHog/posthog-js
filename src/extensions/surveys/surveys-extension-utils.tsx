@@ -559,7 +559,7 @@ export const defaultBackgroundColor = '#eeeded'
 
 export const createShadow = (styleSheet: string, surveyId: string, element?: Element, posthog?: PostHog) => {
     const div = document.createElement('div')
-    div.className = `PostHogSurvey-${surveyId}`
+    div.className = getSurveyContainerClass({ id: surveyId })
     const shadow = div.attachShadow({ mode: 'open' })
     if (styleSheet) {
         const styleElement = prepareStylesheet(document, styleSheet, posthog)
@@ -813,4 +813,8 @@ export function doesSurveyMatchSelector(survey: Survey): boolean {
         return true
     }
     return !!document?.querySelector(survey.conditions.selector)
+}
+
+export function getSurveyContainerClass(survey: Pick<Survey, 'id'>): string {
+    return `PostHogSurvey-${survey.id}`
 }

@@ -317,4 +317,127 @@ test.describe('surveys - feedback widget', () => {
         // Verify second event was sent
         await pollUntilEventCaptured(page, 'survey sent')
     })
+
+    test('if multiple surveys being shown, sending one of them does not close the other one', async ({
+        page,
+        context,
+    }) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+            await route.fulfill({
+                json: {
+                    surveys: [
+                        {
+                            id: '123',
+                            name: 'Test survey',
+                            type: 'widget',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [openTextQuestion],
+                            appearance: {
+                                widgetLabel: 'Feedback',
+                                widgetType: 'tab',
+                                displayThankYouMessage: true,
+                                thankyouMessageHeader: 'Thank you!',
+                            },
+                        },
+                        {
+                            id: '456',
+                            name: 'Test survey 2',
+                            type: 'widget',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [openTextQuestion],
+                            appearance: {
+                                position: 'next_to_trigger',
+                                widgetSelector: '.test-surveys',
+                                widgetType: 'selector',
+                                displayThankYouMessage: true,
+                                thankyouMessageHeader: 'Thank you!',
+                            },
+                        },
+                    ],
+                },
+            })
+        })
+
+        await start(startOptions, page, context)
+        await surveysAPICall
+
+        // click on the second survey trigger
+        await page.locator('.test-surveys').click()
+        await expect(page.locator('.PostHogSurvey-456').locator('.survey-form')).toBeVisible()
+
+        await page.locator('.PostHogSurvey-123').locator('.ph-survey-widget-tab').click()
+        await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
+
+        // fill in first survey
+        await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('textarea').fill('first submission')
+        await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('.form-submit').click()
+
+        await pollUntilEventCaptured(page, 'survey sent')
+
+        // click on the first survey confirmation message
+        await page.locator('.PostHogSurvey-123').locator('.form-submit').click()
+        await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeVisible()
+
+        // check if the second survey is still visible
+        await expect(page.locator('.PostHogSurvey-456').locator('.survey-form')).toBeVisible()
+    })
+
+    test('if multiple surveys being shown, closing one does not close the other', async ({ page, context }) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+            await route.fulfill({
+                json: {
+                    surveys: [
+                        {
+                            id: '123',
+                            name: 'Test survey',
+                            type: 'widget',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [openTextQuestion],
+                            appearance: {
+                                widgetLabel: 'Feedback',
+                                widgetType: 'tab',
+                                displayThankYouMessage: true,
+                                thankyouMessageHeader: 'Thank you!',
+                            },
+                        },
+                        {
+                            id: '456',
+                            name: 'Test survey 2',
+                            type: 'widget',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [openTextQuestion],
+                            appearance: {
+                                position: 'next_to_trigger',
+                                widgetSelector: '.test-surveys',
+                                widgetType: 'selector',
+                                displayThankYouMessage: true,
+                                thankyouMessageHeader: 'Thank you!',
+                            },
+                        },
+                    ],
+                },
+            })
+        })
+
+        await start(startOptions, page, context)
+        await surveysAPICall
+
+        // click on the second survey trigger
+        await page.locator('.test-surveys').click()
+        await expect(page.locator('.PostHogSurvey-456').locator('.survey-form')).toBeVisible()
+
+        await page.locator('.PostHogSurvey-123').locator('.ph-survey-widget-tab').click()
+        await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
+
+        // close first survey
+        await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('.form-cancel').click()
+
+        await pollUntilEventCaptured(page, 'survey dismissed')
+
+        // check if the second survey is still visible
+        await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeVisible()
+
+        // check if the second survey is still visible
+        await expect(page.locator('.PostHogSurvey-456').locator('.survey-form')).toBeVisible()
+    })
 })

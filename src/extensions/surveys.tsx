@@ -42,6 +42,7 @@ import {
     doesSurveyUrlMatch,
     getContrastingTextColor,
     getDisplayOrderQuestions,
+    getSurveyContainerClass,
     getSurveyResponseKey,
     getSurveySeen,
     hasWaitPeriodPassed,
@@ -55,10 +56,6 @@ import { prepareStylesheet } from './utils/stylesheet-loader'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
-
-function getPosthogWidgetClass(surveyId: string) {
-    return `.PostHogSurvey-${surveyId}`
-}
 
 const DISPATCH_FEEDBACK_WIDGET_EVENT = 'ph:show_survey_widget'
 
@@ -823,7 +820,7 @@ export function usePopupVisibility(
             localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
             setTimeout(() => {
                 const inputField = document
-                    .querySelector(getPosthogWidgetClass(survey.id))
+                    .querySelector(`.${getSurveyContainerClass(survey.id)}`)
                     ?.shadowRoot?.querySelector('textarea, input[type="text"]') as HTMLElement
                 if (inputField) {
                     inputField.focus()
