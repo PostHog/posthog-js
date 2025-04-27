@@ -457,14 +457,17 @@ describe('SurveyManager', () => {
         surveyManager.getTestAPI().addSurveyToFocus('survey1')
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
-        expect(mockPostHog.surveys.getSurveys).toHaveBeenCalledTimes(1)
-        expect(surveyManager.getTestAPI().surveyInFocus).toBe('survey1')
-
         const handlePopoverSurveyMock = jest
             .spyOn(surveyManager as any, '_handlePopoverSurvey')
             .mockImplementation(() => {})
 
+        expect(mockPostHog.surveys.getSurveys).toHaveBeenCalledTimes(1)
+        expect(surveyManager.getTestAPI().surveyInFocus).toBe('survey1')
+        expect(handlePopoverSurveyMock).not.toHaveBeenCalled()
+
         surveyManager.getTestAPI().removeSurveyFromFocus('survey1')
+        jest.spyOn(surveyManager as any, '_canShowNextEventBasedSurvey').mockReturnValue(true)
+
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(mockPostHog.surveys.getSurveys).toHaveBeenCalledTimes(2)
