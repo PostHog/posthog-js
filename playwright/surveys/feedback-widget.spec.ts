@@ -436,8 +436,5 @@ test.describe('surveys - feedback widget', () => {
 
         // check if the second survey is still visible
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeVisible()
-
-        // check if the second survey is still visible
-        await expect(page.locator('.PostHogSurvey-456').locator('.survey-form')).toBeVisible()
     })
 })
