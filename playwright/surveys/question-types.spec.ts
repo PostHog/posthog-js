@@ -66,15 +66,15 @@ test.describe('surveys - core display logic', () => {
         await start(startOptions, page, context)
         await surveysAPICall
 
-        await expect(page.locator('.PostHogSurvey123').locator('.survey-form')).toBeVisible()
-        await expect(page.locator('.PostHogSurvey123').locator('.survey-question')).toHaveText(
+        await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
+        await expect(page.locator('.PostHogSurvey-123').locator('.survey-question')).toHaveText(
             'What feedback do you have for us?'
         )
-        await expect(page.locator('.PostHogSurvey123').locator('.survey-question-description')).toHaveText(
+        await expect(page.locator('.PostHogSurvey-123').locator('.survey-question-description')).toHaveText(
             'plain text description'
         )
-        await page.locator('.PostHogSurvey123').locator('.survey-form').locator('textarea').type('Great job!')
-        await page.locator('.PostHogSurvey123').locator('.form-submit').click()
+        await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('textarea').type('Great job!')
+        await page.locator('.PostHogSurvey-123').locator('.form-submit').click()
 
         await pollUntilEventCaptured(page, 'survey sent')
     })
@@ -100,18 +100,18 @@ test.describe('surveys - core display logic', () => {
         await start(startOptions, page, context)
         await surveysAPICall
 
-        await expect(page.locator('.PostHogSurvey123').locator('.survey-form')).toBeVisible()
-        await expect(page.locator('.PostHogSurvey123').locator('.ratings-number')).toHaveCount(11)
+        await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
+        await expect(page.locator('.PostHogSurvey-123').locator('.ratings-number')).toHaveCount(11)
         let i = 0
-        for (const rating of await page.locator('.PostHogSurvey123').locator('.ratings-number').all()) {
+        for (const rating of await page.locator('.PostHogSurvey-123').locator('.ratings-number').all()) {
             await expect(rating).toBeVisible()
             await expect(rating).toHaveText(`${i++}`)
         }
 
-        await page.locator('.PostHogSurvey123').locator('.ratings-number').first().click()
-        await page.locator('.PostHogSurvey123').locator('.form-submit').click()
+        await page.locator('.PostHogSurvey-123').locator('.ratings-number').first().click()
+        await page.locator('.PostHogSurvey-123').locator('.form-submit').click()
 
-        await expect(page.locator('.PostHogSurvey123').locator('.ratings-number').first()).toHaveText('1')
+        await expect(page.locator('.PostHogSurvey-123').locator('.ratings-number').first()).toHaveText('1')
     })
 
     test('multiple question surveys', async ({ page, context }) => {
@@ -139,18 +139,18 @@ test.describe('surveys - core display logic', () => {
         await start(startOptions, page, context)
         await surveysAPICall
 
-        await expect(page.locator('.PostHogSurvey12345').locator('.survey-form')).toBeVisible()
-        await page.locator('.PostHogSurvey12345').locator('#surveyQuestion0Choice1').click()
-        await page.locator('.PostHogSurvey12345').locator('#surveyQuestion0Choice2').click()
-        await page.locator('.PostHogSurvey12345').locator('.form-submit').click()
+        await expect(page.locator('.PostHogSurvey-12345').locator('.survey-form')).toBeVisible()
+        await page.locator('.PostHogSurvey-12345').locator('#surveyQuestion0Choice1').click()
+        await page.locator('.PostHogSurvey-12345').locator('#surveyQuestion0Choice2').click()
+        await page.locator('.PostHogSurvey-12345').locator('.form-submit').click()
 
-        await page.locator('.PostHogSurvey12345').locator('textarea').type('Great job!')
-        await page.locator('.PostHogSurvey12345').locator('.form-submit').click()
-        await page.locator('.PostHogSurvey12345').locator('.form-submit').click()
+        await page.locator('.PostHogSurvey-12345').locator('textarea').type('Great job!')
+        await page.locator('.PostHogSurvey-12345').locator('.form-submit').click()
+        await page.locator('.PostHogSurvey-12345').locator('.form-submit').click()
 
-        await expect(page.locator('.PostHogSurvey12345').locator('.thank-you-message')).toBeVisible()
-        await page.locator('.PostHogSurvey12345').locator('.form-submit').click()
-        await expect(page.locator('.PostHogSurvey12345').locator('.thank-you-message')).not.toBeVisible()
+        await expect(page.locator('.PostHogSurvey-12345').locator('.thank-you-message')).toBeVisible()
+        await page.locator('.PostHogSurvey-12345').locator('.form-submit').click()
+        await expect(page.locator('.PostHogSurvey-12345').locator('.thank-you-message')).not.toBeVisible()
 
         await pollUntilEventCaptured(page, 'survey sent')
         const captures = await page.capturedEvents()
@@ -210,11 +210,11 @@ test.describe('surveys - core display logic', () => {
         await start(startOptions, page, context)
         await surveysAPICall
 
-        await expect(page.locator('.PostHogSurvey12345').locator('.survey-form')).toBeVisible()
-        await page.locator('.PostHogSurvey12345').locator('#surveyQuestion0Choice3').click()
-        await page.locator('.PostHogSurvey12345').locator('#surveyQuestion0Choice0').click()
-        await page.locator('.PostHogSurvey12345').locator('input[type=text]').type('Newsletters')
-        await page.locator('.PostHogSurvey12345').locator('.form-submit').click()
+        await expect(page.locator('.PostHogSurvey-12345').locator('.survey-form')).toBeVisible()
+        await page.locator('.PostHogSurvey-12345').locator('#surveyQuestion0Choice3').click()
+        await page.locator('.PostHogSurvey-12345').locator('#surveyQuestion0Choice0').click()
+        await page.locator('.PostHogSurvey-12345').locator('input[type=text]').type('Newsletters')
+        await page.locator('.PostHogSurvey-12345').locator('.form-submit').click()
 
         await pollUntilEventCaptured(page, 'survey sent')
         const captures = await page.capturedEvents()
@@ -258,16 +258,16 @@ test.describe('surveys - core display logic', () => {
         await start(startOptions, page, context)
         await surveysAPICall
 
-        await expect(page.locator('.PostHogSurvey12345').locator('.survey-form')).toBeVisible()
-        await page.locator('.PostHogSurvey12345').locator('#surveyQuestion0Choice3').click()
+        await expect(page.locator('.PostHogSurvey-12345').locator('.survey-form')).toBeVisible()
+        await page.locator('.PostHogSurvey-12345').locator('#surveyQuestion0Choice3').click()
         // TODO: you have to click on the input to activate it, really clicking on the parent should select the input
-        await page.locator('.PostHogSurvey12345').locator('#surveyQuestion0Choice3Open').click()
+        await page.locator('.PostHogSurvey-12345').locator('#surveyQuestion0Choice3Open').click()
         await page
-            .locator('.PostHogSurvey12345')
+            .locator('.PostHogSurvey-12345')
             .locator('input[type=text]#surveyQuestion0Choice3Open')
             .type('Product engineer')
 
-        await page.locator('.PostHogSurvey12345').locator('.form-submit').click()
+        await page.locator('.PostHogSurvey-12345').locator('.form-submit').click()
 
         await pollUntilEventCaptured(page, 'survey sent')
         const captures = await page.capturedEvents()

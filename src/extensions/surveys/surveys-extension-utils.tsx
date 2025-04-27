@@ -559,7 +559,7 @@ export const defaultBackgroundColor = '#eeeded'
 
 export const createShadow = (styleSheet: string, surveyId: string, element?: Element, posthog?: PostHog) => {
     const div = document.createElement('div')
-    div.className = `PostHogSurvey${surveyId}`
+    div.className = `PostHogSurvey-${surveyId}`
     const shadow = div.attachShadow({ mode: 'open' })
     if (styleSheet) {
         const styleElement = prepareStylesheet(document, styleSheet, posthog)
@@ -598,7 +598,7 @@ export const sendSurveyEvent = (
             [getSurveyInteractionProperty(survey, 'responded')]: true,
         },
     })
-    window.dispatchEvent(new Event('PHSurveySent'))
+    window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: survey.id } }))
 }
 
 export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {
@@ -621,7 +621,7 @@ export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly
         },
     })
     localStorage.setItem(getSurveySeenKey(survey), 'true')
-    window.dispatchEvent(new Event('PHSurveyClosed'))
+    window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: survey.id } }))
 }
 
 // Use the Fisher-yates algorithm to shuffle this array

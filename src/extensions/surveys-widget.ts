@@ -8,7 +8,7 @@ import { prepareStylesheet } from './utils/stylesheet-loader'
 const document = _document as Document
 
 export function retrieveWidgetShadow(survey: Survey, posthog?: PostHog) {
-    const widgetClassName = `PostHogWidget${survey.id}`
+    const widgetClassName = `PostHogSurvey-${survey.id}`
     const existingDiv = document.querySelector(`.${widgetClassName}`) as HTMLDivElement | null
 
     if (existingDiv && existingDiv.shadowRoot) {
