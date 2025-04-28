@@ -1025,7 +1025,7 @@ export function Questions({
             setCurrentQuestionIndex(nextStep)
             setInProgressSurveyState(survey, {
                 surveySubmissionId: surveySubmissionId,
-                responses: responses,
+                responses: newResponses,
             })
         }
 
