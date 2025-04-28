@@ -28,7 +28,6 @@ describe('SurveyPopup', () => {
         name: 'Test Partial Survey',
         description: 'A test survey for partial responses',
         type: SurveyType.Popover,
-        enable_partial_responses: true, // Enable partial responses for testing
         feature_flag_keys: null,
         linked_flag_key: null,
         targeting_flag_key: null,
@@ -171,10 +170,14 @@ describe('SurveyPopup', () => {
         const generatedId = 'newly-generated-id'
         mockedGetInProgressSurveyState.mockReturnValue(initialState)
         mockedUuidv7.mockReturnValue(generatedId)
+        const partialResponsesSurvey = {
+            ...mockSurvey,
+            enable_partial_responses: true,
+        }
 
         render(
             <SurveyPopup
-                survey={mockSurvey}
+                survey={partialResponsesSurvey}
                 removeSurveyFromFocus={mockRemoveSurveyFromFocus}
                 isPopup={true}
                 posthog={mockPosthog as any}
@@ -192,7 +195,7 @@ describe('SurveyPopup', () => {
             responses: {
                 $survey_response_q1: 'Answer Q1',
             },
-            survey: mockSurvey,
+            survey: partialResponsesSurvey,
             surveySubmissionId: generatedId,
             isSurveyCompleted: false,
             posthog: mockPosthog,
