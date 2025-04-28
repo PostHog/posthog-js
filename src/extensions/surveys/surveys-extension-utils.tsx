@@ -614,18 +614,11 @@ export const sendSurveyEvent = ({
         },
     })
 
-    // Update in-progress survey state if it's not completed
-    if (!isSurveyCompleted) {
-        setInProgressSurveyState(survey, {
-            surveySubmissionId: surveySubmissionId,
-            responses: responses,
-        })
-        return
+    if (isSurveyCompleted) {
+        // Only dispatch PHSurveySent if the survey is completed, as that removes the survey from focus
+        window.dispatchEvent(new Event('PHSurveySent'))
+        clearInProgressSurveyState(survey)
     }
-
-    // Only dispatch PHSurveySent if the survey is completed
-    window.dispatchEvent(new Event('PHSurveySent'))
-    clearInProgressSurveyState(survey)
 }
 
 export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {

@@ -48,6 +48,7 @@ import {
     hasWaitPeriodPassed,
     isSurveyInProgress,
     sendSurveyEvent,
+    setInProgressSurveyState,
     style,
     SURVEY_DEFAULT_Z_INDEX,
     SurveyContext,
@@ -1014,20 +1015,25 @@ export function Questions({
 
         const responseKey = getSurveyResponseKey(questionId)
 
-        setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
+        const newResponses = { ...questionsResponses, [responseKey]: res }
+        setQuestionsResponses(newResponses)
 
         const nextStep = getNextSurveyStep(survey, displayQuestionIndex, res)
         const isSurveyCompleted = nextStep === SurveyQuestionBranchingType.End
 
         if (!isSurveyCompleted) {
             setCurrentQuestionIndex(nextStep)
+            setInProgressSurveyState(survey, {
+                surveySubmissionId: surveySubmissionId,
+                responses: responses,
+            })
         }
 
         // If partial responses are enabled, send the survey sent event with with the responses,
         // otherwise only send the event when the survey is completed
         if (survey.enable_partial_responses || isSurveyCompleted) {
             sendSurveyEvent({
-                responses: { ...questionsResponses, [responseKey]: res },
+                responses: newResponses,
                 survey,
                 surveySubmissionId,
                 isSurveyCompleted,
