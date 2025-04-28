@@ -137,7 +137,7 @@ export function RatingQuestion({
                                     return (
                                         <button
                                             className={`ratings-emoji question-${displayQuestionIndex}-rating-${idx} ${
-                                                active ? 'rating-active' : null
+                                                active ? 'rating-active' : ''
                                             }`}
                                             value={idx + 1}
                                             key={idx}
