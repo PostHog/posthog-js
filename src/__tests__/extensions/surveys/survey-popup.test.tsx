@@ -9,9 +9,6 @@ import * as uuid from '../../../uuidv7' // Import uuidv7
 jest.mock('../../../extensions/surveys/surveys-extension-utils', () => ({
     ...jest.requireActual('../../../extensions/surveys/surveys-extension-utils'), // Keep original implementations for non-mocked parts
     getInProgressSurveyState: jest.fn(),
-    // No need to mock set/clear directly if we verify send/dismiss event calls
-    // setInProgressSurveyState: jest.fn(),
-    // clearInProgressSurveyState: jest.fn(),
     sendSurveyEvent: jest.fn(),
     dismissedSurveyEvent: jest.fn(),
 }))
