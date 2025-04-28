@@ -576,7 +576,7 @@ export const sendSurveyEvent = (
     responses: Record<string, string | number | string[] | null> = {},
     survey: Survey,
     posthog?: PostHog,
-    surveySubmissionId?: string,
+    surveySubmissionId: string,
     isSurveyCompleted?: boolean
 ) => {
     if (!posthog) {
@@ -606,21 +606,18 @@ export const sendSurveyEvent = (
         },
     })
 
-    // Manage localStorage state based on completion
-    if (isSurveyCompleted) {
-        window.dispatchEvent(new Event('PHSurveySent'))
-        // Clear in-progress state on final completion
-        clearInProgressSurveyState(survey)
-    } else if (surveySubmissionId) {
-        // Set/Update in-progress state for partial submissions if ID exists
+    // Update in-progress survey state if it's not completed
+    if (!isSurveyCompleted) {
         setInProgressSurveyState(survey, {
             surveySubmissionId: surveySubmissionId,
             responses: responses,
         })
-    } else {
-        // Log if partial submission without ID - cannot save state
-        logger.error('[survey sent] surveySubmissionId is required to save partial submission state.')
+        return
     }
+
+    // Only dispatch PHSurveySent if the survey is completed
+    window.dispatchEvent(new Event('PHSurveySent'))
+    clearInProgressSurveyState(survey)
 }
 
 export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {
