@@ -125,10 +125,10 @@ export function RatingQuestion({
         if (isNumber(initialValue)) {
             return initialValue
         }
-        if (isArray(initialValue) && initialValue.length > 0 && isNumber(initialValue[0])) {
-            return initialValue[0]
+        if (isArray(initialValue) && initialValue.length > 0 && isNumber(parseInt(initialValue[0]))) {
+            return parseInt(initialValue[0])
         }
-        if (isString(initialValue) && !isNumber(initialValue)) {
+        if (isString(initialValue) && isNumber(parseInt(initialValue))) {
             return parseInt(initialValue)
         }
         return null
