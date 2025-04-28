@@ -155,4 +155,5 @@ module.exports = {
         },
     ],
     root: true,
+    ignorePatterns: ['playground/error-tracking/**/*'],
 }
