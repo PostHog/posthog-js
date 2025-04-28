@@ -858,7 +858,6 @@ export function doesSurveyMatchSelector(survey: Survey): boolean {
 interface InProgressSurveyState {
     surveySubmissionId: string
     responses: Record<string, string | number | string[] | null>
-    // NOTE: We might need currentQuestionIndex here later if restoring multi-page surveys
 }
 
 const getInProgressSurveyStateKey = (survey: Pick<Survey, 'id' | 'current_iteration'>): string => {
