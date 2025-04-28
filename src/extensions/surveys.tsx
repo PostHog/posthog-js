@@ -820,7 +820,7 @@ export function usePopupVisibility(
             localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
             setTimeout(() => {
                 const inputField = document
-                    .querySelector(`.${getSurveyContainerClass(survey)}`)
+                    .querySelector(getSurveyContainerClass(survey, true))
                     ?.shadowRoot?.querySelector('textarea, input[type="text"]') as HTMLElement
                 if (inputField) {
                     inputField.focus()

@@ -815,6 +815,7 @@ export function doesSurveyMatchSelector(survey: Survey): boolean {
     return !!document?.querySelector(survey.conditions.selector)
 }
 
-export function getSurveyContainerClass(survey: Pick<Survey, 'id'>): string {
-    return `PostHogSurvey-${survey.id}`
+export function getSurveyContainerClass(survey: Pick<Survey, 'id'>, asSelector = false): string {
+    const className = `PostHogSurvey-${survey.id}`
+    return asSelector ? `.${className}` : className
 }
