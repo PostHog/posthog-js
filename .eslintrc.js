@@ -153,6 +153,17 @@ module.exports = {
                 'posthog-js/no-direct-null-check': 'off',
             },
         },
+        {
+            files: ['playground/**/*'],
+            rules: {
+                'no-console': 'off',
+                '@typescript-eslint/no-require-imports': 'off',
+                'no-undef': 'off',
+            },
+            env: {
+                node: true,
+            },
+        },
     ],
     root: true,
     ignorePatterns: ['playground/error-tracking/**/*'],
