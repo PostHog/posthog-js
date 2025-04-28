@@ -188,13 +188,15 @@ describe('SurveyPopup', () => {
         const nextButton = screen.getByRole('button', { name: /submit survey/i })
         fireEvent.click(nextButton)
 
-        expect(mockedSendSurveyEvent).toHaveBeenCalledWith(
-            { $survey_response_q1: 'Answer Q1' },
-            mockSurvey,
-            mockPosthog,
-            generatedId,
-            false // isSurveyCompleted = false
-        )
+        expect(mockedSendSurveyEvent).toHaveBeenCalledWith({
+            responses: {
+                $survey_response_q1: 'Answer Q1',
+            },
+            survey: mockSurvey,
+            surveySubmissionId: generatedId,
+            isSurveyCompleted: false,
+            posthog: mockPosthog,
+        })
         expect(screen.getByText('Question 2')).toBeVisible()
     })
 
@@ -228,13 +230,16 @@ describe('SurveyPopup', () => {
         fireEvent.click(submitButton)
 
         // Verify final sendSurveyEvent call
-        expect(mockedSendSurveyEvent).toHaveBeenCalledWith(
-            { $survey_response_q1: 'Answer Q1', $survey_response_q2: 'Answer Q2' },
-            mockSurvey,
-            mockPosthog,
-            existingState.surveySubmissionId,
-            true // isSurveyCompleted = true
-        )
+        expect(mockedSendSurveyEvent).toHaveBeenCalledWith({
+            responses: {
+                $survey_response_q1: 'Answer Q1',
+                $survey_response_q2: 'Answer Q2',
+            },
+            survey: mockSurvey,
+            surveySubmissionId: existingState.surveySubmissionId,
+            isSurveyCompleted: true,
+            posthog: mockPosthog,
+        })
 
         // *** Manually dispatch the event that the real function would dispatch ***
         window.dispatchEvent(new Event('PHSurveySent'))
