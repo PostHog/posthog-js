@@ -1021,26 +1021,19 @@ export function Questions({
 
         if (!isSurveyCompleted) {
             setCurrentQuestionIndex(nextStep)
-
-            if (survey.enable_partial_responses) {
-                sendSurveyEvent(
-                    { ...questionsResponses, [responseKey]: res },
-                    survey,
-                    posthog,
-                    surveySubmissionId,
-                    isSurveyCompleted
-                )
-            }
-            return
         }
 
-        sendSurveyEvent(
-            { ...questionsResponses, [responseKey]: res },
-            survey,
-            posthog,
-            surveySubmissionId,
-            isSurveyCompleted
-        )
+        // If partial responses are enabled, send the survey sent event with with the responses,
+        // otherwise only send the event when the survey is completed
+        if (survey.enable_partial_responses || isSurveyCompleted) {
+            sendSurveyEvent({
+                responses: { ...questionsResponses, [responseKey]: res },
+                survey,
+                surveySubmissionId,
+                isSurveyCompleted,
+                posthog,
+            })
+        }
     }
 
     return (

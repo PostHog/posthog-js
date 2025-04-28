@@ -572,13 +572,21 @@ export const createShadow = (styleSheet: string, surveyId: string, element?: Ele
     return shadow
 }
 
-export const sendSurveyEvent = (
-    responses: Record<string, string | number | string[] | null> = {},
-    survey: Survey,
-    posthog?: PostHog,
-    surveySubmissionId: string,
-    isSurveyCompleted?: boolean
-) => {
+interface SendSurveyEventArgs {
+    responses: Record<string, string | number | string[] | null>
+    survey: Survey
+    surveySubmissionId: string
+    isSurveyCompleted: boolean
+    posthog?: PostHog
+}
+
+export const sendSurveyEvent = ({
+    responses,
+    survey,
+    surveySubmissionId,
+    posthog,
+    isSurveyCompleted,
+}: SendSurveyEventArgs) => {
     if (!posthog) {
         logger.error('[survey sent] event not captured, PostHog instance not found.')
         return
