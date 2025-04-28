@@ -605,7 +605,7 @@ export const sendSurveyEvent = ({
             id: question.id,
             question: question.question,
         })),
-        $survey_submission_id: surveySubmissionId, // Include the ID if available
+        $survey_submission_id: surveySubmissionId,
         $survey_completed: isSurveyCompleted,
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
         ...responses,
