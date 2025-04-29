@@ -2063,10 +2063,10 @@ export class PostHog {
         // TRICKY: We want a deterministic state for persistence so that a new pageload has the same persistence
         const persistenceDisabled = this.config.disable_persistence || (isOptedOut && !!defaultPersistenceDisabled)
 
-        if (this.persistence?.disabled !== persistenceDisabled) {
+        if (this.persistence?._disabled !== persistenceDisabled) {
             this.persistence?.set_disabled(persistenceDisabled)
         }
-        if (this.sessionPersistence?.disabled !== persistenceDisabled) {
+        if (this.sessionPersistence?._disabled !== persistenceDisabled) {
             this.sessionPersistence?.set_disabled(persistenceDisabled)
         }
     }

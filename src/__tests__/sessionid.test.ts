@@ -40,7 +40,7 @@ describe('Session ID manager', () => {
         persistence = {
             props: { [SESSION_ID]: undefined },
             register: jest.fn(),
-            disabled: false,
+            _disabled: false,
         }
         ;(sessionStore._is_supported as jest.Mock).mockReturnValue(true)
         // @ts-expect-error - TS gets confused about the types here
@@ -274,7 +274,7 @@ describe('Session ID manager', () => {
             expect(sessionStore._set).toHaveBeenCalledWith('ph_persistance-name_window_id', 'newWindowId')
         })
         it('stores and retrieves a window_id if persistance is disabled and storage is not used', () => {
-            persistence.disabled = true
+            persistence._disabled = true
             const sessionIdManager = sessionIdMgr(persistence)
             sessionIdManager['_setWindowId']('newWindowId')
             expect(sessionIdManager['_getWindowId']()).toEqual('newWindowId')

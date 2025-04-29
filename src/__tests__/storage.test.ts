@@ -75,7 +75,7 @@ describe('sessionStore', () => {
         expect(sessionStore._parse('foo')).toEqual(null)
     })
 
-    describe('sessionStore.is_supported', () => {
+    describe('sessionStore._is_supported', () => {
         beforeEach(() => {
             // Reset the sessionStorageSupported before each test. Otherwise, we'd just be testing the cached value.
             // eslint-disable-next-line no-unused-vars

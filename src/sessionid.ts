@@ -123,7 +123,7 @@ export class SessionIdManager {
 
     private _canUseSessionStorage(): boolean {
         // We only want to use sessionStorage if persistence is enabled and not memory storage
-        return this._config.persistence !== 'memory' && !this._persistence.disabled && sessionStore._is_supported()
+        return this._config.persistence !== 'memory' && !this._persistence._disabled && sessionStore._is_supported()
     }
 
     // Note: this tries to store the windowId in sessionStorage. SessionStorage is unique to the current window/tab,
