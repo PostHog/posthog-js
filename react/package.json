@@ -9,7 +9,7 @@
         "directory": "react"
     },
     "author": "hey@posthog.com",
-    "license": "MIT",
+    "license": "Apache-2.0",
     "homepage": "https://posthog.com/docs/libraries/react",
     "packageManager": "pnpm@9.15.4",
     "scripts": {
