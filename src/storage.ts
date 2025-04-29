@@ -93,13 +93,13 @@ export function chooseCookieDomain(hostname: string, cross_subdomain: boolean | 
 
 // Methods partially borrowed from quirksmode.org/js/cookies.html
 export const cookieStore: PersistentStore = {
-    is_supported: () => !!document,
+    _is_supported: () => !!document,
 
-    error: function (msg) {
+    _error: function (msg) {
         logger.error('cookieStore error: ' + msg)
     },
 
-    get: function (name) {
+    _get: function (name) {
         if (!document) {
             return
         }
@@ -120,17 +120,17 @@ export const cookieStore: PersistentStore = {
         return null
     },
 
-    parse: function (name) {
+    _parse: function (name) {
         let cookie
         try {
-            cookie = JSON.parse(cookieStore.get(name)) || {}
+            cookie = JSON.parse(cookieStore._get(name)) || {}
         } catch {
             // noop
         }
         return cookie
     },
 
-    set: function (name, value, days, cross_subdomain, is_secure) {
+    _set: function (name, value, days, cross_subdomain, is_secure) {
         if (!document) {
             return
         }
@@ -171,9 +171,9 @@ export const cookieStore: PersistentStore = {
         }
     },
 
-    remove: function (name, cross_subdomain) {
+    _remove: function (name, cross_subdomain) {
         try {
-            cookieStore.set(name, '', -1, cross_subdomain)
+            cookieStore._set(name, '', -1, cross_subdomain)
         } catch {
             return
         }
@@ -183,7 +183,7 @@ export const cookieStore: PersistentStore = {
 let _localStorage_supported: boolean | null = null
 
 export const localStore: PersistentStore = {
-    is_supported: function () {
+    _is_supported: function () {
         if (!isNull(_localStorage_supported)) {
             return _localStorage_supported
         }
@@ -193,11 +193,11 @@ export const localStore: PersistentStore = {
             try {
                 const key = '__mplssupport__',
                     val = 'xyz'
-                localStore.set(key, val)
-                if (localStore.get(key) !== '"xyz"') {
+                localStore._set(key, val)
+                if (localStore._get(key) !== '"xyz"') {
                     supported = false
                 }
-                localStore.remove(key)
+                localStore._remove(key)
             } catch {
                 supported = false
             }
@@ -212,41 +212,41 @@ export const localStore: PersistentStore = {
         return supported
     },
 
-    error: function (msg) {
+    _error: function (msg) {
         logger.error('localStorage error: ' + msg)
     },
 
-    get: function (name) {
+    _get: function (name) {
         try {
             return window?.localStorage.getItem(name)
         } catch (err) {
-            localStore.error(err)
+            localStore._error(err)
         }
         return null
     },
 
-    parse: function (name) {
+    _parse: function (name) {
         try {
-            return JSON.parse(localStore.get(name)) || {}
+            return JSON.parse(localStore._get(name)) || {}
         } catch {
             // noop
         }
         return null
     },
 
-    set: function (name, value) {
+    _set: function (name, value) {
         try {
             window?.localStorage.setItem(name, JSON.stringify(value))
         } catch (err) {
-            localStore.error(err)
+            localStore._error(err)
         }
     },
 
-    remove: function (name) {
+    _remove: function (name) {
         try {
             window?.localStorage.removeItem(name)
         } catch (err) {
-            localStore.error(err)
+            localStore._error(err)
         }
     },
 }
@@ -264,15 +264,15 @@ const COOKIE_PERSISTED_PROPERTIES = [
 
 export const localPlusCookieStore: PersistentStore = {
     ...localStore,
-    parse: function (name) {
+    _parse: function (name) {
         try {
             let cookieProperties: Properties = {}
             try {
                 // See if there's a cookie stored with data.
-                cookieProperties = cookieStore.parse(name) || {}
+                cookieProperties = cookieStore._parse(name) || {}
             } catch {}
-            const value = extend(cookieProperties, JSON.parse(localStore.get(name) || '{}'))
-            localStore.set(name, value)
+            const value = extend(cookieProperties, JSON.parse(localStore._get(name) || '{}'))
+            localStore._set(name, value)
             return value
         } catch {
             // noop
@@ -280,9 +280,9 @@ export const localPlusCookieStore: PersistentStore = {
         return null
     },
 
-    set: function (name, value, days, cross_subdomain, is_secure, debug) {
+    _set: function (name, value, days, cross_subdomain, is_secure, debug) {
         try {
-            localStore.set(name, value, undefined, undefined, debug)
+            localStore._set(name, value, undefined, undefined, debug)
             const cookiePersistedProperties: Record<string, any> = {}
             COOKIE_PERSISTED_PROPERTIES.forEach((key) => {
                 if (value[key]) {
@@ -291,19 +291,19 @@ export const localPlusCookieStore: PersistentStore = {
             })
 
             if (Object.keys(cookiePersistedProperties).length) {
-                cookieStore.set(name, cookiePersistedProperties, days, cross_subdomain, is_secure, debug)
+                cookieStore._set(name, cookiePersistedProperties, days, cross_subdomain, is_secure, debug)
             }
         } catch (err) {
-            localStore.error(err)
+            localStore._error(err)
         }
     },
 
-    remove: function (name, cross_subdomain) {
+    _remove: function (name, cross_subdomain) {
         try {
             window?.localStorage.removeItem(name)
-            cookieStore.remove(name, cross_subdomain)
+            cookieStore._remove(name, cross_subdomain)
         } catch (err) {
-            localStore.error(err)
+            localStore._error(err)
         }
     },
 }
@@ -312,27 +312,27 @@ const memoryStorage: Properties = {}
 
 // Storage that only lasts the length of the pageview if we don't want to use cookies
 export const memoryStore: PersistentStore = {
-    is_supported: function () {
+    _is_supported: function () {
         return true
     },
 
-    error: function (msg) {
+    _error: function (msg) {
         logger.error('memoryStorage error: ' + msg)
     },
 
-    get: function (name) {
+    _get: function (name) {
         return memoryStorage[name] || null
     },
 
-    parse: function (name) {
+    _parse: function (name) {
         return memoryStorage[name] || null
     },
 
-    set: function (name, value) {
+    _set: function (name, value) {
         memoryStorage[name] = value
     },
 
-    remove: function (name) {
+    _remove: function (name) {
         delete memoryStorage[name]
     },
 }
@@ -343,7 +343,7 @@ export const resetSessionStorageSupported = () => {
 }
 // Storage that only lasts the length of a tab/window. Survives page refreshes
 export const sessionStore: PersistentStore = {
-    is_supported: function () {
+    _is_supported: function () {
         if (!isNull(sessionStorageSupported)) {
             return sessionStorageSupported
         }
@@ -352,11 +352,11 @@ export const sessionStore: PersistentStore = {
             try {
                 const key = '__support__',
                     val = 'xyz'
-                sessionStore.set(key, val)
-                if (sessionStore.get(key) !== '"xyz"') {
+                sessionStore._set(key, val)
+                if (sessionStore._get(key) !== '"xyz"') {
                     sessionStorageSupported = false
                 }
-                sessionStore.remove(key)
+                sessionStore._remove(key)
             } catch {
                 sessionStorageSupported = false
             }
@@ -366,41 +366,41 @@ export const sessionStore: PersistentStore = {
         return sessionStorageSupported
     },
 
-    error: function (msg) {
+    _error: function (msg) {
         logger.error('sessionStorage error: ', msg)
     },
 
-    get: function (name) {
+    _get: function (name) {
         try {
             return window?.sessionStorage.getItem(name)
         } catch (err) {
-            sessionStore.error(err)
+            sessionStore._error(err)
         }
         return null
     },
 
-    parse: function (name) {
+    _parse: function (name) {
         try {
-            return JSON.parse(sessionStore.get(name)) || null
+            return JSON.parse(sessionStore._get(name)) || null
         } catch {
             // noop
         }
         return null
     },
 
-    set: function (name, value) {
+    _set: function (name, value) {
         try {
             window?.sessionStorage.setItem(name, JSON.stringify(value))
         } catch (err) {
-            sessionStore.error(err)
+            sessionStore._error(err)
         }
     },
 
-    remove: function (name) {
+    _remove: function (name) {
         try {
             window?.sessionStorage.removeItem(name)
         } catch (err) {
-            sessionStore.error(err)
+            sessionStore._error(err)
         }
     },
 }

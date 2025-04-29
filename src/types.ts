@@ -1442,11 +1442,11 @@ export type EvaluationReason = {
 export type RemoteConfigFeatureFlagCallback = (payload: JsonType) => void
 
 export interface PersistentStore {
-    is_supported: () => boolean
-    error: (error: any) => void
-    parse: (name: string) => any
-    get: (name: string) => any
-    set: (
+    _is_supported: () => boolean
+    _error: (error: any) => void
+    _parse: (name: string) => any
+    _get: (name: string) => any
+    _set: (
         name: string,
         value: any,
         expire_days?: number | null,
@@ -1454,7 +1454,7 @@ export interface PersistentStore {
         secure?: boolean,
         debug?: boolean
     ) => void
-    remove: (name: string, cross_subdomain?: boolean) => void
+    _remove: (name: string, cross_subdomain?: boolean) => void
 }
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type

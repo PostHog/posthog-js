@@ -51,31 +51,31 @@ describe('sessionStore', () => {
     })
 
     it('stores objects as strings', () => {
-        sessionStore.set('foo', { bar: 'baz' })
-        expect(sessionStore.get('foo')).toEqual('{"bar":"baz"}')
+        sessionStore._set('foo', { bar: 'baz' })
+        expect(sessionStore._get('foo')).toEqual('{"bar":"baz"}')
     })
     it('stores and retrieves an object untouched', () => {
         const obj = { bar: 'baz' }
-        sessionStore.set('foo', obj)
-        expect(sessionStore.parse('foo')).toEqual(obj)
+        sessionStore._set('foo', obj)
+        expect(sessionStore._parse('foo')).toEqual(obj)
     })
     it('stores and retrieves a string untouched', () => {
         const str = 'hey hey'
-        sessionStore.set('foo', str)
-        expect(sessionStore.parse('foo')).toEqual(str)
+        sessionStore._set('foo', str)
+        expect(sessionStore._parse('foo')).toEqual(str)
     })
     it('returns null if the key does not exist', () => {
-        expect(sessionStore.parse('baz')).toEqual(null)
+        expect(sessionStore._parse('baz')).toEqual(null)
     })
     it('remove deletes an item from storage', () => {
         const str = 'hey hey'
-        sessionStore.set('foo', str)
-        expect(sessionStore.parse('foo')).toEqual(str)
-        sessionStore.remove('foo')
-        expect(sessionStore.parse('foo')).toEqual(null)
+        sessionStore._set('foo', str)
+        expect(sessionStore._parse('foo')).toEqual(str)
+        sessionStore._remove('foo')
+        expect(sessionStore._parse('foo')).toEqual(null)
     })
 
-    describe('sessionStore.is_supported', () => {
+    describe('sessionStore._is_supported', () => {
         beforeEach(() => {
             // Reset the sessionStorageSupported before each test. Otherwise, we'd just be testing the cached value.
             // eslint-disable-next-line no-unused-vars
@@ -84,11 +84,11 @@ describe('sessionStore', () => {
         it('returns false if sessionStorage is undefined', () => {
             const sessionStorage = (window as any).sessionStorage
             delete (window as any).sessionStorage
-            expect(sessionStore.is_supported()).toEqual(false)
+            expect(sessionStore._is_supported()).toEqual(false)
             ;(window as any).sessionStorage = sessionStorage
         })
         it('returns true by default', () => {
-            expect(sessionStore.is_supported()).toEqual(true)
+            expect(sessionStore._is_supported()).toEqual(true)
         })
     })
 })
