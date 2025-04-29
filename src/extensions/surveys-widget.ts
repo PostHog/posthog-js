@@ -1,14 +1,14 @@
 import { PostHog } from '../posthog-core'
 import { Survey } from '../posthog-surveys-types'
 import { document as _document } from '../utils/globals'
-import { SURVEY_DEFAULT_Z_INDEX } from './surveys/surveys-extension-utils'
+import { getSurveyContainerClass, SURVEY_DEFAULT_Z_INDEX } from './surveys/surveys-extension-utils'
 import { prepareStylesheet } from './utils/stylesheet-loader'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const document = _document as Document
 
 export function retrieveWidgetShadow(survey: Survey, posthog?: PostHog) {
-    const widgetClassName = `PostHogWidget${survey.id}`
+    const widgetClassName = getSurveyContainerClass(survey)
     const existingDiv = document.querySelector(`.${widgetClassName}`) as HTMLDivElement | null
 
     if (existingDiv && existingDiv.shadowRoot) {

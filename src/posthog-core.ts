@@ -93,9 +93,11 @@ import { WebExperiments } from './web-experiments'
 /*
 SIMPLE STYLE GUIDE:
 
-this.x === public function
-this._x === internal - only use within this file
-this.__x === private - only use within the class
+Use TypeScript accessibility modifiers, e.g. private/protected
+
+If something is not part of the public interface:
+* prefix it with _ to allow mangling
+* prefix it with __ to disable mangling, but signal that it is internal
 
 Globals should be all caps
 */
@@ -1832,7 +1834,7 @@ export class PostHog {
                     ? this.persistence
                     : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
-            if (localStore.is_supported() && localStore.get('ph_debug') === 'true') {
+            if (localStore._is_supported() && localStore._get('ph_debug') === 'true') {
                 this.config.debug = true
             }
             if (this.config.debug) {
@@ -2061,10 +2063,10 @@ export class PostHog {
         // TRICKY: We want a deterministic state for persistence so that a new pageload has the same persistence
         const persistenceDisabled = this.config.disable_persistence || (isOptedOut && !!defaultPersistenceDisabled)
 
-        if (this.persistence?.disabled !== persistenceDisabled) {
+        if (this.persistence?._disabled !== persistenceDisabled) {
             this.persistence?.set_disabled(persistenceDisabled)
         }
-        if (this.sessionPersistence?.disabled !== persistenceDisabled) {
+        if (this.sessionPersistence?._disabled !== persistenceDisabled) {
             this.sessionPersistence?.set_disabled(persistenceDisabled)
         }
     }

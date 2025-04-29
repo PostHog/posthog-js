@@ -51,21 +51,21 @@ const parseName = (config: PostHogConfig): string => {
 export class PostHogPersistence {
     private _config: PostHogConfig
     props: Properties
-    storage: PersistentStore
-    campaign_params_saved: boolean
-    name: string
-    disabled: boolean | undefined
-    secure: boolean | undefined
-    expire_days: number | undefined
-    default_expiry: number | undefined
-    cross_subdomain: boolean | undefined
+    private _storage: PersistentStore
+    private _campaign_params_saved: boolean
+    private readonly _name: string
+    _disabled: boolean | undefined
+    private _secure: boolean | undefined
+    private _expire_days: number | undefined
+    private _default_expiry: number | undefined
+    private _cross_subdomain: boolean | undefined
 
     constructor(config: PostHogConfig) {
         this._config = config
         this.props = {}
-        this.campaign_params_saved = false
-        this.name = parseName(config)
-        this.storage = this._buildStorage(config)
+        this._campaign_params_saved = false
+        this._name = parseName(config)
+        this._storage = this._buildStorage(config)
         this.load()
         if (config.debug) {
             logger.info('Persistence loaded', config['persistence'], { ...this.props })
@@ -89,17 +89,17 @@ export class PostHogPersistence {
         let store: PersistentStore
         // We handle storage type in a case-insensitive way for backwards compatibility
         const storage_type = config['persistence'].toLowerCase() as Lowercase<PostHogConfig['persistence']>
-        if (storage_type === 'localstorage' && localStore.is_supported()) {
+        if (storage_type === 'localstorage' && localStore._is_supported()) {
             store = localStore
-        } else if (storage_type === 'localstorage+cookie' && localPlusCookieStore.is_supported()) {
+        } else if (storage_type === 'localstorage+cookie' && localPlusCookieStore._is_supported()) {
             store = localPlusCookieStore
-        } else if (storage_type === 'sessionstorage' && sessionStore.is_supported()) {
+        } else if (storage_type === 'sessionstorage' && sessionStore._is_supported()) {
             store = sessionStore
         } else if (storage_type === 'memory') {
             store = memoryStore
         } else if (storage_type === 'cookie') {
             store = cookieStore
-        } else if (localPlusCookieStore.is_supported()) {
+        } else if (localPlusCookieStore._is_supported()) {
             // selected storage type wasn't supported, fallback to 'localstorage+cookie' if possible
             store = localPlusCookieStore
         } else {
@@ -126,11 +126,11 @@ export class PostHogPersistence {
     }
 
     load(): void {
-        if (this.disabled) {
+        if (this._disabled) {
             return
         }
 
-        const entry = this.storage.parse(this.name)
+        const entry = this._storage._parse(this._name)
 
         if (entry) {
             this.props = extend({}, entry)
@@ -143,16 +143,23 @@ export class PostHogPersistence {
      * As such callers of this should ideally check that the data has changed beforehand
      */
     save(): void {
-        if (this.disabled) {
+        if (this._disabled) {
             return
         }
-        this.storage.set(this.name, this.props, this.expire_days, this.cross_subdomain, this.secure, this._config.debug)
+        this._storage._set(
+            this._name,
+            this.props,
+            this._expire_days,
+            this._cross_subdomain,
+            this._secure,
+            this._config.debug
+        )
     }
 
     remove(): void {
         // remove both domain and subdomain cookies
-        this.storage.remove(this.name, false)
-        this.storage.remove(this.name, true)
+        this._storage._remove(this._name, false)
+        this._storage._remove(this._name, true)
     }
 
     // removes the storage entry and deletes all loaded data
@@ -174,7 +181,7 @@ export class PostHogPersistence {
             if (isUndefined(default_value)) {
                 default_value = 'None'
             }
-            this.expire_days = isUndefined(days) ? this.default_expiry : days
+            this._expire_days = isUndefined(days) ? this._default_expiry : days
 
             let hasChanges = false
 
@@ -200,7 +207,7 @@ export class PostHogPersistence {
 
     register(props: Properties, days?: number): boolean {
         if (isObject(props)) {
-            this.expire_days = isUndefined(days) ? this.default_expiry : days
+            this._expire_days = isUndefined(days) ? this._default_expiry : days
 
             let hasChanges = false
 
@@ -227,7 +234,7 @@ export class PostHogPersistence {
     }
 
     update_campaign_params(): void {
-        if (!this.campaign_params_saved) {
+        if (!this._campaign_params_saved) {
             const campaignParams = getCampaignParams(
                 this._config.custom_campaign_params,
                 this._config.mask_personal_data_properties,
@@ -237,7 +244,7 @@ export class PostHogPersistence {
             if (!isEmptyObject(stripEmptyProperties(campaignParams))) {
                 this.register(campaignParams)
             }
-            this.campaign_params_saved = true
+            this._campaign_params_saved = true
         }
     }
     update_search_keyword(): void {
@@ -263,13 +270,6 @@ export class PostHogPersistence {
             },
             undefined
         )
-    }
-
-    get_referrer_info(): Properties {
-        return stripEmptyProperties({
-            $referrer: this['props']['$referrer'],
-            $referring_domain: this['props']['$referring_domain'],
-        })
     }
 
     get_initial_props(): Properties {
@@ -309,7 +309,7 @@ export class PostHogPersistence {
     }
 
     update_config(config: PostHogConfig, oldConfig: PostHogConfig): void {
-        this.default_expiry = this.expire_days = config['cookie_expiration']
+        this._default_expiry = this._expire_days = config['cookie_expiration']
         this.set_disabled(config['disable_persistence'])
         this.set_cross_subdomain(config['cross_subdomain_cookie'])
         this.set_secure(config['secure_cookie'])
@@ -321,7 +321,7 @@ export class PostHogPersistence {
 
             // clear the old store
             this.clear()
-            this.storage = newStore
+            this._storage = newStore
             this.props = props
 
             this.save()
@@ -329,8 +329,8 @@ export class PostHogPersistence {
     }
 
     set_disabled(disabled: boolean): void {
-        this.disabled = disabled
-        if (this.disabled) {
+        this._disabled = disabled
+        if (this._disabled) {
             this.remove()
         } else {
             this.save()
@@ -338,20 +338,16 @@ export class PostHogPersistence {
     }
 
     set_cross_subdomain(cross_subdomain: boolean): void {
-        if (cross_subdomain !== this.cross_subdomain) {
-            this.cross_subdomain = cross_subdomain
+        if (cross_subdomain !== this._cross_subdomain) {
+            this._cross_subdomain = cross_subdomain
             this.remove()
             this.save()
         }
     }
 
-    get_cross_subdomain(): boolean {
-        return !!this.cross_subdomain
-    }
-
     set_secure(secure: boolean): void {
-        if (secure !== this.secure) {
-            this.secure = secure
+        if (secure !== this._secure) {
+            this._secure = secure
             this.remove()
             this.save()
         }

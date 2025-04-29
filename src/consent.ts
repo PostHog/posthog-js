@@ -45,7 +45,7 @@ export class ConsentManager {
     }
 
     public optInOut(isOptedIn: boolean) {
-        this._storage.set(
+        this._storage._set(
             this._storageKey,
             isOptedIn ? 1 : 0,
             this._config.cookie_expiration,
@@ -55,7 +55,7 @@ export class ConsentManager {
     }
 
     public reset() {
-        this._storage.remove(this._storageKey, this._config.cross_subdomain_cookie)
+        this._storage._remove(this._storageKey, this._config.cross_subdomain_cookie)
     }
 
     private get _storageKey() {
@@ -64,7 +64,7 @@ export class ConsentManager {
     }
 
     private get _storedConsent(): ConsentStatus {
-        const value = this._storage.get(this._storageKey)
+        const value = this._storage._get(this._storageKey)
         return value === '1' ? ConsentStatus.GRANTED : value === '0' ? ConsentStatus.DENIED : ConsentStatus.PENDING
     }
 
@@ -74,13 +74,13 @@ export class ConsentManager {
             this._persistentStore = persistenceType === 'localStorage' ? localStore : cookieStore
             const otherStorage = persistenceType === 'localStorage' ? cookieStore : localStore
 
-            if (otherStorage.get(this._storageKey)) {
-                if (!this._persistentStore.get(this._storageKey)) {
+            if (otherStorage._get(this._storageKey)) {
+                if (!this._persistentStore._get(this._storageKey)) {
                     // This indicates we have moved to a new storage format so we migrate the value over
-                    this.optInOut(otherStorage.get(this._storageKey) === '1')
+                    this.optInOut(otherStorage._get(this._storageKey) === '1')
                 }
 
-                otherStorage.remove(this._storageKey, this._config.cross_subdomain_cookie)
+                otherStorage._remove(this._storageKey, this._config.cross_subdomain_cookie)
             }
         }
 

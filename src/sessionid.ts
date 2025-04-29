@@ -75,18 +75,18 @@ export class SessionIdManager {
         // primary_window_exists is set when the DOM has been loaded and is cleared on unload
         // if it exists here it means there was no unload which suggests this window is opened as a tab duplication, window.open, etc.
         if (this._canUseSessionStorage()) {
-            const lastWindowId = sessionStore.parse(this._window_id_storage_key)
+            const lastWindowId = sessionStore._parse(this._window_id_storage_key)
 
-            const primaryWindowExists = sessionStore.parse(this._primary_window_exists_storage_key)
+            const primaryWindowExists = sessionStore._parse(this._primary_window_exists_storage_key)
             if (lastWindowId && !primaryWindowExists) {
                 // Persist window from previous storage state
                 this._windowId = lastWindowId
             } else {
                 // Wipe any reference to previous window id
-                sessionStore.remove(this._window_id_storage_key)
+                sessionStore._remove(this._window_id_storage_key)
             }
             // Flag this session as having a primary window
-            sessionStore.set(this._primary_window_exists_storage_key, true)
+            sessionStore._set(this._primary_window_exists_storage_key, true)
         }
 
         if (this._config.bootstrap?.sessionID) {
@@ -123,7 +123,7 @@ export class SessionIdManager {
 
     private _canUseSessionStorage(): boolean {
         // We only want to use sessionStorage if persistence is enabled and not memory storage
-        return this._config.persistence !== 'memory' && !this._persistence.disabled && sessionStore.is_supported()
+        return this._config.persistence !== 'memory' && !this._persistence._disabled && sessionStore._is_supported()
     }
 
     // Note: this tries to store the windowId in sessionStorage. SessionStorage is unique to the current window/tab,
@@ -134,7 +134,7 @@ export class SessionIdManager {
         if (windowId !== this._windowId) {
             this._windowId = windowId
             if (this._canUseSessionStorage()) {
-                sessionStore.set(this._window_id_storage_key, windowId)
+                sessionStore._set(this._window_id_storage_key, windowId)
             }
         }
     }
@@ -144,7 +144,7 @@ export class SessionIdManager {
             return this._windowId
         }
         if (this._canUseSessionStorage()) {
-            return sessionStore.parse(this._window_id_storage_key)
+            return sessionStore._parse(this._window_id_storage_key)
         }
         // New window id will be generated
         return null
@@ -204,7 +204,7 @@ export class SessionIdManager {
             'beforeunload',
             () => {
                 if (this._canUseSessionStorage()) {
-                    sessionStore.remove(this._primary_window_exists_storage_key)
+                    sessionStore._remove(this._primary_window_exists_storage_key)
                 }
             },
             // Not making it passive to try and force the browser to handle this before the page is unloaded

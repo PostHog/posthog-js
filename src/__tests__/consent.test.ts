@@ -46,8 +46,8 @@ describe('consentManager', () => {
         expect(posthog.has_opted_in_capturing()).toBe(true)
         expect(posthog.has_opted_out_capturing()).toBe(false)
 
-        expect(posthog.persistence?.disabled).toBe(false)
-        expect(posthog.sessionPersistence?.disabled).toBe(false)
+        expect(posthog.persistence?._disabled).toBe(false)
+        expect(posthog.sessionPersistence?._disabled).toBe(false)
     })
 
     it('should start default opted out if setting given', () => {
@@ -55,8 +55,8 @@ describe('consentManager', () => {
         expect(posthog.has_opted_in_capturing()).toBe(false)
         expect(posthog.has_opted_out_capturing()).toBe(true)
 
-        expect(posthog.persistence?.disabled).toBe(false)
-        expect(posthog.sessionPersistence?.disabled).toBe(false)
+        expect(posthog.persistence?._disabled).toBe(false)
+        expect(posthog.sessionPersistence?._disabled).toBe(false)
     })
 
     it('should start default opted out if setting given and disable storage', () => {
@@ -64,22 +64,22 @@ describe('consentManager', () => {
         expect(posthog.has_opted_in_capturing()).toBe(false)
         expect(posthog.has_opted_out_capturing()).toBe(true)
 
-        expect(posthog.persistence?.disabled).toBe(true)
-        expect(posthog.sessionPersistence?.disabled).toBe(true)
+        expect(posthog.persistence?._disabled).toBe(true)
+        expect(posthog.sessionPersistence?._disabled).toBe(true)
     })
 
     it('should enable or disable persistence when changing opt out status', () => {
         posthog = createPostHog({ opt_out_capturing_by_default: true, opt_out_persistence_by_default: true })
         expect(posthog.has_opted_in_capturing()).toBe(false)
-        expect(posthog.persistence?.disabled).toBe(true)
+        expect(posthog.persistence?._disabled).toBe(true)
 
         posthog.opt_in_capturing()
         expect(posthog.has_opted_in_capturing()).toBe(true)
-        expect(posthog.persistence?.disabled).toBe(false)
+        expect(posthog.persistence?._disabled).toBe(false)
 
         posthog.opt_out_capturing()
         expect(posthog.has_opted_in_capturing()).toBe(false)
-        expect(posthog.persistence?.disabled).toBe(true)
+        expect(posthog.persistence?._disabled).toBe(true)
     })
 
     describe('opt out event', () => {

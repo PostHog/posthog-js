@@ -1,0 +1,16 @@
+{
+    "name": "flags",
+    "version": "1.0.0",
+    "main": "server.js",
+    "scripts": {
+        "build": "cd ../.. && pnpm install && pnpm run build",
+        "start": "npm run build && node server.js"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "description": "",
+    "dependencies": {
+        "express": "^4.18.2"
+    }
+}

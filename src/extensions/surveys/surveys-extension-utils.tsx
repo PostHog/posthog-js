@@ -560,7 +560,7 @@ export const defaultBackgroundColor = '#eeeded'
 
 export const createShadow = (styleSheet: string, surveyId: string, element?: Element, posthog?: PostHog) => {
     const div = document.createElement('div')
-    div.className = `PostHogSurvey${surveyId}`
+    div.className = getSurveyContainerClass({ id: surveyId })
     const shadow = div.attachShadow({ mode: 'open' })
     if (styleSheet) {
         const styleElement = prepareStylesheet(document, styleSheet, posthog)
@@ -616,7 +616,7 @@ export const sendSurveyEvent = ({
 
     if (isSurveyCompleted) {
         // Only dispatch PHSurveySent if the survey is completed, as that removes the survey from focus
-        window.dispatchEvent(new Event('PHSurveySent'))
+        window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: survey.id } }))
         clearInProgressSurveyState(survey)
     }
 }
@@ -651,10 +651,10 @@ export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly
         },
     })
 
-    window.dispatchEvent(new Event('PHSurveyClosed'))
-
     // Clear in-progress state on dismissal
     clearInProgressSurveyState(survey)
+    localStorage.setItem(getSurveySeenKey(survey), 'true')
+    window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: survey.id } }))
 }
 
 // Use the Fisher-yates algorithm to shuffle this array
@@ -902,4 +902,9 @@ export const clearInProgressSurveyState = (survey: Pick<Survey, 'id' | 'current_
     } catch (e) {
         logger.error('Error clearing in-progress survey state from localStorage', e)
     }
+}
+
+export function getSurveyContainerClass(survey: Pick<Survey, 'id'>, asSelector = false): string {
+    const className = `PostHogSurvey-${survey.id}`
+    return asSelector ? `.${className}` : className
 }

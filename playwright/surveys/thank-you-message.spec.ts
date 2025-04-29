@@ -46,11 +46,11 @@ test.describe('surveys - feedback widget', () => {
         await start(startOptions, page, context)
         await surveysAPICall
 
-        await expect(page.locator('.PostHogSurvey123 .ratings-emoji')).toHaveCount(5)
-        await page.locator('.PostHogSurvey123 .ratings-emoji').first().click()
+        await expect(page.locator('.PostHogSurvey-123 .ratings-emoji')).toHaveCount(5)
+        await page.locator('.PostHogSurvey-123 .ratings-emoji').first().click()
 
-        await page.locator('.PostHogSurvey123 .form-submit').click()
-        await expect(page.locator('.PostHogSurvey123 .thank-you-message')).toBeVisible()
+        await page.locator('.PostHogSurvey-123 .form-submit').click()
+        await expect(page.locator('.PostHogSurvey-123 .thank-you-message')).toBeVisible()
     })
 
     test('counts down with auto disappear after 5 seconds', async ({ page, context }) => {
@@ -74,12 +74,12 @@ test.describe('surveys - feedback widget', () => {
         await start(startOptions, page, context)
         await surveysAPICall
 
-        await expect(page.locator('.PostHogSurvey123 .ratings-emoji')).toHaveCount(5)
-        await page.locator('.PostHogSurvey123 .ratings-emoji').first().click()
-        await page.locator('.PostHogSurvey123 .form-submit').click()
+        await expect(page.locator('.PostHogSurvey-123 .ratings-emoji')).toHaveCount(5)
+        await page.locator('.PostHogSurvey-123 .ratings-emoji').first().click()
+        await page.locator('.PostHogSurvey-123 .form-submit').click()
 
-        await expect(page.locator('.PostHogSurvey123 .thank-you-message')).toBeVisible()
+        await expect(page.locator('.PostHogSurvey-123 .thank-you-message')).toBeVisible()
         await page.waitForTimeout(5000)
-        await expect(page.locator('.PostHogSurvey123 .thank-you-message')).not.toBeVisible()
+        await expect(page.locator('.PostHogSurvey-123 .thank-you-message')).not.toBeVisible()
     })
 })

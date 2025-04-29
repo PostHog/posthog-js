@@ -1,10 +1,11 @@
 {
     "name": "posthog-js",
-    "version": "1.236.7",
+    "version": "1.237.0",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "hey@posthog.com",
-    "license": "MIT",
+    "license": "SEE LICENSE IN LICENSE",
+    "homepage": "https://posthog.com/docs/libraries/js",
     "packageManager": "pnpm@9.15.4",
     "scripts": {
         "start": "pnpm build-react && pnpm build-rollup -w",
@@ -28,10 +29,13 @@
         "playwright": "pnpm exec playwright test --project webkit --project firefox --project chromium",
         "playwright-ui": "pnpm exec playwright test --ui --project webkit --project firefox --project chromium",
         "playwright-webserver": "npx http-server ./ -p 8082",
+        "playwright:surveys": "pnpm exec playwright test playwright/surveys/* --project webkit --project firefox --project chromium",
+        "playwright:surveys:ui": "pnpm exec playwright test playwright/surveys/* --ui --project webkit --project firefox --project chromium",
         "prepare": "[ -z \"$VERCEL\" ] && husky install || echo \"Skipping husky install on vercel build\"",
         "deprecate-old-versions": "node scripts/deprecate-old-versions.mjs",
         "check-testcafe-results": "ts-node testcafe/check-testcafe-results.js",
-        "run-testcafe-localhost": "node scripts/run-testcafe-localhost.mjs"
+        "run-testcafe-localhost": "node scripts/run-testcafe-localhost.mjs",
+        "write-mangled-property-names": "WRITE_MANGLED_PROPERTIES=1 pnpm build-rollup"
     },
     "main": "dist/main.js",
     "module": "dist/module.js",
