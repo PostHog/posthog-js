@@ -31,7 +31,8 @@
         "prepare": "[ -z \"$VERCEL\" ] && husky install || echo \"Skipping husky install on vercel build\"",
         "deprecate-old-versions": "node scripts/deprecate-old-versions.mjs",
         "check-testcafe-results": "ts-node testcafe/check-testcafe-results.js",
-        "run-testcafe-localhost": "node scripts/run-testcafe-localhost.mjs"
+        "run-testcafe-localhost": "node scripts/run-testcafe-localhost.mjs",
+        "write-mangled-property-names": "WRITE_MANGLED_PROPERTIES=1 pnpm build-rollup"
     },
     "main": "dist/main.js",
     "module": "dist/module.js",
