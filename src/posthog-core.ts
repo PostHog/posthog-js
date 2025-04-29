@@ -1834,7 +1834,7 @@ export class PostHog {
                     ? this.persistence
                     : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
-            if (localStore.is_supported() && localStore.get('ph_debug') === 'true') {
+            if (localStore._is_supported() && localStore._get('ph_debug') === 'true') {
                 this.config.debug = true
             }
             if (this.config.debug) {

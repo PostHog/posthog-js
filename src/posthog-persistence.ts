@@ -89,17 +89,17 @@ export class PostHogPersistence {
         let store: PersistentStore
         // We handle storage type in a case-insensitive way for backwards compatibility
         const storage_type = config['persistence'].toLowerCase() as Lowercase<PostHogConfig['persistence']>
-        if (storage_type === 'localstorage' && localStore.is_supported()) {
+        if (storage_type === 'localstorage' && localStore._is_supported()) {
             store = localStore
-        } else if (storage_type === 'localstorage+cookie' && localPlusCookieStore.is_supported()) {
+        } else if (storage_type === 'localstorage+cookie' && localPlusCookieStore._is_supported()) {
             store = localPlusCookieStore
-        } else if (storage_type === 'sessionstorage' && sessionStore.is_supported()) {
+        } else if (storage_type === 'sessionstorage' && sessionStore._is_supported()) {
             store = sessionStore
         } else if (storage_type === 'memory') {
             store = memoryStore
         } else if (storage_type === 'cookie') {
             store = cookieStore
-        } else if (localPlusCookieStore.is_supported()) {
+        } else if (localPlusCookieStore._is_supported()) {
             // selected storage type wasn't supported, fallback to 'localstorage+cookie' if possible
             store = localPlusCookieStore
         } else {
@@ -130,7 +130,7 @@ export class PostHogPersistence {
             return
         }
 
-        const entry = this.storage.parse(this.name)
+        const entry = this.storage._parse(this.name)
 
         if (entry) {
             this.props = extend({}, entry)
@@ -146,13 +146,20 @@ export class PostHogPersistence {
         if (this.disabled) {
             return
         }
-        this.storage.set(this.name, this.props, this.expire_days, this.cross_subdomain, this.secure, this._config.debug)
+        this.storage._set(
+            this.name,
+            this.props,
+            this.expire_days,
+            this.cross_subdomain,
+            this.secure,
+            this._config.debug
+        )
     }
 
     remove(): void {
         // remove both domain and subdomain cookies
-        this.storage.remove(this.name, false)
-        this.storage.remove(this.name, true)
+        this.storage._remove(this.name, false)
+        this.storage._remove(this.name, true)
     }
 
     // removes the storage entry and deletes all loaded data
