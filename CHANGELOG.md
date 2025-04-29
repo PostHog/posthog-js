@@ -1,3 +1,9 @@
+## 1.236.8 - 2025-04-29
+
+- feat: Reduce bundle size with property mangling (#1902)
+- Make the flags demo runnable (#1919)
+- chore(err): add nuxtjs example (#1917)
+
 ## 1.236.7 - 2025-04-25
 
 - chore: survey 10kb win (#1921)
