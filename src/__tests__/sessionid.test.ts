@@ -329,7 +329,7 @@ describe('Session ID manager', () => {
         it('if primary_window_exists key exists, cycle window id', () => {
             // setup
             ;(sessionStore._parse as jest.Mock).mockImplementation((storeKey: string) =>
-                storeKey === 'ph_persistance-name__primary_window_exists' ? true : 'oldWindowId'
+                storeKey === 'ph_persistance-name_primary_window_exists' ? true : 'oldWindowId'
             )
             // expect
             expect(sessionIdMgr(persistence)['_windowId']).toEqual(undefined)
