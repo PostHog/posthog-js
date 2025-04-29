@@ -4,7 +4,8 @@
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "hey@posthog.com",
-    "license": "MIT",
+    "license": "SEE LICENSE IN LICENSE",
+    "homepage": "https://posthog.com/docs/libraries/js",
     "packageManager": "pnpm@9.15.4",
     "scripts": {
         "start": "pnpm build-react && pnpm build-rollup -w",
