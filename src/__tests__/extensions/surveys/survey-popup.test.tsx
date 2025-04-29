@@ -245,7 +245,7 @@ describe('SurveyPopup', () => {
         })
 
         // *** Manually dispatch the event that the real function would dispatch ***
-        window.dispatchEvent(new Event('PHSurveySent'))
+        window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: mockSurvey.id } }))
 
         // Now wait for the confirmation message triggered by the event
         await waitFor(() => expect(screen.getByText('Thank you!')).toBeVisible())
@@ -261,7 +261,7 @@ describe('SurveyPopup', () => {
         }
         mockedGetInProgressSurveyState.mockReturnValue(existingState)
         mockedDismissedSurveyEvent.mockImplementation(() => {
-            window.dispatchEvent(new Event('PHSurveyClosed'))
+            window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: mockSurvey.id } }))
         })
 
         render(

@@ -228,8 +228,8 @@ test.describe('surveys - feedback widget', () => {
 
         await pollUntilEventCaptured(page, 'survey shown')
 
-        await page.locator('.PostHogSurvey123 textarea').fill('experiments is awesome!')
-        await page.locator('.PostHogSurvey123 .form-submit').click()
+        await page.locator('.PostHogSurvey-123 textarea').fill('experiments is awesome!')
+        await page.locator('.PostHogSurvey-123 .form-submit').click()
 
         await pollUntilEventCaptured(page, 'survey sent')
         const surveySentEvent = await page
@@ -244,8 +244,8 @@ test.describe('surveys - feedback widget', () => {
             })
         )
 
-        await page.locator('.PostHogSurvey123 textarea').fill('partial responses!')
-        await page.locator('.PostHogSurvey123 .form-submit').click()
+        await page.locator('.PostHogSurvey-123 textarea').fill('partial responses!')
+        await page.locator('.PostHogSurvey-123 .form-submit').click()
         await pollUntilEventCaptured(page, 'survey sent')
         const surveySentEvent2 = await page.capturedEvents().then((events) => getLastSurveySentEvent(events))
         expect(surveySentEvent2!.properties).toEqual(
@@ -258,8 +258,8 @@ test.describe('surveys - feedback widget', () => {
             })
         )
 
-        await page.locator('.PostHogSurvey123 textarea').fill('partial responses is finished!')
-        await page.locator('.PostHogSurvey123 .form-submit').click()
+        await page.locator('.PostHogSurvey-123 textarea').fill('partial responses is finished!')
+        await page.locator('.PostHogSurvey-123 .form-submit').click()
         await pollUntilEventCaptured(page, 'survey sent')
         const surveySentEvent3 = await page.capturedEvents().then((events) => getLastSurveySentEvent(events))
         expect(surveySentEvent3!.properties).toEqual(
@@ -309,8 +309,8 @@ test.describe('surveys - feedback widget', () => {
 
         await pollUntilEventCaptured(page, 'survey shown')
 
-        await page.locator('.PostHogSurvey123 textarea').fill('experiments is awesome!')
-        await page.locator('.PostHogSurvey123 .form-submit').click()
+        await page.locator('.PostHogSurvey-123 textarea').fill('experiments is awesome!')
+        await page.locator('.PostHogSurvey-123 .form-submit').click()
 
         await pollUntilEventCaptured(page, 'survey sent')
         const surveySentEvent = await page
@@ -325,8 +325,8 @@ test.describe('surveys - feedback widget', () => {
             })
         )
 
-        await page.locator('.PostHogSurvey123 textarea').fill('partial responses!')
-        await page.locator('.PostHogSurvey123 .form-submit').click()
+        await page.locator('.PostHogSurvey-123 textarea').fill('partial responses!')
+        await page.locator('.PostHogSurvey-123 .form-submit').click()
         await pollUntilEventCaptured(page, 'survey sent')
         const surveySentEvent2 = await page.capturedEvents().then((events) => getLastSurveySentEvent(events))
         expect(surveySentEvent2!.properties).toEqual(
@@ -339,7 +339,7 @@ test.describe('surveys - feedback widget', () => {
             })
         )
 
-        await page.locator('.PostHogSurvey123 .cancel-btn-wrapper').click()
+        await page.locator('.PostHogSurvey-123 .cancel-btn-wrapper').click()
         await pollUntilEventCaptured(page, 'survey dismissed')
         const surveyDismissedEvent = await page
             .capturedEvents()
