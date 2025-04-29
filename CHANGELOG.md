@@ -1,3 +1,9 @@
+## 1.237.0 - 2025-04-29
+
+- fix: prevent survey events to affect multiple surveys (#1924)
+- chore: Add homepage fields and copy LICENSE to posthog-js-react (#1928)
+- feat: Allow mangling of storage function names (#1927)
+
 ## 1.236.8 - 2025-04-29
 
 - feat: Reduce bundle size with property mangling (#1902)
