@@ -632,9 +632,6 @@ export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly
 
     const inProgressSurvey = getInProgressSurveyState(survey)
 
-    // Mark as seen in localStorage
-    localStorage.setItem(getSurveySeenKey(survey), 'true')
-
     // Send dismissal event
     posthog.capture('survey dismissed', {
         $survey_name: survey.name,
