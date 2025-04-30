@@ -231,13 +231,13 @@ describe('SessionRecording', () => {
             expect(sessionRecording['_statusMatcher']).toBe(allMatchSessionRecordingStatus)
         })
 
-        it('uses originalSessionRecordingStatus when triggerMatching is not specified', () => {
+        it('uses most restrictive when triggerMatching is not specified', () => {
             sessionRecording.onRemoteConfig(
                 makeDecideResponse({
                     sessionRecording: { endpoint: '/s/' },
                 })
             )
-            expect(sessionRecording['_statusMatcher']).toBe(anyMatchSessionRecordingStatus)
+            expect(sessionRecording['_statusMatcher']).toBe(allMatchSessionRecordingStatus)
         })
 
         it('when the first event is a meta it does not take a manual full snapshot', () => {

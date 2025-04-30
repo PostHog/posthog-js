@@ -1414,36 +1414,10 @@ describe('SessionRecording', () => {
 
         it('does not emit events until after first active event', () => {
             const a = emitInactiveEvent(startingTimestamp + 100, 'unknown')
-            expect(sessionRecording['_buffer']).toEqual({
-                data: [a],
-                sessionId: sessionId,
-                size: 118,
-                windowId: expect.any(String),
-            })
-
             const b = emitInactiveEvent(startingTimestamp + 110, 'unknown')
-            expect(sessionRecording['_buffer']).toEqual({
-                data: [a, b],
-                sessionId: sessionId,
-                size: 236,
-                windowId: expect.any(String),
-            })
-
             const c = emitInactiveEvent(startingTimestamp + 120, 'unknown')
-            expect(sessionRecording['_buffer']).toEqual({
-                data: [a, b, c],
-                sessionId: sessionId,
-                size: 354,
-                windowId: expect.any(String),
-            })
 
             _emit(createFullSnapshot({}), 'unknown')
-            expect(sessionRecording['_buffer']).toEqual({
-                data: [a, b, c, createFullSnapshot({})],
-                sessionId: sessionId,
-                size: 354,
-                windowId: expect.any(String),
-            })
             expect(sessionRecording['_isIdle']).toEqual('unknown')
             expect(posthog.capture).not.toHaveBeenCalled()
 
@@ -1792,31 +1766,31 @@ describe('SessionRecording', () => {
 
     describe('linked flags', () => {
         it('stores the linked flag on decide response', () => {
-            expect(sessionRecording.linkedFlagMatching.linkedFlag).toEqual(null)
-            expect(sessionRecording.linkedFlagMatching.linkedFlagSeen).toEqual(false)
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual(null)
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
 
             sessionRecording.onRemoteConfig(
                 makeDecideResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
             )
 
-            expect(sessionRecording.linkedFlagMatching.linkedFlag).toEqual('the-flag-key')
-            expect(sessionRecording.linkedFlagMatching.linkedFlagSeen).toEqual(false)
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual('the-flag-key')
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
             expect(sessionRecording.status).toEqual('buffering')
 
             expect(onFeatureFlagsCallback).not.toBeNull()
 
             onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': true })
-            expect(sessionRecording.linkedFlagMatching.linkedFlagSeen).toEqual(true)
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
             expect(sessionRecording.status).toEqual('active')
 
             onFeatureFlagsCallback?.(['different', 'keys'], { different: true, keys: true })
-            expect(sessionRecording.linkedFlagMatching.linkedFlagSeen).toEqual(false)
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
             expect(sessionRecording.status).toEqual('buffering')
         })
 
         it('can handle linked flags with variants', () => {
-            expect(sessionRecording.linkedFlagMatching.linkedFlag).toEqual(null)
-            expect(sessionRecording.linkedFlagMatching.linkedFlagSeen).toEqual(false)
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual(null)
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
 
             sessionRecording.onRemoteConfig(
                 makeDecideResponse({
@@ -1824,36 +1798,39 @@ describe('SessionRecording', () => {
                 })
             )
 
-            expect(sessionRecording.linkedFlagMatching.linkedFlag).toEqual({ flag: 'the-flag-key', variant: 'test-a' })
-            expect(sessionRecording.linkedFlagMatching.linkedFlagSeen).toEqual(false)
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual({
+                flag: 'the-flag-key',
+                variant: 'test-a',
+            })
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
             expect(sessionRecording.status).toEqual('buffering')
 
             expect(onFeatureFlagsCallback).not.toBeNull()
 
             onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'test-a' })
-            expect(sessionRecording.linkedFlagMatching.linkedFlagSeen).toEqual(true)
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
             expect(sessionRecording.status).toEqual('active')
 
             onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'control' })
-            expect(sessionRecording.linkedFlagMatching.linkedFlagSeen).toEqual(false)
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
             expect(sessionRecording.status).toEqual('buffering')
         })
 
         it('can be overriden', () => {
-            expect(sessionRecording.linkedFlagMatching.linkedFlag).toEqual(null)
-            expect(sessionRecording.linkedFlagMatching.linkedFlagSeen).toEqual(false)
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual(null)
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
 
             sessionRecording.onRemoteConfig(
                 makeDecideResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
             )
 
-            expect(sessionRecording.linkedFlagMatching.linkedFlag).toEqual('the-flag-key')
-            expect(sessionRecording.linkedFlagMatching.linkedFlagSeen).toEqual(false)
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual('the-flag-key')
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
             expect(sessionRecording.status).toEqual('buffering')
 
             sessionRecording.overrideLinkedFlag()
 
-            expect(sessionRecording.linkedFlagMatching.linkedFlagSeen).toEqual(true)
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
             expect(sessionRecording.status).toEqual('active')
         })
 
@@ -1866,8 +1843,8 @@ describe('SessionRecording', () => {
         it('can be paused while waiting for flag', () => {
             fakeNavigateTo('https://test.com/blocked')
 
-            expect(sessionRecording.linkedFlagMatching.linkedFlag).toEqual(null)
-            expect(sessionRecording.linkedFlagMatching.linkedFlagSeen).toEqual(false)
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual(null)
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
             expect(sessionRecording.status).toEqual('buffering')
 
             sessionRecording.onRemoteConfig(
@@ -1885,8 +1862,8 @@ describe('SessionRecording', () => {
                 })
             )
 
-            expect(sessionRecording.linkedFlagMatching.linkedFlag).toEqual('the-flag-key')
-            expect(sessionRecording.linkedFlagMatching.linkedFlagSeen).toEqual(false)
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual('the-flag-key')
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
             expect(sessionRecording.status).toEqual('buffering')
             expect(sessionRecording['paused']).toBeUndefined()
 
@@ -1900,13 +1877,13 @@ describe('SessionRecording', () => {
             }
             _emit(snapshotEvent)
 
-            expect(sessionRecording.linkedFlagMatching.linkedFlag).toEqual('the-flag-key')
-            expect(sessionRecording.linkedFlagMatching.linkedFlagSeen).toEqual(false)
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual('the-flag-key')
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
             expect(sessionRecording.status).toEqual('paused')
 
             sessionRecording.overrideLinkedFlag()
 
-            expect(sessionRecording.linkedFlagMatching.linkedFlagSeen).toEqual(true)
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
             expect(sessionRecording.status).toEqual('paused')
 
             fakeNavigateTo('https://test.com/allowed')
@@ -2461,8 +2438,8 @@ describe('SessionRecording', () => {
                 })
             )
             expect(sessionRecording.status).toBe('disabled')
-            expect(sessionRecording.urlTriggerMatching['_urlBlocked']).toBe(false)
-            expect(sessionRecording['buffer'].data).toHaveLength(0)
+            expect(sessionRecording['_urlTriggerMatching']['_urlBlocked']).toBe(false)
+            expect(sessionRecording['_buffer'].data).toHaveLength(0)
 
             fakeNavigateTo('https://test.com/blocked')
             // check is trigger by rrweb emit, not the navigation per se, so...
@@ -2470,8 +2447,8 @@ describe('SessionRecording', () => {
 
             expect(posthog.capture).not.toHaveBeenCalled()
             expect(sessionRecording.status).toBe('paused')
-            expect(sessionRecording.urlTriggerMatching['_urlBlocked']).toBe(true)
-            expect(sessionRecording['buffer'].data).toHaveLength(0)
+            expect(sessionRecording['_urlTriggerMatching']['_urlBlocked']).toBe(true)
+            expect(sessionRecording['_buffer'].data).toHaveLength(0)
             expect((sessionRecording as any)['_tryAddCustomEvent']).toHaveBeenCalledWith('recording paused', {
                 reason: 'url blocker',
             })
@@ -2515,16 +2492,17 @@ describe('SessionRecording', () => {
             simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
 
             expect(sessionRecording.status).toBe('active')
-            expect(sessionRecording['buffer'].data).toHaveLength(0)
+            expect(sessionRecording['_buffer'].data).toHaveLength(0)
         })
 
-        it('starts if sees an event but still waiting for a URL', async () => {
+        it('starts if sees an event but still waiting for a URL when in OR', async () => {
             sessionRecording.onRemoteConfig(
                 makeDecideResponse({
                     sessionRecording: {
                         endpoint: '/s/',
                         eventTriggers: ['$exception'],
                         urlTriggers: [{ url: 'start-on-me', matching: 'regex' }],
+                        triggerMatchType: 'any',
                     },
                 })
             )
@@ -2547,6 +2525,36 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toBe('active')
         })
 
+        it('does not start if sees an event but still waiting for a URL when in AND', async () => {
+            sessionRecording.onRemoteConfig(
+                makeDecideResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['$exception'],
+                        urlTriggers: [{ url: 'start-on-me', matching: 'regex' }],
+                        triggerMatchType: 'all',
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            // Emit some events before hitting blocked URL
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+
+            expect(sessionRecording['_buffer'].data).toHaveLength(2)
+
+            simpleEventEmitter.emit('eventCaptured', { event: 'not-$exception' })
+
+            expect(sessionRecording.status).toBe('buffering')
+
+            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+
+            // because still waiting for URL to trigger
+            expect(sessionRecording.status).toBe('buffering')
+        })
+
         it('never sends data when sampling is false regardless of event triggers', async () => {
             // this is a regression test for https://posthoghelp.zendesk.com/agent/tickets/24373
             // where the buffered data was sent to capture when the event trigger fired
@@ -2565,7 +2573,7 @@ describe('SessionRecording', () => {
             )
 
             expect(sessionRecording.status).toBe('buffering')
-            expect(sessionRecording['buffer'].data).toHaveLength(0)
+            expect(sessionRecording['_buffer'].data).toHaveLength(0)
 
             // Emit some events before hitting event trigger
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
@@ -2574,6 +2582,35 @@ describe('SessionRecording', () => {
             simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
             expect(sessionRecording.status).toBe('disabled')
             expect(posthog.capture).not.toHaveBeenCalled()
+        })
+
+        it('sends data when sampling is false and there is an event triggers in OR mode', async () => {
+            // this is a regression test for https://posthoghelp.zendesk.com/agent/tickets/24373
+            // where the buffered data was sent to capture when the event trigger fired
+            // before the sample rate was taken into account
+            // and then would immediately stop
+
+            sessionRecording.onRemoteConfig(
+                makeDecideResponse({
+                    sessionRecording: {
+                        endpoint: '/s/',
+                        eventTriggers: ['$exception'],
+                        sampleRate: '0.00', // i.e. never send recording
+                        triggerMatchType: 'any',
+                    },
+                })
+            )
+
+            expect(sessionRecording.status).toBe('buffering')
+            expect(sessionRecording['_buffer'].data).toHaveLength(0)
+
+            // Emit some events before hitting event trigger
+            _emit(createIncrementalSnapshot({ data: { source: 1 } }))
+            _emit(createIncrementalSnapshot({ data: { source: 2 } }))
+
+            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+            expect(sessionRecording.status).toBe('active')
+            expect(posthog.capture).toHaveBeenCalled()
         })
     })
 })

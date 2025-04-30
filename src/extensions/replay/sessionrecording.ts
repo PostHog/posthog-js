@@ -50,9 +50,11 @@ import { addEventListener } from '../../utils'
 import { sampleOnProperty } from '../sampling'
 import {
     allMatchSessionRecordingStatus,
+    AndTriggerMatching,
     anyMatchSessionRecordingStatus,
     LinkedFlagMatching,
     nullMatchSessionRecordingStatus,
+    OrTriggerMatching,
     PendingTriggerMatching,
     RecordingTriggersStatus,
     SessionRecordingStatus,
@@ -268,9 +270,11 @@ export class SessionRecording {
         return this._sessionId
     }
 
-    private _linkedFlagMatching: LinkedFlagMatching = new LinkedFlagMatching(this._instance)
-    private _urlTriggerMatching: URLTriggerMatching = new URLTriggerMatching(this._instance)
-    private _eventTriggerMatching: EventTriggerMatching = new EventTriggerMatching(this._instance)
+    private _linkedFlagMatching: LinkedFlagMatching
+    private _urlTriggerMatching: URLTriggerMatching
+    private _eventTriggerMatching: EventTriggerMatching
+    // we need to be able to check the state of the event and url triggers separately
+    // as we make some decisions based on them without referencing LinkedFlag etc
     private _triggerMatching: TriggerStatusMatching = new PendingTriggerMatching()
 
     private _fullSnapshotTimer?: ReturnType<typeof setInterval>
@@ -431,9 +435,9 @@ export class SessionRecording {
             receivedDecide: this.receivedDecide,
             isRecordingEnabled: this._isRecordingEnabled,
             isSampled: this._isSampled,
-            urlTriggerMatching: new URLTriggerMatching(this._instance),
-            eventTriggerMatching: new EventTriggerMatching(this._instance),
-            linkedFlagMatching: new LinkedFlagMatching(this._instance),
+            urlTriggerMatching: this._urlTriggerMatching,
+            eventTriggerMatching: this._eventTriggerMatching,
+            linkedFlagMatching: this._linkedFlagMatching,
             sessionId: this.sessionId,
         })
     }
@@ -451,6 +455,10 @@ export class SessionRecording {
         if (this._instance.config.__preview_experimental_cookieless_mode) {
             throw new Error(LOGGER_PREFIX + ' cannot be used with __preview_experimental_cookieless_mode.')
         }
+
+        this._linkedFlagMatching = new LinkedFlagMatching(this._instance)
+        this._urlTriggerMatching = new URLTriggerMatching(this._instance)
+        this._eventTriggerMatching = new EventTriggerMatching(this._instance)
 
         // we know there's a sessionManager, so don't need to start without a session id
         const { sessionId, windowId } = this._sessionManager.checkAndGetSessionAndWindowId()
@@ -627,11 +635,12 @@ export class SessionRecording {
 
         if (response.sessionRecording?.triggerMatchType === 'any') {
             this._statusMatcher = anyMatchSessionRecordingStatus
-        } else if (response.sessionRecording?.triggerMatchType === 'all') {
-            this._statusMatcher = allMatchSessionRecordingStatus
+            this._triggerMatching = new OrTriggerMatching([this._eventTriggerMatching, this._urlTriggerMatching])
         } else {
-            // default to the least restrictive
-            this._statusMatcher = anyMatchSessionRecordingStatus
+            // either the setting is "ALL"
+            // or we default to the most restrictive
+            this._statusMatcher = allMatchSessionRecordingStatus
+            this._triggerMatching = new AndTriggerMatching([this._eventTriggerMatching, this._urlTriggerMatching])
         }
 
         this._urlTriggerMatching.onRemoteConfig(response)
@@ -1039,18 +1048,17 @@ export class SessionRecording {
             this._pageViewFallBack()
         }
 
-        // always have to check if the URL is blocked really early,
-        // or you risk getting stuck in a loop
-        if (this._urlTriggerMatching.urlBlocked && !isRecordingPausedEvent(rawEvent)) {
-            return
-        }
-
         // Check if the URL matches any trigger patterns
         this._urlTriggerMatching.checkUrlTriggerConditions(
             () => this._pauseRecording(),
             () => this._resumeRecording(),
             (triggerType) => this._activateTrigger(triggerType)
         )
+        // always have to check if the URL is blocked really early,
+        // or you risk getting stuck in a loop
+        if (this._urlTriggerMatching.urlBlocked && !isRecordingPausedEvent(rawEvent)) {
+            return
+        }
 
         // we're processing a full snapshot, so we should reset the timer
         if (rawEvent.type === EventType.FullSnapshot) {
@@ -1058,8 +1066,10 @@ export class SessionRecording {
         }
 
         // Clear the buffer if waiting for a trigger and only keep data from after the current full snapshot
+        // we always start trigger pending so need to wait for decide before we know if we're really pending
         if (
             rawEvent.type === EventType.FullSnapshot &&
+            this._receivedDecide &&
             this._triggerMatching.triggerStatus(this.sessionId) === 'trigger_pending'
         ) {
             this._clearBuffer()

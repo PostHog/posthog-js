@@ -8,19 +8,29 @@ import { isBoolean, isObject, isString } from '../../utils/type-utils'
 import { isNullish } from '../../utils/type-utils'
 import { window } from '../../utils/globals'
 
+export interface RecordingTriggersStatus {
+    get receivedDecide(): boolean
+    get isRecordingEnabled(): false | true | undefined
+    get isSampled(): false | true | null
+    get urlTriggerMatching(): URLTriggerMatching
+    get eventTriggerMatching(): EventTriggerMatching
+    get linkedFlagMatching(): LinkedFlagMatching
+    get sessionId(): string
+}
+
 export type TriggerType = 'url' | 'event'
 /* 
 triggers can have one of three statuses:
  * - trigger_activated: the trigger met conditions to start recording
- * - trigger_pending: the trigger is present but the conditions are not yet met
+ * - trigger_pending: the trigger is present, but the conditions are not yet met
  * - trigger_disabled: the trigger is not present
  */
 export type TriggerStatus = 'trigger_activated' | 'trigger_pending' | 'trigger_disabled'
 
 /**
- * Session recording starts in buffering mode while waiting for decide response
- * Once the response is received it might be disabled, active or sampled
- * When sampled that means a sample rate is set and the last time the session id was rotated
+ * Session recording starts in buffering mode while waiting for "decide response".
+ * Once the response is received, it might be disabled, active or sampled.
+ * When "sampled" that means a sample rate is set, and the last time the session ID rotated
  * the sample rate determined this session should be sent to the server.
  */
 export type SessionRecordingStatus = 'disabled' | 'sampled' | 'active' | 'buffering' | 'paused'
@@ -135,7 +145,10 @@ export class URLTriggerMatching implements TriggerStatusMatching {
         const wasBlocked = this._urlBlocked
         const isNowBlocked = sessionRecordingUrlTriggerMatches(url, this._urlBlocklist)
 
-        if (isNowBlocked && !wasBlocked) {
+        if (wasBlocked && isNowBlocked) {
+            // if the url is blocked and was already blocked, do nothing
+            return
+        } else if (isNowBlocked && !wasBlocked) {
             onPause()
         } else if (!isNowBlocked && wasBlocked) {
             onResume()
@@ -209,17 +222,7 @@ export class EventTriggerMatching implements TriggerStatusMatching {
     }
 }
 
-export interface RecordingTriggersStatus {
-    get receivedDecide(): boolean
-    get isRecordingEnabled(): false | true | undefined
-    get isSampled(): false | true | null
-    get urlTriggerMatching(): URLTriggerMatching
-    get eventTriggerMatching(): EventTriggerMatching
-    get linkedFlagMatching(): LinkedFlagMatching
-    get sessionId(): string
-}
-
-// we need a no-op matcher before we can lazy load the other matches, since all matchers wait on remote config anyway
+// we need a no-op matcher before we can lazy-load the other matches, since all matchers wait on remote config anyway
 export function nullMatchSessionRecordingStatus(triggersStatus: RecordingTriggersStatus): SessionRecordingStatus {
     if (!triggersStatus.isRecordingEnabled) {
         return 'disabled'
