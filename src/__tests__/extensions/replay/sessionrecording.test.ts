@@ -2438,7 +2438,7 @@ describe('SessionRecording', () => {
                 })
             )
             expect(sessionRecording.status).toBe('disabled')
-            expect(sessionRecording['_urlTriggerMatching']['_urlBlocked']).toBe(false)
+            expect(sessionRecording['_urlTriggerMatching']['urlBlocked']).toBe(false)
             expect(sessionRecording['_buffer'].data).toHaveLength(0)
 
             fakeNavigateTo('https://test.com/blocked')
@@ -2447,7 +2447,7 @@ describe('SessionRecording', () => {
 
             expect(posthog.capture).not.toHaveBeenCalled()
             expect(sessionRecording.status).toBe('paused')
-            expect(sessionRecording['_urlTriggerMatching']['_urlBlocked']).toBe(true)
+            expect(sessionRecording['_urlTriggerMatching']['urlBlocked']).toBe(true)
             expect(sessionRecording['_buffer'].data).toHaveLength(0)
             expect((sessionRecording as any)['_tryAddCustomEvent']).toHaveBeenCalledWith('recording paused', {
                 reason: 'url blocker',

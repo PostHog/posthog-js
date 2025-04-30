@@ -24,28 +24,33 @@ type TestConfig = {
     allMatchExpected: SessionRecordingStatus
 }
 
+const fakePostHog = { register_for_session: () => {} } as unknown as PostHog
+
 const defaultTriggersStatus: RecordingTriggersStatus = {
     receivedDecide: true,
     isRecordingEnabled: true,
     isSampled: undefined,
     urlTriggerMatching: {
         onRemoteConfig: () => {},
+        _instance: fakePostHog,
         triggerStatus: () => TRIGGER_DISABLED,
         urlBlocked: false,
     } as unknown as URLTriggerMatching,
     eventTriggerMatching: {
         onRemoteConfig: () => {},
+        _instance: fakePostHog,
         triggerStatus: () => TRIGGER_DISABLED,
     } as unknown as EventTriggerMatching,
     linkedFlagMatching: {
         onRemoteConfig: () => {},
+        _instance: fakePostHog,
         triggerStatus: () => TRIGGER_DISABLED,
     } as unknown as LinkedFlagMatching,
     sessionId: 'test-session',
 }
 
 const makeLinkedFlagMatcher = (linkedFlag: string | null, linkedFlagSeen: boolean): LinkedFlagMatching => {
-    const lfm = new LinkedFlagMatching({} as unknown as PostHog)
+    const lfm = new LinkedFlagMatching(fakePostHog)
     lfm.linkedFlag = linkedFlag
     lfm.linkedFlagSeen = linkedFlagSeen
     return lfm
@@ -70,6 +75,7 @@ const testCases: TestConfig[] = [
         config: {
             urlTriggerMatching: {
                 ...defaultTriggersStatus.urlTriggerMatching,
+                _instance: fakePostHog,
                 urlBlocked: true,
             } as unknown as URLTriggerMatching,
         },
@@ -83,6 +89,7 @@ const testCases: TestConfig[] = [
         config: {
             eventTriggerMatching: {
                 ...defaultTriggersStatus.eventTriggerMatching,
+                _instance: fakePostHog,
                 triggerStatus: () => TRIGGER_DISABLED,
             } as unknown as EventTriggerMatching,
         },
@@ -95,6 +102,7 @@ const testCases: TestConfig[] = [
         config: {
             eventTriggerMatching: {
                 ...defaultTriggersStatus.eventTriggerMatching,
+                _instance: fakePostHog,
                 triggerStatus: () => TRIGGER_PENDING,
             } as unknown as EventTriggerMatching,
         },
@@ -106,6 +114,7 @@ const testCases: TestConfig[] = [
         config: {
             eventTriggerMatching: {
                 ...defaultTriggersStatus.eventTriggerMatching,
+                _instance: fakePostHog,
                 triggerStatus: () => TRIGGER_ACTIVATED,
             } as unknown as EventTriggerMatching,
         },
@@ -165,6 +174,7 @@ const testCases: TestConfig[] = [
         config: {
             urlTriggerMatching: {
                 ...defaultTriggersStatus.urlTriggerMatching,
+                _instance: fakePostHog,
                 triggerStatus: () => TRIGGER_PENDING,
             } as unknown as URLTriggerMatching,
         },
@@ -176,6 +186,7 @@ const testCases: TestConfig[] = [
         config: {
             urlTriggerMatching: {
                 ...defaultTriggersStatus.urlTriggerMatching,
+                _instance: fakePostHog,
                 triggerStatus: () => TRIGGER_DISABLED,
             } as unknown as URLTriggerMatching,
         },
@@ -187,6 +198,7 @@ const testCases: TestConfig[] = [
         config: {
             urlTriggerMatching: {
                 ...defaultTriggersStatus.urlTriggerMatching,
+                _instance: fakePostHog,
                 triggerStatus: () => TRIGGER_ACTIVATED,
             } as unknown as URLTriggerMatching,
         },
@@ -202,6 +214,7 @@ const testCases: TestConfig[] = [
             linkedFlagMatching: makeLinkedFlagMatcher('some-flag', true),
             urlTriggerMatching: {
                 ...defaultTriggersStatus.urlTriggerMatching,
+                _instance: fakePostHog,
                 triggerStatus: () => TRIGGER_ACTIVATED,
             } as unknown as URLTriggerMatching,
         },
@@ -215,6 +228,7 @@ const testCases: TestConfig[] = [
             linkedFlagMatching: makeLinkedFlagMatcher('some-flag', true),
             urlTriggerMatching: {
                 ...defaultTriggersStatus.urlTriggerMatching,
+                _instance: fakePostHog,
                 triggerStatus: () => TRIGGER_PENDING,
             } as unknown as URLTriggerMatching,
         },
@@ -227,6 +241,7 @@ const testCases: TestConfig[] = [
             isSampled: true,
             urlTriggerMatching: {
                 ...defaultTriggersStatus.urlTriggerMatching,
+                _instance: fakePostHog,
                 triggerStatus: () => TRIGGER_PENDING,
             } as unknown as URLTriggerMatching,
         },
@@ -239,6 +254,7 @@ const testCases: TestConfig[] = [
             isSampled: true,
             eventTriggerMatching: {
                 ...defaultTriggersStatus.eventTriggerMatching,
+                _instance: fakePostHog,
                 triggerStatus: () => TRIGGER_PENDING,
             } as unknown as EventTriggerMatching,
         },
@@ -251,6 +267,7 @@ const testCases: TestConfig[] = [
             isSampled: true,
             eventTriggerMatching: {
                 ...defaultTriggersStatus.eventTriggerMatching,
+                _instance: fakePostHog,
                 triggerStatus: () => TRIGGER_ACTIVATED,
             } as unknown as EventTriggerMatching,
         },
@@ -264,6 +281,7 @@ const testCases: TestConfig[] = [
             linkedFlagMatching: makeLinkedFlagMatcher('some-flag', true),
             urlTriggerMatching: {
                 ...defaultTriggersStatus.urlTriggerMatching,
+                _instance: fakePostHog,
                 triggerStatus: () => TRIGGER_ACTIVATED,
             } as unknown as URLTriggerMatching,
         },

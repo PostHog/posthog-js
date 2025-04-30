@@ -124,15 +124,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
     _urlTriggers: SessionRecordingUrlTrigger[] = []
     _urlBlocklist: SessionRecordingUrlTrigger[] = []
 
-    private _urlBlocked: boolean = false
-
-    get urlBlocked(): boolean {
-        return this._urlBlocked
-    }
-
-    set urlBlocked(value: boolean) {
-        this._urlBlocked = value
-    }
+    urlBlocked: boolean = false
 
     constructor(private readonly _instance: PostHog) {}
 
@@ -173,7 +165,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
 
         const url = window.location.href
 
-        const wasBlocked = this._urlBlocked
+        const wasBlocked = this.urlBlocked
         const isNowBlocked = sessionRecordingUrlTriggerMatches(url, this._urlBlocklist)
 
         if (wasBlocked && isNowBlocked) {
