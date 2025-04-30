@@ -254,9 +254,6 @@ export class SessionRecording {
         nullMatchSessionRecordingStatus
 
     private _receivedDecide: boolean = false
-    get receivedDecide(): boolean {
-        return this._receivedDecide
-    }
 
     // we have a buffer - that contains PostHog snapshot events ready to be sent to the server
     private _buffer: SnapshotBuffer
@@ -437,7 +434,7 @@ export class SessionRecording {
         }
 
         return this._statusMatcher({
-            receivedDecide: this.receivedDecide,
+            receivedDecide: this._receivedDecide,
             isRecordingEnabled: this._isRecordingEnabled,
             isSampled: this._isSampled,
             urlTriggerMatching: this._urlTriggerMatching,

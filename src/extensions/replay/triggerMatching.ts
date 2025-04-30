@@ -155,7 +155,11 @@ export class URLTriggerMatching implements TriggerStatusMatching {
         const eitherIsActivated = urlTriggerStatus === TRIGGER_ACTIVATED
         const eitherIsPending = urlTriggerStatus === TRIGGER_PENDING
 
-        return eitherIsActivated ? TRIGGER_ACTIVATED : eitherIsPending ? TRIGGER_PENDING : TRIGGER_DISABLED
+        const result = eitherIsActivated ? TRIGGER_ACTIVATED : eitherIsPending ? TRIGGER_PENDING : TRIGGER_DISABLED
+        this._instance.register_for_session({
+            $sdk_debug_replay_url_trigger_status: result,
+        })
+        return result
     }
 
     checkUrlTriggerConditions(
@@ -198,13 +202,17 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
     constructor(private readonly _instance: PostHog) {}
 
     triggerStatus(): TriggerStatus {
+        let result = TRIGGER_PENDING
         if (isNullish(this.linkedFlag)) {
-            return TRIGGER_DISABLED
+            result = TRIGGER_DISABLED
         }
         if (this.linkedFlagSeen) {
-            return TRIGGER_ACTIVATED
+            result = TRIGGER_ACTIVATED
         }
-        return TRIGGER_PENDING
+        this._instance.register_for_session({
+            $sdk_debug_replay_linked_flag_trigger_status: result,
+        })
+        return result
     }
 
     onRemoteConfig(response: RemoteConfig, onStarted: (flag: string, variant: string | null) => void) {
@@ -249,11 +257,16 @@ export class EventTriggerMatching implements TriggerStatusMatching {
 
     triggerStatus(sessionId: string): TriggerStatus {
         const eventTriggerStatus = this._eventTriggerStatus(sessionId)
-        return eventTriggerStatus === TRIGGER_ACTIVATED
-            ? TRIGGER_ACTIVATED
-            : eventTriggerStatus === TRIGGER_PENDING
-              ? TRIGGER_PENDING
-              : TRIGGER_DISABLED
+        const result =
+            eventTriggerStatus === TRIGGER_ACTIVATED
+                ? TRIGGER_ACTIVATED
+                : eventTriggerStatus === TRIGGER_PENDING
+                  ? TRIGGER_PENDING
+                  : TRIGGER_DISABLED
+        this._instance.register_for_session({
+            $sdk_debug_replay_event_trigger_status: result,
+        })
+        return result
     }
 
     stop(): void {
@@ -331,15 +344,16 @@ export function allMatchSessionRecordingStatus(triggersStatus: RecordingTriggers
         triggersStatus.urlTriggerMatching,
         triggersStatus.linkedFlagMatching,
     ])
-    const hasTriggersConfigured = andTriggerMatch.triggerStatus(triggersStatus.sessionId) !== 'trigger_disabled'
+    const currentTriggerStatus = andTriggerMatch.triggerStatus(triggersStatus.sessionId)
+    const hasTriggersConfigured = currentTriggerStatus !== TRIGGER_DISABLED
 
     const hasSamplingConfigured = isBoolean(triggersStatus.isSampled)
 
-    if (hasTriggersConfigured && andTriggerMatch.triggerStatus(triggersStatus.sessionId) === TRIGGER_PENDING) {
+    if (hasTriggersConfigured && currentTriggerStatus === TRIGGER_PENDING) {
         return BUFFERING
     }
 
-    if (hasTriggersConfigured && andTriggerMatch.triggerStatus(triggersStatus.sessionId) === TRIGGER_DISABLED) {
+    if (hasTriggersConfigured && currentTriggerStatus === TRIGGER_DISABLED) {
         return DISABLED
     }
 
