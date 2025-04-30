@@ -267,16 +267,6 @@ export function anyMatchSessionRecordingStatus(triggersStatus: RecordingTriggers
         return 'disabled'
     }
 
-    if (
-        new OrTriggerMatching([
-            triggersStatus.eventTriggerMatching,
-            triggersStatus.urlTriggerMatching,
-            triggersStatus.linkedFlagMatching,
-        ]).triggerStatus(triggersStatus.sessionId) === 'trigger_pending'
-    ) {
-        return 'buffering'
-    }
-
     if (isBoolean(triggersStatus.isSampled)) {
         return triggersStatus.isSampled ? 'sampled' : 'disabled'
     } else {
