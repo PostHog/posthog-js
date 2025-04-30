@@ -23,6 +23,7 @@ import {
     STORED_PERSON_PROPERTIES_KEY,
     FLAG_CALL_REPORTED,
 } from './constants'
+import { FEATURE_FLAG_CALLED_EVENT, FEATURE_ENROLLMENT_UPDATE_EVENT } from './events'
 
 import { isArray, isUndefined } from './utils/type-utils'
 import { createLogger } from './utils/logger'
@@ -525,7 +526,7 @@ export class PostHogFeatureFlags {
                     properties.$feature_flag_original_payload = flagDetails?.metadata?.original_payload
                 }
 
-                this._instance.capture('$feature_flag_called', properties)
+                this._instance.capture(FEATURE_FLAG_CALLED_EVENT, properties)
             }
         }
         return flagValue
@@ -754,7 +755,7 @@ export class PostHogFeatureFlags {
             properties['$early_access_feature_name'] = feature.name
         }
 
-        this._instance.capture('$feature_enrollment_update', properties)
+        this._instance.capture(FEATURE_ENROLLMENT_UPDATE_EVENT, properties)
         this.setPersonPropertiesForFlags(enrollmentPersonProp, false)
 
         const newFlags = { ...this.getFlagVariants(), [key]: isEnrolled }

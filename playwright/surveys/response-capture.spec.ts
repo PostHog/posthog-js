@@ -2,6 +2,7 @@ import { getSurveyResponseKey } from '../../src/extensions/surveys/surveys-exten
 import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 import { expect, test } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
+import { SURVEY_DISMISSED_EVENT, SURVEY_SENT_EVENT, SURVEY_SHOWN_EVENT } from '../../src/events'
 
 const startOptions = {
     options: {},
@@ -39,15 +40,15 @@ test.describe('surveys - feedback widget', () => {
         await start(startOptions, page, context)
         await surveysAPICall
 
-        await pollUntilEventCaptured(page, 'survey shown')
+        await pollUntilEventCaptured(page, SURVEY_SHOWN_EVENT)
 
         await page.locator('.PostHogSurvey-123 textarea').type('experiments is awesome!')
         await page.locator('.PostHogSurvey-123 .form-submit').click()
 
-        await pollUntilEventCaptured(page, 'survey sent')
+        await pollUntilEventCaptured(page, SURVEY_SENT_EVENT)
         const surveySentEvent = await page
             .capturedEvents()
-            .then((events) => events.find((e) => e.event === 'survey sent'))
+            .then((events) => events.find((e) => e.event === SURVEY_SENT_EVENT))
         expect(surveySentEvent!.properties).toEqual(
             expect.objectContaining({
                 $survey_id: '123',
@@ -85,10 +86,10 @@ test.describe('surveys - feedback widget', () => {
         await start(startOptions, page, context)
         await surveysAPICall
 
-        await pollUntilEventCaptured(page, 'survey shown')
+        await pollUntilEventCaptured(page, SURVEY_SHOWN_EVENT)
         const surveyShownEvent = await page
             .capturedEvents()
-            .then((events) => events.find((e) => e.event === 'survey shown'))
+            .then((events) => events.find((e) => e.event === SURVEY_SHOWN_EVENT))
         expect(surveyShownEvent!.properties).toEqual(
             expect.objectContaining({
                 $survey_id: '123',
@@ -100,10 +101,10 @@ test.describe('surveys - feedback widget', () => {
         await page.locator('.PostHogSurvey-123 textarea').type('experiments is awesome!')
         await page.locator('.PostHogSurvey-123 .form-submit').click()
 
-        await pollUntilEventCaptured(page, 'survey sent')
+        await pollUntilEventCaptured(page, SURVEY_SENT_EVENT)
         const surveySentEvent = await page
             .capturedEvents()
-            .then((events) => events.find((e) => e.event === 'survey sent'))
+            .then((events) => events.find((e) => e.event === SURVEY_SENT_EVENT))
         expect(surveySentEvent!.properties).toEqual(
             expect.objectContaining({
                 $survey_id: '123',
@@ -142,7 +143,7 @@ test.describe('surveys - feedback widget', () => {
         await surveysAPICall
 
         await page.locator('.PostHogSurvey-123 .cancel-btn-wrapper').click()
-        await pollUntilEventCaptured(page, 'survey dismissed')
+        await pollUntilEventCaptured(page, SURVEY_DISMISSED_EVENT)
     })
 
     test('captures survey dismissed event with iteration', async ({ page, context }) => {
@@ -168,10 +169,10 @@ test.describe('surveys - feedback widget', () => {
         await surveysAPICall
 
         await page.locator('.PostHogSurvey-123 .cancel-btn-wrapper').click()
-        await pollUntilEventCaptured(page, 'survey dismissed')
+        await pollUntilEventCaptured(page, SURVEY_DISMISSED_EVENT)
         const surveyDismissedEvent = await page
             .capturedEvents()
-            .then((events) => events.find((e) => e.event === 'survey dismissed'))
+            .then((events) => events.find((e) => e.event === SURVEY_DISMISSED_EVENT))
         expect(surveyDismissedEvent!.properties).toEqual(
             expect.objectContaining({
                 $survey_id: '123',

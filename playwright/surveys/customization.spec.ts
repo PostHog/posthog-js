@@ -1,6 +1,7 @@
 import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 import { expect, test } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
+import { SURVEY_SENT_EVENT } from '../../src/events'
 
 const startOptions = {
     options: {},
@@ -97,7 +98,7 @@ test.describe('surveys - customization', () => {
 
         await page.locator('.PostHogSurvey-123').locator('.form-submit').click()
 
-        await pollUntilEventCaptured(page, 'survey sent')
+        await pollUntilEventCaptured(page, SURVEY_SENT_EVENT)
     })
 
     test('does not show posthog logo if whiteLabel exists', async ({ page, context }) => {
@@ -223,7 +224,7 @@ test.describe('surveys - customization', () => {
         await expect(page.locator('.PostHogSurvey-123').locator('.thank-you-message-body h3')).toHaveText(
             'html thank you message!'
         )
-        await pollUntilEventCaptured(page, 'survey sent')
+        await pollUntilEventCaptured(page, SURVEY_SENT_EVENT)
     })
 
     test('does not render html customization for question descriptions if the question.survey-question-descriptionContentType does not permit it', async ({
@@ -300,6 +301,6 @@ test.describe('surveys - customization', () => {
         await expect(page.locator('.PostHogSurvey-123').locator('.thank-you-message-body')).toHaveText(
             '<h3>html thank you message!</h3>'
         )
-        await pollUntilEventCaptured(page, 'survey sent')
+        await pollUntilEventCaptured(page, SURVEY_SENT_EVENT)
     })
 })

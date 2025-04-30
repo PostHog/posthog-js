@@ -2,6 +2,7 @@ import { SurveySchedule } from '../../src/posthog-surveys-types'
 import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 import { expect, test } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
+import { SURVEY_SHOWN_EVENT, SURVEY_SENT_EVENT, SURVEY_DISMISSED_EVENT } from '../../src/events'
 
 const startOptions = {
     options: {},
@@ -87,7 +88,7 @@ test.describe('surveys - feedback widget', () => {
 
         await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('textarea').fill('hello posthog!')
         await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('.form-submit').click()
-        await pollUntilEventCaptured(page, 'survey sent')
+        await pollUntilEventCaptured(page, SURVEY_SENT_EVENT)
     })
 
     test('displays feedback tab in a responsive manner ', async ({ page, context }) => {
@@ -171,7 +172,7 @@ test.describe('surveys - feedback widget', () => {
 
         await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('textarea').fill('hello posthog!')
         await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('.form-submit').click()
-        await pollUntilEventCaptured(page, 'survey sent')
+        await pollUntilEventCaptured(page, SURVEY_SENT_EVENT)
     })
 
     test('displays multiple question surveys and thank you confirmation if enabled', async ({ page, context }) => {
@@ -209,8 +210,8 @@ test.describe('surveys - feedback widget', () => {
         await page.locator('.PostHogSurvey-123 .form-submit').click()
         await page.locator('.PostHogSurvey-123 .form-submit').click()
 
-        await pollUntilEventCaptured(page, 'survey shown')
-        await pollUntilEventCaptured(page, 'survey sent')
+        await pollUntilEventCaptured(page, SURVEY_SHOWN_EVENT)
+        await pollUntilEventCaptured(page, SURVEY_SENT_EVENT)
     })
 
     test('auto contrasts text color for feedback tab', async ({ page, context }) => {
@@ -295,7 +296,7 @@ test.describe('surveys - feedback widget', () => {
         await expect(page.locator('.PostHogSurvey-123').locator('.thank-you-message-header')).toHaveText('Thank you!')
 
         // Verify the event was sent
-        await pollUntilEventCaptured(page, 'survey sent')
+        await pollUntilEventCaptured(page, SURVEY_SENT_EVENT)
 
         // 5. Close the thank you message and click the survey tab again
         await page.locator('.PostHogSurvey-123').locator('.form-submit').click()
@@ -315,7 +316,7 @@ test.describe('surveys - feedback widget', () => {
         await expect(page.locator('.PostHogSurvey-123').locator('.thank-you-message-header')).toBeVisible()
 
         // Verify second event was sent
-        await pollUntilEventCaptured(page, 'survey sent')
+        await pollUntilEventCaptured(page, SURVEY_SENT_EVENT)
     })
 
     test('if multiple surveys being shown, sending one of them does not close the other one', async ({
@@ -372,7 +373,7 @@ test.describe('surveys - feedback widget', () => {
         await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('textarea').fill('first submission')
         await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('.form-submit').click()
 
-        await pollUntilEventCaptured(page, 'survey sent')
+        await pollUntilEventCaptured(page, SURVEY_SENT_EVENT)
 
         // click on the first survey confirmation message
         await page.locator('.PostHogSurvey-123').locator('.form-submit').click()
@@ -432,7 +433,7 @@ test.describe('surveys - feedback widget', () => {
         // close first survey
         await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('.form-cancel').click()
 
-        await pollUntilEventCaptured(page, 'survey dismissed')
+        await pollUntilEventCaptured(page, SURVEY_DISMISSED_EVENT)
 
         // check if the second survey is still visible
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeVisible()

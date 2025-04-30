@@ -1,6 +1,7 @@
 import { CaptureResult } from '../../types'
 import { isNull } from '../../utils/type-utils'
 import { sampleByDistinctId, sampleByEvent, sampleBySessionId } from '../../customizations/before-send'
+import { AUTOCAPTURE_EVENT } from '../../events'
 
 beforeAll(() => {
     let fiftyFiftyRandom = true
@@ -13,11 +14,11 @@ beforeAll(() => {
 
 describe('before send utils', () => {
     it('can sample by event name', () => {
-        const sampleFn = sampleByEvent(['$autocapture'], 0.5)
+        const sampleFn = sampleByEvent([AUTOCAPTURE_EVENT], 0.5)
 
         const results = []
         Array.from({ length: 100 }).forEach(() => {
-            const captureResult = { event: '$autocapture' } as unknown as CaptureResult
+            const captureResult = { event: AUTOCAPTURE_EVENT } as unknown as CaptureResult
             results.push(sampleFn(captureResult))
         })
         const emittedEvents = results.filter((r) => !isNull(r))
@@ -26,7 +27,7 @@ describe('before send utils', () => {
         expect(emittedEvents[0].properties).toMatchObject({
             $sample_type: ['sampleByEvent'],
             $sample_threshold: 0.5,
-            $sampled_events: ['$autocapture'],
+            $sampled_events: [AUTOCAPTURE_EVENT],
         })
     })
 
@@ -78,7 +79,7 @@ describe('before send utils', () => {
 
     it('can combine thresholds', () => {
         const sampleBySession = sampleBySessionId(0.5)
-        const sampleByEventFn = sampleByEvent(['$autocapture'], 0.5)
+        const sampleByEventFn = sampleByEvent([AUTOCAPTURE_EVENT], 0.5)
 
         const results = []
         const session_id_one = 'a-session-id'
@@ -86,7 +87,7 @@ describe('before send utils', () => {
         Array.from({ length: 100 }).forEach(() => {
             ;[session_id_one, session_id_two].forEach((session_id) => {
                 const captureResult = {
-                    event: '$autocapture',
+                    event: AUTOCAPTURE_EVENT,
                     properties: { $session_id: session_id },
                 } as unknown as CaptureResult
                 const firstBySession = sampleBySession(captureResult)

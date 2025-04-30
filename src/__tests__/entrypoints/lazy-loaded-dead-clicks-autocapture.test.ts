@@ -2,6 +2,7 @@ import { PostHog } from '../../posthog-core'
 import LazyLoadedDeadClicksAutocapture from '../../entrypoints/dead-clicks-autocapture'
 import { assignableWindow, document } from '../../utils/globals'
 import { autocaptureCompatibleElements } from '../../autocapture-utils'
+import { DEAD_CLICK_EVENT } from '../../events'
 
 // need to fake the timer before jsdom inits
 jest.useFakeTimers()
@@ -212,7 +213,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
             expect(fakeInstance.capture).toHaveBeenCalledWith(
-                '$dead_click',
+                DEAD_CLICK_EVENT,
                 {
                     // faked system timestamp isn't moving so this is negative
                     $dead_click_absolute_delay_ms: -900,
@@ -255,7 +256,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
             expect(fakeInstance.capture).toHaveBeenCalledWith(
-                '$dead_click',
+                DEAD_CLICK_EVENT,
                 {
                     // faked system timestamp isn't moving so this is negative
                     $dead_click_absolute_delay_ms: -900,
@@ -299,7 +300,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
             expect(fakeInstance.capture).toHaveBeenCalledWith(
-                '$dead_click',
+                DEAD_CLICK_EVENT,
                 {
                     // faked system timestamp isn't moving so this is negative
                     $dead_click_absolute_delay_ms: -900,
@@ -342,7 +343,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
             expect(lazyLoadedDeadClicksAutocapture['_clicks']).toHaveLength(0)
             expect(fakeInstance.capture).toHaveBeenCalledWith(
-                '$dead_click',
+                DEAD_CLICK_EVENT,
                 {
                     $dead_click_absolute_delay_ms: 3001,
                     $dead_click_absolute_timeout: true,

@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { FeedbackWidget } from '../../../extensions/surveys'
 import { PostHog } from '../../../posthog-core' // Import PostHog type for mocking
 import { Survey, SurveyQuestionType, SurveyType, SurveyWidgetType } from '../../../posthog-surveys-types'
+import { SURVEY_DISMISSED_EVENT, SURVEY_SENT_EVENT, SURVEY_SHOWN_EVENT } from '../../../events'
 
 // Mock PostHog instance
 const mockPosthog = {
@@ -106,14 +107,14 @@ describe('FeedbackWidget', () => {
 
     const expectSurveyShowEvent = (surveyId: string) => {
         expect(mockPosthog.capture).toHaveBeenCalledWith(
-            'survey shown',
+            SURVEY_SHOWN_EVENT,
             expect.objectContaining({ $survey_id: surveyId })
         )
     }
 
     const expectSurveySentEvent = (surveyId: string, response: Record<string, string>) => {
         expect(mockPosthog.capture).toHaveBeenLastCalledWith(
-            'survey sent',
+            SURVEY_SENT_EVENT,
             expect.objectContaining({ $survey_id: surveyId, ...response })
         )
     }
@@ -347,7 +348,7 @@ describe('FeedbackWidget', () => {
 
         // Optionally, check for the dismiss event if it's guaranteed to be captured by this mock instance
         expect(mockPosthog.capture).toHaveBeenCalledWith(
-            'survey dismissed',
+            SURVEY_DISMISSED_EVENT,
             expect.objectContaining({
                 $survey_id: baseWidgetSurvey.id,
             })

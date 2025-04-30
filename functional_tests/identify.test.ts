@@ -7,6 +7,7 @@ import { PostHog } from '../src/posthog-core'
 import { logger } from '../src/utils/logger'
 import { uuidv7 } from '../src/uuidv7'
 import { getRequests } from './mock-server'
+import { IDENTIFY_EVENT, SET_EVENT } from '../src/events'
 
 describe('FunctionalTests / Identify', () => {
     let token: string
@@ -25,7 +26,7 @@ describe('FunctionalTests / Identify', () => {
         await waitFor(() =>
             expect(getRequests(token)['/e/']).toContainEqual(
                 expect.objectContaining({
-                    event: '$identify',
+                    event: IDENTIFY_EVENT,
                     properties: expect.objectContaining({
                         distinct_id: 'test-id',
                         $anon_distinct_id: anonymousId,
@@ -47,7 +48,7 @@ describe('FunctionalTests / Identify', () => {
         await waitFor(() =>
             expect(getRequests(token)['/e/']).toContainEqual(
                 expect.objectContaining({
-                    event: '$identify',
+                    event: IDENTIFY_EVENT,
                     $set: { email: 'first@email.com' },
                     $set_once: expect.objectContaining({
                         location: 'first',
@@ -66,7 +67,7 @@ describe('FunctionalTests / Identify', () => {
         await waitFor(() =>
             expect(getRequests(token)['/e/']).toContainEqual(
                 expect.objectContaining({
-                    event: '$set',
+                    event: SET_EVENT,
                     properties: expect.objectContaining({
                         $browser: 'Safari',
                         $browser_version: null,
@@ -90,7 +91,7 @@ describe('FunctionalTests / Identify', () => {
         await waitFor(() =>
             expect(getRequests(token)['/e/']).toContainEqual(
                 expect.objectContaining({
-                    event: '$identify',
+                    event: IDENTIFY_EVENT,
                     $set: { email: 'first@email.com' },
                     $set_once: expect.objectContaining({
                         location: 'first',
@@ -110,7 +111,7 @@ describe('FunctionalTests / Identify', () => {
         await waitFor(() =>
             expect(getRequests(token)['/e/']).toContainEqual(
                 expect.objectContaining({
-                    event: '$set',
+                    event: SET_EVENT,
                     properties: expect.objectContaining({
                         $browser: 'Safari',
                         $browser_version: null,

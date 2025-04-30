@@ -15,7 +15,7 @@ import {
     splitClassString,
 } from './autocapture-utils'
 import RageClick from './extensions/rageclick'
-import { AutocaptureConfig, COPY_AUTOCAPTURE_EVENT, EventName, Properties, RemoteConfig } from './types'
+import { AutocaptureConfig, EventName, Properties, RemoteConfig } from './types'
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
@@ -25,6 +25,7 @@ import { document, window } from './utils/globals'
 import { convertToURL } from './utils/request-utils'
 import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
 import { includes } from './utils/string-utils'
+import { AUTOCAPTURE_EVENT, COPY_AUTOCAPTURE_EVENT, RAGECLICK_EVENT } from './events'
 
 const logger = createLogger('[AutoCapture]')
 
@@ -342,7 +343,7 @@ export class Autocapture {
         return !disabledClient && !disabledServer
     }
 
-    private _captureEvent(e: Event, eventName: EventName = '$autocapture'): boolean | void {
+    private _captureEvent(e: Event, eventName: EventName = AUTOCAPTURE_EVENT): boolean | void {
         if (!this.isEnabled) {
             return
         }
@@ -354,12 +355,12 @@ export class Autocapture {
             target = (target.parentNode || null) as Element | null
         }
 
-        if (eventName === '$autocapture' && e.type === 'click' && e instanceof MouseEvent) {
+        if (eventName === AUTOCAPTURE_EVENT && e.type === 'click' && e instanceof MouseEvent) {
             if (
                 this.instance.config.rageclick &&
                 this.rageclicks?.isRageClick(e.clientX, e.clientY, new Date().getTime())
             ) {
-                this._captureEvent(e, '$rageclick')
+                this._captureEvent(e, RAGECLICK_EVENT)
             }
         }
 

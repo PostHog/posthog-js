@@ -1,6 +1,7 @@
 import { Page } from '@playwright/test'
 import { EventName } from '../../src/types'
 import { expect } from './posthog-playwright-test-base'
+import { SNAPSHOT_EVENT } from '../../src/events'
 
 export async function pollUntilEventCaptured(
     page: Page,
@@ -23,7 +24,7 @@ export async function pollUntilEventCaptured(
 export async function assertThatRecordingStarted(page: Page) {
     const captures = await page.capturedEvents()
 
-    expect(captures.map((c) => c.event)).toEqual(['$snapshot'])
+    expect(captures.map((c) => c.event)).toEqual([SNAPSHOT_EVENT])
     const capturedSnapshot = captures[0]
 
     expect(capturedSnapshot).toBeDefined()

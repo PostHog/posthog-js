@@ -2,6 +2,7 @@ import { test, expect } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
 import { Page } from '@playwright/test'
 import { CaptureResult } from '../../src/types'
+import { SNAPSHOT_EVENT } from '../../src/events'
 
 // Local config not set
 // decide comes back - says we shouldn't mask
@@ -33,7 +34,7 @@ async function interactWithThePage(page: Page) {
     await page.waitForTimeout(2500)
     // no new events
     const events = await page.capturedEvents()
-    const snapshotEvents = events.filter((e) => e.event === '$snapshot')
+    const snapshotEvents = events.filter((e) => e.event === SNAPSHOT_EVENT)
     expect(snapshotEvents.length).toBeGreaterThan(0)
     return snapshotEvents
 }

@@ -1,5 +1,6 @@
 import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
+import { PAGEVIEW_EVENT, SNAPSHOT_EVENT } from '../../src/events'
 
 const startOptions = {
     options: {
@@ -31,7 +32,7 @@ test.describe('session recording in array.full.js', () => {
             ph?.capture('test_registered_property')
         })
 
-        await page.expectCapturedEventsToBe(['$pageview', '$snapshot', 'test_registered_property'])
+        await page.expectCapturedEventsToBe([PAGEVIEW_EVENT, SNAPSHOT_EVENT, 'test_registered_property'])
         const capturedEvents = await page.capturedEvents()
 
         // don't care about network payloads here

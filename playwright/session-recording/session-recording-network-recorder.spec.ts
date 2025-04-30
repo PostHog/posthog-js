@@ -1,3 +1,4 @@
+import { SNAPSHOT_EVENT } from '../../src/events'
 import { test, expect } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
 import { Page } from '@playwright/test'
@@ -112,7 +113,7 @@ test.beforeEach(async ({ context }) => {
                     },
                 })
                 const capturedEvents = await page.capturedEvents()
-                const snapshots = capturedEvents.filter((c) => c.event === '$snapshot')
+                const snapshots = capturedEvents.filter((c) => c.event === SNAPSHOT_EVENT)
 
                 const capturedRequests: Record<string, any>[] = []
                 for (const snapshot of snapshots) {

@@ -4,6 +4,7 @@ import { uuidv7 } from '../uuidv7'
 import { defaultPostHog } from './helpers/posthog-instance'
 import { CaptureResult, knownUnsafeEditableEvent, PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
+import { SET_EVENT } from '../events'
 
 const rejectingEventFn = () => {
     return null
@@ -120,7 +121,7 @@ describe('posthog core - before send', () => {
         })
         ;(posthog._send_request as jest.Mock).mockClear()
 
-        const capturedData = posthog.capture('$set', {}, { $set: { value: 'provided' } })
+        const capturedData = posthog.capture(SET_EVENT, {}, { $set: { value: 'provided' } })
 
         expect(capturedData).toHaveProperty(['$set', 'value'], 'edited')
         expect(posthog._send_request).toHaveBeenCalledWith({

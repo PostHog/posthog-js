@@ -12,6 +12,7 @@ import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
 import { SessionRecording } from '../extensions/replay/sessionrecording'
 import { SessionPropsManager } from '../session-props'
+import { PAGEVIEW_EVENT, PAGELEAVE_EVENT, GROUP_IDENTIFY_EVENT, IDENTIFY_EVENT, SNAPSHOT_EVENT } from '../events'
 
 let mockGetProperties: jest.Mock
 
@@ -258,7 +259,7 @@ describe('posthog core', () => {
             const posthog = posthogWith(defaultConfig, defaultOverrides)
 
             const captureResult = posthog.capture(
-                '$identify',
+                IDENTIFY_EVENT,
                 { distinct_id: 'some-distinct-id' },
                 { $set: { email: 'john@example.com' }, $set_once: { howOftenAmISet: 'once!' } }
             )
@@ -528,7 +529,7 @@ describe('posthog core', () => {
                 overrides
             )
 
-            expect(posthog._calculate_event_properties('$snapshot', { event: 'prop' }, new Date(), uuid)).toEqual({
+            expect(posthog._calculate_event_properties(SNAPSHOT_EVENT, { event: 'prop' }, new Date(), uuid)).toEqual({
                 token: 'testtoken',
                 event: 'prop',
                 distinct_id: 'abc',
@@ -576,7 +577,9 @@ describe('posthog core', () => {
         it('saves $snapshot data and token for $snapshot events', () => {
             posthog = posthogWith({}, overrides)
 
-            expect(posthog._calculate_event_properties('$snapshot', { $snapshot_data: {} }, new Date(), uuid)).toEqual({
+            expect(
+                posthog._calculate_event_properties(SNAPSHOT_EVENT, { $snapshot_data: {} }, new Date(), uuid)
+            ).toEqual({
                 token: 'testtoken',
                 $snapshot_data: {},
                 distinct_id: 'abc',
@@ -594,14 +597,14 @@ describe('posthog core', () => {
         it('adds page title to $pageview', () => {
             document!.title = 'test'
 
-            expect(posthog._calculate_event_properties('$pageview', {}, new Date(), uuid)).toEqual(
+            expect(posthog._calculate_event_properties(PAGEVIEW_EVENT, {}, new Date(), uuid)).toEqual(
                 expect.objectContaining({ title: 'test' })
             )
         })
 
         it('includes pageview id from previous pageview', () => {
             const pageview1Properties = posthog._calculate_event_properties(
-                '$pageview',
+                PAGEVIEW_EVENT,
                 {},
                 new Date(),
                 'pageview-id-1'
@@ -612,7 +615,7 @@ describe('posthog core', () => {
             expect(event1Properties.$pageview_id).toEqual('pageview-id-1')
 
             const pageview2Properties = posthog._calculate_event_properties(
-                '$pageview',
+                PAGEVIEW_EVENT,
                 {},
                 new Date(),
                 'pageview-id-2'
@@ -624,7 +627,7 @@ describe('posthog core', () => {
             expect(event2Properties.$pageview_id).toEqual('pageview-id-2')
 
             const pageleaveProperties = posthog._calculate_event_properties(
-                '$pageleave',
+                PAGELEAVE_EVENT,
                 {},
                 new Date(),
                 'pageleave-id'
@@ -635,7 +638,7 @@ describe('posthog core', () => {
 
         it('includes pageview id from previous pageview', () => {
             const pageview1Properties = posthog._calculate_event_properties(
-                '$pageview',
+                PAGEVIEW_EVENT,
                 {},
                 new Date(),
                 'pageview-id-1'
@@ -646,7 +649,7 @@ describe('posthog core', () => {
             expect(event1Properties.$pageview_id).toEqual('pageview-id-1')
 
             const pageview2Properties = posthog._calculate_event_properties(
-                '$pageview',
+                PAGEVIEW_EVENT,
                 {},
                 new Date(),
                 'pageview-id-2'
@@ -658,7 +661,7 @@ describe('posthog core', () => {
             expect(event2Properties.$pageview_id).toEqual('pageview-id-2')
 
             const pageleaveProperties = posthog._calculate_event_properties(
-                '$pageleave',
+                PAGELEAVE_EVENT,
                 {},
                 new Date(),
                 'pageleave-id'
@@ -681,7 +684,7 @@ describe('posthog core', () => {
 
             posthog._handle_unload()
 
-            expect(posthog.capture).toHaveBeenCalledWith('$pageleave')
+            expect(posthog.capture).toHaveBeenCalledWith(PAGELEAVE_EVENT)
         })
 
         it('captures $pageleave when capture_pageview is set to history_change', () => {
@@ -696,7 +699,7 @@ describe('posthog core', () => {
 
             posthog._handle_unload()
 
-            expect(posthog.capture).toHaveBeenCalledWith('$pageleave')
+            expect(posthog.capture).toHaveBeenCalledWith(PAGELEAVE_EVENT)
         })
 
         it('does not capture $pageleave when capture_pageview=false and capture_pageleave=if_capture_pageview', () => {
@@ -726,7 +729,7 @@ describe('posthog core', () => {
 
             posthog._handle_unload()
 
-            expect(posthog.capture).toHaveBeenCalledWith('$pageleave')
+            expect(posthog.capture).toHaveBeenCalledWith(PAGELEAVE_EVENT)
         })
 
         it('calls requestQueue unload', () => {
@@ -756,7 +759,7 @@ describe('posthog core', () => {
                 )
                 posthog._handle_unload()
 
-                expect(posthog.capture).toHaveBeenCalledWith('$pageleave', null, { transport: 'sendBeacon' })
+                expect(posthog.capture).toHaveBeenCalledWith(PAGELEAVE_EVENT, null, { transport: 'sendBeacon' })
             })
 
             it('captures $pageleave when capture_pageview is set to history_change', () => {
@@ -770,7 +773,7 @@ describe('posthog core', () => {
                 )
                 posthog._handle_unload()
 
-                expect(posthog.capture).toHaveBeenCalledWith('$pageleave', null, { transport: 'sendBeacon' })
+                expect(posthog.capture).toHaveBeenCalledWith(PAGELEAVE_EVENT, null, { transport: 'sendBeacon' })
             })
 
             it('does not capture $pageleave when capture_pageview=false', () => {
@@ -807,7 +810,7 @@ describe('posthog core', () => {
             posthog.identify('efgh')
 
             expect(posthog.capture).toHaveBeenCalledWith(
-                '$identify',
+                IDENTIFY_EVENT,
                 {
                     distinct_id: 'efgh',
                     $anon_distinct_id: 'abcd',
@@ -1042,7 +1045,7 @@ describe('posthog core', () => {
 
     describe('skipped init()', () => {
         it('capture() does not throw', () => {
-            expect(() => defaultPostHog().capture('$pageview')).not.toThrow()
+            expect(() => defaultPostHog().capture(PAGEVIEW_EVENT)).not.toThrow()
 
             expect(mockLogger.uninitializedWarning).toHaveBeenCalledWith('posthog.capture')
         })
@@ -1136,7 +1139,7 @@ describe('posthog core', () => {
         it('captures $groupidentify event', () => {
             posthog.group('organization', 'org::5', { group: 'property', foo: 5 })
 
-            expect(posthog.capture).toHaveBeenCalledWith('$groupidentify', {
+            expect(posthog.capture).toHaveBeenCalledWith(GROUP_IDENTIFY_EVENT, {
                 $group_type: 'organization',
                 $group_key: 'org::5',
                 $group_set: {
@@ -1293,7 +1296,7 @@ describe('posthog core', () => {
             jest.runOnlyPendingTimers()
 
             expect(instance.capture).not.toHaveBeenLastCalledWith(
-                '$pageview',
+                PAGEVIEW_EVENT,
                 { title: 'test' },
                 { send_instantly: true }
             )
@@ -1313,7 +1316,11 @@ describe('posthog core', () => {
 
             jest.runOnlyPendingTimers()
 
-            expect(instance.capture).toHaveBeenLastCalledWith('$pageview', { title: 'test' }, { send_instantly: true })
+            expect(instance.capture).toHaveBeenLastCalledWith(
+                PAGEVIEW_EVENT,
+                { title: 'test' },
+                { send_instantly: true }
+            )
         })
     })
 

@@ -1,5 +1,6 @@
 import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
+import { PAGEVIEW_EVENT, SNAPSHOT_EVENT } from '../../src/events'
 
 const startOptions = {
     options: {
@@ -34,7 +35,7 @@ test.describe('Session recording - sampling', () => {
             },
         })
 
-        await page.expectCapturedEventsToBe(['$pageview'])
+        await page.expectCapturedEventsToBe([PAGEVIEW_EVENT])
         await page.resetCapturedEvents()
     })
 
@@ -83,6 +84,6 @@ test.describe('Session recording - sampling', () => {
 
         const afterReloadCapturedEvents = await page.capturedEvents()
         const lastCaptured = afterReloadCapturedEvents[afterReloadCapturedEvents.length - 1]
-        expect(lastCaptured['event']).toEqual('$snapshot')
+        expect(lastCaptured['event']).toEqual(SNAPSHOT_EVENT)
     })
 })

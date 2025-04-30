@@ -11,6 +11,9 @@ import {
 } from './helpers'
 import { expect } from 'expect'
 
+// We can't do this because those are TS files and we can only import JS files from here
+// import { PAGEVIEW_EVENT, AUTOCAPTURE_EVENT } from '../src/events'
+
 // eslint-disable-next-line no-undef
 fixture('posthog.js capture')
     .page('http://localhost:8000/playground/cypress-full/index.html')

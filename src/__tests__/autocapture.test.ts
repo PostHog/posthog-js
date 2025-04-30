@@ -16,6 +16,7 @@ import { window } from '../utils/globals'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 import { isUndefined } from '../utils/type-utils'
+import { AUTOCAPTURE_EVENT, COPY_AUTOCAPTURE_EVENT, RAGECLICK_EVENT } from '../events'
 
 // JS DOM doesn't have ClipboardEvent, so we need to mock it
 // see https://github.com/jsdom/jsdom/issues/1568
@@ -401,10 +402,10 @@ describe('Autocapture system', () => {
             autocapture['_captureEvent'](fakeEvent)
 
             expect(beforeSendMock.mock.calls.map((args) => args[0].event)).toEqual([
-                '$autocapture',
-                '$autocapture',
-                '$rageclick',
-                '$autocapture',
+                AUTOCAPTURE_EVENT,
+                AUTOCAPTURE_EVENT,
+                RAGECLICK_EVENT,
+                AUTOCAPTURE_EVENT,
             ])
         })
 
@@ -425,11 +426,11 @@ describe('Autocapture system', () => {
 
                 setWindowTextSelection('copy this test')
 
-                autocapture['_captureEvent'](fakeEvent, '$copy_autocapture')
+                autocapture['_captureEvent'](fakeEvent, COPY_AUTOCAPTURE_EVENT)
 
                 expect(beforeSendMock).toHaveBeenCalledTimes(1)
                 const mockCall = beforeSendMock.mock.calls[0][0]
-                expect(mockCall.event).toEqual('$copy_autocapture')
+                expect(mockCall.event).toEqual(COPY_AUTOCAPTURE_EVENT)
                 expect(mockCall.properties).toHaveProperty('$selected_content', 'copy this test')
                 expect(mockCall.properties).toHaveProperty('$copy_type', 'copy')
             })
@@ -441,11 +442,11 @@ describe('Autocapture system', () => {
 
                 setWindowTextSelection('cut this test')
 
-                autocapture['_captureEvent'](fakeEvent, '$copy_autocapture')
+                autocapture['_captureEvent'](fakeEvent, COPY_AUTOCAPTURE_EVENT)
 
                 const spyArgs = beforeSendMock.mock.calls
                 expect(spyArgs.length).toBe(1)
-                expect(spyArgs[0][0].event).toEqual('$copy_autocapture')
+                expect(spyArgs[0][0].event).toEqual(COPY_AUTOCAPTURE_EVENT)
                 expect(spyArgs[0][0].properties).toHaveProperty('$selected_content', 'cut this test')
                 expect(spyArgs[0][0].properties).toHaveProperty('$copy_type', 'cut')
             })
@@ -457,7 +458,7 @@ describe('Autocapture system', () => {
 
                 setWindowTextSelection('')
 
-                autocapture['_captureEvent'](fakeEvent, '$copy_autocapture')
+                autocapture['_captureEvent'](fakeEvent, COPY_AUTOCAPTURE_EVENT)
 
                 const spyArgs = beforeSendMock.mock.calls
                 expect(spyArgs.length).toBe(0)
@@ -471,7 +472,7 @@ describe('Autocapture system', () => {
                 // oh no, a social security number!
                 setWindowTextSelection('123-45-6789')
 
-                autocapture['_captureEvent'](fakeEvent, '$copy_autocapture')
+                autocapture['_captureEvent'](fakeEvent, COPY_AUTOCAPTURE_EVENT)
 
                 const spyArgs = beforeSendMock.mock.calls
                 expect(spyArgs.length).toBe(0)
@@ -554,7 +555,7 @@ describe('Autocapture system', () => {
             const captureArgs = beforeSendMock.mock.calls[0]
             const event = captureArgs[0].event
             const props = captureArgs[0].properties
-            expect(event).toBe('$autocapture')
+            expect(event).toBe(AUTOCAPTURE_EVENT)
             expect(props['$event_type']).toBe('click')
             expect(props['$elements'][0]).toHaveProperty('attr__href', 'https://test.com')
             expect(props['$elements'][1]).toHaveProperty('tag_name', 'span')
@@ -1012,9 +1013,9 @@ describe('Autocapture system', () => {
             simulateClick(button)
             simulateClick(button)
             expect(beforeSendMock).toHaveBeenCalledTimes(2)
-            expect(beforeSendMock.mock.calls[0][0].event).toBe('$autocapture')
+            expect(beforeSendMock.mock.calls[0][0].event).toBe(AUTOCAPTURE_EVENT)
             expect(beforeSendMock.mock.calls[0][0].properties['$event_type']).toBe('click')
-            expect(beforeSendMock.mock.calls[1][0].event).toBe('$autocapture')
+            expect(beforeSendMock.mock.calls[1][0].event).toBe(AUTOCAPTURE_EVENT)
             expect(beforeSendMock.mock.calls[1][0].properties['$event_type']).toBe('click')
         })
     })

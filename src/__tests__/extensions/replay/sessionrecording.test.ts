@@ -11,6 +11,7 @@ import {
     SESSION_RECORDING_MASKING,
     SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE,
 } from '../../../constants'
+import { EXCEPTION_EVENT, SNAPSHOT_EVENT } from '../../../events'
 import { SessionIdManager } from '../../../sessionid'
 import {
     FULL_SNAPSHOT_EVENT_TYPE,
@@ -864,7 +865,7 @@ describe('SessionRecording', () => {
 
             expect(posthog.capture).toHaveBeenCalledTimes(1)
             expect(posthog.capture).toHaveBeenCalledWith(
-                '$snapshot',
+                SNAPSHOT_EVENT,
                 {
                     $snapshot_bytes: 60,
                     $snapshot_data: [
@@ -901,7 +902,7 @@ describe('SessionRecording', () => {
 
             expect(posthog.capture).toHaveBeenCalledTimes(1)
             expect(posthog.capture).toHaveBeenCalledWith(
-                '$snapshot',
+                SNAPSHOT_EVENT,
                 {
                     $session_id: sessionId,
                     $window_id: 'windowId',
@@ -986,7 +987,7 @@ describe('SessionRecording', () => {
             _emit(createIncrementalSnapshot({ emit: 2 }))
 
             expect(posthog.capture).toHaveBeenCalledWith(
-                '$snapshot',
+                SNAPSHOT_EVENT,
                 {
                     $session_id: 'otherSessionId',
                     $window_id: 'windowId',
@@ -1619,7 +1620,7 @@ describe('SessionRecording', () => {
                 windowId: expect.any(String),
             })
             expect(posthog.capture).toHaveBeenCalledWith(
-                '$snapshot',
+                SNAPSHOT_EVENT,
                 {
                     $snapshot_data: [firstSnapshotEvent, secondSnapshot],
                     $session_id: firstSessionId,
@@ -1711,7 +1712,7 @@ describe('SessionRecording', () => {
 
             // the buffer is flushed on switch to idle
             expect(posthog.capture).toHaveBeenCalledWith(
-                '$snapshot',
+                SNAPSHOT_EVENT,
                 {
                     $snapshot_data: [firstSnapshotEvent, secondSnapshot],
                     $session_id: firstSessionId,
@@ -1739,7 +1740,7 @@ describe('SessionRecording', () => {
 
             // the buffer is flushed, and a full snapshot is taken
             expect(posthog.capture).toHaveBeenCalledWith(
-                '$snapshot',
+                SNAPSHOT_EVENT,
                 {
                     $snapshot_data: [firstSnapshotEvent, secondSnapshot],
                     $session_id: firstSessionId,
@@ -2165,7 +2166,7 @@ describe('SessionRecording', () => {
             sessionRecording['_flushBuffer']()
 
             expect(posthog.capture).toHaveBeenCalledWith(
-                '$snapshot',
+                SNAPSHOT_EVENT,
                 {
                     $snapshot_data: [
                         {
@@ -2189,7 +2190,7 @@ describe('SessionRecording', () => {
             sessionRecording['_flushBuffer']()
 
             expect(posthog.capture).toHaveBeenCalledWith(
-                '$snapshot',
+                SNAPSHOT_EVENT,
                 {
                     $snapshot_data: [
                         {
@@ -2212,7 +2213,7 @@ describe('SessionRecording', () => {
             sessionRecording['_flushBuffer']()
 
             expect(posthog.capture).toHaveBeenCalledWith(
-                '$snapshot',
+                SNAPSHOT_EVENT,
                 {
                     $snapshot_data: [
                         {
@@ -2243,7 +2244,7 @@ describe('SessionRecording', () => {
             sessionRecording['_flushBuffer']()
 
             expect(posthog.capture).toHaveBeenCalledWith(
-                '$snapshot',
+                SNAPSHOT_EVENT,
                 {
                     $snapshot_data: [
                         {
@@ -2278,7 +2279,7 @@ describe('SessionRecording', () => {
             sessionRecording['_flushBuffer']()
 
             expect(posthog.capture).toHaveBeenCalledWith(
-                '$snapshot',
+                SNAPSHOT_EVENT,
                 {
                     $snapshot_data: [mouseEvent],
                     $session_id: sessionId,
@@ -2296,7 +2297,7 @@ describe('SessionRecording', () => {
             sessionRecording['_flushBuffer']()
 
             expect(posthog.capture).toHaveBeenCalledWith(
-                '$snapshot',
+                SNAPSHOT_EVENT,
                 {
                     $snapshot_data: [
                         {
@@ -2322,7 +2323,7 @@ describe('SessionRecording', () => {
             sessionRecording['_flushBuffer']()
 
             expect(posthog.capture).toHaveBeenCalledWith(
-                '$snapshot',
+                SNAPSHOT_EVENT,
                 {
                     $snapshot_data: [
                         {
@@ -2472,7 +2473,7 @@ describe('SessionRecording', () => {
                 makeDecideResponse({
                     sessionRecording: {
                         endpoint: '/s/',
-                        eventTriggers: ['$exception'],
+                        eventTriggers: [EXCEPTION_EVENT],
                     },
                 })
             )
@@ -2489,7 +2490,7 @@ describe('SessionRecording', () => {
 
             expect(sessionRecording.status).toBe('buffering')
 
-            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+            simpleEventEmitter.emit('eventCaptured', { event: EXCEPTION_EVENT })
 
             expect(sessionRecording.status).toBe('active')
             expect(sessionRecording['_buffer'].data).toHaveLength(0)
@@ -2500,7 +2501,7 @@ describe('SessionRecording', () => {
                 makeDecideResponse({
                     sessionRecording: {
                         endpoint: '/s/',
-                        eventTriggers: ['$exception'],
+                        eventTriggers: [EXCEPTION_EVENT],
                         urlTriggers: [{ url: 'start-on-me', matching: 'regex' }],
                         triggerMatchType: 'any',
                     },
@@ -2519,7 +2520,7 @@ describe('SessionRecording', () => {
 
             expect(sessionRecording.status).toBe('buffering')
 
-            simpleEventEmitter.emit('eventCaptured', { event: '$exception' })
+            simpleEventEmitter.emit('eventCaptured', { event: EXCEPTION_EVENT })
 
             // even though still waiting for URL to trigger
             expect(sessionRecording.status).toBe('active')
@@ -2565,7 +2566,7 @@ describe('SessionRecording', () => {
                 makeDecideResponse({
                     sessionRecording: {
                         endpoint: '/s/',
-                        eventTriggers: ['$exception'],
+                        eventTriggers: [EXCEPTION_EVENT],
                         sampleRate: '0.00', // i.e. never send recording
                         triggerMatchType: 'all',
                     },

@@ -1,5 +1,6 @@
 import { test, WindowWithPostHog } from './utils/posthog-playwright-test-base'
 import { start, gotoPage } from './utils/setup'
+import { PAGEVIEW_EVENT, AUTOCAPTURE_EVENT, OPT_IN_EVENT } from '../src/events'
 
 test.describe('opting out', () => {
     test.describe('when not initialized', () => {
@@ -54,7 +55,7 @@ test.describe('opting out', () => {
                 ;(window as WindowWithPostHog).posthog?.opt_in_capturing()
             })
 
-            await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
+            await page.expectCapturedEventsToBe([OPT_IN_EVENT, PAGEVIEW_EVENT])
         })
 
         test('does not send a duplicate $pageview event when opting in', async ({ page, context }) => {
@@ -73,13 +74,13 @@ test.describe('opting out', () => {
                 context
             )
 
-            await page.expectCapturedEventsToBe(['$pageview'])
+            await page.expectCapturedEventsToBe([PAGEVIEW_EVENT])
 
             await page.evaluate(() => {
                 ;(window as WindowWithPostHog).posthog?.opt_in_capturing()
             })
 
-            await page.expectCapturedEventsToBe(['$pageview', '$opt_in'])
+            await page.expectCapturedEventsToBe([PAGEVIEW_EVENT, OPT_IN_EVENT])
         })
     })
 
@@ -96,11 +97,11 @@ test.describe('opting out', () => {
                 context
             )
 
-            await page.expectCapturedEventsToBe(['$pageview'])
+            await page.expectCapturedEventsToBe([PAGEVIEW_EVENT])
 
             await page.click('[data-cy-custom-event-button]')
 
-            await page.expectCapturedEventsToBe(['$pageview', '$autocapture', 'custom-event'])
+            await page.expectCapturedEventsToBe([PAGEVIEW_EVENT, AUTOCAPTURE_EVENT, 'custom-event'])
 
             await page.evaluate(() => {
                 ;(window as WindowWithPostHog).posthog?.opt_out_capturing()
@@ -109,7 +110,7 @@ test.describe('opting out', () => {
             await page.click('[data-cy-custom-event-button]')
 
             // no new events
-            await page.expectCapturedEventsToBe(['$pageview', '$autocapture', 'custom-event'])
+            await page.expectCapturedEventsToBe([PAGEVIEW_EVENT, AUTOCAPTURE_EVENT, 'custom-event'])
         })
     })
 })

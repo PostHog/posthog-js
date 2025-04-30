@@ -7,6 +7,7 @@ import { autocapturePropertiesForElement } from '../autocapture'
 import { isElementInToolbar, isElementNode, isTag } from '../utils/element-utils'
 import { getNativeMutationObserverImplementation } from '../utils/prototype-utils'
 import { addEventListener } from '../utils'
+import { DEAD_CLICK_EVENT } from '../events'
 
 function asClick(event: MouseEvent): DeadClickCandidate | null {
     const eventTarget = getEventTarget(event)
@@ -248,7 +249,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         // TODO need to check safe and captur-able as with autocapture
         // TODO autocaputure config
         this.instance.capture(
-            '$dead_click',
+            DEAD_CLICK_EVENT,
             {
                 ...properties,
                 ...autocapturePropertiesForElement(click.node, {

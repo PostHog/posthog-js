@@ -1,5 +1,6 @@
 import { expect, test, WindowWithPostHog } from './utils/posthog-playwright-test-base'
 import { start } from './utils/setup'
+import { IDENTIFY_EVENT, PAGEVIEW_EVENT } from '../src/events'
 
 test.describe('Identify', () => {
     test.beforeEach(async ({ page, context }) => {
@@ -49,15 +50,15 @@ test.describe('Identify', () => {
         })
         const capturedEvents = await page.capturedEvents()
         const eventsSeen = capturedEvents.map((e) => e.event)
-        expect(eventsSeen.filter((e) => e === '$identify').length).toEqual(2)
+        expect(eventsSeen.filter((e) => e === IDENTIFY_EVENT).length).toEqual(2)
         expect(eventsSeen).toEqual([
-            '$pageview',
+            PAGEVIEW_EVENT,
             'an-anonymous-event',
-            '$identify',
+            IDENTIFY_EVENT,
             'an-identified-event',
             'another-identified-event',
             'an-anonymous-event',
-            '$identify',
+            IDENTIFY_EVENT,
             'an-identified-event',
         ])
         expect(new Set(capturedEvents.map((e) => e.properties['$device_id'])).size).toEqual(1)

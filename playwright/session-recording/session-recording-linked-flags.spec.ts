@@ -1,6 +1,7 @@
 import { test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
 import { assertThatRecordingStarted, pollUntilEventCaptured } from '../utils/event-capture-utils'
+import { PAGEVIEW_EVENT, OPT_IN_EVENT, SNAPSHOT_EVENT } from '../../src/events'
 
 const startOptions = {
     options: {
@@ -38,7 +39,7 @@ test.describe('Session recording - linked flags', () => {
                 })
             },
         })
-        await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
+        await page.expectCapturedEventsToBe([OPT_IN_EVENT, PAGEVIEW_EVENT])
 
         await page.resetCapturedEvents()
 
@@ -47,7 +48,7 @@ test.describe('Session recording - linked flags', () => {
             ph?.startSessionRecording({ linked_flag: true })
         })
         await page.locator('[data-cy-input]').type('hello posthog!')
-        await pollUntilEventCaptured(page, '$snapshot')
+        await pollUntilEventCaptured(page, SNAPSHOT_EVENT)
         await assertThatRecordingStarted(page)
     })
 })

@@ -1,4 +1,5 @@
 import { CAPTURE_RATE_LIMIT } from './constants'
+import { RATE_LIMIT_EVENT } from './events'
 import type { PostHog } from './posthog-core'
 import { RequestResponse } from './types'
 import { createLogger } from './utils/logger'
@@ -6,7 +7,6 @@ import { createLogger } from './utils/logger'
 const logger = createLogger('[RateLimiter]')
 
 const ONE_MINUTE_IN_MILLISECONDS = 60 * 1000
-const RATE_LIMIT_EVENT = '$$client_ingestion_warning'
 
 interface CaptureResponse {
     quota_limited?: string[]

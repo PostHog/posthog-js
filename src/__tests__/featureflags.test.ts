@@ -4,6 +4,7 @@ import { filterActiveFeatureFlags, parseFeatureFlagDecideResponse, PostHogFeatur
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 import { PostHogConfig } from '../types'
+import { FEATURE_FLAG_CALLED_EVENT, FEATURE_ENROLLMENT_UPDATE_EVENT } from '../events'
 
 jest.useFakeTimers()
 jest.spyOn(global, 'setTimeout')
@@ -539,7 +540,7 @@ describe('featureflags', () => {
 
                 featureFlags.getFeatureFlag('beta-feature')
 
-                expect(instance.capture).toHaveBeenCalledWith('$feature_flag_called', {
+                expect(instance.capture).toHaveBeenCalledWith(FEATURE_FLAG_CALLED_EVENT, {
                     $feature_flag: 'beta-feature',
                     $feature_flag_response: true,
                     $feature_flag_payload: { overridden: 'payload' },
@@ -585,7 +586,7 @@ describe('featureflags', () => {
 
                 featureFlags.getFeatureFlag('beta-feature')
 
-                expect(instance.capture).toHaveBeenCalledWith('$feature_flag_called', {
+                expect(instance.capture).toHaveBeenCalledWith(FEATURE_FLAG_CALLED_EVENT, {
                     $feature_flag: 'beta-feature',
                     $feature_flag_response: true,
                     $feature_flag_payload: { overridden: { status: 'overridden' } },
@@ -601,7 +602,7 @@ describe('featureflags', () => {
 
                 featureFlags.getFeatureFlag('alpha-feature-2')
 
-                expect(instance.capture).toHaveBeenCalledWith('$feature_flag_called', {
+                expect(instance.capture).toHaveBeenCalledWith(FEATURE_FLAG_CALLED_EVENT, {
                     $feature_flag: 'alpha-feature-2',
                     $feature_flag_response: 'variant-1',
                     $feature_flag_payload: null,
@@ -616,7 +617,7 @@ describe('featureflags', () => {
 
                 featureFlags.getFeatureFlag('multivariate-flag')
 
-                expect(instance.capture).toHaveBeenCalledWith('$feature_flag_called', {
+                expect(instance.capture).toHaveBeenCalledWith(FEATURE_FLAG_CALLED_EVENT, {
                     $feature_flag: 'multivariate-flag',
                     $feature_flag_response: false,
                     $feature_flag_payload: null,
@@ -942,7 +943,7 @@ describe('featureflags', () => {
             featureFlags.updateEarlyAccessFeatureEnrollment('first-flag', true)
 
             expect(instance.capture).toHaveBeenCalledTimes(1)
-            expect(instance.capture).toHaveBeenCalledWith('$feature_enrollment_update', {
+            expect(instance.capture).toHaveBeenCalledWith(FEATURE_ENROLLMENT_UPDATE_EVENT, {
                 $feature_enrollment: true,
                 $feature_flag: 'first-flag',
                 $set: {
@@ -963,7 +964,7 @@ describe('featureflags', () => {
             featureFlags.updateEarlyAccessFeatureEnrollment('first-flag', false)
 
             expect(instance.capture).toHaveBeenCalledTimes(2)
-            expect(instance.capture).toHaveBeenCalledWith('$feature_enrollment_update', {
+            expect(instance.capture).toHaveBeenCalledWith(FEATURE_ENROLLMENT_UPDATE_EVENT, {
                 $feature_enrollment: false,
                 $feature_flag: 'first-flag',
                 $set: {
@@ -985,7 +986,7 @@ describe('featureflags', () => {
             featureFlags.updateEarlyAccessFeatureEnrollment('x-flag', true)
 
             expect(instance.capture).toHaveBeenCalledTimes(1)
-            expect(instance.capture).toHaveBeenCalledWith('$feature_enrollment_update', {
+            expect(instance.capture).toHaveBeenCalledWith(FEATURE_ENROLLMENT_UPDATE_EVENT, {
                 $feature_enrollment: true,
                 $feature_flag: 'x-flag',
                 $set: {
@@ -1577,7 +1578,7 @@ describe('featureflags', () => {
 
             // Verify capture call includes requestId
             expect(instance.capture).toHaveBeenCalledWith(
-                '$feature_flag_called',
+                FEATURE_FLAG_CALLED_EVENT,
                 expect.objectContaining({
                     $feature_flag: 'test-flag',
                     $feature_flag_response: true,
@@ -1617,7 +1618,7 @@ describe('featureflags', () => {
 
             // Verify capture call includes requestId
             expect(instance.capture).toHaveBeenCalledWith(
-                '$feature_flag_called',
+                FEATURE_FLAG_CALLED_EVENT,
                 expect.objectContaining({
                     $feature_flag: 'test-flag',
                     $feature_flag_response: 'variant-1',
@@ -1654,7 +1655,7 @@ describe('featureflags', () => {
             featureFlags.getFeatureFlag('test-flag')
 
             expect(instance.capture).toHaveBeenCalledWith(
-                '$feature_flag_called',
+                FEATURE_FLAG_CALLED_EVENT,
                 expect.objectContaining({
                     $feature_flag_request_id: NEW_REQUEST_ID,
                 })

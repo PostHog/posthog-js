@@ -41,6 +41,7 @@ export const FLAG_CALL_REPORTED = '$flag_call_reported'
 export const USER_STATE = '$user_state'
 export const CLIENT_SESSION_PROPS = '$client_session_props'
 export const CAPTURE_RATE_LIMIT = '$capture_rate_limit'
+export const WEB_EXPERIMENTS = '$web_experiments'
 
 /** @deprecated Delete this when INITIAL_PERSON_INFO has been around for long enough to ignore backwards compat */
 export const INITIAL_CAMPAIGN_PARAMS = '$initial_campaign_params'
@@ -57,8 +58,6 @@ export const TOOLBAR_CONTAINER_CLASS = 'toolbar-global-fade-container'
  * */
 export const COOKIELESS_SENTINEL_VALUE = '$posthog_cookieless'
 export const COOKIELESS_MODE_FLAG_PROPERTY = '$cookieless_mode'
-
-export const WEB_EXPERIMENTS = '$web_experiments'
 
 // These are properties that are reserved and will not be automatically included in events
 export const PERSISTENCE_RESERVED_PROPERTIES = [

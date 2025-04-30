@@ -2,6 +2,7 @@ import { mockLogger } from './helpers/mock-logger'
 
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
+import { IDENTIFY_EVENT } from '../events'
 
 describe('identify', () => {
     // Note that there are other tests for identify in posthog-core.identify.js
@@ -55,7 +56,7 @@ describe('identify', () => {
         const eventBeforeIdentify = beforeSendMock.mock.calls[0]
         expect(eventBeforeIdentify[0].properties.$is_identified).toEqual(false)
         const identifyCall = beforeSendMock.mock.calls[1]
-        expect(identifyCall[0].event).toEqual('$identify')
+        expect(identifyCall[0].event).toEqual(IDENTIFY_EVENT)
         expect(identifyCall[0].properties.$is_identified).toEqual(true)
         const eventAfterIdentify = beforeSendMock.mock.calls[2]
         expect(eventAfterIdentify[0].properties.$is_identified).toEqual(true)

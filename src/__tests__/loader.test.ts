@@ -10,6 +10,7 @@ import { defaultPostHog } from './helpers/posthog-instance'
 
 import sinon from 'sinon'
 import { assignableWindow, window } from '../utils/globals'
+import { PAGEVIEW_EVENT } from '../events'
 
 describe(`Module-based loader in Node env`, () => {
     const posthog = defaultPostHog()
@@ -49,7 +50,7 @@ describe(`Module-based loader in Node env`, () => {
         sinon.assert.calledOnce(posthog.capture as sinon.SinonSpy<any>)
         const captureArgs = (posthog.capture as sinon.SinonSpy<any>).args[0]
         const event = captureArgs[0]
-        expect(event).toBe('$pageview')
+        expect(event).toBe(PAGEVIEW_EVENT)
         expect(loaded).toBe(true)
 
         posthog.capture = _originalCapture

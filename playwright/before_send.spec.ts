@@ -1,6 +1,7 @@
 import { expect, test, WindowWithPostHog } from './utils/posthog-playwright-test-base'
 import { start } from './utils/setup'
 import { BeforeSendFn } from '../src/types'
+import { PAGEVIEW_EVENT, AUTOCAPTURE_EVENT } from '../src/events'
 
 const startOptions = {
     options: {
@@ -38,18 +39,20 @@ test.describe('before_send', () => {
                         return null
                     }
 
+                    if (cr.event === AUTOCAPTURE_EVENT) {
+                        return {
+                            ...cr,
+                            event: 'redacted',
+                        }
+                    }
+
                     if (cr.event === 'custom-event') {
                         counter++
                         if (counter === 2) {
                             return null
                         }
                     }
-                    if (cr.event === '$autocapture') {
-                        return {
-                            ...cr,
-                            event: 'redacted',
-                        }
-                    }
+
                     return cr
                 },
                 // these tests rely on existing before_send function to capture events
@@ -65,7 +68,7 @@ test.describe('before_send', () => {
 
         expect(captures).toEqual([
             // before adding the new before sendfn
-            '$pageview',
+            PAGEVIEW_EVENT,
             'redacted',
             'custom-event',
             // second button click only has the redacted autocapture event

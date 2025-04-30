@@ -1,6 +1,7 @@
 import { expect, test } from './utils/posthog-playwright-test-base'
 import { start } from './utils/setup'
 import { pollUntilEventCaptured } from './utils/event-capture-utils'
+import { WEB_VITALS_EVENT } from '../src/events'
 
 const startOptions = {
     options: {
@@ -19,9 +20,9 @@ test.describe('Web Vitals', () => {
         await start(startOptions, page, context)
 
         // Wait for web vitals events to be captured
-        await pollUntilEventCaptured(page, '$web_vitals')
+        await pollUntilEventCaptured(page, WEB_VITALS_EVENT)
 
-        const webVitalsEvents = (await page.capturedEvents()).filter((event) => event.event === '$web_vitals')
+        const webVitalsEvents = (await page.capturedEvents()).filter((event) => event.event === WEB_VITALS_EVENT)
         expect(webVitalsEvents.length).toBeGreaterThan(0)
 
         const webVitalsEvent = webVitalsEvents[0]
@@ -60,7 +61,7 @@ test.describe('Web Vitals', () => {
         // Wait a bit to ensure no web vitals events are captured
         await page.waitForTimeout(5000)
 
-        const webVitalsEvents = (await page.capturedEvents()).filter((event) => event.event === '$web_vitals')
+        const webVitalsEvents = (await page.capturedEvents()).filter((event) => event.event === WEB_VITALS_EVENT)
         expect(webVitalsEvents.length).toBe(0)
     })
 })

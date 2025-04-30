@@ -15,6 +15,8 @@ import { prepareStylesheet } from '../utils/stylesheet-loader'
 import { SurveyMatchType } from '../../posthog-surveys-types'
 import { isMatchingRegex } from '../../utils/regex-utils'
 import { detectDeviceType } from '../../utils/user-agent-utils'
+import { SURVEY_DISMISSED_EVENT, SURVEY_SENT_EVENT } from '../../events'
+
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
@@ -568,7 +570,7 @@ export const sendSurveyEvent = (
     }
     localStorage.setItem(getSurveySeenKey(survey), 'true')
 
-    posthog.capture('survey sent', {
+    posthog.capture(SURVEY_SENT_EVENT, {
         $survey_name: survey.name,
         $survey_id: survey.id,
         $survey_iteration: survey.current_iteration,
@@ -596,7 +598,7 @@ export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly
     if (readOnly) {
         return
     }
-    posthog.capture('survey dismissed', {
+    posthog.capture(SURVEY_DISMISSED_EVENT, {
         $survey_name: survey.name,
         $survey_id: survey.id,
         $survey_iteration: survey.current_iteration,

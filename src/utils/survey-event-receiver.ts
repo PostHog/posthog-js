@@ -6,8 +6,7 @@ import { PostHog } from '../posthog-core'
 import { CaptureResult } from '../types'
 import { SURVEY_LOGGER as logger } from './survey-utils'
 import { isUndefined } from './type-utils'
-
-const SURVEY_SHOWN_EVENT_NAME = 'survey shown'
+import { SURVEY_SHOWN_EVENT } from '../events'
 
 export class SurveyEventReceiver {
     // eventToSurveys is a mapping of event name to all the surveys that are activated by it
@@ -112,7 +111,7 @@ export class SurveyEventReceiver {
 
     onEvent(event: string, eventPayload?: CaptureResult): void {
         const existingActivatedSurveys: string[] = this._instance?.persistence?.props[SURVEYS_ACTIVATED] || []
-        if (SURVEY_SHOWN_EVENT_NAME === event && eventPayload && existingActivatedSurveys.length > 0) {
+        if (SURVEY_SHOWN_EVENT === event && eventPayload && existingActivatedSurveys.length > 0) {
             // remove survey that from activatedSurveys here.
             logger.info('survey event matched, removing survey from activated surveys', {
                 event,

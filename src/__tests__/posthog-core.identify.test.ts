@@ -3,6 +3,7 @@ import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
 import { defaultPostHog } from './helpers/posthog-instance'
+import { IDENTIFY_EVENT, SET_EVENT } from '../events'
 
 describe('identify()', () => {
     let instance: PostHog
@@ -58,7 +59,7 @@ describe('identify()', () => {
 
         expect(beforeSendMock).toHaveBeenCalledWith(
             expect.objectContaining({
-                event: '$identify',
+                event: IDENTIFY_EVENT,
                 properties: expect.objectContaining({
                     distinct_id: 'calls capture when identity changes',
                     $anon_distinct_id: 'oldIdentity',
@@ -84,7 +85,7 @@ describe('identify()', () => {
 
         expect(beforeSendMock).toHaveBeenCalledWith(
             expect.objectContaining({
-                event: '$identify',
+                event: IDENTIFY_EVENT,
                 properties: expect.objectContaining({
                     distinct_id: 'a-new-id',
                     $anon_distinct_id: 'oldIdentity',
@@ -103,7 +104,7 @@ describe('identify()', () => {
 
         expect(beforeSendMock).toHaveBeenCalledWith(
             expect.objectContaining({
-                event: '$identify',
+                event: IDENTIFY_EVENT,
                 properties: expect.objectContaining({
                     distinct_id: 'a-new-id',
                     $anon_distinct_id: 'oldIdentity',
@@ -153,7 +154,7 @@ describe('identify()', () => {
 
         expect(beforeSendMock).toHaveBeenCalledWith(
             expect.objectContaining({
-                event: '$identify',
+                event: IDENTIFY_EVENT,
                 properties: expect.objectContaining({
                     distinct_id: 'a-new-id',
                     $anon_distinct_id: 'oldIdentity',
@@ -167,7 +168,7 @@ describe('identify()', () => {
 
         expect(beforeSendMock).toHaveBeenCalledWith(
             expect.objectContaining({
-                event: '$identify',
+                event: IDENTIFY_EVENT,
                 properties: expect.objectContaining({
                     distinct_id: 'a-new-id',
                     $anon_distinct_id: 'oldIdentity',
@@ -197,7 +198,7 @@ describe('identify()', () => {
 
             expect(beforeSendMock).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    event: '$set',
+                    event: SET_EVENT,
                     // get set at the top level and in properties
                     // $set: { email: 'john@example.com' },
                     // $set_once: expect.objectContaining({ howOftenAmISet: 'once!' }),
@@ -302,7 +303,7 @@ describe('identify()', () => {
 
             expect(beforeSendMock).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    event: '$set',
+                    event: SET_EVENT,
                     // get set at the top level and in properties
                     // $set: { email: 'john@example.com' },
                     // $set_once: expect.objectContaining({ name: 'john' }),
@@ -319,7 +320,7 @@ describe('identify()', () => {
 
             expect(beforeSendMock).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    event: '$set',
+                    event: SET_EVENT,
                     properties: expect.objectContaining({
                         $set: { email: 'john@example.com' },
                         $set_once: {},
@@ -334,7 +335,7 @@ describe('identify()', () => {
 
             expect(beforeSendMock).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    event: '$set',
+                    event: SET_EVENT,
                     properties: expect.objectContaining({
                         $set: {},
                         $set_once: { email: 'john@example.com' },

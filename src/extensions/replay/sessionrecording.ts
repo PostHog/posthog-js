@@ -11,6 +11,7 @@ import {
     SESSION_RECORDING_SCRIPT_CONFIG,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
 } from '../../constants'
+import { PAGEVIEW_EVENT, SNAPSHOT_EVENT } from '../../events'
 import {
     estimateSize,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
@@ -519,14 +520,14 @@ export class SessionRecording {
                     // it has the potential to block the main loop,
                     // so we catch all errors.
                     try {
-                        if (event.event === '$pageview') {
+                        if (event.event === PAGEVIEW_EVENT) {
                             const href = event?.properties.$current_url
                                 ? this._maskUrl(event?.properties.$current_url)
                                 : ''
                             if (!href) {
                                 return
                             }
-                            this._tryAddCustomEvent('$pageview', { href })
+                            this._tryAddCustomEvent(PAGEVIEW_EVENT, { href })
                         }
                     } catch (e) {
                         logger.error('Could not add $pageview to rrweb session', e)
@@ -1255,7 +1256,7 @@ export class SessionRecording {
 
     private _captureSnapshot(properties: Properties) {
         // :TRICKY: Make sure we batch these requests, use a custom endpoint and don't truncate the strings.
-        this._instance.capture('$snapshot', properties, {
+        this._instance.capture(SNAPSHOT_EVENT, properties, {
             _url: this._instance.requestRouter.endpointFor('api', this._endpoint),
             _noTruncate: true,
             _batchKey: SESSION_RECORDING_BATCH_KEY,

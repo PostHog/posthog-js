@@ -13,6 +13,7 @@ import { USER_STATE } from '../constants'
 import { SegmentContext, SegmentPlugin } from '../extensions/segment-integration'
 import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
+import { IDENTIFY_EVENT } from '../events'
 
 describe(`Segment integration`, () => {
     let segment: any
@@ -149,7 +150,7 @@ describe(`Segment integration`, () => {
         if (segmentIntegration && segmentIntegration.identify) {
             segmentIntegration.identify({
                 event: {
-                    event: '$identify',
+                    event: IDENTIFY_EVENT,
                     userId: 'distinguished user',
                     anonymousId: 'anonymous segment user',
                 },

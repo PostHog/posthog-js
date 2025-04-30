@@ -5,6 +5,7 @@ import { ExceptionObserver } from '../../../extensions/exception-autocapture'
 import { assignableWindow, window } from '../../../utils/globals'
 import { createPosthogInstance } from '../../helpers/posthog-instance'
 import { uuidv7 } from '../../../uuidv7'
+import { EXCEPTION_EVENT } from '../../../events'
 
 import posthogErrorWrappingFunctions from '../../../entrypoints/exception-autocapture'
 import { afterEach } from '@jest/globals'
@@ -97,7 +98,7 @@ describe('Exception Observer', () => {
             expect(captureCalls.length).toBe(1)
             const singleCall = captureCalls[0]
             expect(singleCall[0]).toMatchObject({
-                event: '$exception',
+                event: EXCEPTION_EVENT,
                 properties: {
                     $exception_personURL: expect.any(String),
                     $exception_list: [
@@ -126,7 +127,7 @@ describe('Exception Observer', () => {
             expect(captureCalls.length).toBe(1)
             const singleCall = captureCalls[0]
             expect(singleCall[0]).toMatchObject({
-                event: '$exception',
+                event: EXCEPTION_EVENT,
                 properties: {
                     $exception_personURL: expect.any(String),
                     $exception_list: [
@@ -149,7 +150,7 @@ describe('Exception Observer', () => {
             const request = sendRequestSpy.mock.calls[0][0]
             expect(request.url).toBe('http://localhost/e/?ip=1')
             expect(request.data).toMatchObject({
-                event: '$exception',
+                event: EXCEPTION_EVENT,
                 properties: {
                     $exception_personURL: expect.any(String),
                     $exception_list: [

@@ -2,6 +2,13 @@ import { getSurveyResponseKey } from '../../src/extensions/surveys/surveys-exten
 import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 import { expect, test } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
+import {
+    PAGEVIEW_EVENT,
+    AUTOCAPTURE_EVENT,
+    SURVEY_SHOWN_EVENT,
+    SURVEY_SENT_EVENT,
+    RAGECLICK_EVENT,
+} from '../../src/events'
 
 const startOptions = {
     options: {},
@@ -76,7 +83,7 @@ test.describe('surveys - core display logic', () => {
         await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('textarea').type('Great job!')
         await page.locator('.PostHogSurvey-123').locator('.form-submit').click()
 
-        await pollUntilEventCaptured(page, 'survey sent')
+        await pollUntilEventCaptured(page, SURVEY_SENT_EVENT)
     })
 
     test('rating questions that are on the 10 scale start at 0', async ({ page, context }) => {
@@ -152,21 +159,21 @@ test.describe('surveys - core display logic', () => {
         await page.locator('.PostHogSurvey-12345').locator('.form-submit').click()
         await expect(page.locator('.PostHogSurvey-12345').locator('.thank-you-message')).not.toBeVisible()
 
-        await pollUntilEventCaptured(page, 'survey sent')
+        await pollUntilEventCaptured(page, SURVEY_SENT_EVENT)
         const captures = await page.capturedEvents()
         expect(captures.map((c) => c.event)).toEqual([
-            '$pageview',
-            'survey shown',
-            '$autocapture',
-            '$autocapture',
-            '$autocapture',
-            '$autocapture',
-            '$rageclick',
-            '$autocapture',
-            'survey sent',
-            '$autocapture',
+            PAGEVIEW_EVENT,
+            SURVEY_SHOWN_EVENT,
+            AUTOCAPTURE_EVENT,
+            AUTOCAPTURE_EVENT,
+            AUTOCAPTURE_EVENT,
+            AUTOCAPTURE_EVENT,
+            RAGECLICK_EVENT,
+            AUTOCAPTURE_EVENT,
+            SURVEY_SENT_EVENT,
+            AUTOCAPTURE_EVENT,
         ])
-        const surveySent = captures.find((c) => c.event === 'survey sent')
+        const surveySent = captures.find((c) => c.event === SURVEY_SENT_EVENT)
         expect(surveySent!.properties[getSurveyResponseKey('multiple_choice_1')]).toEqual(['Product Updates', 'Events'])
         expect(surveySent!.properties['$survey_id']).toEqual('12345')
         expect(surveySent!.properties[getSurveyResponseKey('open_text_1')]).toEqual('Great job!')
@@ -216,17 +223,17 @@ test.describe('surveys - core display logic', () => {
         await page.locator('.PostHogSurvey-12345').locator('input[type=text]').type('Newsletters')
         await page.locator('.PostHogSurvey-12345').locator('.form-submit').click()
 
-        await pollUntilEventCaptured(page, 'survey sent')
+        await pollUntilEventCaptured(page, SURVEY_SENT_EVENT)
         const captures = await page.capturedEvents()
         expect(captures.map((c) => c.event)).toEqual([
-            '$pageview',
-            'survey shown',
-            '$autocapture',
-            '$autocapture',
-            '$autocapture',
-            'survey sent',
+            PAGEVIEW_EVENT,
+            SURVEY_SHOWN_EVENT,
+            AUTOCAPTURE_EVENT,
+            AUTOCAPTURE_EVENT,
+            AUTOCAPTURE_EVENT,
+            SURVEY_SENT_EVENT,
         ])
-        const surveySent = captures.find((c) => c.event === 'survey sent')
+        const surveySent = captures.find((c) => c.event === SURVEY_SENT_EVENT)
         expect(surveySent!.properties[getSurveyResponseKey('multiple_choice_1')]).toEqual(['Tutorials', 'Newsletters'])
         expect(surveySent!.properties['$survey_questions']).toEqual([
             {
@@ -269,17 +276,17 @@ test.describe('surveys - core display logic', () => {
 
         await page.locator('.PostHogSurvey-12345').locator('.form-submit').click()
 
-        await pollUntilEventCaptured(page, 'survey sent')
+        await pollUntilEventCaptured(page, SURVEY_SENT_EVENT)
         const captures = await page.capturedEvents()
         expect(captures.map((c) => c.event)).toEqual([
-            '$pageview',
-            'survey shown',
-            '$autocapture',
-            '$autocapture',
-            '$autocapture',
-            'survey sent',
+            PAGEVIEW_EVENT,
+            SURVEY_SHOWN_EVENT,
+            AUTOCAPTURE_EVENT,
+            AUTOCAPTURE_EVENT,
+            AUTOCAPTURE_EVENT,
+            SURVEY_SENT_EVENT,
         ])
-        const surveySent = captures.find((c) => c.event === 'survey sent')
+        const surveySent = captures.find((c) => c.event === SURVEY_SENT_EVENT)
         expect(surveySent!.properties[getSurveyResponseKey('single_choice_1')]).toEqual('Product engineer')
         expect(surveySent!.properties['$survey_questions']).toEqual([
             {

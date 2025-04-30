@@ -22,6 +22,7 @@ import { createLogger } from '../utils/logger'
 import { USER_STATE } from '../constants'
 import { isFunction } from '../utils/type-utils'
 import { uuidv7 } from '../uuidv7'
+import { IDENTIFY_EVENT, PAGEVIEW_EVENT, SCREEN_EVENT } from '../events'
 
 const logger = createLogger('[SegmentIntegration]')
 
@@ -100,9 +101,9 @@ const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
         // eslint-disable-next-line compat/compat
         load: () => Promise.resolve(),
         track: (ctx) => enrichEvent(ctx, ctx.event.event),
-        page: (ctx) => enrichEvent(ctx, '$pageview'),
-        identify: (ctx) => enrichEvent(ctx, '$identify'),
-        screen: (ctx) => enrichEvent(ctx, '$screen'),
+        page: (ctx) => enrichEvent(ctx, PAGEVIEW_EVENT),
+        identify: (ctx) => enrichEvent(ctx, IDENTIFY_EVENT),
+        screen: (ctx) => enrichEvent(ctx, SCREEN_EVENT),
     }
 }
 

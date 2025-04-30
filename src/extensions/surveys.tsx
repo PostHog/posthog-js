@@ -52,6 +52,7 @@ import {
     SurveyContext,
 } from './surveys/surveys-extension-utils'
 import { prepareStylesheet } from './utils/stylesheet-loader'
+import { SURVEY_SHOWN_EVENT } from '../events'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -810,7 +811,7 @@ export function usePopupVisibility(
 
             setIsPopupVisible(true)
             window.dispatchEvent(new Event('PHSurveyShown'))
-            posthog.capture('survey shown', {
+            posthog.capture(SURVEY_SHOWN_EVENT, {
                 $survey_name: survey.name,
                 $survey_id: survey.id,
                 $survey_iteration: survey.current_iteration,

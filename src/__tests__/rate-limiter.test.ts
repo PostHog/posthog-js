@@ -1,6 +1,7 @@
 import { clearLoggerMocks, mockLogger } from './helpers/mock-logger'
 import { window } from '../../src/utils/globals'
 import { RateLimiter } from '../rate-limiter'
+import { RATE_LIMIT_EVENT } from '../events'
 
 describe('Rate Limiter', () => {
     let rateLimiter: RateLimiter
@@ -122,7 +123,7 @@ describe('Rate Limiter', () => {
 
             expect(mockPostHog.capture).toBeCalledTimes(1)
             expect(mockPostHog.capture).toHaveBeenCalledWith(
-                '$$client_ingestion_warning',
+                RATE_LIMIT_EVENT,
                 {
                     $$client_ingestion_warning_message:
                         'posthog-js client rate limited. Config is set to 10 events per second and 100 events burst limit.',

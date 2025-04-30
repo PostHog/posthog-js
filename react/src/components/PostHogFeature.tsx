@@ -2,6 +2,7 @@ import { useFeatureFlagPayload, useFeatureFlagVariantKey, usePostHog } from '../
 import React, { Children, ReactNode, useCallback, useEffect, useRef } from 'react'
 import { PostHog } from '../context'
 import { isFunction, isNull, isUndefined } from '../utils/type-utils'
+import { FEATURE_INTERACTION, FEATURE_VIEW } from '../utils/event-utils'
 
 export type PostHogFeatureProps = React.HTMLProps<HTMLDivElement> & {
     flag: string
@@ -57,12 +58,12 @@ function captureFeatureInteraction({
 }) {
     const properties: Record<string, any> = {
         feature_flag: flag,
-        $set: { [`$feature_interaction/${flag}`]: flagVariant ?? true },
+        $set: { [`${FEATURE_INTERACTION}/${flag}`]: flagVariant ?? true },
     }
     if (typeof flagVariant === 'string') {
         properties.feature_flag_variant = flagVariant
     }
-    posthog.capture('$feature_interaction', properties)
+    posthog.capture(FEATURE_INTERACTION, properties)
 }
 
 function captureFeatureView({
@@ -76,12 +77,12 @@ function captureFeatureView({
 }) {
     const properties: Record<string, any> = {
         feature_flag: flag,
-        $set: { [`$feature_view/${flag}`]: flagVariant ?? true },
+        $set: { [`${FEATURE_VIEW}/${flag}`]: flagVariant ?? true },
     }
     if (typeof flagVariant === 'string') {
         properties.feature_flag_variant = flagVariant
     }
-    posthog.capture('$feature_view', properties)
+    posthog.capture(FEATURE_VIEW, properties)
 }
 
 function VisibilityAndClickTracker({

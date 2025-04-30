@@ -1,6 +1,7 @@
 import { defaultPostHog } from './helpers/posthog-instance'
 import type { PostHogConfig } from '../types'
 import { uuidv7 } from '../uuidv7'
+import { PAGEVIEW_EVENT, RATE_LIMIT_EVENT } from '../events'
 
 describe('posthog core', () => {
     const mockURL = jest.fn()
@@ -92,7 +93,7 @@ describe('posthog core', () => {
                     posthog.capture(eventName, eventProperties)
                 }
                 expect(beforeSendMock).toHaveBeenCalledTimes(1)
-                expect(beforeSendMock.mock.calls[0][0].event).toBe('$$client_ingestion_warning')
+                expect(beforeSendMock.mock.calls[0][0].event).toBe(RATE_LIMIT_EVENT)
                 expect(console.error).toHaveBeenCalledTimes(50)
                 expect(console.error).toHaveBeenCalledWith(
                     '[PostHog.js]',
@@ -218,7 +219,7 @@ describe('posthog core', () => {
                 })
 
                 // act
-                posthog.capture('$pageview')
+                posthog.capture(PAGEVIEW_EVENT)
 
                 //assert
                 expect(beforeSendMock.mock.calls[0][0].properties).not.toHaveProperty('utm_source')
@@ -235,7 +236,7 @@ describe('posthog core', () => {
                 })
 
                 // act
-                posthog.capture('$pageview')
+                posthog.capture(PAGEVIEW_EVENT)
 
                 //assert
                 expect(beforeSendMock.mock.calls[0][0].properties.utm_source).toBe('source')

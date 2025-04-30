@@ -4,6 +4,7 @@ import { createLogger } from '../../utils/logger'
 import { isBoolean, isNullish, isNumber, isObject, isUndefined } from '../../utils/type-utils'
 import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { assignableWindow, window, location } from '../../utils/globals'
+import { WEB_VITALS_EVENT } from '../../events'
 
 const logger = createLogger('[Web Vitals]')
 
@@ -133,7 +134,7 @@ export class WebVitalsAutocapture {
         }
 
         this._instance.capture(
-            '$web_vitals',
+            WEB_VITALS_EVENT,
             this._buffer.metrics.reduce(
                 (acc, metric) => ({
                     ...acc,

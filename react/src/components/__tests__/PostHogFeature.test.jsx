@@ -4,6 +4,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { PostHogProvider } from '../../context'
 import { PostHogFeature } from '../'
 import '@testing-library/jest-dom'
+import { FEATURE_INTERACTION, FEATURE_VIEW } from '../../utils/event-utils'
 
 const FEATURE_FLAG_STATUS = {
     multivariate_feature: 'string-value',
@@ -68,9 +69,9 @@ describe('PostHogFeature component', () => {
         given.render()
 
         fireEvent.click(screen.getByTestId('helloDiv'))
-        expect(given.posthog.capture).toHaveBeenCalledWith('$feature_interaction', {
+        expect(given.posthog.capture).toHaveBeenCalledWith(FEATURE_INTERACTION, {
             feature_flag: 'test',
-            $set: { '$feature_interaction/test': true },
+            $set: { [`${FEATURE_INTERACTION}/test`]: true },
         })
         expect(given.posthog.capture).toHaveBeenCalledTimes(1)
     })
@@ -79,9 +80,9 @@ describe('PostHogFeature component', () => {
         given.render()
 
         fireEvent.click(screen.getByTestId('helloDiv'))
-        expect(given.posthog.capture).toHaveBeenCalledWith('$feature_interaction', {
+        expect(given.posthog.capture).toHaveBeenCalledWith(FEATURE_INTERACTION, {
             feature_flag: 'test',
-            $set: { '$feature_interaction/test': true },
+            $set: { [`${FEATURE_INTERACTION}/test`]: true },
         })
         expect(given.posthog.capture).toHaveBeenCalledTimes(1)
 
@@ -111,9 +112,9 @@ describe('PostHogFeature component', () => {
         fireEvent.click(screen.getByTestId('worldDiv'))
         fireEvent.click(screen.getByTestId('worldDiv'))
         fireEvent.click(screen.getByTestId('worldDiv'))
-        expect(given.posthog.capture).toHaveBeenCalledWith('$feature_interaction', {
+        expect(given.posthog.capture).toHaveBeenCalledWith(FEATURE_INTERACTION, {
             feature_flag: 'test',
-            $set: { '$feature_interaction/test': true },
+            $set: { [`${FEATURE_INTERACTION}/test`]: true },
         })
         expect(given.posthog.capture).toHaveBeenCalledTimes(1)
     })
@@ -183,9 +184,9 @@ describe('PostHogFeature component', () => {
         fireEvent.click(screen.getByTestId('clicker'))
         fireEvent.click(screen.getByTestId('helloDiv'))
         fireEvent.click(screen.getByTestId('helloDiv'))
-        expect(given.posthog.capture).toHaveBeenCalledWith('$feature_interaction', {
+        expect(given.posthog.capture).toHaveBeenCalledWith(FEATURE_INTERACTION, {
             feature_flag: 'test',
-            $set: { '$feature_interaction/test': true },
+            $set: { [`${FEATURE_INTERACTION}/test`]: true },
         })
         expect(given.posthog.capture).toHaveBeenCalledTimes(1)
     })
@@ -262,10 +263,10 @@ describe('PostHogFeature component', () => {
         expect(given.posthog.capture).not.toHaveBeenCalled()
 
         fireEvent.click(screen.getByTestId('helloDiv'))
-        expect(given.posthog.capture).toHaveBeenCalledWith('$feature_interaction', {
+        expect(given.posthog.capture).toHaveBeenCalledWith(FEATURE_INTERACTION, {
             feature_flag: 'multivariate_feature',
             feature_flag_variant: 'string-value',
-            $set: { '$feature_interaction/multivariate_feature': 'string-value' },
+            $set: { [`${FEATURE_INTERACTION}/multivariate_feature`]: 'string-value' },
         })
         expect(given.posthog.capture).toHaveBeenCalledTimes(1)
     })

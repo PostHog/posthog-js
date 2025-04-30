@@ -8,6 +8,7 @@ import { isObject } from '../utils/type-utils'
 import { beforeEach, expect } from '@jest/globals'
 import { HEATMAPS_ENABLED_SERVER_SIDE } from '../constants'
 import { Heatmaps } from '../heatmaps'
+import { HEATMAP_EVENT } from '../events'
 
 jest.useFakeTimers()
 
@@ -64,7 +65,7 @@ describe('heatmaps', () => {
 
         expect(beforeSendMock).toBeCalledTimes(1)
         expect(beforeSendMock.mock.lastCall[0]).toMatchObject({
-            event: '$$heatmap',
+            event: HEATMAP_EVENT,
             properties: {
                 $heatmap_data: {
                     'http://replaced/': [
@@ -87,7 +88,7 @@ describe('heatmaps', () => {
 
         expect(beforeSendMock).toBeCalledTimes(1)
         expect(beforeSendMock.mock.lastCall[0]).toMatchObject({
-            event: '$$heatmap',
+            event: HEATMAP_EVENT,
             properties: {
                 $heatmap_data: {
                     'http://replaced/': [
@@ -128,7 +129,7 @@ describe('heatmaps', () => {
         jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
         expect(beforeSendMock).toBeCalledTimes(1)
-        expect(beforeSendMock.mock.lastCall[0].event).toEqual('$$heatmap')
+        expect(beforeSendMock.mock.lastCall[0].event).toEqual(HEATMAP_EVENT)
         const heatmapData = beforeSendMock.mock.lastCall[0].properties.$heatmap_data
         expect(heatmapData).toBeDefined()
         expect(heatmapData['http://replaced/']).toHaveLength(4)
@@ -142,7 +143,7 @@ describe('heatmaps', () => {
         jest.advanceTimersByTime(posthog.heatmaps!.flushIntervalMilliseconds + 1)
 
         expect(beforeSendMock).toBeCalledTimes(1)
-        expect(beforeSendMock.mock.lastCall[0].event).toEqual('$$heatmap')
+        expect(beforeSendMock.mock.lastCall[0].event).toEqual(HEATMAP_EVENT)
         expect(beforeSendMock.mock.lastCall[0].properties.$heatmap_data).toBeDefined()
         expect(beforeSendMock.mock.lastCall[0].properties.$heatmap_data['http://replaced/']).toHaveLength(2)
 

@@ -4,6 +4,7 @@ import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 import { INITIAL_CAMPAIGN_PARAMS, INITIAL_REFERRER_INFO } from '../constants'
 import { RemoteConfig } from '../types'
+import { SET_EVENT, GROUP_IDENTIFY_EVENT, CREATE_ALIAS_EVENT, IDENTIFY_EVENT } from '../events'
 
 const INITIAL_CAMPAIGN_PARAMS_NULL = {
     $initial_current_url: null,
@@ -209,7 +210,7 @@ describe('person processing', () => {
             const eventBeforeIdentify = beforeSendMock.mock.calls[0]
             expect(eventBeforeIdentify[0].properties.$process_person_profile).toEqual(false)
             const identifyCall = beforeSendMock.mock.calls[1]
-            expect(identifyCall[0].event).toEqual('$identify')
+            expect(identifyCall[0].event).toEqual(IDENTIFY_EVENT)
             expect(identifyCall[0].properties.$process_person_profile).toEqual(true)
             const eventAfterIdentify = beforeSendMock.mock.calls[2]
             expect(eventAfterIdentify[0].properties.$process_person_profile).toEqual(true)
@@ -228,7 +229,7 @@ describe('person processing', () => {
             const eventBeforeIdentify = beforeSendMock.mock.calls[0]
             expect(eventBeforeIdentify[0].properties.$process_person_profile).toEqual(true)
             const identifyCall = beforeSendMock.mock.calls[1]
-            expect(identifyCall[0].event).toEqual('$identify')
+            expect(identifyCall[0].event).toEqual(IDENTIFY_EVENT)
             expect(identifyCall[0].properties.$process_person_profile).toEqual(true)
             const eventAfterIdentify = beforeSendMock.mock.calls[2]
             expect(eventAfterIdentify[0].properties.$process_person_profile).toEqual(true)
@@ -243,7 +244,7 @@ describe('person processing', () => {
 
             // assert
             const identifyCall = beforeSendMock.mock.calls[0]
-            expect(identifyCall[0].event).toEqual('$identify')
+            expect(identifyCall[0].event).toEqual(IDENTIFY_EVENT)
             expect(identifyCall[0].$set_once).toEqual({
                 ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 ...CAMPAIGN_PARAMS_NULL,
@@ -294,7 +295,7 @@ describe('person processing', () => {
 
             expect(eventS2Before[0].$set_once).toEqual(undefined)
 
-            expect(eventS2Identify[0].event).toEqual('$identify')
+            expect(eventS2Identify[0].event).toEqual(IDENTIFY_EVENT)
             expect(eventS2Identify[0].$set_once).toEqual({
                 ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 ...CAMPAIGN_PARAMS_NULL,
@@ -363,7 +364,7 @@ describe('person processing', () => {
             // most properties are lost across subdomain, that's intentional as we don't want to save too many things in cookies
             expect(eventS2Before[0].properties.testProp).toEqual(undefined)
 
-            expect(eventS2Identify[0].event).toEqual('$identify')
+            expect(eventS2Identify[0].event).toEqual(IDENTIFY_EVENT)
             expect(eventS2Identify[0].$set_once).toEqual({
                 ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 ...CAMPAIGN_PARAMS_NULL,
@@ -394,7 +395,7 @@ describe('person processing', () => {
 
             // assert
             const identifyCall = beforeSendMock.mock.calls[0]
-            expect(identifyCall[0].event).toEqual('$identify')
+            expect(identifyCall[0].event).toEqual(IDENTIFY_EVENT)
             expect(identifyCall[0].$set_once).toEqual({
                 ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 ...CAMPAIGN_PARAMS_NULL,
@@ -422,7 +423,7 @@ describe('person processing', () => {
 
             // assert
             const identifyCall = beforeSendMock.mock.calls[0]
-            expect(identifyCall[0].event).toEqual('$identify')
+            expect(identifyCall[0].event).toEqual(IDENTIFY_EVENT)
             expect(identifyCall[0].$set_once).toEqual({
                 ...INITIAL_CAMPAIGN_PARAMS_NULL,
                 ...CAMPAIGN_PARAMS_NULL,
@@ -463,7 +464,7 @@ describe('person processing', () => {
 
             // assert
             const identifyCall = beforeSendMock.mock.calls[0]
-            expect(identifyCall[0].event).toEqual('$identify')
+            expect(identifyCall[0].event).toEqual(IDENTIFY_EVENT)
             expect(identifyCall[0].$set_once).toEqual({
                 ...CAMPAIGN_PARAMS_NULL,
                 $initial_referrer: 'https://deprecated-referrer.com',
@@ -557,7 +558,7 @@ describe('person processing', () => {
             const eventBeforeGroup = beforeSendMock.mock.calls[0]
             expect(eventBeforeGroup[0].properties.$process_person_profile).toEqual(false)
             const groupIdentify = beforeSendMock.mock.calls[1]
-            expect(groupIdentify[0].event).toEqual('$groupidentify')
+            expect(groupIdentify[0].event).toEqual(GROUP_IDENTIFY_EVENT)
             expect(groupIdentify[0].properties.$process_person_profile).toEqual(true)
             const eventAfterGroup = beforeSendMock.mock.calls[2]
             expect(eventAfterGroup[0].properties.$process_person_profile).toEqual(true)
@@ -611,7 +612,7 @@ describe('person processing', () => {
 
             // assert
             expect(beforeSendMock).toBeCalledTimes(1)
-            expect(beforeSendMock.mock.calls[0][0].event).toEqual('$set')
+            expect(beforeSendMock.mock.calls[0][0].event).toEqual(SET_EVENT)
         })
 
         it('should start person processing for identified_only users', async () => {
@@ -627,7 +628,7 @@ describe('person processing', () => {
             const eventBeforeGroup = beforeSendMock.mock.calls[0]
             expect(eventBeforeGroup[0].properties.$process_person_profile).toEqual(false)
             const set = beforeSendMock.mock.calls[1]
-            expect(set[0].event).toEqual('$set')
+            expect(set[0].event).toEqual(SET_EVENT)
             expect(set[0].properties.$process_person_profile).toEqual(true)
             const eventAfterGroup = beforeSendMock.mock.calls[2]
             expect(eventAfterGroup[0].properties.$process_person_profile).toEqual(true)
@@ -648,7 +649,7 @@ describe('person processing', () => {
             const eventBeforeGroup = beforeSendMock.mock.calls[0]
             expect(eventBeforeGroup[0].properties.$process_person_profile).toEqual(false)
             const alias = beforeSendMock.mock.calls[1]
-            expect(alias[0].event).toEqual('$create_alias')
+            expect(alias[0].event).toEqual(CREATE_ALIAS_EVENT)
             expect(alias[0].properties.$process_person_profile).toEqual(true)
             const eventAfterGroup = beforeSendMock.mock.calls[2]
             expect(eventAfterGroup[0].properties.$process_person_profile).toEqual(true)
@@ -685,7 +686,7 @@ describe('person processing', () => {
             const eventBeforeGroup = beforeSendMock.mock.calls[0]
             expect(eventBeforeGroup[0].properties.$process_person_profile).toEqual(false)
             const set = beforeSendMock.mock.calls[1]
-            expect(set[0].event).toEqual('$set')
+            expect(set[0].event).toEqual(SET_EVENT)
             expect(set[0].properties.$process_person_profile).toEqual(true)
             const eventAfterGroup = beforeSendMock.mock.calls[2]
             expect(eventAfterGroup[0].properties.$process_person_profile).toEqual(true)
@@ -830,7 +831,7 @@ describe('person processing', () => {
             expect(beforeSendMock).toHaveBeenCalledTimes(1)
             expect(beforeSendMock).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    event: '$set',
+                    event: SET_EVENT,
                     properties: expect.objectContaining({
                         $set: { email: 'john@example.com' },
                         $set_once: {},
@@ -886,8 +887,8 @@ describe('person processing', () => {
             posthog.setPersonProperties({ email: 'john@example.com' })
 
             const calls = beforeSendMock.mock.calls
-            expect(calls.filter((call) => call[0].event === '$set').length).toEqual(2)
-            expect(calls.filter((call) => call[0].event === '$identify').length).toEqual(1)
+            expect(calls.filter((call) => call[0].event === SET_EVENT).length).toEqual(2)
+            expect(calls.filter((call) => call[0].event === IDENTIFY_EVENT).length).toEqual(1)
         })
 
         it('should deduplicate when using people.set with identical properties', async () => {
@@ -944,7 +945,7 @@ describe('person processing', () => {
 
             expect(beforeSendMock).toHaveBeenCalledTimes(1)
             const calls = beforeSendMock.mock.calls
-            expect(calls.filter((call) => call[0].event === '$identify').length).toEqual(1)
+            expect(calls.filter((call) => call[0].event === IDENTIFY_EVENT).length).toEqual(1)
         })
 
         it('should not deduplicate a setPersonProperties call after identify() if the $set properties are different', async () => {
@@ -954,8 +955,8 @@ describe('person processing', () => {
             posthog.setPersonProperties({ email: 'jane@example.com' }, { first_seen: 'today' })
 
             const calls = beforeSendMock.mock.calls
-            expect(calls.filter((call) => call[0].event === '$identify').length).toEqual(1)
-            expect(calls.filter((call) => call[0].event === '$set').length).toEqual(1)
+            expect(calls.filter((call) => call[0].event === IDENTIFY_EVENT).length).toEqual(1)
+            expect(calls.filter((call) => call[0].event === SET_EVENT).length).toEqual(1)
         })
 
         it('should not deduplicate a setPersonProperties call after identify() if the $set_onceproperties are different', async () => {
@@ -965,8 +966,8 @@ describe('person processing', () => {
             posthog.setPersonProperties({ email: 'john@example.com' }, { first_seen: 'yesterday' })
 
             const calls = beforeSendMock.mock.calls
-            expect(calls.filter((call) => call[0].event === '$identify').length).toEqual(1)
-            expect(calls.filter((call) => call[0].event === '$set').length).toEqual(1)
+            expect(calls.filter((call) => call[0].event === IDENTIFY_EVENT).length).toEqual(1)
+            expect(calls.filter((call) => call[0].event === SET_EVENT).length).toEqual(1)
         })
 
         it('should not deduplicate a call after an identity change', async () => {
@@ -978,8 +979,8 @@ describe('person processing', () => {
 
             const calls = beforeSendMock.mock.calls
 
-            expect(calls.filter((call) => call[0].event === '$identify').length).toEqual(1)
-            expect(calls.filter((call) => call[0].event === '$set').length).toEqual(2)
+            expect(calls.filter((call) => call[0].event === IDENTIFY_EVENT).length).toEqual(1)
+            expect(calls.filter((call) => call[0].event === SET_EVENT).length).toEqual(2)
         })
     })
 })

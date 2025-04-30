@@ -2,27 +2,47 @@ import type { recordOptions } from './extensions/replay/types/rrweb'
 import type { SegmentAnalytics } from './extensions/segment-integration'
 import { PostHog } from './posthog-core'
 import { Survey } from './posthog-surveys-types'
+import {
+    PAGEVIEW_EVENT,
+    PAGELEAVE_EVENT,
+    GROUP_IDENTIFY_EVENT,
+    FEATURE_ENROLLMENT_UPDATE_EVENT,
+    SET_EVENT,
+    CREATE_ALIAS_EVENT,
+    FEATURE_FLAG_CALLED_EVENT,
+    RATE_LIMIT_EVENT,
+    SURVEY_SHOWN_EVENT,
+    SURVEY_SENT_EVENT,
+    SURVEY_DISMISSED_EVENT,
+    IDENTIFY_EVENT,
+    AUTOCAPTURE_EVENT,
+    DEAD_CLICK_EVENT,
+    WEB_VITALS_EVENT,
+    HEATMAP_EVENT,
+    EXCEPTION_EVENT,
+    OPT_IN_EVENT,
+    SNAPSHOT_EVENT,
+    RAGECLICK_EVENT,
+    COPY_AUTOCAPTURE_EVENT,
+} from './events'
 
 export type Property = any
 export type Properties = Record<string, Property>
 
-export const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
-
 export const knownUnsafeEditableEvent = [
-    '$snapshot',
-    '$pageview',
-    '$pageleave',
-    '$set',
-    'survey dismissed',
-    'survey sent',
-    'survey shown',
-    '$identify',
-    '$groupidentify',
-    '$create_alias',
-    '$$client_ingestion_warning',
-    '$web_experiment_applied',
-    '$feature_enrollment_update',
-    '$feature_flag_called',
+    SNAPSHOT_EVENT,
+    PAGEVIEW_EVENT,
+    PAGELEAVE_EVENT,
+    SET_EVENT,
+    SURVEY_DISMISSED_EVENT,
+    SURVEY_SENT_EVENT,
+    SURVEY_SHOWN_EVENT,
+    IDENTIFY_EVENT,
+    GROUP_IDENTIFY_EVENT,
+    CREATE_ALIAS_EVENT,
+    RATE_LIMIT_EVENT,
+    FEATURE_ENROLLMENT_UPDATE_EVENT,
+    FEATURE_FLAG_CALLED_EVENT,
 ] as const
 
 /**
@@ -39,15 +59,14 @@ export type KnownUnsafeEditableEvent = (typeof knownUnsafeEditableEvent)[number]
  * So, it is safe to sample them to reduce the volume of events sent to PostHog
  */
 export type KnownEventName =
-    | '$heatmaps_data'
-    | '$opt_in'
-    | '$exception'
-    | '$$heatmap'
-    | '$web_vitals'
-    | '$dead_click'
-    | '$autocapture'
+    | typeof OPT_IN_EVENT
+    | typeof EXCEPTION_EVENT
+    | typeof HEATMAP_EVENT
+    | typeof WEB_VITALS_EVENT
+    | typeof DEAD_CLICK_EVENT
+    | typeof AUTOCAPTURE_EVENT
     | typeof COPY_AUTOCAPTURE_EVENT
-    | '$rageclick'
+    | typeof RAGECLICK_EVENT
 
 export type EventName =
     | KnownUnsafeEditableEvent

@@ -6,6 +6,7 @@ import { PostHog } from '../../posthog-core'
 import { DecideResponse, PerformanceCaptureConfig, RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
 import { assignableWindow } from '../../utils/globals'
 import { DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, FIFTEEN_MINUTES_IN_MILLIS } from '../../extensions/web-vitals'
+import { WEB_VITALS_EVENT } from '../../events'
 
 jest.useFakeTimers()
 
@@ -152,7 +153,7 @@ describe('web vitals', () => {
 
                 expect(beforeSendMock.mock.lastCall).toMatchObject([
                     {
-                        event: '$web_vitals',
+                        event: WEB_VITALS_EVENT,
                         properties: expectedProperties,
                     },
                 ])
@@ -168,7 +169,7 @@ describe('web vitals', () => {
                 // for some reason advancing the timer emits a $pageview event as well 🤷
                 expect(beforeSendMock.mock.lastCall).toMatchObject([
                     {
-                        event: '$web_vitals',
+                        event: WEB_VITALS_EVENT,
                         properties: {
                             $web_vitals_CLS_event: expectedEmittedWebVitals('CLS'),
                             $web_vitals_CLS_value: 123.45,
@@ -187,7 +188,7 @@ describe('web vitals', () => {
 
                 expect(beforeSendMock.mock.lastCall).toMatchObject([
                     {
-                        event: '$web_vitals',
+                        event: WEB_VITALS_EVENT,
                         properties: {
                             $web_vitals_CLS_event: expectedEmittedWebVitals('CLS'),
                             $web_vitals_CLS_value: 123.45,

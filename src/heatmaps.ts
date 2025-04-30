@@ -11,6 +11,7 @@ import { isElementInToolbar, isElementNode, isTag } from './utils/element-utils'
 import { DeadClicksAutocapture, isDeadClicksEnabledForHeatmaps } from './extensions/dead-clicks-autocapture'
 import { includes } from './utils/string-utils'
 import { addEventListener } from './utils'
+import { HEATMAP_EVENT } from './events'
 
 const DEFAULT_FLUSH_INTERVAL = 5000
 
@@ -215,7 +216,7 @@ export class Heatmaps {
             return
         }
 
-        this.instance.capture('$$heatmap', {
+        this.instance.capture(HEATMAP_EVENT, {
             $heatmap_data: this.getAndClearBuffer(),
         })
     }

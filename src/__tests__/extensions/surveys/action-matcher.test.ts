@@ -5,6 +5,7 @@ import { PostHogPersistence } from '../../../posthog-persistence'
 import { PostHog } from '../../../posthog-core'
 import { CaptureResult, PostHogConfig } from '../../../types'
 import { ActionMatcher } from '../../../extensions/surveys/action-matcher'
+import { AUTOCAPTURE_EVENT } from '../../../events'
 
 describe('action-matcher', () => {
     let config: PostHogConfig
@@ -86,7 +87,7 @@ describe('action-matcher', () => {
     })
 
     it('can match action on current_url exact', () => {
-        const pageViewAction = createAction(2, '$autocapture', 'https://us.posthog.com')
+        const pageViewAction = createAction(2, AUTOCAPTURE_EVENT, 'https://us.posthog.com')
         const actionMatcher = new ActionMatcher(instance)
         actionMatcher.register([pageViewAction])
 
@@ -99,10 +100,10 @@ describe('action-matcher', () => {
         }
 
         actionMatcher._addActionHook(onAction)
-        actionMatcher.on('$autocapture', createCaptureResult('$autocapture', 'https://eu.posthog.com'))
+        actionMatcher.on(AUTOCAPTURE_EVENT, createCaptureResult(AUTOCAPTURE_EVENT, 'https://eu.posthog.com'))
         expect(pageViewActionMatched).toBeFalsy()
 
-        actionMatcher.on('$autocapture', createCaptureResult('$autocapture', 'https://us.posthog.com'))
+        actionMatcher.on(AUTOCAPTURE_EVENT, createCaptureResult(AUTOCAPTURE_EVENT, 'https://us.posthog.com'))
         expect(pageViewActionMatched).toBeTruthy()
     })
 
@@ -120,16 +121,16 @@ describe('action-matcher', () => {
         }
 
         actionMatcher._addActionHook(onAction)
-        actionMatcher.on('$autocapture', createCaptureResult('$current_url_regexp', 'https://eu.posthog.com'))
+        actionMatcher.on(AUTOCAPTURE_EVENT, createCaptureResult('$current_url_regexp', 'https://eu.posthog.com'))
         expect(pageViewActionMatched).toBeTruthy()
         pageViewActionMatched = false
 
-        actionMatcher.on('$autocapture', createCaptureResult('$current_url_regexp', 'https://us.posthog.com'))
+        actionMatcher.on(AUTOCAPTURE_EVENT, createCaptureResult('$current_url_regexp', 'https://us.posthog.com'))
         expect(pageViewActionMatched).toBeTruthy()
     })
 
     it('can match action on html element selector', () => {
-        const buttonClickedAction = createAction(2, '$autocapture')
+        const buttonClickedAction = createAction(2, AUTOCAPTURE_EVENT)
         if (buttonClickedAction.steps) {
             buttonClickedAction.steps[0].selector = '* > #__next .flex > button:nth-child(2)'
         }
@@ -145,14 +146,14 @@ describe('action-matcher', () => {
         }
         actionMatcher._addActionHook(onAction)
 
-        const result = createCaptureResult('$autocapture', 'https://eu.posthog.com')
+        const result = createCaptureResult(AUTOCAPTURE_EVENT, 'https://eu.posthog.com')
         result.properties.$element_selectors = []
-        actionMatcher.on('$autocapture', result)
+        actionMatcher.on(AUTOCAPTURE_EVENT, result)
         expect(buttonClickedActionMatched).toBeFalsy()
 
         result.properties.$element_selectors = ['* > #__next .flex > button:nth-child(2)']
 
-        actionMatcher.on('$autocapture', result)
+        actionMatcher.on(AUTOCAPTURE_EVENT, result)
         expect(buttonClickedActionMatched).toBeTruthy()
     })
 })

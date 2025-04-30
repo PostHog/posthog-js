@@ -1,6 +1,7 @@
 import { expect, test } from './utils/posthog-playwright-test-base'
 import { start } from './utils/setup'
 import { pollUntilEventCaptured } from './utils/event-capture-utils'
+import { DEAD_CLICK_EVENT } from '../src/events'
 
 const startOptions = {
     options: {
@@ -15,9 +16,9 @@ test.describe('Dead clicks', () => {
 
         await page.locator('[data-cy-not-an-order-button]').click()
 
-        await pollUntilEventCaptured(page, '$dead_click')
+        await pollUntilEventCaptured(page, DEAD_CLICK_EVENT)
 
-        const deadClicks = (await page.capturedEvents()).filter((event) => event.event === '$dead_click')
+        const deadClicks = (await page.capturedEvents()).filter((event) => event.event === DEAD_CLICK_EVENT)
         expect(deadClicks.length).toBe(1)
         const deadClick = deadClicks[0]
 

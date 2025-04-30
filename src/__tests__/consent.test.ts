@@ -7,6 +7,7 @@ import { uuidv7 } from '../uuidv7'
 import { isNull } from '../utils/type-utils'
 import { document, assignableWindow, navigator } from '../utils/globals'
 import { PostHogConfig } from '../types'
+import { PAGEVIEW_EVENT, OPT_IN_EVENT } from '../events'
 
 const DEFAULT_PERSISTENCE_PREFIX = `__ph_opt_in_out_`
 const CUSTOM_PERSISTENCE_PREFIX = `𝓶𝓶𝓶𝓬𝓸𝓸𝓴𝓲𝓮𝓼`
@@ -91,7 +92,7 @@ describe('consentManager', () => {
 
         it('should send opt in event if not disabled', () => {
             posthog.opt_in_capturing()
-            expect(beforeSendMock).toHaveBeenCalledWith(expect.objectContaining({ event: '$opt_in' }))
+            expect(beforeSendMock).toHaveBeenCalledWith(expect.objectContaining({ event: OPT_IN_EVENT }))
         })
 
         it('should send opt in event with overrides', () => {
@@ -114,15 +115,15 @@ describe('consentManager', () => {
         it('should not send opt in event if false', () => {
             posthog.opt_in_capturing({ captureEventName: false })
             expect(beforeSendMock).toHaveBeenCalledTimes(1)
-            expect(beforeSendMock).not.toHaveBeenCalledWith(expect.objectContaining({ event: '$opt_in' }))
-            expect(beforeSendMock).lastCalledWith(expect.objectContaining({ event: '$pageview' }))
+            expect(beforeSendMock).not.toHaveBeenCalledWith(expect.objectContaining({ event: OPT_IN_EVENT }))
+            expect(beforeSendMock).lastCalledWith(expect.objectContaining({ event: PAGEVIEW_EVENT }))
         })
 
         it('should not send opt in event if false', () => {
             posthog.opt_in_capturing({ captureEventName: false })
             expect(beforeSendMock).toHaveBeenCalledTimes(1)
-            expect(beforeSendMock).not.toHaveBeenCalledWith(expect.objectContaining({ event: '$opt_in' }))
-            expect(beforeSendMock).lastCalledWith(expect.objectContaining({ event: '$pageview' }))
+            expect(beforeSendMock).not.toHaveBeenCalledWith(expect.objectContaining({ event: OPT_IN_EVENT }))
+            expect(beforeSendMock).lastCalledWith(expect.objectContaining({ event: PAGEVIEW_EVENT }))
         })
 
         it('should not send $pageview on opt in if capturing is disabled', () => {
@@ -143,10 +144,10 @@ describe('consentManager', () => {
             // eslint-disable-next-line compat/compat
             await new Promise((r) => setTimeout(r, 10))
             expect(beforeSendMock).toHaveBeenCalledTimes(1)
-            expect(beforeSendMock).lastCalledWith(expect.objectContaining({ event: '$pageview' }))
+            expect(beforeSendMock).lastCalledWith(expect.objectContaining({ event: PAGEVIEW_EVENT }))
             posthog.opt_in_capturing()
             expect(beforeSendMock).toHaveBeenCalledTimes(2)
-            expect(beforeSendMock).toHaveBeenCalledWith(expect.objectContaining({ event: '$opt_in' }))
+            expect(beforeSendMock).toHaveBeenCalledWith(expect.objectContaining({ event: OPT_IN_EVENT }))
         })
 
         it('should send $pageview on opt in if is has not been captured', async () => {
@@ -156,8 +157,8 @@ describe('consentManager', () => {
 
             posthog.opt_in_capturing()
             expect(beforeSendMock).toHaveBeenCalledTimes(2)
-            expect(beforeSendMock).toHaveBeenCalledWith(expect.objectContaining({ event: '$opt_in' }))
-            expect(beforeSendMock).lastCalledWith(expect.objectContaining({ event: '$pageview' }))
+            expect(beforeSendMock).toHaveBeenCalledWith(expect.objectContaining({ event: OPT_IN_EVENT }))
+            expect(beforeSendMock).lastCalledWith(expect.objectContaining({ event: PAGEVIEW_EVENT }))
             // Wait for the $pageview timeout to be called
             // eslint-disable-next-line compat/compat
             await new Promise((r) => setTimeout(r, 10))
@@ -171,14 +172,14 @@ describe('consentManager', () => {
 
             posthog.opt_in_capturing()
             expect(beforeSendMock).toHaveBeenCalledTimes(2)
-            expect(beforeSendMock).toHaveBeenCalledWith(expect.objectContaining({ event: '$opt_in' }))
-            expect(beforeSendMock).lastCalledWith(expect.objectContaining({ event: '$pageview' }))
+            expect(beforeSendMock).toHaveBeenCalledWith(expect.objectContaining({ event: OPT_IN_EVENT }))
+            expect(beforeSendMock).lastCalledWith(expect.objectContaining({ event: PAGEVIEW_EVENT }))
             // Wait for the $pageview timeout to be called
             // eslint-disable-next-line compat/compat
             await new Promise((r) => setTimeout(r, 10))
             posthog.opt_in_capturing()
             expect(beforeSendMock).toHaveBeenCalledTimes(3)
-            expect(beforeSendMock).not.lastCalledWith(expect.objectContaining({ event: '$pageview' }))
+            expect(beforeSendMock).not.lastCalledWith(expect.objectContaining({ event: PAGEVIEW_EVENT }))
         })
     })
 
@@ -244,7 +245,7 @@ describe('consentManager', () => {
                     posthog.on('eventCaptured', beforeSendMock)
 
                     posthog.opt_in_capturing()
-                    expect(beforeSendMock).toHaveBeenCalledWith(expect.objectContaining({ event: '$opt_in' }))
+                    expect(beforeSendMock).toHaveBeenCalledWith(expect.objectContaining({ event: OPT_IN_EVENT }))
 
                     beforeSendMock.mockClear()
                     const captureEventName = `єνєηт`

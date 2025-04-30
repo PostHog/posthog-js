@@ -1,6 +1,7 @@
 import { expect, test } from './utils/posthog-playwright-test-base'
 import { start } from './utils/setup'
 import { pollUntilEventCaptured } from './utils/event-capture-utils'
+import { PAGEVIEW_EVENT, AUTOCAPTURE_EVENT, EXCEPTION_EVENT } from '../src/events'
 
 test.describe('Exception capture', () => {
     test.describe('Exception autocapture enabled', () => {
@@ -15,11 +16,11 @@ test.describe('Exception capture', () => {
         test('manual exception capture of error', async ({ page }) => {
             await page.click('[data-cy-exception-button]')
 
-            await pollUntilEventCaptured(page, '$exception')
+            await pollUntilEventCaptured(page, EXCEPTION_EVENT)
 
             const captures = await page.capturedEvents()
-            expect(captures.map((c) => c.event)).toEqual(['$pageview', '$autocapture', '$exception'])
-            expect(captures[2].event).toEqual('$exception')
+            expect(captures.map((c) => c.event)).toEqual([PAGEVIEW_EVENT, AUTOCAPTURE_EVENT, EXCEPTION_EVENT])
+            expect(captures[2].event).toEqual(EXCEPTION_EVENT)
             expect(captures[2].properties.extra_prop).toEqual(2)
             expect(captures[2].properties.$exception_source).toBeUndefined()
             expect(captures[2].properties.$exception_personURL).toBeUndefined()
@@ -30,11 +31,11 @@ test.describe('Exception capture', () => {
         test('manual exception capture of string', async ({ page }) => {
             await page.click('[data-cy-exception-string-button]')
 
-            await pollUntilEventCaptured(page, '$exception')
+            await pollUntilEventCaptured(page, EXCEPTION_EVENT)
 
             const captures = await page.capturedEvents()
-            expect(captures.map((c) => c.event)).toEqual(['$pageview', '$autocapture', '$exception'])
-            expect(captures[2].event).toEqual('$exception')
+            expect(captures.map((c) => c.event)).toEqual([PAGEVIEW_EVENT, AUTOCAPTURE_EVENT, EXCEPTION_EVENT])
+            expect(captures[2].event).toEqual(EXCEPTION_EVENT)
             expect(captures[2].properties.extra_prop).toEqual(2)
             expect(captures[2].properties.$exception_source).toBeUndefined()
             expect(captures[2].properties.$exception_personURL).toBeUndefined()
@@ -63,11 +64,11 @@ test.describe('Exception capture', () => {
         test('adds stacktrace to captured strings', async ({ page, browserName }) => {
             await page.click('[data-cy-exception-string-button]')
 
-            await pollUntilEventCaptured(page, '$exception')
+            await pollUntilEventCaptured(page, EXCEPTION_EVENT)
 
             const captures = await page.capturedEvents()
-            expect(captures.map((c) => c.event)).toEqual(['$pageview', '$autocapture', '$exception'])
-            expect(captures[2].event).toEqual('$exception')
+            expect(captures.map((c) => c.event)).toEqual([PAGEVIEW_EVENT, AUTOCAPTURE_EVENT, EXCEPTION_EVENT])
+            expect(captures[2].event).toEqual(EXCEPTION_EVENT)
             expect(captures[2].properties.$exception_list[0].stacktrace.type).toEqual('raw')
             expect(captures[2].properties.$exception_list[0].stacktrace.frames.length).toEqual(1)
             expect(captures[2].properties.$exception_list[0].stacktrace.frames[0].function).toEqual(

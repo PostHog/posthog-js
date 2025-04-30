@@ -11,6 +11,18 @@ import {
     SURVEYS_REQUEST_TIMEOUT_MS,
     USER_STATE,
 } from './constants'
+import {
+    PAGEVIEW_EVENT,
+    PAGELEAVE_EVENT,
+    SET_EVENT,
+    GROUP_IDENTIFY_EVENT,
+    CREATE_ALIAS_EVENT,
+    OPT_IN_EVENT,
+    AI_FEEDBACK_EVENT,
+    AI_METRIC_EVENT,
+    IDENTIFY_EVENT,
+    SNAPSHOT_EVENT,
+} from './events'
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { ExceptionObserver } from './extensions/exception-autocapture'
 import { errorToProperties } from './extensions/exception-autocapture/error-conversion'
@@ -115,7 +127,7 @@ type OnlyValidKeys<T, Shape> = T extends Shape ? (Exclude<keyof T, keyof Shape> 
 const instances: Record<string, PostHog> = {}
 
 // some globals for comparisons
-const __NOOP = () => {}
+const __NOOP = () => { }
 
 const PRIMARY_INSTANCE_NAME = 'posthog'
 
@@ -389,8 +401,8 @@ export class PostHog {
             namedPosthog._init(token, config, name)
             instances[name] = namedPosthog
 
-            // Add as a property to the primary instance (this isn't type-safe but its how it was always done)
-            ;(instances[PRIMARY_INSTANCE_NAME] as any)[name] = namedPosthog
+                // Add as a property to the primary instance (this isn't type-safe but its how it was always done)
+                ; (instances[PRIMARY_INSTANCE_NAME] as any)[name] = namedPosthog
 
             return namedPosthog
         }
@@ -608,8 +620,8 @@ export class PostHog {
             this.compression = includes(config['supportedCompression'], Compression.GZipJS)
                 ? Compression.GZipJS
                 : includes(config['supportedCompression'], Compression.Base64)
-                  ? Compression.Base64
-                  : undefined
+                    ? Compression.Base64
+                    : undefined
         }
 
         if (config.analytics?.endpoint) {
@@ -674,13 +686,13 @@ export class PostHog {
     _handle_unload(): void {
         if (!this.config.request_batching) {
             if (this._shouldCapturePageleave()) {
-                this.capture('$pageleave', null, { transport: 'sendBeacon' })
+                this.capture(PAGELEAVE_EVENT, null, { transport: 'sendBeacon' })
             }
             return
         }
 
         if (this._shouldCapturePageleave()) {
-            this.capture('$pageleave')
+            this.capture(PAGELEAVE_EVENT)
         }
 
         this._requestQueue?.unload()
@@ -760,7 +772,7 @@ export class PostHog {
                 if (isArray(fn_name)) {
                     capturing_calls.push(item) // chained call e.g. posthog.get_group().set()
                 } else if (isFunction(item)) {
-                    ;(item as any).call(this)
+                    ; (item as any).call(this)
                 } else if (isArray(item) && fn_name === 'alias') {
                     alias_calls.push(item)
                 } else if (isArray(item) && fn_name.indexOf('capture') !== -1 && isFunction((this as any)[fn_name])) {
@@ -986,7 +998,7 @@ export class PostHog {
             properties[COOKIELESS_MODE_FLAG_PROPERTY] = true
         }
 
-        if (event_name === '$snapshot') {
+        if (event_name === SNAPSHOT_EVENT) {
             const persistenceProps = { ...this.persistence.properties(), ...this.sessionPersistence.properties() }
             properties['distinct_id'] = persistenceProps.distinct_id
             if (
@@ -1027,16 +1039,16 @@ export class PostHog {
         }
 
         let pageviewProperties: Record<string, any>
-        if (event_name === '$pageview') {
+        if (event_name === PAGEVIEW_EVENT) {
             pageviewProperties = this.pageViewManager.doPageView(timestamp, uuid)
-        } else if (event_name === '$pageleave') {
+        } else if (event_name === PAGELEAVE_EVENT) {
             pageviewProperties = this.pageViewManager.doPageLeave(timestamp)
         } else {
             pageviewProperties = this.pageViewManager.doEvent()
         }
         properties = extend(properties, pageviewProperties)
 
-        if (event_name === '$pageview' && document) {
+        if (event_name === PAGEVIEW_EVENT && document) {
             properties['title'] = document.title
         }
 
@@ -1074,9 +1086,9 @@ export class PostHog {
         } else {
             logger.error(
                 'Invalid value for property_denylist config: ' +
-                    this.config.property_denylist +
-                    ' or property_blacklist config: ' +
-                    this.config.property_blacklist
+                this.config.property_denylist +
+                ' or property_blacklist config: ' +
+                this.config.property_blacklist
             )
         }
 
@@ -1360,7 +1372,7 @@ export class PostHog {
      * @returns {Function} A function that can be called to unsubscribe the listener. E.g. Used by useEffect when the component unmounts.
      */
     onSessionId(callback: SessionIdChangedCallback): () => void {
-        return this.sessionManager?.onSessionId(callback) ?? (() => {})
+        return this.sessionManager?.onSessionId(callback) ?? (() => { })
     }
 
     /** Get list of all surveys. */
@@ -1511,7 +1523,7 @@ export class PostHog {
             )
 
             this.capture(
-                '$identify',
+                IDENTIFY_EVENT,
                 {
                     distinct_id: new_distinct_id,
                     $anon_distinct_id: previous_distinct_id,
@@ -1573,7 +1585,7 @@ export class PostHog {
         // Update current user properties
         this.setPersonPropertiesForFlags({ ...(userPropertiesToSetOnce || {}), ...(userPropertiesToSet || {}) })
 
-        this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
+        this.capture(SET_EVENT, { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
 
         this._cachedPersonProperties = hash
     }
@@ -1605,7 +1617,7 @@ export class PostHog {
         this.register({ $groups: { ...existingGroups, [groupType]: groupKey } })
 
         if (groupPropertiesToSet) {
-            this.capture('$groupidentify', {
+            this.capture(GROUP_IDENTIFY_EVENT, {
                 $group_type: groupType,
                 $group_key: groupKey,
                 $group_set: groupPropertiesToSet,
@@ -1812,7 +1824,7 @@ export class PostHog {
         }
         if (alias !== original) {
             this._register_single(ALIAS_ID_KEY, alias)
-            return this.capture('$create_alias', { alias: alias, distinct_id: original })
+            return this.capture(CREATE_ALIAS_EVENT, { alias: alias, distinct_id: original })
         } else {
             logger.warn('alias matches current distinct_id - skipping api call.')
             this.identify(alias)
@@ -2103,7 +2115,9 @@ export class PostHog {
 
         // Don't capture if captureEventName is null or false
         if (isUndefined(options?.captureEventName) || options?.captureEventName) {
-            this.capture(options?.captureEventName ?? '$opt_in', options?.captureProperties, { send_instantly: true })
+            this.capture(options?.captureEventName ?? OPT_IN_EVENT, options?.captureProperties, {
+                send_instantly: true,
+            })
         }
 
         if (this.config.capture_pageview) {
@@ -2177,7 +2191,7 @@ export class PostHog {
         // Extra check here to guarantee we only ever trigger a single `$pageview` event
         if (!this._initialPageviewCaptured) {
             this._initialPageviewCaptured = true
-            this.capture('$pageview', { title: document.title }, { send_instantly: true })
+            this.capture(PAGEVIEW_EVENT, { title: document.title }, { send_instantly: true })
 
             // After we've captured the initial pageview, we can remove the listener
             if (this._visibilityStateListener) {
@@ -2244,7 +2258,7 @@ export class PostHog {
      * @param userFeedback The feedback to capture.
      */
     captureTraceFeedback(traceId: string | number, userFeedback: string) {
-        this.capture('$ai_feedback', {
+        this.capture(AI_FEEDBACK_EVENT, {
             $ai_trace_id: String(traceId),
             $ai_feedback_text: userFeedback,
         })
@@ -2257,7 +2271,7 @@ export class PostHog {
      * @param metricValue The value of the metric to capture.
      */
     captureTraceMetric(traceId: string | number, metricName: string, metricValue: string | number | boolean) {
-        this.capture('$ai_metric', {
+        this.capture(AI_METRIC_EVENT, {
             $ai_trace_id: String(traceId),
             $ai_metric_name: metricName,
             $ai_metric_value: String(metricValue),
@@ -2274,7 +2288,7 @@ const add_dom_loaded_handler = function () {
         if ((dom_loaded_handler as any).done) {
             return
         }
-        ;(dom_loaded_handler as any).done = true
+        ; (dom_loaded_handler as any).done = true
 
         ENQUEUE_REQUESTS = false
 

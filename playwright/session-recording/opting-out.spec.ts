@@ -3,6 +3,7 @@ import { start } from '../utils/setup'
 import { BrowserContext, Page } from '@playwright/test'
 import { PostHogConfig } from '../../src/types'
 import { assertThatRecordingStarted, pollUntilEventCaptured } from '../utils/event-capture-utils'
+import { PAGEVIEW_EVENT, OPT_IN_EVENT, SNAPSHOT_EVENT } from '../../src/events'
 
 async function startWith(config: Partial<PostHogConfig>, page: Page, context: BrowserContext) {
     // there will be a decide call
@@ -50,7 +51,7 @@ test.describe('Session Recording - opting out', () => {
 
         await page.locator('[data-cy-input]').type('hello posthog!')
         await page.waitForTimeout(250) // short delay since there's no snapshot to wait for
-        await page.expectCapturedEventsToBe(['$pageview'])
+        await page.expectCapturedEventsToBe([PAGEVIEW_EVENT])
     })
 
     test('can start recording after starting opted out', async ({ page, context }) => {
@@ -67,12 +68,12 @@ test.describe('Session Recording - opting out', () => {
             },
         })
 
-        await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
+        await page.expectCapturedEventsToBe([OPT_IN_EVENT, PAGEVIEW_EVENT])
 
         await page.resetCapturedEvents()
 
         await page.locator('[data-cy-input]').type('hello posthog!')
-        await pollUntilEventCaptured(page, '$snapshot')
+        await pollUntilEventCaptured(page, SNAPSHOT_EVENT)
         await assertThatRecordingStarted(page)
     })
 
@@ -91,7 +92,7 @@ test.describe('Session Recording - opting out', () => {
         })
 
         await page.locator('[data-cy-input]').type('hello posthog!')
-        await pollUntilEventCaptured(page, '$snapshot')
+        await pollUntilEventCaptured(page, SNAPSHOT_EVENT)
         await assertThatRecordingStarted(page)
     })
 
@@ -121,6 +122,6 @@ test.describe('Session Recording - opting out', () => {
 
         const capturedEvents = await page.capturedEvents()
         // no snapshot events sent
-        expect(capturedEvents.map((x) => x.event)).toEqual(['$pageview', 'custom-event'])
+        expect(capturedEvents.map((x) => x.event)).toEqual([PAGEVIEW_EVENT, 'custom-event'])
     })
 })
