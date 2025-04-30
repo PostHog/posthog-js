@@ -647,6 +647,9 @@ export class SessionRecording {
             this._statusMatcher = allMatchSessionRecordingStatus
             this._triggerMatching = new AndTriggerMatching([this._eventTriggerMatching, this._urlTriggerMatching])
         }
+        this._instance.register_for_session({
+            $sdk_debug_replay_trigger_matching: this._triggerMatching,
+        })
 
         this._urlTriggerMatching.onRemoteConfig(response)
         this._eventTriggerMatching.onRemoteConfig(response)
