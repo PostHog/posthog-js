@@ -34,8 +34,11 @@ import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
 import {
     allMatchSessionRecordingStatus,
+    AndTriggerMatching,
     anyMatchSessionRecordingStatus,
     nullMatchSessionRecordingStatus,
+    OrTriggerMatching,
+    PendingTriggerMatching,
 } from '../../../extensions/replay/triggerMatching'
 
 // Type and source defined here designate a non-user-generated recording event
@@ -202,6 +205,7 @@ describe('SessionRecording', () => {
 
         it('has null status matcher before remote config', () => {
             expect(sessionRecording['_statusMatcher']).toBe(nullMatchSessionRecordingStatus)
+            expect(sessionRecording['_triggerMatching']).toBeInstanceOf(PendingTriggerMatching)
         })
 
         it('loads script based on script config', () => {
@@ -220,15 +224,17 @@ describe('SessionRecording', () => {
                 })
             )
             expect(sessionRecording['_statusMatcher']).toBe(anyMatchSessionRecordingStatus)
+            expect(sessionRecording['_triggerMatching']).toBeInstanceOf(OrTriggerMatching)
         })
 
-        it('uses allMatchSessionRecordingStatus when triggerMatching is not "all"', () => {
+        it('uses allMatchSessionRecordingStatus when triggerMatching is "all"', () => {
             sessionRecording.onRemoteConfig(
                 makeDecideResponse({
                     sessionRecording: { endpoint: '/s/', triggerMatchType: 'all' },
                 })
             )
             expect(sessionRecording['_statusMatcher']).toBe(allMatchSessionRecordingStatus)
+            expect(sessionRecording['_triggerMatching']).toBeInstanceOf(AndTriggerMatching)
         })
 
         it('uses most restrictive when triggerMatching is not specified', () => {
@@ -238,6 +244,7 @@ describe('SessionRecording', () => {
                 })
             )
             expect(sessionRecording['_statusMatcher']).toBe(allMatchSessionRecordingStatus)
+            expect(sessionRecording['_triggerMatching']).toBeInstanceOf(AndTriggerMatching)
         })
 
         it('when the first event is a meta it does not take a manual full snapshot', () => {
