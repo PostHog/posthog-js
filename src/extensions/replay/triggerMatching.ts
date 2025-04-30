@@ -48,8 +48,8 @@ function sessionRecordingUrlTriggerMatches(url: string, triggers: SessionRecordi
 
 export interface TriggerStatusMatching {
     triggerStatus(sessionId: string): TriggerStatus
+    stop(): void
 }
-
 export class OrTriggerMatching implements TriggerStatusMatching {
     constructor(private readonly _matchers: TriggerStatusMatching[]) {}
 
@@ -62,6 +62,10 @@ export class OrTriggerMatching implements TriggerStatusMatching {
             return 'trigger_pending'
         }
         return 'trigger_disabled'
+    }
+
+    stop(): void {
+        this._matchers.forEach((m) => m.stop())
     }
 }
 
@@ -85,11 +89,19 @@ export class AndTriggerMatching implements TriggerStatusMatching {
                 return 'trigger_pending'
         }
     }
+
+    stop(): void {
+        this._matchers.forEach((m) => m.stop())
+    }
 }
 
 export class PendingTriggerMatching implements TriggerStatusMatching {
     triggerStatus(): TriggerStatus {
         return 'trigger_pending'
+    }
+
+    stop(): void {
+        // no-op
     }
 }
 
@@ -158,12 +170,16 @@ export class URLTriggerMatching implements TriggerStatusMatching {
             onActivate('url')
         }
     }
+
+    stop(): void {
+        // no-op
+    }
 }
 
 export class LinkedFlagMatching implements TriggerStatusMatching {
     linkedFlag: string | FlagVariant | null = null
     linkedFlagSeen: boolean = false
-
+    private _flaglistenerCleanup: () => void = () => {}
     constructor(private readonly _instance: PostHog) {}
 
     triggerStatus(): TriggerStatus {
@@ -182,7 +198,7 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
         if (!isNullish(this.linkedFlag) && !this.linkedFlagSeen) {
             const linkedFlag = isString(this.linkedFlag) ? this.linkedFlag : this.linkedFlag.flag
             const linkedVariant = isString(this.linkedFlag) ? null : this.linkedFlag.variant
-            this._instance.onFeatureFlags((_flags, variants) => {
+            this._flaglistenerCleanup = this._instance.onFeatureFlags((_flags, variants) => {
                 const flagIsPresent = isObject(variants) && linkedFlag in variants
                 const linkedFlagMatches = linkedVariant ? variants[linkedFlag] === linkedVariant : flagIsPresent
                 if (linkedFlagMatches) {
@@ -191,6 +207,10 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
                 this.linkedFlagSeen = linkedFlagMatches
             })
         }
+    }
+
+    stop(): void {
+        this._flaglistenerCleanup()
     }
 }
 
@@ -219,6 +239,10 @@ export class EventTriggerMatching implements TriggerStatusMatching {
             : eventTriggerStatus === 'trigger_pending'
               ? 'trigger_pending'
               : 'trigger_disabled'
+    }
+
+    stop(): void {
+        // no-op
     }
 }
 

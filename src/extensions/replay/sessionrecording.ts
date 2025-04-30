@@ -570,6 +570,9 @@ export class SessionRecording {
             this._samplingSessionListener?.()
             this._samplingSessionListener = undefined
 
+            this._eventTriggerMatching.stop()
+            this._urlTriggerMatching.stop()
+            this._linkedFlagMatching.stop()
             logger.info('stopped')
         }
     }
