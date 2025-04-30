@@ -34,3 +34,21 @@ export async function assertThatRecordingStarted(page: Page) {
     expect(capturedSnapshot!['properties']['$snapshot_data'][0].type).toEqual(4) // meta
     expect(capturedSnapshot!['properties']['$snapshot_data'][1].type).toEqual(2) // full_snapshot
 }
+
+export async function pollUntilCondition(
+    page: Page,
+    fn: () => boolean | Promise<boolean>,
+    wait = 200,
+    attempts = 0,
+    maxAttempts = 50
+): Promise<void> {
+    const condition = await fn()
+    if (condition) {
+        return
+    } else if (attempts < maxAttempts) {
+        await page.waitForTimeout(wait)
+        return pollUntilCondition(page, fn, wait, attempts + 1, maxAttempts)
+    } else {
+        throw new Error('Max attempts reached without condition being true')
+    }
+}

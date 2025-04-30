@@ -4,19 +4,20 @@ import {
     MultipleSurveyQuestion,
     Survey,
     SurveyAppearance,
+    SurveyPosition,
     SurveyQuestion,
     SurveySchedule,
-    SurveyType,
 } from '../../posthog-surveys-types'
-import { document as _document, window as _window } from '../../utils/globals'
-import { createLogger } from '../../utils/logger'
+import { document as _document, window as _window, userAgent } from '../../utils/globals'
+import { SURVEY_LOGGER as logger, SURVEY_SEEN_PREFIX } from '../../utils/survey-utils'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
+
+import { SurveyMatchType } from '../../posthog-surveys-types'
+import { isMatchingRegex } from '../../utils/regex-utils'
+import { detectDeviceType } from '../../utils/user-agent-utils'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
-const SurveySeenPrefix = 'seenSurvey_'
-
-const logger = createLogger('[Surveys]')
 
 export const SURVEY_DEFAULT_Z_INDEX = 2147483647
 
@@ -36,12 +37,13 @@ export function getSurveyResponseKey(questionId: string) {
 
 export const style = (appearance: SurveyAppearance | null) => {
     const positions = {
-        left: 'left: 30px;',
-        right: 'right: 30px;',
-        center: `
+        [SurveyPosition.Left]: 'left: 30px;',
+        [SurveyPosition.Right]: 'right: 60px;',
+        [SurveyPosition.Center]: `
             left: 50%;
             transform: translateX(-50%);
           `,
+        [SurveyPosition.NextToTrigger]: 'right: 30px;',
     }
 
     const styles = `
@@ -58,7 +60,7 @@ export const style = (appearance: SurveyAppearance | null) => {
               z-index: ${parseInt(appearance?.zIndex || SURVEY_DEFAULT_Z_INDEX.toString())};
               border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
               border-bottom: 0px;
-              ${positions[appearance?.position || 'right'] || 'right: 30px;'}
+              ${appearance?.position ? positions[appearance.position] : positions[SurveyPosition.Right]}
               flex-direction: column;
               background: ${appearance?.backgroundColor || '#eeeded'};
               border-top-left-radius: 10px;
@@ -550,14 +552,14 @@ export const defaultSurveyAppearance: SurveyAppearance = {
     whiteLabel: false,
     displayThankYouMessage: true,
     thankYouMessageHeader: 'Thank you for your feedback!',
-    position: 'right',
+    position: SurveyPosition.Right,
 }
 
 export const defaultBackgroundColor = '#eeeded'
 
 export const createShadow = (styleSheet: string, surveyId: string, element?: Element, posthog?: PostHog) => {
     const div = document.createElement('div')
-    div.className = `PostHogSurvey${surveyId}`
+    div.className = getSurveyContainerClass({ id: surveyId })
     const shadow = div.attachShadow({ mode: 'open' })
     if (styleSheet) {
         const styleElement = prepareStylesheet(document, styleSheet, posthog)
@@ -596,7 +598,7 @@ export const sendSurveyEvent = (
             [getSurveyInteractionProperty(survey, 'responded')]: true,
         },
     })
-    window.dispatchEvent(new Event('PHSurveySent'))
+    window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: survey.id } }))
 }
 
 export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {
@@ -619,7 +621,7 @@ export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly
         },
     })
     localStorage.setItem(getSurveySeenKey(survey), 'true')
-    window.dispatchEvent(new Event('PHSurveyClosed'))
+    window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: survey.id } }))
 }
 
 // Use the Fisher-yates algorithm to shuffle this array
@@ -673,12 +675,11 @@ export const hasEvents = (survey: Pick<Survey, 'conditions'>): boolean => {
     return survey.conditions?.events?.values?.length != undefined && survey.conditions?.events?.values?.length > 0
 }
 
-export const canActivateRepeatedly = (survey: Pick<Survey, 'schedule' | 'type' | 'conditions'>): boolean => {
-    if (survey.schedule === SurveySchedule.Always && survey.type === SurveyType.Widget) {
-        return true
-    }
-
-    return !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey))
+export const canActivateRepeatedly = (survey: Pick<Survey, 'schedule' | 'conditions'>): boolean => {
+    return (
+        !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey)) ||
+        survey.schedule === SurveySchedule.Always
+    )
 }
 
 /**
@@ -698,24 +699,12 @@ export const getSurveySeen = (survey: Survey): boolean => {
 }
 
 export const getSurveySeenKey = (survey: Survey): string => {
-    let surveySeenKey = `${SurveySeenPrefix}${survey.id}`
+    let surveySeenKey = `${SURVEY_SEEN_PREFIX}${survey.id}`
     if (survey.current_iteration && survey.current_iteration > 0) {
-        surveySeenKey = `${SurveySeenPrefix}${survey.id}_${survey.current_iteration}`
+        surveySeenKey = `${SURVEY_SEEN_PREFIX}${survey.id}_${survey.current_iteration}`
     }
 
     return surveySeenKey
-}
-
-export const getSurveySeenStorageKeys = (): string[] => {
-    const surveyKeys = []
-    for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i)
-        if (key?.startsWith(SurveySeenPrefix)) {
-            surveyKeys.push(key)
-        }
-    }
-
-    return surveyKeys
 }
 
 const getSurveyInteractionProperty = (survey: Survey, action: string): string => {
@@ -774,4 +763,59 @@ export const renderChildrenAsTextOrHtml = ({ component, children, renderAsHtml, 
               children,
               style,
           })
+}
+
+const surveyValidationMap: Record<SurveyMatchType, (targets: string[], value: string) => boolean> = {
+    icontains: (targets, value) => targets.some((target) => value.toLowerCase().includes(target.toLowerCase())),
+    not_icontains: (targets, value) => targets.every((target) => !value.toLowerCase().includes(target.toLowerCase())),
+    regex: (targets, value) => targets.some((target) => isMatchingRegex(value, target)),
+    not_regex: (targets, value) => targets.every((target) => !isMatchingRegex(value, target)),
+    exact: (targets, value) => targets.some((target) => value === target),
+    is_not: (targets, value) => targets.every((target) => value !== target),
+}
+
+function defaultMatchType(matchType?: SurveyMatchType): SurveyMatchType {
+    return matchType ?? 'icontains'
+}
+
+// use urlMatchType to validate url condition, fallback to contains for backwards compatibility
+export function doesSurveyUrlMatch(survey: Pick<Survey, 'conditions'>): boolean {
+    if (!survey.conditions?.url) {
+        return true
+    }
+    // if we dont know the url, assume it is not a match
+    const href = window?.location?.href
+    if (!href) {
+        return false
+    }
+    const targets = [survey.conditions.url]
+    return surveyValidationMap[defaultMatchType(survey.conditions?.urlMatchType)](targets, href)
+}
+
+export function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
+    if (!survey.conditions?.deviceTypes || survey.conditions?.deviceTypes.length === 0) {
+        return true
+    }
+    // if we dont know the device type, assume it is not a match
+    if (!userAgent) {
+        return false
+    }
+
+    const deviceType = detectDeviceType(userAgent)
+    return surveyValidationMap[defaultMatchType(survey.conditions?.deviceTypesMatchType)](
+        survey.conditions.deviceTypes,
+        deviceType
+    )
+}
+
+export function doesSurveyMatchSelector(survey: Survey): boolean {
+    if (!survey.conditions?.selector) {
+        return true
+    }
+    return !!document?.querySelector(survey.conditions.selector)
+}
+
+export function getSurveyContainerClass(survey: Pick<Survey, 'id'>, asSelector = false): string {
+    const className = `PostHogSurvey-${survey.id}`
+    return asSelector ? `.${className}` : className
 }

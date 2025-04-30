@@ -8,7 +8,7 @@
  * properties (such as browser, OS, etc) here, as usually getting the current value of those from event properties is
  * sufficient.
  */
-import { Info } from './utils/event-utils'
+import { getPersonInfo, getPersonPropsFromInfo } from './utils/event-utils'
 import type { SessionIdManager } from './sessionid'
 import type { PostHogPersistence } from './posthog-persistence'
 import { CLIENT_SESSION_PROPS } from './constants'
@@ -37,14 +37,11 @@ interface StoredSessionSourceProps {
 }
 
 const generateSessionSourceParams = (posthog?: PostHog): LegacySessionSourceProps | CurrentSessionSourceProps => {
-    return Info.personInfo({
-        maskPersonalDataProperties: posthog?.config.mask_personal_data_properties,
-        customPersonalDataProperties: posthog?.config.custom_personal_data_properties,
-    })
+    return getPersonInfo(posthog?.config.mask_personal_data_properties, posthog?.config.custom_personal_data_properties)
 }
 
 export class SessionPropsManager {
-    private readonly instance: PostHog
+    private readonly _instance: PostHog
     private readonly _sessionIdManager: SessionIdManager
     private readonly _persistence: PostHogPersistence
     private readonly _sessionSourceParamGenerator: (
@@ -57,7 +54,7 @@ export class SessionPropsManager {
         persistence: PostHogPersistence,
         sessionSourceParamGenerator?: (instance?: PostHog) => LegacySessionSourceProps | CurrentSessionSourceProps
     ) {
-        this.instance = instance
+        this._instance = instance
         this._sessionIdManager = sessionIdManager
         this._persistence = persistence
         this._sessionSourceParamGenerator = sessionSourceParamGenerator || generateSessionSourceParams
@@ -77,7 +74,7 @@ export class SessionPropsManager {
 
         const newProps: StoredSessionSourceProps = {
             sessionId,
-            props: this._sessionSourceParamGenerator(this.instance),
+            props: this._sessionSourceParamGenerator(this._instance),
         }
         this._persistence.register({ [CLIENT_SESSION_PROPS]: newProps })
     }
@@ -88,7 +85,7 @@ export class SessionPropsManager {
             return {}
         }
         if ('r' in p) {
-            return Info.personPropsFromInfo(p)
+            return getPersonPropsFromInfo(p)
         } else {
             return {
                 $referring_domain: p.referringDomain,

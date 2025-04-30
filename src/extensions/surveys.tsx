@@ -1,22 +1,29 @@
 import { PostHog } from '../posthog-core'
-import { doesSurveyUrlMatch } from '../posthog-surveys'
 import {
     Survey,
     SurveyAppearance,
+    SurveyCallback,
+    SurveyPosition,
     SurveyQuestion,
     SurveyQuestionBranchingType,
     SurveyQuestionType,
-    SurveyRenderReason,
+    SurveySchedule,
     SurveyType,
+    SurveyWidgetType,
 } from '../posthog-surveys-types'
+import { addEventListener } from '../utils'
 
 import * as Preact from 'preact'
-import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks'
-import { addEventListener } from '../utils'
+import { useContext, useEffect, useMemo, useState } from 'preact/hooks'
 import { document as _document, window as _window } from '../utils/globals'
-import { createLogger } from '../utils/logger'
+import {
+    doesSurveyActivateByAction,
+    doesSurveyActivateByEvent,
+    isSurveyRunning,
+    SURVEY_LOGGER as logger,
+} from '../utils/survey-utils'
 import { isNull, isNumber } from '../utils/type-utils'
-import { createWidgetShadow, createWidgetStyle } from './surveys-widget'
+import { createWidgetStyle, retrieveWidgetShadow } from './surveys-widget'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import { Cancel } from './surveys/components/QuestionHeader'
 import {
@@ -26,11 +33,16 @@ import {
     RatingQuestion,
 } from './surveys/components/QuestionTypes'
 import {
+    canActivateRepeatedly,
     createShadow,
     defaultSurveyAppearance,
     dismissedSurveyEvent,
+    doesSurveyDeviceTypesMatch,
+    doesSurveyMatchSelector,
+    doesSurveyUrlMatch,
     getContrastingTextColor,
     getDisplayOrderQuestions,
+    getSurveyContainerClass,
     getSurveyResponseKey,
     getSurveySeen,
     hasWaitPeriodPassed,
@@ -38,17 +50,14 @@ import {
     style,
     SURVEY_DEFAULT_Z_INDEX,
     SurveyContext,
-} from './surveys/surveys-utils'
+} from './surveys/surveys-extension-utils'
 import { prepareStylesheet } from './utils/stylesheet-loader'
-const logger = createLogger('[Surveys]')
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 
-function getPosthogWidgetClass(surveyId: string) {
-    return `.PostHogWidget${surveyId}`
-}
+const DISPATCH_FEEDBACK_WIDGET_EVENT = 'ph:show_survey_widget'
 
 function getRatingBucketForResponseValue(responseValue: number, scale: number) {
     if (scale === 3) {
@@ -107,7 +116,13 @@ export function getNextSurveyStep(
         if (question.type === SurveyQuestionType.SingleChoice) {
             // :KLUDGE: for now, look up the choiceIndex based on the response
             // TODO: once QuestionTypes.MultipleChoiceQuestion is refactored, pass the selected choiceIndex into this method
-            const selectedChoiceIndex = question.choices.indexOf(`${response}`)
+            let selectedChoiceIndex = question.choices.indexOf(`${response}`)
+
+            if (selectedChoiceIndex === -1 && question.hasOpenChoice) {
+                // if the response is not found in the choices, it must be the open choice,
+                // which is always the last choice
+                selectedChoiceIndex = question.choices.length - 1
+            }
 
             if (question.branching?.responseValues?.hasOwnProperty(selectedChoiceIndex)) {
                 const nextStep = question.branching.responseValues[selectedChoiceIndex]
@@ -154,17 +169,18 @@ export function getNextSurveyStep(
 }
 
 export class SurveyManager {
-    private posthog: PostHog
-    private surveyInFocus: string | null
-    private surveyTimeouts: Map<string, NodeJS.Timeout> = new Map()
+    private _posthog: PostHog
+    private _surveyInFocus: string | null
+    private _surveyTimeouts: Map<string, NodeJS.Timeout> = new Map()
+    private _widgetSelectorListeners: Map<string, { element: Element; listener: EventListener }> = new Map()
 
     constructor(posthog: PostHog) {
-        this.posthog = posthog
+        this._posthog = posthog
         // This is used to track the survey that is currently in focus. We only show one survey at a time.
-        this.surveyInFocus = null
+        this._surveyInFocus = null
     }
 
-    private canShowNextEventBasedSurvey = (): boolean => {
+    private _canShowNextEventBasedSurvey = (): boolean => {
         // with event based surveys, we need to show the next survey without reloading the page.
         // A simple check for div elements with the class name pattern of PostHogSurvey_xyz doesn't work here
         // because preact leaves behind the div element for any surveys responded/dismissed with a <style> node.
@@ -178,15 +194,15 @@ export class SurveyManager {
         return true
     }
 
-    private clearSurveyTimeout(surveyId: string) {
-        const timeout = this.surveyTimeouts.get(surveyId)
+    private _clearSurveyTimeout(surveyId: string) {
+        const timeout = this._surveyTimeouts.get(surveyId)
         if (timeout) {
             clearTimeout(timeout)
-            this.surveyTimeouts.delete(surveyId)
+            this._surveyTimeouts.delete(surveyId)
         }
     }
 
-    private handlePopoverSurvey = (survey: Survey): void => {
+    private _handlePopoverSurvey = (survey: Survey): void => {
         const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
         const lastSeenSurveyDate = localStorage.getItem(`lastSeenSurveyDate`)
 
@@ -196,17 +212,17 @@ export class SurveyManager {
 
         const surveySeen = getSurveySeen(survey)
         if (!surveySeen) {
-            this.clearSurveyTimeout(survey.id)
-            this.addSurveyToFocus(survey.id)
+            this._clearSurveyTimeout(survey.id)
+            this._addSurveyToFocus(survey.id)
             const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
-            const shadow = createShadow(style(survey?.appearance), survey.id, undefined, this.posthog)
+            const shadow = createShadow(style(survey?.appearance), survey.id, undefined, this._posthog)
             if (delaySeconds <= 0) {
                 return Preact.render(
                     <SurveyPopup
                         key={'popover-survey'}
-                        posthog={this.posthog}
+                        posthog={this._posthog}
                         survey={survey}
-                        removeSurveyFromFocus={this.removeSurveyFromFocus}
+                        removeSurveyFromFocus={this._removeSurveyFromFocus}
                         isPopup={true}
                     />,
                     shadow
@@ -214,71 +230,150 @@ export class SurveyManager {
             }
             const timeoutId = setTimeout(() => {
                 if (!doesSurveyUrlMatch(survey)) {
-                    return this.removeSurveyFromFocus(survey.id)
+                    return this._removeSurveyFromFocus(survey.id)
                 }
                 // rendering with surveyPopupDelaySeconds = 0 because we're already handling the timeout here
                 Preact.render(
                     <SurveyPopup
                         key={'popover-survey'}
-                        posthog={this.posthog}
+                        posthog={this._posthog}
                         survey={{ ...survey, appearance: { ...survey.appearance, surveyPopupDelaySeconds: 0 } }}
-                        removeSurveyFromFocus={this.removeSurveyFromFocus}
+                        removeSurveyFromFocus={this._removeSurveyFromFocus}
                         isPopup={true}
                     />,
                     shadow
                 )
             }, delaySeconds * 1000)
-            this.surveyTimeouts.set(survey.id, timeoutId)
+            this._surveyTimeouts.set(survey.id, timeoutId)
         }
     }
 
-    private handleWidget = (survey: Survey): void => {
-        const shadow = createWidgetShadow(survey, this.posthog)
-
+    private _handleWidget = (survey: Survey): void => {
+        // Ensure widget container exists if it doesn't
+        const shadow = retrieveWidgetShadow(survey, this._posthog)
         const stylesheetContent = style(survey.appearance)
-        const stylesheet = prepareStylesheet(document, stylesheetContent, this.posthog)
+        const WIDGET_STYLE_ID = 'ph-data-style-id'
 
-        if (stylesheet) {
-            shadow.appendChild(stylesheet)
+        // Check if the stylesheet already exists
+        if (!shadow.querySelector(`style[${WIDGET_STYLE_ID}="${WIDGET_STYLE_ID}"]`)) {
+            const stylesheet = prepareStylesheet(document, stylesheetContent, this._posthog)
+
+            if (stylesheet) {
+                stylesheet.setAttribute(WIDGET_STYLE_ID, WIDGET_STYLE_ID) // Add identifier
+                shadow.appendChild(stylesheet)
+            }
         }
 
         Preact.render(
             <FeedbackWidget
-                key={'feedback-survey'}
-                posthog={this.posthog}
+                key={'feedback-survey-' + survey.id} // Use unique key
+                posthog={this._posthog}
                 survey={survey}
-                removeSurveyFromFocus={this.removeSurveyFromFocus}
+                removeSurveyFromFocus={this._removeSurveyFromFocus}
             />,
             shadow
         )
     }
 
-    private handleWidgetSelector = (survey: Survey): void => {
-        const selectorOnPage =
-            survey.appearance?.widgetSelector && document.querySelector(survey.appearance.widgetSelector)
-        if (selectorOnPage) {
-            if (document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 0) {
-                this.handleWidget(survey)
-            } else if (document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 1) {
-                // we have to check if user selector already has a survey listener attached to it because we always have to check if it's on the page or not
-                if (!selectorOnPage.getAttribute('PHWidgetSurveyClickListener')) {
-                    const surveyPopup = document
-                        .querySelector(getPosthogWidgetClass(survey.id))
-                        ?.shadowRoot?.querySelector(`.survey-form`) as HTMLFormElement
+    private _removeWidgetSelectorListener = (surveyId: string): void => {
+        const existing = this._widgetSelectorListeners.get(surveyId)
+        if (existing) {
+            existing.element.removeEventListener('click', existing.listener)
+            existing.element.removeAttribute('PHWidgetSurveyClickListener')
+            this._widgetSelectorListeners.delete(surveyId)
+            logger.info(`Removed click listener for survey ${surveyId}`)
+        }
+    }
 
-                    addEventListener(selectorOnPage, 'click', () => {
-                        if (surveyPopup) {
-                            surveyPopup.style.display = surveyPopup.style.display === 'none' ? 'block' : 'none'
-                            addEventListener(surveyPopup, 'PHSurveyClosed', () => {
-                                this.removeSurveyFromFocus(survey.id)
-                                surveyPopup.style.display = 'none'
-                            })
-                        }
-                    })
+    private _manageWidgetSelectorListener = (survey: Survey): void => {
+        const selector = survey.appearance?.widgetSelector
+        if (!selector) {
+            return
+        }
 
-                    selectorOnPage.setAttribute('PHWidgetSurveyClickListener', 'true')
-                }
+        const currentElement = document.querySelector(selector)
+        const existingListenerData = this._widgetSelectorListeners.get(survey.id)
+
+        if (!currentElement) {
+            // Element not found, remove listener if it exists
+            if (existingListenerData) {
+                this._removeWidgetSelectorListener(survey.id)
             }
+            return
+        }
+
+        // Ensure the base widget is rendered first if needed
+        this._handleWidget(survey)
+
+        if (existingListenerData) {
+            // Listener exists, check if element changed
+            if (currentElement !== existingListenerData.element) {
+                logger.info(`Selector element changed for survey ${survey.id}. Re-attaching listener.`)
+                this._removeWidgetSelectorListener(survey.id)
+                // Continue to attach listener to the new element below
+            } else {
+                // Element is the same, listener already attached, do nothing
+                return
+            }
+        }
+
+        // Element found, and no listener attached (or it was just removed from old element)
+        if (!currentElement.hasAttribute('PHWidgetSurveyClickListener')) {
+            const listener = (event: Event) => {
+                event.stopPropagation() // Prevent bubbling
+
+                if (survey.appearance?.position !== SurveyPosition.NextToTrigger) {
+                    window.dispatchEvent(
+                        new CustomEvent(DISPATCH_FEEDBACK_WIDGET_EVENT, {
+                            detail: { surveyId: survey.id, position: {} },
+                        })
+                    )
+                    return
+                }
+
+                const buttonRect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+                const viewportHeight = window.innerHeight
+                const viewportWidth = window.innerWidth
+                const surveyWidth = parseInt(survey.appearance?.maxWidth || '300')
+                const estimatedMinSurveyHeight = 250 // Keep this estimation
+                const buttonCenterX = buttonRect.left + buttonRect.width / 2
+                let left = buttonCenterX - surveyWidth / 2
+                const horizontalPadding = 20
+                if (left + surveyWidth > viewportWidth - horizontalPadding) {
+                    left = viewportWidth - surveyWidth - horizontalPadding
+                }
+                if (left < horizontalPadding) {
+                    left = horizontalPadding
+                }
+                const spacing = 12
+                const spaceBelow = viewportHeight - buttonRect.bottom
+                const spaceAbove = buttonRect.top
+                const showAbove = spaceBelow < estimatedMinSurveyHeight && spaceAbove > spaceBelow
+
+                const positionStyles: React.CSSProperties = {
+                    position: 'fixed',
+                    top: showAbove ? 'auto' : `${buttonRect.bottom + spacing}px`,
+                    left: `${left}px`,
+                    right: 'auto',
+                    bottom: showAbove ? `${viewportHeight - buttonRect.top + spacing}px` : 'auto',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                    borderBottom: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
+                    borderRadius: '10px',
+                    zIndex: SURVEY_DEFAULT_Z_INDEX,
+                }
+
+                // Dispatch event for the FeedbackWidget to catch
+                window.dispatchEvent(
+                    new CustomEvent(DISPATCH_FEEDBACK_WIDGET_EVENT, {
+                        detail: { surveyId: survey.id, position: positionStyles },
+                    })
+                )
+            }
+
+            addEventListener(currentElement, 'click', listener)
+            currentElement.setAttribute('PHWidgetSurveyClickListener', 'true')
+            this._widgetSelectorListeners.set(survey.id, { element: currentElement, listener })
+            logger.info(`Attached click listener for survey ${survey.id}`)
         }
     }
 
@@ -288,135 +383,201 @@ export class SurveyManager {
      * @param surveys
      * @returns The surveys sorted by their appearance delay
      */
-    private sortSurveysByAppearanceDelay(surveys: Survey[]): Survey[] {
-        return surveys.sort(
-            (a, b) => (a.appearance?.surveyPopupDelaySeconds || 0) - (b.appearance?.surveyPopupDelaySeconds || 0)
-        )
-    }
+    private _sortSurveysByAppearanceDelay(surveys: Survey[]): Survey[] {
+        return surveys.sort((a, b) => {
+            const aIsAlways = a.schedule === SurveySchedule.Always
+            const bIsAlways = b.schedule === SurveySchedule.Always
 
-    /**
-     * Checks the feature flags associated with this Survey to see if the survey can be rendered.
-     * @param survey
-     * @param instance
-     */
-    public canRenderSurvey = (survey: Survey): SurveyRenderReason => {
-        const renderReason: SurveyRenderReason = {
-            visible: false,
-        }
-
-        if (survey.end_date) {
-            renderReason.disabledReason = `survey was completed on ${survey.end_date}`
-            return renderReason
-        }
-
-        if (survey.type != SurveyType.Popover) {
-            renderReason.disabledReason = `Only Popover survey types can be rendered`
-            return renderReason
-        }
-
-        const linkedFlagCheck = survey.linked_flag_key
-            ? this.posthog.featureFlags.isFeatureEnabled(survey.linked_flag_key)
-            : true
-
-        if (!linkedFlagCheck) {
-            renderReason.disabledReason = `linked feature flag ${survey.linked_flag_key} is false`
-            return renderReason
-        }
-
-        const targetingFlagCheck = survey.targeting_flag_key
-            ? this.posthog.featureFlags.isFeatureEnabled(survey.targeting_flag_key)
-            : true
-
-        if (!targetingFlagCheck) {
-            renderReason.disabledReason = `targeting feature flag ${survey.targeting_flag_key} is false`
-            return renderReason
-        }
-
-        const internalTargetingFlagCheck = survey.internal_targeting_flag_key
-            ? this.posthog.featureFlags.isFeatureEnabled(survey.internal_targeting_flag_key)
-            : true
-
-        if (!internalTargetingFlagCheck) {
-            renderReason.disabledReason = `internal targeting feature flag ${survey.internal_targeting_flag_key} is false`
-            return renderReason
-        }
-
-        renderReason.visible = true
-        return renderReason
+            if (aIsAlways && !bIsAlways) {
+                return 1 // a comes after b
+            }
+            if (!aIsAlways && bIsAlways) {
+                return -1 // a comes before b
+            }
+            // If both are Always or neither is Always, sort by delay
+            return (a.appearance?.surveyPopupDelaySeconds || 0) - (b.appearance?.surveyPopupDelaySeconds || 0)
+        })
     }
 
     public renderSurvey = (survey: Survey, selector: Element): void => {
         Preact.render(
             <SurveyPopup
                 key={'popover-survey'}
-                posthog={this.posthog}
+                posthog={this._posthog}
                 survey={survey}
-                removeSurveyFromFocus={this.removeSurveyFromFocus}
+                removeSurveyFromFocus={this._removeSurveyFromFocus}
                 isPopup={false}
             />,
             selector
         )
     }
 
+    private _isSurveyFeatureFlagEnabled(flagKey: string | null) {
+        if (!flagKey) {
+            return true
+        }
+        return !!this._posthog.featureFlags.isFeatureEnabled(flagKey)
+    }
+
+    private _isSurveyConditionMatched(survey: Survey): boolean {
+        if (!survey.conditions) {
+            return true
+        }
+        return doesSurveyUrlMatch(survey) && doesSurveyDeviceTypesMatch(survey) && doesSurveyMatchSelector(survey)
+    }
+
+    private _internalFlagCheckSatisfied(survey: Survey): boolean {
+        return canActivateRepeatedly(survey) || this._isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key)
+    }
+
+    public checkSurveyEligibility(survey: Survey): { eligible: boolean; reason?: string } {
+        const eligibility = { eligible: true, reason: undefined as string | undefined }
+
+        if (!isSurveyRunning(survey)) {
+            eligibility.eligible = false
+            eligibility.reason = `Survey is not running. It was completed on ${survey.end_date}`
+            return eligibility
+        }
+
+        if (!this._isSurveyFeatureFlagEnabled(survey.linked_flag_key)) {
+            eligibility.eligible = false
+            eligibility.reason = `Survey linked feature flag is not enabled`
+            return eligibility
+        }
+
+        if (!this._isSurveyFeatureFlagEnabled(survey.targeting_flag_key)) {
+            eligibility.eligible = false
+            eligibility.reason = `Survey targeting feature flag is not enabled`
+            return eligibility
+        }
+
+        if (!this._internalFlagCheckSatisfied(survey)) {
+            eligibility.eligible = false
+            eligibility.reason = 'Survey internal targeting flag is not enabled and survey cannot activate repeatedly'
+            return eligibility
+        }
+
+        return eligibility
+    }
+
+    /**
+     * Surveys can be activated by events or actions. This method checks if the survey has events and actions,
+     * and if so, it checks if the survey has been activated.
+     * @param survey
+     */
+    private _hasActionOrEventTriggeredSurvey(survey: Survey): boolean {
+        if (!doesSurveyActivateByEvent(survey) && !doesSurveyActivateByAction(survey)) {
+            // If survey doesn't depend on events/actions, it's considered "triggered" by default
+            return true
+        }
+        const surveysActivatedByEventsOrActions: string[] | undefined =
+            this._posthog.surveys._surveyEventReceiver?.getSurveys()
+        return !!surveysActivatedByEventsOrActions?.includes(survey.id)
+    }
+
+    private _checkFlags(survey: Survey): boolean {
+        if (!survey.feature_flag_keys?.length) {
+            return true
+        }
+
+        return survey.feature_flag_keys.every(({ key, value }) => {
+            if (!key || !value) {
+                return true
+            }
+            return this._posthog.featureFlags.isFeatureEnabled(value)
+        })
+    }
+
+    public getActiveMatchingSurveys = (callback: SurveyCallback, forceReload = false): void => {
+        this._posthog?.surveys.getSurveys((surveys) => {
+            const targetingMatchedSurveys = surveys.filter((survey) => {
+                const eligibility = this.checkSurveyEligibility(survey)
+                return (
+                    eligibility.eligible &&
+                    this._isSurveyConditionMatched(survey) &&
+                    this._hasActionOrEventTriggeredSurvey(survey) &&
+                    this._checkFlags(survey)
+                )
+            })
+
+            callback(targetingMatchedSurveys)
+        }, forceReload)
+    }
+
     public callSurveysAndEvaluateDisplayLogic = (forceReload: boolean = false): void => {
-        this.posthog?.getActiveMatchingSurveys((surveys) => {
-            const nonAPISurveys = surveys.filter((survey) => survey.type !== 'api')
+        this.getActiveMatchingSurveys((surveys) => {
+            const nonAPISurveys = surveys.filter((survey) => survey.type !== SurveyType.API)
 
             // Create a queue of surveys sorted by their appearance delay.  We will evaluate the display logic
             // for each survey in the queue in order, and only display one survey at a time.
-            const nonAPISurveyQueue = this.sortSurveysByAppearanceDelay(nonAPISurveys)
+            const nonAPISurveyQueue = this._sortSurveysByAppearanceDelay(nonAPISurveys)
+
+            // Keep track of surveys processed this cycle to remove listeners for inactive ones
+            const activeSelectorSurveyIds = new Set<string>()
 
             nonAPISurveyQueue.forEach((survey) => {
-                // We only evaluate the display logic for one survey at a time
-                if (!isNull(this.surveyInFocus)) {
-                    return
-                }
+                // Widget Type Logic
                 if (survey.type === SurveyType.Widget) {
-                    if (
-                        survey.appearance?.widgetType === 'tab' &&
-                        document.querySelectorAll(`.PostHogWidget${survey.id}`).length === 0
+                    if (survey.appearance?.widgetType === SurveyWidgetType.Tab) {
+                        // Render tab widget if not already present
+                        this._handleWidget(survey)
+                    } else if (
+                        survey.appearance?.widgetType === SurveyWidgetType.Selector &&
+                        survey.appearance?.widgetSelector
                     ) {
-                        this.handleWidget(survey)
-                    }
-                    if (survey.appearance?.widgetType === 'selector' && survey.appearance?.widgetSelector) {
-                        this.handleWidgetSelector(survey)
+                        activeSelectorSurveyIds.add(survey.id)
+                        // Manage the listener attachment/detachment dynamically
+                        this._manageWidgetSelectorListener(survey)
                     }
                 }
 
-                if (survey.type === SurveyType.Popover && this.canShowNextEventBasedSurvey()) {
-                    this.handlePopoverSurvey(survey)
+                // Popover Type Logic (only one shown at a time)
+                if (
+                    isNull(this._surveyInFocus) &&
+                    survey.type === SurveyType.Popover &&
+                    this._canShowNextEventBasedSurvey()
+                ) {
+                    this._handlePopoverSurvey(survey)
+                }
+            })
+
+            // Clean up listeners for surveys that are no longer active or matched
+            this._widgetSelectorListeners.forEach((_, surveyId) => {
+                if (!activeSelectorSurveyIds.has(surveyId)) {
+                    this._removeWidgetSelectorListener(surveyId)
                 }
             })
         }, forceReload)
     }
 
-    private addSurveyToFocus = (id: string): void => {
-        if (!isNull(this.surveyInFocus)) {
-            logger.error(`Survey ${[...this.surveyInFocus]} already in focus. Cannot add survey ${id}.`)
+    private _addSurveyToFocus = (id: string): void => {
+        if (!isNull(this._surveyInFocus)) {
+            logger.error(`Survey ${[...this._surveyInFocus]} already in focus. Cannot add survey ${id}.`)
         }
-        this.surveyInFocus = id
+        this._surveyInFocus = id
     }
 
-    private removeSurveyFromFocus = (id: string): void => {
-        if (this.surveyInFocus !== id) {
+    private _removeSurveyFromFocus = (id: string): void => {
+        if (this._surveyInFocus !== id) {
             logger.error(`Survey ${id} is not in focus. Cannot remove survey ${id}.`)
         }
-        this.clearSurveyTimeout(id)
-        this.surveyInFocus = null
+        this._clearSurveyTimeout(id)
+        this._surveyInFocus = null
     }
 
     // Expose internal state and methods for testing
     public getTestAPI() {
         return {
-            addSurveyToFocus: this.addSurveyToFocus,
-            removeSurveyFromFocus: this.removeSurveyFromFocus,
-            surveyInFocus: this.surveyInFocus,
-            surveyTimeouts: this.surveyTimeouts,
-            canShowNextEventBasedSurvey: this.canShowNextEventBasedSurvey,
-            handleWidget: this.handleWidget,
-            handlePopoverSurvey: this.handlePopoverSurvey,
-            handleWidgetSelector: this.handleWidgetSelector,
-            sortSurveysByAppearanceDelay: this.sortSurveysByAppearanceDelay,
+            addSurveyToFocus: this._addSurveyToFocus,
+            removeSurveyFromFocus: this._removeSurveyFromFocus,
+            surveyInFocus: this._surveyInFocus,
+            surveyTimeouts: this._surveyTimeouts,
+            canShowNextEventBasedSurvey: this._canShowNextEventBasedSurvey,
+            handleWidget: this._handleWidget,
+            handlePopoverSurvey: this._handlePopoverSurvey,
+            manageWidgetSelectorListener: this._manageWidgetSelectorListener,
+            sortSurveysByAppearanceDelay: this._sortSurveysByAppearanceDelay,
+            checkFlags: this._checkFlags.bind(this),
         }
     }
 }
@@ -522,7 +683,7 @@ export function generateSurveys(posthog: PostHog) {
 }
 
 type UseHideSurveyOnURLChangeProps = {
-    survey: Pick<Survey, 'id' | 'conditions'>
+    survey: Pick<Survey, 'id' | 'conditions' | 'type' | 'appearance'>
     removeSurveyFromFocus: (id: string) => void
     setSurveyVisible: (visible: boolean) => void
     isPreviewMode?: boolean
@@ -550,11 +711,21 @@ export function useHideSurveyOnURLChange({
         }
 
         const checkUrlMatch = () => {
-            const urlCheck = doesSurveyUrlMatch(survey)
-            if (!urlCheck) {
-                setSurveyVisible(false)
-                return removeSurveyFromFocus(survey.id)
+            const isSurveyTypeWidget = survey.type === SurveyType.Widget
+            const doesSurveyMatchUrlCondition = doesSurveyUrlMatch(survey)
+            const isSurveyWidgetTypeTab = survey.appearance?.widgetType === SurveyWidgetType.Tab && isSurveyTypeWidget
+
+            if (doesSurveyMatchUrlCondition) {
+                if (isSurveyWidgetTypeTab) {
+                    logger.info(`Showing survey ${survey.id} because it is a feedback button tab and URL matches`)
+                    setSurveyVisible(true)
+                }
+                return
             }
+
+            logger.info(`Hiding survey ${survey.id} because URL does not match`)
+            setSurveyVisible(false)
+            return removeSurveyFromFocus(survey.id)
         }
 
         // Listen for browser back/forward browser history changes
@@ -605,12 +776,18 @@ export function usePopupVisibility(
             return
         }
 
-        const handleSurveyClosed = () => {
+        const handleSurveyClosed = (event: CustomEvent) => {
+            if (event.detail.surveyId !== survey.id) {
+                return
+            }
             removeSurveyFromFocus(survey.id)
             setIsPopupVisible(false)
         }
 
-        const handleSurveySent = () => {
+        const handleSurveySent = (event: CustomEvent) => {
+            if (event.detail.surveyId !== survey.id) {
+                return
+            }
             if (!survey.appearance?.displayThankYouMessage) {
                 removeSurveyFromFocus(survey.id)
                 setIsPopupVisible(false)
@@ -643,7 +820,7 @@ export function usePopupVisibility(
             localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
             setTimeout(() => {
                 const inputField = document
-                    .querySelector(getPosthogWidgetClass(survey.id))
+                    .querySelector(getSurveyContainerClass(survey, true))
                     ?.shadowRoot?.querySelector('textarea, input[type="text"]') as HTMLElement
                 if (inputField) {
                     inputField.focus()
@@ -651,8 +828,8 @@ export function usePopupVisibility(
             }, 100)
         }
 
-        addEventListener(window, 'PHSurveyClosed', handleSurveyClosed)
-        addEventListener(window, 'PHSurveySent', handleSurveySent)
+        addEventListener(window, 'PHSurveyClosed', handleSurveyClosed as EventListener)
+        addEventListener(window, 'PHSurveySent', handleSurveySent as EventListener)
 
         if (millisecondDelay > 0) {
             // This path is only used for direct usage of SurveyPopup,
@@ -660,15 +837,15 @@ export function usePopupVisibility(
             const timeoutId = setTimeout(showSurvey, millisecondDelay)
             return () => {
                 clearTimeout(timeoutId)
-                window.removeEventListener('PHSurveyClosed', handleSurveyClosed)
-                window.removeEventListener('PHSurveySent', handleSurveySent)
+                window.removeEventListener('PHSurveyClosed', handleSurveyClosed as EventListener)
+                window.removeEventListener('PHSurveySent', handleSurveySent as EventListener)
             }
         } else {
             // This is the path used for surveys managed by SurveyManager
             showSurvey()
             return () => {
-                window.removeEventListener('PHSurveyClosed', handleSurveyClosed)
-                window.removeEventListener('PHSurveySent', handleSurveySent)
+                window.removeEventListener('PHSurveyClosed', handleSurveyClosed as EventListener)
+                window.removeEventListener('PHSurveySent', handleSurveySent as EventListener)
             }
         }
     }, [])
@@ -826,6 +1003,7 @@ export function Questions({
     return (
         <form
             className="survey-form"
+            name="surveyForm"
             style={
                 isPopup
                     ? {
@@ -895,8 +1073,7 @@ export function FeedbackWidget({
 }): JSX.Element | null {
     const [isFeedbackButtonVisible, setIsFeedbackButtonVisible] = useState(true)
     const [showSurvey, setShowSurvey] = useState(false)
-    const [styleOverrides, setStyle] = useState({})
-    const widgetRef = useRef<HTMLDivElement>(null)
+    const [styleOverrides, setStyleOverrides] = useState<React.CSSProperties>({})
 
     useEffect(() => {
         if (!posthog) {
@@ -908,84 +1085,37 @@ export function FeedbackWidget({
         }
 
         if (survey.appearance?.widgetType === 'tab') {
-            if (widgetRef.current) {
-                const widgetPos = widgetRef.current.getBoundingClientRect()
-                const style = {
-                    top: '50%',
-                    left: parseInt(`${widgetPos.right - 360}`),
-                    bottom: 'auto',
-                    borderRadius: 10,
-                    borderBottom: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
-                }
-                setStyle(style)
+            setStyleOverrides({
+                top: '50%',
+                bottom: 'auto',
+                borderRadius: 10,
+                borderBottom: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
+            })
+        }
+        const handleShowSurvey = (event: Event) => {
+            const customEvent = event as CustomEvent
+            // Check if the event is for this specific survey instance
+            if (customEvent.detail?.surveyId === survey.id) {
+                logger.info(`Received show event for survey ${survey.id}`)
+                setStyleOverrides(customEvent.detail.position || {})
+                setShowSurvey(true) // Show the survey popup
             }
         }
-        if (survey.appearance?.widgetType === 'selector') {
-            const widget = document.querySelector(survey.appearance.widgetSelector || '') ?? undefined
 
-            addEventListener(widget, 'click', (event) => {
-                // Calculate position based on the selector button
-                const buttonRect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-                const viewportHeight = window.innerHeight
-                const viewportWidth = window.innerWidth
+        addEventListener(window, DISPATCH_FEEDBACK_WIDGET_EVENT, handleShowSurvey)
 
-                // Get survey width from maxWidth or default to 300px
-                const surveyWidth = parseInt(survey.appearance?.maxWidth || '300')
-
-                // Estimated minimum survey height (we don't know exact height yet)
-                const estimatedMinSurveyHeight = 250
-
-                // Calculate horizontal center position of the button
-                const buttonCenterX = buttonRect.left + buttonRect.width / 2
-
-                // Calculate horizontal center position
-                let left = buttonCenterX - surveyWidth / 2
-
-                // Ensure the survey doesn't go off-screen horizontally (with padding)
-                const horizontalPadding = 20
-                if (left + surveyWidth > viewportWidth - horizontalPadding) {
-                    left = viewportWidth - surveyWidth - horizontalPadding
-                }
-                if (left < horizontalPadding) {
-                    left = horizontalPadding
-                }
-
-                // Simple spacing between button and survey
-                const spacing = 12
-
-                // Determine if we should show above or below
-                const spaceBelow = viewportHeight - buttonRect.bottom
-                const spaceAbove = buttonRect.top
-
-                // Prefer below if there's enough space, otherwise try above
-                const showAbove = spaceBelow < estimatedMinSurveyHeight && spaceAbove > spaceBelow
-
-                // If both above and below have insufficient space, prefer below as fallback
-                // For positioning logic only - scrolling will still make it accessible
-
-                // Set style overrides for positioning
-                setStyle((prev) => ({
-                    ...prev,
-                    position: 'fixed', // Fixed to viewport
-                    top: showAbove ? 'auto' : buttonRect.bottom + spacing + 'px',
-                    left: left + 'px',
-                    right: 'auto',
-                    bottom: showAbove ? viewportHeight - buttonRect.top + spacing + 'px' : 'auto',
-                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                    borderBottom: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
-                    borderRadius: '10px',
-                    zIndex: SURVEY_DEFAULT_Z_INDEX, // High z-index to ensure visibility
-                }))
-
-                setShowSurvey(!showSurvey)
-
-                // Prevent event from bubbling up to parent elements
-                event.stopPropagation()
-            })
-
-            widget?.setAttribute('PHWidgetSurveyClickListener', 'true')
+        // Cleanup listener on component unmount
+        return () => {
+            window.removeEventListener(DISPATCH_FEEDBACK_WIDGET_EVENT, handleShowSurvey)
         }
-    }, [])
+    }, [
+        posthog,
+        readOnly,
+        survey.id,
+        survey.appearance?.widgetType,
+        survey.appearance?.widgetSelector,
+        survey.appearance?.borderColor,
+    ])
 
     useHideSurveyOnURLChange({
         survey,
@@ -1006,7 +1136,6 @@ export function FeedbackWidget({
             {survey.appearance?.widgetType === 'tab' && (
                 <div
                     className="ph-survey-widget-tab"
-                    ref={widgetRef}
                     onClick={() => !readOnly && setShowSurvey(!showSurvey)}
                     style={{ color: getContrastingTextColor(survey.appearance.widgetColor) }}
                 >

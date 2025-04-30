@@ -8,33 +8,33 @@ describe('RequestQueue', () => {
     describe('setting flush timeout', () => {
         it('can override the flush timeout', () => {
             const queue = new RequestQueue(jest.fn(), { flush_interval_ms: 1000 })
-            expect(queue['flushTimeoutMs']).toEqual(1000)
+            expect(queue['_flushTimeoutMs']).toEqual(1000)
         })
 
         it('defaults to 3000 when not configured', () => {
             const queue = new RequestQueue(jest.fn(), {})
-            expect(queue['flushTimeoutMs']).toEqual(DEFAULT_FLUSH_INTERVAL_MS)
+            expect(queue['_flushTimeoutMs']).toEqual(DEFAULT_FLUSH_INTERVAL_MS)
         })
 
         it('defaults to 3000 when no config', () => {
             const queue = new RequestQueue(jest.fn())
-            expect(queue['flushTimeoutMs']).toEqual(DEFAULT_FLUSH_INTERVAL_MS)
+            expect(queue['_flushTimeoutMs']).toEqual(DEFAULT_FLUSH_INTERVAL_MS)
         })
 
         it('cannot set below 250', () => {
             const queue = new RequestQueue(jest.fn(), { flush_interval_ms: 249 })
-            expect(queue['flushTimeoutMs']).toEqual(250)
+            expect(queue['_flushTimeoutMs']).toEqual(250)
         })
 
         it('cannot set above 5000', () => {
             const queue = new RequestQueue(jest.fn(), { flush_interval_ms: 5001 })
-            expect(queue['flushTimeoutMs']).toEqual(5000)
+            expect(queue['_flushTimeoutMs']).toEqual(5000)
         })
 
         it('can be passed in from posthog config', async () => {
             const posthog = await createPosthogInstance('token', { request_queue_config: { flush_interval_ms: 1000 } })
             expect(posthog.config.request_queue_config.flush_interval_ms).toEqual(1000)
-            expect(posthog['_requestQueue']['flushTimeoutMs']).toEqual(1000)
+            expect(posthog['_requestQueue']['_flushTimeoutMs']).toEqual(1000)
         })
     })
 

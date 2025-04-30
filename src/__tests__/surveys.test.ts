@@ -1,12 +1,12 @@
 /// <reference lib="dom" />
 
 import { SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
-import { generateSurveys, getNextSurveyStep } from '../extensions/surveys'
+import { generateSurveys, getNextSurveyStep, SurveyManager } from '../extensions/surveys'
 import {
     canActivateRepeatedly,
     getDisplayOrderChoices,
     getDisplayOrderQuestions,
-} from '../extensions/surveys/surveys-utils'
+} from '../extensions/surveys/surveys-extension-utils'
 import { PostHog } from '../posthog-core'
 import { PostHogPersistence } from '../posthog-persistence'
 import { PostHogSurveys } from '../posthog-surveys'
@@ -46,9 +46,11 @@ describe('surveys', () => {
 
     const firstSurveys: Survey[] = [
         {
+            id: 'first-survey',
             name: 'first survey',
             description: 'first survey description',
             type: SurveyType.Popover,
+            start_date: new Date().toISOString(),
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
         } as unknown as Survey,
     ]
@@ -73,6 +75,7 @@ describe('surveys', () => {
             id: 'first-survey',
             description: 'first survey description',
             type: SurveyType.Popover,
+            start_date: new Date().toISOString(),
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
             conditions: {
                 events: {
@@ -98,6 +101,7 @@ describe('surveys', () => {
             id: 'second-survey',
             description: 'second survey description',
             type: SurveyType.Popover,
+            start_date: new Date().toISOString(),
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a moblin?' }],
         } as unknown as Survey,
         {
@@ -105,6 +109,7 @@ describe('surveys', () => {
             id: 'third-survey',
             description: 'third survey description',
             type: SurveyType.Popover,
+            start_date: new Date().toISOString(),
             questions: [{ type: SurveyQuestionType.Open, question: 'what is a bokoblin?' }],
             conditions: {
                 events: {
@@ -212,6 +217,7 @@ describe('surveys', () => {
         instance.surveys = surveys
         // all being squashed into a mock posthog so...
         instance.getActiveMatchingSurveys = instance.surveys.getActiveMatchingSurveys.bind(instance.surveys)
+        instance.canRenderSurveyAsync = instance.surveys.canRenderSurveyAsync.bind(instance.surveys)
 
         // mock loadIfEnabled so posthog.surveys.loadIfEnabled() doesn't call _send_request
         // and it instantiates the survey event receiver
@@ -220,6 +226,8 @@ describe('surveys', () => {
             surveys._surveyEventReceiver = new SurveyEventReceiver(instance)
         })
         surveys.loadIfEnabled = loadIfEnabledMock
+        const surveyManager = new SurveyManager(instance)
+        ;(surveys as any)._surveyManager = surveyManager
 
         Object.defineProperty(window, 'location', {
             configurable: true,
@@ -321,6 +329,19 @@ describe('surveys', () => {
             expect(data).toEqual([])
         })
         expect(instance._send_request).not.toHaveBeenCalled()
+    })
+
+    it('can render survey async', async () => {
+        const result = await surveys.canRenderSurveyAsync(firstSurveys[0].id, true)
+
+        expect(result.disabledReason).toBeUndefined()
+        expect(result.visible).toBeTruthy()
+    })
+
+    it('cannot render survey async', async () => {
+        const result = await surveys.canRenderSurveyAsync('i dont exist', true)
+
+        expect(result.visible).toBeFalsy()
     })
 
     describe('getActiveMatchingSurveys', () => {
@@ -729,8 +750,6 @@ describe('surveys', () => {
         })
 
         it('returns event based surveys that observed an event', () => {
-            // TODO this test fails when run in isolation
-
             surveysResponse = {
                 surveys: [surveyWithEnabledInternalFlag, surveyWithEvents],
             }
@@ -975,6 +994,32 @@ describe('surveys', () => {
             expect(getNextSurveyStep(survey, 0, 'Yes')).toEqual(1)
             expect(getNextSurveyStep(survey, 0, 'No')).toEqual(2)
             expect(getNextSurveyStep(survey, 0, 'Maybe')).toEqual(3)
+        })
+
+        it('should branch out correctly based on a single choice response, with an open ended choice', () => {
+            survey.questions = [
+                {
+                    type: SurveyQuestionType.SingleChoice,
+                    question: 'Will you leave us a review?',
+                    choices: ['Yes', 'No', 'Maybe', 'Sometimes', 'Other'],
+                    branching: {
+                        type: SurveyQuestionBranchingType.ResponseBased,
+                        responseValues: {
+                            '0': 'end',
+                            '1': 1,
+                            '4': 'end',
+                        },
+                    },
+                    hasOpenChoice: true,
+                },
+                { type: SurveyQuestionType.Open, question: 'Why yes?' },
+                { type: SurveyQuestionType.Open, question: 'Why no?' },
+                { type: SurveyQuestionType.Open, question: 'Why maybe?' },
+            ] as unknown[] as SurveyQuestion[]
+            expect(getNextSurveyStep(survey, 0, 'Yes')).toEqual('end')
+            expect(getNextSurveyStep(survey, 0, 'No')).toEqual(1)
+            expect(getNextSurveyStep(survey, 0, 'Maybe')).toEqual(1)
+            expect(getNextSurveyStep(survey, 0, 'this is another answer')).toEqual('end')
         })
 
         // Response-based branching, scale 1-3
@@ -1287,65 +1332,6 @@ describe('surveys', () => {
             ] as unknown as SurveyQuestion[]
             expect(() => getNextSurveyStep(survey, 0, '2')).toThrow('The response type must be an integer')
             expect(() => getNextSurveyStep(survey, 0, 'some_string')).toThrow('The response type must be an integer')
-        })
-    })
-
-    describe('checkFlags', () => {
-        it('should return true when no feature flags are specified', () => {
-            const survey = { id: '123', questions: [] } as Survey
-            const result = surveys.checkFlags(survey)
-            expect(result).toBe(true)
-        })
-
-        it('should return true when all feature flags are enabled', () => {
-            const survey = {
-                id: '123',
-                questions: [],
-                feature_flag_keys: [
-                    { key: 'flag1', value: 'flag-1' },
-                    { key: 'flag2', value: 'flag-2' },
-                ],
-            } as Survey
-
-            jest.spyOn(instance.featureFlags, 'isFeatureEnabled').mockImplementation(() => true)
-
-            const result = surveys.checkFlags(survey)
-            expect(result).toBe(true)
-        })
-
-        it('should return false when any feature flag is disabled', () => {
-            const survey = {
-                id: '123',
-                questions: [],
-                feature_flag_keys: [
-                    { key: 'flag1', value: 'flag-1' },
-                    { key: 'flag2', value: 'flag-2' },
-                ],
-            } as Survey
-
-            jest.spyOn(instance.featureFlags, 'isFeatureEnabled').mockImplementation((flag) =>
-                flag === 'flag-1' ? true : false
-            )
-
-            const result = surveys.checkFlags(survey)
-            expect(result).toBe(false)
-        })
-
-        it('should ignore feature flags with missing key or value', () => {
-            const survey = {
-                id: '123',
-                questions: [],
-                feature_flag_keys: [
-                    { key: '', value: 'flag-1' },
-                    { key: 'flag2', value: '' },
-                    { key: 'flag3', value: 'flag-3' },
-                ],
-            } as Survey
-
-            jest.spyOn(instance.featureFlags, 'isFeatureEnabled').mockImplementation(() => true)
-
-            const result = surveys.checkFlags(survey)
-            expect(result).toBe(true)
         })
     })
 })

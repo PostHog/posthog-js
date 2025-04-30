@@ -419,15 +419,19 @@ export interface PostHogConfig {
 
     /**
      * Determines whether PostHog should capture pageview events automatically.
+     * Can be:
+     * - `true`: Capture regular pageviews (default)
+     * - `false`: Don't capture any pageviews
+     * - `'history_change'`: Only capture pageviews on history API changes (pushState, replaceState, popstate)
      *
      * @default true
      */
-    capture_pageview: boolean
+    capture_pageview: boolean | 'history_change'
 
     /**
      * Determines whether PostHog should capture pageleave events.
      * If set to `true`, it will capture pageleave events for all pages.
-     * If set to `'if_capture_pageview'`, it will only capture pageleave events if `capture_pageview` is also set to `true`.
+     * If set to `'if_capture_pageview'`, it will only capture pageleave events if `capture_pageview` is also set to `true` or `'history_change'`.
      *
      * @default 'if_capture_pageview'
      */
@@ -1439,11 +1443,11 @@ export type EvaluationReason = {
 export type RemoteConfigFeatureFlagCallback = (payload: JsonType) => void
 
 export interface PersistentStore {
-    is_supported: () => boolean
-    error: (error: any) => void
-    parse: (name: string) => any
-    get: (name: string) => any
-    set: (
+    _is_supported: () => boolean
+    _error: (error: any) => void
+    _parse: (name: string) => any
+    _get: (name: string) => any
+    _set: (
         name: string,
         value: any,
         expire_days?: number | null,
@@ -1451,7 +1455,7 @@ export interface PersistentStore {
         secure?: boolean,
         debug?: boolean
     ) => void
-    remove: (name: string, cross_subdomain?: boolean) => void
+    _remove: (name: string, cross_subdomain?: boolean) => void
 }
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type

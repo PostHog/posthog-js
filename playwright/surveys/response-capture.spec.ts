@@ -1,4 +1,4 @@
-import { getSurveyResponseKey } from '../../src/extensions/surveys/surveys-utils'
+import { getSurveyResponseKey } from '../../src/extensions/surveys/surveys-extension-utils'
 import { pollUntilEventCaptured } from '../utils/event-capture-utils'
 import { expect, test } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
@@ -41,8 +41,8 @@ test.describe('surveys - feedback widget', () => {
 
         await pollUntilEventCaptured(page, 'survey shown')
 
-        await page.locator('.PostHogSurvey123 textarea').type('experiments is awesome!')
-        await page.locator('.PostHogSurvey123 .form-submit').click()
+        await page.locator('.PostHogSurvey-123 textarea').type('experiments is awesome!')
+        await page.locator('.PostHogSurvey-123 .form-submit').click()
 
         await pollUntilEventCaptured(page, 'survey sent')
         const surveySentEvent = await page
@@ -97,8 +97,8 @@ test.describe('surveys - feedback widget', () => {
             })
         )
 
-        await page.locator('.PostHogSurvey123 textarea').type('experiments is awesome!')
-        await page.locator('.PostHogSurvey123 .form-submit').click()
+        await page.locator('.PostHogSurvey-123 textarea').type('experiments is awesome!')
+        await page.locator('.PostHogSurvey-123 .form-submit').click()
 
         await pollUntilEventCaptured(page, 'survey sent')
         const surveySentEvent = await page
@@ -141,7 +141,7 @@ test.describe('surveys - feedback widget', () => {
         await start(startOptions, page, context)
         await surveysAPICall
 
-        await page.locator('.PostHogSurvey123 .cancel-btn-wrapper').click()
+        await page.locator('.PostHogSurvey-123 .cancel-btn-wrapper').click()
         await pollUntilEventCaptured(page, 'survey dismissed')
     })
 
@@ -167,7 +167,7 @@ test.describe('surveys - feedback widget', () => {
         await start(startOptions, page, context)
         await surveysAPICall
 
-        await page.locator('.PostHogSurvey123 .cancel-btn-wrapper').click()
+        await page.locator('.PostHogSurvey-123 .cancel-btn-wrapper').click()
         await pollUntilEventCaptured(page, 'survey dismissed')
         const surveyDismissedEvent = await page
             .capturedEvents()

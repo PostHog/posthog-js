@@ -20,6 +20,8 @@ jobs:
             - run: pnpm install
             - run: pnpm build
             - run: pnpm test:unit
+            - run: pnpm write-mangled-property-names
+            - run: git diff --exit-code # fail if e.g. the mangled properties list has changed, see rollup.config.js
 
     integration:
         name: Playwright E2E tests

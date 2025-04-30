@@ -41,10 +41,10 @@ export interface TriggerStatusMatching {
 }
 
 export class OrTriggerMatching implements TriggerStatusMatching {
-    constructor(private readonly matchers: TriggerStatusMatching[]) {}
+    constructor(private readonly _matchers: TriggerStatusMatching[]) {}
 
     triggerStatus(sessionId: string): TriggerStatus {
-        const statuses = this.matchers.map((m) => m.triggerStatus(sessionId))
+        const statuses = this._matchers.map((m) => m.triggerStatus(sessionId))
         if (statuses.includes('trigger_activated')) {
             return 'trigger_activated'
         }
@@ -56,11 +56,11 @@ export class OrTriggerMatching implements TriggerStatusMatching {
 }
 
 export class AndTriggerMatching implements TriggerStatusMatching {
-    constructor(private readonly matchers: TriggerStatusMatching[]) {}
+    constructor(private readonly _matchers: TriggerStatusMatching[]) {}
 
     triggerStatus(sessionId: string): TriggerStatus {
         const statuses = new Set<TriggerStatus>()
-        for (const matcher of this.matchers) {
+        for (const matcher of this._matchers) {
             statuses.add(matcher.triggerStatus(sessionId))
         }
 
@@ -97,24 +97,24 @@ export class URLTriggerMatching implements TriggerStatusMatching {
         this._urlBlocked = value
     }
 
-    constructor(private readonly instance: PostHog) {}
+    constructor(private readonly _instance: PostHog) {}
 
     onRemoteConfig(response: RemoteConfig) {
         this._urlTriggers = response.sessionRecording?.urlTriggers || []
         this._urlBlocklist = response.sessionRecording?.urlBlocklist || []
     }
 
-    private urlTriggerStatus(sessionId: string): TriggerStatus {
+    private _urlTriggerStatus(sessionId: string): TriggerStatus {
         if (this._urlTriggers.length === 0) {
             return 'trigger_disabled'
         }
 
-        const currentTriggerSession = this.instance?.get_property(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
+        const currentTriggerSession = this._instance?.get_property(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
         return currentTriggerSession === sessionId ? 'trigger_activated' : 'trigger_pending'
     }
 
     triggerStatus(sessionId: string): TriggerStatus {
-        const urlTriggerStatus = this.urlTriggerStatus(sessionId)
+        const urlTriggerStatus = this._urlTriggerStatus(sessionId)
         const eitherIsActivated = urlTriggerStatus === 'trigger_activated'
         const eitherIsPending = urlTriggerStatus === 'trigger_pending'
 
@@ -151,7 +151,7 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
     linkedFlag: string | FlagVariant | null = null
     linkedFlagSeen: boolean = false
 
-    constructor(private readonly instance: PostHog) {}
+    constructor(private readonly _instance: PostHog) {}
 
     triggerStatus(): TriggerStatus {
         if (isNullish(this.linkedFlag)) {
@@ -169,7 +169,7 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
         if (!isNullish(this.linkedFlag) && !this.linkedFlagSeen) {
             const linkedFlag = isString(this.linkedFlag) ? this.linkedFlag : this.linkedFlag.flag
             const linkedVariant = isString(this.linkedFlag) ? null : this.linkedFlag.variant
-            this.instance.onFeatureFlags((_flags, variants) => {
+            this._instance.onFeatureFlags((_flags, variants) => {
                 const flagIsPresent = isObject(variants) && linkedFlag in variants
                 const linkedFlagMatches = linkedVariant ? variants[linkedFlag] === linkedVariant : flagIsPresent
                 if (linkedFlagMatches) {
@@ -184,23 +184,23 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
 export class EventTriggerMatching implements TriggerStatusMatching {
     _eventTriggers: string[] = []
 
-    constructor(private readonly instance: PostHog) {}
+    constructor(private readonly _instance: PostHog) {}
 
     onRemoteConfig(response: RemoteConfig) {
         this._eventTriggers = response.sessionRecording?.eventTriggers || []
     }
 
-    private eventTriggerStatus(sessionId: string): TriggerStatus {
+    private _eventTriggerStatus(sessionId: string): TriggerStatus {
         if (this._eventTriggers.length === 0) {
             return 'trigger_disabled'
         }
 
-        const currentTriggerSession = this.instance?.get_property(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
+        const currentTriggerSession = this._instance?.get_property(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
         return currentTriggerSession === sessionId ? 'trigger_activated' : 'trigger_pending'
     }
 
     triggerStatus(sessionId: string): TriggerStatus {
-        const eventTriggerStatus = this.eventTriggerStatus(sessionId)
+        const eventTriggerStatus = this._eventTriggerStatus(sessionId)
         return eventTriggerStatus === 'trigger_activated'
             ? 'trigger_activated'
             : eventTriggerStatus === 'trigger_pending'
@@ -316,7 +316,7 @@ export function allMatchSessionRecordingStatus(triggersStatus: RecordingTriggers
     }
 
     // sampling can't ever cause buffering, it's always determined right away or not configured
-    if (hasSamplingConfigured && triggersStatus.isSampled === false) {
+    if (hasSamplingConfigured && !triggersStatus.isSampled) {
         return 'disabled'
     }
 

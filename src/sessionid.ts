@@ -22,8 +22,8 @@ const SESSION_LENGTH_LIMIT_MILLISECONDS = 24 * 3600 * 1000 // 24 hours
 export class SessionIdManager {
     private readonly _sessionIdGenerator: () => string
     private readonly _windowIdGenerator: () => string
-    private config: Partial<PostHogConfig>
-    private persistence: PostHogPersistence
+    private _config: Partial<PostHogConfig>
+    private _persistence: PostHogPersistence
     private _windowId: string | null | undefined
     private _sessionId: string | null | undefined
     private readonly _window_id_storage_key: string
@@ -45,8 +45,8 @@ export class SessionIdManager {
             throw new Error('SessionIdManager cannot be used with __preview_experimental_cookieless_mode')
         }
 
-        this.config = instance.config
-        this.persistence = instance.persistence
+        this._config = instance.config
+        this._persistence = instance.persistence
         this._windowId = undefined
         this._sessionId = undefined
         this._sessionStartTimestamp = null
@@ -54,9 +54,9 @@ export class SessionIdManager {
         this._sessionIdGenerator = sessionIdGenerator || uuidv7
         this._windowIdGenerator = windowIdGenerator || uuidv7
 
-        const persistenceName = this.config['persistence_name'] || this.config['token']
+        const persistenceName = this._config['persistence_name'] || this._config['token']
 
-        const desiredTimeout = this.config['session_idle_timeout_seconds'] || DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS
+        const desiredTimeout = this._config['session_idle_timeout_seconds'] || DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS
         this._sessionTimeoutMs =
             clampToRange(
                 desiredTimeout,
@@ -67,7 +67,7 @@ export class SessionIdManager {
             ) * 1000
 
         instance.register({ $configured_session_timeout_ms: this._sessionTimeoutMs })
-        this.resetIdleTimer()
+        this._resetIdleTimer()
 
         this._window_id_storage_key = 'ph_' + persistenceName + '_window_id'
         this._primary_window_exists_storage_key = 'ph_' + persistenceName + '_primary_window_exists'
@@ -75,24 +75,24 @@ export class SessionIdManager {
         // primary_window_exists is set when the DOM has been loaded and is cleared on unload
         // if it exists here it means there was no unload which suggests this window is opened as a tab duplication, window.open, etc.
         if (this._canUseSessionStorage()) {
-            const lastWindowId = sessionStore.parse(this._window_id_storage_key)
+            const lastWindowId = sessionStore._parse(this._window_id_storage_key)
 
-            const primaryWindowExists = sessionStore.parse(this._primary_window_exists_storage_key)
+            const primaryWindowExists = sessionStore._parse(this._primary_window_exists_storage_key)
             if (lastWindowId && !primaryWindowExists) {
                 // Persist window from previous storage state
                 this._windowId = lastWindowId
             } else {
                 // Wipe any reference to previous window id
-                sessionStore.remove(this._window_id_storage_key)
+                sessionStore._remove(this._window_id_storage_key)
             }
             // Flag this session as having a primary window
-            sessionStore.set(this._primary_window_exists_storage_key, true)
+            sessionStore._set(this._primary_window_exists_storage_key, true)
         }
 
-        if (this.config.bootstrap?.sessionID) {
+        if (this._config.bootstrap?.sessionID) {
             try {
-                const sessionStartTimestamp = uuid7ToTimestampMs(this.config.bootstrap.sessionID)
-                this._setSessionId(this.config.bootstrap.sessionID, new Date().getTime(), sessionStartTimestamp)
+                const sessionStartTimestamp = uuid7ToTimestampMs(this._config.bootstrap.sessionID)
+                this._setSessionId(this._config.bootstrap.sessionID, new Date().getTime(), sessionStartTimestamp)
             } catch (e) {
                 logger.error('Invalid sessionID in bootstrap', e)
             }
@@ -123,7 +123,7 @@ export class SessionIdManager {
 
     private _canUseSessionStorage(): boolean {
         // We only want to use sessionStorage if persistence is enabled and not memory storage
-        return this.config.persistence !== 'memory' && !this.persistence.disabled && sessionStore.is_supported()
+        return this._config.persistence !== 'memory' && !this._persistence._disabled && sessionStore._is_supported()
     }
 
     // Note: this tries to store the windowId in sessionStorage. SessionStorage is unique to the current window/tab,
@@ -134,7 +134,7 @@ export class SessionIdManager {
         if (windowId !== this._windowId) {
             this._windowId = windowId
             if (this._canUseSessionStorage()) {
-                sessionStore.set(this._window_id_storage_key, windowId)
+                sessionStore._set(this._window_id_storage_key, windowId)
             }
         }
     }
@@ -144,7 +144,7 @@ export class SessionIdManager {
             return this._windowId
         }
         if (this._canUseSessionStorage()) {
-            return sessionStore.parse(this._window_id_storage_key)
+            return sessionStore._parse(this._window_id_storage_key)
         }
         // New window id will be generated
         return null
@@ -166,7 +166,7 @@ export class SessionIdManager {
             this._sessionActivityTimestamp = sessionActivityTimestamp
             this._sessionId = sessionId
 
-            this.persistence.register({
+            this._persistence.register({
                 [SESSION_ID]: [sessionActivityTimestamp, sessionId, sessionStartTimestamp],
             })
         }
@@ -176,7 +176,7 @@ export class SessionIdManager {
         if (this._sessionId && this._sessionActivityTimestamp && this._sessionStartTimestamp) {
             return [this._sessionActivityTimestamp, this._sessionId, this._sessionStartTimestamp]
         }
-        const sessionIdInfo = this.persistence.props[SESSION_ID]
+        const sessionIdInfo = this._persistence.props[SESSION_ID]
 
         if (isArray(sessionIdInfo) && sessionIdInfo.length === 2) {
             // Storage does not yet have a session start time. Add the last activity timestamp as the start time
@@ -204,7 +204,7 @@ export class SessionIdManager {
             'beforeunload',
             () => {
                 if (this._canUseSessionStorage()) {
-                    sessionStore.remove(this._primary_window_exists_storage_key)
+                    sessionStore._remove(this._primary_window_exists_storage_key)
                 }
             },
             // Not making it passive to try and force the browser to handle this before the page is unloaded
@@ -229,7 +229,7 @@ export class SessionIdManager {
      * @param {Number} timestamp (optional) Defaults to the current time. The timestamp to be stored with the sessionId (used when determining if a new sessionId should be generated)
      */
     checkAndGetSessionAndWindowId(readOnly = false, _timestamp: number | null = null) {
-        if (this.config.__preview_experimental_cookieless_mode) {
+        if (this._config.__preview_experimental_cookieless_mode) {
             throw new Error(
                 'checkAndGetSessionAndWindowId should not be called in __preview_experimental_cookieless_mode'
             )
@@ -271,7 +271,7 @@ export class SessionIdManager {
         this._setSessionId(sessionId, newActivityTimestamp, sessionStartTimestamp)
 
         if (!readOnly) {
-            this.resetIdleTimer()
+            this._resetIdleTimer()
         }
 
         if (valuesChanged) {
@@ -293,7 +293,7 @@ export class SessionIdManager {
         }
     }
 
-    private resetIdleTimer() {
+    private _resetIdleTimer() {
         clearTimeout(this._enforceIdleTimeout)
         this._enforceIdleTimeout = setTimeout(() => {
             // enforce idle timeout a little after the session timeout to ensure the session is reset even without activity

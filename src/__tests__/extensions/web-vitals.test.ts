@@ -3,11 +3,35 @@ import '../helpers/mock-logger'
 import { createPosthogInstance } from '../helpers/posthog-instance'
 import { uuidv7 } from '../../uuidv7'
 import { PostHog } from '../../posthog-core'
-import { DecideResponse, PerformanceCaptureConfig, SupportedWebVitalsMetrics } from '../../types'
+import { DecideResponse, PerformanceCaptureConfig, RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
 import { assignableWindow } from '../../utils/globals'
 import { DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, FIFTEEN_MINUTES_IN_MILLIS } from '../../extensions/web-vitals'
 
 jest.useFakeTimers()
+
+let mockLocation: jest.Mock
+
+jest.mock('../../utils/globals', () => {
+    const original = jest.requireActual('../../utils/globals')
+    mockLocation = jest.fn().mockReturnValue({
+        protocol: 'http:',
+        host: 'localhost',
+        pathname: '/',
+        search: '',
+        hash: '',
+        href: 'http://localhost/',
+    })
+    return {
+        ...original,
+        assignableWindow: {
+            ...original.assignableWindow,
+            __PosthogExtensions__: {},
+        },
+        get location() {
+            return mockLocation()
+        },
+    }
+})
 
 describe('web vitals', () => {
     let posthog: PostHog
@@ -251,5 +275,126 @@ describe('web vitals', () => {
                 expect(posthog.webVitalsAutocapture!.isEnabled).toBe(expected)
             }
         )
+    })
+
+    it('should be disabled if capture_performance is set to false', async () => {
+        posthog = await createPosthogInstance(uuidv7(), {
+            before_send: beforeSendMock,
+            capture_performance: false,
+        })
+
+        expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
+    })
+
+    it('should be disabled if capture_performance is set to false even if enabled server-side', async () => {
+        posthog = await createPosthogInstance(uuidv7(), {
+            before_send: beforeSendMock,
+            capture_performance: false,
+        })
+
+        posthog.webVitalsAutocapture!.onRemoteConfig({
+            capturePerformance: {
+                web_vitals: true,
+            },
+        } as RemoteConfig)
+
+        expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
+    })
+
+    it('should not run on file:// protocol', async () => {
+        mockLocation.mockReturnValue({
+            protocol: 'file:',
+            host: ' ',
+            pathname: '/Users/robbie/Desktop/test.html',
+            search: '',
+            hash: '',
+            href: 'file:///Users/robbie/Desktop/test.html',
+        })
+
+        posthog = await createPosthogInstance(uuidv7(), {
+            before_send: beforeSendMock,
+            capture_performance: { web_vitals: true },
+        })
+
+        posthog.webVitalsAutocapture!.onRemoteConfig({
+            capturePerformance: { web_vitals: true },
+        } as RemoteConfig)
+
+        expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
+    })
+
+    it.each([
+        // hybrid app tools
+        'capacitor',
+        'capacitor-electron',
+        'tauri',
+        'ionic',
+        'wails',
+        'android-app',
+        'ms-appx-web',
+        // browser extensions
+        'chrome',
+        'chrome-extension',
+        'moz-extension',
+        'safari-web-extension',
+        'vscode-webview',
+        // local files
+        'file',
+        'blob',
+        'data',
+        'content',
+        'dfile',
+        'javascript',
+        'about',
+        'localhost',
+        // email clients
+        'ms-outlook',
+        'email',
+        // misc
+        'ws',
+        'wss',
+        'ftp',
+        'unknown',
+    ])('should not run on %s protocol', async (protocol) => {
+        mockLocation.mockReturnValue({
+            protocol: protocol + ':',
+            host: 'localhost',
+            pathname: '/',
+            search: '',
+            hash: '',
+            href: `${protocol}://localhost/`,
+        })
+
+        posthog = await createPosthogInstance(uuidv7(), {
+            before_send: beforeSendMock,
+            capture_performance: { web_vitals: true },
+        })
+
+        posthog.webVitalsAutocapture!.onRemoteConfig({
+            capturePerformance: { web_vitals: true },
+        } as RemoteConfig)
+
+        expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
+    })
+    it.each(['http', 'https'])('should run on %s protocol', async (protocol) => {
+        mockLocation.mockReturnValue({
+            protocol: protocol + ':',
+            host: 'localhost',
+            pathname: '/',
+            search: '',
+            hash: '',
+            href: `${protocol}://localhost/`,
+        })
+
+        posthog = await createPosthogInstance(uuidv7(), {
+            before_send: beforeSendMock,
+            capture_performance: { web_vitals: true },
+        })
+
+        posthog.webVitalsAutocapture!.onRemoteConfig({
+            capturePerformance: { web_vitals: true },
+        } as DecideResponse)
+
+        expect(posthog.webVitalsAutocapture!.isEnabled).toBe(true)
     })
 })

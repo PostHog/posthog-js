@@ -16,8 +16,7 @@ import { DeadClicksAutoCaptureConfig, Properties, RemoteConfig, SiteAppLoader } 
 const win: (Window & typeof globalThis) | undefined = typeof window !== 'undefined' ? window : undefined
 
 export type AssignableWindow = Window &
-    typeof globalThis &
-    Record<string, any> & {
+    typeof globalThis & {
         __PosthogExtensions__?: PostHogExtensions
 
         _POSTHOG_REMOTE_CONFIG?: Record<
@@ -27,7 +26,22 @@ export type AssignableWindow = Window &
                 siteApps: SiteAppLoader[]
             }
         >
-    }
+
+        doNotTrack: any
+        posthogCustomizations: any
+        posthogErrorWrappingFunctions: any
+        rrweb: any
+        rrwebConsoleRecord: any
+        getRecordNetworkPlugin: any
+        POSTHOG_DEBUG: any
+        posthog: any
+        ph_load_toolbar: any
+        ph_load_editor: any
+        ph_toolbar_state: any
+        postHogWebVitalsCallbacks: any
+        postHogTracingHeadersPatchFns: any
+        extendPostHogWithSurveys: any
+    } & Record<`__$$ph_site_app_${string}`, any>
 
 /**
  * This is our contract between (potentially) lazily loaded extensions and the SDK

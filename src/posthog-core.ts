@@ -14,6 +14,7 @@ import {
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { ExceptionObserver } from './extensions/exception-autocapture'
 import { errorToProperties } from './extensions/exception-autocapture/error-conversion'
+import { HistoryAutocapture } from './extensions/history-autocapture'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { setupSegmentIntegration } from './extensions/segment-integration'
 import { SentryIntegration, sentryIntegration, SentryIntegrationOptions } from './extensions/sentry-integration'
@@ -66,10 +67,10 @@ import {
     safewrapClass,
 } from './utils'
 import { isLikelyBot } from './utils/blocked-uas'
-import { Info } from './utils/event-utils'
+import { getEventProperties } from './utils/event-utils'
 import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
-import { getPersonPropertiesHash } from './utils/person-property-utils'
 import { logger } from './utils/logger'
+import { getPersonPropertiesHash } from './utils/person-property-utils'
 import { RequestRouter, RequestRouterRegion } from './utils/request-router'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
 import { includes, isDistinctIdStringLike } from './utils/string-utils'
@@ -92,9 +93,11 @@ import { WebExperiments } from './web-experiments'
 /*
 SIMPLE STYLE GUIDE:
 
-this.x === public function
-this._x === internal - only use within this file
-this.__x === private - only use within the class
+Use TypeScript accessibility modifiers, e.g. private/protected
+
+If something is not part of the public interface:
+* prefix it with _ to allow mangling
+* prefix it with __ to disable mangling, but signal that it is internal
 
 Globals should be all caps
 */
@@ -144,7 +147,7 @@ export const defaultConfig = (): PostHogConfig => ({
     custom_campaign_params: [],
     custom_blocked_useragents: [],
     save_referrer: true,
-    capture_pageview: true,
+    capture_pageview: true, // can be true, false, or 'history-change'
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     cookie_expiration: 365,
@@ -282,6 +285,7 @@ export class PostHog {
     webVitalsAutocapture?: WebVitalsAutocapture
     exceptionObserver?: ExceptionObserver
     deadClicksAutocapture?: DeadClicksAutocapture
+    historyAutocapture?: HistoryAutocapture
 
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
@@ -335,7 +339,6 @@ export class PostHog {
         this.rateLimiter = new RateLimiter(this)
         this.requestRouter = new RequestRouter(this)
         this.consent = new ConsentManager(this)
-
         // NOTE: See the property definition for deprecation notice
         this.people = {
             set: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
@@ -488,6 +491,9 @@ export class PostHog {
 
         this.deadClicksAutocapture = new DeadClicksAutocapture(this, isDeadClicksEnabledForAutocapture)
         this.deadClicksAutocapture.startIfEnabled()
+
+        this.historyAutocapture = new HistoryAutocapture(this)
+        this.historyAutocapture.startIfEnabled()
 
         // if any instance on the page has debug = true, we set the
         // global debug to be true
@@ -991,10 +997,10 @@ export class PostHog {
             return properties
         }
 
-        const infoProperties = Info.properties({
-            maskPersonalDataProperties: this.config.mask_personal_data_properties,
-            customPersonalDataProperties: this.config.custom_personal_data_properties,
-        })
+        const infoProperties = getEventProperties(
+            this.config.mask_personal_data_properties,
+            this.config.custom_personal_data_properties
+        )
 
         if (this.sessionManager) {
             const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
@@ -1007,11 +1013,9 @@ export class PostHog {
 
         try {
             if (this.sessionRecording) {
-                properties['$recording_status'] = this.sessionRecording.status
-                properties['$sdk_debug_replay_internal_buffer_length'] = this.sessionRecording['buffer'].data.length
-                properties['$sdk_debug_replay_internal_buffer_size'] = this.sessionRecording['buffer'].size
+                extend(properties, this.sessionRecording.sdkDebugProperties)
             }
-            properties['$sdk_debug_retry_queue_size'] = this._retryQueue?.['queue']?.length
+            properties['$sdk_debug_retry_queue_size'] = this._retryQueue?.length
         } catch (e: any) {
             properties['$sdk_debug_error_capturing_properties'] = String(e)
         }
@@ -1372,9 +1376,26 @@ export class PostHog {
         this.surveys.renderSurvey(surveyId, selector)
     }
 
-    /** Checks the feature flags associated with this Survey to see if the survey can be rendered. */
+    /**
+     * Checks the feature flags associated with this Survey to see if the survey can be rendered.
+     *
+     * This method is deprecated because it's synchronous and won't return the correct result if surveys are not loaded.
+     * @deprecated Use `canRenderSurveyAsync` instead.
+     * @param surveyId The ID of the survey to check.
+     * @returns A SurveyRenderReason object indicating if the survey can be rendered.
+     */
     canRenderSurvey(surveyId: string): SurveyRenderReason | null {
         return this.surveys.canRenderSurvey(surveyId)
+    }
+
+    /**
+     * Checks the feature flags associated with this Survey to see if the survey can be rendered.
+     * @param surveyId The ID of the survey to check.
+     * @param forceReload If true, the survey will be reloaded from the server, Default: false
+     * @returns A SurveyRenderReason object indicating if the survey can be rendered.
+     */
+    canRenderSurveyAsync(surveyId: string, forceReload = false): Promise<SurveyRenderReason> {
+        return this.surveys.canRenderSurveyAsync(surveyId, forceReload)
     }
 
     /**
@@ -1813,7 +1834,7 @@ export class PostHog {
                     ? this.persistence
                     : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
 
-            if (localStore.is_supported() && localStore.get('ph_debug') === 'true') {
+            if (localStore._is_supported() && localStore._get('ph_debug') === 'true') {
                 this.config.debug = true
             }
             if (this.config.debug) {
@@ -1997,7 +2018,8 @@ export class PostHog {
     _shouldCapturePageleave(): boolean {
         return (
             this.config.capture_pageleave === true ||
-            (this.config.capture_pageleave === 'if_capture_pageview' && this.config.capture_pageview)
+            (this.config.capture_pageleave === 'if_capture_pageview' &&
+                (this.config.capture_pageview === true || this.config.capture_pageview === 'history_change'))
         )
     }
 
@@ -2041,10 +2063,10 @@ export class PostHog {
         // TRICKY: We want a deterministic state for persistence so that a new pageload has the same persistence
         const persistenceDisabled = this.config.disable_persistence || (isOptedOut && !!defaultPersistenceDisabled)
 
-        if (this.persistence?.disabled !== persistenceDisabled) {
+        if (this.persistence?._disabled !== persistenceDisabled) {
             this.persistence?.set_disabled(persistenceDisabled)
         }
-        if (this.sessionPersistence?.disabled !== persistenceDisabled) {
+        if (this.sessionPersistence?._disabled !== persistenceDisabled) {
             this.sessionPersistence?.set_disabled(persistenceDisabled)
         }
     }

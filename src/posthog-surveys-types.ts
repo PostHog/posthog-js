@@ -4,6 +4,19 @@
  * See https://github.com/PostHog/posthog-js/issues/698
  */
 
+export enum SurveyWidgetType {
+    Button = 'button',
+    Tab = 'tab',
+    Selector = 'selector',
+}
+
+export enum SurveyPosition {
+    Left = 'left',
+    Center = 'center',
+    Right = 'right',
+    NextToTrigger = 'next_to_trigger',
+}
+
 export interface SurveyAppearance {
     // keep in sync with frontend/src/types.ts -> SurveyAppearance
     backgroundColor?: string
@@ -25,12 +38,12 @@ export interface SurveyAppearance {
     thankYouMessageDescriptionContentType?: SurveyQuestionDescriptionContentType
     thankYouMessageCloseButtonText?: string
     borderColor?: string
-    position?: 'left' | 'right' | 'center'
+    position?: SurveyPosition
     placeholder?: string
     shuffleQuestions?: boolean
     surveyPopupDelaySeconds?: number
     // widget options
-    widgetType?: 'button' | 'tab' | 'selector'
+    widgetType?: SurveyWidgetType
     widgetSelector?: string
     widgetLabel?: string
     widgetColor?: string
@@ -186,6 +199,7 @@ export interface Survey {
     current_iteration: number | null
     current_iteration_start_date: string | null
     schedule?: SurveySchedule | null
+    enable_partial_responses?: boolean | null
 }
 
 export interface SurveyActionType {

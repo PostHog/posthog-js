@@ -8,12 +8,10 @@ describe('RetryQueue', () => {
         _send_request: jest.fn(),
     }
     let retryQueue: RetryQueue
-    let retryQueuePrivate: any
     let now = Date.now()
 
     beforeEach(() => {
         retryQueue = new RetryQueue(mockPosthog as any)
-        retryQueuePrivate = retryQueue as any
 
         jest.useFakeTimers()
         jest.setSystemTime(now)
@@ -60,8 +58,8 @@ describe('RetryQueue', () => {
     it('processes retry requests', () => {
         enqueueRequests()
 
-        expect(retryQueuePrivate.queue.length).toEqual(4)
-        expect(retryQueuePrivate.queue).toEqual([
+        expect(retryQueue.length).toEqual(4)
+        expect(retryQueue['_queue']).toEqual([
             {
                 requestOptions: {
                     url: '/e',
@@ -100,7 +98,7 @@ describe('RetryQueue', () => {
         fastForwardTimeAndRunTimer(3500)
 
         // clears queue
-        expect(retryQueuePrivate.queue.length).toEqual(0)
+        expect(retryQueue.length).toEqual(0)
         expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
         // Check the retry count is added
         expect(mockPosthog._send_request.mock.calls.map(([arg1]) => arg1.url)).toEqual([
@@ -128,7 +126,7 @@ describe('RetryQueue', () => {
 
         retryQueue.unload()
 
-        expect(retryQueuePrivate.queue.length).toEqual(0)
+        expect(retryQueue.length).toEqual(0)
         expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
         expect(mockPosthog._send_request.mock.calls.map(([arg1]) => arg1.transport)).toEqual([
             'sendBeacon',
@@ -139,8 +137,8 @@ describe('RetryQueue', () => {
     })
 
     it('enqueues requests when offline and flushes immediately when online again', () => {
-        retryQueuePrivate.areWeOnline = false
-        expect(retryQueuePrivate.areWeOnline).toEqual(false)
+        retryQueue['_areWeOnline'] = false
+        expect(retryQueue['_areWeOnline']).toEqual(false)
 
         enqueueRequests()
         fastForwardTimeAndRunTimer()
@@ -149,12 +147,12 @@ describe('RetryQueue', () => {
         expect(mockPosthog._send_request).toHaveBeenCalledTimes(0)
 
         // queue stays the same
-        expect(retryQueuePrivate.queue.length).toEqual(4)
+        expect(retryQueue.length).toEqual(4)
 
         window.dispatchEvent(new Event('online'))
 
-        expect(retryQueuePrivate.areWeOnline).toEqual(true)
-        expect(retryQueuePrivate.queue.length).toEqual(0)
+        expect(retryQueue['_areWeOnline']).toEqual(true)
+        expect(retryQueue.length).toEqual(0)
         expect(mockPosthog._send_request).toHaveBeenCalledTimes(4)
     })
 
@@ -165,7 +163,7 @@ describe('RetryQueue', () => {
             retriesPerformedSoFar: 10,
         })
 
-        expect(retryQueuePrivate.queue.length).toEqual(0)
+        expect(retryQueue.length).toEqual(0)
     })
 
     it('only calls the callback when successful', () => {
@@ -186,7 +184,7 @@ describe('RetryQueue', () => {
 
         fastForwardTimeAndRunTimer()
 
-        expect(retryQueuePrivate.queue.length).toEqual(0)
+        expect(retryQueue.length).toEqual(0)
         expect(cb).toHaveBeenCalledTimes(1)
         expect(cb).toHaveBeenCalledWith({ statusCode: 200, text: 'it worked!' })
     })
@@ -204,7 +202,7 @@ describe('RetryQueue', () => {
             retriesPerformedSoFar: 10,
         })
 
-        expect(retryQueuePrivate.queue.length).toEqual(0)
+        expect(retryQueue.length).toEqual(0)
         expect(cb).toHaveBeenCalledTimes(1)
         expect(cb).toHaveBeenCalledWith({ statusCode: 500 })
     })
@@ -222,8 +220,8 @@ describe('RetryQueue', () => {
             retriesPerformedSoFar: 1,
         })
 
-        expect(retryQueuePrivate.queue.length).toEqual(1)
-        expect(retryQueuePrivate.queue[0].requestOptions.retriesPerformedSoFar).toEqual(2)
+        expect(retryQueue.length).toEqual(1)
+        expect(retryQueue['_queue'][0].requestOptions.retriesPerformedSoFar).toEqual(2)
     })
 
     describe('backoff calculation', () => {

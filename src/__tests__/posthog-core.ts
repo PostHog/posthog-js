@@ -1,6 +1,5 @@
 import { mockLogger } from './helpers/mock-logger'
 
-import { Info } from '../utils/event-utils'
 import * as globals from '../utils/globals'
 import { document, window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
@@ -13,6 +12,17 @@ import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
 import { SessionRecording } from '../extensions/replay/sessionrecording'
 import { SessionPropsManager } from '../session-props'
+
+let mockGetProperties: jest.Mock
+
+jest.mock('../utils/event-utils', () => {
+    const originalEventUtils = jest.requireActual('../utils/event-utils')
+    mockGetProperties = jest.fn().mockImplementation((...args) => originalEventUtils.getEventProperties(...args))
+    return {
+        ...originalEventUtils,
+        getEventProperties: mockGetProperties,
+    }
+})
 
 describe('posthog core', () => {
     const baseUTCDateTime = new Date(Date.UTC(2020, 0, 1, 0, 0, 0))
@@ -431,7 +441,7 @@ describe('posthog core', () => {
         }
 
         beforeEach(() => {
-            jest.spyOn(Info, 'properties').mockReturnValue({ $lib: 'web' })
+            mockGetProperties.mockReturnValue({ $lib: 'web' })
 
             posthog = posthogWith(
                 {
@@ -461,6 +471,7 @@ describe('posthog core', () => {
                 $sdk_debug_replay_internal_buffer_length: 0,
                 $sdk_debug_replay_internal_buffer_size: 0,
                 $sdk_debug_retry_queue_size: 0,
+                $sdk_debug_current_session_duration: null,
             })
         })
 
@@ -488,6 +499,7 @@ describe('posthog core', () => {
                 $sdk_debug_replay_internal_buffer_length: 0,
                 $sdk_debug_replay_internal_buffer_size: 0,
                 $sdk_debug_retry_queue_size: 0,
+                $sdk_debug_current_session_duration: null,
             })
         })
 
@@ -672,6 +684,21 @@ describe('posthog core', () => {
             expect(posthog.capture).toHaveBeenCalledWith('$pageleave')
         })
 
+        it('captures $pageleave when capture_pageview is set to history_change', () => {
+            const posthog = posthogWith(
+                {
+                    capture_pageview: 'history_change',
+                    capture_pageleave: 'if_capture_pageview',
+                    request_batching: true,
+                },
+                { capture: jest.fn() }
+            )
+
+            posthog._handle_unload()
+
+            expect(posthog.capture).toHaveBeenCalledWith('$pageleave')
+        })
+
         it('does not capture $pageleave when capture_pageview=false and capture_pageleave=if_capture_pageview', () => {
             const posthog = posthogWith(
                 {
@@ -722,6 +749,20 @@ describe('posthog core', () => {
                 const posthog = posthogWith(
                     {
                         capture_pageview: true,
+                        capture_pageleave: 'if_capture_pageview',
+                        request_batching: false,
+                    },
+                    { capture: jest.fn() }
+                )
+                posthog._handle_unload()
+
+                expect(posthog.capture).toHaveBeenCalledWith('$pageleave', null, { transport: 'sendBeacon' })
+            })
+
+            it('captures $pageleave when capture_pageview is set to history_change', () => {
+                const posthog = posthogWith(
+                    {
+                        capture_pageview: 'history_change',
                         capture_pageleave: 'if_capture_pageview',
                         request_batching: false,
                     },
