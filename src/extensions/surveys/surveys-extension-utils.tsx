@@ -526,20 +526,6 @@ export function getContrastingTextColor(color: string = defaultBackgroundColor) 
     }
     return 'black'
 }
-export function getTextColor(el: HTMLElement) {
-    const backgroundColor = window.getComputedStyle(el).backgroundColor
-    if (backgroundColor === 'rgba(0, 0, 0, 0)') {
-        return 'black'
-    }
-    const colorMatch = backgroundColor.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d+(?:\.\d+)?))?\)$/)
-    if (!colorMatch) return 'black'
-
-    const r = parseInt(colorMatch[1])
-    const g = parseInt(colorMatch[2])
-    const b = parseInt(colorMatch[3])
-    const hsp = Math.sqrt(0.299 * (r * r) + 0.587 * (g * g) + 0.114 * (b * b))
-    return hsp > 127.5 ? 'black' : 'white'
-}
 
 export const defaultSurveyAppearance: SurveyAppearance = {
     backgroundColor: '#eeeded',

@@ -1,3 +1,7 @@
+## 1.237.1 - 2025-04-30
+
+- chore: use getConstratingColor and add question-container (#1926)
+
 ## 1.237.0 - 2025-04-29
 
 - fix: prevent survey events to affect multiple surveys (#1924)

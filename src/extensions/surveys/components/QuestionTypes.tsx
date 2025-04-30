@@ -1,4 +1,4 @@
-import { Fragment, RefObject } from 'preact'
+import { Fragment } from 'preact'
 import { useMemo, useRef, useState } from 'preact/hooks'
 import {
     BasicSurveyQuestion,
@@ -9,7 +9,6 @@ import {
     SurveyQuestionType,
 } from '../../../posthog-surveys-types'
 import { isArray, isNull } from '../../../utils/type-utils'
-import { useContrastingTextColor } from '../hooks/useContrastingTextColor'
 import {
     checkSVG,
     dissatisfiedEmoji,
@@ -18,7 +17,7 @@ import {
     veryDissatisfiedEmoji,
     verySatisfiedEmoji,
 } from '../icons'
-import { getDisplayOrderChoices } from '../surveys-extension-utils'
+import { getContrastingTextColor, getDisplayOrderChoices } from '../surveys-extension-utils'
 import { BottomSection } from './BottomSection'
 import { QuestionHeader } from './QuestionHeader'
 
@@ -41,25 +40,27 @@ export function OpenTextQuestion({
     const [text, setText] = useState('')
 
     return (
-        <div>
-            <QuestionHeader
-                question={question.question}
-                description={question.description}
-                descriptionContentType={question.descriptionContentType}
-                backgroundColor={appearance.backgroundColor}
-                forceDisableHtml={forceDisableHtml}
-            />
-            <textarea
-                rows={4}
-                placeholder={appearance?.placeholder}
-                onInput={(e) => {
-                    setText(e.currentTarget.value)
-                    e.stopPropagation()
-                }}
-                onKeyDown={(e) => {
-                    e.stopPropagation()
-                }}
-            />
+        <Fragment>
+            <div className="question-container">
+                <QuestionHeader
+                    question={question.question}
+                    description={question.description}
+                    descriptionContentType={question.descriptionContentType}
+                    backgroundColor={appearance.backgroundColor}
+                    forceDisableHtml={forceDisableHtml}
+                />
+                <textarea
+                    rows={4}
+                    placeholder={appearance?.placeholder}
+                    onInput={(e) => {
+                        setText(e.currentTarget.value)
+                        e.stopPropagation()
+                    }}
+                    onKeyDown={(e) => {
+                        e.stopPropagation()
+                    }}
+                />
+            </div>
             <BottomSection
                 text={question.buttonText || 'Submit'}
                 submitDisabled={!text && !question.optional}
@@ -67,7 +68,7 @@ export function OpenTextQuestion({
                 onSubmit={() => onSubmit(text)}
                 onPreviewSubmit={() => onPreviewSubmit(text)}
             />
-        </div>
+        </Fragment>
     )
 }
 
@@ -82,12 +83,14 @@ export function LinkQuestion({
 }) {
     return (
         <Fragment>
-            <QuestionHeader
-                question={question.question}
-                description={question.description}
-                descriptionContentType={question.descriptionContentType}
-                forceDisableHtml={forceDisableHtml}
-            />
+            <div className="question-container">
+                <QuestionHeader
+                    question={question.question}
+                    description={question.description}
+                    descriptionContentType={question.descriptionContentType}
+                    forceDisableHtml={forceDisableHtml}
+                />
+            </div>
             <BottomSection
                 text={question.buttonText || 'Submit'}
                 submitDisabled={false}
@@ -117,69 +120,71 @@ export function RatingQuestion({
 
     return (
         <Fragment>
-            <QuestionHeader
-                question={question.question}
-                description={question.description}
-                descriptionContentType={question.descriptionContentType}
-                forceDisableHtml={forceDisableHtml}
-                backgroundColor={appearance.backgroundColor}
-            />
-            <div className="rating-section">
-                <div className="rating-options">
-                    {question.display === 'emoji' && (
-                        <div className="rating-options-emoji">
-                            {(question.scale === 3 ? threeScaleEmojis : fiveScaleEmojis).map((emoji, idx) => {
-                                const active = idx + 1 === rating
-                                return (
-                                    <button
-                                        className={`ratings-emoji question-${displayQuestionIndex}-rating-${idx} ${
-                                            active ? 'rating-active' : null
-                                        }`}
-                                        value={idx + 1}
-                                        key={idx}
-                                        type="button"
-                                        onClick={() => {
-                                            setRating(idx + 1)
-                                        }}
-                                        style={{
-                                            fill: active
-                                                ? appearance.ratingButtonActiveColor
-                                                : appearance.ratingButtonColor,
-                                            borderColor: appearance.borderColor,
-                                        }}
-                                    >
-                                        {emoji}
-                                    </button>
-                                )
-                            })}
-                        </div>
-                    )}
-                    {question.display === 'number' && (
-                        <div
-                            className="rating-options-number"
-                            style={{ gridTemplateColumns: `repeat(${scale - starting + 1}, minmax(0, 1fr))` }}
-                        >
-                            {getScaleNumbers(question.scale).map((number, idx) => {
-                                const active = rating === number
-                                return (
-                                    <RatingButton
-                                        key={idx}
-                                        displayQuestionIndex={displayQuestionIndex}
-                                        active={active}
-                                        appearance={appearance}
-                                        num={number}
-                                        setActiveNumber={(num) => {
-                                            setRating(num)
-                                        }}
-                                    />
-                                )
-                            })}
-                        </div>
-                    )}
-                </div>
-                <div className="rating-text">
-                    <div>{question.lowerBoundLabel}</div>
-                    <div>{question.upperBoundLabel}</div>
+            <div className="question-container">
+                <QuestionHeader
+                    question={question.question}
+                    description={question.description}
+                    descriptionContentType={question.descriptionContentType}
+                    forceDisableHtml={forceDisableHtml}
+                    backgroundColor={appearance.backgroundColor}
+                />
+                <div className="rating-section">
+                    <div className="rating-options">
+                        {question.display === 'emoji' && (
+                            <div className="rating-options-emoji">
+                                {(question.scale === 3 ? threeScaleEmojis : fiveScaleEmojis).map((emoji, idx) => {
+                                    const active = idx + 1 === rating
+                                    return (
+                                        <button
+                                            className={`ratings-emoji question-${displayQuestionIndex}-rating-${idx} ${
+                                                active ? 'rating-active' : ''
+                                            }`}
+                                            value={idx + 1}
+                                            key={idx}
+                                            type="button"
+                                            onClick={() => {
+                                                setRating(idx + 1)
+                                            }}
+                                            style={{
+                                                fill: active
+                                                    ? appearance.ratingButtonActiveColor
+                                                    : appearance.ratingButtonColor,
+                                                borderColor: appearance.borderColor,
+                                            }}
+                                        >
+                                            {emoji}
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                        )}
+                        {question.display === 'number' && (
+                            <div
+                                className="rating-options-number"
+                                style={{ gridTemplateColumns: `repeat(${scale - starting + 1}, minmax(0, 1fr))` }}
+                            >
+                                {getScaleNumbers(question.scale).map((number, idx) => {
+                                    const active = rating === number
+                                    return (
+                                        <RatingButton
+                                            key={idx}
+                                            displayQuestionIndex={displayQuestionIndex}
+                                            active={active}
+                                            appearance={appearance}
+                                            num={number}
+                                            setActiveNumber={(num) => {
+                                                setRating(num)
+                                            }}
+                                        />
+                                    )
+                                })}
+                            </div>
+                        )}
+                    </div>
+                    <div className="rating-text">
+                        <div>{question.lowerBoundLabel}</div>
+                        <div>{question.upperBoundLabel}</div>
+                    </div>
                 </div>
             </div>
             <BottomSection
@@ -206,19 +211,17 @@ export function RatingButton({
     appearance: SurveyAppearance
     setActiveNumber: (num: number) => void
 }) {
-    const { textColor, ref } = useContrastingTextColor({ appearance, defaultTextColor: 'black', forceUpdate: active })
     return (
         <button
-            ref={ref as RefObject<HTMLButtonElement>}
-            className={`ratings-number question-${displayQuestionIndex}-rating-${num} ${
-                active ? 'rating-active' : null
-            }`}
+            className={`ratings-number question-${displayQuestionIndex}-rating-${num} ${active ? 'rating-active' : ''}`}
             type="button"
             onClick={() => {
                 setActiveNumber(num)
             }}
             style={{
-                color: textColor,
+                color: getContrastingTextColor(
+                    active ? appearance.ratingButtonActiveColor : appearance.ratingButtonColor
+                ),
                 backgroundColor: active ? appearance.ratingButtonActiveColor : appearance.ratingButtonColor,
                 borderColor: appearance.borderColor,
             }}
@@ -310,70 +313,72 @@ export function MultipleChoiceQuestion({
     }
 
     return (
-        <div>
-            <QuestionHeader
-                question={question.question}
-                description={question.description}
-                descriptionContentType={question.descriptionContentType}
-                forceDisableHtml={forceDisableHtml}
-                backgroundColor={appearance.backgroundColor}
-            />
-            <div className="multiple-choice-options limit-height">
-                {choices.map((choice: string, idx: number) => {
-                    const isOpenChoice = !!question.hasOpenChoice && idx === question.choices.length - 1
-                    const choiceClass = `choice-option${isOpenChoice ? ' choice-option-open' : ''}`
+        <Fragment>
+            <div className="question-container">
+                <QuestionHeader
+                    question={question.question}
+                    description={question.description}
+                    descriptionContentType={question.descriptionContentType}
+                    forceDisableHtml={forceDisableHtml}
+                    backgroundColor={appearance.backgroundColor}
+                />
+                <div className="multiple-choice-options limit-height">
+                    {choices.map((choice: string, idx: number) => {
+                        const isOpenChoice = !!question.hasOpenChoice && idx === question.choices.length - 1
+                        const choiceClass = `choice-option${isOpenChoice ? ' choice-option-open' : ''}`
 
-                    const isChecked = isOpenChoice
-                        ? openChoiceSelected
-                        : question.type === SurveyQuestionType.SingleChoice
-                          ? selectedChoices === choice
-                          : isArray(selectedChoices) && selectedChoices.includes(choice)
+                        const isChecked = isOpenChoice
+                            ? openChoiceSelected
+                            : question.type === SurveyQuestionType.SingleChoice
+                              ? selectedChoices === choice
+                              : isArray(selectedChoices) && selectedChoices.includes(choice)
 
-                    return (
-                        <div className={choiceClass} key={idx}>
-                            <input
-                                type={inputType}
-                                id={`surveyQuestion${displayQuestionIndex}Choice${idx}`}
-                                name={`question${displayQuestionIndex}`}
-                                checked={isChecked}
-                                onClick={() => handleChoiceChange(choice, isOpenChoice)}
-                            />
-                            <label
-                                htmlFor={`surveyQuestion${displayQuestionIndex}Choice${idx}`}
-                                style={{ color: 'black' }}
-                            >
-                                {isOpenChoice ? (
-                                    <>
-                                        <span>{choice}:</span>
-                                        <input
-                                            type="text"
-                                            ref={openChoiceInputRef}
-                                            id={`surveyQuestion${displayQuestionIndex}Choice${idx}Open`}
-                                            name={`question${displayQuestionIndex}`}
-                                            value={openEndedInput}
-                                            onKeyDown={(e) => {
-                                                e.stopPropagation()
-                                            }}
-                                            onInput={(e) => handleOpenEndedInputChange(e)}
-                                            onClick={(e) => {
-                                                // Ensure the checkbox/radio gets checked when clicking the input
-                                                if (!openChoiceSelected) {
-                                                    handleChoiceChange(choice, true)
-                                                }
-                                                e.stopPropagation()
-                                            }}
-                                        />
-                                    </>
-                                ) : (
-                                    choice
-                                )}
-                            </label>
-                            <span className="choice-check" style={{ color: 'black' }}>
-                                {checkSVG}
-                            </span>
-                        </div>
-                    )
-                })}
+                        return (
+                            <div className={choiceClass} key={idx}>
+                                <input
+                                    type={inputType}
+                                    id={`surveyQuestion${displayQuestionIndex}Choice${idx}`}
+                                    name={`question${displayQuestionIndex}`}
+                                    checked={isChecked}
+                                    onClick={() => handleChoiceChange(choice, isOpenChoice)}
+                                />
+                                <label
+                                    htmlFor={`surveyQuestion${displayQuestionIndex}Choice${idx}`}
+                                    style={{ color: 'black' }}
+                                >
+                                    {isOpenChoice ? (
+                                        <>
+                                            <span>{choice}:</span>
+                                            <input
+                                                type="text"
+                                                ref={openChoiceInputRef}
+                                                id={`surveyQuestion${displayQuestionIndex}Choice${idx}Open`}
+                                                name={`question${displayQuestionIndex}`}
+                                                value={openEndedInput}
+                                                onKeyDown={(e) => {
+                                                    e.stopPropagation()
+                                                }}
+                                                onInput={(e) => handleOpenEndedInputChange(e)}
+                                                onClick={(e) => {
+                                                    // Ensure the checkbox/radio gets checked when clicking the input
+                                                    if (!openChoiceSelected) {
+                                                        handleChoiceChange(choice, true)
+                                                    }
+                                                    e.stopPropagation()
+                                                }}
+                                            />
+                                        </>
+                                    ) : (
+                                        choice
+                                    )}
+                                </label>
+                                <span className="choice-check" style={{ color: 'black' }}>
+                                    {checkSVG}
+                                </span>
+                            </div>
+                        )
+                    })}
+                </div>
             </div>
             <BottomSection
                 text={question.buttonText || 'Submit'}
@@ -403,7 +408,7 @@ export function MultipleChoiceQuestion({
                     }
                 }}
             />
-        </div>
+        </Fragment>
     )
 }
 
