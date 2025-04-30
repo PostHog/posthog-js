@@ -267,10 +267,6 @@ export function anyMatchSessionRecordingStatus(triggersStatus: RecordingTriggers
         return 'disabled'
     }
 
-    if (triggersStatus.urlTriggerMatching.urlBlocked) {
-        return 'paused'
-    }
-
     if (
         new OrTriggerMatching([
             triggersStatus.eventTriggerMatching,
