@@ -147,7 +147,7 @@ export const defaultConfig = (): PostHogConfig => ({
     custom_campaign_params: [],
     custom_blocked_useragents: [],
     save_referrer: true,
-    capture_pageview: true, // can be true, false, or 'history-change'
+    capture_pageview: true, // can be true, false, or 'history_change'
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     cookie_expiration: 365,
