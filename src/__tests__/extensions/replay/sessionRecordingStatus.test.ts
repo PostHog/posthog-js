@@ -206,7 +206,7 @@ const testCases: TestConfig[] = [
             } as unknown as URLTriggerMatching,
         },
         anyMatchExpected: ACTIVE, // trigger activated, so sampling overridden
-        allMatchExpected: DISABLED,
+        allMatchExpected: DISABLED, // sampling is false so can never have an ALL match
     },
     {
         name: 'sampling false with linked flag and inactive url trigger',
