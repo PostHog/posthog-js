@@ -244,7 +244,7 @@ describe('SessionRecording', () => {
             sessionRecording.startIfEnabledOrStop()
             expect(loadScriptMock).toHaveBeenCalled()
             expect(sessionRecording['status']).toBe('buffering')
-            expect(sessionRecording['buffer']).toEqual({
+            expect(sessionRecording['_buffer']).toEqual({
                 ...EMPTY_BUFFER,
                 sessionId: sessionId,
                 windowId: 'windowId',
@@ -252,7 +252,7 @@ describe('SessionRecording', () => {
 
             const metaSnapshot = createMetaSnapshot({ data: { href: 'https://example.com' } })
             _emit(metaSnapshot)
-            expect(sessionRecording['buffer']).toEqual({
+            expect(sessionRecording['_buffer']).toEqual({
                 data: [metaSnapshot],
                 sessionId: sessionId,
                 size: 48,
@@ -264,7 +264,7 @@ describe('SessionRecording', () => {
             sessionRecording.startIfEnabledOrStop()
             expect(loadScriptMock).toHaveBeenCalled()
             expect(sessionRecording['status']).toBe('buffering')
-            expect(sessionRecording['buffer']).toEqual({
+            expect(sessionRecording['_buffer']).toEqual({
                 ...EMPTY_BUFFER,
                 sessionId: sessionId,
                 windowId: 'windowId',
@@ -272,7 +272,7 @@ describe('SessionRecording', () => {
 
             const fullSnapshot = createFullSnapshot()
             _emit(fullSnapshot)
-            expect(sessionRecording['buffer']).toEqual({
+            expect(sessionRecording['_buffer']).toEqual({
                 data: [fullSnapshot],
                 sessionId: sessionId,
                 size: 20,
@@ -284,7 +284,7 @@ describe('SessionRecording', () => {
             sessionRecording.startIfEnabledOrStop()
             expect(loadScriptMock).toHaveBeenCalled()
             expect(sessionRecording['status']).toBe('buffering')
-            expect(sessionRecording['buffer']).toEqual({
+            expect(sessionRecording['_buffer']).toEqual({
                 ...EMPTY_BUFFER,
                 sessionId: sessionId,
                 windowId: 'windowId',
@@ -292,7 +292,7 @@ describe('SessionRecording', () => {
 
             const incrementalSnapshot = createIncrementalSnapshot({ data: { source: 1 } })
             _emit(incrementalSnapshot)
-            expect(sessionRecording['buffer']).toEqual({
+            expect(sessionRecording['_buffer']).toEqual({
                 data: [incrementalSnapshot],
                 sessionId: sessionId,
                 size: 30,
@@ -301,7 +301,7 @@ describe('SessionRecording', () => {
 
             sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: undefined }))
             expect(sessionRecording['status']).toBe('disabled')
-            expect(sessionRecording['buffer'].data.length).toEqual(0)
+            expect(sessionRecording['_buffer'].data.length).toEqual(0)
             expect(posthog.capture).not.toHaveBeenCalled()
         })
 
@@ -317,10 +317,10 @@ describe('SessionRecording', () => {
         it('sample rate is null when decide does not return it', () => {
             sessionRecording.startIfEnabledOrStop()
             expect(loadScriptMock).toHaveBeenCalled()
-            expect(sessionRecording['isSampled']).toBe(null)
+            expect(sessionRecording['_isSampled']).toBe(null)
 
             sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
-            expect(sessionRecording['isSampled']).toBe(null)
+            expect(sessionRecording['_isSampled']).toBe(null)
         })
 
         it('stores true in persistence if recording is enabled from the server', () => {
@@ -379,7 +379,7 @@ describe('SessionRecording', () => {
                 })
             )
 
-            expect(sessionRecording['sampleRate']).toBe(0.7)
+            expect(sessionRecording['_sampleRate']).toBe(0.7)
             expect(posthog.get_property(SESSION_RECORDING_SAMPLE_RATE)).toBe(0.7)
         })
 

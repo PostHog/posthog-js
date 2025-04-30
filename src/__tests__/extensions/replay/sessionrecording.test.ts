@@ -1414,9 +1414,36 @@ describe('SessionRecording', () => {
 
         it('does not emit events until after first active event', () => {
             const a = emitInactiveEvent(startingTimestamp + 100, 'unknown')
+            expect(sessionRecording['_buffer']).toEqual({
+                data: [a],
+                sessionId: sessionId,
+                size: 118,
+                windowId: expect.any(String),
+            })
+
             const b = emitInactiveEvent(startingTimestamp + 110, 'unknown')
+            expect(sessionRecording['_buffer']).toEqual({
+                data: [a, b],
+                sessionId: sessionId,
+                size: 236,
+                windowId: expect.any(String),
+            })
+
             const c = emitInactiveEvent(startingTimestamp + 120, 'unknown')
+            expect(sessionRecording['_buffer']).toEqual({
+                data: [a, b, c],
+                sessionId: sessionId,
+                size: 354,
+                windowId: expect.any(String),
+            })
+
             _emit(createFullSnapshot({}), 'unknown')
+            expect(sessionRecording['_buffer']).toEqual({
+                data: [a, b, c, createFullSnapshot({})],
+                sessionId: sessionId,
+                size: 354,
+                windowId: expect.any(String),
+            })
             expect(sessionRecording['_isIdle']).toEqual('unknown')
             expect(posthog.capture).not.toHaveBeenCalled()
 
