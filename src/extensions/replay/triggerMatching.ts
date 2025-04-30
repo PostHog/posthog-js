@@ -8,6 +8,17 @@ import { isBoolean, isObject, isString } from '../../utils/type-utils'
 import { isNullish } from '../../utils/type-utils'
 import { window } from '../../utils/globals'
 
+export const DISABLED = 'disabled'
+export const SAMPLED = 'sampled'
+export const ACTIVE = 'active'
+export const BUFFERING = 'buffering'
+export const PAUSED = 'paused'
+
+const TRIGGER = 'trigger'
+export const TRIGGER_ACTIVATED = TRIGGER + '_activated'
+export const TRIGGER_PENDING = TRIGGER + '_pending'
+export const TRIGGER_DISABLED = TRIGGER + '_' + DISABLED
+
 export interface RecordingTriggersStatus {
     get receivedDecide(): boolean
     get isRecordingEnabled(): false | true | undefined
@@ -25,7 +36,9 @@ triggers can have one of three statuses:
  * - trigger_pending: the trigger is present, but the conditions are not yet met
  * - trigger_disabled: the trigger is not present
  */
-export type TriggerStatus = 'trigger_activated' | 'trigger_pending' | 'trigger_disabled'
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const triggerStatuses = [TRIGGER_ACTIVATED, TRIGGER_PENDING, TRIGGER_DISABLED] as const
+export type TriggerStatus = (typeof triggerStatuses)[number]
 
 /**
  * Session recording starts in buffering mode while waiting for "decide response".
@@ -33,7 +46,9 @@ export type TriggerStatus = 'trigger_activated' | 'trigger_pending' | 'trigger_d
  * When "sampled" that means a sample rate is set, and the last time the session ID rotated
  * the sample rate determined this session should be sent to the server.
  */
-export type SessionRecordingStatus = 'disabled' | 'sampled' | 'active' | 'buffering' | 'paused'
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const sessionRecordingStatuses = [DISABLED, SAMPLED, ACTIVE, BUFFERING, PAUSED] as const
+export type SessionRecordingStatus = (typeof sessionRecordingStatuses)[number]
 
 function sessionRecordingUrlTriggerMatches(url: string, triggers: SessionRecordingUrlTrigger[]) {
     return triggers.some((trigger) => {
@@ -55,13 +70,13 @@ export class OrTriggerMatching implements TriggerStatusMatching {
 
     triggerStatus(sessionId: string): TriggerStatus {
         const statuses = this._matchers.map((m) => m.triggerStatus(sessionId))
-        if (statuses.includes('trigger_activated')) {
-            return 'trigger_activated'
+        if (statuses.includes(TRIGGER_ACTIVATED)) {
+            return TRIGGER_ACTIVATED
         }
-        if (statuses.includes('trigger_pending')) {
-            return 'trigger_pending'
+        if (statuses.includes(TRIGGER_PENDING)) {
+            return TRIGGER_PENDING
         }
-        return 'trigger_disabled'
+        return TRIGGER_DISABLED
     }
 
     stop(): void {
@@ -79,14 +94,14 @@ export class AndTriggerMatching implements TriggerStatusMatching {
         }
 
         // trigger_disabled means no config
-        statuses.delete('trigger_disabled')
+        statuses.delete(TRIGGER_DISABLED)
         switch (statuses.size) {
             case 0:
-                return 'trigger_disabled'
+                return TRIGGER_DISABLED
             case 1:
                 return Array.from(statuses)[0]
             default:
-                return 'trigger_pending'
+                return TRIGGER_PENDING
         }
     }
 
@@ -97,7 +112,7 @@ export class AndTriggerMatching implements TriggerStatusMatching {
 
 export class PendingTriggerMatching implements TriggerStatusMatching {
     triggerStatus(): TriggerStatus {
-        return 'trigger_pending'
+        return TRIGGER_PENDING
     }
 
     stop(): void {
@@ -128,19 +143,19 @@ export class URLTriggerMatching implements TriggerStatusMatching {
 
     private _urlTriggerStatus(sessionId: string): TriggerStatus {
         if (this._urlTriggers.length === 0) {
-            return 'trigger_disabled'
+            return TRIGGER_DISABLED
         }
 
         const currentTriggerSession = this._instance?.get_property(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
-        return currentTriggerSession === sessionId ? 'trigger_activated' : 'trigger_pending'
+        return currentTriggerSession === sessionId ? TRIGGER_ACTIVATED : TRIGGER_PENDING
     }
 
     triggerStatus(sessionId: string): TriggerStatus {
         const urlTriggerStatus = this._urlTriggerStatus(sessionId)
-        const eitherIsActivated = urlTriggerStatus === 'trigger_activated'
-        const eitherIsPending = urlTriggerStatus === 'trigger_pending'
+        const eitherIsActivated = urlTriggerStatus === TRIGGER_ACTIVATED
+        const eitherIsPending = urlTriggerStatus === TRIGGER_PENDING
 
-        return eitherIsActivated ? 'trigger_activated' : eitherIsPending ? 'trigger_pending' : 'trigger_disabled'
+        return eitherIsActivated ? TRIGGER_ACTIVATED : eitherIsPending ? TRIGGER_PENDING : TRIGGER_DISABLED
     }
 
     checkUrlTriggerConditions(
@@ -184,12 +199,12 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
 
     triggerStatus(): TriggerStatus {
         if (isNullish(this.linkedFlag)) {
-            return 'trigger_disabled'
+            return TRIGGER_DISABLED
         }
         if (this.linkedFlagSeen) {
-            return 'trigger_activated'
+            return TRIGGER_ACTIVATED
         }
-        return 'trigger_pending'
+        return TRIGGER_PENDING
     }
 
     onRemoteConfig(response: RemoteConfig, onStarted: (flag: string, variant: string | null) => void) {
@@ -225,20 +240,20 @@ export class EventTriggerMatching implements TriggerStatusMatching {
 
     private _eventTriggerStatus(sessionId: string): TriggerStatus {
         if (this._eventTriggers.length === 0) {
-            return 'trigger_disabled'
+            return TRIGGER_DISABLED
         }
 
         const currentTriggerSession = this._instance?.get_property(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
-        return currentTriggerSession === sessionId ? 'trigger_activated' : 'trigger_pending'
+        return currentTriggerSession === sessionId ? TRIGGER_ACTIVATED : TRIGGER_PENDING
     }
 
     triggerStatus(sessionId: string): TriggerStatus {
         const eventTriggerStatus = this._eventTriggerStatus(sessionId)
-        return eventTriggerStatus === 'trigger_activated'
-            ? 'trigger_activated'
-            : eventTriggerStatus === 'trigger_pending'
-              ? 'trigger_pending'
-              : 'trigger_disabled'
+        return eventTriggerStatus === TRIGGER_ACTIVATED
+            ? TRIGGER_ACTIVATED
+            : eventTriggerStatus === TRIGGER_PENDING
+              ? TRIGGER_PENDING
+              : TRIGGER_DISABLED
     }
 
     stop(): void {
@@ -249,23 +264,23 @@ export class EventTriggerMatching implements TriggerStatusMatching {
 // we need a no-op matcher before we can lazy-load the other matches, since all matchers wait on remote config anyway
 export function nullMatchSessionRecordingStatus(triggersStatus: RecordingTriggersStatus): SessionRecordingStatus {
     if (!triggersStatus.isRecordingEnabled) {
-        return 'disabled'
+        return DISABLED
     }
 
-    return 'buffering'
+    return BUFFERING
 }
 
 export function anyMatchSessionRecordingStatus(triggersStatus: RecordingTriggersStatus): SessionRecordingStatus {
     if (!triggersStatus.receivedDecide) {
-        return 'buffering'
+        return BUFFERING
     }
 
     if (!triggersStatus.isRecordingEnabled) {
-        return 'disabled'
+        return DISABLED
     }
 
     if (triggersStatus.urlTriggerMatching.urlBlocked) {
-        return 'paused'
+        return PAUSED
     }
 
     const sampledActive = triggersStatus.isSampled === true
@@ -275,40 +290,40 @@ export function anyMatchSessionRecordingStatus(triggersStatus: RecordingTriggers
         triggersStatus.linkedFlagMatching,
     ]).triggerStatus(triggersStatus.sessionId)
 
-    if (sampledActive || triggerMatches === 'trigger_activated') {
-        return sampledActive ? 'sampled' : 'active'
+    if (sampledActive || triggerMatches === TRIGGER_ACTIVATED) {
+        return sampledActive ? SAMPLED : ACTIVE
     }
 
-    if (triggerMatches == 'trigger_pending') {
+    if (triggerMatches === TRIGGER_PENDING) {
         // even if sampled active is false, we should still be buffering
         // since a pending trigger could override it
-        return 'buffering'
+        return BUFFERING
     }
 
     // if sampling is set and the session is already decided to not be sampled
     // then we should never be active
     if (triggersStatus.isSampled === false) {
-        return 'disabled'
+        return DISABLED
     }
 
     if (isBoolean(triggersStatus.isSampled)) {
-        return triggersStatus.isSampled ? 'sampled' : 'disabled'
+        return triggersStatus.isSampled ? SAMPLED : DISABLED
     } else {
-        return 'active'
+        return ACTIVE
     }
 }
 
 export function allMatchSessionRecordingStatus(triggersStatus: RecordingTriggersStatus): SessionRecordingStatus {
     if (!triggersStatus.receivedDecide) {
-        return 'buffering'
+        return BUFFERING
     }
 
     if (!triggersStatus.isRecordingEnabled) {
-        return 'disabled'
+        return DISABLED
     }
 
     if (triggersStatus.urlTriggerMatching.urlBlocked) {
-        return 'paused'
+        return PAUSED
     }
 
     const andTriggerMatch = new AndTriggerMatching([
@@ -320,24 +335,24 @@ export function allMatchSessionRecordingStatus(triggersStatus: RecordingTriggers
 
     const hasSamplingConfigured = isBoolean(triggersStatus.isSampled)
 
-    if (hasTriggersConfigured && andTriggerMatch.triggerStatus(triggersStatus.sessionId) === 'trigger_pending') {
-        return 'buffering'
+    if (hasTriggersConfigured && andTriggerMatch.triggerStatus(triggersStatus.sessionId) === TRIGGER_PENDING) {
+        return BUFFERING
     }
 
-    if (hasTriggersConfigured && andTriggerMatch.triggerStatus(triggersStatus.sessionId) === 'trigger_disabled') {
-        return 'disabled'
+    if (hasTriggersConfigured && andTriggerMatch.triggerStatus(triggersStatus.sessionId) === TRIGGER_DISABLED) {
+        return DISABLED
     }
 
     // sampling can't ever cause buffering, it's always determined right away or not configured
     if (hasSamplingConfigured && !triggersStatus.isSampled) {
-        return 'disabled'
+        return DISABLED
     }
 
     // If sampling is configured and set to true, return sampled
     if (triggersStatus.isSampled === true) {
-        return 'sampled'
+        return SAMPLED
     }
 
     // All configured matches are satisfied
-    return 'active'
+    return ACTIVE
 }

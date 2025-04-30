@@ -57,11 +57,13 @@ import {
     OrTriggerMatching,
     PendingTriggerMatching,
     RecordingTriggersStatus,
+    SAMPLED,
     SessionRecordingStatus,
+    TRIGGER_PENDING,
     TriggerStatusMatching,
     TriggerType,
 } from './triggerMatching'
-import { EventTriggerMatching } from './triggerMatching'
+import { EventTriggerMatching, ACTIVE } from './triggerMatching'
 import { URLTriggerMatching } from './triggerMatching'
 
 const LOGGER_PREFIX = '[SessionRecording]'
@@ -76,7 +78,7 @@ type SessionStartReason =
     | 'recording_initialized'
     | 'linked_flag_matched'
     | 'linked_flag_overridden'
-    | 'sampled'
+    | typeof SAMPLED
     | 'session_id_changed'
     | 'url_trigger_matched'
     | 'event_trigger_matched'
@@ -311,7 +313,7 @@ export class SessionRecording {
     }
 
     private get _fullSnapshotIntervalMillis(): number {
-        if (this._triggerMatching.triggerStatus(this.sessionId) === 'trigger_pending') {
+        if (this._triggerMatching.triggerStatus(this.sessionId) === TRIGGER_PENDING) {
             return ONE_MINUTE
         }
 
@@ -428,7 +430,7 @@ export class SessionRecording {
      */
     get status(): SessionRecordingStatus {
         if (!this._receivedDecide) {
-            return 'buffering'
+            return BUFFERING
         }
 
         return this._statusMatcher({
@@ -608,7 +610,7 @@ export class SessionRecording {
 
         if (makeDecision) {
             if (shouldSample) {
-                this._reportStarted('sampled')
+                this._reportStarted(SAMPLED)
             } else {
                 logger.warn(
                     `Sample rate (${currentSampleRate}) has determined that this sessionId (${sessionId}) will not be sent to the server.`
@@ -774,7 +776,7 @@ export class SessionRecording {
         }
 
         logger.info('starting')
-        if (this.status === 'active') {
+        if (this.status === ACTIVE) {
             this._reportStarted(startReason || 'recording_initialized')
         }
     }
@@ -1073,7 +1075,7 @@ export class SessionRecording {
         if (
             rawEvent.type === EventType.FullSnapshot &&
             this._receivedDecide &&
-            this._triggerMatching.triggerStatus(this.sessionId) === 'trigger_pending'
+            this._triggerMatching.triggerStatus(this.sessionId) === TRIGGER_PENDING
         ) {
             this._clearBuffer()
         }
@@ -1120,7 +1122,7 @@ export class SessionRecording {
             $window_id: this._windowId,
         }
 
-        if (this.status === 'disabled') {
+        if (this.status === DISABLED) {
             this._clearBuffer()
             return
         }
@@ -1203,12 +1205,7 @@ export class SessionRecording {
         const isBelowMinimumDuration =
             isNumber(minimumDuration) && isPositiveSessionDuration && sessionDuration < minimumDuration
 
-        if (
-            this.status === 'buffering' ||
-            this.status === 'paused' ||
-            this.status === 'disabled' ||
-            isBelowMinimumDuration
-        ) {
+        if (this.status === BUFFERING || this.status === PAUSED || this.status === DISABLED || isBelowMinimumDuration) {
             this._flushBufferTimer = setTimeout(() => {
                 this._flushBuffer()
             }, RECORDING_BUFFER_TIMEOUT)
@@ -1264,7 +1261,7 @@ export class SessionRecording {
     }
 
     private _activateTrigger(triggerType: TriggerType) {
-        if (this._triggerMatching.triggerStatus(this.sessionId) === 'trigger_pending') {
+        if (this._triggerMatching.triggerStatus(this.sessionId) === TRIGGER_PENDING) {
             // status is stored separately for URL and event triggers
             this._instance?.persistence?.register({
                 [triggerType === 'url'
