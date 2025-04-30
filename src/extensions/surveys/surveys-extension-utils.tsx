@@ -643,6 +643,10 @@ export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly
             Object.values(inProgressSurvey?.responses || {}).filter((resp) => !isNullish(resp)).length > 0,
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
         ...inProgressSurvey?.responses,
+        $survey_questions: survey.questions.map((question) => ({
+            id: question.id,
+            question: question.question,
+        })),
         $set: {
             [getSurveyInteractionProperty(survey, 'dismissed')]: true,
         },
