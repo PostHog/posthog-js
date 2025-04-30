@@ -7,9 +7,6 @@ import { FlagVariant, RemoteConfig, SessionRecordingUrlTrigger } from '../../typ
 import { isBoolean, isObject, isString } from '../../utils/type-utils'
 import { isNullish } from '../../utils/type-utils'
 import { window } from '../../utils/globals'
-import { createLogger } from '../../utils/logger'
-
-const logger = createLogger('[SessionRecordingTriggerMatching]')
 
 export const DISABLED = 'disabled'
 export const SAMPLED = 'sampled'
@@ -275,17 +272,14 @@ export function nullMatchSessionRecordingStatus(triggersStatus: RecordingTrigger
 
 export function anyMatchSessionRecordingStatus(triggersStatus: RecordingTriggersStatus): SessionRecordingStatus {
     if (!triggersStatus.receivedDecide) {
-        logger.info('session waiting for decide', { triggersStatus })
         return BUFFERING
     }
 
     if (!triggersStatus.isRecordingEnabled) {
-        logger.info('session disabled', { triggersStatus })
         return DISABLED
     }
 
     if (triggersStatus.urlTriggerMatching.urlBlocked) {
-        logger.info('session paused', { triggersStatus })
         return PAUSED
     }
 
@@ -297,12 +291,10 @@ export function anyMatchSessionRecordingStatus(triggersStatus: RecordingTriggers
     ]).triggerStatus(triggersStatus.sessionId)
 
     if (sampledActive) {
-        logger.info('session started by sampling')
         return SAMPLED
     }
 
     if (triggerMatches === TRIGGER_ACTIVATED) {
-        logger.info('session started by trigger')
         return ACTIVE
     }
 
@@ -358,16 +350,8 @@ export function allMatchSessionRecordingStatus(triggersStatus: RecordingTriggers
 
     // If sampling is configured and set to true, return sampled
     if (triggersStatus.isSampled === true) {
-        logger.info(
-            'all triggers are active and sampling is configured, session sampled',
-            JSON.stringify(triggersStatus)
-        )
         return SAMPLED
     }
 
-    logger.info(
-        'all triggers are active and sampling is not configured, session active',
-        JSON.stringify(triggersStatus)
-    )
     return ACTIVE
 }
