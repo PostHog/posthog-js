@@ -1,3 +1,7 @@
+## 1.239.0 - 2025-05-01
+
+- feat: Avoid tracking pageview from prerenders (#1910)
+
 ## 1.238.0 - 2025-05-01
 
 - feat: allow ANY or ALL matches for triggers (#1875)
