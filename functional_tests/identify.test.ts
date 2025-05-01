@@ -35,9 +35,7 @@ describe('FunctionalTests / Identify', () => {
             )
         )
 
-        // we assert the calls are empty, rather than not called,
-        // because we want to see the calls if the expectation fails
-        expect(jest.mocked(logger).error.mock.calls).toEqual([])
+        expect(jest.mocked(logger).error).toBeCalledTimes(0)
     })
 
     test('identify sends an engage request if identify called twice with the same distinct id and with $set/$set_once', async () => {
