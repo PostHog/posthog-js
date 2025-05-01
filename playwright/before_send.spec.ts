@@ -39,17 +39,17 @@ test.describe('before_send', () => {
                         return null
                     }
 
-                    if (cr.event === AUTOCAPTURE_EVENT) {
-                        return {
-                            ...cr,
-                            event: 'redacted',
-                        }
-                    }
-
                     if (cr.event === 'custom-event') {
                         counter++
                         if (counter === 2) {
                             return null
+                        }
+                    }
+
+                    if (cr.event === AUTOCAPTURE_EVENT) {
+                        return {
+                            ...cr,
+                            event: 'redacted',
                         }
                     }
 
