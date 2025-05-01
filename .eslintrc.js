@@ -95,6 +95,19 @@ module.exports = {
             },
         },
         {
+            files: 'functional_tests/**/*',
+            extends: extend.filter((s) => s !== 'plugin:compat/recommended'),
+            rules: {
+                ...rules,
+                'no-console': 'off',
+                'no-restricted-globals': 'off',
+                'compat/compat': 'off',
+            },
+            parserOptions: {
+                project: './functional_tests/tsconfig.json',
+            },
+        },
+        {
             files: ['**/*.js'],
             parserOptions: {
                 project: null, // <- prevents the TS parser from trying to parse it with type info
