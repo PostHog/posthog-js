@@ -293,6 +293,7 @@ export class PostHog {
     webPerformance = new DeprecatedWebPerformanceObserver()
 
     _initialPageviewCaptured: boolean
+    _visibilityStateListener: (() => void) | null
     _personProcessingSetOncePropertiesSent: boolean = false
     _triggered_notifs: any
     compression?: Compression
@@ -327,6 +328,7 @@ export class PostHog {
         this.__loaded = false
         this.analyticsDefaultEndpoint = '/e/'
         this._initialPageviewCaptured = false
+        this._visibilityStateListener = null
         this._initialPersonProfilesConfig = null
         this._cachedPersonProperties = null
         this.featureFlags = new PostHogFeatureFlags(this)
@@ -2154,9 +2156,34 @@ export class PostHog {
     }
 
     _captureInitialPageview(): void {
-        if (document && !this._initialPageviewCaptured) {
+        if (!document) {
+            return
+        }
+
+        // If page is not visible, add a listener to detect when the page becomes visible
+        // and trigger the pageview only then
+        // This is useful to avoid `prerender` calls from Chrome/Wordpress/SPAs
+        // that are not visible to the user
+
+        if (document.visibilityState !== 'visible') {
+            if (!this._visibilityStateListener) {
+                this._visibilityStateListener = this._captureInitialPageview.bind(this)
+                addEventListener(document, 'visibilitychange', this._visibilityStateListener)
+            }
+
+            return
+        }
+
+        // Extra check here to guarantee we only ever trigger a single `$pageview` event
+        if (!this._initialPageviewCaptured) {
             this._initialPageviewCaptured = true
             this.capture('$pageview', { title: document.title }, { send_instantly: true })
+
+            // After we've captured the initial pageview, we can remove the listener
+            if (this._visibilityStateListener) {
+                document.removeEventListener('visibilitychange', this._visibilityStateListener)
+                this._visibilityStateListener = null
+            }
         }
     }
 
