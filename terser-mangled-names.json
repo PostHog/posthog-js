@@ -298,6 +298,7 @@
         "_urlBlocklist",
         "_urlTriggerStatus",
         "_urlTriggers",
+        "_visibilityStateListener",
         "_widgetSelectorListeners",
         "_windowId",
         "_windowIdGenerator",
