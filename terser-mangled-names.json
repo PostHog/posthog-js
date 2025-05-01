@@ -296,7 +296,6 @@
         "_updateActivatedSurveys",
         "_updateScrollData",
         "_updateWindowAndSessionIds",
-        "_urlBlocked",
         "_urlBlocklist",
         "_urlTriggerMatching",
         "_urlTriggerStatus",
