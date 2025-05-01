@@ -8,7 +8,7 @@
     "homepage": "https://posthog.com/docs/libraries/js",
     "packageManager": "pnpm@9.15.4",
     "scripts": {
-        "start": "pnpm build-react && pnpm build-rollup -w",
+        "start": "pnpm build-react && NODE_OPTIONS=\"--max-old-space-size=8192\" pnpm build-rollup -w",
         "build": "pnpm build-rollup && pnpm build-react",
         "build-rollup": "rm -rf lib && tsc -b && rollup -c --bundleConfigAsCjs",
         "build-react": "cd react; NODE_ENV=dev pnpm i; pnpm build;",

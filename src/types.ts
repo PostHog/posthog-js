@@ -1310,6 +1310,16 @@ export interface RemoteConfig {
         scriptConfig?: { script?: string | undefined }
         urlBlocklist?: SessionRecordingUrlTrigger[]
         eventTriggers?: string[]
+        /**
+         * Controls how event, url, sampling, and linked flag triggers are combined
+         *
+         * `any` means that if any of the triggers match, the session will be recorded
+         * `all` means that all the triggers must match for the session to be recorded
+         *
+         * originally it was (event || url) && (sampling || linked flag)
+         * which nobody wanted, now the default is all
+         */
+        triggerMatchType?: 'any' | 'all'
     }
 
     /**
