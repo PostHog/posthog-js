@@ -1,3 +1,7 @@
+## 1.238.0 - 2025-05-01
+
+- feat: allow ANY or ALL matches for triggers (#1875)
+
 ## 1.237.1 - 2025-04-30
 
 - chore: use getConstratingColor and add question-container (#1926)
