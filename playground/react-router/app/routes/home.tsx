@@ -3,9 +3,13 @@ import type { Route } from './+types/home'
 
 // eslint-disable-next-line no-empty-pattern
 export function meta({}: Route.MetaArgs) {
-    return [{ title: 'New React Router App' }, { name: 'description', content: 'Welcome to React Router!' }]
+    return [{ title: 'PostHog React Router Demo' }]
 }
 
 export default function Home() {
-    return <Welcome />
+    return (
+        <div className="container mx-auto p-8">
+            <Welcome />
+        </div>
+    )
 }
