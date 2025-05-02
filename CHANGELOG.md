@@ -1,3 +1,8 @@
+## 1.239.1 - 2025-05-02
+
+- fix: dont mangle some surveys properties (#1934)
+- docs: use history_change option on SPA playgrounds  (#1929)
+
 ## 1.239.0 - 2025-05-01
 
 - feat: Avoid tracking pageview from prerenders (#1910)
