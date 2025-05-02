@@ -90,7 +90,8 @@ const plugins = (es5) => [
                           '_noTruncate',
                           '_onCapture',
 
-                          // used in surveys
+                          // used in surveys, however, this shouldn't be needed
+                          // TODO: figure out how to remove them
                           '_posthog',
                           '_instance',
                           '_surveyEventReceiver',
