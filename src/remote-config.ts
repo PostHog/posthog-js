@@ -7,7 +7,11 @@ import { assignableWindow } from './utils/globals'
 const logger = createLogger('[RemoteConfig]')
 
 export class RemoteConfigLoader {
-    constructor(private readonly _instance: PostHog) {}
+    private readonly _instance: PostHog
+
+    constructor(_instance: PostHog) {
+        this._instance = _instance
+    }
 
     get remoteConfig(): RemoteConfig | undefined {
         return assignableWindow._POSTHOG_REMOTE_CONFIG?.[this._instance.config.token]?.config

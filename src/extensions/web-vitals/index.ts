@@ -16,13 +16,15 @@ export const FIFTEEN_MINUTES_IN_MILLIS = 15 * ONE_MINUTE_IN_MILLIS
 type WebVitalsEventBuffer = { url: string | undefined; metrics: any[]; firstMetricTimestamp: number | undefined }
 
 export class WebVitalsAutocapture {
+    private readonly _instance: PostHog
     private _enabledServerSide: boolean = false
     private _initialized = false
 
     private _buffer: WebVitalsEventBuffer = { url: undefined, metrics: [], firstMetricTimestamp: undefined }
     private _delayedFlushTimer: ReturnType<typeof setTimeout> | undefined
 
-    constructor(private readonly _instance: PostHog) {
+    constructor(_instance: PostHog) {
+        this._instance = _instance
         this._enabledServerSide = !!this._instance.persistence?.props[WEB_VITALS_ENABLED_SERVER_SIDE]
 
         this.startIfEnabled()

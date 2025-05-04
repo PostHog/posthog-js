@@ -247,6 +247,7 @@ function isRecordingPausedEvent(e: eventWithTime) {
 }
 
 export class SessionRecording {
+    private readonly _instance: PostHog
     private _endpoint: string
     private _flushBufferTimer?: any
 
@@ -444,7 +445,8 @@ export class SessionRecording {
         })
     }
 
-    constructor(private readonly _instance: PostHog) {
+    constructor(_instance: PostHog) {
+        this._instance = _instance
         this._captureStarted = false
         this._endpoint = BASE_ENDPOINT
         this._stopRrweb = undefined

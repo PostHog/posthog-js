@@ -18,9 +18,12 @@ export interface ScrollContext {
 
 // This class is responsible for tracking scroll events and maintaining the scroll context
 export class ScrollManager {
+    private readonly _instance: PostHog
     private _context: ScrollContext | undefined
 
-    constructor(private _instance: PostHog) {}
+    constructor(_instance: PostHog) {
+        this._instance = _instance
+    }
 
     getContext(): ScrollContext | undefined {
         return this._context

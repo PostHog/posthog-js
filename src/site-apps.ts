@@ -6,12 +6,14 @@ import { createLogger } from './utils/logger'
 const logger = createLogger('[SiteApps]')
 
 export class SiteApps {
+    private readonly _instance: PostHog
     apps: Record<string, SiteApp>
 
     private _stopBuffering?: () => void
     private _bufferedInvocations: SiteAppGlobals[]
 
-    constructor(private _instance: PostHog) {
+    constructor(_instance: PostHog) {
+        this._instance = _instance
         // events captured between loading posthog-js and the site app; up to 1000 events
         this._bufferedInvocations = []
         this.apps = {}

@@ -66,7 +66,11 @@ export interface TriggerStatusMatching {
     stop(): void
 }
 export class OrTriggerMatching implements TriggerStatusMatching {
-    constructor(private readonly _matchers: TriggerStatusMatching[]) {}
+    private readonly _matchers: TriggerStatusMatching[]
+
+    constructor(_matchers: TriggerStatusMatching[]) {
+        this._matchers = _matchers
+    }
 
     triggerStatus(sessionId: string): TriggerStatus {
         const statuses = this._matchers.map((m) => m.triggerStatus(sessionId))
@@ -85,7 +89,11 @@ export class OrTriggerMatching implements TriggerStatusMatching {
 }
 
 export class AndTriggerMatching implements TriggerStatusMatching {
-    constructor(private readonly _matchers: TriggerStatusMatching[]) {}
+    private readonly _matchers: TriggerStatusMatching[]
+
+    constructor(_matchers: TriggerStatusMatching[]) {
+        this._matchers = _matchers
+    }
 
     triggerStatus(sessionId: string): TriggerStatus {
         const statuses = new Set<TriggerStatus>()
@@ -121,12 +129,15 @@ export class PendingTriggerMatching implements TriggerStatusMatching {
 }
 
 export class URLTriggerMatching implements TriggerStatusMatching {
+    private readonly _instance: PostHog
     _urlTriggers: SessionRecordingUrlTrigger[] = []
     _urlBlocklist: SessionRecordingUrlTrigger[] = []
 
     urlBlocked: boolean = false
 
-    constructor(private readonly _instance: PostHog) {}
+    constructor(_instance: PostHog) {
+        this._instance = _instance
+    }
 
     onRemoteConfig(response: RemoteConfig) {
         this._urlTriggers = response.sessionRecording?.urlTriggers || []
@@ -188,10 +199,14 @@ export class URLTriggerMatching implements TriggerStatusMatching {
 }
 
 export class LinkedFlagMatching implements TriggerStatusMatching {
+    private readonly _instance: PostHog
     linkedFlag: string | FlagVariant | null = null
     linkedFlagSeen: boolean = false
     private _flaglistenerCleanup: () => void = () => {}
-    constructor(private readonly _instance: PostHog) {}
+
+    constructor(_instance: PostHog) {
+        this._instance = _instance
+    }
 
     triggerStatus(): TriggerStatus {
         let result = TRIGGER_PENDING
@@ -230,9 +245,12 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
 }
 
 export class EventTriggerMatching implements TriggerStatusMatching {
+    private readonly _instance: PostHog
     _eventTriggers: string[] = []
 
-    constructor(private readonly _instance: PostHog) {}
+    constructor(_instance: PostHog) {
+        this._instance = _instance
+    }
 
     onRemoteConfig(response: RemoteConfig) {
         this._eventTriggers = response.sessionRecording?.eventTriggers || []

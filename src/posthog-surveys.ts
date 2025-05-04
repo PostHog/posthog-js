@@ -15,6 +15,7 @@ import {
 import { isArray, isNullish } from './utils/type-utils'
 
 export class PostHogSurveys {
+    private readonly _instance: PostHog
     private _hasSurveys?: boolean
     public _surveyEventReceiver: SurveyEventReceiver | null
     private _surveyManager: SurveyManager | null = null
@@ -22,7 +23,8 @@ export class PostHogSurveys {
     private _isInitializingSurveys: boolean = false
     private _surveyCallbacks: SurveyCallback[] = []
 
-    constructor(private readonly _instance: PostHog) {
+    constructor(_instance: PostHog) {
+        this._instance = _instance
         // we set this to undefined here because we need the persistence storage for this type
         // but that's not initialized until loadIfEnabled is called.
         this._surveyEventReceiver = null

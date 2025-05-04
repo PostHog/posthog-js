@@ -6,10 +6,13 @@ import { isUndefined } from '../utils/type-utils'
 const logger = createLogger('[TracingHeaders]')
 
 export class TracingHeaders {
+    private readonly _instance: PostHog
     private _restoreXHRPatch: (() => void) | undefined = undefined
     private _restoreFetchPatch: (() => void) | undefined = undefined
 
-    constructor(private readonly _instance: PostHog) {}
+    constructor(_instance: PostHog) {
+        this._instance = _instance
+    }
 
     private _loadScript(cb: () => void): void {
         if (assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns) {

@@ -22,6 +22,10 @@ const rules = {
             leadingUnderscore: 'require',
         },
     ],
+    // We've seen some quite subtle bugs where parameters properties that are property mangled with terser can be
+    // undefined. It seems to be related to .
+    // See https://posthog.slack.com/archives/C03P7NL6RMW/p1746218789588879
+    '@typescript-eslint/parameter-properties': 'error',
 }
 
 const extend = [

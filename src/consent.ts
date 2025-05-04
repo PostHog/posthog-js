@@ -17,9 +17,12 @@ export enum ConsentStatus {
  * ConsentManager provides tools for managing user consent as configured by the application.
  */
 export class ConsentManager {
+    private readonly _instance: PostHog
     private _persistentStore?: PersistentStore
 
-    constructor(private _instance: PostHog) {}
+    constructor(_instance: PostHog) {
+        this._instance = _instance
+    }
 
     private get _config() {
         return this._instance.config
