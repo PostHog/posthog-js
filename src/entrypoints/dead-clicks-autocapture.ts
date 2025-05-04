@@ -25,7 +25,7 @@ function checkTimeout(value: number | undefined, thresholdMs: number) {
 }
 
 class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptureInterface {
-    private readonly _instance: PostHog
+    readonly instance: PostHog
     private _mutationObserver: MutationObserver | undefined
     private _lastMutation: number | undefined
     private _lastSelectionChanged: number | undefined
@@ -56,7 +56,7 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 
     constructor(instance: PostHog, config?: DeadClicksAutoCaptureConfig) {
-        this._instance = instance
+        this.instance = instance
         this._config = this._asRequiredConfig(config)
         this._onCapture = this._config.__onCapture
     }
@@ -246,14 +246,14 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     private _captureDeadClick(click: DeadClickCandidate, properties: Properties) {
         // TODO need to check safe and captur-able as with autocapture
         // TODO autocaputure config
-        this._instance.capture(
+        this.instance.capture(
             '$dead_click',
             {
                 ...properties,
                 ...autocapturePropertiesForElement(click.node, {
                     e: click.originalEvent,
-                    maskAllElementAttributes: this._instance.config.mask_all_element_attributes,
-                    maskAllText: this._instance.config.mask_all_text,
+                    maskAllElementAttributes: this.instance.config.mask_all_element_attributes,
+                    maskAllText: this.instance.config.mask_all_text,
                     elementAttributeIgnoreList: this._config.element_attribute_ignorelist,
                     // TRICKY: it appears that we were moving to elementsChainAsString, but the UI still depends on elements, so :shrug:
                     elementsChainAsString: false,
