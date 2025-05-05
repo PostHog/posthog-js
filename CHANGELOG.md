@@ -1,3 +1,20 @@
+## 1.239.1 - 2025-05-02
+
+- fix: dont mangle some surveys properties (#1934)
+- docs: use history_change option on SPA playgrounds  (#1929)
+
+## 1.239.0 - 2025-05-01
+
+- feat: Avoid tracking pageview from prerenders (#1910)
+
+## 1.238.0 - 2025-05-01
+
+- feat: allow ANY or ALL matches for triggers (#1875)
+
+## 1.237.1 - 2025-04-30
+
+- chore: use getConstratingColor and add question-container (#1926)
+
 ## 1.237.0 - 2025-04-29
 
 - fix: prevent survey events to affect multiple surveys (#1924)
