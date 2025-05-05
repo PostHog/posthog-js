@@ -685,7 +685,7 @@ export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string
 }
 
 export const getDisplayOrderQuestions = (survey: Survey): SurveyQuestion[] => {
-    if (!survey.appearance || !survey.appearance.shuffleQuestions) {
+    if (!survey.appearance || !survey.appearance.shuffleQuestions || survey.enable_partial_responses) {
         return survey.questions
     }
 
