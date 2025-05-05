@@ -66,6 +66,7 @@ export function OpenTextQuestion({
                     onKeyDown={(e) => {
                         e.stopPropagation()
                     }}
+                    value={text}
                 />
             </div>
             <BottomSection
