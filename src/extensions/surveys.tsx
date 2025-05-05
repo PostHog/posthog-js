@@ -837,7 +837,7 @@ export function usePopupVisibility(
             setTimeout(() => {
                 const inputField = document
                     .querySelector(getSurveyContainerClass(survey, true))
-                    ?.shadowRoot?.querySelector('textarea, input[type="text"]') as HTMLElement
+                    ?.shadowRoot?.querySelector('textarea') as HTMLElement
                 if (inputField) {
                     inputField.focus()
                 }
@@ -989,12 +989,17 @@ export function Questions({
     })
     const { previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit, surveySubmissionId } =
         useContext(SurveyContext)
-    const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
+    const [currentQuestionIndex, setCurrentQuestionIndex] = useState(() => {
+        const inProgressSurveyData = getInProgressSurveyState(survey)
+        return previewPageIndex || inProgressSurveyData?.lastQuestionIndex || 0
+    })
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
     // Sync preview state
     useEffect(() => {
-        setCurrentQuestionIndex(previewPageIndex ?? 0)
+        if (previewPageIndex) {
+            setCurrentQuestionIndex(previewPageIndex)
+        }
     }, [previewPageIndex])
 
     const onNextButtonClick = ({
@@ -1029,6 +1034,7 @@ export function Questions({
             setInProgressSurveyState(survey, {
                 surveySubmissionId: surveySubmissionId,
                 responses: newResponses,
+                lastQuestionIndex: nextStep,
             })
         }
 
@@ -1045,6 +1051,12 @@ export function Questions({
         }
     }
 
+    const currentQuestion = surveyQuestions.at(currentQuestionIndex)
+
+    if (!currentQuestion) {
+        return null
+    }
+
     return (
         <form
             className="survey-form"
@@ -1059,49 +1071,41 @@ export function Questions({
                     : {}
             }
         >
-            {surveyQuestions.map((question, displayQuestionIndex) => {
-                const isVisible = currentQuestionIndex === displayQuestionIndex
-                return (
-                    isVisible && (
-                        <div
-                            className="survey-box"
-                            style={
-                                isPopup
-                                    ? {
-                                          backgroundColor:
-                                              survey.appearance?.backgroundColor ||
-                                              defaultSurveyAppearance.backgroundColor,
-                                      }
-                                    : {}
-                            }
-                        >
-                            {isPopup && (
-                                <Cancel
-                                    onClick={() => {
-                                        onPopupSurveyDismissed()
-                                    }}
-                                />
-                            )}
-                            {getQuestionComponent({
-                                question,
-                                forceDisableHtml,
-                                displayQuestionIndex,
-                                appearance: survey.appearance || defaultSurveyAppearance,
-                                onSubmit: (res) =>
-                                    onNextButtonClick({
-                                        res,
-                                        displayQuestionIndex,
-                                        questionId: question.id,
-                                    }),
-                                onPreviewSubmit,
-                                initialValue: question.id
-                                    ? questionsResponses[getSurveyResponseKey(question.id)]
-                                    : undefined,
-                            })}
-                        </div>
-                    )
-                )
-            })}
+            <div
+                className="survey-box"
+                style={
+                    isPopup
+                        ? {
+                              backgroundColor:
+                                  survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor,
+                          }
+                        : {}
+                }
+            >
+                {isPopup && (
+                    <Cancel
+                        onClick={() => {
+                            onPopupSurveyDismissed()
+                        }}
+                    />
+                )}
+                {getQuestionComponent({
+                    question: currentQuestion,
+                    forceDisableHtml,
+                    displayQuestionIndex: currentQuestionIndex,
+                    appearance: survey.appearance || defaultSurveyAppearance,
+                    onSubmit: (res) =>
+                        onNextButtonClick({
+                            res,
+                            displayQuestionIndex: currentQuestionIndex,
+                            questionId: currentQuestion.id,
+                        }),
+                    onPreviewSubmit,
+                    initialValue: currentQuestion.id
+                        ? questionsResponses[getSurveyResponseKey(currentQuestion.id)]
+                        : undefined,
+                })}
+            </div>
         </form>
     )
 }

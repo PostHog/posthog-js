@@ -843,6 +843,7 @@ export function doesSurveyMatchSelector(survey: Survey): boolean {
 
 interface InProgressSurveyState {
     surveySubmissionId: string
+    lastQuestionIndex: number
     responses: Record<string, string | number | string[] | null>
 }
 
