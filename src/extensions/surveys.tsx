@@ -1,7 +1,8 @@
+import * as Preact from 'preact'
+import { useContext, useEffect, useMemo, useState } from 'preact/hooks'
 import { PostHog } from '../posthog-core'
 import {
     Survey,
-    SurveyAppearance,
     SurveyCallback,
     SurveyPosition,
     SurveyQuestion,
@@ -12,9 +13,6 @@ import {
     SurveyWidgetType,
 } from '../posthog-surveys-types'
 import { addEventListener } from '../utils'
-
-import * as Preact from 'preact'
-import { useContext, useEffect, useMemo, useState } from 'preact/hooks'
 import { document as _document, window as _window } from '../utils/globals'
 import {
     doesSurveyActivateByAction,
@@ -23,10 +21,12 @@ import {
     SURVEY_LOGGER as logger,
 } from '../utils/survey-utils'
 import { isNull, isNumber } from '../utils/type-utils'
+import { uuidv7 } from '../uuidv7'
 import { createWidgetStyle, retrieveWidgetShadow } from './surveys-widget'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import { Cancel } from './surveys/components/QuestionHeader'
 import {
+    CommonQuestionProps,
     LinkQuestion,
     MultipleChoiceQuestion,
     OpenTextQuestion,
@@ -42,11 +42,14 @@ import {
     doesSurveyUrlMatch,
     getContrastingTextColor,
     getDisplayOrderQuestions,
+    getInProgressSurveyState,
     getSurveyContainerClass,
     getSurveyResponseKey,
     getSurveySeen,
     hasWaitPeriodPassed,
+    isSurveyInProgress,
     sendSurveyEvent,
+    setInProgressSurveyState,
     style,
     SURVEY_DEFAULT_Z_INDEX,
     SurveyContext,
@@ -385,6 +388,14 @@ export class SurveyManager {
      */
     private _sortSurveysByAppearanceDelay(surveys: Survey[]): Survey[] {
         return surveys.sort((a, b) => {
+            const isSurveyInProgressA = isSurveyInProgress(a)
+            const isSurveyInProgressB = isSurveyInProgress(b)
+            if (isSurveyInProgressA && !isSurveyInProgressB) {
+                return -1 // a comes before b (in progress surveys first)
+            }
+            if (!isSurveyInProgressA && isSurveyInProgressB) {
+                return 1 // a comes after b (in progress surveys first)
+            }
             const aIsAlways = a.schedule === SurveySchedule.Always
             const bIsAlways = b.schedule === SurveySchedule.Always
 
@@ -427,7 +438,11 @@ export class SurveyManager {
     }
 
     private _internalFlagCheckSatisfied(survey: Survey): boolean {
-        return canActivateRepeatedly(survey) || this._isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key)
+        return (
+            canActivateRepeatedly(survey) ||
+            this._isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key) ||
+            isSurveyInProgress(survey)
+        )
     }
 
     public checkSurveyEligibility(survey: Survey): { eligible: boolean; reason?: string } {
@@ -453,7 +468,8 @@ export class SurveyManager {
 
         if (!this._internalFlagCheckSatisfied(survey)) {
             eligibility.eligible = false
-            eligibility.reason = 'Survey internal targeting flag is not enabled and survey cannot activate repeatedly'
+            eligibility.reason =
+                'Survey internal targeting flag is not enabled and survey cannot activate repeatedly and survey is not in progress'
             return eligibility
         }
 
@@ -821,7 +837,7 @@ export function usePopupVisibility(
             setTimeout(() => {
                 const inputField = document
                     .querySelector(getSurveyContainerClass(survey, true))
-                    ?.shadowRoot?.querySelector('textarea, input[type="text"]') as HTMLElement
+                    ?.shadowRoot?.querySelector('textarea') as HTMLElement
                 if (inputField) {
                     inputField.focus()
                 }
@@ -900,6 +916,21 @@ export function SurveyPopup({
     const shouldShowConfirmation = isSurveySent || previewPageIndex === survey.questions.length
     const confirmationBoxLeftStyle = style?.left && isNumber(style?.left) ? { left: style.left - 40 } : {}
 
+    const surveyContextValue = useMemo(() => {
+        const getInProgressSurvey = getInProgressSurveyState(survey)
+        return {
+            isPreviewMode,
+            previewPageIndex: previewPageIndex,
+            onPopupSurveyDismissed: () => {
+                dismissedSurveyEvent(survey, posthog, isPreviewMode)
+                onPopupSurveyDismissed()
+            },
+            isPopup: isPopup || false,
+            surveySubmissionId: getInProgressSurvey?.surveySubmissionId || uuidv7(),
+            onPreviewSubmit,
+        }
+    }, [isPreviewMode, previewPageIndex, isPopup, posthog, survey, onPopupSurveyDismissed, onPreviewSubmit])
+
     if (isPreviewMode) {
         style = style || {}
         style.left = 'unset'
@@ -908,18 +939,7 @@ export function SurveyPopup({
     }
 
     return isPopupVisible ? (
-        <SurveyContext.Provider
-            value={{
-                isPreviewMode,
-                previewPageIndex: previewPageIndex,
-                onPopupSurveyDismissed: () => {
-                    dismissedSurveyEvent(survey, posthog, isPreviewMode)
-                    onPopupSurveyDismissed()
-                },
-                isPopup: isPopup || false,
-                onPreviewSubmit,
-            }}
-        >
+        <SurveyContext.Provider value={surveyContextValue}>
             {!shouldShowConfirmation ? (
                 <Questions
                     survey={survey}
@@ -959,14 +979,27 @@ export function Questions({
     const textColor = getContrastingTextColor(
         survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor
     )
-    const [questionsResponses, setQuestionsResponses] = useState({})
-    const { previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit } = useContext(SurveyContext)
-    const [currentQuestionIndex, setCurrentQuestionIndex] = useState(previewPageIndex || 0)
+    // Initialize responses from localStorage or empty object
+    const [questionsResponses, setQuestionsResponses] = useState(() => {
+        const inProgressSurveyData = getInProgressSurveyState(survey)
+        if (inProgressSurveyData?.responses) {
+            logger.info('Survey is already in progress, filling in initial responses')
+        }
+        return inProgressSurveyData?.responses || {}
+    })
+    const { previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit, surveySubmissionId } =
+        useContext(SurveyContext)
+    const [currentQuestionIndex, setCurrentQuestionIndex] = useState(() => {
+        const inProgressSurveyData = getInProgressSurveyState(survey)
+        return previewPageIndex || inProgressSurveyData?.lastQuestionIndex || 0
+    })
     const surveyQuestions = useMemo(() => getDisplayOrderQuestions(survey), [survey])
 
     // Sync preview state
     useEffect(() => {
-        setCurrentQuestionIndex(previewPageIndex ?? 0)
+        if (previewPageIndex) {
+            setCurrentQuestionIndex(previewPageIndex)
+        }
     }, [previewPageIndex])
 
     const onNextButtonClick = ({
@@ -990,14 +1023,38 @@ export function Questions({
 
         const responseKey = getSurveyResponseKey(questionId)
 
-        setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
+        const newResponses = { ...questionsResponses, [responseKey]: res }
+        setQuestionsResponses(newResponses)
 
         const nextStep = getNextSurveyStep(survey, displayQuestionIndex, res)
-        if (nextStep === SurveyQuestionBranchingType.End) {
-            sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
-        } else {
+        const isSurveyCompleted = nextStep === SurveyQuestionBranchingType.End
+
+        if (!isSurveyCompleted) {
             setCurrentQuestionIndex(nextStep)
+            setInProgressSurveyState(survey, {
+                surveySubmissionId: surveySubmissionId,
+                responses: newResponses,
+                lastQuestionIndex: nextStep,
+            })
         }
+
+        // If partial responses are enabled, send the survey sent event with with the responses,
+        // otherwise only send the event when the survey is completed
+        if (survey.enable_partial_responses || isSurveyCompleted) {
+            sendSurveyEvent({
+                responses: newResponses,
+                survey,
+                surveySubmissionId,
+                isSurveyCompleted,
+                posthog,
+            })
+        }
+    }
+
+    const currentQuestion = surveyQuestions.at(currentQuestionIndex)
+
+    if (!currentQuestion) {
+        return null
     }
 
     return (
@@ -1014,46 +1071,41 @@ export function Questions({
                     : {}
             }
         >
-            {surveyQuestions.map((question, displayQuestionIndex) => {
-                const isVisible = currentQuestionIndex === displayQuestionIndex
-                return (
-                    isVisible && (
-                        <div
-                            className="survey-box"
-                            style={
-                                isPopup
-                                    ? {
-                                          backgroundColor:
-                                              survey.appearance?.backgroundColor ||
-                                              defaultSurveyAppearance.backgroundColor,
-                                      }
-                                    : {}
-                            }
-                        >
-                            {isPopup && (
-                                <Cancel
-                                    onClick={() => {
-                                        onPopupSurveyDismissed()
-                                    }}
-                                />
-                            )}
-                            {getQuestionComponent({
-                                question,
-                                forceDisableHtml,
-                                displayQuestionIndex,
-                                appearance: survey.appearance || defaultSurveyAppearance,
-                                onSubmit: (res) =>
-                                    onNextButtonClick({
-                                        res,
-                                        displayQuestionIndex,
-                                        questionId: question.id,
-                                    }),
-                                onPreviewSubmit,
-                            })}
-                        </div>
-                    )
-                )
-            })}
+            <div
+                className="survey-box"
+                style={
+                    isPopup
+                        ? {
+                              backgroundColor:
+                                  survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor,
+                          }
+                        : {}
+                }
+            >
+                {isPopup && (
+                    <Cancel
+                        onClick={() => {
+                            onPopupSurveyDismissed()
+                        }}
+                    />
+                )}
+                {getQuestionComponent({
+                    question: currentQuestion,
+                    forceDisableHtml,
+                    displayQuestionIndex: currentQuestionIndex,
+                    appearance: survey.appearance || defaultSurveyAppearance,
+                    onSubmit: (res) =>
+                        onNextButtonClick({
+                            res,
+                            displayQuestionIndex: currentQuestionIndex,
+                            questionId: currentQuestion.id,
+                        }),
+                    onPreviewSubmit,
+                    initialValue: currentQuestion.id
+                        ? questionsResponses[getSurveyResponseKey(currentQuestion.id)]
+                        : undefined,
+                })}
+            </div>
         </form>
     )
 }
@@ -1160,13 +1212,9 @@ export function FeedbackWidget({
     )
 }
 
-interface GetQuestionComponentProps {
+interface GetQuestionComponentProps extends CommonQuestionProps {
     question: SurveyQuestion
-    forceDisableHtml: boolean
     displayQuestionIndex: number
-    appearance: SurveyAppearance
-    onSubmit: (res: string | string[] | number | null) => void
-    onPreviewSubmit: (res: string | string[] | number | null) => void
 }
 
 const getQuestionComponent = ({
@@ -1176,6 +1224,7 @@ const getQuestionComponent = ({
     appearance,
     onSubmit,
     onPreviewSubmit,
+    initialValue,
 }: GetQuestionComponentProps): JSX.Element => {
     const questionComponents = {
         [SurveyQuestionType.Open]: OpenTextQuestion,
@@ -1195,6 +1244,7 @@ const getQuestionComponent = ({
         onSubmit: (res: string | string[] | number | null) => {
             onSubmit(res)
         },
+        initialValue,
     }
 
     const additionalProps: Record<SurveyQuestionType, any> = {

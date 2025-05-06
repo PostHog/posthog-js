@@ -175,17 +175,14 @@ test.describe('surveys - core display logic', () => {
             {
                 id: 'multiple_choice_1',
                 question: 'Which types of content would you like to see more of?',
-                index: 0,
             },
             {
                 id: 'open_text_1',
                 question: 'What feedback do you have for us?',
-                index: 1,
             },
             {
                 id: 'nps_rating_1',
                 question: 'Would you recommend surveys?',
-                index: 2,
             },
         ])
     })
@@ -232,7 +229,6 @@ test.describe('surveys - core display logic', () => {
             {
                 id: 'multiple_choice_1',
                 question: 'Which types of content would you like to see more of?',
-                index: 0,
             },
         ])
     })
@@ -285,7 +281,6 @@ test.describe('surveys - core display logic', () => {
             {
                 id: 'single_choice_1',
                 question: 'What is your occupation?',
-                index: 0,
             },
         ])
     })

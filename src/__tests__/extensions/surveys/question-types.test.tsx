@@ -1,6 +1,17 @@
-import { fireEvent, render } from '@testing-library/preact'
-import { MultipleChoiceQuestion, OpenTextQuestion } from '../../../extensions/surveys/components/QuestionTypes'
-import { BasicSurveyQuestion, MultipleSurveyQuestion, SurveyQuestionType } from '../../../posthog-surveys-types'
+import '@testing-library/jest-dom'
+
+import { fireEvent, render, screen } from '@testing-library/preact'
+import {
+    MultipleChoiceQuestion,
+    OpenTextQuestion,
+    RatingQuestion,
+} from '../../../extensions/surveys/components/QuestionTypes'
+import {
+    BasicSurveyQuestion,
+    MultipleSurveyQuestion,
+    RatingSurveyQuestion,
+    SurveyQuestionType,
+} from '../../../posthog-surveys-types'
 
 describe('MultipleChoiceQuestion', () => {
     const mockAppearance = {
@@ -210,4 +221,166 @@ describe('OpenTextQuestion', () => {
     })
 
     // Add other tests for OpenTextQuestion if needed...
+})
+
+describe('RatingQuestion', () => {
+    const mockAppearance = {
+        backgroundColor: '#fff',
+        submitButtonText: 'Submit',
+        ratingButtonColor: '#ccc',
+        ratingButtonActiveColor: '#007bff',
+        borderColor: '#ddd',
+    }
+
+    const baseProps = {
+        forceDisableHtml: false,
+        appearance: mockAppearance,
+        displayQuestionIndex: 1,
+        onSubmit: jest.fn(),
+        onPreviewSubmit: jest.fn(),
+    }
+
+    const ratingQuestion: RatingSurveyQuestion = {
+        type: SurveyQuestionType.Rating,
+        question: 'How would you rate your experience?',
+        description: 'Scale from 1 to 5',
+        display: 'number',
+        scale: 5,
+        lowerBoundLabel: 'Bad',
+        upperBoundLabel: 'Good',
+        optional: false,
+    }
+
+    const getRatingButton = (value: number) => {
+        return screen.getByText(value.toString())
+    }
+
+    it('renders correctly with no initial value', () => {
+        render(<RatingQuestion {...baseProps} question={ratingQuestion} initialValue={null} />)
+        const buttons = screen.getAllByRole('button')
+        const ratingButtons = buttons.filter((btn) => btn.textContent !== mockAppearance.submitButtonText)
+        ratingButtons.forEach((button) => {
+            expect(button).not.toHaveClass('rating-active')
+        })
+    })
+
+    it('renders correctly with a valid numeric initial value', () => {
+        render(<RatingQuestion {...baseProps} question={ratingQuestion} initialValue={3} />)
+        const button3 = getRatingButton(3)
+        expect(button3).toHaveClass('rating-active')
+        expect(button3).toHaveStyle(`background-color: ${mockAppearance.ratingButtonActiveColor}`)
+    })
+
+    it('renders correctly with a valid string initial value', () => {
+        render(<RatingQuestion {...baseProps} question={ratingQuestion} initialValue={'4'} />)
+        const button4 = getRatingButton(4)
+        expect(button4).toHaveClass('rating-active')
+        expect(button4).toHaveStyle(`background-color: ${mockAppearance.ratingButtonActiveColor}`)
+    })
+
+    it('renders correctly with a valid array initial value', () => {
+        render(<RatingQuestion {...baseProps} question={ratingQuestion} initialValue={['2']} />)
+        const button2 = getRatingButton(2)
+        expect(button2).toHaveClass('rating-active')
+        expect(button2).toHaveStyle(`background-color: ${mockAppearance.ratingButtonActiveColor}`)
+    })
+
+    it('renders correctly with an invalid string initial value', () => {
+        render(<RatingQuestion {...baseProps} question={ratingQuestion} initialValue={'invalid'} />)
+        const buttons = screen.getAllByRole('button')
+        const ratingButtons = buttons.filter((btn) => btn.textContent !== mockAppearance.submitButtonText)
+        ratingButtons.forEach((button) => {
+            expect(button).not.toHaveClass('rating-active')
+        })
+    })
+
+    it('renders correctly with an empty array initial value', () => {
+        render(<RatingQuestion {...baseProps} question={ratingQuestion} initialValue={[]} />)
+        const buttons = screen.getAllByRole('button')
+        const ratingButtons = buttons.filter((btn) => btn.textContent !== mockAppearance.submitButtonText)
+        ratingButtons.forEach((button) => {
+            expect(button).not.toHaveClass('rating-active')
+        })
+    })
+
+    it('renders correctly with an array containing an invalid string', () => {
+        render(<RatingQuestion {...baseProps} question={ratingQuestion} initialValue={['invalid']} />)
+        const buttons = screen.getAllByRole('button')
+        const ratingButtons = buttons.filter((btn) => btn.textContent !== mockAppearance.submitButtonText)
+        ratingButtons.forEach((button) => {
+            expect(button).not.toHaveClass('rating-active')
+        })
+    })
+
+    const ratingQuestion10Scale: RatingSurveyQuestion = {
+        ...ratingQuestion,
+        scale: 10,
+        description: 'Scale from 0 to 10',
+    }
+
+    it('renders 10-scale correctly with initial value 0', () => {
+        render(<RatingQuestion {...baseProps} question={ratingQuestion10Scale} initialValue={0} />)
+        const button0 = getRatingButton(0)
+        expect(button0).toHaveClass('rating-active')
+        expect(button0).toHaveStyle(`background-color: ${mockAppearance.ratingButtonActiveColor}`)
+    })
+
+    it('renders 10-scale correctly with initial value 10', () => {
+        render(<RatingQuestion {...baseProps} question={ratingQuestion10Scale} initialValue={'10'} />)
+        const button10 = getRatingButton(10)
+        expect(button10).toHaveClass('rating-active')
+        expect(button10).toHaveStyle(`background-color: ${mockAppearance.ratingButtonActiveColor}`)
+    })
+
+    it('updates rating on click', () => {
+        render(<RatingQuestion {...baseProps} question={ratingQuestion} initialValue={null} />)
+        const button2 = getRatingButton(2)
+        const button4 = getRatingButton(4)
+
+        expect(button2).not.toHaveClass('rating-active')
+        expect(button4).not.toHaveClass('rating-active')
+
+        fireEvent.click(button4)
+        expect(button2).not.toHaveClass('rating-active')
+        expect(button4).toHaveClass('rating-active')
+        expect(button4).toHaveStyle(`background-color: ${mockAppearance.ratingButtonActiveColor}`)
+
+        fireEvent.click(button2)
+        expect(button4).not.toHaveClass('rating-active')
+        expect(button2).toHaveClass('rating-active')
+        expect(button2).toHaveStyle(`background-color: ${mockAppearance.ratingButtonActiveColor}`)
+    })
+
+    it('calls onSubmit with the selected rating', () => {
+        render(<RatingQuestion {...baseProps} question={ratingQuestion} initialValue={null} />)
+        const button3 = getRatingButton(3)
+        const submitButton = screen.getByText(mockAppearance.submitButtonText)
+
+        fireEvent.click(button3)
+        fireEvent.click(submitButton)
+
+        expect(baseProps.onSubmit).toHaveBeenCalledWith(3)
+    })
+
+    it('submit button is disabled initially if question is not optional', () => {
+        render(<RatingQuestion {...baseProps} question={ratingQuestion} initialValue={null} />)
+        const submitButton = screen.getByText(mockAppearance.submitButtonText)
+        expect(submitButton).toBeDisabled()
+    })
+
+    it('submit button is enabled initially if question is optional', () => {
+        const optionalQuestion = { ...ratingQuestion, optional: true }
+        render(<RatingQuestion {...baseProps} question={optionalQuestion} initialValue={null} />)
+        const submitButton = screen.getByText(mockAppearance.submitButtonText)
+        expect(submitButton).not.toBeDisabled()
+    })
+
+    it('submit button is enabled after selecting a rating', () => {
+        render(<RatingQuestion {...baseProps} question={ratingQuestion} initialValue={null} />)
+        const button3 = getRatingButton(3)
+        const submitButton = screen.getByText(mockAppearance.submitButtonText)
+
+        fireEvent.click(button3)
+        expect(submitButton).not.toBeDisabled()
+    })
 })

@@ -14,8 +14,8 @@ const CDP_DOMAINS = ['https://*.redditstatic.com', 'https://*.reddit.com'].join(
 
 export default function App({ Component, pageProps }: AppProps) {
     const user = useUser()
-
     useEffect(() => {
+        // Use a type assertion to add the property to the window object
         ;(window as any).POSTHOG_DEBUG = true
         if (user) {
             posthogHelpers.setUser(user)

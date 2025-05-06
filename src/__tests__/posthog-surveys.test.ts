@@ -15,6 +15,7 @@ import { PostHogSurveys } from '../posthog-surveys'
 import { Survey, SurveySchedule, SurveyType } from '../posthog-surveys-types'
 import { DecideResponse } from '../types'
 import { assignableWindow } from '../utils/globals'
+import { SURVEY_IN_PROGRESS_PREFIX } from '../utils/survey-utils'
 
 describe('posthog-surveys', () => {
     describe('PostHogSurveys Class', () => {
@@ -104,6 +105,8 @@ describe('posthog-surveys', () => {
                 loadExternalDependency: mockLoadExternalDependency,
                 canActivateRepeatedly: jest.fn().mockReturnValue(false),
             }
+
+            surveys.reset()
         })
 
         afterEach(() => {
@@ -154,7 +157,7 @@ describe('posthog-surveys', () => {
                 const result = surveys['_checkSurveyEligibility'](survey.id)
                 expect(result.eligible).toBeFalsy()
                 expect(result.reason).toEqual(
-                    'Survey internal targeting flag is not enabled and survey cannot activate repeatedly'
+                    'Survey internal targeting flag is not enabled and survey cannot activate repeatedly and survey is not in progress'
                 )
             })
 
@@ -163,6 +166,20 @@ describe('posthog-surveys', () => {
                 decideResponse.featureFlags[survey.linked_flag_key] = true
                 decideResponse.featureFlags[survey.internal_targeting_flag_key] = false
                 const result = surveys['_checkSurveyEligibility'](repeatableSurvey.id)
+                expect(result.eligible).toBeTruthy()
+            })
+
+            it('can render a survey that is in progress', () => {
+                decideResponse.featureFlags[survey.targeting_flag_key] = true
+                decideResponse.featureFlags[survey.linked_flag_key] = true
+                decideResponse.featureFlags[survey.internal_targeting_flag_key] = false
+                localStorage.setItem(
+                    `${SURVEY_IN_PROGRESS_PREFIX}${survey.id}`,
+                    JSON.stringify({
+                        surveySubmissionId: '123',
+                    })
+                )
+                const result = surveys['_checkSurveyEligibility'](survey.id)
                 expect(result.eligible).toBeTruthy()
             })
         })

@@ -8,7 +8,7 @@ import {
     SurveyAppearance,
     SurveyQuestionType,
 } from '../../../posthog-surveys-types'
-import { isArray, isNull } from '../../../utils/type-utils'
+import { isArray, isNull, isNumber, isString } from '../../../utils/type-utils'
 import {
     checkSVG,
     dissatisfiedEmoji,
@@ -21,11 +21,12 @@ import { getContrastingTextColor, getDisplayOrderChoices } from '../surveys-exte
 import { BottomSection } from './BottomSection'
 import { QuestionHeader } from './QuestionHeader'
 
-interface CommonProps {
+export interface CommonQuestionProps {
     forceDisableHtml: boolean
     appearance: SurveyAppearance
     onSubmit: (res: string | string[] | number | null) => void
     onPreviewSubmit: (res: string | string[] | number | null) => void
+    initialValue?: string | string[] | number | null
 }
 
 export function OpenTextQuestion({
@@ -34,10 +35,16 @@ export function OpenTextQuestion({
     appearance,
     onSubmit,
     onPreviewSubmit,
-}: CommonProps & {
+    initialValue,
+}: CommonQuestionProps & {
     question: BasicSurveyQuestion
 }) {
-    const [text, setText] = useState('')
+    const [text, setText] = useState<string>(() => {
+        if (isString(initialValue)) {
+            return initialValue
+        }
+        return ''
+    })
 
     return (
         <Fragment>
@@ -59,6 +66,7 @@ export function OpenTextQuestion({
                     onKeyDown={(e) => {
                         e.stopPropagation()
                     }}
+                    value={text}
                 />
             </div>
             <BottomSection
@@ -78,7 +86,7 @@ export function LinkQuestion({
     appearance,
     onSubmit,
     onPreviewSubmit,
-}: CommonProps & {
+}: CommonQuestionProps & {
     question: LinkSurveyQuestion
 }) {
     return (
@@ -110,13 +118,25 @@ export function RatingQuestion({
     appearance,
     onSubmit,
     onPreviewSubmit,
-}: CommonProps & {
+    initialValue,
+}: CommonQuestionProps & {
     question: RatingSurveyQuestion
     displayQuestionIndex: number
 }) {
     const scale = question.scale
     const starting = question.scale === 10 ? 0 : 1
-    const [rating, setRating] = useState<number | null>(null)
+    const [rating, setRating] = useState<number | null>(() => {
+        if (isNumber(initialValue)) {
+            return initialValue
+        }
+        if (isArray(initialValue) && initialValue.length > 0 && isNumber(parseInt(initialValue[0]))) {
+            return parseInt(initialValue[0])
+        }
+        if (isString(initialValue) && isNumber(parseInt(initialValue))) {
+            return parseInt(initialValue)
+        }
+        return null
+    })
 
     return (
         <Fragment>
@@ -264,17 +284,41 @@ export function MultipleChoiceQuestion({
     appearance,
     onSubmit,
     onPreviewSubmit,
-}: CommonProps & {
+    initialValue,
+}: CommonQuestionProps & {
     question: MultipleSurveyQuestion
     displayQuestionIndex: number
 }) {
     const openChoiceInputRef = useRef<HTMLInputElement>(null)
     const choices = useMemo(() => getDisplayOrderChoices(question), [question])
-    const [selectedChoices, setSelectedChoices] = useState<string | string[] | null>(
-        question.type === SurveyQuestionType.MultipleChoice ? [] : null
-    )
-    const [openChoiceSelected, setOpenChoiceSelected] = useState(false)
-    const [openEndedInput, setOpenEndedInput] = useState('')
+    const [selectedChoices, setSelectedChoices] = useState<string | string[] | null>(() => {
+        if (isString(initialValue)) {
+            return initialValue
+        }
+        if (isArray(initialValue)) {
+            return initialValue
+        }
+        return question.type === SurveyQuestionType.SingleChoice ? null : []
+    })
+    const [openChoiceSelected, setOpenChoiceSelected] = useState(() => {
+        if (isString(initialValue)) {
+            return !choices.includes(initialValue)
+        }
+        if (isArray(initialValue)) {
+            // check if initialValue IS NOT in choices
+            return !choices.some((choice) => initialValue.includes(choice))
+        }
+        return false
+    })
+    const [openEndedInput, setOpenEndedInput] = useState(() => {
+        if (isString(initialValue) && !choices.includes(initialValue)) {
+            return initialValue
+        }
+        if (isArray(initialValue)) {
+            return initialValue.find((choice) => !choices.includes(choice)) || ''
+        }
+        return ''
+    })
 
     const inputType = question.type === SurveyQuestionType.SingleChoice ? 'radio' : 'checkbox'
 

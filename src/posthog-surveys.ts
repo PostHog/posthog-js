@@ -10,6 +10,7 @@ import {
     doesSurveyActivateByEvent,
     isSurveyRunning,
     SURVEY_LOGGER as logger,
+    SURVEY_IN_PROGRESS_PREFIX,
     SURVEY_SEEN_PREFIX,
 } from './utils/survey-utils'
 import { isArray, isNullish } from './utils/type-utils'
@@ -47,7 +48,7 @@ export class PostHogSurveys {
         const surveyKeys = []
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i)
-            if (key?.startsWith(SURVEY_SEEN_PREFIX)) {
+            if (key?.startsWith(SURVEY_SEEN_PREFIX) || key?.startsWith(SURVEY_IN_PROGRESS_PREFIX)) {
                 surveyKeys.push(key)
             }
         }

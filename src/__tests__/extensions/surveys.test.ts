@@ -17,6 +17,7 @@ import * as Preact from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { PostHog } from '../../posthog-core'
 import { DecideResponse } from '../../types'
+import { SURVEY_IN_PROGRESS_PREFIX } from '../../utils/survey-utils'
 
 declare const global: any
 
@@ -510,6 +511,27 @@ describe('SurveyManager', () => {
             { id: '1', appearance: { surveyPopupDelaySeconds: 5 }, schedule: 'event' },
             { id: '2', appearance: { surveyPopupDelaySeconds: 2 }, schedule: SurveySchedule.Always },
             { id: '4', appearance: { surveyPopupDelaySeconds: 8 }, schedule: SurveySchedule.Always },
+        ])
+    })
+
+    test('sortSurveysByAppearanceDelay should sort surveys in progress first', () => {
+        const surveys: Survey[] = [
+            { id: '1', appearance: { surveyPopupDelaySeconds: 5 } },
+            { id: '2', appearance: { surveyPopupDelaySeconds: 2 } },
+        ] as unknown as Survey[]
+
+        localStorage.setItem(
+            `${SURVEY_IN_PROGRESS_PREFIX}1`,
+            JSON.stringify({
+                surveySubmissionId: '123',
+            })
+        )
+
+        const sortedSurveys = surveyManager.getTestAPI().sortSurveysByAppearanceDelay(surveys)
+
+        expect(sortedSurveys).toEqual([
+            { id: '1', appearance: { surveyPopupDelaySeconds: 5 } },
+            { id: '2', appearance: { surveyPopupDelaySeconds: 2 } },
         ])
     })
 
