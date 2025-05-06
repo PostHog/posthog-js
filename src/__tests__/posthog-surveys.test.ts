@@ -127,7 +127,6 @@ describe('posthog-surveys', () => {
                 decideResponse.featureFlags[survey.internal_targeting_flag_key] = true
                 decideResponse.featureFlags[survey.linked_flag_key] = true
                 const result = surveys.canRenderSurvey(survey.id)
-                console.log(result)
                 expect(result.visible).toBeTruthy()
             })
         })
