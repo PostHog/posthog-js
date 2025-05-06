@@ -274,7 +274,7 @@ export class PostHogSurveys {
     }
 
     canRenderSurvey(surveyId: string): SurveyRenderReason {
-        if (!isNullish(this._surveyManager)) {
+        if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return { visible: false, disabledReason: 'SDK is not enabled or survey functionality is not yet loaded' }
         }

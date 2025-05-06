@@ -114,6 +114,24 @@ describe('posthog-surveys', () => {
             delete assignableWindow.__PosthogExtensions__
         })
 
+        describe('canRenderSurvey', () => {
+            it('should return false if surveys are not loaded', () => {
+                const result = surveys.canRenderSurvey(survey.id)
+                expect(result.visible).toBeFalsy()
+            })
+
+            it('should return visible: true if surveys are loaded and the survey is eligible', () => {
+                mockPostHog.get_property.mockReturnValue([survey])
+                surveys['_surveyManager'] = new SurveyManager(mockPostHog as PostHog)
+                decideResponse.featureFlags[survey.targeting_flag_key] = true
+                decideResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                decideResponse.featureFlags[survey.linked_flag_key] = true
+                const result = surveys.canRenderSurvey(survey.id)
+                console.log(result)
+                expect(result.visible).toBeTruthy()
+            })
+        })
+
         describe('checkSurveyEligibility', () => {
             beforeEach(() => {
                 // mock getSurveys response
