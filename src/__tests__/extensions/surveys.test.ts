@@ -323,15 +323,11 @@ describe('SurveyManager', () => {
         const handlePopoverSurveyMock = jest
             .spyOn(surveyManager as any, '_handlePopoverSurvey')
             .mockImplementation(() => {})
-        const canShowNextEventBasedSurveyMock = jest
-            .spyOn(surveyManager as any, '_canShowNextEventBasedSurvey')
-            .mockReturnValue(true)
 
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(mockPostHog.surveys.getSurveys).toHaveBeenCalled()
         expect(handlePopoverSurveyMock).toHaveBeenCalledWith(mockSurveys[0])
-        expect(canShowNextEventBasedSurveyMock).toHaveBeenCalled()
     })
 
     test('should initialize surveyInFocus correctly', () => {
@@ -353,17 +349,32 @@ describe('SurveyManager', () => {
         expect(surveyManager.getTestAPI().surveyInFocus).toBe(null)
     })
 
-    test('canShowNextEventBasedSurvey should return correct visibility status', () => {
-        const surveyDiv = document.createElement('div')
-        surveyDiv.className = 'PostHogSurvey_test'
-        surveyDiv.attachShadow({ mode: 'open' })
-        surveyDiv.shadowRoot!.appendChild(document.createElement('style'))
-        document.body.appendChild(surveyDiv)
+    it('should only display one popover survey if multiple popovers are eligible', () => {
+        const anotherPopover = { ...mockSurveys[0], id: 'popover-2' }
 
-        expect(surveyManager.getTestAPI().canShowNextEventBasedSurvey()).toBe(true)
+        mockPostHog.surveys.getSurveys = jest.fn((callback) => callback([mockSurveys[0], anotherPopover]))
 
-        surveyDiv.shadowRoot!.appendChild(document.createElement('div'))
-        expect(surveyManager.getTestAPI().canShowNextEventBasedSurvey()).toBe(false)
+        const handlePopoverSurveySpy = jest.spyOn(surveyManager as any, '_handlePopoverSurvey')
+        const addSurveyToFocusSpy = jest.spyOn(surveyManager as any, '_addSurveyToFocus')
+
+        surveyManager.callSurveysAndEvaluateDisplayLogic(true)
+
+        expect(mockPostHog.surveys.getSurveys).toHaveBeenCalled()
+
+        // First popover should be handled
+        expect(handlePopoverSurveySpy).toHaveBeenCalledWith(mockSurveys[0])
+        expect(addSurveyToFocusSpy).toHaveBeenCalledWith(mockSurveys[0].id)
+        expect(surveyManager.getTestAPI().surveyInFocus).toBe(mockSurveys[0].id)
+
+        // Call the function again to check that the second popover is not handled
+        surveyManager.callSurveysAndEvaluateDisplayLogic(true)
+
+        // Second popover should NOT be handled as one is already in focus
+        expect(handlePopoverSurveySpy).not.toHaveBeenCalledWith(anotherPopover)
+
+        // Ensure only called once for the first popover
+        expect(handlePopoverSurveySpy).toHaveBeenCalledTimes(1)
+        expect(addSurveyToFocusSpy).toHaveBeenCalledTimes(1)
     })
 
     test('callSurveysAndEvaluateDisplayLogic should handle popup surveys correctly', () => {
@@ -374,7 +385,6 @@ describe('SurveyManager', () => {
         const manageWidgetSelectorListener = jest
             .spyOn(surveyManager as any, '_manageWidgetSelectorListener')
             .mockImplementation(() => {})
-        jest.spyOn(surveyManager as any, '_canShowNextEventBasedSurvey').mockReturnValue(true)
 
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
@@ -467,7 +477,6 @@ describe('SurveyManager', () => {
         expect(handlePopoverSurveyMock).not.toHaveBeenCalled()
 
         surveyManager.getTestAPI().removeSurveyFromFocus('survey1')
-        jest.spyOn(surveyManager as any, '_canShowNextEventBasedSurvey').mockReturnValue(true)
 
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
@@ -753,6 +762,147 @@ describe('SurveyManager', () => {
 
             const result = surveyManager.getTestAPI().checkFlags(survey)
             expect(result).toBe(true)
+        })
+    })
+
+    describe('callSurveysAndEvaluateDisplayLogic', () => {
+        let mockPosthog: jest.Mocked<PostHog>
+        let surveyManager: SurveyManager
+        let mockGetSurveysCallback: jest.Mock
+
+        const surveyWidgetTab = {
+            id: 'widget-tab-survey',
+            name: 'Feedback Tab Survey',
+            description: 'A widget survey that shows as a tab.',
+            type: SurveyType.Widget,
+            questions: [{ type: SurveyQuestionType.Open, question: 'Feedback?', id: 'q1' }],
+            appearance: {
+                widgetType: SurveyWidgetType.Tab,
+                widgetLabel: 'Feedback',
+                backgroundColor: '#ffffff',
+                // ... other necessary appearance properties
+            }, // Cast to avoid TS complaining about partial type
+            // Ensure it passes eligibility checks
+            linked_flag_key: null,
+            targeting_flag_key: null,
+            internal_targeting_flag_key: null,
+            conditions: null, // Assuming no URL/selector conditions for simplicity
+            start_date: null,
+            end_date: null, // Active survey
+        }
+
+        const surveyPopover = {
+            id: 'popover-survey',
+            name: 'Important Popover',
+            description: 'A popover survey.',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'Your thoughts?', id: 'pq1' }],
+            appearance: {
+                surveyPopupDelaySeconds: 0, // Show immediately for test
+                backgroundColor: '#ffffff',
+                // ... other necessary appearance properties
+            },
+            linked_flag_key: null,
+            targeting_flag_key: null,
+            internal_targeting_flag_key: null,
+            conditions: null,
+            start_date: null,
+            end_date: null,
+        }
+
+        beforeEach(() => {
+            // Create a fresh mock for PostHog for each test
+            mockPosthog = {
+                featureFlags: {
+                    isFeatureEnabled: jest.fn().mockReturnValue(true), // Assume all flags are enabled
+                },
+                surveys: {
+                    getSurveys: jest.fn((callback) => {
+                        mockGetSurveysCallback = callback // Capture the callback
+                    }),
+                    _surveyEventReceiver: {
+                        // Mock this if _hasActionOrEventTriggeredSurvey relies on it
+                        getSurveys: jest.fn().mockReturnValue([]), // Default to no event-triggered surveys
+                    },
+                },
+                // Add other methods if SurveyManager constructor or methods use them
+            } as unknown as jest.Mocked<PostHog> // Cast to satisfy PostHog type, then to jest.Mocked
+
+            surveyManager = new SurveyManager(mockPosthog)
+
+            // Mock document/window elements if necessary for shadow DOM creation, etc.
+            // e.g., jest.spyOn(document, 'createElement').mockImplementation(...)
+            //       jest.spyOn(document, 'querySelectorAll').mockReturnValue([]); // Default
+        })
+
+        afterEach(() => {
+            jest.clearAllMocks()
+            // Restore any global mocks if set up in beforeEach
+            // e.g., document.createElement.mockRestore();
+        })
+
+        it('should display a popover survey even if a widget tab survey is also eligible and rendered', () => {
+            // 1. Setup spies on the internal methods we want to check
+            const handleWidgetSpy = jest.spyOn(surveyManager.getTestAPI(), 'handleWidget')
+            const handlePopoverSurveySpy = jest.spyOn(surveyManager.getTestAPI(), 'handlePopoverSurvey')
+            const addSurveyToFocusSpy = jest.spyOn(surveyManager.getTestAPI(), 'addSurveyToFocus')
+
+            // 2. Call the method that triggers getSurveys
+            surveyManager.callSurveysAndEvaluateDisplayLogic(true)
+
+            // 3. Simulate the getSurveys callback with both types of surveys
+            //    Ensure the widget survey might appear "first" in list if sorting matters,
+            //    though the _surveyInFocus check should be the key.
+            expect(mockPosthog.surveys.getSurveys).toHaveBeenCalled()
+            if (mockGetSurveysCallback) {
+                mockGetSurveysCallback([surveyWidgetTab, surveyPopover])
+            } else {
+                throw new Error('getSurveys callback was not captured')
+            }
+
+            // 4. Assertions
+            // Widget tab should be handled
+            expect(handleWidgetSpy).toHaveBeenCalledWith(surveyWidgetTab)
+
+            // Popover should also be handled because _surveyInFocus is initially null
+            expect(handlePopoverSurveySpy).toHaveBeenCalledWith(surveyPopover)
+
+            // Popover survey should be set to focus
+            expect(addSurveyToFocusSpy).toHaveBeenCalledWith(surveyPopover.id)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(surveyPopover.id)
+
+            // Optional: Check that querySelectorAll wasn't the reason popover was blocked
+            // (This is harder to test directly now _canShowNextEventBasedSurvey is gone,
+            //  but the behavior of popover showing is the main goal)
+        })
+
+        it('should only display one popover survey if multiple popovers are eligible', () => {
+            const anotherPopover = { ...surveyPopover, id: 'popover-2' }
+
+            const handlePopoverSurveySpy = jest.spyOn(surveyManager.getTestAPI(), 'handlePopoverSurvey')
+            const addSurveyToFocusSpy = jest.spyOn(surveyManager.getTestAPI(), 'addSurveyToFocus')
+
+            surveyManager.callSurveysAndEvaluateDisplayLogic(true)
+
+            expect(mockPosthog.surveys.getSurveys).toHaveBeenCalled()
+            if (mockGetSurveysCallback) {
+                // Popover, then Widget, then another Popover
+                mockGetSurveysCallback([surveyPopover, surveyWidgetTab, anotherPopover])
+            } else {
+                throw new Error('getSurveys callback was not captured')
+            }
+
+            // First popover should be handled
+            expect(handlePopoverSurveySpy).toHaveBeenCalledWith(surveyPopover)
+            expect(addSurveyToFocusSpy).toHaveBeenCalledWith(surveyPopover.id)
+            expect(surveyManager.getTestAPI().surveyInFocus).toBe(surveyPopover.id)
+
+            // Second popover should NOT be handled as one is already in focus
+            expect(handlePopoverSurveySpy).not.toHaveBeenCalledWith(anotherPopover)
+
+            // Ensure only called once for the first popover
+            expect(handlePopoverSurveySpy).toHaveBeenCalledTimes(1)
+            expect(addSurveyToFocusSpy).toHaveBeenCalledTimes(1)
         })
     })
 })
