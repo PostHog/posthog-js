@@ -118,6 +118,7 @@ describe('posthog-surveys', () => {
             it('should return false if surveys are not loaded', () => {
                 const result = surveys.canRenderSurvey(survey.id)
                 expect(result.visible).toBeFalsy()
+                expect(result.disabledReason).toEqual('SDK is not enabled or survey functionality is not yet loaded')
             })
 
             it('should return visible: true if surveys are loaded and the survey is eligible', () => {
@@ -128,6 +129,7 @@ describe('posthog-surveys', () => {
                 decideResponse.featureFlags[survey.linked_flag_key] = true
                 const result = surveys.canRenderSurvey(survey.id)
                 expect(result.visible).toBeTruthy()
+                expect(result.disabledReason).toBeUndefined()
             })
         })
 
