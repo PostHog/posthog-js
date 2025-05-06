@@ -590,6 +590,7 @@ export const sendSurveyEvent = ({
         $survey_questions: survey.questions.map((question) => ({
             id: question.id,
             question: question.question,
+            response: question.id ? responses[getSurveyResponseKey(question.id)] : null,
         })),
         $survey_submission_id: surveySubmissionId,
         $survey_completed: isSurveyCompleted,
@@ -633,6 +634,7 @@ export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly
         $survey_questions: survey.questions.map((question) => ({
             id: question.id,
             question: question.question,
+            response: question.id ? inProgressSurvey?.responses[getSurveyResponseKey(question.id)] : null,
         })),
         $set: {
             [getSurveyInteractionProperty(survey, 'dismissed')]: true,
