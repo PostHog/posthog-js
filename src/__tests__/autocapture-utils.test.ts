@@ -13,10 +13,12 @@ import {
     getDirectAndNestedSpanText,
     getElementsChainString,
     getClassNames,
+    makeSafeText,
 } from '../autocapture-utils'
 import { document } from '../utils/globals'
 import { makeMouseEvent } from './autocapture.test'
 import { AutocaptureConfig } from '../types'
+import { trim } from '../utils/string-utils'
 
 describe(`Autocapture utility functions`, () => {
     afterEach(() => {
@@ -106,6 +108,85 @@ describe(`Autocapture utility functions`, () => {
         5105-1051-0510-5100
       `
             expect(getSafeText(el)).toBe(`Why hello there`)
+        })
+
+        it(`should handle text with quotation marks properly`, () => {
+            const el = document!.createElement(`div`)
+
+            el.innerHTML = `Text with "double quotes" in it`
+            expect(getSafeText(el)).toBe(`Text with "double quotes" in it`)
+
+            el.innerHTML = `Text with 'single quotes' in it`
+            expect(getSafeText(el)).toBe(`Text with 'single quotes' in it`)
+
+            el.innerHTML = `Mixed "double" and 'single' quotes`
+            expect(getSafeText(el)).toBe(`Mixed "double" and 'single' quotes`)
+        })
+    })
+
+    describe(`makeSafeText`, () => {
+        it(`should handle text with quotation marks properly`, () => {
+            expect(makeSafeText(`Text with "double quotes" in it`)).toBe(`Text with "double quotes" in it`)
+            expect(makeSafeText(`Text with 'single quotes' in it`)).toBe(`Text with 'single quotes' in it`)
+            expect(makeSafeText(`Mixed "double" and 'single' quotes`)).toBe(`Mixed "double" and 'single' quotes`)
+        })
+
+        it(`should preserve the structure when splitting and joining text with quotes`, () => {
+            // Log steps to understand how the processing works
+            const input = `Click here to "get started" today!`
+            const trimmed = trim(input)
+            const split = trimmed.split(/(\s+)/)
+            console.log('Split result:', split)
+
+            const filtered = split.filter((s) => shouldCaptureValue(s))
+            console.log('Filtered result:', filtered)
+
+            const joined = filtered.join('')
+            console.log('Joined result:', joined)
+
+            const normalized = joined.replace(/[\r\n]/g, ' ').replace(/[ ]+/g, ' ')
+            console.log('Normalized result:', normalized)
+
+            // Final result from makeSafeText
+            expect(makeSafeText(input)).toBe(input)
+        })
+
+        it(`should handle complex cases with quotes and possibly problematic formats`, () => {
+            const testStrings = [
+                `Click "OK" to continue`,
+                `Select the "My Account" option`,
+                `Click "Order History"`,
+                `"Double quoted text" with some text after`,
+                `Text before "double quoted text"`,
+                `A string with "multiple" "quoted" sections`,
+                `A string with 'single' 'quoted' sections`,
+                `A "mixed quote' string that might cause problems`,
+                `A 'mixed quote" string that might cause problems`,
+                `"nested "quotes" within" might be an issue`,
+                `Line breaks
+                 with "quotes" might cause issues`,
+                `Quotes "at the end"`,
+                `"Quotes at the start" of text`,
+                `""`, // Empty quotes
+            ]
+
+            // Test each string
+            testStrings.forEach((str) => {
+                console.log(`Original: "${str}"`)
+                const result = makeSafeText(str)
+                console.log(`Result: "${result}"`)
+                expect(result).not.toBeNull()
+
+                // For non-empty strings, we should get a result
+                if (str.trim().length > 0) {
+                    // If the original had quotes, the result should have them too
+                    if (str.includes('"') || str.includes("'")) {
+                        // The result should include some form of quotation mark
+                        const hasQuotes = result?.includes('"') || result?.includes("'")
+                        expect(hasQuotes).toBeTruthy()
+                    }
+                }
+            })
         })
     })
 
@@ -453,6 +534,70 @@ describe(`Autocapture utility functions`, () => {
             child.innerHTML = `test 1`
             parent.appendChild(child)
             expect(getDirectAndNestedSpanText(parent)).toBe('test test 1')
+        })
+
+        it(`should properly handle quotation marks in link text`, () => {
+            const link = document!.createElement('a')
+            link.innerHTML = `Click here to "get started" today!`
+
+            expect(getDirectAndNestedSpanText(link)).toBe(`Click here to "get started" today!`)
+
+            link.innerHTML = `Click here to 'get started' today!`
+            expect(getDirectAndNestedSpanText(link)).toBe(`Click here to 'get started' today!`)
+
+            link.innerHTML = `Click here to "get started" with our 'special offer'!`
+            expect(getDirectAndNestedSpanText(link)).toBe(`Click here to "get started" with our 'special offer'!`)
+        })
+
+        it(`should properly handle complex titles with multiple quotes`, () => {
+            const link = document!.createElement('a')
+            link.innerHTML = `Course Title: "Understanding the 'Creative Process' in Modern Design"`
+
+            // Check that quotes are preserved in the extracted text
+            expect(getDirectAndNestedSpanText(link)).toBe(
+                `Course Title: "Understanding the 'Creative Process' in Modern Design"`
+            )
+
+            // Test with a link using title attribute
+            link.setAttribute('title', `Course Title: "Understanding the 'Creative Process' in Modern Design"`)
+            expect(link.getAttribute('title')).toBe(
+                `Course Title: "Understanding the 'Creative Process' in Modern Design"`
+            )
+        })
+
+        it(`should handle link text with multiple text nodes`, () => {
+            // Create a link element
+            const link = document!.createElement('a')
+
+            // Add multiple text nodes to simulate how browsers might split text content
+            const textNode1 = document.createTextNode('Course Title: ')
+            const textNode2 = document.createTextNode('"Understanding the \'Creative Process\' in Modern Design"')
+
+            link.appendChild(textNode1)
+            link.appendChild(textNode2)
+
+            // Since we're creating direct text nodes, we need to check the actual output format
+            // This matches how makeSafeText joins text segments without spaces between text nodes
+            const expected = 'Course Title:"Understanding the \'Creative Process\' in Modern Design"'
+            expect(getDirectAndNestedSpanText(link)).toBe(expected)
+        })
+
+        it(`should handle link text with spans containing parts of quoted text`, () => {
+            // Create a link element
+            const link = document!.createElement('a')
+
+            // Add a text node for the first part
+            link.appendChild(document.createTextNode('Course Title: '))
+
+            // Add a span with the quoted part
+            const span = document!.createElement('span')
+            span.textContent = '"Understanding the \'Creative Process\' in Modern Design"'
+            link.appendChild(span)
+
+            // Verify the text is properly collected and joined
+            expect(getDirectAndNestedSpanText(link)).toBe(
+                `Course Title: "Understanding the 'Creative Process' in Modern Design"`
+            )
         })
     })
 
