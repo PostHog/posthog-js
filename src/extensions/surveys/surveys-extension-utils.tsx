@@ -13,9 +13,9 @@ import { SURVEY_LOGGER as logger, SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX 
 import { isNullish } from '../../utils/type-utils'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
 
-import { SurveyMatchType } from '../../posthog-surveys-types'
-import { isMatchingRegex } from '../../utils/regex-utils'
 import { detectDeviceType } from '../../utils/user-agent-utils'
+import { propertyComparisons } from '../../utils/property-utils'
+import { PropertyMatchType } from '../../types'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
@@ -791,16 +791,7 @@ export const renderChildrenAsTextOrHtml = ({ component, children, renderAsHtml, 
           })
 }
 
-const surveyValidationMap: Record<SurveyMatchType, (targets: string[], value: string) => boolean> = {
-    icontains: (targets, value) => targets.some((target) => value.toLowerCase().includes(target.toLowerCase())),
-    not_icontains: (targets, value) => targets.every((target) => !value.toLowerCase().includes(target.toLowerCase())),
-    regex: (targets, value) => targets.some((target) => isMatchingRegex(value, target)),
-    not_regex: (targets, value) => targets.every((target) => !isMatchingRegex(value, target)),
-    exact: (targets, value) => targets.some((target) => value === target),
-    is_not: (targets, value) => targets.every((target) => value !== target),
-}
-
-function defaultMatchType(matchType?: SurveyMatchType): SurveyMatchType {
+function defaultMatchType(matchType?: PropertyMatchType): PropertyMatchType {
     return matchType ?? 'icontains'
 }
 
@@ -815,7 +806,8 @@ export function doesSurveyUrlMatch(survey: Pick<Survey, 'conditions'>): boolean 
         return false
     }
     const targets = [survey.conditions.url]
-    return surveyValidationMap[defaultMatchType(survey.conditions?.urlMatchType)](targets, href)
+    const matchType = defaultMatchType(survey.conditions?.urlMatchType)
+    return propertyComparisons[matchType](targets, [href])
 }
 
 export function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
@@ -828,9 +820,9 @@ export function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
     }
 
     const deviceType = detectDeviceType(userAgent)
-    return surveyValidationMap[defaultMatchType(survey.conditions?.deviceTypesMatchType)](
+    return propertyComparisons[defaultMatchType(survey.conditions?.deviceTypesMatchType)](
         survey.conditions.deviceTypes,
-        deviceType
+        [deviceType]
     )
 }
 

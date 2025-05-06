@@ -70,7 +70,7 @@ import { isLikelyBot } from './utils/blocked-uas'
 import { getEventProperties } from './utils/event-utils'
 import { assignableWindow, document, location, navigator, userAgent, window } from './utils/globals'
 import { logger } from './utils/logger'
-import { getPersonPropertiesHash } from './utils/person-property-utils'
+import { getPersonPropertiesHash } from './utils/property-utils'
 import { RequestRouter, RequestRouterRegion } from './utils/request-router'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
 import { includes, isDistinctIdStringLike } from './utils/string-utils'
@@ -627,6 +627,7 @@ export class PostHog {
         this.surveys.onRemoteConfig(config)
         this.webVitalsAutocapture?.onRemoteConfig(config)
         this.exceptionObserver?.onRemoteConfig(config)
+        this.exceptions.onRemoteConfig(config)
         this.deadClicksAutocapture?.onRemoteConfig(config)
     }
 
