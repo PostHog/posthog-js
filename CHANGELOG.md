@@ -1,3 +1,7 @@
+## 1.240.0 - 2025-05-06
+
+- feat: submit partial responses for survey answers (#1888)
+
 ## 1.239.1 - 2025-05-02
 
 - fix: dont mangle some surveys properties (#1934)
