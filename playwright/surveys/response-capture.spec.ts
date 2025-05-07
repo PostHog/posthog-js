@@ -58,6 +58,7 @@ test.describe('surveys - feedback widget', () => {
                     {
                         id: 'open_text_1',
                         question: 'What feedback do you have for us?',
+                        response: 'experiments is awesome!',
                     },
                 ],
             })
@@ -117,6 +118,7 @@ test.describe('surveys - feedback widget', () => {
                     {
                         id: 'open_text_1',
                         question: 'What feedback do you have for us?',
+                        response: 'experiments is awesome!',
                     },
                 ],
             })
