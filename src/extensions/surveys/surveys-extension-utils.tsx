@@ -10,7 +10,7 @@ import {
 } from '../../posthog-surveys-types'
 import { document as _document, window as _window, userAgent } from '../../utils/globals'
 import { SURVEY_LOGGER as logger, SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../../utils/survey-utils'
-import { isNullish } from '../../utils/type-utils'
+import { isNullish, isArray } from '../../utils/type-utils'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
 
 import { SurveyMatchType } from '../../posthog-surveys-types'
@@ -566,6 +566,17 @@ interface SendSurveyEventArgs {
     posthog?: PostHog
 }
 
+const getSurveyResponseValue = (responses: Record<string, string | number | string[] | null>, questionId?: string) => {
+    if (!questionId) {
+        return null
+    }
+    const response = responses[getSurveyResponseKey(questionId)]
+    if (isArray(response)) {
+        return [...response]
+    }
+    return response
+}
+
 export const sendSurveyEvent = ({
     responses,
     survey,
@@ -590,6 +601,7 @@ export const sendSurveyEvent = ({
         $survey_questions: survey.questions.map((question) => ({
             id: question.id,
             question: question.question,
+            response: getSurveyResponseValue(responses, question.id),
         })),
         $survey_submission_id: surveySubmissionId,
         $survey_completed: isSurveyCompleted,
@@ -633,6 +645,7 @@ export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly
         $survey_questions: survey.questions.map((question) => ({
             id: question.id,
             question: question.question,
+            response: getSurveyResponseValue(inProgressSurvey?.responses || {}, question.id),
         })),
         $set: {
             [getSurveyInteractionProperty(survey, 'dismissed')]: true,

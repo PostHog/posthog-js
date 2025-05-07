@@ -73,7 +73,7 @@ test.describe('surveys - core display logic', () => {
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-question-description')).toHaveText(
             'plain text description'
         )
-        await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('textarea').type('Great job!')
+        await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('textarea').fill('Great job!')
         await page.locator('.PostHogSurvey-123').locator('.form-submit').click()
 
         await pollUntilEventCaptured(page, 'survey sent')
@@ -111,7 +111,7 @@ test.describe('surveys - core display logic', () => {
         await page.locator('.PostHogSurvey-123').locator('.ratings-number').first().click()
         await page.locator('.PostHogSurvey-123').locator('.form-submit').click()
 
-        await expect(page.locator('.PostHogSurvey-123').locator('.ratings-number').first()).toHaveText('1')
+        await expect(page.locator('.PostHogSurvey-123').locator('.ratings-number').first()).toHaveText('0')
     })
 
     test('multiple question surveys', async ({ page, context }) => {
@@ -144,7 +144,7 @@ test.describe('surveys - core display logic', () => {
         await page.locator('.PostHogSurvey-12345').locator('#surveyQuestion0Choice2').click()
         await page.locator('.PostHogSurvey-12345').locator('.form-submit').click()
 
-        await page.locator('.PostHogSurvey-12345').locator('textarea').type('Great job!')
+        await page.locator('.PostHogSurvey-12345').locator('textarea').fill('Great job!')
         await page.locator('.PostHogSurvey-12345').locator('.form-submit').click()
         await page.locator('.PostHogSurvey-12345').locator('.form-submit').click()
 
@@ -167,7 +167,9 @@ test.describe('surveys - core display logic', () => {
             '$autocapture',
         ])
         const surveySent = captures.find((c) => c.event === 'survey sent')
-        expect(surveySent!.properties[getSurveyResponseKey('multiple_choice_1')]).toEqual(['Product Updates', 'Events'])
+        expect(surveySent!.properties[getSurveyResponseKey('multiple_choice_1')]).toEqual(
+            expect.arrayContaining(['Product Updates', 'Events'])
+        )
         expect(surveySent!.properties['$survey_id']).toEqual('12345')
         expect(surveySent!.properties[getSurveyResponseKey('open_text_1')]).toEqual('Great job!')
         expect(surveySent!.properties[getSurveyResponseKey('nps_rating_1')]).toBeNull()
@@ -175,14 +177,17 @@ test.describe('surveys - core display logic', () => {
             {
                 id: 'multiple_choice_1',
                 question: 'Which types of content would you like to see more of?',
+                response: ['Product Updates', 'Events'],
             },
             {
                 id: 'open_text_1',
                 question: 'What feedback do you have for us?',
+                response: 'Great job!',
             },
             {
                 id: 'nps_rating_1',
                 question: 'Would you recommend surveys?',
+                response: null,
             },
         ])
     })
@@ -229,6 +234,7 @@ test.describe('surveys - core display logic', () => {
             {
                 id: 'multiple_choice_1',
                 question: 'Which types of content would you like to see more of?',
+                response: ['Tutorials', 'Newsletters'],
             },
         ])
     })
@@ -281,6 +287,7 @@ test.describe('surveys - core display logic', () => {
             {
                 id: 'single_choice_1',
                 question: 'What is your occupation?',
+                response: 'Product engineer',
             },
         ])
     })

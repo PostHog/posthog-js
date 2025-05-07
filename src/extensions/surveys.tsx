@@ -1239,5 +1239,5 @@ const getQuestionComponent = ({
     const Component = questionComponents[question.type]
     const componentProps = { ...commonProps, ...additionalProps[question.type] }
 
-    return <Component {...componentProps} />
+    return <Component {...componentProps} key={question.id} />
 }
