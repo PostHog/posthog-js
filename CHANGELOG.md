@@ -1,3 +1,7 @@
+## 1.240.4 - 2025-05-07
+
+- chore: include response within the survey_quesiton property (#1942)
+
 ## 1.240.3 - 2025-05-07
 
 - fix: false flag should not trigger linked flags (#1944)
