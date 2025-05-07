@@ -51,7 +51,15 @@ test.describe('Session recording - linked flags', () => {
             },
             decideResponseOverrides: {
                 sessionRecording: { linkedFlag: 'my-linked-flag' },
-                featureFlags: { 'my-linked-flag': false },
+                flags: {
+                    'my-linked-flag': {
+                        enabled: false,
+                        key: 'my-linked-flag',
+                        variant: undefined,
+                        metadata: undefined,
+                        reason: undefined,
+                    },
+                },
             },
         })
         await recorderPromise
@@ -73,7 +81,15 @@ test.describe('Session recording - linked flags', () => {
             },
             decideResponseOverrides: {
                 sessionRecording: { linkedFlag: 'my-linked-flag' },
-                featureFlags: { 'my-linked-flag': true },
+                flags: {
+                    'my-linked-flag': {
+                        enabled: true,
+                        key: 'my-linked-flag',
+                        variant: undefined,
+                        metadata: undefined,
+                        reason: undefined,
+                    },
+                },
             },
         })
 
@@ -95,7 +111,15 @@ test.describe('Session recording - linked flags', () => {
                 },
                 decideResponseOverrides: {
                     sessionRecording: { linkedFlag: 'my-linked-flag' },
-                    featureFlags: { 'not-my-linked-flag': true },
+                    flags: {
+                        'not-my-linked-flag': {
+                            enabled: true,
+                            key: 'not-my-linked-flag',
+                            variant: undefined,
+                            metadata: undefined,
+                            reason: undefined,
+                        },
+                    },
                 },
             },
             []
