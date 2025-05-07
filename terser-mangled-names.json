@@ -26,7 +26,6 @@
         "_callDecideEndpoint",
         "_callLoadToolbar",
         "_campaign_params_saved",
-        "_canShowNextEventBasedSurvey",
         "_canUseSessionStorage",
         "_canvasRecording",
         "_capture",
