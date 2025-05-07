@@ -1,3 +1,7 @@
+## 1.240.2 - 2025-05-07
+
+- fix: conflict between event based vs feedback button surveys (#1941)
+
 ## 1.240.1 - 2025-05-07
 
 - fix: getRenderSurvey behavior (#1939)
