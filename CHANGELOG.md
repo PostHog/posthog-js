@@ -1,3 +1,7 @@
+## 1.240.3 - 2025-05-07
+
+- fix: false flag should not trigger linked flags (#1944)
+
 ## 1.240.2 - 2025-05-07
 
 - fix: conflict between event based vs feedback button surveys (#1941)
