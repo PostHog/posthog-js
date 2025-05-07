@@ -213,6 +213,7 @@
         "_register_single",
         "_reloadDebouncer",
         "_reloadingDisabled",
+        "_remoteEnabled",
         "_remove",
         "_removeEventTriggerCaptureHook",
         "_removePageViewCaptureHook",
