@@ -183,20 +183,6 @@ export class SurveyManager {
         this._surveyInFocus = null
     }
 
-    private _canShowNextEventBasedSurvey = (): boolean => {
-        // with event based surveys, we need to show the next survey without reloading the page.
-        // A simple check for div elements with the class name pattern of PostHogSurvey_xyz doesn't work here
-        // because preact leaves behind the div element for any surveys responded/dismissed with a <style> node.
-        // To alleviate this, we check the last div in the dom and see if it has any elements other than a Style node.
-        // if the last PostHogSurvey_xyz div has only one style node, we can show the next survey in the queue
-        // without reloading the page.
-        const surveyPopups = document.querySelectorAll(`div[class^=PostHogSurvey]`)
-        if (surveyPopups.length > 0) {
-            return surveyPopups[surveyPopups.length - 1].shadowRoot?.childElementCount === 1
-        }
-        return true
-    }
-
     private _clearSurveyTimeout(surveyId: string) {
         const timeout = this._surveyTimeouts.get(surveyId)
         if (timeout) {
@@ -376,7 +362,7 @@ export class SurveyManager {
             addEventListener(currentElement, 'click', listener)
             currentElement.setAttribute('PHWidgetSurveyClickListener', 'true')
             this._widgetSelectorListeners.set(survey.id, { element: currentElement, listener })
-            logger.info(`Attached click listener for survey ${survey.id}`)
+            logger.info(`Attached click listener for feedback button survey ${survey.id}`)
         }
     }
 
@@ -548,11 +534,7 @@ export class SurveyManager {
                 }
 
                 // Popover Type Logic (only one shown at a time)
-                if (
-                    isNull(this._surveyInFocus) &&
-                    survey.type === SurveyType.Popover &&
-                    this._canShowNextEventBasedSurvey()
-                ) {
+                if (isNull(this._surveyInFocus) && survey.type === SurveyType.Popover) {
                     this._handlePopoverSurvey(survey)
                 }
             })
@@ -588,7 +570,6 @@ export class SurveyManager {
             removeSurveyFromFocus: this._removeSurveyFromFocus,
             surveyInFocus: this._surveyInFocus,
             surveyTimeouts: this._surveyTimeouts,
-            canShowNextEventBasedSurvey: this._canShowNextEventBasedSurvey,
             handleWidget: this._handleWidget,
             handlePopoverSurvey: this._handlePopoverSurvey,
             manageWidgetSelectorListener: this._manageWidgetSelectorListener,
@@ -1148,7 +1129,7 @@ export function FeedbackWidget({
             const customEvent = event as CustomEvent
             // Check if the event is for this specific survey instance
             if (customEvent.detail?.surveyId === survey.id) {
-                logger.info(`Received show event for survey ${survey.id}`)
+                logger.info(`Received show event for feedback button survey ${survey.id}`)
                 setStyleOverrides(customEvent.detail.position || {})
                 setShowSurvey(true) // Show the survey popup
             }
