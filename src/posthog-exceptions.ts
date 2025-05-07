@@ -9,11 +9,11 @@ const logger = createLogger('[Error tracking]')
 
 export class PostHogExceptions {
     private readonly _instance: PostHog
-    private _suppressionRules: ErrorTrackingSuppressionRule[]
+    private _suppressionRules: ErrorTrackingSuppressionRule[] = []
 
     constructor(instance: PostHog) {
         this._instance = instance
-        this._suppressionRules = this._instance.persistence?.props[ERROR_TRACKING_SUPPRESSION_RULES]
+        this._suppressionRules = this._instance.persistence?.get_property(ERROR_TRACKING_SUPPRESSION_RULES) ?? []
     }
 
     onRemoteConfig(response: RemoteConfig) {
