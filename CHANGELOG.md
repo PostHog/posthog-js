@@ -1,3 +1,8 @@
+## 1.240.1 - 2025-05-07
+
+- fix: getRenderSurvey behavior (#1939)
+- chore: make internal vars private (#1938)
+
 ## 1.240.0 - 2025-05-06
 
 - feat: submit partial responses for survey answers (#1888)
