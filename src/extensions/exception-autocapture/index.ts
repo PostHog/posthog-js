@@ -9,23 +9,23 @@ import { isObject, isUndefined } from '../../utils/type-utils'
 const logger = createLogger('[ExceptionAutocapture]')
 
 export class ExceptionObserver {
-    instance: PostHog
-    remoteEnabled: boolean | undefined
-    config: Required<ExceptionAutoCaptureConfig>
+    private _instance: PostHog
+    private _remoteEnabled: boolean | undefined
+    private _config: Required<ExceptionAutoCaptureConfig>
     private _unwrapOnError: (() => void) | undefined
     private _unwrapUnhandledRejection: (() => void) | undefined
     private _unwrapConsoleError: (() => void) | undefined
 
     constructor(instance: PostHog) {
-        this.instance = instance
-        this.remoteEnabled = !!this.instance.persistence?.props[EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]
-        this.config = this._requiredConfig()
+        this._instance = instance
+        this._remoteEnabled = !!this._instance.persistence?.props[EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]
+        this._config = this._requiredConfig()
 
         this.startIfEnabled()
     }
 
     private _requiredConfig(): Required<ExceptionAutoCaptureConfig> {
-        const providedConfig = this.instance.config.capture_exceptions
+        const providedConfig = this._instance.config.capture_exceptions
         let config = {
             capture_unhandled_errors: false,
             capture_unhandled_rejections: false,
@@ -34,7 +34,7 @@ export class ExceptionObserver {
 
         if (isObject(providedConfig)) {
             config = { ...config, ...providedConfig }
-        } else if (isUndefined(providedConfig) ? this.remoteEnabled : providedConfig) {
+        } else if (isUndefined(providedConfig) ? this._remoteEnabled : providedConfig) {
             config = { ...config, capture_unhandled_errors: true, capture_unhandled_rejections: true }
         }
 
@@ -43,9 +43,9 @@ export class ExceptionObserver {
 
     public get isEnabled(): boolean {
         return (
-            this.config.capture_console_errors ||
-            this.config.capture_unhandled_errors ||
-            this.config.capture_unhandled_rejections
+            this._config.capture_console_errors ||
+            this._config.capture_unhandled_errors ||
+            this._config.capture_unhandled_rejections
         )
     }
 
@@ -63,7 +63,7 @@ export class ExceptionObserver {
         }
 
         assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
-            this.instance,
+            this._instance,
             'exception-autocapture',
             (err) => {
                 if (err) {
@@ -85,13 +85,13 @@ export class ExceptionObserver {
         const wrapConsoleError = assignableWindow.__PosthogExtensions__.errorWrappingFunctions.wrapConsoleError
 
         try {
-            if (!this._unwrapOnError && this.config.capture_unhandled_errors) {
+            if (!this._unwrapOnError && this._config.capture_unhandled_errors) {
                 this._unwrapOnError = wrapOnError(this.captureException.bind(this))
             }
-            if (!this._unwrapUnhandledRejection && this.config.capture_unhandled_rejections) {
+            if (!this._unwrapUnhandledRejection && this._config.capture_unhandled_rejections) {
                 this._unwrapUnhandledRejection = wrapUnhandledRejection(this.captureException.bind(this))
             }
-            if (!this._unwrapConsoleError && this.config.capture_console_errors) {
+            if (!this._unwrapConsoleError && this._config.capture_console_errors) {
                 this._unwrapConsoleError = wrapConsoleError(this.captureException.bind(this))
             }
         } catch (e) {
@@ -115,12 +115,12 @@ export class ExceptionObserver {
         const autocaptureExceptionsResponse = response.autocaptureExceptions
 
         // store this in-memory in case persistence is disabled
-        this.remoteEnabled = !!autocaptureExceptionsResponse || false
-        this.config = this._requiredConfig()
+        this._remoteEnabled = !!autocaptureExceptionsResponse || false
+        this._config = this._requiredConfig()
 
-        if (this.instance.persistence) {
-            this.instance.persistence.register({
-                [EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]: this.remoteEnabled,
+        if (this._instance.persistence) {
+            this._instance.persistence.register({
+                [EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]: this._remoteEnabled,
             })
         }
 
@@ -128,12 +128,12 @@ export class ExceptionObserver {
     }
 
     captureException(errorProperties: Properties) {
-        const posthogHost = this.instance.requestRouter.endpointFor('ui')
+        const posthogHost = this._instance.requestRouter.endpointFor('ui')
 
         errorProperties.$exception_personURL = `${posthogHost}/project/${
-            this.instance.config.token
-        }/person/${this.instance.get_distinct_id()}`
+            this._instance.config.token
+        }/person/${this._instance.get_distinct_id()}`
 
-        this.instance.exceptions.sendExceptionEvent(errorProperties)
+        this._instance.exceptions.sendExceptionEvent(errorProperties)
     }
 }
