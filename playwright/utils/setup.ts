@@ -19,6 +19,22 @@ export async function gotoPage(page: Page, url: string) {
     await page.goto(url)
 }
 
+export interface StartOptions {
+    waitForDecide?: boolean
+    initPosthog?: boolean
+    resetOnInit?: boolean
+    // playwright is stricter than cypress on access to the window object
+    // sometimes you need to pass functions here that will run on window in the correct page
+    runBeforePostHogInit?: (pg: Page) => void
+    // playwright is stricter than cypress on access to the window object
+    // sometimes you need to pass functions here that will run on window in the correct page
+    runAfterPostHogInit?: (pg: Page) => void
+    type?: 'navigate' | 'reload'
+    options?: Partial<PostHogConfig>
+    decideResponseOverrides?: Partial<DecideResponse>
+    url?: string
+}
+
 export async function start(
     {
         waitForDecide = true,
@@ -34,21 +50,7 @@ export async function start(
             capturePerformance: true,
         },
         url = '/playground/cypress-full/index.html',
-    }: {
-        waitForDecide?: boolean
-        initPosthog?: boolean
-        resetOnInit?: boolean
-        // playwright is stricter than cypress on access to the window object
-        // sometimes you need to pass functions here that will run on window in the correct page
-        runBeforePostHogInit?: (pg: Page) => void
-        // playwright is stricter than cypress on access to the window object
-        // sometimes you need to pass functions here that will run on window in the correct page
-        runAfterPostHogInit?: (pg: Page) => void
-        type?: 'navigate' | 'reload'
-        options?: Partial<PostHogConfig>
-        decideResponseOverrides?: Partial<DecideResponse>
-        url?: string
-    },
+    }: StartOptions,
     page: Page,
     context: BrowserContext
 ) {

@@ -215,7 +215,10 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
             const linkedVariant = isString(this.linkedFlag) ? null : this.linkedFlag.variant
             this._flaglistenerCleanup = this._instance.onFeatureFlags((_flags, variants) => {
                 const flagIsPresent = isObject(variants) && linkedFlag in variants
-                const linkedFlagMatches = linkedVariant ? variants[linkedFlag] === linkedVariant : flagIsPresent
+                const linkedFlagMatches =
+                    flagIsPresent &&
+                    (linkedVariant ? variants[linkedFlag] === linkedVariant : variants[linkedFlag] === true)
+
                 if (linkedFlagMatches) {
                     onStarted(linkedFlag, linkedVariant)
                 }

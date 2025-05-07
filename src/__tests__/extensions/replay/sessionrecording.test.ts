@@ -1788,6 +1788,20 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toEqual('buffering')
         })
 
+        it('does not react to flags that are present but false', () => {
+            sessionRecording.onRemoteConfig(
+                makeDecideResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
+            )
+
+            expect(sessionRecording.status).toEqual('buffering')
+
+            expect(onFeatureFlagsCallback).not.toBeNull()
+
+            onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': false })
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
+            expect(sessionRecording.status).toEqual('buffering')
+        })
+
         it('can handle linked flags with variants', () => {
             expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual(null)
             expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
