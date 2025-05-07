@@ -49,7 +49,7 @@ export class PostHogExceptions {
         }
 
         const exceptionValues = exceptionList.reduce(
-            (acc: Record<'$exception_types' | '$exception_messages', string[]>, { type, value }) => {
+            (acc, { type, value }) => {
                 if (isString(type) && type.length > 0) {
                     acc['$exception_types'].push(type)
                 }
