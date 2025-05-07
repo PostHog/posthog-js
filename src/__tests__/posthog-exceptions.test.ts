@@ -113,7 +113,7 @@ describe('PostHogExceptions', () => {
                 },
             ])
             exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [suppressionRule] } } as DecideResponse)
-            exceptions.sendExceptionEvent({ custom_property: true })
+            exceptions.sendExceptionEvent({ $exception_list: [{ type: 'TypeError', value: 'This is a type error' }] })
             expect(captureMock).toBeCalled()
         })
     })

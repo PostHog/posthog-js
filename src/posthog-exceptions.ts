@@ -3,7 +3,7 @@ import { PostHog } from './posthog-core'
 import { ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
 import { propertyComparisons } from './utils/property-utils'
-import { isArray } from './utils/type-utils'
+import { isArray, isString } from './utils/type-utils'
 
 const logger = createLogger('[Error tracking]')
 
@@ -48,10 +48,21 @@ export class PostHogExceptions {
             return false
         }
 
-        const exceptionValues = {
-            $exception_types: exceptionList.map((x) => x.type),
-            $exception_messages: exceptionList.map((x) => x.value),
-        }
+        const exceptionValues = exceptionList.reduce(
+            (acc: Record<'$exception_types' | '$exception_messages', string[]>, { type, value }) => {
+                if (isString(type) && type.length > 0) {
+                    acc['$exception_types'].push(type)
+                }
+                if (isString(value) && value.length > 0) {
+                    acc['$exception_messages'].push(value)
+                }
+                return acc
+            },
+            {
+                $exception_types: [],
+                $exception_messages: [],
+            }
+        )
 
         return this._suppressionRules.some((rule) => {
             const results = rule.values.map((v) => {
