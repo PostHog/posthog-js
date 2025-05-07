@@ -637,10 +637,101 @@ describe(`Autocapture utility functions`, () => {
         })
         it('should process elements correctly', () => {
             const elementChain = getElementsChainString([
-                { tag_name: 'div', nth_child: 1, nth_of_type: 2, $el_text: 'text' },
+                {
+                    tag_name: 'div',
+                    $el_text: 'text',
+                    nth_child: 1,
+                    nth_of_type: 2,
+                },
             ])
 
-            expect(elementChain).toEqual('div:text="text"nth-child="1"nth-of-type="2"')
+            expect(elementChain).toEqual('div:nth-child="1"nth-of-type="2"text="text"')
+        })
+
+        it('should properly escape quotation marks in elements', () => {
+            // Test with double quotes
+            let elementChain = getElementsChainString([
+                {
+                    tag_name: 'a',
+                    $el_text: 'Click here to "get started" today!',
+                    nth_child: 1,
+                    nth_of_type: 1,
+                },
+            ])
+
+            console.log('Element with double quotes:', elementChain)
+            // Should properly escape double quotes
+            expect(elementChain).toContain('text="Click here to \\"get started\\" today!"')
+
+            // Test with single quotes
+            elementChain = getElementsChainString([
+                {
+                    tag_name: 'a',
+                    $el_text: "Click here to 'get started' today!",
+                    nth_child: 1,
+                    nth_of_type: 1,
+                },
+            ])
+
+            console.log('Element with single quotes:', elementChain)
+            // Single quotes don't need to be escaped
+            expect(elementChain).toContain('text="Click here to \'get started\' today!"')
+
+            // Test with mixed quotes
+            elementChain = getElementsChainString([
+                {
+                    tag_name: 'a',
+                    $el_text: 'Course Title: "Understanding the \'Creative Process\' in Modern Design"',
+                    nth_child: 1,
+                    nth_of_type: 1,
+                },
+            ])
+
+            console.log('Element with mixed quotes:', elementChain)
+            // Should properly escape double quotes, single quotes remain unescaped
+            expect(elementChain).toContain(
+                'text="Course Title: \\"Understanding the \'Creative Process\' in Modern Design\\""'
+            )
+        })
+
+        it('should ensure consistency between captured $el_text and processed elements chain text', () => {
+            // Create test elements with different quotation patterns
+            const testElements = [
+                {
+                    $el_text: 'Click "Sign Up" button',
+                    tag_name: 'a',
+                    nth_child: 1,
+                    nth_of_type: 1,
+                },
+                {
+                    $el_text: 'Course Title: "Understanding the \'Creative Process\' in Modern Design"',
+                    tag_name: 'button',
+                    nth_child: 2,
+                    nth_of_type: 1,
+                },
+                {
+                    $el_text: 'Text with "multiple" "quoted" sections',
+                    tag_name: 'span',
+                    nth_child: 3,
+                    nth_of_type: 1,
+                },
+            ]
+
+            // Get the elements chain string
+            const elementsChain = getElementsChainString(testElements)
+
+            // For each test element, verify the element text is properly escaped in the chain
+            testElements.forEach((element) => {
+                const expectedText = element.$el_text
+                const escapedText = expectedText.replace(/"/g, '\\"')
+
+                // The elements chain should contain the ESCAPED text
+                expect(elementsChain).toContain(`text="${escapedText}"`)
+
+                // Log for verification
+                console.log(`Original $el_text: "${element.$el_text}"`)
+                console.log(`Escaped text: "${escapedText}"`)
+            })
         })
     })
 
