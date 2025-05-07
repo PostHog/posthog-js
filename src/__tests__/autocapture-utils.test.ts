@@ -18,7 +18,6 @@ import {
 import { document } from '../utils/globals'
 import { makeMouseEvent } from './autocapture.test'
 import { AutocaptureConfig } from '../types'
-import { trim } from '../utils/string-utils'
 
 describe(`Autocapture utility functions`, () => {
     afterEach(() => {
@@ -132,22 +131,7 @@ describe(`Autocapture utility functions`, () => {
         })
 
         it(`should preserve the structure when splitting and joining text with quotes`, () => {
-            // Log steps to understand how the processing works
             const input = `Click here to "get started" today!`
-            const trimmed = trim(input)
-            const split = trimmed.split(/(\s+)/)
-            console.log('Split result:', split)
-
-            const filtered = split.filter((s) => shouldCaptureValue(s))
-            console.log('Filtered result:', filtered)
-
-            const joined = filtered.join('')
-            console.log('Joined result:', joined)
-
-            const normalized = joined.replace(/[\r\n]/g, ' ').replace(/[ ]+/g, ' ')
-            console.log('Normalized result:', normalized)
-
-            // Final result from makeSafeText
             expect(makeSafeText(input)).toBe(input)
         })
 
@@ -172,9 +156,7 @@ describe(`Autocapture utility functions`, () => {
 
             // Test each string
             testStrings.forEach((str) => {
-                console.log(`Original: "${str}"`)
                 const result = makeSafeText(str)
-                console.log(`Result: "${result}"`)
                 expect(result).not.toBeNull()
 
                 // For non-empty strings, we should get a result
@@ -659,7 +641,6 @@ describe(`Autocapture utility functions`, () => {
                 },
             ])
 
-            console.log('Element with double quotes:', elementChain)
             // Should properly escape double quotes
             expect(elementChain).toContain('text="Click here to \\"get started\\" today!"')
 
@@ -673,7 +654,6 @@ describe(`Autocapture utility functions`, () => {
                 },
             ])
 
-            console.log('Element with single quotes:', elementChain)
             // Single quotes don't need to be escaped
             expect(elementChain).toContain('text="Click here to \'get started\' today!"')
 
@@ -687,7 +667,6 @@ describe(`Autocapture utility functions`, () => {
                 },
             ])
 
-            console.log('Element with mixed quotes:', elementChain)
             // Should properly escape double quotes, single quotes remain unescaped
             expect(elementChain).toContain(
                 'text="Course Title: \\"Understanding the \'Creative Process\' in Modern Design\\""'
@@ -727,10 +706,6 @@ describe(`Autocapture utility functions`, () => {
 
                 // The elements chain should contain the ESCAPED text
                 expect(elementsChain).toContain(`text="${escapedText}"`)
-
-                // Log for verification
-                console.log(`Original $el_text: "${element.$el_text}"`)
-                console.log(`Escaped text: "${escapedText}"`)
             })
         })
     })
