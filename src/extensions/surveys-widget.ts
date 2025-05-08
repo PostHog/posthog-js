@@ -1,8 +1,9 @@
 import { PostHog } from '../posthog-core'
 import { Survey } from '../posthog-surveys-types'
 import { document as _document } from '../utils/globals'
-import { getSurveyContainerClass, SURVEY_DEFAULT_Z_INDEX } from './surveys/surveys-extension-utils'
+import { addSurveyCSSVariablesToElement, getSurveyContainerClass } from './surveys/surveys-extension-utils'
 import { prepareStylesheet } from './utils/stylesheet-loader'
+import widgetStyles from './surveys/widget.css'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const document = _document as Document
@@ -17,42 +18,17 @@ export function retrieveWidgetShadow(survey: Survey, posthog?: PostHog) {
 
     // If it doesn't exist, create it
     const div = document.createElement('div')
+    addSurveyCSSVariablesToElement(div, survey.appearance)
     div.className = widgetClassName
     const shadow = div.attachShadow({ mode: 'open' })
-    const widgetStyleSheet = createWidgetStyle(survey.appearance?.widgetColor)
-
-    const stylesheet = prepareStylesheet(document, widgetStyleSheet, posthog)
+    const stylesheet = createWidgetStylesheet(posthog)
     if (stylesheet) {
-        shadow.append(stylesheet)
+        shadow.appendChild(stylesheet)
     }
-
     document.body.appendChild(div)
     return shadow
 }
 
-export function createWidgetStyle(widgetColor?: string) {
-    return `
-        .ph-survey-widget-tab {
-            position: fixed;
-            top: 50%;
-            right: 0;
-            background: ${widgetColor || '#e0a045'};
-            color: white;
-            transform: rotate(-90deg) translate(0, -100%);
-            transform-origin: right top;
-            min-width: 40px;
-            padding: 8px 12px;
-            font-weight: 500;
-            border-radius: 3px 3px 0 0;
-            text-align: center;
-            cursor: pointer;
-            z-index: ${SURVEY_DEFAULT_Z_INDEX};
-        }
-        .ph-survey-widget-tab:hover {
-            padding-bottom: 13px;
-        }
-        .ph-survey-widget-button {
-            position: fixed;
-        }
-    `
+export function createWidgetStylesheet(posthog?: PostHog) {
+    return prepareStylesheet(document, typeof widgetStyles === 'string' ? widgetStyles : '', posthog)
 }
