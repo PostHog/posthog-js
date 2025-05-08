@@ -129,25 +129,17 @@ export const style = (appearance: SurveyAppearance | null) => {
               width: 100%;
           }
           .form-cancel {
-              display: flex;
-              float: right;
-              border: none;
-              background: none;
-              cursor: pointer;
-          }
-          .cancel-btn-wrapper {
-              position: absolute;
-              width: 35px;
-              height: 35px;
+              border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
               border-radius: 100%;
+              background: white;
+              border-radius: 100%;
+              line-height: 0;
+              cursor: pointer;
+              padding: 12px;
+              position: absolute;
               top: 0;
               right: 0;
               transform: translate(50%, -50%);
-              background: white;
-              border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
-              display: flex;
-              justify-content: center;
-              align-items: center;
           }
           .bolded { font-weight: 600; }
           .buttons {
