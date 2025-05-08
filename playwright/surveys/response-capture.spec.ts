@@ -145,7 +145,7 @@ test.describe('surveys - feedback widget', () => {
         await start(startOptions, page, context)
         await surveysAPICall
 
-        await page.locator('.PostHogSurvey-123 .cancel-btn-wrapper').click()
+        await page.locator('.PostHogSurvey-123 .form-cancel').click()
         await pollUntilEventCaptured(page, 'survey dismissed')
         const surveyDismissedEvent = await page
             .capturedEvents()
@@ -180,7 +180,7 @@ test.describe('surveys - feedback widget', () => {
         await start(startOptions, page, context)
         await surveysAPICall
 
-        await page.locator('.PostHogSurvey-123 .cancel-btn-wrapper').click()
+        await page.locator('.PostHogSurvey-123 .form-cancel').click()
         await pollUntilEventCaptured(page, 'survey dismissed')
         const surveyDismissedEvent = await page
             .capturedEvents()
@@ -341,7 +341,7 @@ test.describe('surveys - feedback widget', () => {
             })
         )
 
-        await page.locator('.PostHogSurvey-123 .cancel-btn-wrapper').click()
+        await page.locator('.PostHogSurvey-123 .form-cancel').click()
         await pollUntilEventCaptured(page, 'survey dismissed')
         const surveyDismissedEvent = await page
             .capturedEvents()

@@ -70,7 +70,7 @@ test.describe('surveys - core display logic', () => {
         await surveysAPICall
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
-        await page.locator('.PostHogSurvey-123').locator('.cancel-btn-wrapper').click()
+        await page.locator('.PostHogSurvey-123').locator('.form-cancel').click()
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeInViewport()
 
         expect(

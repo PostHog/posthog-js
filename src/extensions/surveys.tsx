@@ -212,7 +212,6 @@ export class SurveyManager {
                         posthog={this._posthog}
                         survey={survey}
                         removeSurveyFromFocus={this._removeSurveyFromFocus}
-                        isPopup={true}
                     />,
                     shadow
                 )
@@ -228,7 +227,6 @@ export class SurveyManager {
                         posthog={this._posthog}
                         survey={{ ...survey, appearance: { ...survey.appearance, surveyPopupDelaySeconds: 0 } }}
                         removeSurveyFromFocus={this._removeSurveyFromFocus}
-                        isPopup={true}
                     />,
                     shadow
                 )
@@ -627,7 +625,6 @@ export const renderSurveysPreview = ({
             onPreviewSubmit={onPreviewSubmit}
             previewPageIndex={previewPageIndex}
             removeSurveyFromFocus={() => {}}
-            isPopup={true}
         />,
         parentElement
     )
@@ -877,7 +874,7 @@ export function SurveyPopup({
     style,
     previewPageIndex,
     removeSurveyFromFocus,
-    isPopup,
+    isPopup = true,
     onPreviewSubmit = () => {},
     onPopupSurveyDismissed = () => {},
     onCloseConfirmationMessage = () => {},
@@ -1052,6 +1049,14 @@ export function Questions({
                     : {}
             }
         >
+            {isPopup && (
+                <Cancel
+                    onClick={() => {
+                        onPopupSurveyDismissed()
+                    }}
+                />
+            )}
+
             <div
                 className="survey-box"
                 style={
@@ -1063,13 +1068,6 @@ export function Questions({
                         : {}
                 }
             >
-                {isPopup && (
-                    <Cancel
-                        onClick={() => {
-                            onPopupSurveyDismissed()
-                        }}
-                    />
-                )}
                 {getQuestionComponent({
                     question: currentQuestion,
                     forceDisableHtml,
@@ -1184,7 +1182,6 @@ export function FeedbackWidget({
                     forceDisableHtml={forceDisableHtml}
                     style={styleOverrides}
                     removeSurveyFromFocus={removeSurveyFromFocus}
-                    isPopup={true}
                     onPopupSurveyDismissed={resetShowSurvey}
                     onCloseConfirmationMessage={resetShowSurvey}
                 />
