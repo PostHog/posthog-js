@@ -19,7 +19,6 @@ import { detectDeviceType } from '../../utils/user-agent-utils'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
-
 export const SURVEY_DEFAULT_Z_INDEX = 2147483647
 
 export function getFontFamily(fontFamily?: string): string {
