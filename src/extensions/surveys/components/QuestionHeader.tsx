@@ -41,7 +41,6 @@ export function Cancel({ onClick }: { onClick: () => void }) {
             disabled={isPreviewMode}
             aria-label="Close survey"
             type="button"
-            role="button"
         >
             {cancelSVG}
         </button>

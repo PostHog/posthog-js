@@ -130,7 +130,6 @@ export const style = (appearance: SurveyAppearance | null) => {
           }
           .form-cancel {
               border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
-              border-radius: 100%;
               background: white;
               border-radius: 100%;
               line-height: 0;
