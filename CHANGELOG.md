@@ -1,3 +1,8 @@
+## 1.240.5 - 2025-05-08
+
+- fix: padding on cancel button (#1946)
+- chore: make rollup able to bundle CSS files (#1945)
+
 ## 1.240.4 - 2025-05-07
 
 - chore: include response within the survey_quesiton property (#1942)
