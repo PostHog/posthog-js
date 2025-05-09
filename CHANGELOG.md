@@ -1,3 +1,7 @@
+## 1.240.6 - 2025-05-09
+
+- feat: use css files for survey widget styles (#1948)
+
 ## 1.240.5 - 2025-05-08
 
 - fix: padding on cancel button (#1946)
