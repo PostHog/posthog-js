@@ -11,7 +11,7 @@
     right: 0;
     background: var(--ph-widget-color);
     color: var(--ph-widget-text-color);
-    transform: rotate(-90deg) translate(0, -100%);
+    transform: rotate(-90deg) translateY(-100%);
     transform-origin: right top;
     min-width: 40px;
     padding: 8px 12px;
@@ -20,9 +20,9 @@
     text-align: center;
     cursor: pointer;
     z-index: var(--ph-widget-z-index);
-    transition: padding-bottom 0.1s ease-in-out;
+    transition: transform 0.1s ease-in-out;
 }
 
 .ph-survey-widget-tab:hover {
-    padding-bottom: 13px;
+    transform: rotate(-90deg) translateY(-100%) scaleY(1.1);
 }
