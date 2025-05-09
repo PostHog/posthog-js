@@ -963,7 +963,7 @@ describe('Autocapture system', () => {
             const props1 = beforeSendMock.mock.calls[0][0].properties
 
             expect(props1['$elements_chain']).toBe(
-                'a.test-class.test-class2.test-class3.test-class4.test-class5:nth-child="1"nth-of-type="1"href="http://test.com"attr__href="http://test.com"attr__class="test-class test-class2 test-class3 test-class4 test-class5";span:nth-child="1"nth-of-type="1"'
+                'a.test-class.test-class2.test-class3.test-class4.test-class5:attr__class="test-class test-class2 test-class3 test-class4 test-class5"attr__href="http://test.com"href="http://test.com"nth-child="1"nth-of-type="1";span:nth-child="1"nth-of-type="1"'
             )
         })
 
