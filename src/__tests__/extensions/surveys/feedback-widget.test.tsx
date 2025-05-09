@@ -130,8 +130,6 @@ describe('FeedbackWidget', () => {
         // Check if the tab is visible
         const tab = screen.getByText('Feedback')
         expect(tab).toBeVisible()
-        // Check default text color contrast (black background -> white text)
-        expect(tab).toHaveStyle('color: white')
 
         // Survey popup should not be visible initially
         expect(screen.queryByRole('form')).not.toBeInTheDocument() // Form is inside SurveyPopup

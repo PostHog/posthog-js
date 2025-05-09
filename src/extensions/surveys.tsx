@@ -22,7 +22,7 @@ import {
 } from '../utils/survey-utils'
 import { isNull, isNumber } from '../utils/type-utils'
 import { uuidv7 } from '../uuidv7'
-import { createWidgetStyle, retrieveWidgetShadow } from './surveys-widget'
+import { createWidgetStylesheet, retrieveWidgetShadow } from './surveys-widget'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import { Cancel } from './surveys/components/QuestionHeader'
 import {
@@ -51,7 +51,6 @@ import {
     sendSurveyEvent,
     setInProgressSurveyState,
     style,
-    SURVEY_DEFAULT_Z_INDEX,
     SurveyContext,
 } from './surveys/surveys-extension-utils'
 import { prepareStylesheet } from './utils/stylesheet-loader'
@@ -346,7 +345,7 @@ export class SurveyManager {
                     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
                     borderBottom: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
                     borderRadius: '10px',
-                    zIndex: SURVEY_DEFAULT_Z_INDEX,
+                    zIndex: defaultSurveyAppearance.zIndex,
                 }
 
                 // Dispatch event for the FeedbackWidget to catch
@@ -641,8 +640,7 @@ export const renderFeedbackWidgetPreview = ({
     forceDisableHtml?: boolean
     posthog?: PostHog
 }) => {
-    const stylesheetContent = createWidgetStyle(survey.appearance?.widgetColor)
-    const stylesheet = prepareStylesheet(document, stylesheetContent, posthog)
+    const stylesheet = createWidgetStylesheet(posthog)
     if (stylesheet) {
         root.appendChild(stylesheet)
     }
@@ -1165,12 +1163,7 @@ export function FeedbackWidget({
     return (
         <Preact.Fragment>
             {survey.appearance?.widgetType === 'tab' && (
-                <div
-                    className="ph-survey-widget-tab"
-                    onClick={() => !readOnly && setShowSurvey(!showSurvey)}
-                    style={{ color: getContrastingTextColor(survey.appearance.widgetColor) }}
-                >
-                    <div className="ph-survey-widget-tab-icon"></div>
+                <div className="ph-survey-widget-tab" onClick={() => !readOnly && setShowSurvey(!showSurvey)}>
                     {survey.appearance?.widgetLabel || ''}
                 </div>
             )}
