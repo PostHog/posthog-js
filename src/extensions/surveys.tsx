@@ -171,7 +171,7 @@ export function getNextSurveyStep(
 }
 
 export class SurveyManager {
-    private _posthog: PostHog
+    private readonly _posthog: PostHog
     private _surveyInFocus: string | null
     private _surveyTimeouts: Map<string, NodeJS.Timeout> = new Map()
     private _widgetSelectorListeners: Map<string, { element: Element; listener: EventListener }> = new Map()

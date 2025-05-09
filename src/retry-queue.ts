@@ -34,13 +34,15 @@ interface RetryQueueElement {
 }
 
 export class RetryQueue {
+    private readonly _instance: PostHog
     private _isPolling: boolean = false // flag to continue to recursively poll or not
     private _poller: number | undefined // to become interval for reference to clear later
     private _pollIntervalMs: number = 3000
     private _queue: RetryQueueElement[] = []
     private _areWeOnline: boolean
 
-    constructor(private _instance: PostHog) {
+    constructor(_instance: PostHog) {
+        this._instance = _instance
         this._queue = []
         this._areWeOnline = true
 

@@ -25,6 +25,7 @@ function checkTimeout(value: number | undefined, thresholdMs: number) {
 }
 
 class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocaptureInterface {
+    readonly instance: PostHog
     private _mutationObserver: MutationObserver | undefined
     private _lastMutation: number | undefined
     private _lastSelectionChanged: number | undefined
@@ -54,10 +55,8 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         }
     }
 
-    constructor(
-        readonly instance: PostHog,
-        config?: DeadClicksAutoCaptureConfig
-    ) {
+    constructor(instance: PostHog, config?: DeadClicksAutoCaptureConfig) {
+        this.instance = instance
         this._config = this._asRequiredConfig(config)
         this._onCapture = this._config.__onCapture
     }

@@ -98,10 +98,13 @@ describe('Error conversion', () => {
     })
 
     class FakeDomError {
-        constructor(
-            public name: string,
-            public message: string
-        ) {}
+        public name: string
+        public message: string
+
+        constructor(name: string, message: string) {
+            this.message = message
+            this.name = name
+        }
         [Symbol.toStringTag] = 'DOMError'
     }
 
