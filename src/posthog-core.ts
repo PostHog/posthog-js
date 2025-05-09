@@ -326,7 +326,7 @@ export class PostHog {
         this.sentryIntegration = (options?: SentryIntegrationOptions) => sentryIntegration(this, options)
         this.__request_queue = []
         this.__loaded = false
-        this.analyticsDefaultEndpoint = '/e/'
+        this.analyticsDefaultEndpoint = '/i/v0/e/'
         this._initialPageviewCaptured = false
         this._visibilityStateListener = null
         this._initialPersonProfilesConfig = null
