@@ -51,12 +51,16 @@ export const defaultSurveyAppearance = {
     zIndex: '2147483647',
     disabledButtonOpacity: '0.6',
     maxWidth: '300px',
+    textPrimaryColor: '#020617',
+    textSecondaryColor: '#1e293b',
 } as const
 
 export const addSurveyCSSVariablesToElement = (element: HTMLElement, appearance?: SurveyAppearance | null) => {
     const effectiveAppearance = { ...defaultSurveyAppearance, ...appearance }
     const hostStyle = element.style
 
+    hostStyle.setProperty('--ph-survey-text-primary-color', effectiveAppearance.textPrimaryColor)
+    hostStyle.setProperty('--ph-survey-text-secondary-color', effectiveAppearance.textSecondaryColor)
     hostStyle.setProperty('--ph-survey-font-family', getFontFamily(effectiveAppearance.fontFamily))
     hostStyle.setProperty('--ph-survey-max-width', effectiveAppearance.maxWidth)
     hostStyle.setProperty('--ph-survey-z-index', effectiveAppearance.zIndex)

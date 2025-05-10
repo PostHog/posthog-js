@@ -11,8 +11,7 @@
     --ph-survey-submit-button-text-color: white; /* Default, will be overridden based on button color */
     --ph-survey-rating-bg-color: white;
     --ph-survey-rating-active-bg-color: black;
-    --ph-survey-text-primary-color: black; /* Default text color */
-    --ph-survey-text-secondary-color: #777;
+    --ph-survey-text-primary-color: #020617; /* Default text color */
     --ph-survey-text-subtle-color: #939393;
     --ph-survey-input-background: white;
     --ph-survey-input-focus-shadow: rgba(0, 0, 0, 0.15);
@@ -138,7 +137,7 @@
 .survey-question-description {
     font-size: 13px;
     padding-top: 5px;
-    color: var(--ph-survey-text-secondary-color);
+    opacity: 0.8;
 }
 
 /* --- Open Text Question --- */
@@ -280,7 +279,6 @@
             flex-grow: 1;
             border: 0;
             outline: 0;
-            font-family: inherit;
             font-size: inherit;
             z-index: 2; /* Ensure input is clickable */
 
@@ -409,8 +407,7 @@
     font-size: 11px;
     justify-content: space-between;
     margin-top: 6px;
-    opacity: 0.6;
-    color: var(--ph-survey-text-secondary-color);
+    opacity: 0.7;
 }
 
 /* --- Buttons --- */
@@ -527,7 +524,6 @@
 
 .thank-you-message-header {
     margin: 10px 0px 0px;
-    background: var(--ph-survey-background-color);
     font-weight: 600;
     font-size: 16px;
 }
@@ -535,8 +531,7 @@
 .thank-you-message-body {
     margin-top: 6px;
     font-size: 14px;
-    background: var(--ph-survey-background-color);
-    color: var(--ph-survey-text-secondary-color);
+    opacity: 0.8;
 }
 
 .thank-you-message-countdown {

@@ -571,6 +571,10 @@ export const renderSurveysPreview = ({
     onPreviewSubmit?: (res: string | string[] | number | null) => void
     posthog?: PostHog
 }) => {
+    const currentStyle = parentElement.querySelector('style[data-ph-survey-style]')
+    if (currentStyle) {
+        currentStyle.remove()
+    }
     const stylesheet = getSurveyStylesheet()
     if (stylesheet) {
         parentElement.appendChild(stylesheet)
