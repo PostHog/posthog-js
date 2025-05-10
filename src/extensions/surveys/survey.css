@@ -15,7 +15,7 @@
     --ph-survey-rating-active-bg-color: black;
     --ph-survey-rating-active-text-color: white;
     --ph-survey-text-primary-color: #020617; /* Default text color, based on text-slate-950 */
-    --ph-survey-text-subtle-color: #939393; /* Default text color, based on text-slate-500 */
+    --ph-survey-text-subtle-color: #939393;
     --ph-survey-input-background: white;
     --ph-survey-input-focus-shadow: rgba(0, 0, 0, 0.15);
     --ph-survey-choice-background: white;
@@ -188,27 +188,24 @@
 /* --- Multiple Choice Question --- */
 .multiple-choice-options {
     font-size: 14px;
-    display: flex; /* Use flexbox for easier gap control */
+    display: flex;
     flex-direction: column;
-    gap: 8px; /* Increased gap between options */
+    gap: 8px;
 
     & .choice-option {
         display: flex;
-        /* align-items: center; No longer needed directly here */
-        /* gap: 4px; Replaced by label padding/structure */
         font-size: 13px;
         cursor: pointer;
         position: relative;
 
         &:hover {
-            /* Apply hover styles only if the input inside isn't checked */
             &:not(:has(input:checked)) {
                 & label {
                     background: var(--ph-survey-choice-background-hover);
-                    border-color: var(--ph-survey-text-subtle-color); /* Darken border on hover */
+                    border-color: var(--ph-survey-text-subtle-color);
                 }
                 & .choice-check {
-                    opacity: 0.5; /* Subtle show on hover ONLY when not checked */
+                    opacity: 0.5;
                 }
             }
         }
@@ -227,7 +224,7 @@
 
         &:checked + label {
             font-weight: bold;
-            border: 1.5px solid var(--ph-survey-border-color);
+            border: 1.5px solid var(--ph-survey-text-subtle-color);
             background: var(--ph-survey-choice-background);
 
             & + .choice-check {
@@ -242,20 +239,20 @@
     }
 
     & label {
-        /* The clickable label area */
+        /* The clickable label area for open-ended option */
         width: 100%;
         cursor: pointer;
-        padding: 10px 35px 10px 10px; /* Adjust padding for checkmark space */
-        border: 1.5px solid var(--ph-survey-border-color); /* Use default border color */
+        padding: 10px 35px 10px 10px;
+        border: 1.5px solid var(--ph-survey-border-color);
         border-radius: 4px;
         background: var(--ph-survey-choice-background);
         transition:
             border-color 0.15s ease,
             background-color 0.15s ease;
-        display: block; /* Ensure label takes full width */
-        position: relative; /* Needed for checkmark positioning */
-        box-sizing: border-box; /* Include padding/border in width */
-        color: var(--ph-survey-text-primary-color);
+        display: block;
+        position: relative;
+        box-sizing: border-box;
+        color: var(--ph-survey-input-text-color);
     }
 
     /* Styles for the "Other" option input field */
@@ -300,6 +297,7 @@
     opacity: 0; /* Hide by default */
     pointer-events: none; /* Prevent interaction */
     z-index: 2; /* Ensure checkmark is above input invisible layer */
+    color: var(--ph-survey-input-text-color);
 
     & svg {
         display: block;

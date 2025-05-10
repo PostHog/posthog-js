@@ -163,12 +163,6 @@ export function RatingQuestion({
                                             onClick={() => {
                                                 setRating(idx + 1)
                                             }}
-                                            style={{
-                                                fill: active
-                                                    ? appearance.ratingButtonActiveColor
-                                                    : appearance.ratingButtonColor,
-                                                borderColor: appearance.borderColor,
-                                            }}
                                         >
                                             {emoji}
                                         </button>
@@ -375,10 +369,7 @@ export function MultipleChoiceQuestion({
                                     checked={isChecked}
                                     onClick={() => handleChoiceChange(choice, isOpenChoice)}
                                 />
-                                <label
-                                    htmlFor={`surveyQuestion${displayQuestionIndex}Choice${idx}`}
-                                    style={{ color: 'black' }}
-                                >
+                                <label htmlFor={`surveyQuestion${displayQuestionIndex}Choice${idx}`}>
                                     {isOpenChoice ? (
                                         <>
                                             <span>{choice}:</span>
@@ -405,9 +396,7 @@ export function MultipleChoiceQuestion({
                                         choice
                                     )}
                                 </label>
-                                <span className="choice-check" style={{ color: 'black' }}>
-                                    {checkSVG}
-                                </span>
+                                <span className="choice-check">{checkSVG}</span>
                             </div>
                         )
                     })}

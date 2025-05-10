@@ -54,6 +54,8 @@ export const defaultSurveyAppearance = {
     disabledButtonOpacity: '0.6',
     maxWidth: '300px',
     textPrimaryColor: '#020617',
+    textSubtleColor: '#939393',
+    inputTextColor: '#020617',
     boxPadding: '20px 25px 10px',
 } as const
 
@@ -87,6 +89,8 @@ export const addSurveyCSSVariablesToElement = (element: HTMLElement, appearance?
         '--ph-survey-text-primary-color',
         getContrastingTextColor(effectiveAppearance.backgroundColor)
     )
+    hostStyle.setProperty('--ph-survey-input-text-color', effectiveAppearance.inputTextColor)
+    hostStyle.setProperty('--ph-survey-text-subtle-color', effectiveAppearance.textSubtleColor)
     hostStyle.setProperty('--ph-widget-color', effectiveAppearance.widgetColor)
     hostStyle.setProperty('--ph-widget-text-color', getContrastingTextColor(effectiveAppearance.widgetColor))
     hostStyle.setProperty('--ph-widget-z-index', effectiveAppearance.zIndex)
