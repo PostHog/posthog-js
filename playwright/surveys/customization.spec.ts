@@ -87,11 +87,11 @@ test.describe('surveys - customization', () => {
 
         await expect(page.locator('.PostHogSurvey-123').locator('.footer-branding')).toBeVisible()
 
-        await expect(page.locator('.PostHogSurvey-123').locator('.survey-question')).toHaveCSS(
+        await expect(page.locator('.PostHogSurvey-123').locator('.survey-container')).toHaveCSS(
             'background-color',
             black
         )
-        await expect(page.locator('.PostHogSurvey-123').locator('.survey-question')).toHaveCSS('color', white)
+        await expect(page.locator('.PostHogSurvey-123').locator('.survey-container')).toHaveCSS('color', white)
 
         await page.locator('.PostHogSurvey-123').locator('textarea').type('This is great!')
 

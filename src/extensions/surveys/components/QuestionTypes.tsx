@@ -17,7 +17,7 @@ import {
     veryDissatisfiedEmoji,
     verySatisfiedEmoji,
 } from '../icons'
-import { getContrastingTextColor, getDisplayOrderChoices } from '../surveys-extension-utils'
+import { getDisplayOrderChoices } from '../surveys-extension-utils'
 import { BottomSection } from './BottomSection'
 import { QuestionHeader } from './QuestionHeader'
 
@@ -53,7 +53,6 @@ export function OpenTextQuestion({
                     question={question.question}
                     description={question.description}
                     descriptionContentType={question.descriptionContentType}
-                    backgroundColor={appearance.backgroundColor}
                     forceDisableHtml={forceDisableHtml}
                 />
                 <textarea
@@ -146,7 +145,6 @@ export function RatingQuestion({
                     description={question.description}
                     descriptionContentType={question.descriptionContentType}
                     forceDisableHtml={forceDisableHtml}
-                    backgroundColor={appearance.backgroundColor}
                 />
                 <div className="rating-section">
                     <div className="rating-options">
@@ -164,12 +162,6 @@ export function RatingQuestion({
                                             type="button"
                                             onClick={() => {
                                                 setRating(idx + 1)
-                                            }}
-                                            style={{
-                                                fill: active
-                                                    ? appearance.ratingButtonActiveColor
-                                                    : appearance.ratingButtonColor,
-                                                borderColor: appearance.borderColor,
                                             }}
                                         >
                                             {emoji}
@@ -222,7 +214,6 @@ export function RatingButton({
     num,
     active,
     displayQuestionIndex,
-    appearance,
     setActiveNumber,
 }: {
     num: number
@@ -237,13 +228,6 @@ export function RatingButton({
             type="button"
             onClick={() => {
                 setActiveNumber(num)
-            }}
-            style={{
-                color: getContrastingTextColor(
-                    active ? appearance.ratingButtonActiveColor : appearance.ratingButtonColor
-                ),
-                backgroundColor: active ? appearance.ratingButtonActiveColor : appearance.ratingButtonColor,
-                borderColor: appearance.borderColor,
             }}
         >
             {num}
@@ -364,7 +348,6 @@ export function MultipleChoiceQuestion({
                     description={question.description}
                     descriptionContentType={question.descriptionContentType}
                     forceDisableHtml={forceDisableHtml}
-                    backgroundColor={appearance.backgroundColor}
                 />
                 <div className="multiple-choice-options limit-height">
                     {choices.map((choice: string, idx: number) => {
@@ -386,10 +369,7 @@ export function MultipleChoiceQuestion({
                                     checked={isChecked}
                                     onClick={() => handleChoiceChange(choice, isOpenChoice)}
                                 />
-                                <label
-                                    htmlFor={`surveyQuestion${displayQuestionIndex}Choice${idx}`}
-                                    style={{ color: 'black' }}
-                                >
+                                <label htmlFor={`surveyQuestion${displayQuestionIndex}Choice${idx}`}>
                                     {isOpenChoice ? (
                                         <>
                                             <span>{choice}:</span>
@@ -416,9 +396,7 @@ export function MultipleChoiceQuestion({
                                         choice
                                     )}
                                 </label>
-                                <span className="choice-check" style={{ color: 'black' }}>
-                                    {checkSVG}
-                                </span>
+                                <span className="choice-check">{checkSVG}</span>
                             </div>
                         )
                     })}

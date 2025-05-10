@@ -268,21 +268,18 @@ describe('RatingQuestion', () => {
         render(<RatingQuestion {...baseProps} question={ratingQuestion} initialValue={3} />)
         const button3 = getRatingButton(3)
         expect(button3).toHaveClass('rating-active')
-        expect(button3).toHaveStyle(`background-color: ${mockAppearance.ratingButtonActiveColor}`)
     })
 
     it('renders correctly with a valid string initial value', () => {
         render(<RatingQuestion {...baseProps} question={ratingQuestion} initialValue={'4'} />)
         const button4 = getRatingButton(4)
         expect(button4).toHaveClass('rating-active')
-        expect(button4).toHaveStyle(`background-color: ${mockAppearance.ratingButtonActiveColor}`)
     })
 
     it('renders correctly with a valid array initial value', () => {
         render(<RatingQuestion {...baseProps} question={ratingQuestion} initialValue={['2']} />)
         const button2 = getRatingButton(2)
         expect(button2).toHaveClass('rating-active')
-        expect(button2).toHaveStyle(`background-color: ${mockAppearance.ratingButtonActiveColor}`)
     })
 
     it('renders correctly with an invalid string initial value', () => {
@@ -322,14 +319,12 @@ describe('RatingQuestion', () => {
         render(<RatingQuestion {...baseProps} question={ratingQuestion10Scale} initialValue={0} />)
         const button0 = getRatingButton(0)
         expect(button0).toHaveClass('rating-active')
-        expect(button0).toHaveStyle(`background-color: ${mockAppearance.ratingButtonActiveColor}`)
     })
 
     it('renders 10-scale correctly with initial value 10', () => {
         render(<RatingQuestion {...baseProps} question={ratingQuestion10Scale} initialValue={'10'} />)
         const button10 = getRatingButton(10)
         expect(button10).toHaveClass('rating-active')
-        expect(button10).toHaveStyle(`background-color: ${mockAppearance.ratingButtonActiveColor}`)
     })
 
     it('updates rating on click', () => {
@@ -343,12 +338,10 @@ describe('RatingQuestion', () => {
         fireEvent.click(button4)
         expect(button2).not.toHaveClass('rating-active')
         expect(button4).toHaveClass('rating-active')
-        expect(button4).toHaveStyle(`background-color: ${mockAppearance.ratingButtonActiveColor}`)
 
         fireEvent.click(button2)
         expect(button4).not.toHaveClass('rating-active')
         expect(button2).toHaveClass('rating-active')
-        expect(button2).toHaveStyle(`background-color: ${mockAppearance.ratingButtonActiveColor}`)
     })
 
     it('calls onSubmit with the selected rating', () => {
