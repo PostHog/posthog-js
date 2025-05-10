@@ -8,7 +8,7 @@ import {
     useHideSurveyOnURLChange,
     usePopupVisibility,
 } from '../../extensions/surveys'
-import { createShadow } from '../../extensions/surveys/surveys-extension-utils'
+import { retrieveSurveyShadow } from '../../extensions/surveys/surveys-extension-utils'
 import { Survey, SurveyQuestionType, SurveySchedule, SurveyType, SurveyWidgetType } from '../../posthog-surveys-types'
 
 import { afterAll, beforeAll, beforeEach } from '@jest/globals'
@@ -31,7 +31,7 @@ describe('survey display logic', () => {
 
     test('createShadow', () => {
         const surveyId = 'randomSurveyId'
-        const mockShadow = createShadow(`.survey-${surveyId}-form {}`, surveyId)
+        const mockShadow = retrieveSurveyShadow(`.survey-${surveyId}-form {}`, surveyId)
         expect(mockShadow.mode).toBe('open')
         expect(mockShadow.host.className).toBe(`PostHogSurvey-${surveyId}`)
     })

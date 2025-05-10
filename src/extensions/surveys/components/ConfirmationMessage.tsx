@@ -18,7 +18,6 @@ export function ConfirmationMessage({
     forceDisableHtml,
     appearance,
     onClose,
-    styleOverrides,
 }: {
     header: string
     description: string
@@ -33,7 +32,7 @@ export function ConfirmationMessage({
     const { isPopup } = useContext(SurveyContext)
 
     return (
-        <div className="thank-you-message" style={{ ...styleOverrides }}>
+        <div className="thank-you-message">
             <div className="thank-you-message-container">
                 {isPopup && <Cancel onClick={() => onClose()} />}
                 <h3 className="thank-you-message-header" style={{ color: textColor }}>
