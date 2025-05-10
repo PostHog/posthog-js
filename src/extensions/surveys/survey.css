@@ -21,6 +21,7 @@
     --ph-survey-choice-border-hover: rgba(0, 0, 0, 0.4);
     --ph-survey-scrollbar-thumb-color: var(--ph-survey-border-color);
     --ph-survey-scrollbar-track-color: var(--ph-survey-background-color);
+    --ph-survey-input-text-color: #020617;
 
     /* Widget/Embedded Tab CSS Variables */
     --ph-widget-color: #e0a045; /* Default color */
@@ -147,11 +148,18 @@
 }
 
 .survey-form {
+    & textarea,
+    input {
+        color: var(--ph-survey-input-text-color); /* TODO: Consider a CSS variable? */
+        background: var(--ph-survey-choice-background);
+        @media (max-width: 768px) {
+            font-size: 1rem;
+        }
+        font-family: inherit;
+    }
+
     & textarea {
-        color: #2d2d2d; /* TODO: Consider a CSS variable? */
         font-size: 14px;
-        font-family: var(--ph-survey-font-family);
-        background: var(--ph-survey-input-background);
         outline: none;
         padding: 10px;
         border-radius: 6px;
@@ -159,9 +167,6 @@
         margin-top: 14px;
         width: 100%;
         box-sizing: border-box;
-        @media (max-width: 768px) {
-            font-size: 1rem;
-        }
     }
 }
 
@@ -261,37 +266,28 @@
             display: flex; /* Use flex to allow wrapping */
             flex-wrap: wrap; /* Allow input to wrap below */
             gap: 4px; /* Small gap between elements if they wrap unexpectedly */
-            /* align-items: center; Remove vertical alignment */
-            /* max-width: 100%; Already width 100% */
         }
 
         & label span {
             /* Label text for "Other:" */
             width: 100%; /* Make span take full width */
-            /* flex-shrink: 0; Not needed */
         }
 
         & label input {
-            /* Text input for "Other" */
+            /* Text input for open-text option in multiple choice question */
             position: relative;
             opacity: 1;
             flex-grow: 1;
             border: 0;
             outline: 0;
-            background: transparent;
             font-family: inherit;
             font-size: inherit;
-            margin: 0;
-            padding: 0;
-            color: var(--ph-survey-text-primary-color);
             z-index: 2; /* Ensure input is clickable */
 
             &::placeholder {
                 color: var(--ph-survey-text-subtle-color);
             }
         }
-
-        /* No change needed for disabled state */
     }
 }
 

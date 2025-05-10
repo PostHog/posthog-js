@@ -17,7 +17,7 @@ import {
     veryDissatisfiedEmoji,
     verySatisfiedEmoji,
 } from '../icons'
-import { getContrastingTextColor, getDisplayOrderChoices } from '../surveys-extension-utils'
+import { getDisplayOrderChoices } from '../surveys-extension-utils'
 import { BottomSection } from './BottomSection'
 import { QuestionHeader } from './QuestionHeader'
 
@@ -220,7 +220,6 @@ export function RatingButton({
     num,
     active,
     displayQuestionIndex,
-    appearance,
     setActiveNumber,
 }: {
     num: number
@@ -235,13 +234,6 @@ export function RatingButton({
             type="button"
             onClick={() => {
                 setActiveNumber(num)
-            }}
-            style={{
-                color: getContrastingTextColor(
-                    active ? appearance.ratingButtonActiveColor : appearance.ratingButtonColor
-                ),
-                backgroundColor: active ? appearance.ratingButtonActiveColor : appearance.ratingButtonColor,
-                borderColor: appearance.borderColor,
             }}
         >
             {num}
