@@ -28,20 +28,7 @@ const plugins = (es5) => [
             postcssImport(),
             postcssNesting(),
             cssnano({
-                preset: [
-                    'default',
-                    {
-                        discardComments: { removeAll: true },
-                        normalizeWhitespace: true,
-                        minifyFontValues: { removeQuotes: false },
-                        minifyGradients: true,
-                        convertValues: true,
-                        reduceInitial: true,
-                        mergeRules: true,
-                        discardUnused: true,
-                        // ...add more aggressive options as needed
-                    },
-                ],
+                preset: ['default', { discardComments: { removeAll: true } }],
             }),
         ],
         minimize: true,
