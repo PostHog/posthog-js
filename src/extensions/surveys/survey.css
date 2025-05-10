@@ -320,26 +320,24 @@
     background-color: transparent;
     border: none;
     padding: 0px;
-    transition: transform 0.15s ease;
+    transition:
+        transform 0.15s ease,
+        opacity 0.15s ease;
+    opacity: 0.5;
 
     &:hover {
         cursor: pointer;
         transform: scale(1.15);
+        opacity: 1;
+    }
+
+    &.rating-active {
+        opacity: 1;
     }
 
     & svg {
-        transition:
-            fill 0.15s ease,
-            transform 0.15s ease;
+        fill: var(--ph-survey-text-primary-color);
     }
-
-    &.rating-active svg {
-        fill: var(--ph-survey-rating-active-bg-color); /* Active color */
-    }
-}
-
-.emoji-svg {
-    fill: var(--ph-survey-rating-bg-color); /* Default color */
 }
 
 /* Number Rating */
@@ -489,8 +487,8 @@
     gap: 4px;
     align-items: center;
     font-weight: 500;
-    text-decoration: none; /* Ensure no underline */
-    opacity: 0.5;
+    text-decoration: none;
+    opacity: 0.6;
     transition: opacity 0.15s ease;
     color: var(--ph-survey-text-primary-color);
 
