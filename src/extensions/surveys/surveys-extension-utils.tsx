@@ -40,7 +40,9 @@ export const defaultSurveyAppearance = {
     submitButtonColor: 'black',
     submitButtonTextColor: 'white',
     ratingButtonColor: 'white',
+    ratingButtonTextColor: '#020617',
     ratingButtonActiveColor: 'black',
+    ratingButtonActiveTextColor: 'white',
     borderColor: '#c9c6c6',
     placeholder: 'Start typing...',
     whiteLabel: false,
@@ -52,16 +54,15 @@ export const defaultSurveyAppearance = {
     disabledButtonOpacity: '0.6',
     maxWidth: '300px',
     textPrimaryColor: '#020617',
-    textSecondaryColor: '#1e293b',
+    boxPadding: '20px 25px 10px',
 } as const
 
 export const addSurveyCSSVariablesToElement = (element: HTMLElement, appearance?: SurveyAppearance | null) => {
     const effectiveAppearance = { ...defaultSurveyAppearance, ...appearance }
     const hostStyle = element.style
 
-    hostStyle.setProperty('--ph-survey-text-primary-color', effectiveAppearance.textPrimaryColor)
-    hostStyle.setProperty('--ph-survey-text-secondary-color', effectiveAppearance.textSecondaryColor)
     hostStyle.setProperty('--ph-survey-font-family', getFontFamily(effectiveAppearance.fontFamily))
+    hostStyle.setProperty('--ph-survey-box-padding', effectiveAppearance.boxPadding)
     hostStyle.setProperty('--ph-survey-max-width', effectiveAppearance.maxWidth)
     hostStyle.setProperty('--ph-survey-z-index', effectiveAppearance.zIndex)
     hostStyle.setProperty('--ph-survey-border-color', effectiveAppearance.borderColor)
@@ -73,7 +74,15 @@ export const addSurveyCSSVariablesToElement = (element: HTMLElement, appearance?
         appearance?.submitButtonTextColor || getContrastingTextColor()
     )
     hostStyle.setProperty('--ph-survey-rating-bg-color', effectiveAppearance.ratingButtonColor)
+    hostStyle.setProperty(
+        '--ph-survey-rating-text-color',
+        getContrastingTextColor(effectiveAppearance.ratingButtonColor)
+    )
     hostStyle.setProperty('--ph-survey-rating-active-bg-color', effectiveAppearance.ratingButtonActiveColor)
+    hostStyle.setProperty(
+        '--ph-survey-rating-active-text-color',
+        getContrastingTextColor(effectiveAppearance.ratingButtonActiveColor)
+    )
     hostStyle.setProperty(
         '--ph-survey-text-primary-color',
         getContrastingTextColor(effectiveAppearance.backgroundColor)

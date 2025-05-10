@@ -1025,17 +1025,7 @@ export function Questions({
                 />
             )}
 
-            <div
-                className="survey-box"
-                style={
-                    isPopup
-                        ? {
-                              backgroundColor:
-                                  survey.appearance?.backgroundColor || defaultSurveyAppearance.backgroundColor,
-                          }
-                        : {}
-                }
-            >
+            <div className="survey-box">
                 {getQuestionComponent({
                     question: currentQuestion,
                     forceDisableHtml,

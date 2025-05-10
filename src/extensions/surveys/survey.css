@@ -2,6 +2,7 @@
     /* Define CSS Variables with defaults */
     --ph-survey-font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Roboto', Helvetica, Arial,
         sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+    --ph-survey-box-padding: 20px 24px;
     --ph-survey-max-width: 300px;
     --ph-survey-z-index: 2147483647;
     --ph-survey-border-color: #dcdcdc;
@@ -10,7 +11,9 @@
     --ph-survey-submit-button-color: black;
     --ph-survey-submit-button-text-color: white; /* Default, will be overridden based on button color */
     --ph-survey-rating-bg-color: white;
+    --ph-survey-rating-text-color: #020617;
     --ph-survey-rating-active-bg-color: black;
+    --ph-survey-rating-active-text-color: white;
     --ph-survey-text-primary-color: #020617; /* Default text color */
     --ph-survey-text-subtle-color: #939393;
     --ph-survey-input-background: white;
@@ -21,7 +24,6 @@
     --ph-survey-scrollbar-thumb-color: var(--ph-survey-border-color);
     --ph-survey-scrollbar-track-color: var(--ph-survey-background-color);
     --ph-survey-input-text-color: #020617;
-
     /* Widget/Embedded Tab CSS Variables */
     --ph-widget-color: #e0a045; /* Default color */
     --ph-widget-text-color: white; /* Default text color (usually white for contrast) */
@@ -42,11 +44,11 @@
     text-align: center;
     cursor: pointer;
     z-index: var(--ph-survey-z-index);
-    transition: transform 0.1s ease-in-out;
+    transition: padding-bottom 0.1s ease-in-out;
 }
 
 .ph-survey-widget-tab:hover {
-    transform: rotate(-90deg) translateY(-100%) scaleY(1.1);
+    padding-bottom: 12px;
 }
 
 /* --- Animations --- */
@@ -112,26 +114,31 @@
 
 .survey-box,
 .thank-you-message-container {
-    padding: 20px 25px 10px;
+    padding: var(--ph-survey-box-padding);
     display: flex;
     flex-direction: column;
     border-radius: 10px;
+    gap: 16px;
+}
+
+.bottom-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 .question-container,
 .thank-you-message-container {
     animation: ph-survey-question-slide-in 0.25s ease-out forwards;
-}
-
-.bottom-section {
-    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 /* --- Questions & Description --- */
 .survey-question {
     font-weight: 500;
     font-size: 14px;
-    margin-bottom: 5px;
 }
 
 .survey-question-description {
@@ -163,7 +170,6 @@
         padding: 10px;
         border-radius: 6px;
         border: 1.5px solid var(--ph-survey-border-color);
-        margin-top: 14px;
         width: 100%;
         box-sizing: border-box;
     }
@@ -181,7 +187,6 @@
 
 /* --- Multiple Choice Question --- */
 .multiple-choice-options {
-    margin-top: 13px;
     font-size: 14px;
     display: flex; /* Use flexbox for easier gap control */
     flex-direction: column;
@@ -193,7 +198,6 @@
         /* gap: 4px; Replaced by label padding/structure */
         font-size: 13px;
         cursor: pointer;
-        /* margin-bottom: 5px; Replaced by parent gap */
         position: relative;
 
         &:hover {
@@ -209,10 +213,6 @@
             }
         }
     }
-
-    /* & > .choice-option:last-of-type { */
-    /* margin-bottom: 0px; No longer needed due to gap */
-    /* } */
 
     & input {
         /* Hidden radio/checkbox */
@@ -309,11 +309,6 @@
     }
 }
 
-/* --- Rating Question --- */
-.rating-options {
-    margin-top: 14px;
-}
-
 /* Emoji Rating */
 .rating-options-emoji {
     display: flex;
@@ -344,7 +339,7 @@
 }
 
 .emoji-svg {
-    fill: var(--ph-survey-text-subtle-color); /* Default color */
+    fill: var(--ph-survey-rating-bg-color); /* Default color */
 }
 
 /* Number Rating */
@@ -366,7 +361,7 @@
             background-color 0.15s ease,
             color 0.15s ease; /* Add transitions */
         background: transparent; /* Default background */
-        color: var(--ph-survey-text-primary-color); /* Default text color */
+        color: var(--ph-survey-rating-text-color); /* Default text color */
         border-left: none; /* Remove default button border */
         border-top: none;
         border-bottom: none;
@@ -379,7 +374,7 @@
 
         &.rating-active {
             background: var(--ph-survey-rating-active-bg-color); /* Active background */
-            color: var(--ph-survey-submit-button-text-color); /* Use contrasting text color for active */
+            color: var(--ph-survey-rating-active-text-color); /* Use contrasting text color for active */
         }
     }
 }
@@ -406,7 +401,6 @@
     flex-direction: row;
     font-size: 11px;
     justify-content: space-between;
-    margin-top: 6px;
     opacity: 0.7;
 }
 
@@ -465,14 +459,6 @@
     }
 }
 
-/* Submit button placement in thank you message */
-.thank-you-message-container {
-    & .form-submit {
-        margin-top: 20px;
-        margin-bottom: 10px;
-    }
-}
-
 /* Cancel Button (Circular X button) */
 .form-cancel {
     border: 1.5px solid var(--ph-survey-border-color);
@@ -497,8 +483,6 @@
 /* --- Footer --- */
 .footer-branding {
     font-size: 11px;
-    margin-top: 10px;
-    padding-bottom: 10px; /* Add padding for spacing */
     text-align: center;
     display: flex;
     justify-content: center;
@@ -506,14 +490,16 @@
     align-items: center;
     font-weight: 500;
     text-decoration: none; /* Ensure no underline */
-    color: var(--ph-survey-text-subtle-color);
+    opacity: 0.5;
+    transition: opacity 0.15s ease;
+    color: var(--ph-survey-text-primary-color);
+
+    &:hover {
+        opacity: 1;
+    }
 
     & a {
         text-decoration: none;
-        transition: color 0.15s ease;
-        &:hover {
-            color: var(--ph-survey-text-primary-color); /* Use primary text color on hover */
-        }
     }
 }
 
@@ -526,12 +512,14 @@
     margin: 10px 0px 0px;
     font-weight: 600;
     font-size: 16px;
+    color: var(--ph-survey-text-primary-color);
 }
 
 .thank-you-message-body {
     margin-top: 6px;
     font-size: 14px;
     opacity: 0.8;
+    color: var(--ph-survey-text-primary-color);
 }
 
 .thank-you-message-countdown {
@@ -547,7 +535,6 @@
     overflow-x: hidden;
     scrollbar-width: thin; /* Firefox */
     scrollbar-color: var(--ph-survey-scrollbar-thumb-color) var(--ph-survey-scrollbar-track-color); /* Firefox */
-    padding-right: 5px; /* Add padding to avoid content touching scrollbar */
 
     /* Webkit Scrollbar Styles */
     &::-webkit-scrollbar {
