@@ -53,7 +53,6 @@ export function OpenTextQuestion({
                     question={question.question}
                     description={question.description}
                     descriptionContentType={question.descriptionContentType}
-                    backgroundColor={appearance.backgroundColor}
                     forceDisableHtml={forceDisableHtml}
                 />
                 <textarea
@@ -146,7 +145,6 @@ export function RatingQuestion({
                     description={question.description}
                     descriptionContentType={question.descriptionContentType}
                     forceDisableHtml={forceDisableHtml}
-                    backgroundColor={appearance.backgroundColor}
                 />
                 <div className="rating-section">
                     <div className="rating-options">
@@ -364,7 +362,6 @@ export function MultipleChoiceQuestion({
                     description={question.description}
                     descriptionContentType={question.descriptionContentType}
                     forceDisableHtml={forceDisableHtml}
-                    backgroundColor={appearance.backgroundColor}
                 />
                 <div className="multiple-choice-options limit-height">
                     {choices.map((choice: string, idx: number) => {

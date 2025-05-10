@@ -20,7 +20,7 @@ import {
     isSurveyRunning,
     SURVEY_LOGGER as logger,
 } from '../utils/survey-utils'
-import { isNull, isNumber } from '../utils/type-utils'
+import { isNull, isUndefined } from '../utils/type-utils'
 import { uuidv7 } from '../uuidv7'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import { Cancel } from './surveys/components/QuestionHeader'
@@ -578,13 +578,12 @@ export const renderSurveysPreview = ({
     }
     Preact.render(
         <SurveyPopup
-            key="surveys-render-preview"
             survey={survey}
             forceDisableHtml={forceDisableHtml}
             style={{
                 position: 'relative',
                 right: 0,
-                borderBottom: `1px solid ${survey.appearance?.borderColor}`,
+                borderBottom: `1px solid var(--ph-survey-border-color)`,
                 borderRadius: 10,
             }}
             onPreviewSubmit={onPreviewSubmit}
@@ -870,8 +869,6 @@ export function SurveyPopup({
         removeSurveyFromFocus
     )
     const shouldShowConfirmation = isSurveySent || previewPageIndex === survey.questions.length
-    const confirmationBoxLeftStyle = style?.left && isNumber(style?.left) ? { left: style.left - 40 } : {}
-
     const surveyContextValue = useMemo(() => {
         const getInProgressSurvey = getInProgressSurveyState(survey)
         return {
@@ -916,7 +913,6 @@ export function SurveyPopup({
                         forceDisableHtml={!!forceDisableHtml}
                         contentType={survey.appearance?.thankYouMessageDescriptionContentType}
                         appearance={survey.appearance || defaultSurveyAppearance}
-                        styleOverrides={{ ...style, ...confirmationBoxLeftStyle }}
                         onClose={() => {
                             setIsPopupVisible(false)
                             onCloseConfirmationMessage()
@@ -945,7 +941,7 @@ export function Questions({
         }
         return inProgressSurveyData?.responses || {}
     })
-    const { previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit, surveySubmissionId } =
+    const { previewPageIndex, onPopupSurveyDismissed, isPopup, onPreviewSubmit, surveySubmissionId, isPreviewMode } =
         useContext(SurveyContext)
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(() => {
         const inProgressSurveyData = getInProgressSurveyState(survey)
@@ -955,10 +951,10 @@ export function Questions({
 
     // Sync preview state
     useEffect(() => {
-        if (previewPageIndex) {
+        if (isPreviewMode && !isUndefined(previewPageIndex)) {
             setCurrentQuestionIndex(previewPageIndex)
         }
-    }, [previewPageIndex])
+    }, [previewPageIndex, isPreviewMode])
 
     const onNextButtonClick = ({
         res,

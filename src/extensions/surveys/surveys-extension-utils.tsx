@@ -66,9 +66,10 @@ export const addSurveyCSSVariablesToElement = (element: HTMLElement, appearance?
     hostStyle.setProperty('--ph-survey-submit-button-color', effectiveAppearance.submitButtonColor)
     hostStyle.setProperty(
         '--ph-survey-submit-button-text-color',
-        getContrastingTextColor(effectiveAppearance.submitButtonColor)
+        appearance?.submitButtonTextColor || getContrastingTextColor()
     )
-    hostStyle.setProperty('--ph-survey-rating-active-color', effectiveAppearance.ratingButtonActiveColor)
+    hostStyle.setProperty('--ph-survey-rating-bg-color', effectiveAppearance.ratingButtonColor)
+    hostStyle.setProperty('--ph-survey-rating-active-bg-color', effectiveAppearance.ratingButtonActiveColor)
     hostStyle.setProperty(
         '--ph-survey-text-primary-color',
         getContrastingTextColor(effectiveAppearance.backgroundColor)
@@ -296,8 +297,11 @@ export const retrieveSurveyShadow = (
     div.className = widgetClassName
     const shadow = div.attachShadow({ mode: 'open' })
     const stylesheet = getSurveyStylesheet(posthog)
-
     if (stylesheet) {
+        const existingStylesheet = shadow.querySelector('style')
+        if (existingStylesheet) {
+            shadow.removeChild(existingStylesheet)
+        }
         shadow.appendChild(stylesheet)
     }
     ;(element ? element : document.body).appendChild(div)

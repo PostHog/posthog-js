@@ -9,7 +9,8 @@
     --ph-survey-disabled-button-opacity: 0.6;
     --ph-survey-submit-button-color: black;
     --ph-survey-submit-button-text-color: white; /* Default, will be overridden based on button color */
-    --ph-survey-rating-active-color: black;
+    --ph-survey-rating-bg-color: white;
+    --ph-survey-rating-active-bg-color: black;
     --ph-survey-text-primary-color: black; /* Default text color */
     --ph-survey-text-secondary-color: #777;
     --ph-survey-text-subtle-color: #939393;
@@ -222,8 +223,8 @@
 
         &:checked + label {
             font-weight: bold;
-            border: 1.5px solid var(--ph-survey-rating-active-color); /* Use active color for border */
-            background: var(--ph-survey-choice-background); /* Keep background consistent */
+            border: 1.5px solid var(--ph-survey-border-color);
+            background: var(--ph-survey-choice-background);
 
             & + .choice-check {
                 opacity: 1; /* Show fully when checked, override hover */
@@ -308,7 +309,7 @@
 
     & svg {
         display: block;
-        fill: var(--ph-survey-rating-active-color); /* Color the checkmark */
+        fill: var(--ph-survey-rating-bg-color); /* Color the checkmark */
         width: 16px;
         height: 16px;
     }
@@ -344,12 +345,12 @@
     }
 
     &.rating-active svg {
-        fill: var(--ph-survey-rating-active-color); /* Active color */
+        fill: var(--ph-survey-rating-active-bg-color); /* Active color */
     }
 }
 
 .emoji-svg {
-    fill: '#939393'; /* Default color */
+    fill: var(--ph-survey-text-subtle-color); /* Default color */
 }
 
 /* Number Rating */
@@ -383,7 +384,7 @@
         }
 
         &.rating-active {
-            background: var(--ph-survey-rating-active-color); /* Active background */
+            background: var(--ph-survey-rating-active-bg-color); /* Active background */
             color: var(--ph-survey-submit-button-text-color); /* Use contrasting text color for active */
         }
     }
@@ -395,6 +396,10 @@
     font-weight: 600;
     padding: 8px 0px;
     border: none;
+    background-color: var(--ph-survey-rating-bg-color);
+    & .rating-active {
+        background-color: var(--ph-survey-rating-active-bg-color);
+    }
 
     &:hover {
         cursor: pointer;
@@ -522,7 +527,6 @@
 /* --- Thank You Message --- */
 .thank-you-message {
     text-align: center;
-    /* Entry animation handled by .survey-form */
 }
 
 .thank-you-message-header {
@@ -530,7 +534,6 @@
     background: var(--ph-survey-background-color);
     font-weight: 600;
     font-size: 16px;
-    color: var(--ph-survey-text-primary-color);
 }
 
 .thank-you-message-body {

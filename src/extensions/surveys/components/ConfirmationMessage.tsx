@@ -1,10 +1,6 @@
 import { h } from 'preact'
 import { SurveyAppearance, SurveyQuestionDescriptionContentType } from '../../../posthog-surveys-types'
-import {
-    defaultSurveyAppearance,
-    getContrastingTextColor,
-    renderChildrenAsTextOrHtml,
-} from '../surveys-extension-utils'
+import { renderChildrenAsTextOrHtml } from '../surveys-extension-utils'
 import { BottomSection } from './BottomSection'
 import { Cancel } from './QuestionHeader'
 
@@ -25,25 +21,19 @@ export function ConfirmationMessage({
     contentType?: SurveyQuestionDescriptionContentType
     appearance: SurveyAppearance
     onClose: () => void
-    styleOverrides?: React.CSSProperties
 }) {
-    const textColor = getContrastingTextColor(appearance.backgroundColor || defaultSurveyAppearance.backgroundColor)
-
     const { isPopup } = useContext(SurveyContext)
 
     return (
         <div className="thank-you-message">
             <div className="thank-you-message-container">
                 {isPopup && <Cancel onClick={() => onClose()} />}
-                <h3 className="thank-you-message-header" style={{ color: textColor }}>
-                    {header}
-                </h3>
+                <h3 className="thank-you-message-header">{header}</h3>
                 {description &&
                     renderChildrenAsTextOrHtml({
                         component: h('div', { className: 'thank-you-message-body' }),
                         children: description,
                         renderAsHtml: !forceDisableHtml && contentType !== 'text',
-                        style: { color: textColor },
                     })}
                 {isPopup && (
                     <BottomSection
