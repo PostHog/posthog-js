@@ -31,7 +31,7 @@ describe('survey display logic', () => {
 
     test('createShadow', () => {
         const surveyId = 'randomSurveyId'
-        const mockShadow = retrieveSurveyShadow(`.survey-${surveyId}-form {}`, surveyId)
+        const mockShadow = retrieveSurveyShadow({ id: surveyId, appearance: {} })
         expect(mockShadow.mode).toBe('open')
         expect(mockShadow.host.className).toBe(`PostHogSurvey-${surveyId}`)
     })
