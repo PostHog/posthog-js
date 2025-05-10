@@ -833,15 +833,6 @@ interface SurveyPopupProps {
     onCloseConfirmationMessage?: () => void
 }
 
-/**
- *     const positionStyle = {
-        left: position === SurveyPosition.Left ? '30px' : position === SurveyPosition.Center ? '50%' : 'unset',
-        transform: position === SurveyPosition.Center ? 'translateX(-50%)' : 'unset',
-        right: position === SurveyPosition.Right ? '30px' : 'unset',
-    }
-
- */
-
 function getPopoverPosition(position: SurveyPosition = SurveyPosition.Right) {
     switch (position) {
         case SurveyPosition.Left:
