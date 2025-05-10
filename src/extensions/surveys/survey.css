@@ -9,13 +9,13 @@
     --ph-survey-background-color: #eeeded;
     --ph-survey-disabled-button-opacity: 0.6;
     --ph-survey-submit-button-color: black;
-    --ph-survey-submit-button-text-color: white; /* Default, will be overridden based on button color */
+    --ph-survey-submit-button-text-color: white;
     --ph-survey-rating-bg-color: white;
     --ph-survey-rating-text-color: #020617;
     --ph-survey-rating-active-bg-color: black;
     --ph-survey-rating-active-text-color: white;
-    --ph-survey-text-primary-color: #020617; /* Default text color */
-    --ph-survey-text-subtle-color: #939393;
+    --ph-survey-text-primary-color: #020617; /* Default text color, based on text-slate-950 */
+    --ph-survey-text-subtle-color: #939393; /* Default text color, based on text-slate-500 */
     --ph-survey-input-background: white;
     --ph-survey-input-focus-shadow: rgba(0, 0, 0, 0.15);
     --ph-survey-choice-background: white;
@@ -514,10 +514,10 @@
 }
 
 .thank-you-message-body {
-    margin-top: 6px;
     font-size: 14px;
     opacity: 0.8;
     color: var(--ph-survey-text-primary-color);
+    padding-bottom: 12px;
 }
 
 .thank-you-message-countdown {
@@ -528,29 +528,29 @@
 
 /* --- Scrollable Content --- */
 .limit-height {
-    max-height: 300px; /* Adjust as needed */
+    max-height: 256px;
     overflow-y: auto;
     overflow-x: hidden;
-    scrollbar-width: thin; /* Firefox */
-    scrollbar-color: var(--ph-survey-scrollbar-thumb-color) var(--ph-survey-scrollbar-track-color); /* Firefox */
+    scrollbar-width: thin;
+    scrollbar-color: var(--ph-survey-scrollbar-thumb-color) var(--ph-survey-scrollbar-track-color);
 
     /* Webkit Scrollbar Styles */
     &::-webkit-scrollbar {
-        width: 8px; /* Width of the scrollbar */
+        width: 8px;
     }
 
     &::-webkit-scrollbar-track {
-        background: var(--ph-survey-scrollbar-track-color); /* Track color */
+        background: var(--ph-survey-scrollbar-track-color);
         border-radius: 4px;
     }
 
     &::-webkit-scrollbar-thumb {
-        background-color: var(--ph-survey-scrollbar-thumb-color); /* Thumb color */
+        background-color: var(--ph-survey-scrollbar-thumb-color);
         border-radius: 4px;
-        border: 2px solid var(--ph-survey-scrollbar-track-color); /* Creates padding around thumb */
+        border: 2px solid var(--ph-survey-scrollbar-track-color);
 
         &:hover {
-            background-color: var(--ph-survey-text-subtle-color); /* Darker thumb on hover */
+            background-color: var(--ph-survey-text-subtle-color);
         }
     }
 }
