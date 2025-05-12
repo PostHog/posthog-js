@@ -156,6 +156,7 @@ const plugins = (es5) => [
                           'posthog',
                           'version',
                           'surveys',
+                          'calculateEventProperties',
 
                           // possibly used by naughty users - we should decide if we want make these part of the public API, but be cautious for now
                           '_isIdentified',

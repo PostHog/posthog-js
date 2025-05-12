@@ -21,7 +21,6 @@
         "_bufferedInvocations",
         "_buildStorage",
         "_cachedPersonProperties",
-        "_calculate_event_properties",
         "_calculate_set_once_properties",
         "_callDecideEndpoint",
         "_callLoadToolbar",
