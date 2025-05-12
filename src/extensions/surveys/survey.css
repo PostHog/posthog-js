@@ -18,8 +18,6 @@
     --ph-survey-text-subtle-color: #939393;
     --ph-survey-input-background: white;
     --ph-survey-input-focus-shadow: rgba(0, 0, 0, 0.15);
-    --ph-survey-choice-background: white;
-    --ph-survey-choice-background-hover: #fcfcfc;
     --ph-survey-choice-border-hover: rgba(0, 0, 0, 0.4);
     --ph-survey-scrollbar-thumb-color: var(--ph-survey-border-color);
     --ph-survey-scrollbar-track-color: var(--ph-survey-background-color);
@@ -143,7 +141,7 @@
 
 .survey-question-description {
     font-size: 13px;
-    padding-top: 5px;
+    padding-top: 4px;
     opacity: 0.8;
 }
 
@@ -155,9 +153,9 @@
 
 .survey-form {
     & textarea,
-    input {
-        color: var(--ph-survey-input-text-color); /* TODO: Consider a CSS variable? */
-        background: var(--ph-survey-choice-background);
+    input[type='text'] {
+        color: var(--ph-survey-input-text-color);
+        background: var(--ph-survey-input-background);
         @media (max-width: 768px) {
             font-size: 1rem;
         }
@@ -201,7 +199,6 @@
         &:hover {
             &:not(:has(input:checked)) {
                 & label {
-                    background: var(--ph-survey-choice-background-hover);
                     border-color: var(--ph-survey-text-subtle-color);
                 }
                 & .choice-check {
@@ -225,7 +222,6 @@
         &:checked + label {
             font-weight: bold;
             border: 1.5px solid var(--ph-survey-text-subtle-color);
-            background: var(--ph-survey-choice-background);
 
             & + .choice-check {
                 opacity: 1; /* Show fully when checked, override hover */
@@ -236,6 +232,11 @@
                 font-weight: bold;
             }
         }
+
+        &:active + label {
+            transform: scale(0.98);
+            transition: transform 0.15s ease;
+        }
     }
 
     & label {
@@ -245,7 +246,7 @@
         padding: 10px 35px 10px 10px;
         border: 1.5px solid var(--ph-survey-border-color);
         border-radius: 4px;
-        background: var(--ph-survey-choice-background);
+        background: var(--ph-survey-input-background);
         transition:
             border-color 0.15s ease,
             background-color 0.15s ease;
@@ -258,10 +259,10 @@
     /* Styles for the "Other" option input field */
     & .choice-option-open {
         & label {
-            padding-right: 10px; /* Keep padding consistent, adjusted for checkmark */
-            display: flex; /* Use flex to allow wrapping */
-            flex-wrap: wrap; /* Allow input to wrap below */
-            gap: 4px; /* Small gap between elements if they wrap unexpectedly */
+            padding-right: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
         }
 
         & label span {
@@ -338,7 +339,7 @@
     }
 }
 
-/* Number Rating */
+/* Number Rating Container */
 .rating-options-number {
     display: grid;
     grid-auto-columns: 1fr; /* Equal columns */
@@ -351,12 +352,11 @@
     & > .ratings-number {
         /* Styles specific to numbers inside the grid */
         border-right: 1px solid var(--ph-survey-border-color); /* Add dividers */
-        text-align: center; /* Center numbers */
-        cursor: pointer; /* Add cursor */
+        text-align: center;
+        cursor: pointer;
         transition:
             background-color 0.15s ease,
             color 0.15s ease; /* Add transitions */
-        background: transparent; /* Default background */
         color: var(--ph-survey-rating-text-color); /* Default text color */
         border-left: none; /* Remove default button border */
         border-top: none;
@@ -467,8 +467,9 @@
     top: 0;
     right: 0;
     transform: translate(50%, -50%);
-    transition: opacity 0.15s ease;
-    transition: transform 0.15s ease;
+    transition:
+        opacity 0.15s ease,
+        transform 0.15s ease;
 
     &:hover {
         transform: translate(50%, -50%) scale(1.1);

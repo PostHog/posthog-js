@@ -14,10 +14,9 @@ export function QuestionHeader({
     description?: string | null
     descriptionContentType?: SurveyQuestionDescriptionContentType
     forceDisableHtml: boolean
-    backgroundColor?: string
 }) {
     return (
-        <div>
+        <div className="question-header">
             <div className="survey-question">{question}</div>
             {description &&
                 renderChildrenAsTextOrHtml({

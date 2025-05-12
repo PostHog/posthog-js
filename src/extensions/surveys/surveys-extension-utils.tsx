@@ -35,12 +35,15 @@ export function getSurveyResponseKey(questionId: string) {
     return `$survey_response_${questionId}`
 }
 
+const BLACK_TEXT_COLOR = '#020617' // Maps out to text-slate-950 from tailwind colors. Intended for text use outside interactive elements like buttons
+
+// Keep in sync with defaultSurveyAppearance on the main app
 export const defaultSurveyAppearance = {
     backgroundColor: '#eeeded',
     submitButtonColor: 'black',
     submitButtonTextColor: 'white',
     ratingButtonColor: 'white',
-    ratingButtonTextColor: '#020617',
+    ratingButtonTextColor: 'black',
     ratingButtonActiveColor: 'black',
     ratingButtonActiveTextColor: 'white',
     borderColor: '#c9c6c6',
@@ -53,10 +56,11 @@ export const defaultSurveyAppearance = {
     zIndex: '2147483647',
     disabledButtonOpacity: '0.6',
     maxWidth: '300px',
-    textPrimaryColor: '#020617',
+    textPrimaryColor: BLACK_TEXT_COLOR,
     textSubtleColor: '#939393',
-    inputTextColor: '#020617',
-    boxPadding: '20px 25px 10px',
+    inputBackground: 'white',
+    inputTextColor: BLACK_TEXT_COLOR,
+    boxPadding: '20px 24px 10px',
 } as const
 
 export const addSurveyCSSVariablesToElement = (element: HTMLElement, appearance?: SurveyAppearance | null) => {
@@ -73,7 +77,7 @@ export const addSurveyCSSVariablesToElement = (element: HTMLElement, appearance?
     hostStyle.setProperty('--ph-survey-submit-button-color', effectiveAppearance.submitButtonColor)
     hostStyle.setProperty(
         '--ph-survey-submit-button-text-color',
-        appearance?.submitButtonTextColor || getContrastingTextColor()
+        appearance?.submitButtonTextColor || getContrastingTextColor(effectiveAppearance.submitButtonColor)
     )
     hostStyle.setProperty('--ph-survey-rating-bg-color', effectiveAppearance.ratingButtonColor)
     hostStyle.setProperty(
@@ -91,6 +95,7 @@ export const addSurveyCSSVariablesToElement = (element: HTMLElement, appearance?
     )
     hostStyle.setProperty('--ph-survey-input-text-color', effectiveAppearance.inputTextColor)
     hostStyle.setProperty('--ph-survey-text-subtle-color', effectiveAppearance.textSubtleColor)
+    hostStyle.setProperty('--ph-survey-input-background', effectiveAppearance.inputBackground)
     hostStyle.setProperty('--ph-widget-color', effectiveAppearance.widgetColor)
     hostStyle.setProperty('--ph-widget-text-color', getContrastingTextColor(effectiveAppearance.widgetColor))
     hostStyle.setProperty('--ph-widget-z-index', effectiveAppearance.zIndex)
@@ -98,12 +103,6 @@ export const addSurveyCSSVariablesToElement = (element: HTMLElement, appearance?
     // Adjust input/choice background slightly if main background is white
     if (effectiveAppearance.backgroundColor === 'white') {
         hostStyle.setProperty('--ph-survey-input-background', '#f8f8f8')
-        hostStyle.setProperty('--ph-survey-choice-background', '#fdfdfd')
-        hostStyle.setProperty('--ph-survey-choice-background-hover', '#f9f9f9')
-    } else {
-        hostStyle.setProperty('--ph-survey-input-background', 'white') // Default if not white
-        hostStyle.setProperty('--ph-survey-choice-background', 'white') // Default if not white
-        hostStyle.setProperty('--ph-survey-choice-background-hover', '#fcfcfc') // Default if not white
     }
 }
 
@@ -263,7 +262,7 @@ function hex2rgb(c: string) {
     return 'rgb(255, 255, 255)'
 }
 
-export function getContrastingTextColor(color: string = defaultSurveyAppearance.backgroundColor) {
+function getContrastingTextColor(color: string = defaultSurveyAppearance.backgroundColor) {
     let rgb
     if (color[0] === '#') {
         rgb = hex2rgb(color)
@@ -277,7 +276,7 @@ export function getContrastingTextColor(color: string = defaultSurveyAppearance.
         rgb = hex2rgb(nameColorToHex)
     }
     if (!rgb) {
-        return 'black'
+        return BLACK_TEXT_COLOR
     }
     const colorMatch = rgb.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d+(?:\.\d+)?))?\)$/)
     if (colorMatch) {
@@ -285,9 +284,9 @@ export function getContrastingTextColor(color: string = defaultSurveyAppearance.
         const g = parseInt(colorMatch[2])
         const b = parseInt(colorMatch[3])
         const hsp = Math.sqrt(0.299 * (r * r) + 0.587 * (g * g) + 0.114 * (b * b))
-        return hsp > 127.5 ? 'black' : 'white'
+        return hsp > 127.5 ? BLACK_TEXT_COLOR : 'white'
     }
-    return 'black'
+    return BLACK_TEXT_COLOR
 }
 
 export function getSurveyStylesheet(posthog?: PostHog) {
