@@ -29,7 +29,7 @@ describe('survey display logic', () => {
         jest.clearAllMocks()
     })
 
-    test('createShadow', () => {
+    test('retrieveSurveyShadow', () => {
         const surveyId = 'randomSurveyId'
         const mockShadow = retrieveSurveyShadow({ id: surveyId, appearance: {} })
         expect(mockShadow.mode).toBe('open')
