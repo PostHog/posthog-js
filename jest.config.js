@@ -6,4 +6,7 @@ module.exports = {
     modulePathIgnorePatterns: ['src/__tests__/setup.js', 'src/__tests__/helpers/'],
     clearMocks: true,
     testEnvironment: 'jsdom',
+    moduleNameMapper: {
+        '\\.css$': 'identity-obj-proxy',
+    },
 }

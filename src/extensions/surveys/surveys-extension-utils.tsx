@@ -10,7 +10,7 @@ import {
 } from '../../posthog-surveys-types'
 import { document as _document, window as _window, userAgent } from '../../utils/globals'
 import { SURVEY_LOGGER as logger, SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../../utils/survey-utils'
-import { isNullish } from '../../utils/type-utils'
+import { isNullish, isArray } from '../../utils/type-utils'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
 
 import { SurveyMatchType } from '../../posthog-surveys-types'
@@ -19,8 +19,6 @@ import { detectDeviceType } from '../../utils/user-agent-utils'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
-
-export const SURVEY_DEFAULT_Z_INDEX = 2147483647
 
 export function getFontFamily(fontFamily?: string): string {
     if (fontFamily === 'inherit') {
@@ -35,6 +33,24 @@ export function getFontFamily(fontFamily?: string): string {
 export function getSurveyResponseKey(questionId: string) {
     return `$survey_response_${questionId}`
 }
+
+export const defaultSurveyAppearance = {
+    backgroundColor: '#eeeded',
+    submitButtonColor: 'black',
+    submitButtonTextColor: 'white',
+    ratingButtonColor: 'white',
+    ratingButtonActiveColor: 'black',
+    borderColor: '#c9c6c6',
+    placeholder: 'Start typing...',
+    whiteLabel: false,
+    displayThankYouMessage: true,
+    thankYouMessageHeader: 'Thank you for your feedback!',
+    position: SurveyPosition.Right,
+    widgetColor: '#e0a045',
+    zIndex: '2147483647',
+    disabledButtonOpacity: '0.6',
+    maxWidth: '300px',
+} as const
 
 export const style = (appearance: SurveyAppearance | null) => {
     const positions = {
@@ -56,9 +72,9 @@ export const style = (appearance: SurveyAppearance | null) => {
               font-weight: normal;
               font-family: ${getFontFamily(appearance?.fontFamily)};
               text-align: left;
-              max-width: ${parseInt(appearance?.maxWidth || '300')}px;
+              max-width: ${appearance?.maxWidth || defaultSurveyAppearance.maxWidth};
               width: 100%;
-              z-index: ${parseInt(appearance?.zIndex || SURVEY_DEFAULT_Z_INDEX.toString())};
+              z-index: ${appearance?.zIndex || defaultSurveyAppearance.zIndex};
               border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
               border-bottom: 0px;
               ${appearance?.position ? positions[appearance.position] : positions[SurveyPosition.Right]}
@@ -129,25 +145,16 @@ export const style = (appearance: SurveyAppearance | null) => {
               width: 100%;
           }
           .form-cancel {
-              display: flex;
-              float: right;
-              border: none;
-              background: none;
-              cursor: pointer;
-          }
-          .cancel-btn-wrapper {
-              position: absolute;
-              width: 35px;
-              height: 35px;
+              border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
+              background: white;
               border-radius: 100%;
+              line-height: 0;
+              cursor: pointer;
+              padding: 12px;
+              position: absolute;
               top: 0;
               right: 0;
               transform: translate(50%, -50%);
-              background: white;
-              border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
-              display: flex;
-              justify-content: center;
-              align-items: center;
           }
           .bolded { font-weight: 600; }
           .buttons {
@@ -345,6 +352,42 @@ export const style = (appearance: SurveyAppearance | null) => {
         .trim()
 }
 
+export const addSurveyCSSVariablesToElement = (element: HTMLDivElement, appearance?: SurveyAppearance | null) => {
+    const effectiveAppearance = { ...defaultSurveyAppearance, ...appearance }
+    const hostStyle = element.style
+
+    hostStyle.setProperty('--ph-survey-font-family', getFontFamily(effectiveAppearance.fontFamily))
+    hostStyle.setProperty('--ph-survey-max-width', effectiveAppearance.maxWidth)
+    hostStyle.setProperty('--ph-survey-z-index', effectiveAppearance.zIndex)
+    hostStyle.setProperty('--ph-survey-border-color', effectiveAppearance.borderColor)
+    hostStyle.setProperty('--ph-survey-background-color', effectiveAppearance.backgroundColor)
+    hostStyle.setProperty('--ph-survey-disabled-button-opacity', effectiveAppearance.disabledButtonOpacity)
+    hostStyle.setProperty('--ph-survey-submit-button-color', effectiveAppearance.submitButtonColor)
+    hostStyle.setProperty(
+        '--ph-survey-submit-button-text-color',
+        getContrastingTextColor(effectiveAppearance.submitButtonColor)
+    )
+    hostStyle.setProperty('--ph-survey-rating-active-color', effectiveAppearance.ratingButtonActiveColor)
+    hostStyle.setProperty(
+        '--ph-survey-text-primary-color',
+        getContrastingTextColor(effectiveAppearance.backgroundColor)
+    )
+    hostStyle.setProperty('--ph-widget-color', effectiveAppearance.widgetColor)
+    hostStyle.setProperty('--ph-widget-text-color', getContrastingTextColor(effectiveAppearance.widgetColor))
+    hostStyle.setProperty('--ph-widget-z-index', effectiveAppearance.zIndex)
+
+    // Adjust input/choice background slightly if main background is white
+    if (effectiveAppearance.backgroundColor === 'white') {
+        hostStyle.setProperty('--ph-survey-input-background', '#f8f8f8')
+        hostStyle.setProperty('--ph-survey-choice-background', '#fdfdfd')
+        hostStyle.setProperty('--ph-survey-choice-background-hover', '#f9f9f9')
+    } else {
+        hostStyle.setProperty('--ph-survey-input-background', 'white') // Default if not white
+        hostStyle.setProperty('--ph-survey-choice-background', 'white') // Default if not white
+        hostStyle.setProperty('--ph-survey-choice-background-hover', '#fcfcfc') // Default if not white
+    }
+}
+
 function nameToHex(name: string) {
     return {
         aliceblue: '#f0f8ff',
@@ -501,7 +544,7 @@ function hex2rgb(c: string) {
     return 'rgb(255, 255, 255)'
 }
 
-export function getContrastingTextColor(color: string = defaultBackgroundColor) {
+export function getContrastingTextColor(color: string = defaultSurveyAppearance.backgroundColor) {
     let rgb
     if (color[0] === '#') {
         rgb = hex2rgb(color)
@@ -528,22 +571,6 @@ export function getContrastingTextColor(color: string = defaultBackgroundColor) 
     return 'black'
 }
 
-export const defaultSurveyAppearance: SurveyAppearance = {
-    backgroundColor: '#eeeded',
-    submitButtonColor: 'black',
-    submitButtonTextColor: 'white',
-    ratingButtonColor: 'white',
-    ratingButtonActiveColor: 'black',
-    borderColor: '#c9c6c6',
-    placeholder: 'Start typing...',
-    whiteLabel: false,
-    displayThankYouMessage: true,
-    thankYouMessageHeader: 'Thank you for your feedback!',
-    position: SurveyPosition.Right,
-}
-
-export const defaultBackgroundColor = '#eeeded'
-
 export const createShadow = (styleSheet: string, surveyId: string, element?: Element, posthog?: PostHog) => {
     const div = document.createElement('div')
     div.className = getSurveyContainerClass({ id: surveyId })
@@ -564,6 +591,17 @@ interface SendSurveyEventArgs {
     surveySubmissionId: string
     isSurveyCompleted: boolean
     posthog?: PostHog
+}
+
+const getSurveyResponseValue = (responses: Record<string, string | number | string[] | null>, questionId?: string) => {
+    if (!questionId) {
+        return null
+    }
+    const response = responses[getSurveyResponseKey(questionId)]
+    if (isArray(response)) {
+        return [...response]
+    }
+    return response
 }
 
 export const sendSurveyEvent = ({
@@ -590,6 +628,7 @@ export const sendSurveyEvent = ({
         $survey_questions: survey.questions.map((question) => ({
             id: question.id,
             question: question.question,
+            response: getSurveyResponseValue(responses, question.id),
         })),
         $survey_submission_id: surveySubmissionId,
         $survey_completed: isSurveyCompleted,
@@ -633,6 +672,7 @@ export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly
         $survey_questions: survey.questions.map((question) => ({
             id: question.id,
             question: question.question,
+            response: getSurveyResponseValue(inProgressSurvey?.responses || {}, question.id),
         })),
         $set: {
             [getSurveyInteractionProperty(survey, 'dismissed')]: true,

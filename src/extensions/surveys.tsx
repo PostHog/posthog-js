@@ -22,7 +22,7 @@ import {
 } from '../utils/survey-utils'
 import { isNull, isNumber } from '../utils/type-utils'
 import { uuidv7 } from '../uuidv7'
-import { createWidgetStyle, retrieveWidgetShadow } from './surveys-widget'
+import { createWidgetStylesheet, retrieveWidgetShadow } from './surveys-widget'
 import { ConfirmationMessage } from './surveys/components/ConfirmationMessage'
 import { Cancel } from './surveys/components/QuestionHeader'
 import {
@@ -51,7 +51,6 @@ import {
     sendSurveyEvent,
     setInProgressSurveyState,
     style,
-    SURVEY_DEFAULT_Z_INDEX,
     SurveyContext,
 } from './surveys/surveys-extension-utils'
 import { prepareStylesheet } from './utils/stylesheet-loader'
@@ -183,20 +182,6 @@ export class SurveyManager {
         this._surveyInFocus = null
     }
 
-    private _canShowNextEventBasedSurvey = (): boolean => {
-        // with event based surveys, we need to show the next survey without reloading the page.
-        // A simple check for div elements with the class name pattern of PostHogSurvey_xyz doesn't work here
-        // because preact leaves behind the div element for any surveys responded/dismissed with a <style> node.
-        // To alleviate this, we check the last div in the dom and see if it has any elements other than a Style node.
-        // if the last PostHogSurvey_xyz div has only one style node, we can show the next survey in the queue
-        // without reloading the page.
-        const surveyPopups = document.querySelectorAll(`div[class^=PostHogSurvey]`)
-        if (surveyPopups.length > 0) {
-            return surveyPopups[surveyPopups.length - 1].shadowRoot?.childElementCount === 1
-        }
-        return true
-    }
-
     private _clearSurveyTimeout(surveyId: string) {
         const timeout = this._surveyTimeouts.get(surveyId)
         if (timeout) {
@@ -226,7 +211,6 @@ export class SurveyManager {
                         posthog={this._posthog}
                         survey={survey}
                         removeSurveyFromFocus={this._removeSurveyFromFocus}
-                        isPopup={true}
                     />,
                     shadow
                 )
@@ -242,7 +226,6 @@ export class SurveyManager {
                         posthog={this._posthog}
                         survey={{ ...survey, appearance: { ...survey.appearance, surveyPopupDelaySeconds: 0 } }}
                         removeSurveyFromFocus={this._removeSurveyFromFocus}
-                        isPopup={true}
                     />,
                     shadow
                 )
@@ -362,7 +345,7 @@ export class SurveyManager {
                     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
                     borderBottom: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
                     borderRadius: '10px',
-                    zIndex: SURVEY_DEFAULT_Z_INDEX,
+                    zIndex: defaultSurveyAppearance.zIndex,
                 }
 
                 // Dispatch event for the FeedbackWidget to catch
@@ -376,7 +359,7 @@ export class SurveyManager {
             addEventListener(currentElement, 'click', listener)
             currentElement.setAttribute('PHWidgetSurveyClickListener', 'true')
             this._widgetSelectorListeners.set(survey.id, { element: currentElement, listener })
-            logger.info(`Attached click listener for survey ${survey.id}`)
+            logger.info(`Attached click listener for feedback button survey ${survey.id}`)
         }
     }
 
@@ -548,11 +531,7 @@ export class SurveyManager {
                 }
 
                 // Popover Type Logic (only one shown at a time)
-                if (
-                    isNull(this._surveyInFocus) &&
-                    survey.type === SurveyType.Popover &&
-                    this._canShowNextEventBasedSurvey()
-                ) {
+                if (isNull(this._surveyInFocus) && survey.type === SurveyType.Popover) {
                     this._handlePopoverSurvey(survey)
                 }
             })
@@ -588,7 +567,6 @@ export class SurveyManager {
             removeSurveyFromFocus: this._removeSurveyFromFocus,
             surveyInFocus: this._surveyInFocus,
             surveyTimeouts: this._surveyTimeouts,
-            canShowNextEventBasedSurvey: this._canShowNextEventBasedSurvey,
             handleWidget: this._handleWidget,
             handlePopoverSurvey: this._handlePopoverSurvey,
             manageWidgetSelectorListener: this._manageWidgetSelectorListener,
@@ -646,7 +624,6 @@ export const renderSurveysPreview = ({
             onPreviewSubmit={onPreviewSubmit}
             previewPageIndex={previewPageIndex}
             removeSurveyFromFocus={() => {}}
-            isPopup={true}
         />,
         parentElement
     )
@@ -663,8 +640,7 @@ export const renderFeedbackWidgetPreview = ({
     forceDisableHtml?: boolean
     posthog?: PostHog
 }) => {
-    const stylesheetContent = createWidgetStyle(survey.appearance?.widgetColor)
-    const stylesheet = prepareStylesheet(document, stylesheetContent, posthog)
+    const stylesheet = createWidgetStylesheet(posthog)
     if (stylesheet) {
         root.appendChild(stylesheet)
     }
@@ -896,7 +872,7 @@ export function SurveyPopup({
     style,
     previewPageIndex,
     removeSurveyFromFocus,
-    isPopup,
+    isPopup = true,
     onPreviewSubmit = () => {},
     onPopupSurveyDismissed = () => {},
     onCloseConfirmationMessage = () => {},
@@ -1071,6 +1047,14 @@ export function Questions({
                     : {}
             }
         >
+            {isPopup && (
+                <Cancel
+                    onClick={() => {
+                        onPopupSurveyDismissed()
+                    }}
+                />
+            )}
+
             <div
                 className="survey-box"
                 style={
@@ -1082,13 +1066,6 @@ export function Questions({
                         : {}
                 }
             >
-                {isPopup && (
-                    <Cancel
-                        onClick={() => {
-                            onPopupSurveyDismissed()
-                        }}
-                    />
-                )}
                 {getQuestionComponent({
                     question: currentQuestion,
                     forceDisableHtml,
@@ -1148,7 +1125,7 @@ export function FeedbackWidget({
             const customEvent = event as CustomEvent
             // Check if the event is for this specific survey instance
             if (customEvent.detail?.surveyId === survey.id) {
-                logger.info(`Received show event for survey ${survey.id}`)
+                logger.info(`Received show event for feedback button survey ${survey.id}`)
                 setStyleOverrides(customEvent.detail.position || {})
                 setShowSurvey(true) // Show the survey popup
             }
@@ -1186,12 +1163,7 @@ export function FeedbackWidget({
     return (
         <Preact.Fragment>
             {survey.appearance?.widgetType === 'tab' && (
-                <div
-                    className="ph-survey-widget-tab"
-                    onClick={() => !readOnly && setShowSurvey(!showSurvey)}
-                    style={{ color: getContrastingTextColor(survey.appearance.widgetColor) }}
-                >
-                    <div className="ph-survey-widget-tab-icon"></div>
+                <div className="ph-survey-widget-tab" onClick={() => !readOnly && setShowSurvey(!showSurvey)}>
                     {survey.appearance?.widgetLabel || ''}
                 </div>
             )}
@@ -1203,7 +1175,6 @@ export function FeedbackWidget({
                     forceDisableHtml={forceDisableHtml}
                     style={styleOverrides}
                     removeSurveyFromFocus={removeSurveyFromFocus}
-                    isPopup={true}
                     onPopupSurveyDismissed={resetShowSurvey}
                     onCloseConfirmationMessage={resetShowSurvey}
                 />
@@ -1258,5 +1229,5 @@ const getQuestionComponent = ({
     const Component = questionComponents[question.type]
     const componentProps = { ...commonProps, ...additionalProps[question.type] }
 
-    return <Component {...componentProps} />
+    return <Component {...componentProps} key={question.id} />
 }

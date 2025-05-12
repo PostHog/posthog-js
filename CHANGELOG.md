@@ -1,3 +1,29 @@
+## 1.240.6 - 2025-05-09
+
+- feat: use css files for survey widget styles (#1948)
+
+## 1.240.5 - 2025-05-08
+
+- fix: padding on cancel button (#1946)
+- chore: make rollup able to bundle CSS files (#1945)
+
+## 1.240.4 - 2025-05-07
+
+- chore: include response within the survey_quesiton property (#1942)
+
+## 1.240.3 - 2025-05-07
+
+- fix: false flag should not trigger linked flags (#1944)
+
+## 1.240.2 - 2025-05-07
+
+- fix: conflict between event based vs feedback button surveys (#1941)
+
+## 1.240.1 - 2025-05-07
+
+- fix: getRenderSurvey behavior (#1939)
+- chore: make internal vars private (#1938)
+
 ## 1.240.0 - 2025-05-06
 
 - feat: submit partial responses for survey answers (#1888)

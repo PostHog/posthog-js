@@ -6,6 +6,10 @@ import { dts } from 'rollup-plugin-dts'
 import terser from '@rollup/plugin-terser'
 import { visualizer } from 'rollup-plugin-visualizer'
 import commonjs from '@rollup/plugin-commonjs'
+import postcss from 'rollup-plugin-postcss'
+import postcssImport from 'postcss-import'
+import postcssNesting from 'postcss-nesting'
+import cssnano from 'cssnano'
 import fs from 'fs'
 import path from 'path'
 
@@ -19,6 +23,17 @@ const plugins = (es5) => [
     resolve({ browser: true }),
     typescript({ sourceMap: true, outDir: './dist' }),
     commonjs(),
+    postcss({
+        plugins: [
+            postcssImport(),
+            postcssNesting(),
+            cssnano({
+                preset: ['default', { discardComments: { removeAll: true } }],
+            }),
+        ],
+        minimize: true,
+        inject: false,
+    }),
     babel({
         extensions: ['.js', '.jsx', '.ts', '.tsx'],
         babelHelpers: 'bundled',
