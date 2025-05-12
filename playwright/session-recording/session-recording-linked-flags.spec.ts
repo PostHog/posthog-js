@@ -1,8 +1,9 @@
 import { test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
+import { start, StartOptions } from '../utils/setup'
 import { assertThatRecordingStarted, pollUntilEventCaptured } from '../utils/event-capture-utils'
+import { BrowserContext, Page } from '@playwright/test'
 
-const startOptions = {
+const startOptions: StartOptions = {
     options: {
         session_recording: {},
         opt_out_capturing_by_default: true,
@@ -10,7 +11,7 @@ const startOptions = {
     decideResponseOverrides: {
         sessionRecording: {
             endpoint: '/ses/',
-            // a flag that doesn't exist, can never be recorded
+            // a flag which doesn't exist can never be recorded
             linkedFlag: 'i am a flag that does not exist',
         },
         capturePerformance: true,
@@ -20,13 +21,110 @@ const startOptions = {
 }
 
 test.describe('Session recording - linked flags', () => {
-    test.beforeEach(async ({ page, context }) => {
-        await start(startOptions, page, context)
-        await page.expectCapturedEventsToBe([])
+    const startWithFlags = async (
+        page: Page,
+        context: BrowserContext,
+        startOptionsOverrides: Partial<StartOptions> = {},
+        expectedStartingEvents: string[] = ['$pageview']
+    ) => {
+        await start(
+            {
+                ...startOptions,
+                ...startOptionsOverrides,
+                decideResponseOverrides: {
+                    ...startOptions.decideResponseOverrides,
+                    ...startOptionsOverrides.decideResponseOverrides,
+                },
+            },
+            page,
+            context
+        )
+        await page.expectCapturedEventsToBe(expectedStartingEvents)
         await page.resetCapturedEvents()
+    }
+
+    test('does not start when boolean linked flag is false', async ({ page, context }) => {
+        const recorderPromise = page.waitForResponse('**/recorder.js*')
+        await startWithFlags(page, context, {
+            options: {
+                opt_out_capturing_by_default: false,
+            },
+            decideResponseOverrides: {
+                sessionRecording: { linkedFlag: 'my-linked-flag' },
+                flags: {
+                    'my-linked-flag': {
+                        enabled: false,
+                        key: 'my-linked-flag',
+                        variant: undefined,
+                        metadata: undefined,
+                        reason: undefined,
+                    },
+                },
+            },
+        })
+        await recorderPromise
+
+        // even activity won't trigger a snapshot, we're buffering
+        await page.locator('[data-cy-input]').type('hello posthog!')
+        // short delay since there's no snapshot to wait for
+        await page.waitForTimeout(250)
+
+        await page.expectCapturedEventsToBe([])
     })
 
-    test('can opt in and override linked flag', async ({ page }) => {
+    test('starts when boolean linked flag is true', async ({ page, context }) => {
+        const recorderPromise = page.waitForResponse('**/recorder.js*')
+
+        await startWithFlags(page, context, {
+            options: {
+                opt_out_capturing_by_default: false,
+            },
+            decideResponseOverrides: {
+                sessionRecording: { linkedFlag: 'my-linked-flag' },
+                flags: {
+                    'my-linked-flag': {
+                        enabled: true,
+                        key: 'my-linked-flag',
+                        variant: undefined,
+                        metadata: undefined,
+                        reason: undefined,
+                    },
+                },
+            },
+        })
+
+        await recorderPromise
+
+        await page.locator('[data-cy-input]').type('hello posthog!')
+        await pollUntilEventCaptured(page, '$snapshot')
+        await assertThatRecordingStarted(page)
+    })
+
+    test('can opt in and override linked flag', async ({ page, context }) => {
+        await startWithFlags(
+            page,
+            context,
+            {
+                options: {
+                    // we start opted out, so we can test the opt-in and override
+                    opt_out_capturing_by_default: true,
+                },
+                decideResponseOverrides: {
+                    sessionRecording: { linkedFlag: 'my-linked-flag' },
+                    flags: {
+                        'not-my-linked-flag': {
+                            enabled: true,
+                            key: 'not-my-linked-flag',
+                            variant: undefined,
+                            metadata: undefined,
+                            reason: undefined,
+                        },
+                    },
+                },
+            },
+            []
+        )
+
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/recorder.js*'],
             action: async () => {
@@ -38,6 +136,7 @@ test.describe('Session recording - linked flags', () => {
                 })
             },
         })
+
         await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
 
         await page.resetCapturedEvents()
