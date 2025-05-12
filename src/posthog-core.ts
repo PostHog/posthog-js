@@ -1115,6 +1115,9 @@ export class PostHog {
         return properties
     }
 
+    /** @deprecated - deprecated in 1.241.0, use `calculateEventProperties` instead  */
+    _calculate_event_properties = this.calculateEventProperties.bind(this)
+
     /**
      * Add additional set_once properties to the event when creating a person profile. This allows us to create the
      * profile with mostly-accurate properties, despite earlier events not setting them. We do this by storing them in

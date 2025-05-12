@@ -161,6 +161,7 @@ const plugins = (es5) => [
                           // possibly used by naughty users - we should decide if we want make these part of the public API, but be cautious for now
                           '_isIdentified',
                           '_is_bot',
+                          '_calculate_event_properties', // deprecated in favour of calculateEventProperties
 
                           // URL parameters
                           '__posthog_debug',
