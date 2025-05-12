@@ -43,9 +43,7 @@ export const defaultSurveyAppearance = {
     submitButtonColor: 'black',
     submitButtonTextColor: 'white',
     ratingButtonColor: 'white',
-    ratingButtonTextColor: 'black',
     ratingButtonActiveColor: 'black',
-    ratingButtonActiveTextColor: 'white',
     borderColor: '#c9c6c6',
     placeholder: 'Start typing...',
     whiteLabel: false,
@@ -56,10 +54,8 @@ export const defaultSurveyAppearance = {
     zIndex: '2147483647',
     disabledButtonOpacity: '0.6',
     maxWidth: '300px',
-    textPrimaryColor: BLACK_TEXT_COLOR,
     textSubtleColor: '#939393',
     inputBackground: 'white',
-    inputTextColor: BLACK_TEXT_COLOR,
     boxPadding: '20px 24px 10px',
 } as const
 
@@ -93,9 +89,9 @@ export const addSurveyCSSVariablesToElement = (element: HTMLElement, appearance?
         '--ph-survey-text-primary-color',
         getContrastingTextColor(effectiveAppearance.backgroundColor)
     )
-    hostStyle.setProperty('--ph-survey-input-text-color', effectiveAppearance.inputTextColor)
     hostStyle.setProperty('--ph-survey-text-subtle-color', effectiveAppearance.textSubtleColor)
     hostStyle.setProperty('--ph-survey-input-background', effectiveAppearance.inputBackground)
+    hostStyle.setProperty('--ph-survey-input-text-color', getContrastingTextColor(effectiveAppearance.inputBackground))
     hostStyle.setProperty('--ph-widget-color', effectiveAppearance.widgetColor)
     hostStyle.setProperty('--ph-widget-text-color', getContrastingTextColor(effectiveAppearance.widgetColor))
     hostStyle.setProperty('--ph-widget-z-index', effectiveAppearance.zIndex)
