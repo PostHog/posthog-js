@@ -39,7 +39,7 @@ const appearanceWithThanks = {
     thankyouMessageBody: 'We appreciate your feedback.',
 }
 
-const black = 'rgb(0, 0, 0)'
+const black = 'rgb(2, 6, 23)'
 const white = 'rgb(255, 255, 255)'
 
 test.describe('surveys - feedback widget', () => {

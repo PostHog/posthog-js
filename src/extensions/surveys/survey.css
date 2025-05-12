@@ -125,6 +125,10 @@
     gap: 8px;
 }
 
+.thank-you-message-header ~ .bottom-section {
+    padding-top: 16px;
+}
+
 .question-container,
 .thank-you-message-container {
     animation: ph-survey-question-slide-in 0.25s ease-out forwards;
@@ -510,13 +514,6 @@
     font-size: 14px;
     opacity: 0.8;
     color: var(--ph-survey-text-primary-color);
-    padding-bottom: 12px;
-}
-
-.thank-you-message-countdown {
-    margin-left: 6px;
-    font-size: 12px;
-    opacity: 0.7;
 }
 
 /* --- Scrollable Content --- */
