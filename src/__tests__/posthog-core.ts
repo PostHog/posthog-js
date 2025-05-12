@@ -617,25 +617,6 @@ describe('posthog core', () => {
             expect(pageleaveProperties.$pageview_id).toEqual('pageview-id-2')
             expect(pageleaveProperties.$prev_pageview_id).toEqual('pageview-id-2')
         })
-
-        it('includes pageview id from previous pageview', () => {
-            const pageview1Properties = posthog.calculateEventProperties('$pageview', {}, new Date(), 'pageview-id-1')
-            expect(pageview1Properties.$pageview_id).toEqual('pageview-id-1')
-
-            const event1Properties = posthog.calculateEventProperties('custom event', {}, new Date(), 'event-id-1')
-            expect(event1Properties.$pageview_id).toEqual('pageview-id-1')
-
-            const pageview2Properties = posthog.calculateEventProperties('$pageview', {}, new Date(), 'pageview-id-2')
-            expect(pageview2Properties.$pageview_id).toEqual('pageview-id-2')
-            expect(pageview2Properties.$prev_pageview_id).toEqual('pageview-id-1')
-
-            const event2Properties = posthog.calculateEventProperties('custom event', {}, new Date(), 'event-id-2')
-            expect(event2Properties.$pageview_id).toEqual('pageview-id-2')
-
-            const pageleaveProperties = posthog.calculateEventProperties('$pageleave', {}, new Date(), 'pageleave-id')
-            expect(pageleaveProperties.$pageview_id).toEqual('pageview-id-2')
-            expect(pageleaveProperties.$prev_pageview_id).toEqual('pageview-id-2')
-        })
     })
 
     describe('_handle_unload()', () => {
