@@ -340,9 +340,8 @@
     grid-auto-columns: 1fr; /* Equal columns */
     grid-auto-flow: column; /* Arrange horizontally */
     border-radius: 6px;
-    overflow: hidden; /* Clip corners */
+    overflow: hidden;
     border: 1.5px solid var(--ph-survey-border-color);
-    background: var(--ph-survey-input-background); /* Background for the container */
 
     & > .ratings-number {
         /* Styles specific to numbers inside the grid */
