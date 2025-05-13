@@ -456,7 +456,7 @@ describe('posthog core', () => {
         })
 
         it('returns calculated properties', () => {
-            expect(posthog._calculate_event_properties('custom_event', { event: 'prop' }, new Date(), uuid)).toEqual({
+            expect(posthog.calculateEventProperties('custom_event', { event: 'prop' }, new Date(), uuid)).toEqual({
                 token: 'testtoken',
                 event: 'prop',
                 $lib: 'web',
@@ -483,7 +483,7 @@ describe('posthog core', () => {
                 overrides
             )
 
-            expect(posthog._calculate_event_properties('custom_event', { event: 'prop' }, new Date(), uuid)).toEqual({
+            expect(posthog.calculateEventProperties('custom_event', { event: 'prop' }, new Date(), uuid)).toEqual({
                 token: 'testtoken',
                 event: 'prop',
                 $lib: 'web',
@@ -514,7 +514,7 @@ describe('posthog core', () => {
             )
 
             expect(
-                posthog._calculate_event_properties('custom_event', { event: 'prop' }, new Date(), uuid)[
+                posthog.calculateEventProperties('custom_event', { event: 'prop' }, new Date(), uuid)[
                     '$process_person_profile'
                 ]
             ).toEqual(false)
@@ -528,7 +528,7 @@ describe('posthog core', () => {
                 overrides
             )
 
-            expect(posthog._calculate_event_properties('$snapshot', { event: 'prop' }, new Date(), uuid)).toEqual({
+            expect(posthog.calculateEventProperties('$snapshot', { event: 'prop' }, new Date(), uuid)).toEqual({
                 token: 'testtoken',
                 event: 'prop',
                 distinct_id: 'abc',
@@ -545,7 +545,7 @@ describe('posthog core', () => {
                 overrides
             )
 
-            expect(posthog._calculate_event_properties('custom_event', { event: 'prop' }, new Date(), uuid)).toEqual({
+            expect(posthog.calculateEventProperties('custom_event', { event: 'prop' }, new Date(), uuid)).toEqual({
                 event_name: 'custom_event',
                 token: 'testtoken',
                 $process_person_profile: false,
@@ -576,7 +576,7 @@ describe('posthog core', () => {
         it('saves $snapshot data and token for $snapshot events', () => {
             posthog = posthogWith({}, overrides)
 
-            expect(posthog._calculate_event_properties('$snapshot', { $snapshot_data: {} }, new Date(), uuid)).toEqual({
+            expect(posthog.calculateEventProperties('$snapshot', { $snapshot_data: {} }, new Date(), uuid)).toEqual({
                 token: 'testtoken',
                 $snapshot_data: {},
                 distinct_id: 'abc',
@@ -586,7 +586,7 @@ describe('posthog core', () => {
         it("doesn't modify properties passed into it", () => {
             const properties = { prop1: 'val1', prop2: 'val2' }
 
-            posthog._calculate_event_properties('custom_event', properties, new Date(), uuid)
+            posthog.calculateEventProperties('custom_event', properties, new Date(), uuid)
 
             expect(Object.keys(properties)).toEqual(['prop1', 'prop2'])
         })
@@ -594,75 +594,26 @@ describe('posthog core', () => {
         it('adds page title to $pageview', () => {
             document!.title = 'test'
 
-            expect(posthog._calculate_event_properties('$pageview', {}, new Date(), uuid)).toEqual(
+            expect(posthog.calculateEventProperties('$pageview', {}, new Date(), uuid)).toEqual(
                 expect.objectContaining({ title: 'test' })
             )
         })
 
         it('includes pageview id from previous pageview', () => {
-            const pageview1Properties = posthog._calculate_event_properties(
-                '$pageview',
-                {},
-                new Date(),
-                'pageview-id-1'
-            )
+            const pageview1Properties = posthog.calculateEventProperties('$pageview', {}, new Date(), 'pageview-id-1')
             expect(pageview1Properties.$pageview_id).toEqual('pageview-id-1')
 
-            const event1Properties = posthog._calculate_event_properties('custom event', {}, new Date(), 'event-id-1')
+            const event1Properties = posthog.calculateEventProperties('custom event', {}, new Date(), 'event-id-1')
             expect(event1Properties.$pageview_id).toEqual('pageview-id-1')
 
-            const pageview2Properties = posthog._calculate_event_properties(
-                '$pageview',
-                {},
-                new Date(),
-                'pageview-id-2'
-            )
+            const pageview2Properties = posthog.calculateEventProperties('$pageview', {}, new Date(), 'pageview-id-2')
             expect(pageview2Properties.$pageview_id).toEqual('pageview-id-2')
             expect(pageview2Properties.$prev_pageview_id).toEqual('pageview-id-1')
 
-            const event2Properties = posthog._calculate_event_properties('custom event', {}, new Date(), 'event-id-2')
+            const event2Properties = posthog.calculateEventProperties('custom event', {}, new Date(), 'event-id-2')
             expect(event2Properties.$pageview_id).toEqual('pageview-id-2')
 
-            const pageleaveProperties = posthog._calculate_event_properties(
-                '$pageleave',
-                {},
-                new Date(),
-                'pageleave-id'
-            )
-            expect(pageleaveProperties.$pageview_id).toEqual('pageview-id-2')
-            expect(pageleaveProperties.$prev_pageview_id).toEqual('pageview-id-2')
-        })
-
-        it('includes pageview id from previous pageview', () => {
-            const pageview1Properties = posthog._calculate_event_properties(
-                '$pageview',
-                {},
-                new Date(),
-                'pageview-id-1'
-            )
-            expect(pageview1Properties.$pageview_id).toEqual('pageview-id-1')
-
-            const event1Properties = posthog._calculate_event_properties('custom event', {}, new Date(), 'event-id-1')
-            expect(event1Properties.$pageview_id).toEqual('pageview-id-1')
-
-            const pageview2Properties = posthog._calculate_event_properties(
-                '$pageview',
-                {},
-                new Date(),
-                'pageview-id-2'
-            )
-            expect(pageview2Properties.$pageview_id).toEqual('pageview-id-2')
-            expect(pageview2Properties.$prev_pageview_id).toEqual('pageview-id-1')
-
-            const event2Properties = posthog._calculate_event_properties('custom event', {}, new Date(), 'event-id-2')
-            expect(event2Properties.$pageview_id).toEqual('pageview-id-2')
-
-            const pageleaveProperties = posthog._calculate_event_properties(
-                '$pageleave',
-                {},
-                new Date(),
-                'pageleave-id'
-            )
+            const pageleaveProperties = posthog.calculateEventProperties('$pageleave', {}, new Date(), 'pageleave-id')
             expect(pageleaveProperties.$pageview_id).toEqual('pageview-id-2')
             expect(pageleaveProperties.$prev_pageview_id).toEqual('pageview-id-2')
         })
