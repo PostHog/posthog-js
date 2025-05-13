@@ -300,6 +300,7 @@ test.describe('surveys - feedback widget', () => {
         // 5. Close the thank you message and click the survey tab again
         await page.locator('.PostHogSurvey-123').locator('.form-submit').click()
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeVisible()
+        await page.waitForTimeout(300)
 
         // Open the survey again
         await page.locator('.PostHogSurvey-123').locator('.ph-survey-widget-tab').click()
