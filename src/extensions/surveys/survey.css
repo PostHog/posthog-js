@@ -35,14 +35,16 @@
     color: var(--ph-widget-text-color);
     transform: rotate(-90deg) translateY(-100%);
     transform-origin: right top;
-    min-width: 40px;
-    padding: 8px 12px;
+    padding: 10px 12px;
     font-weight: 500;
     border-radius: 3px 3px 0 0;
     text-align: center;
     cursor: pointer;
     z-index: var(--ph-survey-z-index);
     transition: padding-bottom 0.1s ease-in-out;
+    font-size: 1rem;
+    font-family: inherit;
+    border: none;
 }
 
 .ph-survey-widget-tab:hover {

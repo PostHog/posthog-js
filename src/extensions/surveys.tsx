@@ -1130,9 +1130,9 @@ export function FeedbackWidget({
     return (
         <Preact.Fragment>
             {survey.appearance?.widgetType === 'tab' && (
-                <div className="ph-survey-widget-tab" onClick={() => !readOnly && setShowSurvey(!showSurvey)}>
+                <button className="ph-survey-widget-tab" onClick={() => setShowSurvey(!showSurvey)} disabled={readOnly}>
                     {survey.appearance?.widgetLabel || ''}
-                </div>
+                </button>
             )}
             {showSurvey && (
                 <SurveyPopup
