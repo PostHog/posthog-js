@@ -1,3 +1,7 @@
+## 1.241.0 - 2025-05-13
+
+- feat: Add calculateEventProperties to public API (#1951)
+
 ## 1.240.6 - 2025-05-09
 
 - feat: use css files for survey widget styles (#1948)
