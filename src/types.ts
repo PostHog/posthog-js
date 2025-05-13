@@ -1290,6 +1290,14 @@ export interface RemoteConfig {
     elementsChainAsString?: boolean
 
     /**
+     * Error tracking configuration options
+     */
+    errorTracking?: {
+        autocaptureExceptions?: boolean
+        suppressionRules?: ErrorTrackingSuppressionRule[]
+    }
+
+    /**
      * This is currently in development and may have breaking changes without a major version bump
      */
     autocaptureExceptions?: boolean | { endpoint?: string }
@@ -1642,4 +1650,18 @@ export interface ErrorConversions {
 export interface SessionRecordingUrlTrigger {
     url: string
     matching: 'regex'
+}
+
+export type PropertyMatchType = 'regex' | 'not_regex' | 'exact' | 'is_not' | 'icontains' | 'not_icontains'
+
+export interface ErrorTrackingSuppressionRule {
+    type: 'AND' | 'OR'
+    values: ErrorTrackingSuppressionRuleValue[]
+}
+
+export interface ErrorTrackingSuppressionRuleValue {
+    key: '$exception_types' | '$exception_messages'
+    operator: PropertyMatchType
+    value: string | string[]
+    type: string
 }
