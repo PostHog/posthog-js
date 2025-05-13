@@ -1,3 +1,7 @@
+## 1.241.1 - 2025-05-13
+
+- fix: Remove initial person info from event payload (#1953)
+
 ## 1.241.0 - 2025-05-13
 
 - feat: Add calculateEventProperties to public API (#1951)
