@@ -11,14 +11,15 @@ import {
 import { document as _document, window as _window, userAgent } from '../../utils/globals'
 import { SURVEY_LOGGER as logger, SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../../utils/survey-utils'
 import { isNullish, isArray } from '../../utils/type-utils'
-import { prepareStylesheet } from '../utils/stylesheet-loader'
 
 import { SurveyMatchType } from '../../posthog-surveys-types'
 import { isMatchingRegex } from '../../utils/regex-utils'
 import { detectDeviceType } from '../../utils/user-agent-utils'
+import { prepareStylesheet } from '../utils/stylesheet-loader'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
+import surveyStyles from './survey.css'
 
 export function getFontFamily(fontFamily?: string): string {
     if (fontFamily === 'inherit') {
@@ -34,6 +35,9 @@ export function getSurveyResponseKey(questionId: string) {
     return `$survey_response_${questionId}`
 }
 
+const BLACK_TEXT_COLOR = '#020617' // Maps out to text-slate-950 from tailwind colors. Intended for text use outside interactive elements like buttons
+
+// Keep in sync with defaultSurveyAppearance on the main app
 export const defaultSurveyAppearance = {
     backgroundColor: '#eeeded',
     submitButtonColor: 'black',
@@ -50,313 +54,17 @@ export const defaultSurveyAppearance = {
     zIndex: '2147483647',
     disabledButtonOpacity: '0.6',
     maxWidth: '300px',
+    textSubtleColor: '#939393',
+    inputBackground: 'white',
+    boxPadding: '20px 24px 10px',
 } as const
 
-export const style = (appearance: SurveyAppearance | null) => {
-    const positions = {
-        [SurveyPosition.Left]: 'left: 30px;',
-        [SurveyPosition.Right]: 'right: 60px;',
-        [SurveyPosition.Center]: `
-            left: 50%;
-            transform: translateX(-50%);
-          `,
-        [SurveyPosition.NextToTrigger]: 'right: 30px;',
-    }
-
-    const styles = `
-          .survey-form, .thank-you-message {
-              position: fixed;
-              margin: 0px;
-              bottom: 0px;
-              color: black;
-              font-weight: normal;
-              font-family: ${getFontFamily(appearance?.fontFamily)};
-              text-align: left;
-              max-width: ${appearance?.maxWidth || defaultSurveyAppearance.maxWidth};
-              width: 100%;
-              z-index: ${appearance?.zIndex || defaultSurveyAppearance.zIndex};
-              border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
-              border-bottom: 0px;
-              ${appearance?.position ? positions[appearance.position] : positions[SurveyPosition.Right]}
-              flex-direction: column;
-              background: ${appearance?.backgroundColor || '#eeeded'};
-              border-top-left-radius: 10px;
-              border-top-right-radius: 10px;
-              box-shadow: -6px 0 16px -8px rgb(0 0 0 / 8%), -9px 0 28px 0 rgb(0 0 0 / 5%), -12px 0 48px 16px rgb(0 0 0 / 3%);
-          }
-
-          .survey-box, .thank-you-message-container {
-              padding: 20px 25px 10px;
-              display: flex;
-              flex-direction: column;
-              border-radius: 10px;
-          }
-
-          .thank-you-message {
-              text-align: center;
-          }
-
-          .form-submit[disabled] {
-              opacity: ${appearance?.disabledButtonOpacity || '0.6'};
-              filter: grayscale(50%);
-              cursor: not-allowed;
-          }
-          .survey-form textarea {
-              color: #2d2d2d;
-              font-size: 14px;
-              font-family: ${getFontFamily(appearance?.fontFamily)};
-              background: white;
-              color: black;
-              outline: none;
-              padding-left: 10px;
-              padding-right: 10px;
-              padding-top: 10px;
-              border-radius: 6px;
-              border-color: ${appearance?.borderColor || '#c9c6c6'};
-              margin-top: 14px;
-              width: 100%;
-              box-sizing: border-box;
-          }
-          .survey-box:has(.survey-question:empty):not(:has(.survey-question-description)) textarea {
-              margin-top: 0;
-          }
-          .form-submit {
-              box-sizing: border-box;
-              margin: 0;
-              font-family: inherit;
-              overflow: visible;
-              text-transform: none;
-              position: relative;
-              display: inline-block;
-              font-weight: 700;
-              white-space: nowrap;
-              text-align: center;
-              border: 1.5px solid transparent;
-              cursor: pointer;
-              user-select: none;
-              touch-action: manipulation;
-              padding: 12px;
-              font-size: 14px;
-              border-radius: 6px;
-              outline: 0;
-              background: ${appearance?.submitButtonColor || 'black'} !important;
-              text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.12);
-              box-shadow: 0 2px 0 rgba(0, 0, 0, 0.045);
-              width: 100%;
-          }
-          .form-cancel {
-              border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
-              background: white;
-              border-radius: 100%;
-              line-height: 0;
-              cursor: pointer;
-              padding: 12px;
-              position: absolute;
-              top: 0;
-              right: 0;
-              transform: translate(50%, -50%);
-          }
-          .bolded { font-weight: 600; }
-          .buttons {
-              display: flex;
-              justify-content: center;
-          }
-          .footer-branding {
-              font-size: 11px;
-              margin-top: 10px;
-              text-align: center;
-              display: flex;
-              justify-content: center;
-              gap: 4px;
-              align-items: center;
-              font-weight: 500;
-              background: ${appearance?.backgroundColor || '#eeeded'};
-              text-decoration: none;
-              backgroundColor: ${appearance?.backgroundColor || '#eeeded'};
-              color: ${getContrastingTextColor(appearance?.backgroundColor || '#eeeded')};
-          }
-          .survey-question {
-              font-weight: 500;
-              font-size: 14px;
-              background: ${appearance?.backgroundColor || '#eeeded'};
-          }
-          .question-textarea-wrapper {
-              display: flex;
-              flex-direction: column;
-          }
-          .survey-question-description {
-              font-size: 13px;
-              padding-top: 5px;
-              background: ${appearance?.backgroundColor || '#eeeded'};
-          }
-          .ratings-number {
-              font-size: 16px;
-              font-weight: 600;
-              padding: 8px 0px;
-              border: none;
-          }
-          .ratings-number:hover {
-              cursor: pointer;
-          }
-          .rating-options {
-              margin-top: 14px;
-          }
-          .rating-options-number {
-              display: grid;
-              border-radius: 6px;
-              overflow: hidden;
-              border: 1.5px solid ${appearance?.borderColor || '#c9c6c6'};
-          }
-          .rating-options-number > .ratings-number {
-              border-right: 1px solid ${appearance?.borderColor || '#c9c6c6'};
-          }
-          .rating-options-number > .ratings-number:last-of-type {
-              border-right: 0px;
-          }
-          .rating-options-number .rating-active {
-              background: ${appearance?.ratingButtonActiveColor || 'black'};
-          }
-          .rating-options-emoji {
-              display: flex;
-              justify-content: space-between;
-          }
-          .ratings-emoji {
-              font-size: 16px;
-              background-color: transparent;
-              border: none;
-              padding: 0px;
-          }
-          .ratings-emoji:hover {
-              cursor: pointer;
-          }
-          .ratings-emoji.rating-active svg {
-              fill: ${appearance?.ratingButtonActiveColor || 'black'};
-          }
-          .emoji-svg {
-              fill: '#939393';
-          }
-          .rating-text {
-              display: flex;
-              flex-direction: row;
-              font-size: 11px;
-              justify-content: space-between;
-              margin-top: 6px;
-              background: ${appearance?.backgroundColor || '#eeeded'};
-              opacity: .60;
-          }
-          .limit-height {
-              max-height: 300px;
-              overflow: auto;
-              scrollbar-width: thin;
-              scrollbar-color: ${appearance?.borderColor || '#c9c6c6'} ${appearance?.backgroundColor || '#eeeded'};
-          }
-          .multiple-choice-options {
-              margin-top: 13px;
-              font-size: 14px;
-          }
-          .survey-box:has(.survey-question:empty):not(:has(.survey-question-description)) .multiple-choice-options {
-              margin-top: 0;
-          }
-          .multiple-choice-options .choice-option {
-              display: flex;
-              align-items: center;
-              gap: 4px;
-              font-size: 13px;
-              cursor: pointer;
-              margin-bottom: 5px;
-              position: relative;
-          }
-          .multiple-choice-options > .choice-option:last-of-type {
-              margin-bottom: 0px;
-          }
-          .multiple-choice-options input {
-              cursor: pointer;
-              position: absolute;
-              opacity: 0;
-          }
-          .choice-check {
-              position: absolute;
-              right: 10px;
-              background: white;
-          }
-          .choice-check svg {
-              display: none;
-          }
-          .multiple-choice-options .choice-option:hover .choice-check svg {
-              display: inline-block;
-              opacity: .25;
-          }
-          .multiple-choice-options input:checked + label + .choice-check svg {
-              display: inline-block;
-              opacity: 100% !important;
-          }
-          .multiple-choice-options input:checked + label {
-              font-weight: bold;
-              border: 1.5px solid rgba(0,0,0);
-          }
-          .multiple-choice-options input:checked + label input {
-              font-weight: bold;
-          }
-          .multiple-choice-options label {
-              width: 100%;
-              cursor: pointer;
-              padding: 10px;
-              border: 1.5px solid rgba(0,0,0,.25);
-              border-radius: 4px;
-              background: white;
-          }
-          .multiple-choice-options .choice-option-open label {
-              padding-right: 30px;
-              display: flex;
-              flex-wrap: wrap;
-              gap: 8px;
-              max-width: 100%;
-          }
-          .multiple-choice-options .choice-option-open label span {
-              width: 100%;
-          }
-          .multiple-choice-options .choice-option-open input:disabled + label {
-              opacity: 0.6;
-          }
-          .multiple-choice-options .choice-option-open label input {
-              position: relative;
-              opacity: 1;
-              flex-grow: 1;
-              border: 0;
-              outline: 0;
-          }
-          .thank-you-message-body {
-              margin-top: 6px;
-              font-size: 14px;
-              background: ${appearance?.backgroundColor || '#eeeded'};
-          }
-          .thank-you-message-header {
-              margin: 10px 0px 0px;
-              background: ${appearance?.backgroundColor || '#eeeded'};
-          }
-          .thank-you-message-container .form-submit {
-              margin-top: 20px;
-              margin-bottom: 10px;
-          }
-          .thank-you-message-countdown {
-              margin-left: 6px;
-          }
-          .bottom-section {
-              margin-top: 14px;
-          }
-          `
-
-    return styles
-        .replace(/[\n\r\t]+/g, ' ') // remove newlines/tabs
-        .replace(/\s{2,}/g, ' ') // collapse extra spaces
-        .trim()
-}
-
-export const addSurveyCSSVariablesToElement = (element: HTMLDivElement, appearance?: SurveyAppearance | null) => {
+export const addSurveyCSSVariablesToElement = (element: HTMLElement, appearance?: SurveyAppearance | null) => {
     const effectiveAppearance = { ...defaultSurveyAppearance, ...appearance }
     const hostStyle = element.style
 
     hostStyle.setProperty('--ph-survey-font-family', getFontFamily(effectiveAppearance.fontFamily))
+    hostStyle.setProperty('--ph-survey-box-padding', effectiveAppearance.boxPadding)
     hostStyle.setProperty('--ph-survey-max-width', effectiveAppearance.maxWidth)
     hostStyle.setProperty('--ph-survey-z-index', effectiveAppearance.zIndex)
     hostStyle.setProperty('--ph-survey-border-color', effectiveAppearance.borderColor)
@@ -365,13 +73,25 @@ export const addSurveyCSSVariablesToElement = (element: HTMLDivElement, appearan
     hostStyle.setProperty('--ph-survey-submit-button-color', effectiveAppearance.submitButtonColor)
     hostStyle.setProperty(
         '--ph-survey-submit-button-text-color',
-        getContrastingTextColor(effectiveAppearance.submitButtonColor)
+        appearance?.submitButtonTextColor || getContrastingTextColor(effectiveAppearance.submitButtonColor)
     )
-    hostStyle.setProperty('--ph-survey-rating-active-color', effectiveAppearance.ratingButtonActiveColor)
+    hostStyle.setProperty('--ph-survey-rating-bg-color', effectiveAppearance.ratingButtonColor)
+    hostStyle.setProperty(
+        '--ph-survey-rating-text-color',
+        getContrastingTextColor(effectiveAppearance.ratingButtonColor)
+    )
+    hostStyle.setProperty('--ph-survey-rating-active-bg-color', effectiveAppearance.ratingButtonActiveColor)
+    hostStyle.setProperty(
+        '--ph-survey-rating-active-text-color',
+        getContrastingTextColor(effectiveAppearance.ratingButtonActiveColor)
+    )
     hostStyle.setProperty(
         '--ph-survey-text-primary-color',
         getContrastingTextColor(effectiveAppearance.backgroundColor)
     )
+    hostStyle.setProperty('--ph-survey-text-subtle-color', effectiveAppearance.textSubtleColor)
+    hostStyle.setProperty('--ph-survey-input-background', effectiveAppearance.inputBackground)
+    hostStyle.setProperty('--ph-survey-input-text-color', getContrastingTextColor(effectiveAppearance.inputBackground))
     hostStyle.setProperty('--ph-widget-color', effectiveAppearance.widgetColor)
     hostStyle.setProperty('--ph-widget-text-color', getContrastingTextColor(effectiveAppearance.widgetColor))
     hostStyle.setProperty('--ph-widget-z-index', effectiveAppearance.zIndex)
@@ -379,12 +99,6 @@ export const addSurveyCSSVariablesToElement = (element: HTMLDivElement, appearan
     // Adjust input/choice background slightly if main background is white
     if (effectiveAppearance.backgroundColor === 'white') {
         hostStyle.setProperty('--ph-survey-input-background', '#f8f8f8')
-        hostStyle.setProperty('--ph-survey-choice-background', '#fdfdfd')
-        hostStyle.setProperty('--ph-survey-choice-background-hover', '#f9f9f9')
-    } else {
-        hostStyle.setProperty('--ph-survey-input-background', 'white') // Default if not white
-        hostStyle.setProperty('--ph-survey-choice-background', 'white') // Default if not white
-        hostStyle.setProperty('--ph-survey-choice-background-hover', '#fcfcfc') // Default if not white
     }
 }
 
@@ -544,7 +258,7 @@ function hex2rgb(c: string) {
     return 'rgb(255, 255, 255)'
 }
 
-export function getContrastingTextColor(color: string = defaultSurveyAppearance.backgroundColor) {
+function getContrastingTextColor(color: string = defaultSurveyAppearance.backgroundColor) {
     let rgb
     if (color[0] === '#') {
         rgb = hex2rgb(color)
@@ -558,7 +272,7 @@ export function getContrastingTextColor(color: string = defaultSurveyAppearance.
         rgb = hex2rgb(nameColorToHex)
     }
     if (!rgb) {
-        return 'black'
+        return BLACK_TEXT_COLOR
     }
     const colorMatch = rgb.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d+(?:\.\d+)?))?\)$/)
     if (colorMatch) {
@@ -566,20 +280,41 @@ export function getContrastingTextColor(color: string = defaultSurveyAppearance.
         const g = parseInt(colorMatch[2])
         const b = parseInt(colorMatch[3])
         const hsp = Math.sqrt(0.299 * (r * r) + 0.587 * (g * g) + 0.114 * (b * b))
-        return hsp > 127.5 ? 'black' : 'white'
+        return hsp > 127.5 ? BLACK_TEXT_COLOR : 'white'
     }
-    return 'black'
+    return BLACK_TEXT_COLOR
 }
 
-export const createShadow = (styleSheet: string, surveyId: string, element?: Element, posthog?: PostHog) => {
+export function getSurveyStylesheet(posthog?: PostHog) {
+    const stylesheet = prepareStylesheet(document, typeof surveyStyles === 'string' ? surveyStyles : '', posthog)
+    stylesheet?.setAttribute('data-ph-survey-style', 'true')
+    return stylesheet
+}
+
+export const retrieveSurveyShadow = (
+    survey: Pick<Survey, 'id' | 'appearance'>,
+    posthog?: PostHog,
+    element?: Element
+) => {
+    const widgetClassName = getSurveyContainerClass(survey)
+    const existingDiv = document.querySelector(`.${widgetClassName}`)
+
+    if (existingDiv && existingDiv.shadowRoot) {
+        return existingDiv.shadowRoot
+    }
+
+    // If it doesn't exist, create it
     const div = document.createElement('div')
-    div.className = getSurveyContainerClass({ id: surveyId })
+    addSurveyCSSVariablesToElement(div, survey.appearance)
+    div.className = widgetClassName
     const shadow = div.attachShadow({ mode: 'open' })
-    if (styleSheet) {
-        const styleElement = prepareStylesheet(document, styleSheet, posthog)
-        if (styleElement) {
-            shadow.appendChild(styleElement)
+    const stylesheet = getSurveyStylesheet(posthog)
+    if (stylesheet) {
+        const existingStylesheet = shadow.querySelector('style')
+        if (existingStylesheet) {
+            shadow.removeChild(existingStylesheet)
         }
+        shadow.appendChild(stylesheet)
     }
     ;(element ? element : document.body).appendChild(div)
     return shadow
