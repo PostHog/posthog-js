@@ -204,7 +204,7 @@ export class SurveyManager {
         this._clearSurveyTimeout(survey.id)
         this._addSurveyToFocus(survey.id)
         const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
-        const shadow = retrieveSurveyShadow(survey)
+        const shadow = retrieveSurveyShadow(survey, this._posthog)
         if (delaySeconds <= 0) {
             return Preact.render(
                 <SurveyPopup
@@ -718,7 +718,7 @@ export function usePopupVisibility(
         const removeDOMAndHidePopup = () => {
             if (survey.type === SurveyType.Popover) {
                 removeSurveyFromFocus(survey.id)
-                const shadow = retrieveSurveyShadow(survey)
+                const shadow = retrieveSurveyShadow(survey, posthog)
                 Preact.render(null, shadow)
                 const shadowContainer = document.querySelector(getSurveyContainerClass(survey, true))
                 shadowContainer?.remove()
