@@ -297,7 +297,7 @@ export const retrieveSurveyShadow = (
     element?: Element
 ) => {
     const widgetClassName = getSurveyContainerClass(survey)
-    const existingDiv = document.querySelector(`.${widgetClassName}`) as HTMLDivElement | null
+    const existingDiv = document.querySelector(`.${widgetClassName}`)
 
     if (existingDiv && existingDiv.shadowRoot) {
         return existingDiv.shadowRoot

@@ -167,7 +167,6 @@
     }
 
     & textarea {
-        font-size: 14px;
         outline: none;
         padding: 10px;
         border-radius: 6px;
@@ -276,7 +275,6 @@
             flex-grow: 1;
             border: 0;
             outline: 0;
-            font-size: inherit;
             z-index: 2; /* Ensure input is clickable */
 
             &::placeholder {
