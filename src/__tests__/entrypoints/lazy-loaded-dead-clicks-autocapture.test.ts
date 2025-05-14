@@ -214,21 +214,18 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(fakeInstance.capture).toHaveBeenCalledWith(
                 '$dead_click',
                 {
-                    // faked system timestamp isn't moving so this is negative
+                    $ce_version: 1,
                     $dead_click_absolute_delay_ms: -900,
                     $dead_click_absolute_timeout: false,
                     $dead_click_event_timestamp: 900,
                     $dead_click_last_mutation_timestamp: undefined,
-                    $dead_click_last_scroll_timestamp: undefined,
                     $dead_click_mutation_delay_ms: undefined,
                     $dead_click_mutation_timeout: false,
                     $dead_click_scroll_delay_ms: undefined,
                     $dead_click_scroll_timeout: false,
                     $dead_click_selection_changed_delay_ms: 100,
                     $dead_click_selection_changed_timeout: true,
-                    $ce_version: 1,
                     $el_text: 'text',
-                    $elements_chain: 'body:text="text"nth-child="2"nth-of-type="1"',
                     $elements: [
                         {
                             $el_text: 'text',
@@ -237,6 +234,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                             tag_name: 'body',
                         },
                     ],
+                    $elements_chain: 'body:nth-child="2"nth-of-type="1"text="text"',
                     $event_type: 'click',
                 },
                 { timestamp: new Date(900) }
@@ -257,21 +255,18 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(fakeInstance.capture).toHaveBeenCalledWith(
                 '$dead_click',
                 {
-                    // faked system timestamp isn't moving so this is negative
+                    $ce_version: 1,
                     $dead_click_absolute_delay_ms: -900,
                     $dead_click_absolute_timeout: false,
                     $dead_click_event_timestamp: 900,
                     $dead_click_last_mutation_timestamp: 3401,
-                    $dead_click_last_scroll_timestamp: undefined,
                     $dead_click_mutation_delay_ms: 2501,
                     $dead_click_mutation_timeout: true,
                     $dead_click_scroll_delay_ms: undefined,
                     $dead_click_scroll_timeout: false,
                     $dead_click_selection_changed_delay_ms: undefined,
                     $dead_click_selection_changed_timeout: false,
-                    $ce_version: 1,
                     $el_text: 'text',
-                    $elements_chain: 'body:text="text"nth-child="2"nth-of-type="1"',
                     $elements: [
                         {
                             $el_text: 'text',
@@ -280,6 +275,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                             tag_name: 'body',
                         },
                     ],
+                    $elements_chain: 'body:nth-child="2"nth-of-type="1"text="text"',
                     $event_type: 'click',
                 },
                 { timestamp: new Date(900) }
@@ -302,6 +298,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                 '$dead_click',
                 {
                     // faked system timestamp isn't moving so this is negative
+                    $ce_version: 1,
                     $dead_click_absolute_delay_ms: -900,
                     $dead_click_absolute_timeout: false,
                     $dead_click_event_timestamp: 900,
@@ -312,9 +309,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                     $dead_click_scroll_timeout: true,
                     $dead_click_selection_changed_delay_ms: undefined,
                     $dead_click_selection_changed_timeout: false,
-                    $ce_version: 1,
                     $el_text: 'text',
-                    $elements_chain: 'body:text="text"nth-child="2"nth-of-type="1"',
                     $elements: [
                         {
                             $el_text: 'text',
@@ -323,6 +318,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                             tag_name: 'body',
                         },
                     ],
+                    $elements_chain: 'body:nth-child="2"nth-of-type="1"text="text"',
                     $event_type: 'click',
                 },
                 { timestamp: new Date(900) }
@@ -344,20 +340,18 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             expect(fakeInstance.capture).toHaveBeenCalledWith(
                 '$dead_click',
                 {
+                    $ce_version: 1,
                     $dead_click_absolute_delay_ms: 3001,
                     $dead_click_absolute_timeout: true,
                     $dead_click_event_timestamp: 900,
                     $dead_click_last_mutation_timestamp: undefined,
-                    $dead_click_last_scroll_timestamp: undefined,
                     $dead_click_mutation_delay_ms: undefined,
                     $dead_click_mutation_timeout: false,
                     $dead_click_scroll_delay_ms: undefined,
                     $dead_click_scroll_timeout: false,
                     $dead_click_selection_changed_delay_ms: undefined,
                     $dead_click_selection_changed_timeout: false,
-                    $ce_version: 1,
                     $el_text: 'text',
-                    $elements_chain: 'body:text="text"nth-child="2"nth-of-type="1"',
                     $elements: [
                         {
                             $el_text: 'text',
@@ -366,6 +360,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
                             tag_name: 'body',
                         },
                     ],
+                    $elements_chain: 'body:nth-child="2"nth-of-type="1"text="text"',
                     $event_type: 'click',
                 },
                 { timestamp: new Date(900) }
