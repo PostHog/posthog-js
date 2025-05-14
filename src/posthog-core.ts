@@ -23,6 +23,7 @@ import { TracingHeaders } from './extensions/tracing-headers'
 import { WebVitalsAutocapture } from './extensions/web-vitals'
 import { Heatmaps } from './heatmaps'
 import { PageViewManager } from './page-view'
+import { PostHogChat } from './posthog-chat'
 import { PostHogExceptions } from './posthog-exceptions'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
@@ -268,6 +269,7 @@ export class PostHog {
     pageViewManager: PageViewManager
     featureFlags: PostHogFeatureFlags
     surveys: PostHogSurveys
+    chat: PostHogChat
     experiments: WebExperiments
     toolbar: Toolbar
     exceptions: PostHogExceptions
@@ -336,6 +338,7 @@ export class PostHog {
         this.scrollManager = new ScrollManager(this)
         this.pageViewManager = new PageViewManager(this)
         this.surveys = new PostHogSurveys(this)
+        this.chat = new PostHogChat(this)
         this.experiments = new WebExperiments(this)
         this.exceptions = new PostHogExceptions(this)
         this.rateLimiter = new RateLimiter(this)
@@ -482,6 +485,8 @@ export class PostHog {
         this.autocapture = new Autocapture(this)
         this.autocapture.startIfEnabled()
         this.surveys.loadIfEnabled()
+
+        this.chat.startIfEnabled()
 
         this.heatmaps = new Heatmaps(this)
         this.heatmaps.startIfEnabled()
@@ -1880,6 +1885,7 @@ export class PostHog {
             this.autocapture?.startIfEnabled()
             this.heatmaps?.startIfEnabled()
             this.surveys.loadIfEnabled()
+            this.chat.startIfEnabled()
             this._sync_opt_out_with_persistence()
         }
     }
