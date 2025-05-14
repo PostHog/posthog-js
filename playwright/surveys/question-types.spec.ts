@@ -68,8 +68,8 @@ const singleChoiceSkipButtonQuestion = {
 
 const appearanceWithThanks = {
     displayThankYouMessage: true,
-    thankyouMessageHeader: 'Thanks!',
-    thankyouMessageBody: 'We appreciate your feedback.',
+    thankYouMessageHeader: 'Thanks!',
+    thankYouMessageBody: 'We appreciate your feedback.',
 }
 
 test.describe('surveys - core display logic', () => {
@@ -368,7 +368,7 @@ test.describe('surveys - skipSubmitButton functionality', () => {
         // Thank you message
         await expect(surveyLocator.locator('.thank-you-message')).toBeVisible()
         await expect(surveyLocator.locator('.thank-you-message h3')).toHaveText(
-            appearanceWithThanks.thankyouMessageHeader
+            appearanceWithThanks.thankYouMessageHeader
         )
         await surveyLocator.locator('.form-submit').click() // Click to dismiss thank you
         await expect(surveyLocator.locator('.thank-you-message')).not.toBeVisible()
