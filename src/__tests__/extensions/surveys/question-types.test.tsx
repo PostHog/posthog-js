@@ -107,11 +107,11 @@ describe('MultipleChoiceQuestion', () => {
                 <MultipleChoiceQuestion {...baseProps} onSubmit={onSubmitMock} question={singleChoiceSkipQuestion} />
             )
 
+            expect(queryByText('Submit')).not.toBeInTheDocument()
             // Click on 'Blue' option
             fireEvent.click(getByLabelText('Blue'))
 
             expect(onSubmitMock).toHaveBeenCalledWith('Blue')
-            expect(queryByText('Submit')).not.toBeInTheDocument()
         })
 
         it('shows submit button if skipSubmitButton is false', () => {
@@ -119,9 +119,9 @@ describe('MultipleChoiceQuestion', () => {
             const { getByLabelText, queryByText } = render(
                 <MultipleChoiceQuestion {...baseProps} question={question} />
             )
+            expect(queryByText('Submit')).toBeInTheDocument()
             fireEvent.click(getByLabelText('Blue'))
             expect(baseProps.onSubmit).not.toHaveBeenCalled()
-            expect(queryByText('Submit')).toBeInTheDocument()
         })
 
         it('shows submit button if skipSubmitButton is true but hasOpenChoice is true', () => {
@@ -146,9 +146,9 @@ describe('MultipleChoiceQuestion', () => {
             const { getByLabelText, queryByText } = render(
                 <MultipleChoiceQuestion {...baseProps} question={question} />
             )
+            expect(queryByText('Submit')).toBeInTheDocument()
             fireEvent.click(getByLabelText('Blue'))
             expect(baseProps.onSubmit).not.toHaveBeenCalled()
-            expect(queryByText('Submit')).toBeInTheDocument()
         })
     })
 
@@ -462,12 +462,12 @@ describe('RatingQuestion', () => {
             render(<RatingQuestion {...baseProps} onSubmit={onSubmitMock} question={ratingSkipQuestion} />)
             const button3 = getRatingButton(3)
 
+            expect(screen.queryByText(mockAppearance.submitButtonText)).not.toBeInTheDocument()
             fireEvent.click(button3)
 
             await waitFor(() => {
                 expect(onSubmitMock).toHaveBeenCalledWith(3)
             })
-            expect(screen.queryByText(mockAppearance.submitButtonText)).not.toBeInTheDocument()
         })
 
         it('submits rating immediately and hides button for emoji display', async () => {
@@ -477,12 +477,12 @@ describe('RatingQuestion', () => {
             // Click the emoji button that corresponds to rating value 1
             const specificEmojiButton = screen.getByRole('button', { name: 'Rate 1' })
 
+            expect(screen.queryByText(mockAppearance.submitButtonText)).not.toBeInTheDocument()
             fireEvent.click(specificEmojiButton)
 
             await waitFor(() => {
                 expect(onSubmitMock).toHaveBeenCalledWith(1)
             })
-            expect(screen.queryByText(mockAppearance.submitButtonText)).not.toBeInTheDocument()
         })
 
         it('shows submit button if skipSubmitButton is false for number display', () => {
