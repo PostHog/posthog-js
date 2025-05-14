@@ -1,3 +1,7 @@
+## 1.242.1 - 2025-05-14
+
+- fix: retrieve survey shadow should include posthog ref (#1955)
+
 ## 1.242.0 - 2025-05-13
 
 - feat: use css files for survey styles (#1950)
