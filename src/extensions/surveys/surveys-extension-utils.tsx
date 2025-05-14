@@ -56,7 +56,7 @@ export const defaultSurveyAppearance = {
     maxWidth: '300px',
     textSubtleColor: '#939393',
     inputBackground: 'white',
-    boxPadding: '20px 24px 10px',
+    boxPadding: '20px 24px',
 } as const
 
 export const addSurveyCSSVariablesToElement = (element: HTMLElement, appearance?: SurveyAppearance | null) => {

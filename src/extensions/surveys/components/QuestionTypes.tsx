@@ -154,6 +154,7 @@ export function RatingQuestion({
                                     const active = idx + 1 === rating
                                     return (
                                         <button
+                                            aria-label={`Rate ${idx + 1}`}
                                             className={`ratings-emoji question-${displayQuestionIndex}-rating-${idx} ${
                                                 active ? 'rating-active' : ''
                                             }`}
@@ -162,6 +163,9 @@ export function RatingQuestion({
                                             type="button"
                                             onClick={() => {
                                                 setRating(idx + 1)
+                                                if (question.skipSubmitButton) {
+                                                    onSubmit(idx + 1)
+                                                }
                                             }}
                                         >
                                             {emoji}
@@ -186,6 +190,9 @@ export function RatingQuestion({
                                             num={number}
                                             setActiveNumber={(num) => {
                                                 setRating(num)
+                                                if (question.skipSubmitButton) {
+                                                    onSubmit(num)
+                                                }
                                             }}
                                         />
                                     )
@@ -199,13 +206,15 @@ export function RatingQuestion({
                     </div>
                 </div>
             </div>
-            <BottomSection
-                text={question.buttonText || appearance?.submitButtonText || 'Submit'}
-                submitDisabled={isNull(rating) && !question.optional}
-                appearance={appearance}
-                onSubmit={() => onSubmit(rating)}
-                onPreviewSubmit={() => onPreviewSubmit(rating)}
-            />
+            {!question.skipSubmitButton && (
+                <BottomSection
+                    text={question.buttonText || appearance?.submitButtonText || 'Submit'}
+                    submitDisabled={isNull(rating) && !question.optional}
+                    appearance={appearance}
+                    onSubmit={() => onSubmit(rating)}
+                    onPreviewSubmit={() => onPreviewSubmit(rating)}
+                />
+            )}
         </Fragment>
     )
 }
@@ -224,6 +233,7 @@ export function RatingButton({
 }) {
     return (
         <button
+            aria-label={`Rate ${num}`}
             className={`ratings-number question-${displayQuestionIndex}-rating-${num} ${active ? 'rating-active' : ''}`}
             type="button"
             onClick={() => {
@@ -305,6 +315,8 @@ export function MultipleChoiceQuestion({
     })
 
     const inputType = question.type === SurveyQuestionType.SingleChoice ? 'radio' : 'checkbox'
+    const shouldSkipSubmit =
+        question.skipSubmitButton && question.type === SurveyQuestionType.SingleChoice && !question.hasOpenChoice
 
     const handleChoiceChange = (val: string, isOpenChoice: boolean) => {
         if (isOpenChoice) {
@@ -320,6 +332,9 @@ export function MultipleChoiceQuestion({
         if (question.type === SurveyQuestionType.SingleChoice) {
             setSelectedChoices(val)
             setOpenChoiceSelected(false) // Deselect open choice when selecting another option
+            if (shouldSkipSubmit) {
+                onSubmit(val)
+            }
             return
         }
 
@@ -402,34 +417,36 @@ export function MultipleChoiceQuestion({
                     })}
                 </div>
             </div>
-            <BottomSection
-                text={question.buttonText || 'Submit'}
-                submitDisabled={isSubmitDisabled(
-                    selectedChoices,
-                    openChoiceSelected,
-                    openEndedInput,
-                    !!question.optional
-                )}
-                appearance={appearance}
-                onSubmit={() => {
-                    if (openChoiceSelected && question.type === SurveyQuestionType.MultipleChoice) {
-                        if (isArray(selectedChoices)) {
-                            onSubmit([...selectedChoices, openEndedInput])
+            {!shouldSkipSubmit && (
+                <BottomSection
+                    text={question.buttonText || 'Submit'}
+                    submitDisabled={isSubmitDisabled(
+                        selectedChoices,
+                        openChoiceSelected,
+                        openEndedInput,
+                        !!question.optional
+                    )}
+                    appearance={appearance}
+                    onSubmit={() => {
+                        if (openChoiceSelected && question.type === SurveyQuestionType.MultipleChoice) {
+                            if (isArray(selectedChoices)) {
+                                onSubmit([...selectedChoices, openEndedInput])
+                            }
+                        } else {
+                            onSubmit(selectedChoices)
                         }
-                    } else {
-                        onSubmit(selectedChoices)
-                    }
-                }}
-                onPreviewSubmit={() => {
-                    if (openChoiceSelected && question.type === SurveyQuestionType.MultipleChoice) {
-                        if (isArray(selectedChoices)) {
-                            onPreviewSubmit([...selectedChoices, openEndedInput])
+                    }}
+                    onPreviewSubmit={() => {
+                        if (openChoiceSelected && question.type === SurveyQuestionType.MultipleChoice) {
+                            if (isArray(selectedChoices)) {
+                                onPreviewSubmit([...selectedChoices, openEndedInput])
+                            }
+                        } else {
+                            onPreviewSubmit(selectedChoices)
                         }
-                    } else {
-                        onPreviewSubmit(selectedChoices)
-                    }
-                }}
-            />
+                    }}
+                />
+            )}
         </Fragment>
     )
 }
