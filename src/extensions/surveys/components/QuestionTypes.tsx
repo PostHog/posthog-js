@@ -216,15 +216,14 @@ export function RatingQuestion({
                     </div>
                 </div>
             </div>
-            {!question.skipSubmitButton && (
-                <BottomSection
-                    text={question.buttonText || appearance?.submitButtonText || 'Submit'}
-                    submitDisabled={isNull(rating) && !question.optional}
-                    appearance={appearance}
-                    onSubmit={() => onSubmit(rating)}
-                    onPreviewSubmit={() => onPreviewSubmit(rating)}
-                />
-            )}
+            <BottomSection
+                text={question.buttonText || appearance?.submitButtonText || 'Submit'}
+                submitDisabled={isNull(rating) && !question.optional}
+                appearance={appearance}
+                onSubmit={() => onSubmit(rating)}
+                onPreviewSubmit={() => onPreviewSubmit(rating)}
+                skipSubmitButton={question.skipSubmitButton}
+            />
         </Fragment>
     )
 }
@@ -431,36 +430,35 @@ export function MultipleChoiceQuestion({
                     })}
                 </div>
             </div>
-            {!shouldSkipSubmit && (
-                <BottomSection
-                    text={question.buttonText || 'Submit'}
-                    submitDisabled={isSubmitDisabled(
-                        selectedChoices,
-                        openChoiceSelected,
-                        openEndedInput,
-                        !!question.optional
-                    )}
-                    appearance={appearance}
-                    onSubmit={() => {
-                        if (openChoiceSelected && question.type === SurveyQuestionType.MultipleChoice) {
-                            if (isArray(selectedChoices)) {
-                                onSubmit([...selectedChoices, openEndedInput])
-                            }
-                        } else {
-                            onSubmit(selectedChoices)
+            <BottomSection
+                text={question.buttonText || 'Submit'}
+                submitDisabled={isSubmitDisabled(
+                    selectedChoices,
+                    openChoiceSelected,
+                    openEndedInput,
+                    !!question.optional
+                )}
+                appearance={appearance}
+                onSubmit={() => {
+                    if (openChoiceSelected && question.type === SurveyQuestionType.MultipleChoice) {
+                        if (isArray(selectedChoices)) {
+                            onSubmit([...selectedChoices, openEndedInput])
                         }
-                    }}
-                    onPreviewSubmit={() => {
-                        if (openChoiceSelected && question.type === SurveyQuestionType.MultipleChoice) {
-                            if (isArray(selectedChoices)) {
-                                onPreviewSubmit([...selectedChoices, openEndedInput])
-                            }
-                        } else {
-                            onPreviewSubmit(selectedChoices)
+                    } else {
+                        onSubmit(selectedChoices)
+                    }
+                }}
+                onPreviewSubmit={() => {
+                    if (openChoiceSelected && question.type === SurveyQuestionType.MultipleChoice) {
+                        if (isArray(selectedChoices)) {
+                            onPreviewSubmit([...selectedChoices, openEndedInput])
                         }
-                    }}
-                />
-            )}
+                    } else {
+                        onPreviewSubmit(selectedChoices)
+                    }
+                }}
+                skipSubmitButton={shouldSkipSubmit}
+            />
         </Fragment>
     )
 }
