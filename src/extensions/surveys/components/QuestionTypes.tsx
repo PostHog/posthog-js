@@ -17,7 +17,7 @@ import {
     veryDissatisfiedEmoji,
     verySatisfiedEmoji,
 } from '../icons'
-import { getDisplayOrderChoices } from '../surveys-extension-utils'
+import { getDisplayOrderChoices, useSurveyContext } from '../surveys-extension-utils'
 import { BottomSection } from './BottomSection'
 import { QuestionHeader } from './QuestionHeader'
 
@@ -137,6 +137,15 @@ export function RatingQuestion({
         return null
     })
 
+    const { isPreviewMode } = useSurveyContext()
+
+    const handleSubmit = (num: number) => {
+        if (isPreviewMode) {
+            return onPreviewSubmit(num)
+        }
+        return onSubmit(num)
+    }
+
     return (
         <Fragment>
             <div className="question-container">
@@ -162,9 +171,10 @@ export function RatingQuestion({
                                             key={idx}
                                             type="button"
                                             onClick={() => {
-                                                setRating(idx + 1)
+                                                const response = idx + 1
+                                                setRating(response)
                                                 if (question.skipSubmitButton) {
-                                                    onSubmit(idx + 1)
+                                                    handleSubmit(response)
                                                 }
                                             }}
                                         >
@@ -188,10 +198,10 @@ export function RatingQuestion({
                                             active={active}
                                             appearance={appearance}
                                             num={number}
-                                            setActiveNumber={(num) => {
-                                                setRating(num)
+                                            setActiveNumber={(response) => {
+                                                setRating(response)
                                                 if (question.skipSubmitButton) {
-                                                    onSubmit(num)
+                                                    handleSubmit(response)
                                                 }
                                             }}
                                         />
@@ -313,6 +323,7 @@ export function MultipleChoiceQuestion({
         }
         return ''
     })
+    const { isPreviewMode } = useSurveyContext()
 
     const inputType = question.type === SurveyQuestionType.SingleChoice ? 'radio' : 'checkbox'
     const shouldSkipSubmit =
@@ -334,6 +345,9 @@ export function MultipleChoiceQuestion({
             setOpenChoiceSelected(false) // Deselect open choice when selecting another option
             if (shouldSkipSubmit) {
                 onSubmit(val)
+                if (isPreviewMode) {
+                    onPreviewSubmit(val)
+                }
             }
             return
         }
