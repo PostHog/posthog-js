@@ -8,7 +8,8 @@
         "dev": "nodemon server.js"
     },
     "dependencies": {
-        "express": "^4.18.2"
+        "express": "^4.18.2",
+        "uuid": "^11.1.0"
     },
     "devDependencies": {
         "nodemon": "^2.0.22"
