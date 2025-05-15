@@ -846,7 +846,12 @@ function getPopoverPosition(position: SurveyPosition = SurveyPosition.Right, sur
         case SurveyPosition.Left:
             return { left: '30px' }
         case SurveyPosition.Center:
-            return { left: '50%', transform: 'translateX(-50%)' }
+            return {
+                left: '0',
+                right: '0',
+                marginLeft: 'auto',
+                marginRight: 'auto',
+            }
         default:
         case SurveyPosition.Right:
             return { right: surveyWidgetType && surveyWidgetType === SurveyWidgetType.Tab ? '60px' : '30px' }
