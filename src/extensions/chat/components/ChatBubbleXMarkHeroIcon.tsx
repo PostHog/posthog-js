@@ -8,8 +8,8 @@ export function ChatBubbleXMarkHeroIcon({ isVisible }: { isVisible: boolean }) {
             stroke="currentColor"
             className="size-6"
             style={{
-                visibility: isVisible ? 'visible' : 'hidden',
-                transition: 'all 0s ease 0s!important',
+                opacity: isVisible ? 1 : 0,
+                transition: 'all 1s ease',
                 position: 'absolute',
                 top: 0,
                 left: 0,

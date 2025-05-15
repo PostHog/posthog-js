@@ -1,5 +1,6 @@
 import { ChatBubbleLeftRightHeroIcon } from './ChatBubbleLeftRightHeroIcon'
 import { ChatBubbleXMarkHeroIcon } from './ChatBubbleXMarkHeroIcon'
+import { BRAND_COLOR } from './style'
 
 export function ChatBubble({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: (isOpen: boolean) => void }) {
     return (
@@ -11,10 +12,12 @@ export function ChatBubble({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: 
                 borderRadius: 54,
                 width: 54,
                 height: 54,
-                backgroundColor: '#fff',
+                backgroundColor: BRAND_COLOR,
+                color: 'white',
                 display: 'flex',
                 justifyContent: 'center',
                 alignItems: 'center',
+                cursor: 'pointer',
             }}
             onClick={() => {
                 setIsOpen(!isOpen)

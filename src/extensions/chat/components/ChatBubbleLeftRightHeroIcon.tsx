@@ -7,8 +7,8 @@ export function ChatBubbleLeftRightHeroIcon({ isVisible }: { isVisible: boolean 
             strokeWidth={1.5}
             stroke="currentColor"
             style={{
-                visibility: isVisible ? 'visible' : 'hidden',
-                transition: 'all 0s ease 0s!important',
+                opacity: isVisible ? 1 : 0,
+                transition: 'all 1s ease',
                 position: 'absolute',
                 top: 0,
                 left: 0,
