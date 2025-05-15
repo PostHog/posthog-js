@@ -5,6 +5,7 @@ import {
     MultipleChoiceQuestion,
     OpenTextQuestion,
     RatingQuestion,
+    parseUserPropertiesInLink,
 } from '../../../extensions/surveys/components/QuestionTypes'
 import {
     BasicSurveyQuestion,
@@ -12,6 +13,221 @@ import {
     RatingSurveyQuestion,
     SurveyQuestionType,
 } from '../../../posthog-surveys-types'
+import { PostHog } from '../../../posthog-core'
+import { STORED_PERSON_PROPERTIES_KEY } from '../../../constants'
+
+// Helper to create a mock PostHog instance for testing parseUserPropertiesInLink
+const mockPostHog = (properties: Record<string, any> = {}): PostHog => {
+    return {
+        get_property: (key: string) => properties[key],
+    } as PostHog
+}
+
+describe('parseUserPropertiesInLink', () => {
+    it('should return the original link if no placeholders are present', () => {
+        const link = 'https://example.com/page'
+        expect(parseUserPropertiesInLink(link, mockPostHog())).toBe(link)
+    })
+
+    it('should replace placeholder with direct property value', () => {
+        const ph = mockPostHog({ user_id: '123' })
+        const link = 'https://example.com?id={{user_id}}'
+        expect(parseUserPropertiesInLink(link, ph)).toBe('https://example.com?id=123')
+    })
+
+    it('should replace placeholder with stored person property if direct is not found', () => {
+        const ph = mockPostHog({
+            [STORED_PERSON_PROPERTIES_KEY]: { user_id: 'abc' },
+        })
+        const link = 'https://example.com?id={{user_id}}'
+        expect(parseUserPropertiesInLink(link, ph)).toBe('https://example.com?id=abc')
+    })
+
+    it('should prioritize direct property over stored person property if direct is a valid string/number', () => {
+        const ph = mockPostHog({
+            user_id: 'direct_val',
+            [STORED_PERSON_PROPERTIES_KEY]: { user_id: 'stored_val' },
+        })
+        const link = 'https://example.com?id={{user_id}}'
+        expect(parseUserPropertiesInLink(link, ph)).toBe('https://example.com?id=direct_val')
+    })
+
+    it('should use stored person property if direct property is null', () => {
+        const ph = mockPostHog({
+            user_id: null,
+            [STORED_PERSON_PROPERTIES_KEY]: { user_id: 'stored_val_for_null' },
+        })
+        const link = 'https://example.com?id={{user_id}}'
+        expect(parseUserPropertiesInLink(link, ph)).toBe('https://example.com?id=stored_val_for_null')
+    })
+
+    it('should use stored person property if direct property is undefined', () => {
+        const ph = mockPostHog({
+            // user_id is undefined implicitly
+            [STORED_PERSON_PROPERTIES_KEY]: { user_id: 'stored_val_for_undefined' },
+        })
+        const link = 'https://example.com?id={{user_id}}'
+        expect(parseUserPropertiesInLink(link, ph)).toBe('https://example.com?id=stored_val_for_undefined')
+    })
+
+    it('should not replace placeholder if property not in direct or stored person properties', () => {
+        const ph = mockPostHog({
+            [STORED_PERSON_PROPERTIES_KEY]: { another_prop: 'val' },
+        })
+        const link = 'https://example.com?id={{non_existent_id}}'
+        expect(parseUserPropertiesInLink(link, ph)).toBe(link)
+    })
+
+    it('should handle case where STORED_PERSON_PROPERTIES_KEY is not an object', () => {
+        const ph = mockPostHog({
+            [STORED_PERSON_PROPERTIES_KEY]: 'not_an_object',
+        })
+        const link = 'https://example.com?id={{user_id}}'
+        expect(parseUserPropertiesInLink(link, ph)).toBe(link)
+    })
+
+    it('should handle case where STORED_PERSON_PROPERTIES_KEY does not exist', () => {
+        const ph = mockPostHog({})
+        const link = 'https://example.com?id={{user_id}}'
+        expect(parseUserPropertiesInLink(link, ph)).toBe(link)
+    })
+
+    it('should trim whitespace for property names when checking stored person properties', () => {
+        const ph = mockPostHog({
+            [STORED_PERSON_PROPERTIES_KEY]: { user_id: 'trimmed_stored' },
+        })
+        const link = 'https://example.com?id={{ user_id }}'
+        expect(parseUserPropertiesInLink(link, ph)).toBe('https://example.com?id=trimmed_stored')
+    })
+
+    it('should URL encode stored person property values', () => {
+        const ph = mockPostHog({
+            [STORED_PERSON_PROPERTIES_KEY]: { name: 'Stored User' },
+        })
+        const link = 'https://example.com?user={{name}}'
+        expect(parseUserPropertiesInLink(link, ph)).toBe('https://example.com?user=Stored%20User')
+    })
+
+    // --- Retain and adapt previous tests to ensure they still pass with new logic, potentially adding stored properties --- //
+
+    it('should replace a single {placeholder} with a string value (direct)', () => {
+        const ph = mockPostHog({ user_id: '456' })
+        const link = 'https://example.com?id={user_id}'
+        expect(parseUserPropertiesInLink(link, ph)).toBe('https://example.com?id=456')
+    })
+
+    it('should replace a single {placeholder} with a string value (stored)', () => {
+        const ph = mockPostHog({ [STORED_PERSON_PROPERTIES_KEY]: { user_id: '789' } })
+        const link = 'https://example.com?id={user_id}'
+        expect(parseUserPropertiesInLink(link, ph)).toBe('https://example.com?id=789')
+    })
+
+    it('should replace a placeholder with a number value (direct)', () => {
+        const ph = mockPostHog({ score: 100 })
+        const link = 'https://example.com?value={{score}}'
+        expect(parseUserPropertiesInLink(link, ph)).toBe('https://example.com?value=100')
+    })
+
+    it('should replace a placeholder with a number value (stored)', () => {
+        const ph = mockPostHog({ [STORED_PERSON_PROPERTIES_KEY]: { score: 200 } })
+        const link = 'https://example.com?value={{score}}'
+        expect(parseUserPropertiesInLink(link, ph)).toBe('https://example.com?value=200')
+    })
+
+    it('should replace multiple placeholders (mixed direct and stored)', () => {
+        const ph = mockPostHog({
+            user_id: 'abc',
+            [STORED_PERSON_PROPERTIES_KEY]: { region: 'us_stored' },
+        })
+        const link = 'https://{region}.example.com/user/{{user_id}}'
+        expect(parseUserPropertiesInLink(link, ph)).toBe('https://us_stored.example.com/user/abc')
+    })
+
+    it('should handle placeholders with special characters like $ (direct)', () => {
+        const ph = mockPostHog({ $user_id: 'testUserDirect' })
+        const link = 'https://example.com?id={{$user_id}}'
+        expect(parseUserPropertiesInLink(link, ph)).toBe('https://example.com?id=testUserDirect')
+    })
+
+    it('should handle placeholders with special characters like $ (stored)', () => {
+        const ph = mockPostHog({ [STORED_PERSON_PROPERTIES_KEY]: { $user_id: 'testUserStored' } })
+        const link = 'https://example.com?id={{$user_id}}'
+        expect(parseUserPropertiesInLink(link, ph)).toBe('https://example.com?id=testUserStored')
+    })
+
+    it('should trim whitespace from property names in placeholders {{ prop }} (direct)', () => {
+        const ph = mockPostHog({ user_id: 'trimmed_direct' })
+        const link = 'https://example.com?id={{ user_id }}'
+        expect(parseUserPropertiesInLink(link, ph)).toBe('https://example.com?id=trimmed_direct')
+    })
+
+    it('should URL encode property values with spaces (direct)', () => {
+        const ph = mockPostHog({ name: 'John Doe Direct' })
+        const link = 'https://example.com?user={{name}}'
+        expect(parseUserPropertiesInLink(link, ph)).toBe('https://example.com?user=John%20Doe%20Direct')
+    })
+
+    it('should URL encode property values that look like javascript URIs (stored)', () => {
+        const ph = mockPostHog({ [STORED_PERSON_PROPERTIES_KEY]: { malicious_link: "javascript:alert('XSS_Stored')" } })
+        const link = 'https://example.com?redirect={{malicious_link}}'
+        expect(parseUserPropertiesInLink(link, ph)).toBe(
+            "https://example.com?redirect=javascript%3Aalert('XSS_Stored')"
+        )
+    })
+
+    it('should return the original link if posthog instance is undefined', () => {
+        const link = 'https://example.com?id={{user_id}}'
+        expect(parseUserPropertiesInLink(link, undefined)).toBe(link)
+    })
+
+    it('should return the original link if posthog.get_property is undefined', () => {
+        const link = 'https://example.com?id={{user_id}}'
+        expect(parseUserPropertiesInLink(link, {} as PostHog)).toBe(link)
+    })
+
+    it('should return an empty string if the link is empty', () => {
+        expect(parseUserPropertiesInLink('', mockPostHog())).toBe('')
+    })
+
+    it('should handle a link that is only a placeholder (value URL encoded, from stored)', () => {
+        const ph = mockPostHog({
+            [STORED_PERSON_PROPERTIES_KEY]: { homepage: 'index.html?greeting=hello stored world' },
+        })
+        expect(parseUserPropertiesInLink('{{homepage}}', ph)).toBe('index.html%3Fgreeting%3Dhello%20stored%20world')
+    })
+
+    it('should not replace placeholders if property value is an object (in both direct and stored)', () => {
+        const ph = mockPostHog({
+            user_data: { id: 1 },
+            [STORED_PERSON_PROPERTIES_KEY]: { user_data_stored: { id: 2 } },
+        })
+        const link = 'https://example.com?data={{user_data}}&stored_data={{user_data_stored}}'
+        expect(parseUserPropertiesInLink(link, ph)).toBe(
+            'https://example.com?data={{user_data}}&stored_data={{user_data_stored}}'
+        )
+    })
+
+    it('should not replace placeholders if property value is null (and not in stored or stored is also null)', () => {
+        const ph = mockPostHog({
+            user_name: null,
+            [STORED_PERSON_PROPERTIES_KEY]: { user_name_also_null: null },
+        })
+        const link = 'https://example.com?name={{user_name}}&other_name={{user_name_also_null}}'
+        expect(parseUserPropertiesInLink(link, ph)).toBe(link)
+    })
+
+    it('should handle empty property names within placeholders like {{ }} or {} after trimming (checking stored)', () => {
+        const phWithEmptyKeyStored = mockPostHog({ [STORED_PERSON_PROPERTIES_KEY]: { '': 'emptyStoredPropValue' } })
+        const linkWithSpacedEmpty = 'https://example.com?a={{  }}&b={ }'
+        expect(parseUserPropertiesInLink(linkWithSpacedEmpty, phWithEmptyKeyStored)).toBe(
+            'https://example.com?a=emptyStoredPropValue&b=emptyStoredPropValue'
+        )
+
+        // Truly empty placeholders {{}} should still not be replaced as per previous logic
+        const linkWithTrueEmpty = 'https://example.com?a={{}}&b={}'
+        expect(parseUserPropertiesInLink(linkWithTrueEmpty, phWithEmptyKeyStored)).toBe(linkWithTrueEmpty)
+    })
+})
 
 describe('MultipleChoiceQuestion', () => {
     const mockAppearance = {

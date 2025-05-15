@@ -17,9 +17,11 @@ import {
     veryDissatisfiedEmoji,
     verySatisfiedEmoji,
 } from '../icons'
-import { getDisplayOrderChoices } from '../surveys-extension-utils'
+import { getDisplayOrderChoices, useSurveyContext } from '../surveys-extension-utils'
 import { BottomSection } from './BottomSection'
 import { QuestionHeader } from './QuestionHeader'
+import { PostHog } from '../../../posthog-core'
+import { STORED_PERSON_PROPERTIES_KEY } from '../../../constants'
 
 export interface CommonQuestionProps {
     forceDisableHtml: boolean
@@ -79,6 +81,44 @@ export function OpenTextQuestion({
     )
 }
 
+// create a function that replaces any search params like
+// https://example.com/test?name={{$user_id}}
+// {{user_id}} should be replaced by posthog.get_property('$user_id')
+export function parseUserPropertiesInLink(link: string, posthog?: PostHog) {
+    if (!link || !posthog || !posthog.get_property) {
+        return link
+    }
+
+    const regex = /\{\{(.*?)\}\}|\{(.*?)\}/g
+    let newLink = link
+    let match
+
+    // Iterate over all matches and replace them
+    while (!isNull((match = regex.exec(link)))) {
+        const placeholder = match[0] // The full placeholder e.g. {{property_name}} or {property_name}
+        const propertyNameWithPotentialWhitespace = match[1] || match[2] // The actual property name
+
+        if (propertyNameWithPotentialWhitespace) {
+            const propertyName = propertyNameWithPotentialWhitespace.trim()
+            // If after trimming, the propertyName is empty, and the original placeholder was just {{}} or {},
+            // we might still want to fetch a property with an empty string key if that makes sense for the use case.
+            // For now, we proceed if propertyName (trimmed) is not empty, or if it was originally non-empty before trim.
+            // This handles cases like `{{ }}` gracefully by effectively looking for an empty string key if that was intended after trim.
+            if (propertyName || propertyNameWithPotentialWhitespace) {
+                // ensures we try to lookup if original was non-empty, or trimmed is non-empty
+                const propertyValue =
+                    posthog.get_property(propertyName) ||
+                    posthog.get_property(STORED_PERSON_PROPERTIES_KEY)?.[propertyName]
+                // Only replace if the propertyValue is a string or number
+                if (isString(propertyValue) || isNumber(propertyValue)) {
+                    newLink = newLink.replace(placeholder, encodeURIComponent(String(propertyValue)))
+                }
+            }
+        }
+    }
+    return newLink
+}
+
 export function LinkQuestion({
     question,
     forceDisableHtml,
@@ -88,6 +128,9 @@ export function LinkQuestion({
 }: CommonQuestionProps & {
     question: LinkSurveyQuestion
 }) {
+    const { posthog } = useSurveyContext()
+    const parsedLink = parseUserPropertiesInLink(question.link || '', posthog)
+
     return (
         <Fragment>
             <div className="question-container">
@@ -101,7 +144,7 @@ export function LinkQuestion({
             <BottomSection
                 text={question.buttonText || 'Submit'}
                 submitDisabled={false}
-                link={question.link}
+                link={parsedLink}
                 appearance={appearance}
                 onSubmit={() => onSubmit('link clicked')}
                 onPreviewSubmit={() => onPreviewSubmit('link clicked')}
