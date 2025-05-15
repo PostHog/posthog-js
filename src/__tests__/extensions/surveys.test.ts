@@ -672,7 +672,7 @@ describe('SurveyManager', () => {
 
             // Test that clearTimeout is called with correct ID
             const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout')
-            surveyManager.getTestAPI().removeSurveyFromFocus(mockSurvey.id)
+            surveyManager.getTestAPI().removeSurveyFromFocus(mockSurvey)
             expect(clearTimeoutSpy).toHaveBeenCalledWith(timeoutId)
 
             // Verify timeout was removed from map
@@ -862,7 +862,7 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
         })
 
         expect(mockRemoveSurveyFromFocus).toHaveBeenCalledTimes(1)
-        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
+        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith(survey)
         expect(result.current.isPopupVisible).toBe(false)
     })
 
@@ -893,7 +893,7 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
             window.history.replaceState({}, '', '/other/page')
         })
 
-        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
+        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith(survey)
         expect(result.current.isPopupVisible).toBe(false)
     })
 
@@ -910,7 +910,7 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
         })
 
         expect(mockRemoveSurveyFromFocus).toHaveBeenCalledTimes(1)
-        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
+        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith(survey)
         expect(result.current.isPopupVisible).toBe(false)
     })
 
@@ -928,7 +928,7 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
 
         // expect mockremoveSurvey to have been called only once
         expect(mockRemoveSurveyFromFocus).toHaveBeenCalledTimes(1)
-        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
+        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith(survey)
         expect(result.current.isPopupVisible).toBe(false)
     })
 
@@ -983,7 +983,7 @@ describe('usePopupVisibility URL changes should hide surveys accordingly', () =>
 
         // Survey should still not be visible since URL no longer matches
         expect(result.current.isPopupVisible).toBe(false)
-        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
+        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith(survey)
     })
 })
 
@@ -1107,7 +1107,7 @@ describe('useHideSurveyOnURLChange', () => {
             window.history.pushState({}, '', '/different-path')
         })
 
-        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
+        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith(survey)
         expect(mockSetSurveyVisible).toHaveBeenCalledWith(false)
     })
 
@@ -1135,7 +1135,7 @@ describe('useHideSurveyOnURLChange', () => {
             window.history.replaceState({}, '', '/different-path')
         })
 
-        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
+        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith(survey)
         expect(mockSetSurveyVisible).toHaveBeenCalledWith(false)
     })
 
@@ -1167,7 +1167,7 @@ describe('useHideSurveyOnURLChange', () => {
             window.dispatchEvent(new Event('popstate'))
         })
 
-        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
+        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith(survey)
         expect(mockSetSurveyVisible).toHaveBeenCalledWith(false)
     })
 
@@ -1199,7 +1199,7 @@ describe('useHideSurveyOnURLChange', () => {
             window.dispatchEvent(new Event('hashchange'))
         })
 
-        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith('test-survey')
+        expect(mockRemoveSurveyFromFocus).toHaveBeenCalledWith(survey)
         expect(mockSetSurveyVisible).toHaveBeenCalledWith(false)
     })
 
