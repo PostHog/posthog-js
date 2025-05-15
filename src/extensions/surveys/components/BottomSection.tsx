@@ -26,28 +26,26 @@ export function BottomSection({
     const { isPreviewMode } = useContext(SurveyContext)
     return (
         <div className="bottom-section">
-            <div className="buttons">
-                {!skipSubmitButton && (
-                    <button
-                        className="form-submit"
-                        disabled={submitDisabled}
-                        aria-label="Submit survey"
-                        type="button"
-                        onClick={() => {
-                            if (link) {
-                                window?.open(link)
-                            }
-                            if (isPreviewMode) {
-                                onPreviewSubmit?.()
-                            } else {
-                                onSubmit()
-                            }
-                        }}
-                    >
-                        {text}
-                    </button>
-                )}
-            </div>
+            {!skipSubmitButton && (
+                <button
+                    className="form-submit"
+                    disabled={submitDisabled}
+                    aria-label="Submit survey"
+                    type="button"
+                    onClick={() => {
+                        if (link) {
+                            window?.open(link)
+                        }
+                        if (isPreviewMode) {
+                            onPreviewSubmit?.()
+                        } else {
+                            onSubmit()
+                        }
+                    }}
+                >
+                    {text}
+                </button>
+            )}
             {!appearance.whiteLabel && <PostHogLogo />}
         </div>
     )
