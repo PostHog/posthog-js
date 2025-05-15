@@ -207,13 +207,10 @@ describe('parseUserPropertiesInLink', () => {
         expect(parseUserPropertiesInLink(link, ph)).toBe(link)
     })
 
-    it('should handle empty property names within placeholders like {{ }} or {{  }} after trimming (checking stored)', () => {
-        const phWithEmptyKeyStored = mockPostHog({ [STORED_PERSON_PROPERTIES_KEY]: { '': 'emptyStoredPropValue' } })
+    it('should handle empty property names within placeholders like {{ }} or {{  }} after trimming (i.e. do nothing)', () => {
+        const phWithEmptyKeyStored = mockPostHog()
         const linkWithSpacedEmpty = 'https://example.com?a={{  }}&b={{ }}' // Testing two space and one space variants
-        expect(parseUserPropertiesInLink(linkWithSpacedEmpty, phWithEmptyKeyStored)).toBe(
-            'https://example.com?a=emptyStoredPropValue&b=emptyStoredPropValue'
-        )
-        // Truly empty placeholders {{}} should still not be replaced as per current logic
+        expect(parseUserPropertiesInLink(linkWithSpacedEmpty, phWithEmptyKeyStored)).toBe(linkWithSpacedEmpty)
         const linkWithTrueEmpty = 'https://example.com?a={{}}&b={{}} '
         expect(parseUserPropertiesInLink(linkWithTrueEmpty, phWithEmptyKeyStored)).toBe(linkWithTrueEmpty)
     })

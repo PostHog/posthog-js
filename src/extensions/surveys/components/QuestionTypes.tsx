@@ -88,16 +88,16 @@ export function parseUserPropertiesInLink(link: string, posthog?: PostHog) {
 
     const regex = /\{\{(.*?)\}\}/g
     let newLink = link
-    let match
+    let match: RegExpExecArray | null
 
     // Iterate over all matches and replace them
     while (!isNull((match = regex.exec(link)))) {
-        const placeholder = match[0] // The full placeholder e.g. {{property_name}}
-        const propertyNameWithPotentialWhitespace = match[1] // Property name is now always in match[1]
+        const placeholder = match.at(0) // The full placeholder e.g. {{property_name}}
+        const propertyNameWithPotentialWhitespace = match.at(1) // Property name is now always in match[1]
 
-        if (propertyNameWithPotentialWhitespace) {
+        if (placeholder && propertyNameWithPotentialWhitespace) {
             const propertyName = propertyNameWithPotentialWhitespace.trim()
-            if (propertyName || propertyNameWithPotentialWhitespace !== propertyName) {
+            if (propertyName !== '') {
                 const propertyValue =
                     posthog.get_property(propertyName) ||
                     posthog.get_property(STORED_PERSON_PROPERTIES_KEY)?.[propertyName]

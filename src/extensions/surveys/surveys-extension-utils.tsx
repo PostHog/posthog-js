@@ -16,11 +16,11 @@ import { SurveyMatchType } from '../../posthog-surveys-types'
 import { isMatchingRegex } from '../../utils/regex-utils'
 import { detectDeviceType } from '../../utils/user-agent-utils'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
+import surveyStyles from './survey.css'
+import { useContext } from 'preact/hooks'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
-import surveyStyles from './survey.css'
-import { useContext } from 'preact/hooks'
 
 export function getFontFamily(fontFamily?: string): string {
     if (fontFamily === 'inherit') {
