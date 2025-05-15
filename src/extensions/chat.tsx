@@ -7,6 +7,31 @@ import { logger } from '../utils/logger'
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 
+export const retrieveChatShadowRoot = () => {
+    const chatClassName = 'PostHogChat'
+    const existingDiv = document.querySelector(`.${chatClassName}`)
+
+    if (existingDiv && existingDiv.shadowRoot) {
+        return existingDiv.shadowRoot
+    }
+
+    // If it doesn't exist, create it
+    const div = document.createElement('div')
+    // addSurveyCSSVariablesToElement(div, survey.appearance)
+    div.className = chatClassName
+    const shadow = div.attachShadow({ mode: 'open' })
+    // const stylesheet = getSurveyStylesheet(posthog)
+    // if (stylesheet) {
+    //     const existingStylesheet = shadow.querySelector('style')
+    //     if (existingStylesheet) {
+    //         shadow.removeChild(existingStylesheet)
+    //     }
+    //     shadow.appendChild(stylesheet)
+    // }
+    document.body.appendChild(div)
+    return shadow
+}
+
 export class ChatManager {
     private _posthog: PostHog
 
@@ -16,6 +41,13 @@ export class ChatManager {
 
     public evaluateDisplayLogic = (): void => {
         logger.info('PostHogChat evaluateDisplayLogic')
+        const shadowRoot = retrieveChatShadowRoot()
+        Preact.render(
+            <div>
+                <h1>Chat</h1>
+            </div>,
+            shadowRoot
+        )
     }
 }
 
