@@ -9,7 +9,7 @@ export function ChatBubbleXMarkHeroIcon({ isVisible }: { isVisible: boolean }) {
             className="size-6"
             style={{
                 opacity: isVisible ? 1 : 0,
-                transition: 'all 1s ease',
+                transition: 'all 0.3s ease',
                 position: 'absolute',
                 top: 0,
                 left: 0,
