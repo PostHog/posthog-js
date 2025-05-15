@@ -42,8 +42,9 @@ export class ChatManager {
 
     public evaluateDisplayLogic = (): void => {
         logger.info('PostHogChat evaluateDisplayLogic')
+        this._posthog?.chat.getMessages()
         const shadowRoot = retrieveChatShadowRoot()
-        Preact.render(<PosthogChatBox />, shadowRoot)
+        Preact.render(<PosthogChatBox posthog={this._posthog} />, shadowRoot)
     }
 }
 

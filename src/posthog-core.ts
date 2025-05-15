@@ -1390,6 +1390,11 @@ export class PostHog {
     }
 
     /** Get list of all surveys. */
+    getMessages(): void {
+        this.chat.getMessages()
+    }
+
+    /** Get list of all surveys. */
     getSurveys(callback: SurveyCallback, forceReload = false): void {
         this.surveys.getSurveys(callback, forceReload)
     }

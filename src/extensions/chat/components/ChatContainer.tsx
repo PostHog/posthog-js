@@ -1,7 +1,14 @@
 import { ChatHeader } from './ChatHeader'
+import { ChatInput } from './ChatInput'
 import { ChatMessages } from './ChatMessages'
 
-export function ChatContainer({ isVisible }: { isVisible: boolean }) {
+export function ChatContainer({
+    isVisible,
+    sendMessage,
+}: {
+    isVisible: boolean
+    sendMessage: (message: string) => void
+}) {
     return (
         <div
             style={{
@@ -19,6 +26,7 @@ export function ChatContainer({ isVisible }: { isVisible: boolean }) {
         >
             <ChatHeader />
             <ChatMessages />
+            <ChatInput sendMessage={sendMessage} />
         </div>
     )
 }
