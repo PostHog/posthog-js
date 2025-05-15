@@ -55,6 +55,7 @@ export type PostHogExtensionKind =
     | 'recorder'
     | 'tracing-headers'
     | 'surveys'
+    | 'chat'
     | 'dead-clicks-autocapture'
     | 'remote-config'
 
@@ -81,6 +82,7 @@ interface PostHogExtensions {
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
     canActivateRepeatedly?: (survey: any) => boolean
     generateSurveys?: (posthog: PostHog) => any | undefined
+    loadChat?: (posthog: PostHog) => any | undefined
     postHogWebVitalsCallbacks?: {
         onLCP: (metric: any) => void
         onCLS: (metric: any) => void
