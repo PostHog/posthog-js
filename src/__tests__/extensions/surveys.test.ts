@@ -339,12 +339,12 @@ describe('SurveyManager', () => {
     })
 
     test('addSurveyToFocus should add survey ID to surveyInFocus', () => {
-        surveyManager.getTestAPI().addSurveyToFocus('survey1')
+        surveyManager.getTestAPI().addSurveyToFocus({ id: 'survey1' })
         expect(surveyManager.getTestAPI().surveyInFocus).toEqual('survey1')
     })
 
     test('removeSurveyFromFocus should remove survey ID from surveyInFocus', () => {
-        surveyManager.getTestAPI().addSurveyToFocus('survey1')
+        surveyManager.getTestAPI().addSurveyToFocus({ id: 'survey1' })
         surveyManager.getTestAPI().removeSurveyFromFocus({ id: 'survey1', appearance: {} })
         expect(surveyManager.getTestAPI().surveyInFocus).toBe(null)
     })
@@ -455,7 +455,7 @@ describe('SurveyManager', () => {
     test('callSurveysAndEvaluateDisplayLogic should not call surveys in focus', () => {
         mockPostHog.surveys.getSurveys = jest.fn((callback) => callback(mockSurveys))
 
-        surveyManager.getTestAPI().addSurveyToFocus('survey1')
+        surveyManager.getTestAPI().addSurveyToFocus({ id: 'survey1' })
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         expect(mockPostHog.surveys.getSurveys).toHaveBeenCalledTimes(1)
@@ -465,7 +465,7 @@ describe('SurveyManager', () => {
     test('surveyInFocus handling works correctly with in callSurveysAndEvaluateDisplayLogic', () => {
         mockPostHog.surveys.getSurveys = jest.fn((callback) => callback(mockSurveys))
 
-        surveyManager.getTestAPI().addSurveyToFocus('survey1')
+        surveyManager.getTestAPI().addSurveyToFocus({ id: 'survey1' })
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
         const handlePopoverSurveyMock = jest
@@ -641,7 +641,7 @@ describe('SurveyManager', () => {
             // Mock doesSurveyUrlMatch to always return true, used in handlePopoverSurvey
             jest.spyOn(surveyManager as any, '_handlePopoverSurvey').mockImplementation((survey: Survey) => {
                 // Add survey to focus and create a timeout
-                surveyManager.getTestAPI().addSurveyToFocus(survey.id)
+                surveyManager.getTestAPI().addSurveyToFocus(survey)
 
                 if (survey.appearance?.surveyPopupDelaySeconds) {
                     const timeoutId = setTimeout(() => {

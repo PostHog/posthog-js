@@ -202,7 +202,7 @@ export class SurveyManager {
         }
 
         this._clearSurveyTimeout(survey.id)
-        this._addSurveyToFocus(survey.id)
+        this._addSurveyToFocus(survey)
         const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
         const shadow = retrieveSurveyShadow(survey, this._posthog)
         if (delaySeconds <= 0) {
@@ -521,11 +521,11 @@ export class SurveyManager {
         }, forceReload)
     }
 
-    private _addSurveyToFocus = (id: string): void => {
+    private _addSurveyToFocus = (survey: Pick<Survey, 'id'>): void => {
         if (!isNull(this._surveyInFocus)) {
-            logger.error(`Survey ${[...this._surveyInFocus]} already in focus. Cannot add survey ${id}.`)
+            logger.error(`Survey ${[...this._surveyInFocus]} already in focus. Cannot add survey ${survey.id}.`)
         }
-        this._surveyInFocus = id
+        this._surveyInFocus = survey.id
     }
 
     private _removeSurveyFromFocus = (survey: Pick<Survey, 'id' | 'appearance'>): void => {
