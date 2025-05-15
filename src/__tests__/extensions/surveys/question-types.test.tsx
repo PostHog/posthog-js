@@ -63,7 +63,6 @@ describe('parseUserPropertiesInLink', () => {
 
     it('should use stored person property if direct property is undefined', () => {
         const ph = mockPostHog({
-            // user_id is undefined implicitly
             [STORED_PERSON_PROPERTIES_KEY]: { user_id: 'stored_val_for_undefined' },
         })
         const link = 'https://example.com?id={{user_id}}'
@@ -108,18 +107,10 @@ describe('parseUserPropertiesInLink', () => {
         expect(parseUserPropertiesInLink(link, ph)).toBe('https://example.com?user=Stored%20User')
     })
 
-    // --- Retain and adapt previous tests to ensure they still pass with new logic, potentially adding stored properties --- //
-
-    it('should replace a single {placeholder} with a string value (direct)', () => {
+    it('should not process single curly brace placeholders {placeholder}', () => {
         const ph = mockPostHog({ user_id: '456' })
-        const link = 'https://example.com?id={user_id}'
-        expect(parseUserPropertiesInLink(link, ph)).toBe('https://example.com?id=456')
-    })
-
-    it('should replace a single {placeholder} with a string value (stored)', () => {
-        const ph = mockPostHog({ [STORED_PERSON_PROPERTIES_KEY]: { user_id: '789' } })
-        const link = 'https://example.com?id={user_id}'
-        expect(parseUserPropertiesInLink(link, ph)).toBe('https://example.com?id=789')
+        const linkWithSingleBrace = 'https://example.com?id={user_id}&name={{user_id}}'
+        expect(parseUserPropertiesInLink(linkWithSingleBrace, ph)).toBe('https://example.com?id={user_id}&name=456')
     })
 
     it('should replace a placeholder with a number value (direct)', () => {
@@ -139,7 +130,7 @@ describe('parseUserPropertiesInLink', () => {
             user_id: 'abc',
             [STORED_PERSON_PROPERTIES_KEY]: { region: 'us_stored' },
         })
-        const link = 'https://{region}.example.com/user/{{user_id}}'
+        const link = 'https://{{region}}.example.com/user/{{user_id}}'
         expect(parseUserPropertiesInLink(link, ph)).toBe('https://us_stored.example.com/user/abc')
     })
 
@@ -216,15 +207,14 @@ describe('parseUserPropertiesInLink', () => {
         expect(parseUserPropertiesInLink(link, ph)).toBe(link)
     })
 
-    it('should handle empty property names within placeholders like {{ }} or {} after trimming (checking stored)', () => {
+    it('should handle empty property names within placeholders like {{ }} or {{  }} after trimming (checking stored)', () => {
         const phWithEmptyKeyStored = mockPostHog({ [STORED_PERSON_PROPERTIES_KEY]: { '': 'emptyStoredPropValue' } })
-        const linkWithSpacedEmpty = 'https://example.com?a={{  }}&b={ }'
+        const linkWithSpacedEmpty = 'https://example.com?a={{  }}&b={{ }}' // Testing two space and one space variants
         expect(parseUserPropertiesInLink(linkWithSpacedEmpty, phWithEmptyKeyStored)).toBe(
             'https://example.com?a=emptyStoredPropValue&b=emptyStoredPropValue'
         )
-
-        // Truly empty placeholders {{}} should still not be replaced as per previous logic
-        const linkWithTrueEmpty = 'https://example.com?a={{}}&b={}'
+        // Truly empty placeholders {{}} should still not be replaced as per current logic
+        const linkWithTrueEmpty = 'https://example.com?a={{}}&b={{}} '
         expect(parseUserPropertiesInLink(linkWithTrueEmpty, phWithEmptyKeyStored)).toBe(linkWithTrueEmpty)
     })
 })
