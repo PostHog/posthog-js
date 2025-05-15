@@ -1,3 +1,19 @@
+## 1.242.1 - 2025-05-14
+
+- fix: retrieve survey shadow should include posthog ref (#1955)
+
+## 1.242.0 - 2025-05-13
+
+- feat: use css files for survey styles (#1950)
+
+## 1.241.1 - 2025-05-13
+
+- fix: Remove initial person info from event payload (#1953)
+
+## 1.241.0 - 2025-05-13
+
+- feat: Add calculateEventProperties to public API (#1951)
+
 ## 1.240.6 - 2025-05-09
 
 - feat: use css files for survey widget styles (#1948)

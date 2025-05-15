@@ -82,11 +82,7 @@ const createSegmentIntegration = (posthog: PostHog): SegmentPlugin => {
             posthog.identify(ctx.event.userId)
         }
 
-        const additionalProperties = posthog._calculate_event_properties(
-            eventName,
-            ctx.event.properties ?? {},
-            new Date()
-        )
+        const additionalProperties = posthog.calculateEventProperties(eventName, ctx.event.properties)
         ctx.event.properties = Object.assign({}, additionalProperties, ctx.event.properties)
         return ctx
     }

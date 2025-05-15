@@ -903,7 +903,7 @@ export class PostHog {
         let data: CaptureResult = {
             uuid,
             event: event_name,
-            properties: this._calculate_event_properties(event_name, properties || {}, timestamp, uuid),
+            properties: this.calculateEventProperties(event_name, properties || {}, timestamp, uuid),
         }
 
         if (clientRateLimitContext) {
@@ -965,20 +965,35 @@ export class PostHog {
         return this.on('eventCaptured', (data) => callback(data.event, data))
     }
 
-    _calculate_event_properties(
-        event_name: string,
-        event_properties: Properties,
+    /**
+     * calculateEventProperties
+     *
+     * This method is used internally to calculate the event properties before sending it to PostHog. It can also be
+     * used by integrations (e.g. Segment) to enrich events with PostHog properties before sending them to Segment,
+     * which is required for some PostHog products to work correctly. (e.g. to have a correct $session_id property).
+     *
+     * @param {String} eventName The name of the event. This can be anything the user does - 'Button Click', 'Sign Up', '$pageview', etc.
+     * @param {Object} eventProperties The properties to include with the event.
+     * @param {Date} [timestamp] The timestamp of the event, e.g. for calculating time on page. If not set, it'll automatically be set to the current time.
+     * @param {String} [uuid] The uuid of the event, e.g. for storing the $pageview ID.
+     * @param {Boolean} [readOnly] Set this if you do not intend to actually send the event, and therefore do not want to update internal state e.g. session timeout
+
+     */
+    public calculateEventProperties(
+        eventName: string,
+        eventProperties: Properties,
         timestamp?: Date,
-        uuid?: string
+        uuid?: string,
+        readOnly?: boolean
     ): Properties {
         timestamp = timestamp || new Date()
         if (!this.persistence || !this.sessionPersistence) {
-            return event_properties
+            return eventProperties
         }
 
         // set defaults
-        const startTimestamp = this.persistence.remove_event_timer(event_name)
-        let properties = { ...event_properties }
+        const startTimestamp = readOnly ? undefined : this.persistence.remove_event_timer(eventName)
+        let properties = { ...eventProperties }
         properties['token'] = this.config.token
 
         if (this.config.__preview_experimental_cookieless_mode) {
@@ -986,7 +1001,7 @@ export class PostHog {
             properties[COOKIELESS_MODE_FLAG_PROPERTY] = true
         }
 
-        if (event_name === '$snapshot') {
+        if (eventName === '$snapshot') {
             const persistenceProps = { ...this.persistence.properties(), ...this.sessionPersistence.properties() }
             properties['distinct_id'] = persistenceProps.distinct_id
             if (
@@ -1005,7 +1020,10 @@ export class PostHog {
         )
 
         if (this.sessionManager) {
-            const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId()
+            const { sessionId, windowId } = this.sessionManager.checkAndGetSessionAndWindowId(
+                readOnly,
+                timestamp.getTime()
+            )
             properties['$session_id'] = sessionId
             properties['$window_id'] = windowId
         }
@@ -1027,16 +1045,16 @@ export class PostHog {
         }
 
         let pageviewProperties: Record<string, any>
-        if (event_name === '$pageview') {
+        if (eventName === '$pageview' && !readOnly) {
             pageviewProperties = this.pageViewManager.doPageView(timestamp, uuid)
-        } else if (event_name === '$pageleave') {
+        } else if (eventName === '$pageleave' && !readOnly) {
             pageviewProperties = this.pageViewManager.doPageLeave(timestamp)
         } else {
             pageviewProperties = this.pageViewManager.doEvent()
         }
         properties = extend(properties, pageviewProperties)
 
-        if (event_name === '$pageview' && document) {
+        if (eventName === '$pageview' && document) {
             properties['title'] = document.title
         }
 
@@ -1083,19 +1101,22 @@ export class PostHog {
         const sanitize_properties = this.config.sanitize_properties
         if (sanitize_properties) {
             logger.error('sanitize_properties is deprecated. Use before_send instead')
-            properties = sanitize_properties(properties, event_name)
+            properties = sanitize_properties(properties, eventName)
         }
 
         // add person processing flag as very last step, so it cannot be overridden
         const hasPersonProcessing = this._hasPersonProcessing()
         properties['$process_person_profile'] = hasPersonProcessing
         // if the event has person processing, ensure that all future events will too, even if the setting changes
-        if (hasPersonProcessing) {
+        if (hasPersonProcessing && !readOnly) {
             this._requirePersonProcessing('_calculate_event_properties')
         }
 
         return properties
     }
+
+    /** @deprecated - deprecated in 1.241.0, use `calculateEventProperties` instead  */
+    _calculate_event_properties = this.calculateEventProperties.bind(this)
 
     /**
      * Add additional set_once properties to the event when creating a person profile. This allows us to create the
