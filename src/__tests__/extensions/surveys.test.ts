@@ -363,7 +363,7 @@ describe('SurveyManager', () => {
 
         // First popover should be handled
         expect(handlePopoverSurveySpy).toHaveBeenCalledWith(mockSurveys[0])
-        expect(addSurveyToFocusSpy).toHaveBeenCalledWith(mockSurveys[0].id)
+        expect(addSurveyToFocusSpy).toHaveBeenCalledWith(mockSurveys[0])
         expect(surveyManager.getTestAPI().surveyInFocus).toBe(mockSurveys[0].id)
 
         // Call the function again to check that the second popover is not handled
