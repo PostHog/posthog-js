@@ -2,6 +2,7 @@ import * as Preact from 'preact'
 import { PostHog } from '../posthog-core'
 import { document as _document, window as _window } from '../utils/globals'
 import { logger } from '../utils/logger'
+import { PosthogChatBox } from './chat/components/PosthogChatBox'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -42,12 +43,7 @@ export class ChatManager {
     public evaluateDisplayLogic = (): void => {
         logger.info('PostHogChat evaluateDisplayLogic')
         const shadowRoot = retrieveChatShadowRoot()
-        Preact.render(
-            <div>
-                <h1>Chat</h1>
-            </div>,
-            shadowRoot
-        )
+        Preact.render(<PosthogChatBox />, shadowRoot)
     }
 }
 
