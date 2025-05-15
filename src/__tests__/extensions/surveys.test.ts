@@ -345,7 +345,7 @@ describe('SurveyManager', () => {
 
     test('removeSurveyFromFocus should remove survey ID from surveyInFocus', () => {
         surveyManager.getTestAPI().addSurveyToFocus('survey1')
-        surveyManager.getTestAPI().removeSurveyFromFocus('survey1')
+        surveyManager.getTestAPI().removeSurveyFromFocus({ id: 'survey1', appearance: {} })
         expect(surveyManager.getTestAPI().surveyInFocus).toBe(null)
     })
 
@@ -476,7 +476,7 @@ describe('SurveyManager', () => {
         expect(surveyManager.getTestAPI().surveyInFocus).toBe('survey1')
         expect(handlePopoverSurveyMock).not.toHaveBeenCalled()
 
-        surveyManager.getTestAPI().removeSurveyFromFocus('survey1')
+        surveyManager.getTestAPI().removeSurveyFromFocus({ id: 'survey1', appearance: {} })
 
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
@@ -685,7 +685,7 @@ describe('SurveyManager', () => {
             const firstTimeoutId = surveyManager.getTestAPI().surveyTimeouts.get(mockSurvey.id)
 
             // Clear and reset to test second survey
-            surveyManager.getTestAPI().removeSurveyFromFocus(mockSurvey.id)
+            surveyManager.getTestAPI().removeSurveyFromFocus(mockSurvey)
 
             // Create and schedule second survey
             const mockSurvey2 = {
