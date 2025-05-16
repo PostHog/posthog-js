@@ -446,7 +446,9 @@ export class PostHogFeatureFlags {
                     return
                 }
 
-                this.receivedFeatureFlags(response.json ?? {}, errorsLoading)
+                if (!data.disable_flags) {
+                    this.receivedFeatureFlags(response.json ?? {}, errorsLoading)
+                }
 
                 if (this._additionalReloadRequested) {
                     this._additionalReloadRequested = false
