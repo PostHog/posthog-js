@@ -11,6 +11,12 @@ export enum SurveyWidgetType {
 }
 
 export enum SurveyPosition {
+    TopLeft = 'top_left',
+    TopRight = 'top_right',
+    TopCenter = 'top_center',
+    MiddleLeft = 'middle_left',
+    MiddleRight = 'middle_right',
+    MiddleCenter = 'middle_center',
     Left = 'left',
     Center = 'center',
     Right = 'right',
@@ -52,6 +58,7 @@ export interface SurveyAppearance {
     maxWidth?: string
     zIndex?: string
     disabledButtonOpacity?: string
+    boxPadding?: string
 }
 
 export enum SurveyType {

@@ -320,8 +320,6 @@ export class SurveyManager {
                     right: 'auto',
                     bottom: showAbove ? `${viewportHeight - buttonRect.top + spacing}px` : 'auto',
                     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                    borderBottom: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
-                    borderRadius: '10px',
                     zIndex: defaultSurveyAppearance.zIndex,
                 }
 
@@ -552,12 +550,22 @@ export class SurveyManager {
     }
 }
 
+export const DEFAULT_PREVIEW_POSITION_STYLES: React.CSSProperties = {
+    position: 'relative',
+    left: 'unset',
+    right: 'unset',
+    top: 'unset',
+    bottom: 'unset',
+    transform: 'unset',
+}
+
 export const renderSurveysPreview = ({
     survey,
     parentElement,
     previewPageIndex,
     forceDisableHtml,
     onPreviewSubmit,
+    positionStyles = DEFAULT_PREVIEW_POSITION_STYLES,
 }: {
     survey: Survey
     parentElement: HTMLElement
@@ -565,6 +573,7 @@ export const renderSurveysPreview = ({
     forceDisableHtml?: boolean
     onPreviewSubmit?: (res: string | string[] | number | null) => void
     posthog?: PostHog
+    positionStyles?: React.CSSProperties
 }) => {
     const currentStyle = parentElement.querySelector('style[data-ph-survey-style]')
     if (currentStyle) {
@@ -579,12 +588,7 @@ export const renderSurveysPreview = ({
         <SurveyPopup
             survey={survey}
             forceDisableHtml={forceDisableHtml}
-            style={{
-                position: 'relative',
-                right: 0,
-                borderBottom: `1px solid var(--ph-survey-border-color)`,
-                borderRadius: 10,
-            }}
+            style={positionStyles}
             onPreviewSubmit={onPreviewSubmit}
             previewPageIndex={previewPageIndex}
             removeSurveyFromFocus={() => {}}
@@ -843,14 +847,24 @@ interface SurveyPopupProps {
 
 function getPopoverPosition(position: SurveyPosition = SurveyPosition.Right, surveyWidgetType?: SurveyWidgetType) {
     switch (position) {
+        case SurveyPosition.TopLeft:
+            return { top: '0', left: '0', transform: 'translate(30px, 30px)' }
+        case SurveyPosition.TopRight:
+            return { top: '0', right: '0', transform: 'translate(-30px, 30px)' }
+        case SurveyPosition.TopCenter:
+            return { top: '0', left: '50%', transform: 'translate(-50%, 30px)' }
+        case SurveyPosition.MiddleLeft:
+            return { top: '50%', left: '0', transform: 'translate(30px, -50%)' }
+        case SurveyPosition.MiddleRight:
+            return { top: '50%', right: '0', transform: 'translate(-30px, -50%)' }
+        case SurveyPosition.MiddleCenter:
+            return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
         case SurveyPosition.Left:
             return { left: '30px' }
         case SurveyPosition.Center:
             return {
-                left: '0',
-                right: '0',
-                marginLeft: 'auto',
-                marginRight: 'auto',
+                left: '50%',
+                transform: 'translateX(-50%)',
             }
         default:
         case SurveyPosition.Right:
@@ -862,7 +876,7 @@ export function SurveyPopup({
     survey,
     forceDisableHtml,
     posthog,
-    style,
+    style = {},
     previewPageIndex,
     removeSurveyFromFocus = () => {},
     isPopup = true,
@@ -899,13 +913,6 @@ export function SurveyPopup({
             onPreviewSubmit,
         }
     }, [isPreviewMode, previewPageIndex, isPopup, posthog, survey, onPopupSurveyDismissed, onPreviewSubmit])
-
-    if (isPreviewMode) {
-        style = style || {}
-        style.left = 'unset'
-        style.right = 'unset'
-        style.transform = 'unset'
-    }
 
     if (!isPopupVisible) {
         return null
@@ -1087,8 +1094,6 @@ export function FeedbackWidget({
             setStyleOverrides({
                 top: '50%',
                 bottom: 'auto',
-                borderRadius: 10,
-                borderBottom: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
             })
         }
         const handleShowSurvey = (event: Event) => {

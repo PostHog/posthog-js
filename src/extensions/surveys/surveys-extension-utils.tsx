@@ -7,6 +7,7 @@ import {
     SurveyPosition,
     SurveyQuestion,
     SurveySchedule,
+    SurveyWidgetType,
 } from '../../posthog-surveys-types'
 import { document as _document, window as _window, userAgent } from '../../utils/globals'
 import { SURVEY_LOGGER as logger, SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../../utils/survey-utils'
@@ -57,17 +58,33 @@ export const defaultSurveyAppearance = {
     textSubtleColor: '#939393',
     inputBackground: 'white',
     boxPadding: '20px 24px 10px',
+    borderRadius: '10px',
 } as const
 
 export const addSurveyCSSVariablesToElement = (element: HTMLElement, appearance?: SurveyAppearance | null) => {
     const effectiveAppearance = { ...defaultSurveyAppearance, ...appearance }
     const hostStyle = element.style
 
+    const isSurveyOnBottom = [SurveyPosition.Center, SurveyPosition.Left, SurveyPosition.Right].includes(
+        effectiveAppearance.position
+    )
+
     hostStyle.setProperty('--ph-survey-font-family', getFontFamily(effectiveAppearance.fontFamily))
     hostStyle.setProperty('--ph-survey-box-padding', effectiveAppearance.boxPadding)
     hostStyle.setProperty('--ph-survey-max-width', effectiveAppearance.maxWidth)
     hostStyle.setProperty('--ph-survey-z-index', effectiveAppearance.zIndex)
     hostStyle.setProperty('--ph-survey-border-color', effectiveAppearance.borderColor)
+    // Bottom surveys or embedded surveys don't have a border bottom
+    if (isSurveyOnBottom && appearance?.widgetType !== SurveyWidgetType.Tab) {
+        hostStyle.setProperty('--ph-survey-border-bottom', 'none')
+        hostStyle.setProperty(
+            '--ph-survey-border-radius',
+            `${effectiveAppearance.borderRadius} ${effectiveAppearance.borderRadius} 0 0`
+        )
+    } else {
+        hostStyle.setProperty('--ph-survey-border-radius', effectiveAppearance.borderRadius)
+        hostStyle.setProperty('--ph-survey-border-bottom', '1.5px solid var(--ph-survey-border-color)')
+    }
     hostStyle.setProperty('--ph-survey-background-color', effectiveAppearance.backgroundColor)
     hostStyle.setProperty('--ph-survey-disabled-button-opacity', effectiveAppearance.disabledButtonOpacity)
     hostStyle.setProperty('--ph-survey-submit-button-color', effectiveAppearance.submitButtonColor)
