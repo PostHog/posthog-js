@@ -897,6 +897,7 @@ export function SurveyPopup({
             isPopup: isPopup || false,
             surveySubmissionId: getInProgressSurvey?.surveySubmissionId || uuidv7(),
             onPreviewSubmit,
+            posthog,
         }
     }, [isPreviewMode, previewPageIndex, isPopup, posthog, survey, onPopupSurveyDismissed, onPreviewSubmit])
 

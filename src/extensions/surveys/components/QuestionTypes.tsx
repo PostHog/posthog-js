@@ -17,9 +17,11 @@ import {
     veryDissatisfiedEmoji,
     verySatisfiedEmoji,
 } from '../icons'
-import { getDisplayOrderChoices } from '../surveys-extension-utils'
+import { getDisplayOrderChoices, useSurveyContext } from '../surveys-extension-utils'
 import { BottomSection } from './BottomSection'
 import { QuestionHeader } from './QuestionHeader'
+import { PostHog } from '../../../posthog-core'
+import { STORED_PERSON_PROPERTIES_KEY } from '../../../constants'
 
 export interface CommonQuestionProps {
     forceDisableHtml: boolean
@@ -79,6 +81,35 @@ export function OpenTextQuestion({
     )
 }
 
+export function parseUserPropertiesInLink(link: string, posthog?: PostHog) {
+    if (!link || !posthog || !posthog.get_property) {
+        return link
+    }
+
+    const regex = /\{\{(.*?)\}\}/g
+    let newLink = link
+    let match: RegExpExecArray | null
+
+    // Iterate over all matches and replace them
+    while (!isNull((match = regex.exec(link)))) {
+        const placeholder = match.at(0) // The full placeholder e.g. {{property_name}}
+        const propertyNameWithPotentialWhitespace = match.at(1) // Property name is now always in match[1]
+
+        if (placeholder && propertyNameWithPotentialWhitespace) {
+            const propertyName = propertyNameWithPotentialWhitespace.trim()
+            if (propertyName !== '') {
+                const propertyValue =
+                    posthog.get_property(propertyName) ||
+                    posthog.get_property(STORED_PERSON_PROPERTIES_KEY)?.[propertyName]
+                if (isString(propertyValue) || isNumber(propertyValue)) {
+                    newLink = newLink.replace(placeholder, encodeURIComponent(String(propertyValue)))
+                }
+            }
+        }
+    }
+    return newLink
+}
+
 export function LinkQuestion({
     question,
     forceDisableHtml,
@@ -88,6 +119,9 @@ export function LinkQuestion({
 }: CommonQuestionProps & {
     question: LinkSurveyQuestion
 }) {
+    const { posthog } = useSurveyContext()
+    const parsedLink = parseUserPropertiesInLink(question.link || '', posthog)
+
     return (
         <Fragment>
             <div className="question-container">
@@ -101,7 +135,7 @@ export function LinkQuestion({
             <BottomSection
                 text={question.buttonText || 'Submit'}
                 submitDisabled={false}
-                link={question.link}
+                link={parsedLink}
                 appearance={appearance}
                 onSubmit={() => onSubmit('link clicked')}
                 onPreviewSubmit={() => onPreviewSubmit('link clicked')}
