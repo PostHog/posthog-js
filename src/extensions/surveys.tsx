@@ -202,7 +202,7 @@ export class SurveyManager {
         }
 
         this._clearSurveyTimeout(survey.id)
-        this._addSurveyToFocus(survey.id)
+        this._addSurveyToFocus(survey)
         const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
         const shadow = retrieveSurveyShadow(survey, this._posthog)
         if (delaySeconds <= 0) {
@@ -217,7 +217,7 @@ export class SurveyManager {
         }
         const timeoutId = setTimeout(() => {
             if (!doesSurveyUrlMatch(survey)) {
-                return this._removeSurveyFromFocus(survey.id)
+                return this._removeSurveyFromFocus(survey)
             }
             // rendering with surveyPopupDelaySeconds = 0 because we're already handling the timeout here
             Preact.render(
@@ -521,19 +521,24 @@ export class SurveyManager {
         }, forceReload)
     }
 
-    private _addSurveyToFocus = (id: string): void => {
+    private _addSurveyToFocus = (survey: Pick<Survey, 'id'>): void => {
         if (!isNull(this._surveyInFocus)) {
-            logger.error(`Survey ${[...this._surveyInFocus]} already in focus. Cannot add survey ${id}.`)
+            logger.error(`Survey ${[...this._surveyInFocus]} already in focus. Cannot add survey ${survey.id}.`)
         }
-        this._surveyInFocus = id
+        this._surveyInFocus = survey.id
     }
 
-    private _removeSurveyFromFocus = (id: string): void => {
-        if (this._surveyInFocus !== id) {
-            logger.error(`Survey ${id} is not in focus. Cannot remove survey ${id}.`)
+    private _removeSurveyFromFocus = (survey: Pick<Survey, 'id' | 'appearance'>): void => {
+        if (this._surveyInFocus !== survey.id) {
+            logger.error(`Survey ${survey.id} is not in focus. Cannot remove survey ${survey.id}.`)
         }
-        this._clearSurveyTimeout(id)
+        this._clearSurveyTimeout(survey.id)
         this._surveyInFocus = null
+        // Remove survey from the DOM and reset Preact lifecycle
+        const shadow = retrieveSurveyShadow(survey, this._posthog)
+        Preact.render(null, shadow)
+        const shadowContainer = document.querySelector(getSurveyContainerClass(survey, true))
+        shadowContainer?.remove()
     }
 
     // Expose internal state and methods for testing
@@ -630,7 +635,7 @@ export function generateSurveys(posthog: PostHog) {
 
 type UseHideSurveyOnURLChangeProps = {
     survey: Pick<Survey, 'id' | 'conditions' | 'type' | 'appearance'>
-    removeSurveyFromFocus?: (id: string) => void
+    removeSurveyFromFocus?: (survey: Pick<Survey, 'id' | 'appearance'>) => void
     setSurveyVisible: (visible: boolean) => void
     isPreviewMode?: boolean
 }
@@ -671,7 +676,7 @@ export function useHideSurveyOnURLChange({
 
             logger.info(`Hiding survey ${survey.id} because URL does not match`)
             setSurveyVisible(false)
-            return removeSurveyFromFocus(survey.id)
+            return removeSurveyFromFocus(survey)
         }
 
         // Listen for browser back/forward browser history changes
@@ -708,7 +713,7 @@ export function usePopupVisibility(
     posthog: PostHog | undefined,
     millisecondDelay: number,
     isPreviewMode: boolean,
-    removeSurveyFromFocus: (id: string) => void,
+    removeSurveyFromFocus: (survey: Pick<Survey, 'id' | 'appearance'>) => void,
     surveyContainerRef?: React.RefObject<HTMLDivElement>
 ) {
     const [isPopupVisible, setIsPopupVisible] = useState(isPreviewMode || millisecondDelay === 0)
@@ -717,11 +722,7 @@ export function usePopupVisibility(
     const hidePopupWithViewTransition = () => {
         const removeDOMAndHidePopup = () => {
             if (survey.type === SurveyType.Popover) {
-                removeSurveyFromFocus(survey.id)
-                const shadow = retrieveSurveyShadow(survey, posthog)
-                Preact.render(null, shadow)
-                const shadowContainer = document.querySelector(getSurveyContainerClass(survey, true))
-                shadowContainer?.remove()
+                removeSurveyFromFocus(survey)
             }
             setIsPopupVisible(false)
         }
@@ -834,7 +835,7 @@ interface SurveyPopupProps {
     posthog?: PostHog
     style?: React.CSSProperties
     previewPageIndex?: number | undefined
-    removeSurveyFromFocus?: (id: string) => void
+    removeSurveyFromFocus?: (survey: Pick<Survey, 'id' | 'appearance'>) => void
     isPopup?: boolean
     onPreviewSubmit?: (res: string | string[] | number | null) => void
     onPopupSurveyDismissed?: () => void
@@ -884,6 +885,7 @@ export function SurveyPopup({
         removeSurveyFromFocus,
         surveyContainerRef
     )
+
     const shouldShowConfirmation = isSurveySent || previewPageIndex === survey.questions.length
     const surveyContextValue = useMemo(() => {
         const getInProgressSurvey = getInProgressSurveyState(survey)
@@ -897,6 +899,7 @@ export function SurveyPopup({
             isPopup: isPopup || false,
             surveySubmissionId: getInProgressSurvey?.surveySubmissionId || uuidv7(),
             onPreviewSubmit,
+            posthog,
         }
     }, [isPreviewMode, previewPageIndex, isPopup, posthog, survey, onPopupSurveyDismissed, onPreviewSubmit])
 
