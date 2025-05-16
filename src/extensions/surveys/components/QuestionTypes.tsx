@@ -17,7 +17,7 @@ import {
     veryDissatisfiedEmoji,
     verySatisfiedEmoji,
 } from '../icons'
-import { getDisplayOrderChoices } from '../surveys-extension-utils'
+import { getDisplayOrderChoices, useSurveyContext } from '../surveys-extension-utils'
 import { BottomSection } from './BottomSection'
 import { QuestionHeader } from './QuestionHeader'
 
@@ -137,6 +137,15 @@ export function RatingQuestion({
         return null
     })
 
+    const { isPreviewMode } = useSurveyContext()
+
+    const handleSubmit = (num: number) => {
+        if (isPreviewMode) {
+            return onPreviewSubmit(num)
+        }
+        return onSubmit(num)
+    }
+
     return (
         <Fragment>
             <div className="question-container">
@@ -154,6 +163,7 @@ export function RatingQuestion({
                                     const active = idx + 1 === rating
                                     return (
                                         <button
+                                            aria-label={`Rate ${idx + 1}`}
                                             className={`ratings-emoji question-${displayQuestionIndex}-rating-${idx} ${
                                                 active ? 'rating-active' : ''
                                             }`}
@@ -161,7 +171,11 @@ export function RatingQuestion({
                                             key={idx}
                                             type="button"
                                             onClick={() => {
-                                                setRating(idx + 1)
+                                                const response = idx + 1
+                                                setRating(response)
+                                                if (question.skipSubmitButton) {
+                                                    handleSubmit(response)
+                                                }
                                             }}
                                         >
                                             {emoji}
@@ -184,8 +198,11 @@ export function RatingQuestion({
                                             active={active}
                                             appearance={appearance}
                                             num={number}
-                                            setActiveNumber={(num) => {
-                                                setRating(num)
+                                            setActiveNumber={(response) => {
+                                                setRating(response)
+                                                if (question.skipSubmitButton) {
+                                                    handleSubmit(response)
+                                                }
                                             }}
                                         />
                                     )
@@ -205,6 +222,7 @@ export function RatingQuestion({
                 appearance={appearance}
                 onSubmit={() => onSubmit(rating)}
                 onPreviewSubmit={() => onPreviewSubmit(rating)}
+                skipSubmitButton={question.skipSubmitButton}
             />
         </Fragment>
     )
@@ -224,6 +242,7 @@ export function RatingButton({
 }) {
     return (
         <button
+            aria-label={`Rate ${num}`}
             className={`ratings-number question-${displayQuestionIndex}-rating-${num} ${active ? 'rating-active' : ''}`}
             type="button"
             onClick={() => {
@@ -303,8 +322,11 @@ export function MultipleChoiceQuestion({
         }
         return ''
     })
+    const { isPreviewMode } = useSurveyContext()
 
     const inputType = question.type === SurveyQuestionType.SingleChoice ? 'radio' : 'checkbox'
+    const shouldSkipSubmit =
+        question.skipSubmitButton && question.type === SurveyQuestionType.SingleChoice && !question.hasOpenChoice
 
     const handleChoiceChange = (val: string, isOpenChoice: boolean) => {
         if (isOpenChoice) {
@@ -320,6 +342,12 @@ export function MultipleChoiceQuestion({
         if (question.type === SurveyQuestionType.SingleChoice) {
             setSelectedChoices(val)
             setOpenChoiceSelected(false) // Deselect open choice when selecting another option
+            if (shouldSkipSubmit) {
+                onSubmit(val)
+                if (isPreviewMode) {
+                    onPreviewSubmit(val)
+                }
+            }
             return
         }
 
@@ -429,6 +457,7 @@ export function MultipleChoiceQuestion({
                         onPreviewSubmit(selectedChoices)
                     }
                 }}
+                skipSubmitButton={shouldSkipSubmit}
             />
         </Fragment>
     )
