@@ -153,6 +153,7 @@ export enum QuotaLimitedResource {
 }
 
 export class PostHogFeatureFlags {
+    private readonly _instance: PostHog
     _override_warning: boolean = false
     featureFlagEventHandlers: FeatureFlagsCallback[]
     $anon_distinct_id: string | undefined
@@ -164,7 +165,8 @@ export class PostHogFeatureFlags {
     private _decideCalled: boolean = false
     private _flagsLoadedFromRemote: boolean = false
 
-    constructor(private _instance: PostHog) {
+    constructor(_instance: PostHog) {
+        this._instance = _instance
         this.featureFlagEventHandlers = []
     }
 

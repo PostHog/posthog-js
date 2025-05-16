@@ -31,8 +31,10 @@ export const webExperimentUrlValidationMap: Record<
 
 export class WebExperiments {
     private _flagToExperiments?: Map<string, WebExperiment>
+    private readonly _instance: PostHog
 
-    constructor(private _instance: PostHog) {
+    constructor(_instance: PostHog) {
+        this._instance = _instance
         this._instance.onFeatureFlags((flags: string[]) => {
             this.onFeatureFlags(flags)
         })

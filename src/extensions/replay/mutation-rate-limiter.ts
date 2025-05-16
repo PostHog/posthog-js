@@ -4,20 +4,24 @@ import type { rrwebRecord } from './types/rrweb'
 
 import { clampToRange } from '../../utils/number-utils'
 
+interface MutationRateLimiterOptions {
+    bucketSize?: number
+    refillRate?: number
+    onBlockedNode?: (id: number, node: Node | null) => void
+}
+
 export class MutationRateLimiter {
     private _bucketSize = 100
     private _refillRate = 10
     private _mutationBuckets: Record<string, number> = {}
     private _loggedTracker: Record<string, boolean> = {}
 
-    constructor(
-        private readonly _rrweb: rrwebRecord,
-        private readonly _options: {
-            bucketSize?: number
-            refillRate?: number
-            onBlockedNode?: (id: number, node: Node | null) => void
-        } = {}
-    ) {
+    private readonly _rrweb: rrwebRecord
+    private readonly _options: MutationRateLimiterOptions
+
+    constructor(_rrweb: rrwebRecord, _options: MutationRateLimiterOptions = {}) {
+        this._options = _options
+        this._rrweb = _rrweb
         this._refillRate = clampToRange(
             this._options.refillRate ?? this._refillRate,
             0,

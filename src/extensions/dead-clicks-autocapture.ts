@@ -21,13 +21,19 @@ export class DeadClicksAutocapture {
         return this._lazyLoadedDeadClicksAutocapture
     }
 
+    readonly instance: PostHog
     private _lazyLoadedDeadClicksAutocapture: LazyLoadedDeadClicksAutocaptureInterface | undefined
+    readonly isEnabled: (dca: DeadClicksAutocapture) => boolean
+    readonly onCapture?: DeadClicksAutoCaptureConfig['__onCapture']
 
     constructor(
-        readonly instance: PostHog,
-        readonly isEnabled: (dca: DeadClicksAutocapture) => boolean,
-        readonly onCapture?: DeadClicksAutoCaptureConfig['__onCapture']
+        instance: PostHog,
+        isEnabled: (dca: DeadClicksAutocapture) => boolean,
+        onCapture?: DeadClicksAutoCaptureConfig['__onCapture']
     ) {
+        this.onCapture = onCapture
+        this.isEnabled = isEnabled
+        this.instance = instance
         this.startIfEnabled()
     }
 
