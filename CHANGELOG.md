@@ -1,3 +1,8 @@
+## 1.242.2 - 2025-05-15
+
+- fix: center positioning for surveys (#1959)
+- chore: escape quotation marks on elements string handling (#1943)
+
 ## 1.242.1 - 2025-05-14
 
 - fix: retrieve survey shadow should include posthog ref (#1955)
