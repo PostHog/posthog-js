@@ -581,7 +581,7 @@ export const renderSurveysPreview = ({
     const stylesheet = getSurveyStylesheet()
     if (stylesheet) {
         parentElement.appendChild(stylesheet)
-        addSurveyCSSVariablesToElement(parentElement, survey.appearance)
+        addSurveyCSSVariablesToElement(parentElement, survey.type, survey.appearance)
     }
     Preact.render(
         <SurveyPopup
@@ -608,7 +608,7 @@ export const renderFeedbackWidgetPreview = ({
     const stylesheet = getSurveyStylesheet()
     if (stylesheet) {
         root.appendChild(stylesheet)
-        addSurveyCSSVariablesToElement(root, survey.appearance)
+        addSurveyCSSVariablesToElement(root, survey.type, survey.appearance)
     }
 
     Preact.render(<FeedbackWidget forceDisableHtml={forceDisableHtml} survey={survey} readOnly={true} />, root)
