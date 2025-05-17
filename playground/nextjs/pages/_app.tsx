@@ -52,7 +52,7 @@ export default function App({ Component, pageProps }: AppProps) {
                 />
             </Head>
 
-            <main>
+            <main className="max-w-full overflow-hidden">
                 <PageHeader />
                 <Component {...pageProps} />
                 <CookieBanner />

@@ -26,8 +26,8 @@ export function ConfirmationMessage({
 
     return (
         <div className="thank-you-message">
+            {isPopup && <Cancel onClick={() => onClose()} />}
             <div className="thank-you-message-container">
-                {isPopup && <Cancel onClick={() => onClose()} />}
                 <h3 className="thank-you-message-header">{header}</h3>
                 {description &&
                     renderChildrenAsTextOrHtml({
