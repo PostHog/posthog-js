@@ -1,32 +1,38 @@
+require('dotenv').config()
 const express = require('express')
 const path = require('path')
-const { v7: uuidv7 } = require('uuid')
 const app = express()
 const PORT = 8080
 
 // UPDATE YOUR TOKEN!!!
-const POSTHOG_TOKEN = 'phc_tQttuNsuNT6bHLQTFvvxIHjXXcOKWIk7NySsAjw42EF'
-const POSTHOG_SNIPPET = `<script>
+const POSTHOG_TOKEN = process.env.POSTHOG_TOKEN
+const POSTHOG_API_HOST = process.env.POSTHOG_API_HOST
+const POSTHOG_UI_HOST = process.env.POSTHOG_UI_HOST
+const POSTHOG_USE_SNIPPET = process.env.POSTHOG_USE_SNIPPET === 'true' || process.env.POSTHOG_USE_SNIPPET === '1'
+
+const POSTHOG_SCRIPT = POSTHOG_USE_SNIPPET
+    ? `<script>
     !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init bs ws ge fs capture De calculateEventProperties $s register register_once register_for_session unregister unregister_for_session Is getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSurveysLoaded onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey canRenderSurveyAsync identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty xs Ss createPersonProfile Es gs opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing ys debug ks getPageViewId captureTraceFeedback captureTraceMetric".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
     posthog.init("${POSTHOG_TOKEN}", {
-        api_host: 'http://localhost:8010',
-        person_profiles: 'identified_only',
+        api_host: "${POSTHOG_API_HOST}",
+        ui_host: "${POSTHOG_UI_HOST}",
     })
 </script>`
+    : `<script src="/dist/posthog.js"></script>`
 
-const CSP_REPORT_URI = `http://localhost:8010/csp?token=${POSTHOG_TOKEN}&pid=${uuidv7()}`
-const USE_REPORT_TO = CSP_REPORT_URI.startsWith('https://')
+const CSP_REPORT_URI = `${POSTHOG_API_HOST}/csp?token=${POSTHOG_TOKEN}`
+const USE_REPORT_TO = POSTHOG_API_HOST.startsWith('https://')
 
 const CSP_RULES = {
     'default-src': "'self'",
-    'script-src': "'self' https://*.posthog.com http://localhost:8010 'unsafe-inline'",
-    'connect-src': "'self' https://*.posthog.com http://localhost:8010",
+    'script-src': `'self' ${POSTHOG_API_HOST} ${POSTHOG_USE_SNIPPET ? "'unsafe-inline'" : "'nonce-123'"}`,
+    'connect-src': `'self' ${POSTHOG_API_HOST} ${POSTHOG_UI_HOST} https://*.posthog.com`,
     'img-src': "'self' data:",
-    'style-src': "'self'",
-    'report-uri': CSP_REPORT_URI,
+    'style-src': `'self' ${POSTHOG_UI_HOST}`,
+    'report-uri': CSP_REPORT_URI + '&type=report-uri',
     ...(USE_REPORT_TO
         ? {
-              'report-to': 'csp-endpoint', // easier to debug with report-uri
+              'report-to': 'posthog', // easier to debug with report-uri
           }
         : {}),
 }
@@ -34,13 +40,14 @@ const CSP_RULES = {
 const CSP_HEADER = Object.entries(CSP_RULES)
     .map(([key, value]) => `${key} ${value}`)
     .join('; ')
-const REPORTING_HEADER = `csp-endpoint="${CSP_REPORT_URI}"`
+const REPORTING_HEADER = `posthog="${CSP_REPORT_URI}&type=report-to"`
 
-app.use(express.static(path.join(__dirname, 'public')))
+app.use('/dist', express.static(path.join(__dirname, 'dist')))
+app.use('/static', express.static(path.join(__dirname, 'static')))
 
 app.use((req, res, next) => {
     // Set CSP as headers, we can probably make this a bit more configurable for the playground
-    res.setHeader('Content-Security-Policy', CSP_HEADER)
+    res.setHeader('Content-Security-Policy-Report-Only', CSP_HEADER)
     if (USE_REPORT_TO) {
         res.setHeader('Reporting-Endpoints', REPORTING_HEADER)
     }
@@ -56,47 +63,9 @@ app.get('/', (req, res) => {
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>CSP Violation Playground</title>
-      <style>
-        body {
-          font-family: system-ui, -apple-system, sans-serif;
-          max-width: 800px;
-          margin: 0 auto;
-          padding: 20px;
-          line-height: 1.6;
-        }
-        h1 {
-          margin-bottom: 30px;
-          color: #4338ca;
-        }
-        .card {
-          border: 1px solid #ddd;
-          padding: 20px;
-          border-radius: 8px;
-          margin-bottom: 20px;
-          background-color: #f9fafb;
-        }
-        a.button {
-          display: inline-block;
-          background-color: #4f46e5;
-          color: white;
-          text-decoration: none;
-          padding: 10px 15px;
-          border-radius: 4px;
-          margin-right: 10px;
-          margin-bottom: 10px;
-        }
-        a.button:hover {
-          background-color: #4338ca;
-        }
-        pre {
-          background-color: #1e293b;
-          color: #e2e8f0;
-          padding: 15px;
-          border-radius: 4px;
-          overflow-x: auto;
-        }
-      </style>
-      ${POSTHOG_SNIPPET}
+      <link href="/static/styles.css" rel="stylesheet">
+      <script src="/dist/main.js"></script>
+      ${POSTHOG_SCRIPT}
     </head>
     <body>
       <h1>CSP Violation Playground</h1>
@@ -110,6 +79,7 @@ app.get('/', (req, res) => {
         <a href="/external-img" class="button">External Image Violation</a>
         <a href="/external-style" class="button">External Style Violation</a>
         <a href="/xhr-violation" class="button">XHR Violation</a>
+        <a href="/eval" class="button">Eval</a>
       </div>
       
       <div class="card">
@@ -133,12 +103,9 @@ app.get('/inline-script', (req, res) => {
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Inline Script Violation</title>
-      <style>
-        body { font-family: system-ui; max-width: 800px; margin: 20px auto; }
-        h1 { color: #4338ca; }
-        .card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; }
-        a { color: #4f46e5; }
-      </style>
+      <link href="/static/styles.css" rel="stylesheet">
+      <script src="/dist/main.js"></script>
+      ${POSTHOG_SCRIPT}
     </head>
     <body>
       <h1>Inline Script Violation</h1>
@@ -165,15 +132,11 @@ app.get('/external-script', (req, res) => {
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>External Script Violation</title>
-      <style>
-        body { font-family: system-ui; max-width: 800px; margin: 20px auto; }
-        h1 { color: #4338ca; }
-        .card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; }
-        a { color: #4f46e5; }
-      </style>
+      <link href="/static/styles.css" rel="stylesheet">
+      <script src="/dist/main.js"></script>
+      ${POSTHOG_SCRIPT}
       <!-- This external script violates CSP -->
       <script src="https://example.com/script.js"></script>
-      ${POSTHOG_SNIPPET}
     </head>
     <body>
       <h1>External Script Violation</h1>
@@ -195,13 +158,9 @@ app.get('/external-img', (req, res) => {
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>External Image Violation</title>
-      <style>
-        body { font-family: system-ui; max-width: 800px; margin: 20px auto; }
-        h1 { color: #4338ca; }
-        .card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; }
-        a { color: #4f46e5; }
-      </style>
-      ${POSTHOG_SNIPPET}
+      <link href="/static/styles.css" rel="stylesheet">
+      <script src="/dist/main.js"></script>
+      ${POSTHOG_SCRIPT}
     </head>
     <body>
       <h1>External Image Violation</h1>
@@ -225,15 +184,11 @@ app.get('/external-style', (req, res) => {
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>External Style Violation</title>
+      <link href="/static/styles.css" rel="stylesheet">
+      <script src="/dist/main.js"></script>
+      ${POSTHOG_SCRIPT}
       <!-- This external stylesheet violates CSP -->
       <link rel="stylesheet" href="https://example.com/styles.css">
-      <style>
-        body { font-family: system-ui; max-width: 800px; margin: 20px auto; }
-        h1 { color: #4338ca; }
-        .card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; }
-        a { color: #4f46e5; }
-      </style>
-      ${POSTHOG_SNIPPET}
     </head>
     <body>
       <h1>External Style Violation</h1>
@@ -255,13 +210,9 @@ app.get('/xhr-violation', (req, res) => {
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>XHR Violation</title>
-      <style>
-        body { font-family: system-ui; max-width: 800px; margin: 20px auto; }
-        h1 { color: #4338ca; }
-        .card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; }
-        a { color: #4f46e5; }
-      </style>
-      ${POSTHOG_SNIPPET}
+      <link href="/static/styles.css" rel="stylesheet">
+      <script src="/dist/main.js"></script>
+      ${POSTHOG_SCRIPT}
     </head>
     <body>
       <h1>XHR Violation</h1>
@@ -270,10 +221,9 @@ app.get('/xhr-violation', (req, res) => {
         <p><a href="/">Back to Home</a></p>
         <div id="result"></div>
       </div>
-      <!-- We need to use a script from a permitted domain to execute the XHR violation -->
-      <script>
-        // This part is allowed by CSP because it's inline in the page
-        // But the XHR request will violate CSP
+      <!-- We use nonce so that this script is allowed to run despite being inline-->
+      <script nonce="123">
+        // The XHR request will violate CSP
         setTimeout(() => {
           const xhr = new XMLHttpRequest();
           xhr.open('GET', 'https://example.com/api');
@@ -281,6 +231,38 @@ app.get('/xhr-violation', (req, res) => {
           
           document.getElementById('result').innerHTML = 
             'XHR request sent to example.com. Check browser console for CSP violation.';
+        }, 1000);
+      </script>
+    </body>
+    </html>
+  `)
+})
+
+app.get('/eval', (req, res) => {
+    res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>XHR Violation</title>
+      <link href="/static/styles.css" rel="stylesheet">
+      <script src="/dist/main.js"></script>
+      ${POSTHOG_SCRIPT}
+    </head>
+    <body>
+      <h1>XHR Violation</h1>
+      <div class="card">
+        <p>This page attempts to make an XHR request to example.com which violates CSP.</p>
+        <p><a href="/">Back to Home</a></p>
+        <div id="result"></div>
+      </div>
+            <!-- We use nonce so that this script is allowed to run despite being inline-->
+
+      <script nonce="123">
+        // The eval will violate CSP
+        setTimeout(() => {
+          eval('console.log("Hello, world! - sent from my eval")');
         }, 1000);
       </script>
     </body>
