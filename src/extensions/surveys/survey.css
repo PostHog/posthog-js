@@ -9,6 +9,7 @@
     --ph-survey-border-bottom: 1.5px solid var(--ph-survey-border-color);
     --ph-survey-border-radius: 10px;
     --ph-survey-background-color: #eeeded;
+    --ph-survey-box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     --ph-survey-disabled-button-opacity: 0.6;
     --ph-survey-submit-button-color: black;
     --ph-survey-submit-button-text-color: white;
@@ -157,10 +158,7 @@
     border-bottom: var(--ph-survey-border-bottom);
     background: var(--ph-survey-background-color);
     border-radius: var(--ph-survey-border-radius);
-    box-shadow:
-        -6px 0 16px -8px rgb(0 0 0 / 8%),
-        -9px 0 28px 0 rgb(0 0 0 / 5%),
-        -12px 0 48px 16px rgb(0 0 0 / 3%);
+    box-shadow: var(--ph-survey-box-shadow);
     padding: var(--ph-survey-box-padding);
 }
 

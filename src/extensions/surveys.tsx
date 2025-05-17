@@ -319,7 +319,6 @@ export class SurveyManager {
                     left: `${left}px`,
                     right: 'auto',
                     bottom: showAbove ? `${viewportHeight - buttonRect.top + spacing}px` : 'auto',
-                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
                     zIndex: defaultSurveyAppearance.zIndex,
                 }
 
@@ -550,7 +549,7 @@ export class SurveyManager {
     }
 }
 
-export const DEFAULT_PREVIEW_POSITION_STYLES: React.CSSProperties = {
+const DEFAULT_PREVIEW_POSITION_STYLES: React.CSSProperties = {
     position: 'relative',
     left: 'unset',
     right: 'unset',

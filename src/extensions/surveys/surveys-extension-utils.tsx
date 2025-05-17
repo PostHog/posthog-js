@@ -59,6 +59,7 @@ export const defaultSurveyAppearance = {
     inputBackground: 'white',
     boxPadding: '20px 24px 10px',
     borderRadius: '10px',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
 } as const
 
 export const addSurveyCSSVariablesToElement = (element: HTMLElement, appearance?: SurveyAppearance | null) => {
@@ -86,6 +87,7 @@ export const addSurveyCSSVariablesToElement = (element: HTMLElement, appearance?
         hostStyle.setProperty('--ph-survey-border-bottom', '1.5px solid var(--ph-survey-border-color)')
     }
     hostStyle.setProperty('--ph-survey-background-color', effectiveAppearance.backgroundColor)
+    hostStyle.setProperty('--ph-survey-box-shadow', effectiveAppearance.boxShadow)
     hostStyle.setProperty('--ph-survey-disabled-button-opacity', effectiveAppearance.disabledButtonOpacity)
     hostStyle.setProperty('--ph-survey-submit-button-color', effectiveAppearance.submitButtonColor)
     hostStyle.setProperty(
