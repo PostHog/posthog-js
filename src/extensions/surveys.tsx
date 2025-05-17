@@ -844,7 +844,11 @@ interface SurveyPopupProps {
     onCloseConfirmationMessage?: () => void
 }
 
-function getPopoverPosition(position: SurveyPosition = SurveyPosition.Right, surveyWidgetType?: SurveyWidgetType) {
+function getPopoverPosition(
+    type: SurveyType,
+    position: SurveyPosition = SurveyPosition.Right,
+    surveyWidgetType?: SurveyWidgetType
+) {
     switch (position) {
         case SurveyPosition.TopLeft:
             return { top: '0', left: '0', transform: 'translate(30px, 30px)' }
@@ -867,7 +871,7 @@ function getPopoverPosition(position: SurveyPosition = SurveyPosition.Right, sur
             }
         default:
         case SurveyPosition.Right:
-            return { right: surveyWidgetType && surveyWidgetType === SurveyWidgetType.Tab ? '60px' : '30px' }
+            return { right: type === SurveyType.Widget && surveyWidgetType === SurveyWidgetType.Tab ? '60px' : '30px' }
     }
 }
 
@@ -922,7 +926,7 @@ export function SurveyPopup({
             <div
                 className="survey-container"
                 style={{
-                    ...getPopoverPosition(survey.appearance?.position, survey.appearance?.widgetType),
+                    ...getPopoverPosition(survey.type, survey.appearance?.position, survey.appearance?.widgetType),
                     ...style,
                 }}
                 ref={surveyContainerRef}
