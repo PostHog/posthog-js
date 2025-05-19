@@ -1,0 +1,26 @@
+{
+    "name": "csp-violations-playground",
+    "version": "1.0.0",
+    "description": "A playground for testing CSP violation reports with PostHog",
+    "main": "server.js",
+    "scripts": {
+        "build": "NODE_ENV=production rollup -c",
+        "rollup:watch": "rollup -c -w",
+        "serve": "nodemon server.js",
+        "dev": "concurrently -k -n \"ROLLUP,SERVE\" -c \"magenta,cyan\" \"npm:rollup:watch\" \"npm:serve\"",
+        "start": "node server.js"
+    },
+    "dependencies": {
+        "@rollup/plugin-commonjs": "^28.0.3",
+        "@rollup/plugin-node-resolve": "^16.0.1",
+        "@rollup/plugin-replace": "^6.0.2",
+        "concurrently": "^9.1.2",
+        "dotenv": "^16.5.0",
+        "express": "^4.18.2",
+        "posthog-js": "^1.242.2",
+        "uuid": "^11.1.0"
+    },
+    "devDependencies": {
+        "nodemon": "^2.0.22"
+    }
+}
