@@ -1,3 +1,7 @@
+## 1.245.0 - 2025-05-19
+
+- feat: add new options for survey positions (#1965)
+
 ## 1.244.0 - 2025-05-19
 
 
