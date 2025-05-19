@@ -27,38 +27,57 @@ export class PostHogChat {
     }
 
     sendMessage(message: string) {
-        const conversationId = 1
         logger.info('PostHogChat sendMessage', message)
-        // distinct_id: this._instance.get_distinct_id(),
-        this._instance._send_request({
-            url: this._instance.requestRouter.endpointFor('api', `/api/chat/?token=${this._instance.config.token}`),
-            method: 'POST',
-            data: {
-                action: 'send_message',
-                conversation_id: 1,
-                message: message,
-            },
-            timeout: 10000,
-            callback: (response) => {
-                const statusCode = response.statusCode
-                if (statusCode !== 200 || !response.json) {
-                    const error = `Chat message could not be sent, status: ${statusCode}`
-                    logger.error(error)
-                    // return callback([], {
-                    //     isLoaded: false,
-                    //     error,
-                    // })
-                }
-                console.debug('response', response)
-                console.debug('response.json', response.json)
-                // const messages = response.json.messages || []
+        const conversationId = this._instance.get_property('$chat_conversation_id')
 
-                // this._instance.persistence?.register({ [SURVEYS]: surveys })
-                // return callback(surveys, {
-                //     isLoaded: true,
-                // })
-            },
-        })
+        if (!conversationId) {
+            this._instance._send_request({
+                url: this._instance.requestRouter.endpointFor('api', `/api/chat/`),
+                method: 'POST',
+                data: {
+                    token: this._instance.config.token,
+                    action: 'create_conversation',
+                    distinct_id: this._instance.get_distinct_id(),
+                    title: 'Some title',
+                    conversation_id: conversationId,
+                    message: message,
+                    source_url: window.location.href,
+                },
+                timeout: 10000,
+                callback: (response) => {
+                    const statusCode = response.statusCode
+                    if (statusCode !== 200 || !response.json) {
+                        const error = `Chat message could not be sent, status: ${statusCode}`
+                        logger.error(error)
+                    }
+
+                    this._instance.persistence?.register({
+                        $chat_conversation_id: response.json.conversations[0].id,
+                    })
+                },
+            })
+        } else {
+            this._instance._send_request({
+                url: this._instance.requestRouter.endpointFor('api', `/api/chat/`),
+                method: 'POST',
+                data: {
+                    token: this._instance.config.token,
+                    action: 'send_message',
+                    conversation_id: conversationId,
+                    message: message,
+                },
+                timeout: 10000,
+                callback: (response) => {
+                    const statusCode = response.statusCode
+                    if (statusCode !== 200 || !response.json) {
+                        const error = `Chat message could not be sent, status: ${statusCode}`
+                        logger.error(error)
+                    }
+                    console.debug('response', response)
+                    console.debug('response.json', response.json)
+                },
+            })
+        }
     }
 
     getMessages() {

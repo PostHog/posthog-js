@@ -24,7 +24,7 @@ export function ChatHeader() {
                         marginRight: 8,
                     }}
                 ></div>
-                <span style={{ fontSize: 11 }}>Typically replies under an hour</span>
+                <span style={{ fontSize: 11 }}>Typically replies in under an hour</span>
             </div>
         </div>
     )

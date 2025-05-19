@@ -22,6 +22,7 @@ export function ChatContainer({
                 width: 360,
                 visibility: isVisible ? 'visible' : 'hidden',
                 overflow: 'hidden',
+                zIndex: 9999,
             }}
         >
             <ChatHeader />
