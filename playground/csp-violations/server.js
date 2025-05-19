@@ -4,10 +4,16 @@ const path = require('path')
 const app = express()
 const PORT = 8080
 
+const removeTrailingSlash = (str) => str.replace(/\/$/, '')
+
+if (!process.env.POSTHOG_TOKEN || !process.env.POSTHOG_API_HOST) {
+    throw new Error('POSTHOG_TOKEN and POSTHOG_API_HOST must be set')
+}
+
 // UPDATE YOUR TOKEN!!!
 const POSTHOG_TOKEN = process.env.POSTHOG_TOKEN
-const POSTHOG_API_HOST = process.env.POSTHOG_API_HOST
-const POSTHOG_UI_HOST = process.env.POSTHOG_UI_HOST
+const POSTHOG_API_HOST = removeTrailingSlash(process.env.POSTHOG_API_HOST)
+const POSTHOG_UI_HOST = removeTrailingSlash(process.env.POSTHOG_UI_HOST || POSTHOG_API_HOST)
 const POSTHOG_USE_SNIPPET = process.env.POSTHOG_USE_SNIPPET === 'true' || process.env.POSTHOG_USE_SNIPPET === '1'
 
 const POSTHOG_SCRIPT = POSTHOG_USE_SNIPPET
@@ -20,7 +26,7 @@ const POSTHOG_SCRIPT = POSTHOG_USE_SNIPPET
 </script>`
     : `<script src="/dist/posthog.js"></script>`
 
-const CSP_REPORT_URI = `${POSTHOG_API_HOST}/csp?token=${POSTHOG_TOKEN}`
+const CSP_REPORT_URI = `${POSTHOG_API_HOST}/report?token=${POSTHOG_TOKEN}`
 const USE_REPORT_TO = POSTHOG_API_HOST.startsWith('https://')
 
 const CSP_RULES = {
