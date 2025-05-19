@@ -245,7 +245,7 @@ app.get('/eval', (req, res) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>XHR Violation</title>
+      <title>Eval Violation</title>
       <link href="/static/styles.css" rel="stylesheet">
       <script src="/dist/main.js"></script>
       ${POSTHOG_SCRIPT}
