@@ -253,7 +253,7 @@ app.get('/eval', (req, res) => {
     <body>
       <h1>XHR Violation</h1>
       <div class="card">
-        <p>This page attempts to make an XHR request to example.com which violates CSP.</p>
+        <p>This page attempts to execute code using eval() which violates CSP.</p>
         <p><a href="/">Back to Home</a></p>
         <div id="result"></div>
       </div>
