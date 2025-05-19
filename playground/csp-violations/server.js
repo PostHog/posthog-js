@@ -26,7 +26,7 @@ const POSTHOG_SCRIPT = POSTHOG_USE_SNIPPET
 </script>`
     : `<script src="/dist/posthog.js"></script>`
 
-const CSP_REPORT_URI = `${POSTHOG_API_HOST}/report?token=${POSTHOG_TOKEN}`
+const CSP_REPORT_URI = `${POSTHOG_API_HOST}/report/?token=${POSTHOG_TOKEN}`
 const USE_REPORT_TO = POSTHOG_API_HOST.startsWith('https://')
 
 const CSP_RULES = {
