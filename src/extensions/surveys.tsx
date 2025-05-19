@@ -11,6 +11,7 @@ import {
     SurveySchedule,
     SurveyType,
     SurveyWidgetType,
+    SurveyWithTypeAndAppearance,
 } from '../posthog-surveys-types'
 import { addEventListener } from '../utils'
 import { document as _document, window as _window } from '../utils/globals'
@@ -525,7 +526,7 @@ export class SurveyManager {
         this._surveyInFocus = survey.id
     }
 
-    private _removeSurveyFromFocus = (survey: Pick<Survey, 'id' | 'appearance'>): void => {
+    private _removeSurveyFromFocus = (survey: SurveyWithTypeAndAppearance): void => {
         if (this._surveyInFocus !== survey.id) {
             logger.error(`Survey ${survey.id} is not in focus. Cannot remove survey ${survey.id}.`)
         }
@@ -638,7 +639,7 @@ export function generateSurveys(posthog: PostHog) {
 
 type UseHideSurveyOnURLChangeProps = {
     survey: Pick<Survey, 'id' | 'conditions' | 'type' | 'appearance'>
-    removeSurveyFromFocus?: (survey: Pick<Survey, 'id' | 'appearance'>) => void
+    removeSurveyFromFocus?: (survey: SurveyWithTypeAndAppearance) => void
     setSurveyVisible: (visible: boolean) => void
     isPreviewMode?: boolean
 }
@@ -716,7 +717,7 @@ export function usePopupVisibility(
     posthog: PostHog | undefined,
     millisecondDelay: number,
     isPreviewMode: boolean,
-    removeSurveyFromFocus: (survey: Pick<Survey, 'id' | 'appearance'>) => void,
+    removeSurveyFromFocus: (survey: SurveyWithTypeAndAppearance) => void,
     surveyContainerRef?: React.RefObject<HTMLDivElement>
 ) {
     const [isPopupVisible, setIsPopupVisible] = useState(isPreviewMode || millisecondDelay === 0)
@@ -838,7 +839,7 @@ interface SurveyPopupProps {
     posthog?: PostHog
     style?: React.CSSProperties
     previewPageIndex?: number | undefined
-    removeSurveyFromFocus?: (survey: Pick<Survey, 'id' | 'appearance'>) => void
+    removeSurveyFromFocus?: (survey: SurveyWithTypeAndAppearance) => void
     isPopup?: boolean
     onPreviewSubmit?: (res: string | string[] | number | null) => void
     onPopupSurveyDismissed?: () => void

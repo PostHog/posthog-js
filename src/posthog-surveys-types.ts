@@ -211,6 +211,8 @@ export interface Survey {
     enable_partial_responses?: boolean | null
 }
 
+export type SurveyWithTypeAndAppearance = Pick<Survey, 'id' | 'type' | 'appearance'>
+
 export interface SurveyActionType {
     id: number
     name: string | null
