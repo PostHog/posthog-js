@@ -14,14 +14,15 @@ import { document as _document, window as _window, userAgent } from '../../utils
 import { SURVEY_LOGGER as logger, SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../../utils/survey-utils'
 import { isNullish, isArray } from '../../utils/type-utils'
 
-import { SurveyMatchType } from '../../posthog-surveys-types'
-import { isMatchingRegex } from '../../utils/regex-utils'
 import { detectDeviceType } from '../../utils/user-agent-utils'
+import { propertyComparisons } from '../../utils/property-utils'
+import { PropertyMatchType } from '../../types'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 import surveyStyles from './survey.css'
+import { useContext } from 'preact/hooks'
 
 export function getFontFamily(fontFamily?: string): string {
     if (fontFamily === 'inherit') {
@@ -58,7 +59,7 @@ export const defaultSurveyAppearance = {
     maxWidth: '300px',
     textSubtleColor: '#939393',
     inputBackground: 'white',
-    boxPadding: '20px 24px 10px',
+    boxPadding: '20px 24px',
     borderRadius: '10px',
     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
 } as const
@@ -571,6 +572,10 @@ export const SurveyContext = createContext<SurveyContextProps>({
     surveySubmissionId: '',
 })
 
+export const useSurveyContext = () => {
+    return useContext(SurveyContext)
+}
+
 interface RenderProps {
     component: VNode<{ className: string }>
     children: string
@@ -590,16 +595,7 @@ export const renderChildrenAsTextOrHtml = ({ component, children, renderAsHtml, 
           })
 }
 
-const surveyValidationMap: Record<SurveyMatchType, (targets: string[], value: string) => boolean> = {
-    icontains: (targets, value) => targets.some((target) => value.toLowerCase().includes(target.toLowerCase())),
-    not_icontains: (targets, value) => targets.every((target) => !value.toLowerCase().includes(target.toLowerCase())),
-    regex: (targets, value) => targets.some((target) => isMatchingRegex(value, target)),
-    not_regex: (targets, value) => targets.every((target) => !isMatchingRegex(value, target)),
-    exact: (targets, value) => targets.some((target) => value === target),
-    is_not: (targets, value) => targets.every((target) => value !== target),
-}
-
-function defaultMatchType(matchType?: SurveyMatchType): SurveyMatchType {
+function defaultMatchType(matchType?: PropertyMatchType): PropertyMatchType {
     return matchType ?? 'icontains'
 }
 
@@ -614,7 +610,8 @@ export function doesSurveyUrlMatch(survey: Pick<Survey, 'conditions'>): boolean 
         return false
     }
     const targets = [survey.conditions.url]
-    return surveyValidationMap[defaultMatchType(survey.conditions?.urlMatchType)](targets, href)
+    const matchType = defaultMatchType(survey.conditions?.urlMatchType)
+    return propertyComparisons[matchType](targets, [href])
 }
 
 export function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
@@ -627,9 +624,9 @@ export function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
     }
 
     const deviceType = detectDeviceType(userAgent)
-    return surveyValidationMap[defaultMatchType(survey.conditions?.deviceTypesMatchType)](
+    return propertyComparisons[defaultMatchType(survey.conditions?.deviceTypesMatchType)](
         survey.conditions.deviceTypes,
-        deviceType
+        [deviceType]
     )
 }
 

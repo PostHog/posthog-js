@@ -12,7 +12,7 @@ import { isLikelyBot, DEFAULT_BLOCKED_UA_STRS, isBlockedUA, NavigatorUAData } fr
 import { expect } from '@jest/globals'
 
 import { _base64Encode } from '../utils/encode-utils'
-import { getPersonPropertiesHash } from '../utils/person-property-utils'
+import { getPersonPropertiesHash, propertyComparisons } from '../utils/property-utils'
 import { detectDeviceType } from '../utils/user-agent-utils'
 import { getEventProperties } from '../utils/event-utils'
 
@@ -411,6 +411,53 @@ describe('utils', () => {
             expect(hash).toContain('user123')
             expect(hash).toContain('John Doe')
             expect(hash).toContain('New York')
+        })
+    })
+
+    describe('propertyComparisons', () => {
+        const exactCases: [string[], string[], boolean][] = [
+            [[], ['one'], false], // no targets
+            [['one', 'two', 'three'], [], false], // no values
+            [['one', 'two', 'three'], ['one'], true], // one match
+            [['one', 'two', 'three'], ['one', 'does not match'], true], // one match, one not matching
+            [['one', 'two', 'three'], ['one', 'two'], true], // multiple matches
+            [['one', 'two', 'three'], ['no', 'matches'], false], // no matches
+        ]
+        test.each(exactCases)('exact', (targets, values, expected) => {
+            expect(propertyComparisons['exact'](targets, values)).toBe(expected)
+        })
+        test.each(exactCases)('is_not', (targets, values, expected) => {
+            expect(propertyComparisons['is_not'](targets, values)).toBe(!expected)
+        })
+
+        const regexCases: [string[], string[], boolean][] = [
+            [[], ['one'], false], // no targets
+            [['^one$', '^two$', '^three$'], [], false], // no values
+            [['^one$', '^two$', '^three$'], ['one'], true], // one match
+            [['^one$', '^two$', '^three$'], ['one', 'does not match'], true], // one match, one not matching
+            [['^one$', '^two$', '^three$'], ['one', 'two'], true], // multiple matches
+            [['^one$', '^two$', '^three$'], ['no', 'matches'], false], // no matches
+            [['^one$', '^two$', '^three$'], ['ones'], false], // partial match
+        ]
+        test.each(regexCases)('regex', (targets, values, expected) => {
+            expect(propertyComparisons['regex'](targets, values)).toBe(expected)
+        })
+        test.each(regexCases)('not_regex', (targets, values, expected) => {
+            expect(propertyComparisons['not_regex'](targets, values)).toBe(!expected)
+        })
+
+        const icontainsCases: [string[], string[], boolean][] = [
+            [[], ['one'], false], // no targets
+            [['one', 'two', 'three'], [], false], // no values
+            [['one', 'two', 'three'], ['one'], true], // full match
+            [['one', 'two', 'three'], ['no', 'matches'], false], // no matches
+            [['one', 'two', 'three'], ['A message with one matching'], true], // partial match
+        ]
+        test.each(icontainsCases)('icontains', (targets, values, expected) => {
+            expect(propertyComparisons['icontains'](targets, values)).toBe(expected)
+        })
+        test.each(icontainsCases)('not_icontains', (targets, values, expected) => {
+            expect(propertyComparisons['not_icontains'](targets, values)).toBe(!expected)
         })
     })
 })

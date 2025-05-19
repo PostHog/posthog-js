@@ -1,3 +1,16 @@
+## 1.243.1 - 2025-05-19
+
+
+
+## 1.243.0 - 2025-05-19
+
+- feat: suppression matching (#1937)
+
+## 1.242.3 - 2025-05-19
+
+- fix: add new relic to payload host denylist (#1952)
+- chore: remove unused function from survey extensions (#1960)
+
 ## 1.242.2 - 2025-05-15
 
 - fix: center positioning for surveys (#1959)

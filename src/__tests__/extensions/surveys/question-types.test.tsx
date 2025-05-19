@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom'
 
-import { fireEvent, render, screen } from '@testing-library/preact'
+import { fireEvent, render, screen, waitFor } from '@testing-library/preact'
 import {
     MultipleChoiceQuestion,
     OpenTextQuestion,
@@ -87,6 +87,68 @@ describe('MultipleChoiceQuestion', () => {
             setTimeout(() => {
                 expect(document.activeElement).toBe(openInput)
             }, 0)
+        })
+    })
+
+    describe('SingleChoice with skipSubmitButton', () => {
+        const singleChoiceSkipQuestion: MultipleSurveyQuestion = {
+            type: SurveyQuestionType.SingleChoice,
+            question: 'What is your favorite color?',
+            description: 'Choose one color',
+            choices: ['Red', 'Blue', 'Green'],
+            hasOpenChoice: false,
+            optional: false,
+            skipSubmitButton: true,
+        }
+
+        it('submits the selected choice immediately and hides button', () => {
+            const onSubmitMock = jest.fn()
+            const { getByLabelText, queryByText } = render(
+                <MultipleChoiceQuestion {...baseProps} onSubmit={onSubmitMock} question={singleChoiceSkipQuestion} />
+            )
+
+            expect(queryByText('Submit')).not.toBeInTheDocument()
+            // Click on 'Blue' option
+            fireEvent.click(getByLabelText('Blue'))
+
+            expect(onSubmitMock).toHaveBeenCalledWith('Blue')
+        })
+
+        it('shows submit button if skipSubmitButton is false', () => {
+            const question = { ...singleChoiceSkipQuestion, skipSubmitButton: false }
+            const { getByLabelText, queryByText } = render(
+                <MultipleChoiceQuestion {...baseProps} question={question} />
+            )
+            expect(queryByText('Submit')).toBeInTheDocument()
+            fireEvent.click(getByLabelText('Blue'))
+            expect(baseProps.onSubmit).not.toHaveBeenCalled()
+        })
+
+        it('shows submit button if skipSubmitButton is true but hasOpenChoice is true', () => {
+            const question = {
+                ...singleChoiceSkipQuestion,
+                hasOpenChoice: true,
+                choices: [...singleChoiceSkipQuestion.choices, 'Other'],
+            }
+            const { getByLabelText, queryByText } = render(
+                <MultipleChoiceQuestion {...baseProps} question={question} />
+            )
+            fireEvent.click(getByLabelText('Blue'))
+            expect(baseProps.onSubmit).not.toHaveBeenCalled()
+            expect(queryByText('Submit')).toBeInTheDocument()
+        })
+
+        it('shows submit button if skipSubmitButton but the type is multiple choice', () => {
+            const question: MultipleSurveyQuestion = {
+                ...singleChoiceSkipQuestion,
+                type: SurveyQuestionType.MultipleChoice,
+            }
+            const { getByLabelText, queryByText } = render(
+                <MultipleChoiceQuestion {...baseProps} question={question} />
+            )
+            expect(queryByText('Submit')).toBeInTheDocument()
+            fireEvent.click(getByLabelText('Blue'))
+            expect(baseProps.onSubmit).not.toHaveBeenCalled()
         })
     })
 
@@ -375,5 +437,78 @@ describe('RatingQuestion', () => {
 
         fireEvent.click(button3)
         expect(submitButton).not.toBeDisabled()
+    })
+
+    describe('RatingQuestion with skipSubmitButton', () => {
+        const ratingSkipQuestion: RatingSurveyQuestion = {
+            type: SurveyQuestionType.Rating,
+            question: 'How would you rate your experience?',
+            description: 'Scale from 1 to 5',
+            display: 'number',
+            scale: 5,
+            lowerBoundLabel: 'Bad',
+            upperBoundLabel: 'Good',
+            optional: false,
+            skipSubmitButton: true,
+        }
+
+        const ratingEmojiSkipQuestion: RatingSurveyQuestion = {
+            ...ratingSkipQuestion,
+            display: 'emoji',
+        }
+
+        it('submits rating immediately and hides button for number display', async () => {
+            const onSubmitMock = jest.fn()
+            render(<RatingQuestion {...baseProps} onSubmit={onSubmitMock} question={ratingSkipQuestion} />)
+            const button3 = getRatingButton(3)
+
+            expect(screen.queryByText(mockAppearance.submitButtonText)).not.toBeInTheDocument()
+            fireEvent.click(button3)
+
+            await waitFor(() => {
+                expect(onSubmitMock).toHaveBeenCalledWith(3)
+            })
+        })
+
+        it('submits rating immediately and hides button for emoji display', async () => {
+            const onSubmitMock = jest.fn()
+            render(<RatingQuestion {...baseProps} onSubmit={onSubmitMock} question={ratingEmojiSkipQuestion} />)
+
+            // Click the emoji button that corresponds to rating value 1
+            const specificEmojiButton = screen.getByRole('button', { name: 'Rate 1' })
+
+            expect(screen.queryByText(mockAppearance.submitButtonText)).not.toBeInTheDocument()
+            fireEvent.click(specificEmojiButton)
+
+            await waitFor(() => {
+                expect(onSubmitMock).toHaveBeenCalledWith(1)
+            })
+        })
+
+        it('shows submit button if skipSubmitButton is false for number display', () => {
+            const question = { ...ratingSkipQuestion, skipSubmitButton: false }
+            const onSubmitMock = jest.fn()
+            render(<RatingQuestion {...baseProps} onSubmit={onSubmitMock} question={question} />)
+            const button3 = getRatingButton(3)
+
+            fireEvent.click(button3)
+
+            expect(onSubmitMock).not.toHaveBeenCalled()
+            expect(screen.queryByText(mockAppearance.submitButtonText)).toBeInTheDocument()
+        })
+
+        it('shows submit button if skipSubmitButton is false for emoji display', () => {
+            const question = { ...ratingEmojiSkipQuestion, skipSubmitButton: false }
+            const onSubmitMock = jest.fn()
+            render(<RatingQuestion {...baseProps} onSubmit={onSubmitMock} question={question} />)
+
+            // Click the emoji button that corresponds to rating value 1
+            const specificEmojiButton = screen.getByRole('button', { name: 'Rate 1' })
+
+            fireEvent.click(specificEmojiButton)
+
+            expect(onSubmitMock).not.toHaveBeenCalled()
+            expect(screen.queryByText(mockAppearance.submitButtonText)).toBeInTheDocument()
+        })
     })
 })

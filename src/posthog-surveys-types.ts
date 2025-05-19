@@ -4,6 +4,8 @@
  * See https://github.com/PostHog/posthog-js/issues/698
  */
 
+import type { PropertyMatchType } from './types'
+
 export enum SurveyWidgetType {
     Button = 'button',
     Tab = 'tab',
@@ -96,6 +98,7 @@ export interface RatingSurveyQuestion extends SurveyQuestionBase {
     scale: 3 | 5 | 7 | 10
     lowerBoundLabel: string
     upperBoundLabel: string
+    skipSubmitButton?: boolean
 }
 
 export interface MultipleSurveyQuestion extends SurveyQuestionBase {
@@ -103,6 +106,7 @@ export interface MultipleSurveyQuestion extends SurveyQuestionBase {
     choices: string[]
     hasOpenChoice?: boolean
     shuffleOptions?: boolean
+    skipSubmitButton?: boolean
 }
 
 export enum SurveyQuestionType {
@@ -139,8 +143,6 @@ interface SpecificQuestionBranching {
 }
 
 export type SurveyCallback = (surveys: Survey[], context?: { isLoaded: boolean; error?: string }) => void
-
-export type SurveyMatchType = 'regex' | 'not_regex' | 'exact' | 'is_not' | 'icontains' | 'not_icontains'
 
 export interface SurveyElement {
     text?: string
@@ -188,7 +190,7 @@ export interface Survey {
         url?: string
         selector?: string
         seenSurveyWaitPeriodInDays?: number
-        urlMatchType?: SurveyMatchType
+        urlMatchType?: PropertyMatchType
         events: {
             repeatedActivation?: boolean
             values: {
@@ -199,7 +201,7 @@ export interface Survey {
             values: SurveyActionType[]
         } | null
         deviceTypes?: string[]
-        deviceTypesMatchType?: SurveyMatchType
+        deviceTypesMatchType?: PropertyMatchType
     } | null
     start_date: string | null
     end_date: string | null
