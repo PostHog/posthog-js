@@ -16,10 +16,11 @@ import { detectDeviceType } from '../../utils/user-agent-utils'
 import { propertyComparisons } from '../../utils/property-utils'
 import { PropertyMatchType } from '../../types'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
+import surveyStyles from './survey.css'
+import { useContext } from 'preact/hooks'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
-import surveyStyles from './survey.css'
 
 export function getFontFamily(fontFamily?: string): string {
     if (fontFamily === 'inherit') {
@@ -536,6 +537,7 @@ interface SurveyContextProps {
     isPopup: boolean
     onPreviewSubmit: (res: string | string[] | number | null) => void
     surveySubmissionId: string
+    posthog: PostHog | undefined
 }
 
 export const SurveyContext = createContext<SurveyContextProps>({
@@ -545,7 +547,12 @@ export const SurveyContext = createContext<SurveyContextProps>({
     isPopup: true,
     onPreviewSubmit: () => {},
     surveySubmissionId: '',
+    posthog: undefined,
 })
+
+export const useSurveyContext = () => {
+    return useContext(SurveyContext)
+}
 
 interface RenderProps {
     component: VNode<{ className: string }>
