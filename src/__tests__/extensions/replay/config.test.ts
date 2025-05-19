@@ -215,6 +215,7 @@ describe('config', () => {
                     '.ingest.sentry.io',
                     '.clarity.ms',
                     'analytics.google.com',
+                    'bam.nr-data.net',
                 ])
             })
 
@@ -229,6 +230,7 @@ describe('config', () => {
                     '.ingest.sentry.io',
                     '.clarity.ms',
                     'analytics.google.com',
+                    'bam.nr-data.net',
                 ])
             })
         })

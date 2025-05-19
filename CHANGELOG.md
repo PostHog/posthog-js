@@ -1,3 +1,46 @@
+## 1.242.3 - 2025-05-19
+
+- fix: add new relic to payload host denylist (#1952)
+- chore: remove unused function from survey extensions (#1960)
+
+## 1.242.2 - 2025-05-15
+
+- fix: center positioning for surveys (#1959)
+- chore: escape quotation marks on elements string handling (#1943)
+
+## 1.242.1 - 2025-05-14
+
+- fix: retrieve survey shadow should include posthog ref (#1955)
+
+## 1.242.0 - 2025-05-13
+
+- feat: use css files for survey styles (#1950)
+
+## 1.241.1 - 2025-05-13
+
+- fix: Remove initial person info from event payload (#1953)
+
+## 1.241.0 - 2025-05-13
+
+- feat: Add calculateEventProperties to public API (#1951)
+
+## 1.240.6 - 2025-05-09
+
+- feat: use css files for survey widget styles (#1948)
+
+## 1.240.5 - 2025-05-08
+
+- fix: padding on cancel button (#1946)
+- chore: make rollup able to bundle CSS files (#1945)
+
+## 1.240.4 - 2025-05-07
+
+- chore: include response within the survey_quesiton property (#1942)
+
+## 1.240.3 - 2025-05-07
+
+- fix: false flag should not trigger linked flags (#1944)
+
 ## 1.240.2 - 2025-05-07
 
 - fix: conflict between event based vs feedback button surveys (#1941)

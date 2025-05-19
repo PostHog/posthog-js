@@ -54,6 +54,7 @@ export const defaultNetworkOptions: Required<NetworkRecordOptions> = {
         '.clarity.ms',
         // NB no leading dot here
         'analytics.google.com',
+        'bam.nr-data.net',
     ],
 }
 

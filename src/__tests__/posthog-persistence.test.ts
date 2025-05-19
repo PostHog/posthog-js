@@ -112,6 +112,15 @@ describe('persistence', () => {
                 '$feature/other': true,
             })
         })
+
+        it('should not return hidden properties()', () => {
+            const initialPersonInfo = { r: 'https://referrer.example.com', u: 'https://initial-url.example.com' }
+            library.register({
+                [INITIAL_PERSON_INFO]: initialPersonInfo,
+            })
+            expect(library.props[INITIAL_PERSON_INFO]).toEqual(initialPersonInfo)
+            expect(library.properties()).toEqual({})
+        })
     })
 
     describe('localStorage+cookie', () => {

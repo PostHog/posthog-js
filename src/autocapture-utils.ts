@@ -483,7 +483,7 @@ function elementsToString(elements: PHElement[]): string {
                 ([key, value]) => (sortedAttributes[escapeQuotes(key.toString())] = escapeQuotes(value.toString()))
             )
         el_string += ':'
-        el_string += entries(attributes)
+        el_string += entries(sortedAttributes)
             .map(([key, value]) => `${key}="${value}"`)
             .join('')
         return el_string

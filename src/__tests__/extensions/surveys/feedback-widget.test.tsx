@@ -77,11 +77,8 @@ const selectorWidgetSurvey: Survey = {
 }
 
 describe('FeedbackWidget', () => {
-    let removeSurveyFromFocusMock: jest.Mock
-
     beforeEach(() => {
         cleanup()
-        removeSurveyFromFocusMock = jest.fn()
         // Mock history API for URL change hook
         Object.defineProperty(window, 'history', {
             value: {
@@ -119,19 +116,11 @@ describe('FeedbackWidget', () => {
     }
 
     test('renders feedback tab and opens survey on click', () => {
-        render(
-            <FeedbackWidget
-                survey={baseWidgetSurvey}
-                posthog={mockPosthog}
-                removeSurveyFromFocus={removeSurveyFromFocusMock}
-            />
-        )
+        render(<FeedbackWidget survey={baseWidgetSurvey} posthog={mockPosthog} />)
 
         // Check if the tab is visible
         const tab = screen.getByText('Feedback')
         expect(tab).toBeVisible()
-        // Check default text color contrast (black background -> white text)
-        expect(tab).toHaveStyle('color: white')
 
         // Survey popup should not be visible initially
         expect(screen.queryByRole('form')).not.toBeInTheDocument() // Form is inside SurveyPopup
@@ -145,13 +134,7 @@ describe('FeedbackWidget', () => {
     })
 
     test('submits survey response and shows thank you message', async () => {
-        render(
-            <FeedbackWidget
-                survey={baseWidgetSurvey}
-                posthog={mockPosthog}
-                removeSurveyFromFocus={removeSurveyFromFocusMock}
-            />
-        )
+        render(<FeedbackWidget survey={baseWidgetSurvey} posthog={mockPosthog} />)
 
         // Open the survey
         const tab = screen.getByText('Feedback')
@@ -188,10 +171,6 @@ describe('FeedbackWidget', () => {
         await waitFor(() => {
             expect(screen.queryByText('Thanks!')).not.toBeInTheDocument()
         })
-
-        // Check if removeSurveyFromFocus was called (after submission shows thank you, it calls it internally)
-        // This happens inside usePopupVisibility's handleSurveySent
-        expect(removeSurveyFromFocusMock).toHaveBeenCalledWith(baseWidgetSurvey.id)
     })
 
     test('hides/shows feedback tab based on URL condition', async () => {
@@ -201,13 +180,7 @@ describe('FeedbackWidget', () => {
             writable: true,
         })
 
-        render(
-            <FeedbackWidget
-                survey={urlConditionWidgetSurvey}
-                posthog={mockPosthog}
-                removeSurveyFromFocus={removeSurveyFromFocusMock}
-            />
-        )
+        render(<FeedbackWidget survey={urlConditionWidgetSurvey} posthog={mockPosthog} />)
 
         // Initially, the tab should be visible because the URL matches
         expect(screen.getByText('Feedback')).toBeVisible()
@@ -257,13 +230,7 @@ describe('FeedbackWidget', () => {
     })
 
     test('does not render tab for selector widget type initially', () => {
-        render(
-            <FeedbackWidget
-                survey={selectorWidgetSurvey}
-                posthog={mockPosthog}
-                removeSurveyFromFocus={removeSurveyFromFocusMock}
-            />
-        )
+        render(<FeedbackWidget survey={selectorWidgetSurvey} posthog={mockPosthog} />)
 
         // Selector type should not render the tab or the form initially
         expect(screen.queryByText('Feedback')).not.toBeInTheDocument()
@@ -272,13 +239,7 @@ describe('FeedbackWidget', () => {
     })
 
     test('shows survey popup for selector widget when event is dispatched', async () => {
-        render(
-            <FeedbackWidget
-                survey={selectorWidgetSurvey}
-                posthog={mockPosthog}
-                removeSurveyFromFocus={removeSurveyFromFocusMock}
-            />
-        )
+        render(<FeedbackWidget survey={selectorWidgetSurvey} posthog={mockPosthog} />)
 
         // Initially, no survey form
         expect(screen.queryByRole('form')).not.toBeInTheDocument()
@@ -310,19 +271,10 @@ describe('FeedbackWidget', () => {
         })
 
         expectSurveySentEvent(selectorWidgetSurvey.id, { '$survey_response_q-open-1': 'Selector feedback!' })
-
-        // Should be removed from focus after submission (handled internally by SurveyPopup -> usePopupVisibility)
-        expect(removeSurveyFromFocusMock).toHaveBeenCalledWith(selectorWidgetSurvey.id)
     })
 
     test('closes survey popup when cancel button is clicked', async () => {
-        render(
-            <FeedbackWidget
-                survey={baseWidgetSurvey}
-                posthog={mockPosthog}
-                removeSurveyFromFocus={removeSurveyFromFocusMock}
-            />
-        )
+        render(<FeedbackWidget survey={baseWidgetSurvey} posthog={mockPosthog} />)
 
         // Open the survey
         fireEvent.click(screen.getByText('Feedback'))
@@ -337,15 +289,6 @@ describe('FeedbackWidget', () => {
             expect(screen.queryByRole('form')).not.toBeInTheDocument()
         })
 
-        // Check if posthog.capture was called for 'survey dismissed'
-        // Note: The dismissal event might happen *inside* SurveyPopup, not directly in FeedbackWidget.
-        // The important part for *this* test is that the form disappears and removeSurveyFromFocus is called.
-        // We can check the dismissed event in SurveyPopup tests if needed.
-        // Let's verify removeSurveyFromFocus was called, as that's FeedbackWidget's responsibility via props.
-        // SurveyPopup calls onPopupSurveyDismissed -> which calls removeSurveyFromFocus here
-        expect(removeSurveyFromFocusMock).toHaveBeenCalledWith(baseWidgetSurvey.id)
-
-        // Optionally, check for the dismiss event if it's guaranteed to be captured by this mock instance
         expect(mockPosthog.capture).toHaveBeenCalledWith(
             'survey dismissed',
             expect.objectContaining({
