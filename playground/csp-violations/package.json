@@ -8,7 +8,7 @@
         "rollup:watch": "rollup -c -w",
         "serve": "nodemon server.js",
         "dev": "concurrently -k -n \"ROLLUP,SERVE\" -c \"magenta,cyan\" \"npm:rollup:watch\" \"npm:serve\"",
-        "start": "node index.js"
+        "start": "node server.js"
     },
     "dependencies": {
         "@rollup/plugin-commonjs": "^28.0.3",
