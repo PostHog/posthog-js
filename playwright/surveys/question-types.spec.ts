@@ -38,10 +38,38 @@ const singleChoiceQuestion = {
     choices: ['Product Manager', 'Engineer', 'Designer', 'Other'],
     id: 'single_choice_1',
 }
+
+const emojiRatingSkipButtonQuestion = {
+    type: 'rating' as const,
+    display: 'emoji' as const,
+    scale: 3,
+    question: 'Rate your mood (emoji, skip)',
+    id: 'emoji_rating_skip_1',
+    skipSubmitButton: true,
+}
+
+const numberRatingSkipButtonQuestion = {
+    type: 'rating' as const,
+    display: 'number' as const,
+    scale: 5,
+    question: 'Rate your experience (number, skip)',
+    id: 'number_rating_skip_1',
+    skipSubmitButton: true,
+}
+
+const singleChoiceSkipButtonQuestion = {
+    type: 'single_choice' as const,
+    question: 'Your favorite season (skip)?',
+    choices: ['Spring', 'Summer', 'Autumn', 'Winter'],
+    hasOpenChoice: false,
+    id: 'single_choice_skip_1',
+    skipSubmitButton: true,
+}
+
 const appearanceWithThanks = {
     displayThankYouMessage: true,
-    thankyouMessageHeader: 'Thanks!',
-    thankyouMessageBody: 'We appreciate your feedback.',
+    thankYouMessageHeader: 'Thanks!',
+    thankYouMessageBody: 'We appreciate your feedback.',
 }
 
 test.describe('surveys - core display logic', () => {
@@ -290,5 +318,91 @@ test.describe('surveys - core display logic', () => {
                 response: 'Product engineer',
             },
         ])
+    })
+})
+
+test.describe('surveys - skipSubmitButton functionality', () => {
+    test('handles questions with skipSubmitButton correctly and sends event', async ({ page, context }) => {
+        const surveyId = 'skip_button_survey_123'
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+            await route.fulfill({
+                json: {
+                    surveys: [
+                        {
+                            id: surveyId,
+                            name: 'Test Skip Submit Button Survey',
+                            type: 'popover',
+                            start_date: '2021-01-01T00:00:00Z',
+                            questions: [
+                                emojiRatingSkipButtonQuestion,
+                                numberRatingSkipButtonQuestion,
+                                singleChoiceSkipButtonQuestion,
+                            ],
+                            appearance: appearanceWithThanks,
+                        },
+                    ],
+                },
+            })
+        })
+
+        await start(startOptions, page, context)
+        await surveysAPICall
+
+        const surveyLocator = page.locator(`.PostHogSurvey-${surveyId}`)
+
+        // Question 1: Emoji Rating
+        await expect(surveyLocator.locator('.survey-question')).toHaveText(emojiRatingSkipButtonQuestion.question)
+        await expect(surveyLocator.locator('.form-submit')).not.toBeVisible()
+        await surveyLocator.locator('button[aria-label="Rate 2"]').click() // Click 2nd emoji (value 2 for scale 3)
+
+        // Question 2: Number Rating (should appear automatically)
+        await expect(surveyLocator.locator('.survey-question')).toHaveText(numberRatingSkipButtonQuestion.question)
+        await expect(surveyLocator.locator('.form-submit')).not.toBeVisible()
+        await surveyLocator.locator('button[aria-label="Rate 4"]').click() // Click rating 4 for scale 5
+
+        // Question 3: Single Choice (should appear automatically)
+        await expect(surveyLocator.locator('.survey-question')).toHaveText(singleChoiceSkipButtonQuestion.question)
+        await expect(surveyLocator.locator('.form-submit')).not.toBeVisible()
+        await surveyLocator.locator('label:has-text("Summer")').click() // Click "Summer"
+
+        // Thank you message
+        await expect(surveyLocator.locator('.thank-you-message')).toBeVisible()
+        await expect(surveyLocator.locator('.thank-you-message h3')).toHaveText(
+            appearanceWithThanks.thankYouMessageHeader
+        )
+        await surveyLocator.locator('.form-submit').click() // Click to dismiss thank you
+        await expect(surveyLocator.locator('.thank-you-message')).not.toBeVisible()
+
+        // Event validation
+        await pollUntilEventCaptured(page, 'survey sent')
+        const captures = await page.capturedEvents()
+        const surveySentEvent = captures.find(
+            (c) => c.event === 'survey sent' && c.properties['$survey_id'] === surveyId
+        )
+        expect(surveySentEvent).toBeDefined()
+
+        expect(surveySentEvent!.properties[getSurveyResponseKey(emojiRatingSkipButtonQuestion.id)]).toBe(2)
+        expect(surveySentEvent!.properties[getSurveyResponseKey(numberRatingSkipButtonQuestion.id)]).toBe(4)
+        expect(surveySentEvent!.properties[getSurveyResponseKey(singleChoiceSkipButtonQuestion.id)]).toBe('Summer')
+
+        expect(surveySentEvent!.properties['$survey_questions']).toEqual(
+            expect.arrayContaining([
+                {
+                    id: emojiRatingSkipButtonQuestion.id,
+                    question: emojiRatingSkipButtonQuestion.question,
+                    response: 2,
+                },
+                {
+                    id: numberRatingSkipButtonQuestion.id,
+                    question: numberRatingSkipButtonQuestion.question,
+                    response: 4,
+                },
+                {
+                    id: singleChoiceSkipButtonQuestion.id,
+                    question: singleChoiceSkipButtonQuestion.question,
+                    response: 'Summer',
+                },
+            ])
+        )
     })
 })

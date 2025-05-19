@@ -91,6 +91,7 @@ export interface RatingSurveyQuestion extends SurveyQuestionBase {
     scale: 3 | 5 | 7 | 10
     lowerBoundLabel: string
     upperBoundLabel: string
+    skipSubmitButton?: boolean
 }
 
 export interface MultipleSurveyQuestion extends SurveyQuestionBase {
@@ -98,6 +99,7 @@ export interface MultipleSurveyQuestion extends SurveyQuestionBase {
     choices: string[]
     hasOpenChoice?: boolean
     shuffleOptions?: boolean
+    skipSubmitButton?: boolean
 }
 
 export enum SurveyQuestionType {

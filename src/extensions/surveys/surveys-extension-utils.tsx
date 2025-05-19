@@ -20,6 +20,7 @@ import { prepareStylesheet } from '../utils/stylesheet-loader'
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 import surveyStyles from './survey.css'
+import { useContext } from 'preact/hooks'
 
 export function getFontFamily(fontFamily?: string): string {
     if (fontFamily === 'inherit') {
@@ -56,7 +57,7 @@ export const defaultSurveyAppearance = {
     maxWidth: '300px',
     textSubtleColor: '#939393',
     inputBackground: 'white',
-    boxPadding: '20px 24px 10px',
+    boxPadding: '20px 24px',
 } as const
 
 export const addSurveyCSSVariablesToElement = (element: HTMLElement, appearance?: SurveyAppearance | null) => {
@@ -546,6 +547,10 @@ export const SurveyContext = createContext<SurveyContextProps>({
     onPreviewSubmit: () => {},
     surveySubmissionId: '',
 })
+
+export const useSurveyContext = () => {
+    return useContext(SurveyContext)
+}
 
 interface RenderProps {
     component: VNode<{ className: string }>

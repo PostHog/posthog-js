@@ -399,12 +399,6 @@
 }
 
 /* --- Buttons --- */
-.buttons {
-    /* Container for buttons if needed */
-    display: flex;
-    justify-content: center;
-}
-
 /* Submit Button */
 .form-submit {
     box-sizing: border-box;
