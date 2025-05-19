@@ -7,6 +7,8 @@ import {
     SurveyPosition,
     SurveyQuestion,
     SurveySchedule,
+    SurveyType,
+    SurveyWidgetType,
 } from '../../posthog-surveys-types'
 import { document as _document, window as _window, userAgent } from '../../utils/globals'
 import { SURVEY_LOGGER as logger, SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../../utils/survey-utils'
@@ -58,18 +60,40 @@ export const defaultSurveyAppearance = {
     textSubtleColor: '#939393',
     inputBackground: 'white',
     boxPadding: '20px 24px',
+    borderRadius: '10px',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
 } as const
 
-export const addSurveyCSSVariablesToElement = (element: HTMLElement, appearance?: SurveyAppearance | null) => {
+export const addSurveyCSSVariablesToElement = (
+    element: HTMLElement,
+    type: SurveyType,
+    appearance?: SurveyAppearance | null
+) => {
     const effectiveAppearance = { ...defaultSurveyAppearance, ...appearance }
     const hostStyle = element.style
+
+    const isSurveyOnBottom = [SurveyPosition.Center, SurveyPosition.Left, SurveyPosition.Right].includes(
+        effectiveAppearance.position
+    )
 
     hostStyle.setProperty('--ph-survey-font-family', getFontFamily(effectiveAppearance.fontFamily))
     hostStyle.setProperty('--ph-survey-box-padding', effectiveAppearance.boxPadding)
     hostStyle.setProperty('--ph-survey-max-width', effectiveAppearance.maxWidth)
     hostStyle.setProperty('--ph-survey-z-index', effectiveAppearance.zIndex)
     hostStyle.setProperty('--ph-survey-border-color', effectiveAppearance.borderColor)
+    // Non-bottom surveys or tab surveys have the border bottom
+    if (!isSurveyOnBottom || (type === SurveyType.Widget && appearance?.widgetType !== SurveyWidgetType.Tab)) {
+        hostStyle.setProperty('--ph-survey-border-radius', effectiveAppearance.borderRadius)
+        hostStyle.setProperty('--ph-survey-border-bottom', '1.5px solid var(--ph-survey-border-color)')
+    } else {
+        hostStyle.setProperty('--ph-survey-border-bottom', 'none')
+        hostStyle.setProperty(
+            '--ph-survey-border-radius',
+            `${effectiveAppearance.borderRadius} ${effectiveAppearance.borderRadius} 0 0`
+        )
+    }
     hostStyle.setProperty('--ph-survey-background-color', effectiveAppearance.backgroundColor)
+    hostStyle.setProperty('--ph-survey-box-shadow', effectiveAppearance.boxShadow)
     hostStyle.setProperty('--ph-survey-disabled-button-opacity', effectiveAppearance.disabledButtonOpacity)
     hostStyle.setProperty('--ph-survey-submit-button-color', effectiveAppearance.submitButtonColor)
     hostStyle.setProperty(
@@ -293,7 +317,7 @@ export function getSurveyStylesheet(posthog?: PostHog) {
 }
 
 export const retrieveSurveyShadow = (
-    survey: Pick<Survey, 'id' | 'appearance'>,
+    survey: Pick<Survey, 'id' | 'appearance' | 'type'>,
     posthog?: PostHog,
     element?: Element
 ) => {
@@ -306,7 +330,7 @@ export const retrieveSurveyShadow = (
 
     // If it doesn't exist, create it
     const div = document.createElement('div')
-    addSurveyCSSVariablesToElement(div, survey.appearance)
+    addSurveyCSSVariablesToElement(div, survey.type, survey.appearance)
     div.className = widgetClassName
     const shadow = div.attachShadow({ mode: 'open' })
     const stylesheet = getSurveyStylesheet(posthog)

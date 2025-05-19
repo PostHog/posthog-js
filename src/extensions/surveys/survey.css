@@ -6,7 +6,10 @@
     --ph-survey-max-width: 300px;
     --ph-survey-z-index: 2147483647;
     --ph-survey-border-color: #dcdcdc;
+    --ph-survey-border-bottom: 1.5px solid var(--ph-survey-border-color);
+    --ph-survey-border-radius: 10px;
     --ph-survey-background-color: #eeeded;
+    --ph-survey-box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     --ph-survey-disabled-button-opacity: 0.6;
     --ph-survey-submit-button-color: black;
     --ph-survey-submit-button-text-color: white;
@@ -48,7 +51,7 @@
 }
 
 .ph-survey-widget-tab:hover {
-    padding-bottom: 12px;
+    padding-bottom: 16px;
 }
 
 /* --- Animations --- */
@@ -91,33 +94,16 @@
     position: fixed;
     margin: 0;
     bottom: 0;
-    color: var(--ph-survey-text-primary-color);
-    font-weight: normal;
-    font-family: var(--ph-survey-font-family);
-    text-align: left;
-    max-width: var(--ph-survey-max-width);
-    width: 100%;
+    width: var(--ph-survey-max-width);
+    max-width: 85%;
     z-index: var(--ph-survey-z-index);
-    border: 1.5px solid var(--ph-survey-border-color);
-    border-bottom: 0;
-    /* Positioning styles (left, right, transform) are applied via inline style to the host */
-    flex-direction: column;
-    background: var(--ph-survey-background-color);
-    border-top-left-radius: 10px;
-    border-top-right-radius: 10px;
-    box-shadow:
-        -6px 0 16px -8px rgb(0 0 0 / 8%),
-        -9px 0 28px 0 rgb(0 0 0 / 5%),
-        -12px 0 48px 16px rgb(0 0 0 / 3%);
-    animation: ph-survey-fade-in-up 0.3s ease-out forwards;
+    height: fit-content;
 }
 
 .survey-box,
 .thank-you-message-container {
-    padding: var(--ph-survey-box-padding);
     display: flex;
     flex-direction: column;
-    border-radius: 10px;
     gap: 16px;
 }
 
@@ -155,6 +141,26 @@
 .question-textarea-wrapper {
     display: flex;
     flex-direction: column;
+}
+
+.survey-form,
+.thank-you-message {
+    box-sizing: border-box;
+    position: relative;
+    animation: ph-survey-fade-in-up 0.3s ease-out forwards;
+    color: var(--ph-survey-text-primary-color);
+    font-weight: normal;
+    font-family: var(--ph-survey-font-family);
+    text-align: left;
+    width: 100%;
+    z-index: var(--ph-survey-z-index);
+    border: 1.5px solid var(--ph-survey-border-color);
+    border-bottom: var(--ph-survey-border-bottom);
+    background: var(--ph-survey-background-color);
+    border-radius: var(--ph-survey-border-radius);
+    box-shadow: var(--ph-survey-box-shadow);
+    padding: var(--ph-survey-box-padding);
+    margin: 0;
 }
 
 .survey-form {
