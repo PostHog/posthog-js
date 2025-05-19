@@ -1,3 +1,8 @@
+## 1.242.3 - 2025-05-19
+
+- fix: add new relic to payload host denylist (#1952)
+- chore: remove unused function from survey extensions (#1960)
+
 ## 1.242.2 - 2025-05-15
 
 - fix: center positioning for surveys (#1959)
