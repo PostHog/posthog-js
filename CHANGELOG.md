@@ -1,3 +1,7 @@
+## 1.243.0 - 2025-05-19
+
+- feat: suppression matching (#1937)
+
 ## 1.242.3 - 2025-05-19
 
 - fix: add new relic to payload host denylist (#1952)
