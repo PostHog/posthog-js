@@ -10,15 +10,14 @@
 
 ## 1.244.0 - 2025-05-19
 
-
+ - automation let us down here, and this is identical to 1.243.1
 
 ## 1.243.1 - 2025-05-19
 
-
-
-## 1.243.0 - 2025-05-19
-
 - feat: suppression matching (#1937)
+- fix: survey should reappear after url is matching again (#1962)
+- feat: sample violations for easier testing (#1966)
+- feat: allow answer question when clicking on the choice (#1958)
 
 ## 1.242.3 - 2025-05-19
 
