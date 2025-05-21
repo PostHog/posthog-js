@@ -225,12 +225,11 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
                         // then this is a variant flag and we want to match any string
                         linkedFlagMatches = !!variants[linkedFlag]
                     }
-
-                    if (linkedFlagMatches) {
-                        onStarted(linkedFlag, linkedVariant)
-                    }
                 }
                 this.linkedFlagSeen = linkedFlagMatches
+                if (linkedFlagMatches) {
+                    onStarted(linkedFlag, linkedVariant)
+                }
             })
         }
     }
