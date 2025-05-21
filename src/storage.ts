@@ -52,12 +52,12 @@ export function seekFirstNonPublicSubDomain(hostname: string, cookieJar = docume
         const candidate = list.slice(len).join('.')
         const candidateCookieValue = key + '=1;domain=.' + candidate + ';path=/'
 
-        // try to set cookie
-        cookieJar.cookie = candidateCookieValue
+        // try to set cookie, include a short expiry in seconds since we'll check immediately
+        cookieJar.cookie = candidateCookieValue + ';max-age=3'
 
         if (cookieJar.cookie.includes(key)) {
             // the cookie was accepted by the browser, remove the test cookie
-            cookieJar.cookie = candidateCookieValue + ';max-age=' + 0
+            cookieJar.cookie = candidateCookieValue + ';max-age=0'
             firstNonPublicSubDomain = candidate
         }
     }
