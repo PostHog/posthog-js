@@ -1850,6 +1850,10 @@ describe('SessionRecording', () => {
             onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'literally-anything' })
             expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
             expect(sessionRecording.status).toEqual('active')
+
+            onFeatureFlagsCallback?.(['not-the-flag-key'], { 'not-the-flag-key': 'literally-anything' })
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
+            expect(sessionRecording.status).toEqual('buffering')
         })
 
         it('can be overriden', () => {
