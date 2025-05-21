@@ -100,6 +100,130 @@ test.describe('Session recording - linked flags', () => {
         await assertThatRecordingStarted(page)
     })
 
+    test('starts when multi-variant linked flag is "any"', async ({ page, context }) => {
+        const recorderPromise = page.waitForResponse('**/recorder.js*')
+
+        await startWithFlags(page, context, {
+            options: {
+                opt_out_capturing_by_default: false,
+            },
+            decideResponseOverrides: {
+                sessionRecording: { linkedFlag: 'replay-filtering-conversion' },
+                flags: {
+                    'replay-filtering-conversion': {
+                        key: 'replay-filtering-conversion',
+                        enabled: true,
+                        variant: 'templates-heatmap',
+                        reason: {
+                            code: 'condition_match',
+                            condition_index: 0,
+                            description: 'Matched condition set 1',
+                        },
+                        metadata: {
+                            id: 129,
+                            version: 2,
+                            description: undefined,
+                            payload: null,
+                        },
+                    },
+                },
+            },
+        })
+
+        await recorderPromise
+
+        await page.locator('[data-cy-input]').type('hello posthog!')
+        await pollUntilEventCaptured(page, '$snapshot')
+        await assertThatRecordingStarted(page)
+    })
+
+    test('starts when multi-variant linked flag is matching variant', async ({ page, context }) => {
+        const recorderPromise = page.waitForResponse('**/recorder.js*')
+
+        await startWithFlags(page, context, {
+            options: {
+                opt_out_capturing_by_default: false,
+            },
+            decideResponseOverrides: {
+                sessionRecording: {
+                    linkedFlag: {
+                        flag: 'replay-filtering-conversion',
+                        variant: 'templates-heatmap',
+                    },
+                },
+                flags: {
+                    'replay-filtering-conversion': {
+                        key: 'replay-filtering-conversion',
+                        enabled: true,
+                        variant: 'templates-heatmap',
+                        reason: {
+                            code: 'condition_match',
+                            condition_index: 0,
+                            description: 'Matched condition set 1',
+                        },
+                        metadata: {
+                            id: 129,
+                            version: 2,
+                            description: undefined,
+                            payload: null,
+                        },
+                    },
+                },
+            },
+        })
+
+        await recorderPromise
+
+        await page.locator('[data-cy-input]').type('hello posthog!')
+        await pollUntilEventCaptured(page, '$snapshot')
+        await assertThatRecordingStarted(page)
+    })
+
+    test('does not start when multi-variant linked flag is not matching variant', async ({ page, context }) => {
+        const recorderPromise = page.waitForResponse('**/recorder.js*')
+
+        await startWithFlags(page, context, {
+            options: {
+                opt_out_capturing_by_default: false,
+            },
+            decideResponseOverrides: {
+                sessionRecording: {
+                    linkedFlag: {
+                        flag: 'replay-filtering-conversion',
+                        variant: 'not-the-variant-at-all',
+                    },
+                },
+                flags: {
+                    'replay-filtering-conversion': {
+                        key: 'replay-filtering-conversion',
+                        enabled: true,
+                        variant: 'templates-heatmap',
+                        reason: {
+                            code: 'condition_match',
+                            condition_index: 0,
+                            description: 'Matched condition set 1',
+                        },
+                        metadata: {
+                            id: 129,
+                            version: 2,
+                            description: undefined,
+                            payload: null,
+                        },
+                    },
+                },
+            },
+        })
+
+        await recorderPromise
+
+        // even activity won't trigger a snapshot, we're buffering
+        await page.locator('[data-cy-input]').type('hello posthog!')
+        // short delay since there's no snapshot to wait for
+        await page.waitForTimeout(250)
+
+        await page.expectCapturedEventsToBe([])
+    })
+
     test('can opt in and override linked flag', async ({ page, context }) => {
         await startWithFlags(
             page,
