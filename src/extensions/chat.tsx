@@ -42,7 +42,7 @@ export class ChatManager {
 
     public evaluateDisplayLogic = (): void => {
         logger.info('PostHogChat evaluateDisplayLogic')
-        this._posthog?.chat.getMessages()
+        this._posthog?.chat.getChat()
         const shadowRoot = retrieveChatShadowRoot()
         Preact.render(<PosthogChatBox posthog={this._posthog} />, shadowRoot)
     }
@@ -59,8 +59,8 @@ export function loadChat(posthog: PostHog) {
     chatManager.evaluateDisplayLogic()
 
     // evaluate chat visibility every second
-    setInterval(() => {
-        chatManager.evaluateDisplayLogic()
-    }, 1000)
+    //setInterval(() => {
+    //    chatManager.evaluateDisplayLogic()
+    //}, 1000)
     return chatManager
 }

@@ -4,7 +4,8 @@ import { assignableWindow } from './utils/globals'
 
 export class PostHogChat {
     private _isFetchingMessages: boolean = false
-
+    public messages: any[] = []
+    public conversationId: string | null = null
     constructor(private readonly _instance: PostHog) {}
 
     startIfEnabled() {
@@ -26,9 +27,8 @@ export class PostHogChat {
         }
     }
 
-    sendMessage(message: string) {
+    sendMessage(conversationId: string, message: string) {
         logger.info('PostHogChat sendMessage', message)
-        const conversationId = this._instance.get_property('$chat_conversation_id')
 
         if (!conversationId) {
             this._instance._send_request({
@@ -41,7 +41,7 @@ export class PostHogChat {
                     title: 'Some title',
                     conversation_id: conversationId,
                     message: message,
-                    source_url: window.location.href,
+                    source_url: 'chat-widget',
                 },
                 timeout: 10000,
                 callback: (response) => {
@@ -50,6 +50,8 @@ export class PostHogChat {
                         const error = `Chat message could not be sent, status: ${statusCode}`
                         logger.error(error)
                     }
+
+                    this.getChat()
 
                     this._instance.persistence?.register({
                         $chat_conversation_id: response.json.conversations[0].id,
@@ -73,33 +75,21 @@ export class PostHogChat {
                         const error = `Chat message could not be sent, status: ${statusCode}`
                         logger.error(error)
                     }
-                    console.debug('response', response)
-                    console.debug('response.json', response.json)
+
+                    this.getChat()
                 },
             })
         }
     }
 
-    getMessages() {
-        // const existingSurveys = this._instance.get_property(SURVEYS)
-        // if (existingSurveys && !forceReload) {
-        //     return callback(existingSurveys, {
-        //         isLoaded: true,
-        //     })
-        // }
-
-        // // Prevent concurrent API calls
-        // if (this._isFetchingMessages) {
-        //     return callback([], {
-        //         isLoaded: false,
-        //         error: 'Surveys are already being loaded',
-        //     })
-        // }
-
+    getChat() {
         try {
             this._isFetchingMessages = true
             this._instance._send_request({
-                url: this._instance.requestRouter.endpointFor('api', `/api/chat/?token=${this._instance.config.token}`),
+                url: this._instance.requestRouter.endpointFor(
+                    'api',
+                    `/api/chat/?token=${this._instance.config.token}&distinct_id=${this._instance.get_distinct_id()}`
+                ),
                 method: 'GET',
                 timeout: 10000,
                 callback: (response) => {
@@ -113,14 +103,16 @@ export class PostHogChat {
                         //     error,
                         // })
                     }
-                    console.debug('response', response)
-                    console.debug('response.json', response.json)
-                    const messages = response.json.messages || []
+                    const chats = response.json.conversations || []
 
-                    // this._instance.persistence?.register({ [SURVEYS]: surveys })
-                    // return callback(surveys, {
-                    //     isLoaded: true,
-                    // })
+                    if (chats.length === 0) {
+                        //create chat
+                        //this.createChat()
+                    }
+
+                    const chat = chats[0]
+                    this.messages = chat.messages || []
+                    this.conversationId = chat.id
                 },
             })
         } catch (e) {
@@ -128,4 +120,22 @@ export class PostHogChat {
             throw e
         }
     }
+
+    /*createChat() {
+        this._instance._send_request({
+            url: this._instance.requestRouter.endpointFor('api', `/api/chat/`),
+            method: 'POST',
+            data: {
+                token: this._instance.config.token,
+                action: 'create_conversation',
+                distinct_id: this._instance.get_distinct_id(),
+                title: 'Some title',
+            },
+            timeout: 10000,
+            callback: (response) => {
+                console.debug('response', response)
+                console.debug('response.json', response.json)
+            },
+        })
+    }*/
 }

@@ -1,4 +1,4 @@
-import { ChatBubbleLeftRightHeroIcon } from './ChatBubbleLeftRightHeroIcon'
+import { ChatBubbleLeftRightHeroIconFilled } from './ChatBubbleLeftRightHeroIcon'
 import { ChatBubbleXMarkHeroIcon } from './ChatBubbleXMarkHeroIcon'
 import { BRAND_COLOR } from './style'
 
@@ -24,7 +24,7 @@ export function ChatBubble({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: 
             }}
         >
             <div style={{ position: 'relative', width: 24, height: 24 }}>
-                <ChatBubbleLeftRightHeroIcon isVisible={!isOpen} />
+                <ChatBubbleLeftRightHeroIconFilled isVisible={!isOpen} />
                 <ChatBubbleXMarkHeroIcon isVisible={isOpen} />
             </div>
         </div>

@@ -1389,9 +1389,9 @@ export class PostHog {
         return this.sessionManager?.onSessionId(callback) ?? (() => {})
     }
 
-    /** Get list of all surveys. */
-    getMessages(): void {
-        this.chat.getMessages()
+    /** Get list of all chats. */
+    getChats(): void {
+        this.chat.getChat()
     }
 
     /** Get list of all surveys. */

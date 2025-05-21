@@ -1,20 +1,22 @@
 import { ChatHeader } from './ChatHeader'
 import { ChatInput } from './ChatInput'
-import { ChatMessages } from './ChatMessages'
+import { ChatMessages, ChatMessageType } from './ChatMessages'
 
 export function ChatContainer({
     isVisible,
     sendMessage,
+    messages,
 }: {
     isVisible: boolean
     sendMessage: (message: string) => void
+    messages: ChatMessageType[]
 }) {
     return (
         <div
             style={{
                 position: 'fixed',
-                right: 24,
-                bottom: 96,
+                right: 14,
+                bottom: 75,
                 transition: 'width .15s ease-in-out !important',
                 borderRadius: 12,
                 backgroundColor: '#fff',
@@ -26,7 +28,7 @@ export function ChatContainer({
             }}
         >
             <ChatHeader />
-            <ChatMessages />
+            <ChatMessages messages={messages} />
             <ChatInput sendMessage={sendMessage} />
         </div>
     )

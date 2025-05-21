@@ -4,7 +4,7 @@ import { BRAND_COLOR } from './style'
 export function ChatInput({ sendMessage }: { sendMessage: (message: string) => void }) {
     const [message, setMessage] = useState('')
     return (
-        <div style={{ display: 'flex', paddingLeft: 8, paddingRight: 8, marginBottom: 8 }}>
+        <div style={{ display: 'flex', padding: 8, borderTop: `1px solid ${BRAND_COLOR}` }}>
             <input
                 type="text"
                 placeholder="Type your message here..."
@@ -28,6 +28,10 @@ export function ChatInput({ sendMessage }: { sendMessage: (message: string) => v
                     borderRadius: 10,
                     display: 'flex',
                     alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '5px 10px',
+                    fontSize: 12,
+                    fontWeight: 300,
                 }}
                 onClick={() => sendMessage(message)}
             >

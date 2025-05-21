@@ -9,27 +9,9 @@ export type ChatMessageType = {
     is_assistant: boolean
 }
 
-export function ChatMessages() {
-    const messages: ChatMessageType[] = [
-        {
-            content: 'How can we help with BizPlanner AI?',
-            is_assistant: true,
-            created_at: '2023-10-01T12:00:00Z',
-            id: '1',
-            conversation: '1',
-            read: true,
-        },
-        {
-            content: 'Can I get a refund for my subscription?',
-            is_assistant: false,
-            created_at: '2023-10-01T12:01:00Z',
-            id: '2',
-            conversation: '1',
-            read: true,
-        },
-    ]
+export function ChatMessages({ messages = [] }: { messages: ChatMessageType[] }) {
     return (
-        <div style={{ background: 'white', width: '100%', height: 366, padding: 8 }}>
+        <div style={{ background: 'white', height: 366, padding: 8, overflowY: 'auto' }}>
             {messages.map((message) => (
                 <ChatMessage message={message} key={message.id} />
             ))}
