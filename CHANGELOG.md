@@ -1,3 +1,9 @@
+## 1.245.1 - 2025-05-21
+
+- chore: update some dependencies (#1969)
+- fix: don't call receivedFeatureFlags if flags were disabled (#1964)
+- fix: csp trailing slash (#1967)
+
 ## 1.245.0 - 2025-05-19
 
 - feat: add new options for survey positions (#1965)
