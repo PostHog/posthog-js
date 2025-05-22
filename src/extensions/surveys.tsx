@@ -11,6 +11,7 @@ import {
     SurveySchedule,
     SurveyType,
     SurveyWidgetType,
+    SurveyWithTypeAndAppearance,
 } from '../posthog-surveys-types'
 import { addEventListener } from '../utils'
 import { document as _document, window as _window } from '../utils/globals'
@@ -202,7 +203,7 @@ export class SurveyManager {
         }
 
         this._clearSurveyTimeout(survey.id)
-        this._addSurveyToFocus(survey.id)
+        this._addSurveyToFocus(survey)
         const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
         const shadow = retrieveSurveyShadow(survey, this._posthog)
         if (delaySeconds <= 0) {
@@ -217,7 +218,7 @@ export class SurveyManager {
         }
         const timeoutId = setTimeout(() => {
             if (!doesSurveyUrlMatch(survey)) {
-                return this._removeSurveyFromFocus(survey.id)
+                return this._removeSurveyFromFocus(survey)
             }
             // rendering with surveyPopupDelaySeconds = 0 because we're already handling the timeout here
             Preact.render(
@@ -319,9 +320,6 @@ export class SurveyManager {
                     left: `${left}px`,
                     right: 'auto',
                     bottom: showAbove ? `${viewportHeight - buttonRect.top + spacing}px` : 'auto',
-                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                    borderBottom: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
-                    borderRadius: '10px',
                     zIndex: defaultSurveyAppearance.zIndex,
                 }
 
@@ -521,19 +519,24 @@ export class SurveyManager {
         }, forceReload)
     }
 
-    private _addSurveyToFocus = (id: string): void => {
+    private _addSurveyToFocus = (survey: Pick<Survey, 'id'>): void => {
         if (!isNull(this._surveyInFocus)) {
-            logger.error(`Survey ${[...this._surveyInFocus]} already in focus. Cannot add survey ${id}.`)
+            logger.error(`Survey ${[...this._surveyInFocus]} already in focus. Cannot add survey ${survey.id}.`)
         }
-        this._surveyInFocus = id
+        this._surveyInFocus = survey.id
     }
 
-    private _removeSurveyFromFocus = (id: string): void => {
-        if (this._surveyInFocus !== id) {
-            logger.error(`Survey ${id} is not in focus. Cannot remove survey ${id}.`)
+    private _removeSurveyFromFocus = (survey: SurveyWithTypeAndAppearance): void => {
+        if (this._surveyInFocus !== survey.id) {
+            logger.error(`Survey ${survey.id} is not in focus. Cannot remove survey ${survey.id}.`)
         }
-        this._clearSurveyTimeout(id)
+        this._clearSurveyTimeout(survey.id)
         this._surveyInFocus = null
+        // Remove survey from the DOM and reset Preact lifecycle
+        const shadow = retrieveSurveyShadow(survey, this._posthog)
+        Preact.render(null, shadow)
+        const shadowContainer = document.querySelector(getSurveyContainerClass(survey, true))
+        shadowContainer?.remove()
     }
 
     // Expose internal state and methods for testing
@@ -552,12 +555,22 @@ export class SurveyManager {
     }
 }
 
+const DEFAULT_PREVIEW_POSITION_STYLES: React.CSSProperties = {
+    position: 'relative',
+    left: 'unset',
+    right: 'unset',
+    top: 'unset',
+    bottom: 'unset',
+    transform: 'unset',
+}
+
 export const renderSurveysPreview = ({
     survey,
     parentElement,
     previewPageIndex,
     forceDisableHtml,
     onPreviewSubmit,
+    positionStyles = DEFAULT_PREVIEW_POSITION_STYLES,
 }: {
     survey: Survey
     parentElement: HTMLElement
@@ -565,6 +578,7 @@ export const renderSurveysPreview = ({
     forceDisableHtml?: boolean
     onPreviewSubmit?: (res: string | string[] | number | null) => void
     posthog?: PostHog
+    positionStyles?: React.CSSProperties
 }) => {
     const currentStyle = parentElement.querySelector('style[data-ph-survey-style]')
     if (currentStyle) {
@@ -573,18 +587,13 @@ export const renderSurveysPreview = ({
     const stylesheet = getSurveyStylesheet()
     if (stylesheet) {
         parentElement.appendChild(stylesheet)
-        addSurveyCSSVariablesToElement(parentElement, survey.appearance)
+        addSurveyCSSVariablesToElement(parentElement, survey.type, survey.appearance)
     }
     Preact.render(
         <SurveyPopup
             survey={survey}
             forceDisableHtml={forceDisableHtml}
-            style={{
-                position: 'relative',
-                right: 0,
-                borderBottom: `1px solid var(--ph-survey-border-color)`,
-                borderRadius: 10,
-            }}
+            style={positionStyles}
             onPreviewSubmit={onPreviewSubmit}
             previewPageIndex={previewPageIndex}
             removeSurveyFromFocus={() => {}}
@@ -605,7 +614,7 @@ export const renderFeedbackWidgetPreview = ({
     const stylesheet = getSurveyStylesheet()
     if (stylesheet) {
         root.appendChild(stylesheet)
-        addSurveyCSSVariablesToElement(root, survey.appearance)
+        addSurveyCSSVariablesToElement(root, survey.type, survey.appearance)
     }
 
     Preact.render(<FeedbackWidget forceDisableHtml={forceDisableHtml} survey={survey} readOnly={true} />, root)
@@ -630,7 +639,7 @@ export function generateSurveys(posthog: PostHog) {
 
 type UseHideSurveyOnURLChangeProps = {
     survey: Pick<Survey, 'id' | 'conditions' | 'type' | 'appearance'>
-    removeSurveyFromFocus?: (id: string) => void
+    removeSurveyFromFocus?: (survey: SurveyWithTypeAndAppearance) => void
     setSurveyVisible: (visible: boolean) => void
     isPreviewMode?: boolean
 }
@@ -671,7 +680,7 @@ export function useHideSurveyOnURLChange({
 
             logger.info(`Hiding survey ${survey.id} because URL does not match`)
             setSurveyVisible(false)
-            return removeSurveyFromFocus(survey.id)
+            return removeSurveyFromFocus(survey)
         }
 
         // Listen for browser back/forward browser history changes
@@ -708,7 +717,7 @@ export function usePopupVisibility(
     posthog: PostHog | undefined,
     millisecondDelay: number,
     isPreviewMode: boolean,
-    removeSurveyFromFocus: (id: string) => void,
+    removeSurveyFromFocus: (survey: SurveyWithTypeAndAppearance) => void,
     surveyContainerRef?: React.RefObject<HTMLDivElement>
 ) {
     const [isPopupVisible, setIsPopupVisible] = useState(isPreviewMode || millisecondDelay === 0)
@@ -717,11 +726,7 @@ export function usePopupVisibility(
     const hidePopupWithViewTransition = () => {
         const removeDOMAndHidePopup = () => {
             if (survey.type === SurveyType.Popover) {
-                removeSurveyFromFocus(survey.id)
-                const shadow = retrieveSurveyShadow(survey, posthog)
-                Preact.render(null, shadow)
-                const shadowContainer = document.querySelector(getSurveyContainerClass(survey, true))
-                shadowContainer?.remove()
+                removeSurveyFromFocus(survey)
             }
             setIsPopupVisible(false)
         }
@@ -834,22 +839,41 @@ interface SurveyPopupProps {
     posthog?: PostHog
     style?: React.CSSProperties
     previewPageIndex?: number | undefined
-    removeSurveyFromFocus?: (id: string) => void
+    removeSurveyFromFocus?: (survey: SurveyWithTypeAndAppearance) => void
     isPopup?: boolean
     onPreviewSubmit?: (res: string | string[] | number | null) => void
     onPopupSurveyDismissed?: () => void
     onCloseConfirmationMessage?: () => void
 }
 
-function getPopoverPosition(position: SurveyPosition = SurveyPosition.Right, surveyWidgetType?: SurveyWidgetType) {
+function getPopoverPosition(
+    type: SurveyType,
+    position: SurveyPosition = SurveyPosition.Right,
+    surveyWidgetType?: SurveyWidgetType
+) {
     switch (position) {
+        case SurveyPosition.TopLeft:
+            return { top: '0', left: '0', transform: 'translate(30px, 30px)' }
+        case SurveyPosition.TopRight:
+            return { top: '0', right: '0', transform: 'translate(-30px, 30px)' }
+        case SurveyPosition.TopCenter:
+            return { top: '0', left: '50%', transform: 'translate(-50%, 30px)' }
+        case SurveyPosition.MiddleLeft:
+            return { top: '50%', left: '0', transform: 'translate(30px, -50%)' }
+        case SurveyPosition.MiddleRight:
+            return { top: '50%', right: '0', transform: 'translate(-30px, -50%)' }
+        case SurveyPosition.MiddleCenter:
+            return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
         case SurveyPosition.Left:
             return { left: '30px' }
         case SurveyPosition.Center:
-            return { left: '50%', transform: 'translateX(-50%)' }
+            return {
+                left: '50%',
+                transform: 'translateX(-50%)',
+            }
         default:
         case SurveyPosition.Right:
-            return { right: surveyWidgetType && surveyWidgetType === SurveyWidgetType.Tab ? '60px' : '30px' }
+            return { right: type === SurveyType.Widget && surveyWidgetType === SurveyWidgetType.Tab ? '60px' : '30px' }
     }
 }
 
@@ -857,7 +881,7 @@ export function SurveyPopup({
     survey,
     forceDisableHtml,
     posthog,
-    style,
+    style = {},
     previewPageIndex,
     removeSurveyFromFocus = () => {},
     isPopup = true,
@@ -879,6 +903,7 @@ export function SurveyPopup({
         removeSurveyFromFocus,
         surveyContainerRef
     )
+
     const shouldShowConfirmation = isSurveySent || previewPageIndex === survey.questions.length
     const surveyContextValue = useMemo(() => {
         const getInProgressSurvey = getInProgressSurveyState(survey)
@@ -892,15 +917,9 @@ export function SurveyPopup({
             isPopup: isPopup || false,
             surveySubmissionId: getInProgressSurvey?.surveySubmissionId || uuidv7(),
             onPreviewSubmit,
+            posthog,
         }
     }, [isPreviewMode, previewPageIndex, isPopup, posthog, survey, onPopupSurveyDismissed, onPreviewSubmit])
-
-    if (isPreviewMode) {
-        style = style || {}
-        style.left = 'unset'
-        style.right = 'unset'
-        style.transform = 'unset'
-    }
 
     if (!isPopupVisible) {
         return null
@@ -911,7 +930,7 @@ export function SurveyPopup({
             <div
                 className="survey-container"
                 style={{
-                    ...getPopoverPosition(survey.appearance?.position, survey.appearance?.widgetType),
+                    ...getPopoverPosition(survey.type, survey.appearance?.position, survey.appearance?.widgetType),
                     ...style,
                 }}
                 ref={surveyContainerRef}
@@ -1082,8 +1101,6 @@ export function FeedbackWidget({
             setStyleOverrides({
                 top: '50%',
                 bottom: 'auto',
-                borderRadius: 10,
-                borderBottom: `1.5px solid ${survey.appearance?.borderColor || '#c9c6c6'}`,
             })
         }
         const handleShowSurvey = (event: Event) => {

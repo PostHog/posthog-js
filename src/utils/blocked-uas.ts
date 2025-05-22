@@ -84,9 +84,12 @@ export const DEFAULT_BLOCKED_UA_STRS = [
     'google web preview',
     'google-read-aloud',
     'googlebot',
+    'googleother',
+    'google-cloudvertexbot',
     'googleweblight',
     'mediapartners-google',
     'storebot-google',
+    'google-inspectiontool',
     'bytespider',
 ]
 

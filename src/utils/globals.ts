@@ -80,7 +80,6 @@ interface PostHogExtensions {
     }
     rrweb?: { record: any; version: string }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
-    canActivateRepeatedly?: (survey: any) => boolean
     generateSurveys?: (posthog: PostHog) => any | undefined
     loadChat?: (posthog: PostHog) => any | undefined
     postHogWebVitalsCallbacks?: {

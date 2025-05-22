@@ -1,3 +1,44 @@
+## 1.246.0 - 2025-05-22
+
+- fix: Block newer google bots (#1974)
+
+## 1.245.2 - 2025-05-22
+
+- fix: linked flag any variant match (#1972)
+- fix: modernise domain spelunking cookie setting code (#1973)
+- chore: fix changelog (#1971)
+
+## 1.245.1 - 2025-05-21
+
+- chore: update some dependencies (#1969)
+- fix: don't call receivedFeatureFlags if flags were disabled (#1964)
+- fix: csp trailing slash (#1967)
+
+## 1.245.0 - 2025-05-19
+
+- feat: add new options for survey positions (#1965)
+
+## 1.244.0 - 2025-05-19
+
+ - automation let us down here, and this is identical to 1.243.1
+
+## 1.243.1 - 2025-05-19
+
+- feat: suppression matching (#1937)
+- fix: survey should reappear after url is matching again (#1962)
+- feat: sample violations for easier testing (#1966)
+- feat: allow answer question when clicking on the choice (#1958)
+
+## 1.242.3 - 2025-05-19
+
+- fix: add new relic to payload host denylist (#1952)
+- chore: remove unused function from survey extensions (#1960)
+
+## 1.242.2 - 2025-05-15
+
+- fix: center positioning for surveys (#1959)
+- chore: escape quotation marks on elements string handling (#1943)
+
 ## 1.242.1 - 2025-05-14
 
 - fix: retrieve survey shadow should include posthog ref (#1955)

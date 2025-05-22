@@ -215,14 +215,22 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
             const linkedVariant = isString(this.linkedFlag) ? null : this.linkedFlag.variant
             this._flaglistenerCleanup = this._instance.onFeatureFlags((_flags, variants) => {
                 const flagIsPresent = isObject(variants) && linkedFlag in variants
-                const linkedFlagMatches =
-                    flagIsPresent &&
-                    (linkedVariant ? variants[linkedFlag] === linkedVariant : variants[linkedFlag] === true)
-
+                let linkedFlagMatches = false
+                if (flagIsPresent) {
+                    const variantForFlagKey = variants[linkedFlag]
+                    if (isBoolean(variantForFlagKey)) {
+                        linkedFlagMatches = variantForFlagKey === true
+                    } else if (linkedVariant) {
+                        linkedFlagMatches = variantForFlagKey === linkedVariant
+                    } else {
+                        // then this is a variant flag and we want to match any string
+                        linkedFlagMatches = !!variantForFlagKey
+                    }
+                }
+                this.linkedFlagSeen = linkedFlagMatches
                 if (linkedFlagMatches) {
                     onStarted(linkedFlag, linkedVariant)
                 }
-                this.linkedFlagSeen = linkedFlagMatches
             })
         }
     }

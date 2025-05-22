@@ -7,19 +7,22 @@ import {
     SurveyPosition,
     SurveyQuestion,
     SurveySchedule,
+    SurveyType,
+    SurveyWidgetType,
 } from '../../posthog-surveys-types'
 import { document as _document, window as _window, userAgent } from '../../utils/globals'
 import { SURVEY_LOGGER as logger, SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../../utils/survey-utils'
 import { isNullish, isArray } from '../../utils/type-utils'
 
-import { SurveyMatchType } from '../../posthog-surveys-types'
-import { isMatchingRegex } from '../../utils/regex-utils'
 import { detectDeviceType } from '../../utils/user-agent-utils'
+import { propertyComparisons } from '../../utils/property-utils'
+import { PropertyMatchType } from '../../types'
 import { prepareStylesheet } from '../utils/stylesheet-loader'
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
 const document = _document as Document
 import surveyStyles from './survey.css'
+import { useContext } from 'preact/hooks'
 
 export function getFontFamily(fontFamily?: string): string {
     if (fontFamily === 'inherit') {
@@ -56,19 +59,41 @@ export const defaultSurveyAppearance = {
     maxWidth: '300px',
     textSubtleColor: '#939393',
     inputBackground: 'white',
-    boxPadding: '20px 24px 10px',
+    boxPadding: '20px 24px',
+    borderRadius: '10px',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
 } as const
 
-export const addSurveyCSSVariablesToElement = (element: HTMLElement, appearance?: SurveyAppearance | null) => {
+export const addSurveyCSSVariablesToElement = (
+    element: HTMLElement,
+    type: SurveyType,
+    appearance?: SurveyAppearance | null
+) => {
     const effectiveAppearance = { ...defaultSurveyAppearance, ...appearance }
     const hostStyle = element.style
+
+    const isSurveyOnBottom = [SurveyPosition.Center, SurveyPosition.Left, SurveyPosition.Right].includes(
+        effectiveAppearance.position
+    )
 
     hostStyle.setProperty('--ph-survey-font-family', getFontFamily(effectiveAppearance.fontFamily))
     hostStyle.setProperty('--ph-survey-box-padding', effectiveAppearance.boxPadding)
     hostStyle.setProperty('--ph-survey-max-width', effectiveAppearance.maxWidth)
     hostStyle.setProperty('--ph-survey-z-index', effectiveAppearance.zIndex)
     hostStyle.setProperty('--ph-survey-border-color', effectiveAppearance.borderColor)
+    // Non-bottom surveys or tab surveys have the border bottom
+    if (!isSurveyOnBottom || (type === SurveyType.Widget && appearance?.widgetType !== SurveyWidgetType.Tab)) {
+        hostStyle.setProperty('--ph-survey-border-radius', effectiveAppearance.borderRadius)
+        hostStyle.setProperty('--ph-survey-border-bottom', '1.5px solid var(--ph-survey-border-color)')
+    } else {
+        hostStyle.setProperty('--ph-survey-border-bottom', 'none')
+        hostStyle.setProperty(
+            '--ph-survey-border-radius',
+            `${effectiveAppearance.borderRadius} ${effectiveAppearance.borderRadius} 0 0`
+        )
+    }
     hostStyle.setProperty('--ph-survey-background-color', effectiveAppearance.backgroundColor)
+    hostStyle.setProperty('--ph-survey-box-shadow', effectiveAppearance.boxShadow)
     hostStyle.setProperty('--ph-survey-disabled-button-opacity', effectiveAppearance.disabledButtonOpacity)
     hostStyle.setProperty('--ph-survey-submit-button-color', effectiveAppearance.submitButtonColor)
     hostStyle.setProperty(
@@ -292,7 +317,7 @@ export function getSurveyStylesheet(posthog?: PostHog) {
 }
 
 export const retrieveSurveyShadow = (
-    survey: Pick<Survey, 'id' | 'appearance'>,
+    survey: Pick<Survey, 'id' | 'appearance' | 'type'>,
     posthog?: PostHog,
     element?: Element
 ) => {
@@ -305,7 +330,7 @@ export const retrieveSurveyShadow = (
 
     // If it doesn't exist, create it
     const div = document.createElement('div')
-    addSurveyCSSVariablesToElement(div, survey.appearance)
+    addSurveyCSSVariablesToElement(div, survey.type, survey.appearance)
     div.className = widgetClassName
     const shadow = div.attachShadow({ mode: 'open' })
     const stylesheet = getSurveyStylesheet(posthog)
@@ -547,6 +572,10 @@ export const SurveyContext = createContext<SurveyContextProps>({
     surveySubmissionId: '',
 })
 
+export const useSurveyContext = () => {
+    return useContext(SurveyContext)
+}
+
 interface RenderProps {
     component: VNode<{ className: string }>
     children: string
@@ -566,16 +595,7 @@ export const renderChildrenAsTextOrHtml = ({ component, children, renderAsHtml, 
           })
 }
 
-const surveyValidationMap: Record<SurveyMatchType, (targets: string[], value: string) => boolean> = {
-    icontains: (targets, value) => targets.some((target) => value.toLowerCase().includes(target.toLowerCase())),
-    not_icontains: (targets, value) => targets.every((target) => !value.toLowerCase().includes(target.toLowerCase())),
-    regex: (targets, value) => targets.some((target) => isMatchingRegex(value, target)),
-    not_regex: (targets, value) => targets.every((target) => !isMatchingRegex(value, target)),
-    exact: (targets, value) => targets.some((target) => value === target),
-    is_not: (targets, value) => targets.every((target) => value !== target),
-}
-
-function defaultMatchType(matchType?: SurveyMatchType): SurveyMatchType {
+function defaultMatchType(matchType?: PropertyMatchType): PropertyMatchType {
     return matchType ?? 'icontains'
 }
 
@@ -590,7 +610,8 @@ export function doesSurveyUrlMatch(survey: Pick<Survey, 'conditions'>): boolean 
         return false
     }
     const targets = [survey.conditions.url]
-    return surveyValidationMap[defaultMatchType(survey.conditions?.urlMatchType)](targets, href)
+    const matchType = defaultMatchType(survey.conditions?.urlMatchType)
+    return propertyComparisons[matchType](targets, [href])
 }
 
 export function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
@@ -603,9 +624,9 @@ export function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
     }
 
     const deviceType = detectDeviceType(userAgent)
-    return surveyValidationMap[defaultMatchType(survey.conditions?.deviceTypesMatchType)](
+    return propertyComparisons[defaultMatchType(survey.conditions?.deviceTypesMatchType)](
         survey.conditions.deviceTypes,
-        deviceType
+        [deviceType]
     )
 }
 
