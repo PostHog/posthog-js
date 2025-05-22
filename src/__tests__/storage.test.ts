@@ -21,8 +21,8 @@ describe('sessionStore', () => {
             set cookie(value) {
                 //needs to refuse known public suffixes, like a browser would
                 // value arrives like dmn_chk_1699961248575=1;domain=.uk
-                const domain = value.split('domain=')
-                if (['.uk', '.com', '.au', '.com.au', '.co.uk'].includes(domain[1])) return
+                const domain = value.split('domain=')[1].split(';')[0]
+                if (['.uk', '.com', '.au', '.com.au', '.co.uk'].includes(domain)) return
                 this.value_ += value + ';'
             },
         }

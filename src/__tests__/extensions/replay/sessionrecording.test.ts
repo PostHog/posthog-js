@@ -1830,6 +1830,32 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toEqual('buffering')
         })
 
+        it('can handle linked flags with any variants', () => {
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual(null)
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
+
+            sessionRecording.onRemoteConfig(
+                makeDecideResponse({
+                    // when the variant is any we only send the key
+                    sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' },
+                })
+            )
+
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual('the-flag-key')
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
+            expect(sessionRecording.status).toEqual('buffering')
+
+            expect(onFeatureFlagsCallback).not.toBeNull()
+
+            onFeatureFlagsCallback?.(['the-flag-key'], { 'the-flag-key': 'literally-anything' })
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(true)
+            expect(sessionRecording.status).toEqual('active')
+
+            onFeatureFlagsCallback?.(['not-the-flag-key'], { 'not-the-flag-key': 'literally-anything' })
+            expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
+            expect(sessionRecording.status).toEqual('buffering')
+        })
+
         it('can be overriden', () => {
             expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual(null)
             expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
