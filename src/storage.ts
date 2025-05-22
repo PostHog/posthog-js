@@ -13,7 +13,6 @@ import { logger } from './utils/logger'
 import { window, document } from './utils/globals'
 import { uuidv7 } from './uuidv7'
 
-const Y1970 = 'Thu, 01 Jan 1970 00:00:00 GMT'
 // we store the discovered subdomain in memory because it might be read multiple times
 let firstNonPublicSubDomain = ''
 
@@ -48,18 +47,17 @@ export function seekFirstNonPublicSubDomain(hostname: string, cookieJar = docume
     const list = hostname.split('.')
     let len = Math.min(list.length, 8) // paranoia - we know this number should be small
     const key = 'dmn_chk_' + uuidv7()
-    const R = new RegExp('(^|;)\\s*' + key + '=1')
 
     while (!firstNonPublicSubDomain && len--) {
         const candidate = list.slice(len).join('.')
-        const candidateCookieValue = key + '=1;domain=.' + candidate
+        const candidateCookieValue = key + '=1;domain=.' + candidate + ';path=/'
 
-        // try to set cookie
-        cookieJar.cookie = candidateCookieValue
+        // try to set cookie, include a short expiry in seconds since we'll check immediately
+        cookieJar.cookie = candidateCookieValue + ';max-age=3'
 
-        if (R.test(cookieJar.cookie)) {
+        if (cookieJar.cookie.includes(key)) {
             // the cookie was accepted by the browser, remove the test cookie
-            cookieJar.cookie = candidateCookieValue + ';expires=' + Y1970
+            cookieJar.cookie = candidateCookieValue + ';max-age=0'
             firstNonPublicSubDomain = candidate
         }
     }
