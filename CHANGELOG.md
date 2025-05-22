@@ -1,3 +1,7 @@
+## 1.246.0 - 2025-05-22
+
+- fix: Block newer google bots (#1974)
+
 ## 1.245.2 - 2025-05-22
 
 - fix: linked flag any variant match (#1972)
