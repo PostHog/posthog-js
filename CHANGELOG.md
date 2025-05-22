@@ -1,3 +1,9 @@
+## 1.245.2 - 2025-05-22
+
+- fix: linked flag any variant match (#1972)
+- fix: modernise domain spelunking cookie setting code (#1973)
+- chore: fix changelog (#1971)
+
 ## 1.245.1 - 2025-05-21
 
 - chore: update some dependencies (#1969)
