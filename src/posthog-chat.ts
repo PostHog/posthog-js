@@ -1,15 +1,21 @@
 import { PostHog } from './posthog-core'
 import { CHAT_LOGGER as logger } from './utils/chat-utils'
 import { assignableWindow } from './utils/globals'
+import { RemoteConfig, PostHogChatConfig } from './types'
 
 export class PostHogChat {
-    private _isFetchingMessages: boolean = false
+    public _isFetchingMessages: boolean = false
+    public isEnabled: boolean = false
     public messages: any[] = []
     public conversationId: string | null = null
+    public chat_config: PostHogChatConfig | null = null
     constructor(private readonly _instance: PostHog) {}
 
     startIfEnabled() {
         logger.info('PostHogChat startIfEnabled')
+        if (!this.isEnabled) {
+            return
+        }
         const loadChat = assignableWindow?.__PosthogExtensions__?.loadChat
 
         if (!loadChat) {
@@ -24,6 +30,16 @@ export class PostHogChat {
 
                 assignableWindow.__PosthogExtensions__?.loadChat?.(this._instance)
             })
+        }
+    }
+
+    onRemoteConfig(response: RemoteConfig) {
+        // only load surveys if they are enabled and there are surveys to load
+        if (response.chat_opt_in) {
+            this._instance.config.disable_chat = false
+            this.chat_config = response.chat_config || null
+            this.isEnabled = true
+            this.startIfEnabled()
         }
     }
 
@@ -53,9 +69,9 @@ export class PostHogChat {
 
                     this.getChat()
 
-                    this._instance.persistence?.register({
+                    /*this._instance.persistence?.register({
                         $chat_conversation_id: response.json.conversations[0].id,
-                    })
+                    })*/
                 },
             })
         } else {
@@ -67,6 +83,7 @@ export class PostHogChat {
                     action: 'send_message',
                     conversation_id: conversationId,
                     message: message,
+                    distinct_id: this._instance.get_distinct_id(),
                 },
                 timeout: 10000,
                 callback: (response) => {
@@ -84,7 +101,6 @@ export class PostHogChat {
 
     getChat() {
         try {
-            this._isFetchingMessages = true
             this._instance._send_request({
                 url: this._instance.requestRouter.endpointFor(
                     'api',
@@ -93,7 +109,6 @@ export class PostHogChat {
                 method: 'GET',
                 timeout: 10000,
                 callback: (response) => {
-                    this._isFetchingMessages = false
                     const statusCode = response.statusCode
                     if (statusCode !== 200 || !response.json) {
                         const error = `Chat API could not be loaded, status: ${statusCode}`
@@ -105,37 +120,16 @@ export class PostHogChat {
                     }
                     const chats = response.json.conversations || []
 
-                    if (chats.length === 0) {
-                        //create chat
-                        //this.createChat()
+                    if (chats.length > 0) {
+                        const chat = chats[0]
+                        this.messages = chat.messages || []
+                        this.conversationId = chat.id
                     }
-
-                    const chat = chats[0]
-                    this.messages = chat.messages || []
-                    this.conversationId = chat.id
                 },
             })
         } catch (e) {
-            this._isFetchingMessages = false
+            logger.error('PostHogChat getChat', e)
             throw e
         }
     }
-
-    /*createChat() {
-        this._instance._send_request({
-            url: this._instance.requestRouter.endpointFor('api', `/api/chat/`),
-            method: 'POST',
-            data: {
-                token: this._instance.config.token,
-                action: 'create_conversation',
-                distinct_id: this._instance.get_distinct_id(),
-                title: 'Some title',
-            },
-            timeout: 10000,
-            callback: (response) => {
-                console.debug('response', response)
-                console.debug('response.json', response.json)
-            },
-        })
-    }*/
 }

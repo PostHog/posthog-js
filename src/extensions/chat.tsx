@@ -18,17 +18,8 @@ export const retrieveChatShadowRoot = () => {
 
     // If it doesn't exist, create it
     const div = document.createElement('div')
-    // addSurveyCSSVariablesToElement(div, survey.appearance)
     div.className = chatClassName
     const shadow = div.attachShadow({ mode: 'open' })
-    // const stylesheet = getSurveyStylesheet(posthog)
-    // if (stylesheet) {
-    //     const existingStylesheet = shadow.querySelector('style')
-    //     if (existingStylesheet) {
-    //         shadow.removeChild(existingStylesheet)
-    //     }
-    //     shadow.appendChild(stylesheet)
-    // }
     document.body.appendChild(div)
     return shadow
 }
@@ -41,6 +32,10 @@ export class ChatManager {
     }
 
     public evaluateDisplayLogic = (): void => {
+        if (!this._posthog?.chat.isEnabled) {
+            return
+        }
+
         logger.info('PostHogChat evaluateDisplayLogic')
         this._posthog?.chat.getChat()
         const shadowRoot = retrieveChatShadowRoot()
@@ -58,9 +53,5 @@ export function loadChat(posthog: PostHog) {
     const chatManager = new ChatManager(posthog)
     chatManager.evaluateDisplayLogic()
 
-    // evaluate chat visibility every second
-    //setInterval(() => {
-    //    chatManager.evaluateDisplayLogic()
-    //}, 1000)
     return chatManager
 }

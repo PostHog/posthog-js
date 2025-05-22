@@ -156,6 +156,7 @@ export const defaultConfig = (): PostHogConfig => ({
     disable_session_recording: false,
     disable_persistence: false,
     disable_web_experiments: true, // disabled in beta.
+    disable_chat: true, // disabled in beta.
     disable_surveys: false,
     disable_external_dependency_loading: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
@@ -630,6 +631,7 @@ export class PostHog {
         this.autocapture?.onRemoteConfig(config)
         this.heatmaps?.onRemoteConfig(config)
         this.surveys.onRemoteConfig(config)
+        this.chat.onRemoteConfig(config)
         this.webVitalsAutocapture?.onRemoteConfig(config)
         this.exceptionObserver?.onRemoteConfig(config)
         this.deadClicksAutocapture?.onRemoteConfig(config)
