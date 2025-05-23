@@ -42,6 +42,7 @@ const BLACK_TEXT_COLOR = '#020617' // Maps out to text-slate-950 from tailwind c
 
 // Keep in sync with defaultSurveyAppearance on the main app
 export const defaultSurveyAppearance = {
+    fontFamily: 'inherit',
     backgroundColor: '#eeeded',
     submitButtonColor: 'black',
     submitButtonTextColor: 'white',
@@ -53,15 +54,19 @@ export const defaultSurveyAppearance = {
     displayThankYouMessage: true,
     thankYouMessageHeader: 'Thank you for your feedback!',
     position: SurveyPosition.Right,
-    widgetColor: '#e0a045',
+    widgetType: SurveyWidgetType.Tab,
+    widgetLabel: 'Feedback',
+    widgetColor: 'black',
     zIndex: '2147483647',
     disabledButtonOpacity: '0.6',
     maxWidth: '300px',
     textSubtleColor: '#939393',
     inputBackground: 'white',
     boxPadding: '20px 24px',
-    borderRadius: '10px',
     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+    borderRadius: '10px',
+    shuffleQuestions: false,
+    surveyPopupDelaySeconds: undefined,
 } as const
 
 export const addSurveyCSSVariablesToElement = (
