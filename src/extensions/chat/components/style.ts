@@ -10,7 +10,7 @@ export const styles = {
         padding: 16,
     }),
     chatHeaderTitle: {
-        fontSize: 11,
+        fontSize: 12,
         fontWeight: 'bold' as const,
     },
     assistantMessageContainer: {

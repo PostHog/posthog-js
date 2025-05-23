@@ -32,12 +32,12 @@ export class ChatManager {
     }
 
     public evaluateDisplayLogic = (): void => {
-        if (!this._posthog?.chat.isEnabled) {
+        if (!this._posthog.chat.isEnabled) {
             return
         }
 
         logger.info('PostHogChat evaluateDisplayLogic')
-        this._posthog?.chat.getChat()
+        this._posthog.getChats()
         const shadowRoot = retrieveChatShadowRoot()
         Preact.render(<PosthogChatBox posthog={this._posthog} />, shadowRoot)
     }

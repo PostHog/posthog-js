@@ -100,6 +100,9 @@ function ChatInput({ sendMessage }: { sendMessage: (message: string) => void }) 
     const [message, setMessage] = useState('')
 
     const handleSendMessage = () => {
+        if (message.trim() === '') {
+            return
+        }
         sendMessage(message)
         setMessage('')
     }
@@ -112,6 +115,11 @@ function ChatInput({ sendMessage }: { sendMessage: (message: string) => void }) 
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 style={styles.chatInput}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                        handleSendMessage()
+                    }
+                }}
             />
             <div style={styles.sendButton(brandColor)} onClick={handleSendMessage}>
                 Send

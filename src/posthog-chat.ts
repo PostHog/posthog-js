@@ -2,11 +2,11 @@ import { PostHog } from './posthog-core'
 import { CHAT_LOGGER as logger } from './utils/chat-utils'
 import { assignableWindow } from './utils/globals'
 import { RemoteConfig, PostHogChatConfig } from './types'
+import { ChatMessageType } from './extensions/chat/components/PosthogChatBox'
 
 export class PostHogChat {
-    public _isFetchingMessages: boolean = false
     public isEnabled: boolean = false
-    public messages: any[] = []
+    public messages: ChatMessageType[] = []
     public conversationId: string | null = null
     public chat_config: PostHogChatConfig | null = null
     constructor(private readonly _instance: PostHog) {}
@@ -52,8 +52,7 @@ export class PostHogChat {
                     token: this._instance.config.token,
                     action: 'create_conversation',
                     distinct_id: this._instance.get_distinct_id(),
-                    title: 'Some title',
-                    conversation_id: conversationId,
+                    title: 'Chat widget',
                     message: message,
                     source_url: 'chat-widget',
                 },
@@ -66,10 +65,6 @@ export class PostHogChat {
                     }
 
                     this.getChat()
-
-                    /*this._instance.persistence?.register({
-                        $chat_conversation_id: response.json.conversations[0].id,
-                    })*/
                 },
             })
         } else {
