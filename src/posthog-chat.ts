@@ -98,6 +98,11 @@ export class PostHogChat {
     }
 
     getChat() {
+        /** No calls if chat is not enabled */
+        if (!this.isEnabled) {
+            return
+        }
+
         try {
             this._instance._send_request({
                 url: this._instance.requestRouter.endpointFor(
