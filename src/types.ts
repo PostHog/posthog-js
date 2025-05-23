@@ -938,6 +938,13 @@ export interface PostHogConfig {
     inapp_link_new_window?: boolean
 }
 
+export interface PostHogChatConfig {
+    /**
+     * The brand color of the chat widget.
+     */
+    brand_color?: string
+}
+
 export interface SessionRecordingOptions {
     /**
      * Derived from `rrweb.record` options
@@ -1379,6 +1386,16 @@ export interface RemoteConfig {
      * Indicates if the team has any flags enabled (if not we don't need to load them)
      */
     hasFeatureFlags?: boolean
+
+    /**
+     * Whether to opt in to chat
+     */
+    chat_opt_in?: boolean
+
+    /**
+     * Chat configuration options
+     */
+    chat_config?: PostHogChatConfig
 }
 
 /**
