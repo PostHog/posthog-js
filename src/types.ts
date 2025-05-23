@@ -487,12 +487,6 @@ export interface PostHogConfig {
      */
     disable_web_experiments: boolean
 
-    /* Determines whether PostHog should disable chat.
-     *
-     * @default true
-     */
-    disable_chat: boolean
-
     /**
      * Determines whether PostHog should disable any external dependency loading.
      * This will prevent PostHog from requesting any external scripts such as those needed for Session Replay, Surveys or Site Apps.

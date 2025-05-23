@@ -36,7 +36,6 @@ export class PostHogChat {
     onRemoteConfig(response: RemoteConfig) {
         // only load surveys if they are enabled and there are surveys to load
         if (response.chat_opt_in) {
-            this._instance.config.disable_chat = false
             this.chat_config = response.chat_config || null
             this.isEnabled = true
             this.startIfEnabled()
