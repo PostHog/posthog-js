@@ -12,7 +12,6 @@ export class PostHogChat {
     constructor(private readonly _instance: PostHog) {}
 
     startIfEnabled() {
-        logger.info('PostHogChat startIfEnabled')
         if (!this.isEnabled) {
             return
         }
