@@ -1,12 +1,15 @@
 import * as Preact from 'preact'
-import { useState, useEffect, useRef, useCallback } from 'preact/hooks'
+import { useState, useEffect, useRef, useCallback, useContext } from 'preact/hooks'
+import { createContext } from 'preact'
 
 import { PostHog } from '../../../posthog-core'
 import { ChatBubbleLeftRightHeroIconFilled } from './ChatBubbleLeftRightHeroIcon'
 import { ChatBubbleXMarkHeroIcon } from './ChatBubbleXMarkHeroIcon'
 
 import { SystemAvatar } from './PosthogAvatar'
-import { BRAND_COLOR } from './style'
+import { BRAND_COLOR, styles } from './style'
+
+const BrandColorContext = createContext<string>(BRAND_COLOR)
 
 export type ChatMessageType = {
     id: string
@@ -17,92 +20,57 @@ export type ChatMessageType = {
     is_assistant: boolean
 }
 
-function ChatHeader({ brandColor }: { brandColor: string }) {
+/**
+ * Renders the header of the chat box.
+ * @param brandColor The primary color used for branding elements in the chat header.
+ */
+function ChatHeader() {
+    const brandColor = useContext(BrandColorContext)
     return (
-        <div
-            style={{
-                backgroundColor: brandColor,
-                color: 'white',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                padding: 16,
-            }}
-        >
-            <span style={{ fontSize: 11, fontWeight: 'bold' }}>Questions? Chat with us!</span>
+        <div style={styles.chatHeader(brandColor)}>
+            <span style={styles.chatHeaderTitle}>Questions? Chat with us!</span>
         </div>
     )
 }
 
-function ChatMessage({ message, brandColor }: { message: ChatMessageType; brandColor: string }) {
+/**
+ * Renders a single chat message, distinguishing between assistant and user messages.
+ * @param message The chat message object to render.
+ * @param brandColor The primary color used for branding assistant messages.
+ */
+function ChatMessage({ message }: { message: ChatMessageType }) {
+    const brandColor = useContext(BrandColorContext)
     if (message.is_assistant) {
         return (
-            <div style={{ width: 284, display: 'flex' }}>
+            <div style={styles.assistantMessageContainer}>
                 <SystemAvatar />
-                <div style={{ display: 'flex', flexDirection: 'column', marginLeft: 8, marginTop: 4 }}>
-                    <span style={{ fontSize: 10, color: 'rgb(146, 169, 193)' }}>Assistant</span>
-                    <span
-                        style={{
-                            fontSize: 12,
-                            backgroundColor: brandColor,
-                            color: 'white',
-                            paddingLeft: 14,
-                            paddingRight: 14,
-                            paddingTop: 8,
-                            paddingBottom: 9,
-                            borderRadius: 10,
-                            overflow: 'hidden',
-                            textAlign: 'left',
-                        }}
-                    >
-                        {message.content}
-                    </span>
-                    <span style={{ fontSize: 10, color: 'rgb(146, 169, 193)' }}>
-                        {new Date(message.created_at).toLocaleTimeString()}
-                    </span>
+                <div style={styles.messageContentContainer}>
+                    <span style={styles.assistantName}>Assistant</span>
+                    <span style={styles.assistantMessageText(brandColor)}>{message.content}</span>
+                    <span style={styles.messageTimestamp}>{new Date(message.created_at).toLocaleTimeString()}</span>
                 </div>
             </div>
         )
     }
 
     return (
-        <div style={{ width: '100%', display: 'flex', justifyContent: 'flex-end' }}>
-            <div style={{ width: 284 }}>
-                <div
-                    style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        marginLeft: 8,
-                        marginTop: 4,
-                        alignItems: 'flex-end',
-                    }}
-                >
-                    <span
-                        style={{
-                            fontSize: 12,
-                            backgroundColor: 'rgb(240, 242, 245)',
-                            color: 'rgb(28, 41, 59)',
-                            paddingLeft: 14,
-                            paddingRight: 14,
-                            paddingTop: 8,
-                            paddingBottom: 9,
-                            borderRadius: 10,
-                            overflow: 'hidden',
-                            textAlign: 'right',
-                        }}
-                    >
-                        {message.content}
-                    </span>
-                    <span style={{ fontSize: 10, color: 'rgb(146, 169, 193)' }}>
-                        {new Date(message.created_at).toLocaleTimeString()}
-                    </span>
+        <div style={styles.userMessageContainerOuter}>
+            <div style={styles.userMessageContainerInner}>
+                <div style={styles.userMessageContentContainer}>
+                    <span style={styles.userMessageText}>{message.content}</span>
+                    <span style={styles.messageTimestamp}>{new Date(message.created_at).toLocaleTimeString()}</span>
                 </div>
             </div>
         </div>
     )
 }
 
-function ChatMessages({ messages = [], brandColor }: { messages: ChatMessageType[]; brandColor: string }) {
+/**
+ * Renders a list of chat messages and handles auto-scrolling to the bottom.
+ * @param messages An array of chat message objects to display.
+ * @param brandColor The primary color used for branding elements within messages.
+ */
+function ChatMessages({ messages = [] }: { messages: ChatMessageType[] }) {
     const messagesEndRef = useRef<HTMLDivElement>(null)
 
     const scrollToBottom = () => {
@@ -114,15 +82,21 @@ function ChatMessages({ messages = [], brandColor }: { messages: ChatMessageType
     }, [messages])
 
     return (
-        <div ref={messagesEndRef} style={{ background: 'white', height: 366, padding: 8, overflowY: 'auto' }}>
+        <div ref={messagesEndRef} style={styles.chatMessagesContainer}>
             {messages.map((message) => (
-                <ChatMessage message={message} key={message.id} brandColor={brandColor} />
+                <ChatMessage message={message} key={message.id} />
             ))}
         </div>
     )
 }
 
-function ChatInput({ sendMessage, brandColor }: { sendMessage: (message: string) => void; brandColor: string }) {
+/**
+ * Renders the input field for typing messages and a send button.
+ * @param sendMessage Callback function to send a message.
+ * @param brandColor The primary color used for branding the send button.
+ */
+function ChatInput({ sendMessage }: { sendMessage: (message: string) => void }) {
+    const brandColor = useContext(BrandColorContext)
     const [message, setMessage] = useState('')
 
     const handleSendMessage = () => {
@@ -131,107 +105,62 @@ function ChatInput({ sendMessage, brandColor }: { sendMessage: (message: string)
     }
 
     return (
-        <div style={{ display: 'flex', padding: 8, borderTop: `1px solid ${brandColor}` }}>
+        <div style={styles.chatInputContainer(brandColor)}>
             <input
                 type="text"
                 placeholder="Type your message here..."
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                style={{
-                    width: '100%',
-                    height: 40,
-                    borderRadius: 8,
-                    border: 'none',
-                    outline: 'none',
-                    padding: '0 10px',
-                    boxSizing: 'border-box',
-                }}
+                style={styles.chatInput}
             />
-            <div
-                style={{
-                    cursor: 'pointer',
-                    backgroundColor: brandColor,
-                    color: 'white',
-                    borderRadius: 10,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '5px 10px',
-                    fontSize: 12,
-                    fontWeight: 300,
-                }}
-                onClick={handleSendMessage}
-            >
+            <div style={styles.sendButton(brandColor)} onClick={handleSendMessage}>
                 Send
             </div>
         </div>
     )
 }
 
+/**
+ * Renders the main chat container, including header, messages, and input.
+ * @param isVisible Controls the visibility of the chat container.
+ * @param sendMessage Callback function to send a message, passed to the ChatInput.
+ * @param messages An array of chat message objects, passed to ChatMessages.
+ * @param brandColor The primary color used for branding elements within the container.
+ */
 function ChatContainer({
     isVisible,
     sendMessage,
     messages,
-    brandColor,
 }: {
     isVisible: boolean
     sendMessage: (message: string) => void
     messages: ChatMessageType[]
-    brandColor: string
 }) {
     return (
-        <div
-            style={{
-                position: 'fixed',
-                right: 14,
-                bottom: 75,
-                transition: 'width .15s ease-in-out !important',
-                borderRadius: 12,
-                backgroundColor: '#fff',
-                boxShadow: '0 6px 6px 0 rgba(0,0,0,.02), 0 8px 24px 0 rgba(0,0,0,.12)',
-                width: 360,
-                visibility: isVisible ? 'visible' : 'hidden',
-                overflow: 'hidden',
-                zIndex: 9999,
-            }}
-        >
-            <ChatHeader brandColor={brandColor} />
-            <ChatMessages messages={messages} brandColor={brandColor} />
-            <ChatInput sendMessage={sendMessage} brandColor={brandColor} />
+        <div style={styles.chatContainer(isVisible)}>
+            <ChatHeader />
+            <ChatMessages messages={messages} />
+            <ChatInput sendMessage={sendMessage} />
         </div>
     )
 }
 
-export function ChatBubble({
-    isOpen,
-    setIsOpen,
-    brandColor,
-}: {
-    isOpen: boolean
-    setIsOpen: (isOpen: boolean) => void
-    brandColor: string
-}) {
+/**
+ * Renders the chat bubble that toggles the chat container visibility.
+ * @param isOpen Indicates whether the chat container is currently open.
+ * @param setIsOpen Callback function to toggle the open state of the chat container.
+ * @param brandColor The primary color used for the chat bubble.
+ */
+export function ChatBubble({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: (isOpen: boolean) => void }) {
+    const brandColor = useContext(BrandColorContext)
     return (
         <div
-            style={{
-                position: 'fixed',
-                right: 14,
-                bottom: 14,
-                borderRadius: 54,
-                width: 54,
-                height: 54,
-                backgroundColor: brandColor,
-                color: 'white',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                cursor: 'pointer',
-            }}
+            style={styles.chatBubble(brandColor)}
             onClick={() => {
                 setIsOpen(!isOpen)
             }}
         >
-            <div style={{ position: 'relative', width: 24, height: 24 }}>
+            <div style={styles.chatBubbleIconContainer}>
                 <ChatBubbleLeftRightHeroIconFilled isVisible={!isOpen} />
                 <ChatBubbleXMarkHeroIcon isVisible={isOpen} />
             </div>
@@ -239,6 +168,10 @@ export function ChatBubble({
     )
 }
 
+/**
+ * Main component for the PostHog chat box, managing state and interactions.
+ * @param posthog The PostHog instance used for chat interactions.
+ */
 export function PosthogChatBox({ posthog }: { posthog: PostHog }) {
     const [isOpen, setIsOpen] = useState(false)
     const [messages, setMessages] = useState<ChatMessageType[]>([])
@@ -257,28 +190,21 @@ export function PosthogChatBox({ posthog }: { posthog: PostHog }) {
             const newChatMessages = (posthog.chat.messages || []) as ChatMessageType[]
 
             setMessages((prevMessages) => {
-                // Helper to get a consistent, comparable representation of a message's key fields
-                const simplifyMessage = (msg: ChatMessageType) => ({
-                    id: msg.id,
-                    content: msg.content,
-                    read: msg.read,
-                })
-
                 if (newChatMessages.length !== prevMessages.length) {
                     return newChatMessages
                 }
 
                 // If lengths are the same, compare content of each message
                 for (let i = 0; i < newChatMessages.length; i++) {
-                    // Ensure both messages exist before trying to simplify, though length check should cover prevMessages[i]
-                    if (!prevMessages[i] || !newChatMessages[i]) {
-                        // Should not happen if lengths are equal and arrays are valid
-                        return newChatMessages // Fallback to update
-                    }
-                    const oldMsgSimplified = JSON.stringify(simplifyMessage(prevMessages[i]))
-                    const newMsgSimplified = JSON.stringify(simplifyMessage(newChatMessages[i]))
+                    const prevMsg = prevMessages[i]
+                    const newMsg = newChatMessages[i]
 
-                    if (oldMsgSimplified !== newMsgSimplified) {
+                    // Check if critical fields have changed
+                    if (
+                        prevMsg.id !== newMsg.id ||
+                        prevMsg.content !== newMsg.content ||
+                        prevMsg.read !== newMsg.read
+                    ) {
                         return newChatMessages
                     }
                 }
@@ -297,19 +223,14 @@ export function PosthogChatBox({ posthog }: { posthog: PostHog }) {
         }
     }, [posthog.chat.conversationId])
 
+    const currentBrandColor = posthog.chat.chat_config?.brand_color || BRAND_COLOR
+
     return (
-        <Preact.Fragment>
-            <ChatBubble
-                isOpen={isOpen}
-                setIsOpen={setIsOpen}
-                brandColor={posthog.chat.chat_config?.brand_color || BRAND_COLOR}
-            />
-            <ChatContainer
-                isVisible={isOpen}
-                sendMessage={sendMessage}
-                messages={messages}
-                brandColor={posthog.chat.chat_config?.brand_color || BRAND_COLOR}
-            />
-        </Preact.Fragment>
+        <BrandColorContext.Provider value={currentBrandColor}>
+            <Preact.Fragment>
+                <ChatBubble isOpen={isOpen} setIsOpen={setIsOpen} />
+                <ChatContainer isVisible={isOpen} sendMessage={sendMessage} messages={messages} />
+            </Preact.Fragment>
+        </BrandColorContext.Provider>
     )
 }
