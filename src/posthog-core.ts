@@ -998,10 +998,7 @@ export class PostHog {
         const startTimestamp = readOnly ? undefined : this.persistence.remove_event_timer(eventName)
         let properties = { ...eventProperties }
         properties['token'] = this.config.token
-
-        if (this.config.defaults) {
-            properties['$config_defaults'] = this.config.defaults
-        }
+        properties['$config_defaults'] = this.config.defaults
 
         if (this.config.__preview_experimental_cookieless_mode) {
             // Set a flag to tell the plugin server to use cookieless server hash mode
