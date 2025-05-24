@@ -275,10 +275,6 @@ export interface HeatmapConfig {
 
 export type BeforeSendFn = (cr: CaptureResult | null) => CaptureResult | null
 
-/**
- * Configuration defaults for breaking changes. When set to a specific date,
- * enables new default behaviors that were introduced on that date.
- */
 export type ConfigDefaults = '2025-05-24' | 'unset'
 
 /**
