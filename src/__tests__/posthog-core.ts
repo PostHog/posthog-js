@@ -472,6 +472,7 @@ describe('posthog core', () => {
                 $sdk_debug_replay_internal_buffer_size: 0,
                 $sdk_debug_retry_queue_size: 0,
                 $sdk_debug_current_session_duration: null,
+                $config_defaults: 'unset',
             })
         })
 
@@ -500,6 +501,7 @@ describe('posthog core', () => {
                 $sdk_debug_replay_internal_buffer_size: 0,
                 $sdk_debug_retry_queue_size: 0,
                 $sdk_debug_current_session_duration: null,
+                $config_defaults: 'unset',
             })
         })
 
@@ -532,6 +534,7 @@ describe('posthog core', () => {
                 token: 'testtoken',
                 event: 'prop',
                 distinct_id: 'abc',
+                $config_defaults: 'unset',
             })
             expect(posthog.sessionManager.checkAndGetSessionAndWindowId).not.toHaveBeenCalled()
         })
@@ -580,6 +583,7 @@ describe('posthog core', () => {
                 token: 'testtoken',
                 $snapshot_data: {},
                 distinct_id: 'abc',
+                $config_defaults: 'unset',
             })
         })
 

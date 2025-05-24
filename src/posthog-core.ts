@@ -56,6 +56,7 @@ import {
     SessionIdChangedCallback,
     SnippetArrayItem,
     ToolbarParams,
+    ConfigDefaults,
 } from './types'
 import {
     _copyAndTruncateStrings,
@@ -133,7 +134,7 @@ let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 &&
 // NOTE: Remember to update `types.ts` when changing a default value
 // to guarantee documentation is up to date, make sure to also update our website docs
 // NOTE²: This shouldn't ever change because we try very hard to be backwards-compatible
-export const defaultConfig = (): PostHogConfig => ({
+export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     api_host: 'https://us.i.posthog.com',
     ui_host: null,
     token: '',
@@ -147,8 +148,9 @@ export const defaultConfig = (): PostHogConfig => ({
     custom_campaign_params: [],
     custom_blocked_useragents: [],
     save_referrer: true,
-    capture_pageview: true, // can be true, false, or 'history_change'
+    capture_pageview: defaults === '2025-05-24' ? 'history_change' : true,
     capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
+    defaults: defaults ?? 'unset',
     debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
     cookie_expiration: 365,
     upgrade: false,
@@ -431,7 +433,7 @@ export class PostHog {
         }
 
         this.set_config(
-            extend({}, defaultConfig(), configRenames(config), {
+            extend({}, defaultConfig(config.defaults), configRenames(config), {
                 name: name,
                 token: token,
             })
@@ -996,6 +998,7 @@ export class PostHog {
         const startTimestamp = readOnly ? undefined : this.persistence.remove_event_timer(eventName)
         let properties = { ...eventProperties }
         properties['token'] = this.config.token
+        properties['$config_defaults'] = this.config.defaults
 
         if (this.config.__preview_experimental_cookieless_mode) {
             // Set a flag to tell the plugin server to use cookieless server hash mode
