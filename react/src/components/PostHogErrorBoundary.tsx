@@ -41,6 +41,11 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
     }
 
     componentDidCatch(error: unknown, errorInfo: React.ErrorInfo) {
+        if (error instanceof Error && error.message.includes('removeChild') && error.message.includes('not a child')) {
+            // Translation interference, log but don't crash
+            console.warn('Chrome translation interference detected:', error)
+            return
+        }
         const { componentStack } = errorInfo
         const { additionalProperties } = this.props
         this.setState({
