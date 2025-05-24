@@ -649,12 +649,12 @@ export interface PostHogConfig {
      * Configuration defaults for breaking changes. When set to a specific date,
      * enables new default behaviors that were introduced on that date.
      *
-     * - `undefined`: Use legacy default behaviors
+     * - `'unset'`: Use legacy default behaviors
      * - `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')
      *
-     * @default undefined
+     * @default 'unset'
      */
-    defaults?: ConfigDefaults
+    defaults: ConfigDefaults
 
     /**
      * Determines the session recording options.
