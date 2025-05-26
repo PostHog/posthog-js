@@ -37,6 +37,17 @@ export class PostHogChat {
         if (response.chat_opt_in) {
             this.chat_config = response.chat_config || null
             this.isEnabled = true
+            if (this.chat_config && this.chat_config.start_message && this.messages.length === 0) {
+                //this.chat_config.start_message = this.chat_config.start_message || 'Questions? Chat with us!'
+                this.messages.push({
+                    id: 'start',
+                    conversation: '',
+                    content: this.chat_config.start_message || 'Questions? Chat with us!',
+                    created_at: new Date().toISOString(),
+                    read: false,
+                    is_assistant: true,
+                })
+            }
             this.startIfEnabled()
         }
     }

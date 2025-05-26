@@ -943,6 +943,11 @@ export interface PostHogChatConfig {
      * The brand color of the chat widget.
      */
     brand_color?: string
+
+    /**
+     * The message to display when the chat is started.
+     */
+    start_message?: string
 }
 
 export interface SessionRecordingOptions {
