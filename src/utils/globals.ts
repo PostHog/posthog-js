@@ -67,7 +67,7 @@ export interface LazyLoadedDeadClicksAutocaptureInterface {
 
 export interface LazyLoadedPostHogChatInterface {
     sendMessage: (conversationId: string, message: string, posthog: PostHog) => void
-    getChat: (posthog: PostHog) => { messages: ChatMessageType[]; conversationId: string }
+    getChat: (posthog: PostHog) => { messages?: ChatMessageType[]; conversationId?: string }
 }
 
 interface PostHogExtensions {

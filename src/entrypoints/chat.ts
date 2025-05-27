@@ -3,6 +3,7 @@ import { loadChat } from '../extensions/chat'
 import { assignableWindow } from '../utils/globals'
 import { PostHog } from '../posthog-core'
 import { CHAT_LOGGER as logger } from '../utils/chat-utils'
+import { ChatMessageType } from '../extensions/chat/components/PosthogChatBox'
 
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
 assignableWindow.__PosthogExtensions__.loadChat = loadChat
@@ -52,7 +53,7 @@ assignableWindow.__PosthogExtensions__.chat = assignableWindow.__PosthogExtensio
             })
         }
     },
-    getChat: (posthog: PostHog) => {
+    getChat: (posthog: PostHog): { messages?: ChatMessageType[]; conversationId?: string } => {
         try {
             posthog._send_request({
                 url: posthog.requestRouter.endpointFor(
@@ -80,13 +81,15 @@ assignableWindow.__PosthogExtensions__.chat = assignableWindow.__PosthogExtensio
                             conversationId: chat.id,
                         }
                     }
-                    return null
+                    return {}
                 },
             })
         } catch (e) {
             logger.error('PostHogChat getChat', e)
             throw e
         }
+
+        return {}
     },
 }
 
