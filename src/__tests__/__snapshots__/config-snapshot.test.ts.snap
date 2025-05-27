@@ -208,7 +208,6 @@ exports[`config snapshot for PostHogConfig 1`] = `
   ],
   \\"properties_string_max_length\\": \\"number\\",
   \\"defaults\\": [
-    \\"undefined\\",
     \\"\\\\\\"2025-05-24\\\\\\"\\",
     \\"\\\\\\"unset\\\\\\"\\"
   ],
