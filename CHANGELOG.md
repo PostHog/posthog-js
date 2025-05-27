@@ -1,3 +1,7 @@
+## 1.248.0 - 2025-05-27
+
+- feat: Add "defaults" to config (#1978)
+
 ## 1.247.0 - 2025-05-27
 
 - fix: getSurveySeen and waitPeriod checks (#1979)
