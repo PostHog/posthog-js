@@ -540,10 +540,10 @@ const getSurveyInteractionProperty = (survey: Survey, action: string): string =>
     return surveyProperty
 }
 
-export const hasWaitPeriodPassed = (
-    lastSeenSurveyDate: string | null,
-    waitPeriodInDays: number | undefined
-): boolean => {
+const LAST_SEEN_SURVEY_DATE_KEY = 'lastSeenSurveyDate'
+
+export const hasWaitPeriodPassed = (waitPeriodInDays: number | undefined): boolean => {
+    const lastSeenSurveyDate = localStorage.getItem(LAST_SEEN_SURVEY_DATE_KEY)
     if (!waitPeriodInDays || !lastSeenSurveyDate) {
         return true
     }

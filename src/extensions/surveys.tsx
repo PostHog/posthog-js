@@ -190,18 +190,6 @@ export class SurveyManager {
     }
 
     private _handlePopoverSurvey = (survey: Survey): void => {
-        const surveyWaitPeriodInDays = survey.conditions?.seenSurveyWaitPeriodInDays
-        const lastSeenSurveyDate = localStorage.getItem(`lastSeenSurveyDate`)
-
-        if (!hasWaitPeriodPassed(lastSeenSurveyDate, surveyWaitPeriodInDays)) {
-            return
-        }
-
-        const surveySeen = getSurveySeen(survey)
-        if (surveySeen) {
-            return
-        }
-
         this._clearSurveyTimeout(survey.id)
         this._addSurveyToFocus(survey)
         const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
@@ -427,6 +415,18 @@ export class SurveyManager {
             eligibility.eligible = false
             eligibility.reason =
                 'Survey internal targeting flag is not enabled and survey cannot activate repeatedly and survey is not in progress'
+            return eligibility
+        }
+
+        if (!hasWaitPeriodPassed(survey.conditions?.seenSurveyWaitPeriodInDays)) {
+            eligibility.eligible = false
+            eligibility.reason = `Survey wait period has not passed`
+            return eligibility
+        }
+
+        if (getSurveySeen(survey)) {
+            eligibility.eligible = false
+            eligibility.reason = `Survey has already been seen and it can't be activated again`
             return eligibility
         }
 
