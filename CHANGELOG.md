@@ -1,3 +1,7 @@
+## 1.247.0 - 2025-05-27
+
+- fix: getSurveySeen and waitPeriod checks (#1979)
+
 ## 1.246.0 - 2025-05-22
 
 - fix: Block newer google bots (#1974)
