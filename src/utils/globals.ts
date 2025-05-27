@@ -64,6 +64,10 @@ export interface LazyLoadedDeadClicksAutocaptureInterface {
     stop: () => void
 }
 
+export interface LazyLoadedPostHogChatInterface {
+    sendMessage: (conversationId: string, message: string, posthog: PostHog) => void
+}
+
 interface PostHogExtensions {
     loadExternalDependency?: (
         posthog: PostHog,
@@ -96,6 +100,7 @@ interface PostHogExtensions {
         ph: PostHog,
         config: DeadClicksAutoCaptureConfig
     ) => LazyLoadedDeadClicksAutocaptureInterface
+    chat?: LazyLoadedPostHogChatInterface
 }
 
 const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win

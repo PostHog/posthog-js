@@ -18,10 +18,6 @@ export class PostHogChat {
         const loadChat = assignableWindow?.__PosthogExtensions__?.loadChat
 
         if (!loadChat) {
-            // if (this._surveyEventReceiver == null) {
-            //     this._surveyEventReceiver = new SurveyEventReceiver(this.instance)
-            // }
-
             assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, 'chat', (err) => {
                 if (err) {
                     return logger.error('Could not load script', err)
@@ -55,52 +51,7 @@ export class PostHogChat {
     sendMessage(conversationId: string, message: string) {
         logger.info('PostHogChat sendMessage', message)
 
-        if (!conversationId) {
-            this._instance._send_request({
-                url: this._instance.requestRouter.endpointFor('api', `/api/chat/`),
-                method: 'POST',
-                data: {
-                    token: this._instance.config.token,
-                    action: 'create_conversation',
-                    distinct_id: this._instance.get_distinct_id(),
-                    title: 'Chat widget',
-                    message: message,
-                    source_url: 'chat-widget',
-                },
-                timeout: 10000,
-                callback: (response) => {
-                    const statusCode = response.statusCode
-                    if (statusCode !== 200 || !response.json) {
-                        const error = `Chat message could not be sent, status: ${statusCode}`
-                        logger.error(error)
-                    }
-
-                    this.getChat()
-                },
-            })
-        } else {
-            this._instance._send_request({
-                url: this._instance.requestRouter.endpointFor('api', `/api/chat/`),
-                method: 'POST',
-                data: {
-                    token: this._instance.config.token,
-                    action: 'send_message',
-                    conversation_id: conversationId,
-                    message: message,
-                    distinct_id: this._instance.get_distinct_id(),
-                },
-                timeout: 10000,
-                callback: (response) => {
-                    const statusCode = response.statusCode
-                    if (statusCode !== 200 || !response.json) {
-                        const error = `Chat message could not be sent, status: ${statusCode}`
-                        logger.error(error)
-                    }
-
-                    this.getChat()
-                },
-            })
-        }
+        assignableWindow.__PosthogExtensions__?.chat?.sendMessage(conversationId, message, this._instance)
     }
 
     getChat() {
