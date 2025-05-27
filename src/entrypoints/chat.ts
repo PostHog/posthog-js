@@ -52,6 +52,42 @@ assignableWindow.__PosthogExtensions__.chat = assignableWindow.__PosthogExtensio
             })
         }
     },
+    getChat: (posthog: PostHog) => {
+        try {
+            posthog._send_request({
+                url: posthog.requestRouter.endpointFor(
+                    'api',
+                    `/api/chat/?token=${posthog.config.token}&distinct_id=${posthog.get_distinct_id()}`
+                ),
+                method: 'GET',
+                timeout: 10000,
+                callback: (response) => {
+                    const statusCode = response.statusCode
+                    if (statusCode !== 200 || !response.json) {
+                        const error = `Chat API could not be loaded, status: ${statusCode}`
+                        logger.error(error)
+                        // return callback([], {
+                        //     isLoaded: false,
+                        //     error,
+                        // })
+                    }
+                    const chats = response.json.conversations || []
+
+                    if (chats.length > 0) {
+                        const chat = chats[0]
+                        return {
+                            messages: chat.messages || [],
+                            conversationId: chat.id,
+                        }
+                    }
+                    return null
+                },
+            })
+        } catch (e) {
+            logger.error('PostHogChat getChat', e)
+            throw e
+        }
+    },
 }
 
 export default loadChat

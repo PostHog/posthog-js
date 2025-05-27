@@ -1,6 +1,7 @@
 import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
 import { DeadClicksAutoCaptureConfig, Properties, RemoteConfig, SiteAppLoader } from '../types'
+import { ChatMessageType } from '../extensions/chat/components/PosthogChatBox'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
@@ -66,6 +67,7 @@ export interface LazyLoadedDeadClicksAutocaptureInterface {
 
 export interface LazyLoadedPostHogChatInterface {
     sendMessage: (conversationId: string, message: string, posthog: PostHog) => void
+    getChat: (posthog: PostHog) => { messages: ChatMessageType[]; conversationId: string }
 }
 
 interface PostHogExtensions {

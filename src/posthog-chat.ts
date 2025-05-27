@@ -60,36 +60,10 @@ export class PostHogChat {
             return
         }
 
-        try {
-            this._instance._send_request({
-                url: this._instance.requestRouter.endpointFor(
-                    'api',
-                    `/api/chat/?token=${this._instance.config.token}&distinct_id=${this._instance.get_distinct_id()}`
-                ),
-                method: 'GET',
-                timeout: 10000,
-                callback: (response) => {
-                    const statusCode = response.statusCode
-                    if (statusCode !== 200 || !response.json) {
-                        const error = `Chat API could not be loaded, status: ${statusCode}`
-                        logger.error(error)
-                        // return callback([], {
-                        //     isLoaded: false,
-                        //     error,
-                        // })
-                    }
-                    const chats = response.json.conversations || []
-
-                    if (chats.length > 0) {
-                        const chat = chats[0]
-                        this.messages = chat.messages || []
-                        this.conversationId = chat.id
-                    }
-                },
-            })
-        } catch (e) {
-            logger.error('PostHogChat getChat', e)
-            throw e
+        const getChatResult = assignableWindow.__PosthogExtensions__?.chat?.getChat(this._instance)
+        if (getChatResult?.messages && getChatResult?.conversationId) {
+            this.messages = getChatResult.messages
+            this.conversationId = getChatResult.conversationId
         }
     }
 }
