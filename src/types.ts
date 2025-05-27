@@ -275,6 +275,8 @@ export interface HeatmapConfig {
 
 export type BeforeSendFn = (cr: CaptureResult | null) => CaptureResult | null
 
+export type ConfigDefaults = '2025-05-24' | 'unset'
+
 /**
  * Configuration options for the PostHog JavaScript SDK.
  * @see https://posthog.com/docs/libraries/js#config
@@ -638,6 +640,17 @@ export interface PostHogConfig {
      * @default 65535
      */
     properties_string_max_length: number
+
+    /**
+     * Configuration defaults for breaking changes. When set to a specific date,
+     * enables new default behaviors that were introduced on that date.
+     *
+     * - `'unset'`: Use legacy default behaviors
+     * - `'2025-05-24'`: Use updated default behaviors (e.g. capture_pageview defaults to 'history_change')
+     *
+     * @default 'unset'
+     */
+    defaults: ConfigDefaults
 
     /**
      * Determines the session recording options.
