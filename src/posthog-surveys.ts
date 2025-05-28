@@ -326,7 +326,7 @@ export class PostHogSurveys {
         this._surveyManager.renderSurvey(survey, elem)
     }
 
-    captureSurveyShownEvent = (survey: Survey) => {
+    captureSurveyShownEvent(survey: Survey) {
         if (isNullish(this._surveyManager)) {
             logger.warn('surveys not loaded')
             return
@@ -334,7 +334,7 @@ export class PostHogSurveys {
         this._surveyManager.captureSurveyShownEvent(survey)
     }
 
-    captureSurveySentEvent = (args: SendSurveyEventArgs) => {
+    captureSurveySentEvent(args: SendSurveyEventArgs) {
         if (isNullish(this._surveyManager)) {
             logger.warn('surveys not loaded')
             return
@@ -342,7 +342,7 @@ export class PostHogSurveys {
         this._surveyManager.captureSurveySentEvent(args)
     }
 
-    captureSurveyDismissedEvent = (survey: Survey) => {
+    captureSurveyDismissedEvent(survey: Survey) {
         if (isNullish(this._surveyManager)) {
             logger.warn('surveys not loaded')
             return
