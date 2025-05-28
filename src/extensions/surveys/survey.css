@@ -94,6 +94,7 @@
     position: fixed;
     margin: 0;
     bottom: 0;
+    min-width: 300px;
     width: var(--ph-survey-max-width);
     max-width: 85%;
     z-index: var(--ph-survey-z-index);

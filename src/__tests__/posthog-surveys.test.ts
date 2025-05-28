@@ -15,7 +15,7 @@ import { PostHogSurveys } from '../posthog-surveys'
 import { Survey, SurveySchedule, SurveyType } from '../posthog-surveys-types'
 import { DecideResponse } from '../types'
 import { assignableWindow } from '../utils/globals'
-import { SURVEY_IN_PROGRESS_PREFIX } from '../utils/survey-utils'
+import { SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
 
 describe('posthog-surveys', () => {
     describe('PostHogSurveys Class', () => {
@@ -46,6 +46,17 @@ describe('posthog-surveys', () => {
             schedule: SurveySchedule.Always,
         }
 
+        const surveyWithWaitPeriod: Survey = {
+            ...survey,
+            id: 'survey-with-wait-period',
+            name: 'survey with wait period',
+            conditions: {
+                seenSurveyWaitPeriodInDays: 7,
+                events: null,
+                actions: null,
+            },
+        }
+
         const decideResponse = {
             featureFlags: {
                 'linked-flag-key': true,
@@ -61,6 +72,9 @@ describe('posthog-surveys', () => {
         beforeEach(() => {
             // Reset mocks
             jest.clearAllMocks()
+
+            // Clear localStorage
+            localStorage.clear()
 
             // Mock PostHog instance
             mockPostHog = {
@@ -103,7 +117,6 @@ describe('posthog-surveys', () => {
             assignableWindow.__PosthogExtensions__ = {
                 generateSurveys: mockGenerateSurveys,
                 loadExternalDependency: mockLoadExternalDependency,
-                canActivateRepeatedly: jest.fn().mockReturnValue(false),
             }
 
             surveys.reset()
@@ -112,6 +125,7 @@ describe('posthog-surveys', () => {
         afterEach(() => {
             // Clean up
             delete assignableWindow.__PosthogExtensions__
+            localStorage.clear()
         })
 
         describe('canRenderSurvey', () => {
@@ -136,7 +150,7 @@ describe('posthog-surveys', () => {
         describe('checkSurveyEligibility', () => {
             beforeEach(() => {
                 // mock getSurveys response
-                mockPostHog.get_property.mockReturnValue([survey, repeatableSurvey])
+                mockPostHog.get_property.mockReturnValue([survey, repeatableSurvey, surveyWithWaitPeriod])
                 surveys['_surveyManager'] = new SurveyManager(mockPostHog as PostHog)
             })
 
@@ -200,6 +214,119 @@ describe('posthog-surveys', () => {
                 )
                 const result = surveys['_checkSurveyEligibility'](survey.id)
                 expect(result.eligible).toBeTruthy()
+            })
+
+            describe('integration with wait period and survey seen checks', () => {
+                beforeEach(() => {
+                    // Set all flags to true for integration tests
+                    decideResponse.featureFlags[survey.targeting_flag_key] = true
+                    decideResponse.featureFlags[survey.linked_flag_key] = true
+                    decideResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                    decideResponse.featureFlags[surveyWithWaitPeriod.targeting_flag_key] = true
+                    decideResponse.featureFlags[surveyWithWaitPeriod.linked_flag_key] = true
+                    decideResponse.featureFlags[surveyWithWaitPeriod.internal_targeting_flag_key] = true
+                })
+
+                it('integrates wait period check with other eligibility criteria', () => {
+                    // Set last seen survey date to 3 days ago (less than 7 day wait period)
+                    const threeDaysAgo = new Date()
+                    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
+                    localStorage.setItem('lastSeenSurveyDate', threeDaysAgo.toISOString())
+
+                    const result = surveys['_checkSurveyEligibility'](surveyWithWaitPeriod.id)
+                    expect(result.eligible).toBeFalsy()
+                    expect(result.reason).toEqual('Survey wait period has not passed')
+                })
+
+                it('integrates survey seen check with other eligibility criteria', () => {
+                    // Mark survey as seen
+                    localStorage.setItem(`${SURVEY_SEEN_PREFIX}${survey.id}`, 'true')
+
+                    const result = surveys['_checkSurveyEligibility'](survey.id)
+                    expect(result.eligible).toBeFalsy()
+                    expect(result.reason).toEqual("Survey has already been seen and it can't be activated again")
+                })
+
+                it('allows repeatable surveys even when seen', () => {
+                    // Use repeatable survey (has SurveySchedule.Always)
+                    localStorage.setItem(`${SURVEY_SEEN_PREFIX}${repeatableSurvey.id}`, 'true')
+
+                    const result = surveys['_checkSurveyEligibility'](repeatableSurvey.id)
+                    expect(result.eligible).toBeTruthy()
+                })
+            })
+
+            describe('check order and interaction between multiple eligibility criteria', () => {
+                const surveyWithBothConditions: Survey = {
+                    ...survey,
+                    id: 'survey-with-both-conditions',
+                    conditions: {
+                        seenSurveyWaitPeriodInDays: 5,
+                        events: null,
+                        actions: null,
+                    },
+                }
+
+                beforeEach(() => {
+                    mockPostHog.get_property.mockReturnValue([surveyWithBothConditions])
+                    // Set all flags to true
+                    decideResponse.featureFlags[surveyWithBothConditions.targeting_flag_key] = true
+                    decideResponse.featureFlags[surveyWithBothConditions.linked_flag_key] = true
+                    decideResponse.featureFlags[surveyWithBothConditions.internal_targeting_flag_key] = true
+                })
+
+                it('checks wait period before survey seen status (early return)', () => {
+                    // Set last seen survey date to 2 days ago (less than 5 day wait period)
+                    const twoDaysAgo = new Date()
+                    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2)
+                    localStorage.setItem('lastSeenSurveyDate', twoDaysAgo.toISOString())
+
+                    // Also mark survey as seen (but this should not be checked since wait period fails first)
+                    localStorage.setItem(`${SURVEY_SEEN_PREFIX}${surveyWithBothConditions.id}`, 'true')
+
+                    const result = surveys['_checkSurveyEligibility'](surveyWithBothConditions.id)
+                    expect(result.eligible).toBeFalsy()
+                    expect(result.reason).toEqual('Survey wait period has not passed')
+                })
+
+                it('checks survey seen status when wait period passes', () => {
+                    // Set last seen survey date to 10 days ago (more than 5 day wait period)
+                    const tenDaysAgo = new Date()
+                    tenDaysAgo.setDate(tenDaysAgo.getDate() - 10)
+                    localStorage.setItem('lastSeenSurveyDate', tenDaysAgo.toISOString())
+
+                    // Mark survey as seen and cannot repeat
+                    localStorage.setItem(`${SURVEY_SEEN_PREFIX}${surveyWithBothConditions.id}`, 'true')
+
+                    const result = surveys['_checkSurveyEligibility'](surveyWithBothConditions.id)
+                    expect(result.eligible).toBeFalsy()
+                    expect(result.reason).toEqual("Survey has already been seen and it can't be activated again")
+                })
+
+                it('allows surveys that pass all checks including repeatability', () => {
+                    // Create a repeatable survey with wait period
+                    const repeatableSurveyWithWaitPeriod: Survey = {
+                        ...repeatableSurvey,
+                        id: 'repeatable-survey-with-wait-period',
+                        conditions: {
+                            seenSurveyWaitPeriodInDays: 5,
+                            events: null,
+                            actions: null,
+                        },
+                    }
+                    mockPostHog.get_property.mockReturnValue([repeatableSurveyWithWaitPeriod])
+
+                    // Set last seen survey date to 10 days ago (more than 5 day wait period)
+                    const tenDaysAgo = new Date()
+                    tenDaysAgo.setDate(tenDaysAgo.getDate() - 10)
+                    localStorage.setItem('lastSeenSurveyDate', tenDaysAgo.toISOString())
+
+                    // Mark survey as seen but can repeat (due to SurveySchedule.Always)
+                    localStorage.setItem(`${SURVEY_SEEN_PREFIX}${repeatableSurveyWithWaitPeriod.id}`, 'true')
+
+                    const result = surveys['_checkSurveyEligibility'](repeatableSurveyWithWaitPeriod.id)
+                    expect(result.eligible).toBeTruthy()
+                })
             })
         })
 

@@ -207,6 +207,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"true\\"
   ],
   \\"properties_string_max_length\\": \\"number\\",
+  \\"defaults\\": [
+    \\"\\\\\\"2025-05-24\\\\\\"\\",
+    \\"\\\\\\"unset\\\\\\"\\"
+  ],
   \\"session_recording\\": {
     \\"blockClass\\": [
       \\"undefined\\",
