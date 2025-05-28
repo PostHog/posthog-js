@@ -10,8 +10,6 @@ import { isUndefined } from '../utils/type-utils'
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
 assignableWindow.__PosthogExtensions__.loadChat = loadChat
 
-// Callback type definitions will be removed from here.
-
 assignableWindow.__PosthogExtensions__.chat = assignableWindow.__PosthogExtensions__.chat || {
     sendMessage: (
         conversationId: string,
