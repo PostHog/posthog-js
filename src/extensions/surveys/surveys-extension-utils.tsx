@@ -12,7 +12,7 @@ import {
 } from '../../posthog-surveys-types'
 import { document as _document, window as _window, userAgent } from '../../utils/globals'
 import { SURVEY_LOGGER as logger, SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../../utils/survey-utils'
-import { isNullish, isArray } from '../../utils/type-utils'
+import { isNullish } from '../../utils/type-utils'
 
 import { detectDeviceType } from '../../utils/user-agent-utils'
 import { propertyComparisons } from '../../utils/property-utils'
@@ -345,106 +345,6 @@ export const retrieveSurveyShadow = (
     return shadow
 }
 
-interface SendSurveyEventArgs {
-    responses: Record<string, string | number | string[] | null>
-    survey: Survey
-    surveySubmissionId: string
-    isSurveyCompleted: boolean
-    posthog?: PostHog
-}
-
-const getSurveyResponseValue = (responses: Record<string, string | number | string[] | null>, questionId?: string) => {
-    if (!questionId) {
-        return null
-    }
-    const response = responses[getSurveyResponseKey(questionId)]
-    if (isArray(response)) {
-        return [...response]
-    }
-    return response
-}
-
-export const sendSurveyEvent = ({
-    responses,
-    survey,
-    surveySubmissionId,
-    posthog,
-    isSurveyCompleted,
-}: SendSurveyEventArgs) => {
-    if (!posthog) {
-        logger.error('[survey sent] event not captured, PostHog instance not found.')
-        return
-    }
-
-    // Mark as seen in localStorage regardless of completion status
-    localStorage.setItem(getSurveySeenKey(survey), 'true')
-
-    // Send the event payload
-    posthog.capture('survey sent', {
-        $survey_name: survey.name,
-        $survey_id: survey.id,
-        $survey_iteration: survey.current_iteration,
-        $survey_iteration_start_date: survey.current_iteration_start_date,
-        $survey_questions: survey.questions.map((question) => ({
-            id: question.id,
-            question: question.question,
-            response: getSurveyResponseValue(responses, question.id),
-        })),
-        $survey_submission_id: surveySubmissionId,
-        $survey_completed: isSurveyCompleted,
-        sessionRecordingUrl: posthog.get_session_replay_url?.(),
-        ...responses,
-        $set: {
-            [getSurveyInteractionProperty(survey, 'responded')]: true,
-        },
-    })
-
-    if (isSurveyCompleted) {
-        // Only dispatch PHSurveySent if the survey is completed, as that removes the survey from focus
-        window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: survey.id } }))
-        clearInProgressSurveyState(survey)
-    }
-}
-
-export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly?: boolean) => {
-    if (!posthog) {
-        logger.error('[survey dismissed] event not captured, PostHog instance not found.')
-        return
-    }
-    if (readOnly) {
-        return
-    }
-
-    const inProgressSurvey = getInProgressSurveyState(survey)
-
-    // Send dismissal event
-    posthog.capture('survey dismissed', {
-        $survey_name: survey.name,
-        $survey_id: survey.id,
-        $survey_iteration: survey.current_iteration,
-        $survey_iteration_start_date: survey.current_iteration_start_date,
-        // check if the survey is partially completed
-        $survey_partially_completed:
-            Object.values(inProgressSurvey?.responses || {}).filter((resp) => !isNullish(resp)).length > 0,
-        sessionRecordingUrl: posthog.get_session_replay_url?.(),
-        ...inProgressSurvey?.responses,
-        $survey_submission_id: inProgressSurvey?.surveySubmissionId,
-        $survey_questions: survey.questions.map((question) => ({
-            id: question.id,
-            question: question.question,
-            response: getSurveyResponseValue(inProgressSurvey?.responses || {}, question.id),
-        })),
-        $set: {
-            [getSurveyInteractionProperty(survey, 'dismissed')]: true,
-        },
-    })
-
-    // Clear in-progress state on dismissal
-    clearInProgressSurveyState(survey)
-    localStorage.setItem(getSurveySeenKey(survey), 'true')
-    window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: survey.id } }))
-}
-
 // Use the Fisher-yates algorithm to shuffle this array
 // https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
 export const shuffle = (array: any[]) => {
@@ -529,15 +429,6 @@ export const getSurveySeenKey = (survey: Survey): string => {
     }
 
     return surveySeenKey
-}
-
-const getSurveyInteractionProperty = (survey: Survey, action: string): string => {
-    let surveyProperty = `$survey_${action}/${survey.id}`
-    if (survey.current_iteration && survey.current_iteration > 0) {
-        surveyProperty = `$survey_${action}/${survey.id}/${survey.current_iteration}`
-    }
-
-    return surveyProperty
 }
 
 export const hasWaitPeriodPassed = (

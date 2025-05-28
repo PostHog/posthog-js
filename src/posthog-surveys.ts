@@ -1,7 +1,7 @@
 import { SURVEYS } from './constants'
 import { SurveyManager } from './extensions/surveys'
 import { PostHog } from './posthog-core'
-import { Survey, SurveyCallback, SurveyRenderReason } from './posthog-surveys-types'
+import { SendSurveyEventArgs, Survey, SurveyCallback, SurveyRenderReason } from './posthog-surveys-types'
 import { RemoteConfig } from './types'
 import { assignableWindow, document } from './utils/globals'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
@@ -324,5 +324,29 @@ export class PostHogSurveys {
             return
         }
         this._surveyManager.renderSurvey(survey, elem)
+    }
+
+    captureSurveyShownEvent = (survey: Survey) => {
+        if (isNullish(this._surveyManager)) {
+            logger.warn('surveys not loaded')
+            return
+        }
+        this._surveyManager.captureSurveyShownEvent(survey)
+    }
+
+    captureSurveySentEvent = (args: SendSurveyEventArgs) => {
+        if (isNullish(this._surveyManager)) {
+            logger.warn('surveys not loaded')
+            return
+        }
+        this._surveyManager.captureSurveySentEvent(args)
+    }
+
+    captureSurveyDismissedEvent = (survey: Survey) => {
+        if (isNullish(this._surveyManager)) {
+            logger.warn('surveys not loaded')
+            return
+        }
+        this._surveyManager.captureSurveyDismissedEvent(survey)
     }
 }
