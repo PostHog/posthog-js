@@ -258,7 +258,7 @@ const validateSurveyResponses = (
     }
 }
 
-const getSurveyInteractionProperty = (survey: Survey, action: string): string => {
+const getSurveyInteractionProperty = (survey: Pick<Survey, 'id' | 'current_iteration'>, action: string): string => {
     let surveyProperty = `$survey_${action}/${survey.id}`
     if (survey.current_iteration && survey.current_iteration > 0) {
         surveyProperty = `$survey_${action}/${survey.id}/${survey.current_iteration}`
@@ -279,7 +279,9 @@ export class SurveyManager {
         this._surveyInFocus = null
     }
 
-    public captureSurveyShownEvent = (survey: Survey) => {
+    public captureSurveyShownEvent = (
+        survey: Pick<Survey, 'id' | 'name' | 'current_iteration' | 'current_iteration_start_date'>
+    ) => {
         this._posthog.capture(SurveyEventName.SHOWN, {
             [SurveyEventProperties.SURVEY_NAME]: survey.name,
             [SurveyEventProperties.SURVEY_ID]: survey.id,
@@ -332,7 +334,10 @@ export class SurveyManager {
         }
     }
 
-    public captureSurveyDismissedEvent = (survey: Survey, readOnly?: boolean) => {
+    public captureSurveyDismissedEvent = (
+        survey: Pick<Survey, 'id' | 'name' | 'current_iteration' | 'current_iteration_start_date' | 'questions'>,
+        readOnly?: boolean
+    ) => {
         if (readOnly) {
             return
         }

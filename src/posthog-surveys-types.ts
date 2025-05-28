@@ -258,7 +258,7 @@ export enum SurveyEventProperties {
 
 export interface SendSurveyEventArgs {
     responses: Record<string, string | number | string[] | null>
-    survey: Survey
+    survey: Pick<Survey, 'id' | 'name' | 'current_iteration' | 'current_iteration_start_date' | 'questions'>
     surveySubmissionId: string
     isSurveyCompleted: boolean
 }

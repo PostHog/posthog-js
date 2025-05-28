@@ -423,7 +423,7 @@ export const getSurveySeen = (survey: Survey): boolean => {
     return false
 }
 
-export const getSurveySeenKey = (survey: Survey): string => {
+export const getSurveySeenKey = (survey: Pick<Survey, 'id' | 'current_iteration'>): string => {
     let surveySeenKey = `${SURVEY_SEEN_PREFIX}${survey.id}`
     if (survey.current_iteration && survey.current_iteration > 0) {
         surveySeenKey = `${SURVEY_SEEN_PREFIX}${survey.id}_${survey.current_iteration}`
