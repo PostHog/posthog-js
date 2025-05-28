@@ -542,14 +542,18 @@ export class SessionRecording {
                         this._instance?.persistence?.unregister(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
                         this._instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
 
-                        if (this._instance.config.session_recording?.addReplayUrlToIntercom) {
-                            assignableWindow.__PosthogExtensions__?.__Replay__?.addReplayUrlToIntercom?.(this._instance)
-                        }
+                        this._externalIntegrations()
                     }
                 })
             }
         } else {
             this.stopRecording()
+        }
+    }
+
+    private _externalIntegrations() {
+        if (this._instance.config.session_recording?.addReplayUrlToIntercom) {
+            assignableWindow.__PosthogExtensions__?.__Replay__?.addReplayUrlToIntercom?.(this._instance)
         }
     }
 
@@ -997,6 +1001,9 @@ export class SessionRecording {
         this._tryAddCustomEvent('$posthog_config', {
             config: this._instance.config,
         })
+
+        // and make sure we call external integrations on boot
+        this._externalIntegrations()
     }
 
     private _scheduleFullSnapshot(): void {

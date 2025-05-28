@@ -19,10 +19,14 @@ assignableWindow.__PosthogExtensions__.__Replay__.addReplayUrlToIntercom = (post
     try {
         const replayUrl = posthog.get_session_replay_url()
         if (!replayUrl) {
+            // eslint-disable-next-line no-console
+            console.warn('[PostHog Recorder] No replay URL found')
             return
         }
         const intercom = (window as any).Intercom
         if (!intercom) {
+            // eslint-disable-next-line no-console
+            console.warn('[PostHog Recorder] No Intercom found')
             return
         }
         intercom('update', {
