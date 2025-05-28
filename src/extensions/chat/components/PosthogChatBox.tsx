@@ -95,7 +95,7 @@ function ChatMessages({ messages = [] }: { messages: ChatMessageType[] }) {
  * @param sendMessage Callback function to send a message.
  * @param brandColor The primary color used for branding the send button.
  */
-function ChatInput({ sendMessage }: { sendMessage: (message: string) => void }) {
+function ChatInput({ sendMessage, isSending }: { sendMessage: (message: string) => void; isSending: boolean }) {
     const brandColor = useContext(BrandColorContext)
     const [message, setMessage] = useState('')
 
@@ -121,8 +121,8 @@ function ChatInput({ sendMessage }: { sendMessage: (message: string) => void }) 
                     }
                 }}
             />
-            <div style={styles.sendButton(brandColor)} onClick={handleSendMessage}>
-                Send
+            <div style={styles.sendButton(brandColor, isSending)} onClick={handleSendMessage}>
+                {isSending ? 'Sending...' : 'Send'}
             </div>
         </div>
     )
@@ -139,16 +139,18 @@ function ChatContainer({
     isVisible,
     sendMessage,
     messages,
+    isSending,
 }: {
     isVisible: boolean
     sendMessage: (message: string) => void
     messages: ChatMessageType[]
+    isSending: boolean
 }) {
     return (
         <div style={styles.chatContainer(isVisible)}>
             <ChatHeader />
             <ChatMessages messages={messages} />
-            <ChatInput sendMessage={sendMessage} />
+            <ChatInput sendMessage={sendMessage} isSending={isSending} />
         </div>
     )
 }
@@ -192,33 +194,32 @@ export function PosthogChatBox({ posthog }: { posthog: PostHog }) {
         [conversationId, posthog]
     )
 
-    useEffect(() => {
-        const intervalId = setInterval(() => {
-            posthog.chat.getChat()
-            const newChatMessages = (posthog.chat.messages || []) as ChatMessageType[]
+    const loadMessages = () => {
+        posthog.chat.getChat()
+        const newChatMessages = (posthog.chat.messages || []) as ChatMessageType[]
+        setMessages((prevMessages) => {
+            if (newChatMessages.length !== prevMessages.length) {
+                return newChatMessages
+            }
 
-            setMessages((prevMessages) => {
-                if (newChatMessages.length !== prevMessages.length) {
+            // If lengths are the same, compare content of each message
+            for (let i = 0; i < newChatMessages.length; i++) {
+                const prevMsg = prevMessages[i]
+                const newMsg = newChatMessages[i]
+
+                // Check if critical fields have changed
+                if (prevMsg.id !== newMsg.id || prevMsg.content !== newMsg.content || prevMsg.read !== newMsg.read) {
                     return newChatMessages
                 }
+            }
 
-                // If lengths are the same, compare content of each message
-                for (let i = 0; i < newChatMessages.length; i++) {
-                    const prevMsg = prevMessages[i]
-                    const newMsg = newChatMessages[i]
+            return prevMessages // No change detected, return the same array reference
+        })
+    }
 
-                    // Check if critical fields have changed
-                    if (
-                        prevMsg.id !== newMsg.id ||
-                        prevMsg.content !== newMsg.content ||
-                        prevMsg.read !== newMsg.read
-                    ) {
-                        return newChatMessages
-                    }
-                }
-
-                return prevMessages // No change detected, return the same array reference
-            })
+    useEffect(() => {
+        const intervalId = setInterval(() => {
+            loadMessages()
         }, 1000)
 
         // Clear the interval when the component unmounts
@@ -237,7 +238,12 @@ export function PosthogChatBox({ posthog }: { posthog: PostHog }) {
         <BrandColorContext.Provider value={currentBrandColor}>
             <Preact.Fragment>
                 <ChatBubble isOpen={isOpen} setIsOpen={setIsOpen} />
-                <ChatContainer isVisible={isOpen} sendMessage={sendMessage} messages={messages} />
+                <ChatContainer
+                    isVisible={isOpen}
+                    sendMessage={sendMessage}
+                    messages={messages}
+                    isSending={posthog.chat.isMessageSending}
+                />
             </Preact.Fragment>
         </BrandColorContext.Provider>
     )

@@ -90,7 +90,7 @@ export const styles = {
         padding: '0 10px',
         boxSizing: 'border-box' as const,
     },
-    sendButton: (brandColor: string) => ({
+    sendButton: (brandColor: string, isSending: boolean) => ({
         cursor: 'pointer',
         backgroundColor: brandColor,
         color: 'white',
@@ -101,6 +101,7 @@ export const styles = {
         padding: '5px 10px',
         fontSize: 12,
         fontWeight: 300,
+        opacity: isSending ? 0.5 : 1,
     }),
     chatContainer: (isVisible: boolean) => ({
         position: 'fixed' as const,

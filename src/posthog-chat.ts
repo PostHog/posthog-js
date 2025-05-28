@@ -4,11 +4,15 @@ import { assignableWindow } from './utils/globals'
 import { RemoteConfig, PostHogChatConfig } from './types'
 import { ChatMessageType } from './extensions/chat/components/PosthogChatBox'
 
+// Define a generic callback type for PostHogChat methods
+type PostHogChatCallback<T = void> = (error: any, result?: T) => void
+
 export class PostHogChat {
     public isEnabled: boolean = false
     public messages: ChatMessageType[] = []
     public conversationId: string | null = null
     public chat_config: PostHogChatConfig | null = null
+    public isMessageSending: boolean = false
     constructor(private readonly _instance: PostHog) {}
 
     startIfEnabled() {
@@ -48,22 +52,60 @@ export class PostHogChat {
         }
     }
 
-    sendMessage(conversationId: string, message: string) {
+    sendMessage(conversationId: string, message: string, callback?: PostHogChatCallback<void>): void {
         logger.info('PostHogChat sendMessage', message)
-
-        assignableWindow.__PosthogExtensions__?.chat?.sendMessage(conversationId, message, this._instance)
+        this.isMessageSending = true
+        try {
+            assignableWindow.__PosthogExtensions__?.chat?.sendMessage(
+                conversationId,
+                message,
+                this._instance,
+                () => {
+                    // Extension's resolve callback
+                    this.isMessageSending = false
+                    if (callback) callback(null)
+                },
+                (error) => {
+                    // Extension's reject callback
+                    this.isMessageSending = false
+                    logger.error('Error in PostHogChat.sendMessage from extension', error)
+                    if (callback) callback(error)
+                }
+            )
+        } catch (error) {
+            this.isMessageSending = false
+            logger.error('Synchronous error in PostHogChat.sendMessage calling extension', error)
+            if (callback) callback(error)
+        }
     }
 
-    getChat() {
-        /** No calls if chat is not enabled */
+    getChat(callback?: PostHogChatCallback<{ messages?: ChatMessageType[]; conversationId?: string }>): void {
         if (!this.isEnabled) {
+            if (callback) callback(null, {}) // Not enabled, callback with empty result
             return
         }
 
-        const getChatResult = assignableWindow.__PosthogExtensions__?.chat?.getChat(this._instance)
-        if (getChatResult?.messages && getChatResult?.conversationId) {
-            this.messages = getChatResult.messages
-            this.conversationId = getChatResult.conversationId
+        try {
+            assignableWindow.__PosthogExtensions__?.chat?.getChat(
+                this._instance,
+                (result) => {
+                    // Extension's resolve callback
+                    logger.info('PostHogChat getChat result:', result)
+                    if (result?.messages && result?.conversationId) {
+                        this.messages = result.messages
+                        this.conversationId = result.conversationId
+                    }
+                    if (callback) callback(null, result)
+                },
+                (error) => {
+                    // Extension's reject callback
+                    logger.error('Error in PostHogChat.getChat from extension', error)
+                    if (callback) callback(error)
+                }
+            )
+        } catch (error) {
+            logger.error('Synchronous error in PostHogChat.getChat calling extension', error)
+            if (callback) callback(error)
         }
     }
 }
