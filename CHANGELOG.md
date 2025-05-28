@@ -1,3 +1,7 @@
+## 1.248.1 - 2025-05-28
+
+- chore: sync with main repo (#1982)
+
 ## 1.248.0 - 2025-05-27
 
 - feat: Add "defaults" to config (#1978)
