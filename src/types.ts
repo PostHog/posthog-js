@@ -1092,6 +1092,12 @@ export interface SessionRecordingOptions {
     session_idle_threshold_ms?: number
 
     /**
+     * ADVANCED: adds the replay URL to Intercom if present in the page
+     * @default false
+     */
+    addReplayUrlToIntercom?: boolean
+
+    /**
      * ADVANCED: alters the refill rate for the token bucket mutation throttling
      * Normally only altered alongside posthog support guidance.
      * Accepts values between 0 and 100

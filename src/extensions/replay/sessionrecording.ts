@@ -541,6 +541,10 @@ export class SessionRecording {
 
                         this._instance?.persistence?.unregister(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
                         this._instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
+
+                        if (this._instance.config.session_recording?.addReplayUrlToIntercom) {
+                            assignableWindow.__PosthogExtensions__?.__Replay__?.addReplayUrlToIntercom?.()
+                        }
                     }
                 })
             }

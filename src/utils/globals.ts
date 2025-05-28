@@ -94,6 +94,9 @@ interface PostHogExtensions {
         ph: PostHog,
         config: DeadClicksAutoCaptureConfig
     ) => LazyLoadedDeadClicksAutocaptureInterface
+    __Replay__?: {
+        addReplayUrlToIntercom?: (posthog: PostHog) => void
+    }
 }
 
 const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win
