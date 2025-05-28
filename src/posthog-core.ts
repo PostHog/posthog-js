@@ -14,6 +14,7 @@ import {
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { ExceptionObserver } from './extensions/exception-autocapture'
 import { errorToProperties } from './extensions/exception-autocapture/error-conversion'
+import { ExternalIntegrations } from './extensions/external-integrations'
 import { HistoryAutocapture } from './extensions/history-autocapture'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { setupSegmentIntegration } from './extensions/segment-integration'
@@ -292,6 +293,7 @@ export class PostHog {
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
     sessionRecording?: SessionRecording
+    externalIntegrations?: ExternalIntegrations
     webPerformance = new DeprecatedWebPerformanceObserver()
 
     _initialPageviewCaptured: boolean
@@ -343,6 +345,7 @@ export class PostHog {
         this.rateLimiter = new RateLimiter(this)
         this.requestRouter = new RequestRouter(this)
         this.consent = new ConsentManager(this)
+        this.externalIntegrations = new ExternalIntegrations(this)
         // NOTE: See the property definition for deprecation notice
         this.people = {
             set: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
@@ -1885,6 +1888,7 @@ export class PostHog {
             this.heatmaps?.startIfEnabled()
             this.surveys.loadIfEnabled()
             this._sync_opt_out_with_persistence()
+            this.externalIntegrations?.startIfEnabledOrStop()
         }
     }
 

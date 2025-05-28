@@ -913,6 +913,14 @@ export interface PostHogConfig {
      */
     request_queue_config?: RequestQueueConfig
 
+    /**
+     * Used to configure external integrations.
+     */
+    integrations?: {
+        intercom?: boolean
+        crispChat?: boolean
+    }
+
     // ------- PREVIEW CONFIGS -------
 
     /**
@@ -1090,12 +1098,6 @@ export interface SessionRecordingOptions {
      * @default 1000 * 60 * 5 (5 minutes)
      */
     session_idle_threshold_ms?: number
-
-    /**
-     * ADVANCED: adds the replay URL to Intercom if present in the page
-     * @default false
-     */
-    addReplayUrlToIntercom?: boolean
 
     /**
      * ADVANCED: alters the refill rate for the token bucket mutation throttling

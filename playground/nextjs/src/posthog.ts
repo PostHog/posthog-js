@@ -57,6 +57,10 @@ if (typeof window !== 'undefined') {
             recordCrossOriginIframes: true,
             blockSelector: '.ph-block-image',
             ignoreClass: 'ph-ignore-image',
+            integrations: {
+                intercom: true,
+                crispChat: true,
+            },
         },
         debug: true,
         capture_pageview: 'history_change',

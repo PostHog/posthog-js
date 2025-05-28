@@ -57,6 +57,8 @@ export type PostHogExtensionKind =
     | 'surveys'
     | 'dead-clicks-autocapture'
     | 'remote-config'
+    | 'intercom-integration'
+    | 'crisp-chat-integration'
 
 export interface LazyLoadedDeadClicksAutocaptureInterface {
     start: (observerTarget: Node) => void
@@ -94,8 +96,9 @@ interface PostHogExtensions {
         ph: PostHog,
         config: DeadClicksAutoCaptureConfig
     ) => LazyLoadedDeadClicksAutocaptureInterface
-    __Replay__?: {
-        addReplayUrlToIntercom?: (posthog: PostHog) => void
+    integrations?: {
+        intercom?: { start: (posthog: PostHog) => void }
+        crispChat?: { start: (posthog: PostHog) => void }
     }
 }
 
