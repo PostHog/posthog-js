@@ -493,6 +493,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
       ]
     }
   ],
+  \\"integrations\\": [
+    \\"undefined\\",
+    \\"{ intercom?: boolean | undefined; crispChat?: boolean | undefined; }\\"
+  ],
   \\"__add_tracing_headers\\": [
     \\"undefined\\",
     \\"false\\",
