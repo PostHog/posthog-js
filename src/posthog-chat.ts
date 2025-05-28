@@ -55,27 +55,37 @@ export class PostHogChat {
     sendMessage(conversationId: string, message: string, callback?: PostHogChatCallback<void>): void {
         logger.info('PostHogChat sendMessage', message)
         this.isMessageSending = true
+
+        const done = (err?: any): void => {
+            this.isMessageSending = false
+            if (callback) {
+                callback(err) // For void result, only error is passed or null for success
+            } else if (err) {
+                logger.error('Unhandled error in PostHogChat.sendMessage (no callback):', err)
+            }
+        }
+
         try {
-            assignableWindow.__PosthogExtensions__?.chat?.sendMessage(
+            const chatExtension = assignableWindow.__PosthogExtensions__?.chat
+            if (!chatExtension?.sendMessage) {
+                return done(new Error('Chat sendMessage extension not available'))
+            }
+
+            chatExtension.sendMessage(
                 conversationId,
                 message,
                 this._instance,
-                () => {
-                    // Extension's resolve callback
-                    this.isMessageSending = false
-                    if (callback) callback(null)
-                },
+                () => done(), // Extension's resolve
                 (error) => {
-                    // Extension's reject callback
-                    this.isMessageSending = false
-                    logger.error('Error in PostHogChat.sendMessage from extension', error)
-                    if (callback) callback(error)
+                    // Extension's reject
+                    logger.error('Error from sendMessage extension:', error)
+                    done(error)
                 }
             )
         } catch (error) {
-            this.isMessageSending = false
-            logger.error('Synchronous error in PostHogChat.sendMessage calling extension', error)
-            if (callback) callback(error)
+            // Synchronous error during invocation
+            logger.error('Synchronous error calling sendMessage extension:', error)
+            done(error)
         }
     }
 
@@ -85,27 +95,41 @@ export class PostHogChat {
             return
         }
 
+        const done = (err: any, result?: { messages?: ChatMessageType[]; conversationId?: string }): void => {
+            if (callback) {
+                callback(err, result)
+            } else if (err) {
+                logger.error('Unhandled error in PostHogChat.getChat (no callback):', err)
+            }
+        }
+
         try {
-            assignableWindow.__PosthogExtensions__?.chat?.getChat(
+            const chatExtension = assignableWindow.__PosthogExtensions__?.chat
+            if (!chatExtension?.getChat) {
+                return done(new Error('Chat getChat extension not available'), undefined)
+            }
+
+            chatExtension.getChat(
                 this._instance,
                 (result) => {
-                    // Extension's resolve callback
+                    // Extension's resolve
                     logger.info('PostHogChat getChat result:', result)
                     if (result?.messages && result?.conversationId) {
                         this.messages = result.messages
                         this.conversationId = result.conversationId
                     }
-                    if (callback) callback(null, result)
+                    done(null, result)
                 },
                 (error) => {
-                    // Extension's reject callback
-                    logger.error('Error in PostHogChat.getChat from extension', error)
-                    if (callback) callback(error)
+                    // Extension's reject
+                    logger.error('Error from getChat extension:', error)
+                    done(error, undefined)
                 }
             )
         } catch (error) {
-            logger.error('Synchronous error in PostHogChat.getChat calling extension', error)
-            if (callback) callback(error)
+            // Synchronous error during invocation
+            logger.error('Synchronous error calling getChat extension:', error)
+            done(error, undefined)
         }
     }
 }
