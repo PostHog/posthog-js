@@ -4,6 +4,7 @@ import {
     MultipleSurveyQuestion,
     Survey,
     SurveyAppearance,
+    SurveyEventProperties,
     SurveyPosition,
     SurveyQuestion,
     SurveySchedule,
@@ -35,7 +36,7 @@ export function getFontFamily(fontFamily?: string): string {
 }
 
 export function getSurveyResponseKey(questionId: string) {
-    return `$survey_response_${questionId}`
+    return `${SurveyEventProperties.SURVEY_RESPONSE}_${questionId}`
 }
 
 const BLACK_TEXT_COLOR = '#020617' // Maps out to text-slate-950 from tailwind colors. Intended for text use outside interactive elements like buttons

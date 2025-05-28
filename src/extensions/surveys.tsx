@@ -183,6 +183,81 @@ const getSurveyResponseValue = (responses: Record<string, string | number | stri
     return response
 }
 
+/**
+ * Validates that survey responses have the correct format for the public API.
+ * This ensures that customers using the public API provide responses in the expected format.
+ *
+ * @param responses - The responses object to validate
+ * @param surveyQuestions - Array of survey questions to validate response keys against
+ * @returns An object with 'valid' boolean and optional 'errors' array
+ */
+const validateSurveyResponses = (
+    responses: Record<string, any>,
+    surveyQuestions: SurveyQuestion[]
+): { valid: boolean; errors?: string[] } => {
+    const errors: string[] = []
+
+    // Check if responses is an object
+    if (!responses || typeof responses !== 'object' || isArray(responses)) {
+        return { valid: false, errors: ['Responses must be a non-null object'] }
+    }
+
+    // Get valid question IDs
+    const validQuestionIds = new Set(surveyQuestions.map((q) => q.id).filter((id) => id))
+
+    // Validate each response entry
+    for (const [key, value] of Object.entries(responses)) {
+        // Check if key starts with the correct prefix
+        if (!key.startsWith(SurveyEventProperties.SURVEY_RESPONSE)) {
+            errors.push(`Response key "${key}" must start with "${SurveyEventProperties.SURVEY_RESPONSE}"`)
+            continue
+        }
+
+        // Check if key follows the expected format (should have an underscore and question ID after the prefix)
+        const expectedPrefix = `${SurveyEventProperties.SURVEY_RESPONSE}_`
+        if (!key.startsWith(expectedPrefix) || key === SurveyEventProperties.SURVEY_RESPONSE) {
+            errors.push(`Response key "${key}" must follow the format "${expectedPrefix}<questionId>"`)
+            continue
+        }
+
+        // Extract question ID from the key
+        const questionId = key.substring(expectedPrefix.length)
+
+        // Check if question ID is empty (this is also a format error)
+        if (!questionId) {
+            errors.push(`Response key "${key}" must follow the format "${expectedPrefix}<questionId>"`)
+            continue
+        }
+
+        // Validate that the question ID exists in the survey
+        if (!validQuestionIds.has(questionId)) {
+            errors.push(
+                `Response key "${key}" references question ID "${questionId}" which does not exist in the survey`
+            )
+            continue
+        }
+
+        // Check if value has correct type
+        if (!isNull(value) && typeof value !== 'string' && typeof value !== 'number' && !isArray(value)) {
+            errors.push(`Response value for key "${key}" must be a string, number, array of strings, or null`)
+            continue
+        }
+
+        // If it's an array, check that all elements are strings
+        if (isArray(value)) {
+            const invalidElements = value.filter((item) => typeof item !== 'string')
+            if (invalidElements.length > 0) {
+                errors.push(`Response value for key "${key}" is an array but contains non-string elements`)
+            }
+        }
+    }
+
+    return {
+        valid: errors.length === 0,
+        errors: errors.length > 0 ? errors : undefined,
+    }
+}
+
 const getSurveyInteractionProperty = (survey: Survey, action: string): string => {
     let surveyProperty = `$survey_${action}/${survey.id}`
     if (survey.current_iteration && survey.current_iteration > 0) {
@@ -220,6 +295,13 @@ export class SurveyManager {
         surveySubmissionId = uuidv7(),
         isSurveyCompleted,
     }: SendSurveyEventArgs) => {
+        // Validate responses to make sure they are in the correct format
+        const validation = validateSurveyResponses(responses, survey.questions)
+        if (!validation.valid) {
+            logger.error('Invalid survey responses format:', validation.errors)
+            return
+        }
+
         // Mark as seen in localStorage regardless of completion status
         localStorage.setItem(getSurveySeenKey(survey), 'true')
 
@@ -1316,3 +1398,6 @@ const getQuestionComponent = ({
 
     return <Component {...componentProps} key={question.id} />
 }
+
+// Export the validation function for public API usage
+export { validateSurveyResponses }

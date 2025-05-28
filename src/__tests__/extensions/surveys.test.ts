@@ -7,9 +7,18 @@ import {
     renderSurveysPreview,
     useHideSurveyOnURLChange,
     usePopupVisibility,
+    validateSurveyResponses,
 } from '../../extensions/surveys'
 import { retrieveSurveyShadow } from '../../extensions/surveys/surveys-extension-utils'
-import { Survey, SurveyQuestionType, SurveySchedule, SurveyType, SurveyWidgetType } from '../../posthog-surveys-types'
+import {
+    Survey,
+    SurveyQuestionType,
+    SurveySchedule,
+    SurveyType,
+    SurveyWidgetType,
+    SurveyEventProperties,
+    SurveyQuestion,
+} from '../../posthog-surveys-types'
 
 import { afterAll, beforeAll, beforeEach } from '@jest/globals'
 import '@testing-library/jest-dom'
@@ -31,7 +40,7 @@ describe('survey display logic', () => {
 
     test('retrieveSurveyShadow', () => {
         const surveyId = 'randomSurveyId'
-        const mockShadow = retrieveSurveyShadow({ id: surveyId, appearance: {} })
+        const mockShadow = retrieveSurveyShadow({ id: surveyId, appearance: {}, type: SurveyType.Popover })
         expect(mockShadow.mode).toBe('open')
         expect(mockShadow.host.className).toBe(`PostHogSurvey-${surveyId}`)
     })
@@ -345,7 +354,7 @@ describe('SurveyManager', () => {
 
     test('removeSurveyFromFocus should remove survey ID from surveyInFocus', () => {
         surveyManager.getTestAPI().addSurveyToFocus({ id: 'survey1' })
-        surveyManager.getTestAPI().removeSurveyFromFocus({ id: 'survey1', appearance: {} })
+        surveyManager.getTestAPI().removeSurveyFromFocus({ id: 'survey1', appearance: {}, type: SurveyType.Popover })
         expect(surveyManager.getTestAPI().surveyInFocus).toBe(null)
     })
 
@@ -476,7 +485,7 @@ describe('SurveyManager', () => {
         expect(surveyManager.getTestAPI().surveyInFocus).toBe('survey1')
         expect(handlePopoverSurveyMock).not.toHaveBeenCalled()
 
-        surveyManager.getTestAPI().removeSurveyFromFocus({ id: 'survey1', appearance: {} })
+        surveyManager.getTestAPI().removeSurveyFromFocus({ id: 'survey1', appearance: {}, type: SurveyType.Popover })
 
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
@@ -1567,5 +1576,209 @@ describe('preview renders', () => {
         // Check if we're on the second question
         expect(container.textContent).toContain('Question 2')
         expect(container.textContent).not.toContain('Question 1')
+    })
+})
+
+describe('validateSurveyResponses', () => {
+    const mockSurveyQuestions: SurveyQuestion[] = [
+        {
+            id: 'question1',
+            question: 'Question 1',
+            type: SurveyQuestionType.Open,
+        },
+        {
+            id: 'question2',
+            question: 'Question 2',
+            type: SurveyQuestionType.Rating,
+            scale: 5,
+            display: 'number',
+            lowerBoundLabel: 'Low',
+            upperBoundLabel: 'High',
+        },
+        {
+            id: 'question3',
+            question: 'Question 3',
+            type: SurveyQuestionType.MultipleChoice,
+            choices: ['option1', 'option2', 'option3'],
+        },
+        {
+            id: 'question4',
+            question: 'Question 4',
+            type: SurveyQuestionType.Open,
+        },
+    ]
+
+    test('should return valid for correctly formatted responses', () => {
+        const validResponses = {
+            [`${SurveyEventProperties.SURVEY_RESPONSE}_question1`]: 'text answer',
+            [`${SurveyEventProperties.SURVEY_RESPONSE}_question2`]: 5,
+            [`${SurveyEventProperties.SURVEY_RESPONSE}_question3`]: ['option1', 'option2'],
+            [`${SurveyEventProperties.SURVEY_RESPONSE}_question4`]: null,
+        }
+
+        const result = validateSurveyResponses(validResponses, mockSurveyQuestions)
+        expect(result.valid).toBe(true)
+        expect(result.errors).toBeUndefined()
+    })
+
+    test('should return invalid for non-object responses', () => {
+        const result1 = validateSurveyResponses(null as any, mockSurveyQuestions)
+        expect(result1.valid).toBe(false)
+        expect(result1.errors).toEqual(['Responses must be a non-null object'])
+
+        const result2 = validateSurveyResponses(['array'] as any, mockSurveyQuestions)
+        expect(result2.valid).toBe(false)
+        expect(result2.errors).toEqual(['Responses must be a non-null object'])
+
+        const result3 = validateSurveyResponses('string' as any, mockSurveyQuestions)
+        expect(result3.valid).toBe(false)
+        expect(result3.errors).toEqual(['Responses must be a non-null object'])
+    })
+
+    test('should return invalid for keys that do not start with correct prefix', () => {
+        const invalidResponses = {
+            invalid_key: 'value',
+            another_bad_key: 'value2',
+            [`${SurveyEventProperties.SURVEY_RESPONSE}_question1`]: 'good value',
+        }
+
+        const result = validateSurveyResponses(invalidResponses, mockSurveyQuestions)
+        expect(result.valid).toBe(false)
+        expect(result.errors).toContain(
+            `Response key "invalid_key" must start with "${SurveyEventProperties.SURVEY_RESPONSE}"`
+        )
+        expect(result.errors).toContain(
+            `Response key "another_bad_key" must start with "${SurveyEventProperties.SURVEY_RESPONSE}"`
+        )
+    })
+
+    test('should return invalid for keys with incorrect format', () => {
+        const invalidResponses = {
+            [SurveyEventProperties.SURVEY_RESPONSE]: 'value', // Missing underscore and question ID
+            [`${SurveyEventProperties.SURVEY_RESPONSE}_`]: 'value', // Missing question ID
+        }
+
+        const result = validateSurveyResponses(invalidResponses, mockSurveyQuestions)
+        expect(result.valid).toBe(false)
+        expect(result.errors).toContain(
+            `Response key "${SurveyEventProperties.SURVEY_RESPONSE}" must follow the format "${SurveyEventProperties.SURVEY_RESPONSE}_<questionId>"`
+        )
+        expect(result.errors).toContain(
+            `Response key "${SurveyEventProperties.SURVEY_RESPONSE}_" must follow the format "${SurveyEventProperties.SURVEY_RESPONSE}_<questionId>"`
+        )
+    })
+
+    test('should return invalid for question IDs that do not exist in survey', () => {
+        const invalidResponses = {
+            [`${SurveyEventProperties.SURVEY_RESPONSE}_nonexistent_question`]: 'value',
+            [`${SurveyEventProperties.SURVEY_RESPONSE}_another_fake_id`]: 'value2',
+            [`${SurveyEventProperties.SURVEY_RESPONSE}_question1`]: 'valid value',
+        }
+
+        const result = validateSurveyResponses(invalidResponses, mockSurveyQuestions)
+        expect(result.valid).toBe(false)
+        expect(result.errors).toContain(
+            `Response key "${SurveyEventProperties.SURVEY_RESPONSE}_nonexistent_question" references question ID "nonexistent_question" which does not exist in the survey`
+        )
+        expect(result.errors).toContain(
+            `Response key "${SurveyEventProperties.SURVEY_RESPONSE}_another_fake_id" references question ID "another_fake_id" which does not exist in the survey`
+        )
+    })
+
+    test('should return invalid for values with incorrect types', () => {
+        const invalidResponses = {
+            [`${SurveyEventProperties.SURVEY_RESPONSE}_question1`]: { object: 'value' },
+            [`${SurveyEventProperties.SURVEY_RESPONSE}_question2`]: true,
+            [`${SurveyEventProperties.SURVEY_RESPONSE}_question3`]: undefined,
+        }
+
+        const result = validateSurveyResponses(invalidResponses, mockSurveyQuestions)
+        expect(result.valid).toBe(false)
+        expect(result.errors).toContain(
+            `Response value for key "${SurveyEventProperties.SURVEY_RESPONSE}_question1" must be a string, number, array of strings, or null`
+        )
+        expect(result.errors).toContain(
+            `Response value for key "${SurveyEventProperties.SURVEY_RESPONSE}_question2" must be a string, number, array of strings, or null`
+        )
+        expect(result.errors).toContain(
+            `Response value for key "${SurveyEventProperties.SURVEY_RESPONSE}_question3" must be a string, number, array of strings, or null`
+        )
+    })
+
+    test('should return invalid for arrays containing non-string elements', () => {
+        const invalidResponses = {
+            [`${SurveyEventProperties.SURVEY_RESPONSE}_question1`]: ['valid', 'strings'],
+            [`${SurveyEventProperties.SURVEY_RESPONSE}_question2`]: ['valid', 123, 'mixed'],
+            [`${SurveyEventProperties.SURVEY_RESPONSE}_question3`]: [true, false],
+        }
+
+        const result = validateSurveyResponses(invalidResponses, mockSurveyQuestions)
+        expect(result.valid).toBe(false)
+        expect(result.errors).toContain(
+            `Response value for key "${SurveyEventProperties.SURVEY_RESPONSE}_question2" is an array but contains non-string elements`
+        )
+        expect(result.errors).toContain(
+            `Response value for key "${SurveyEventProperties.SURVEY_RESPONSE}_question3" is an array but contains non-string elements`
+        )
+    })
+
+    test('should return valid for empty responses object', () => {
+        const result = validateSurveyResponses({}, mockSurveyQuestions)
+        expect(result.valid).toBe(true)
+        expect(result.errors).toBeUndefined()
+    })
+
+    test('should handle multiple validation errors correctly', () => {
+        const invalidResponses = {
+            bad_key: 'value',
+            [`${SurveyEventProperties.SURVEY_RESPONSE}_nonexistent`]: 'value',
+            [`${SurveyEventProperties.SURVEY_RESPONSE}_question1`]: { invalid: 'type' },
+            [`${SurveyEventProperties.SURVEY_RESPONSE}_question2`]: ['string', 123],
+        }
+
+        const result = validateSurveyResponses(invalidResponses, mockSurveyQuestions)
+        expect(result.valid).toBe(false)
+        expect(result.errors).toHaveLength(4)
+        expect(result.errors).toContain('Response key "bad_key" must start with "$survey_response"')
+        expect(result.errors).toContain(
+            `Response key "${SurveyEventProperties.SURVEY_RESPONSE}_nonexistent" references question ID "nonexistent" which does not exist in the survey`
+        )
+        expect(result.errors).toContain(
+            `Response value for key "${SurveyEventProperties.SURVEY_RESPONSE}_question1" must be a string, number, array of strings, or null`
+        )
+        expect(result.errors).toContain(
+            `Response value for key "${SurveyEventProperties.SURVEY_RESPONSE}_question2" is an array but contains non-string elements`
+        )
+    })
+
+    test('should handle survey questions with missing IDs gracefully', () => {
+        const questionsWithMissingIds: SurveyQuestion[] = [
+            {
+                id: 'valid_question',
+                question: 'Valid Question',
+                type: SurveyQuestionType.Open,
+            },
+            {
+                id: '', // Empty ID
+                question: 'Question with empty ID',
+                type: SurveyQuestionType.Open,
+            },
+            {
+                id: undefined as any, // Testing runtime behavior with undefined ID
+                question: 'Question with no ID property',
+                type: SurveyQuestionType.Open,
+            },
+        ]
+
+        const responses = {
+            [`${SurveyEventProperties.SURVEY_RESPONSE}_valid_question`]: 'answer',
+            [`${SurveyEventProperties.SURVEY_RESPONSE}_invalid_question`]: 'answer',
+        }
+
+        const result = validateSurveyResponses(responses, questionsWithMissingIds)
+        expect(result.valid).toBe(false)
+        expect(result.errors).toContain(
+            `Response key "${SurveyEventProperties.SURVEY_RESPONSE}_invalid_question" references question ID "invalid_question" which does not exist in the survey`
+        )
     })
 })
