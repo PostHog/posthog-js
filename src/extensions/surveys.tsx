@@ -227,7 +227,6 @@ export class SurveyManager {
         const validation = validateSurveyResponses(responses, survey.questions)
         if (!validation.valid) {
             logger.error('Invalid survey responses format:', validation.errors)
-            return
         }
 
         // Mark as seen in localStorage regardless of completion status

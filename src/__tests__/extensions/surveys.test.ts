@@ -1763,7 +1763,7 @@ describe('validateSurveyResponses', () => {
                 type: SurveyQuestionType.Open,
             },
             {
-                id: undefined as any, // Testing runtime behavior with undefined ID
+                id: undefined, // Testing runtime behavior with undefined ID
                 question: 'Question with no ID property',
                 type: SurveyQuestionType.Open,
             },
