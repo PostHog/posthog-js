@@ -7,9 +7,8 @@ import {
     renderSurveysPreview,
     useHideSurveyOnURLChange,
     usePopupVisibility,
-    validateSurveyResponses,
 } from '../../extensions/surveys'
-import { retrieveSurveyShadow } from '../../extensions/surveys/surveys-extension-utils'
+import { retrieveSurveyShadow, validateSurveyResponses } from '../../extensions/surveys/surveys-extension-utils'
 import {
     Survey,
     SurveyQuestionType,

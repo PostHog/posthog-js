@@ -342,11 +342,11 @@ export class PostHogSurveys {
         this._surveyManager.captureSurveySentEvent(args)
     }
 
-    captureSurveyDismissedEvent(survey: Survey) {
+    captureSurveyDismissedEvent(survey: Survey, readOnly?: boolean) {
         if (isNullish(this._surveyManager)) {
             logger.warn('surveys not loaded')
             return
         }
-        this._surveyManager.captureSurveyDismissedEvent(survey)
+        this._surveyManager.captureSurveyDismissedEvent(survey, readOnly)
     }
 }

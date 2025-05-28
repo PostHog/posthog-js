@@ -4,6 +4,8 @@ import { SurveyPopup } from '../../../extensions/surveys'
 import * as surveyUtils from '../../../extensions/surveys/surveys-extension-utils' // Import all utils
 import { Survey, SurveyQuestionType, SurveyType } from '../../../posthog-surveys-types'
 import * as uuid from '../../../uuidv7' // Import uuidv7
+import { clearInProgressSurveyState, getSurveySeenKey } from '../../../extensions/surveys/surveys-extension-utils'
+import { PostHog } from '../../../posthog-core'
 
 // Mock the utility functions
 jest.mock('../../../extensions/surveys/surveys-extension-utils', () => ({
@@ -16,64 +18,73 @@ jest.mock('../../../extensions/surveys/surveys-extension-utils', () => ({
 // Mock uuidv7
 jest.mock('../../../uuidv7')
 
+const mockSurvey: Survey = {
+    id: 'test-survey-partial',
+    name: 'Test Partial Survey',
+    description: 'A test survey for partial responses',
+    type: SurveyType.Popover,
+    feature_flag_keys: null,
+    linked_flag_key: null,
+    targeting_flag_key: null,
+    internal_targeting_flag_key: null,
+    questions: [
+        {
+            type: SurveyQuestionType.Open,
+            question: 'Question 1',
+            description: 'First question',
+            id: 'q1',
+        },
+        {
+            type: SurveyQuestionType.Open,
+            question: 'Question 2',
+            description: 'Second question',
+            id: 'q2',
+        },
+    ],
+    appearance: {
+        displayThankYouMessage: true,
+        thankYouMessageHeader: 'Thank you!',
+        thankYouMessageDescription: 'Done.',
+        backgroundColor: '#ffffff',
+        borderColor: '#e5e5e5',
+        submitButtonText: 'Next', // Consistent button text
+        whiteLabel: true,
+    },
+    conditions: null,
+    start_date: null,
+    end_date: null,
+    current_iteration: null,
+    current_iteration_start_date: null,
+    schedule: null,
+}
+
 // Mock PostHog instance needed by event handlers
 const mockPosthog = {
     capture: jest.fn(),
     get_session_replay_url: jest.fn().mockReturnValue('http://example.com/replay'),
-}
+    surveys: {
+        captureSurveySentEvent: jest.fn().mockImplementation(({ survey, isSurveyCompleted }) => {
+            localStorage.setItem(getSurveySeenKey(survey), isSurveyCompleted ? 'true' : 'false')
+            if (isSurveyCompleted) {
+                window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: survey.id } }))
+                clearInProgressSurveyState(survey)
+            }
+        }),
+        captureSurveyDismissedEvent: jest.fn().mockImplementation((survey) => {
+            localStorage.setItem(getSurveySeenKey(survey), 'false')
+            window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: survey.id } }))
+            clearInProgressSurveyState(survey)
+        }),
+    },
+} as unknown as PostHog
 
 describe('SurveyPopup', () => {
-    const mockSurvey: Survey = {
-        id: 'test-survey-partial',
-        name: 'Test Partial Survey',
-        description: 'A test survey for partial responses',
-        type: SurveyType.Popover,
-        feature_flag_keys: null,
-        linked_flag_key: null,
-        targeting_flag_key: null,
-        internal_targeting_flag_key: null,
-        questions: [
-            {
-                type: SurveyQuestionType.Open,
-                question: 'Question 1',
-                description: 'First question',
-                id: 'q1',
-            },
-            {
-                type: SurveyQuestionType.Open,
-                question: 'Question 2',
-                description: 'Second question',
-                id: 'q2',
-            },
-        ],
-        appearance: {
-            displayThankYouMessage: true,
-            thankYouMessageHeader: 'Thank you!',
-            thankYouMessageDescription: 'Done.',
-            backgroundColor: '#ffffff',
-            borderColor: '#e5e5e5',
-            submitButtonText: 'Next', // Consistent button text
-            whiteLabel: true,
-        },
-        conditions: null,
-        start_date: null,
-        end_date: null,
-        current_iteration: null,
-        current_iteration_start_date: null,
-        schedule: null,
-    }
-
     // Mock functions passed as props
     let mockRemoveSurveyFromFocus: jest.Mock
     let mockOnCloseConfirmationMessage: jest.Mock
 
     // Type cast mocks for easier usage
     const mockedGetInProgressSurveyState = surveyUtils.getInProgressSurveyState as jest.Mock
-    // Removed unused mocks for set/clear state
-    // const mockedSetInProgressSurveyState = surveyUtils.setInProgressSurveyState as jest.Mock
-    // const mockedClearInProgressSurveyState = surveyUtils.clearInProgressSurveyState as jest.Mock
-    const mockedSendSurveyEvent = surveyUtils.sendSurveyEvent as jest.Mock
-    const mockedDismissedSurveyEvent = surveyUtils.dismissedSurveyEvent as jest.Mock
     const mockedUuidv7 = uuid.uuidv7 as jest.Mock
 
     beforeEach(() => {
@@ -191,14 +202,13 @@ describe('SurveyPopup', () => {
         const nextButton = screen.getByRole('button', { name: /submit survey/i })
         fireEvent.click(nextButton)
 
-        expect(mockedSendSurveyEvent).toHaveBeenCalledWith({
+        expect(mockPosthog.surveys.captureSurveySentEvent).toHaveBeenCalledWith({
             responses: {
                 $survey_response_q1: 'Answer Q1',
             },
             survey: partialResponsesSurvey,
             surveySubmissionId: generatedId,
             isSurveyCompleted: false,
-            posthog: mockPosthog,
         })
         expect(screen.getByText('Question 2')).toBeVisible()
     })
@@ -233,7 +243,7 @@ describe('SurveyPopup', () => {
         fireEvent.click(submitButton)
 
         // Verify final sendSurveyEvent call
-        expect(mockedSendSurveyEvent).toHaveBeenCalledWith({
+        expect(mockPosthog.surveys.captureSurveySentEvent).toHaveBeenCalledWith({
             responses: {
                 $survey_response_q1: 'Answer Q1',
                 $survey_response_q2: 'Answer Q2',
@@ -241,7 +251,6 @@ describe('SurveyPopup', () => {
             survey: mockSurvey,
             surveySubmissionId: existingState.surveySubmissionId,
             isSurveyCompleted: true,
-            posthog: mockPosthog,
         })
 
         // *** Manually dispatch the event that the real function would dispatch ***
@@ -260,9 +269,6 @@ describe('SurveyPopup', () => {
             responses: { $survey_response_q1: 'Partial answer' },
         }
         mockedGetInProgressSurveyState.mockReturnValue(existingState)
-        mockedDismissedSurveyEvent.mockImplementation(() => {
-            window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: mockSurvey.id } }))
-        })
 
         render(
             <SurveyPopup
@@ -280,6 +286,6 @@ describe('SurveyPopup', () => {
 
         await waitFor(() => expect(screen.queryByRole('form')).not.toBeInTheDocument())
 
-        expect(mockedDismissedSurveyEvent).toHaveBeenCalledWith(mockSurvey, mockPosthog, false)
+        expect(mockPosthog.surveys.captureSurveyDismissedEvent).toHaveBeenCalledWith(mockSurvey, false)
     })
 })

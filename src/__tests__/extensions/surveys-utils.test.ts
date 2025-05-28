@@ -126,7 +126,9 @@ describe('canActivateRepeatedly', () => {
         const survey = {
             schedule: SurveySchedule.Always,
             conditions: undefined,
-        } as Pick<Survey, 'type' | 'schedule' | 'conditions'>
+            id: 'test-survey-1',
+            current_iteration: 0,
+        } as Pick<Survey, 'type' | 'schedule' | 'conditions' | 'id' | 'current_iteration'>
         expect(canActivateRepeatedly(survey)).toBe(true)
     })
 
@@ -141,7 +143,9 @@ describe('canActivateRepeatedly', () => {
                 },
                 actions: { values: [] },
             },
-        } as Pick<Survey, 'type' | 'schedule' | 'conditions'>
+            id: 'test-survey-2',
+            current_iteration: 0,
+        } as Pick<Survey, 'type' | 'schedule' | 'conditions' | 'id' | 'current_iteration'>
         expect(canActivateRepeatedly(survey)).toBe(false)
     })
 
@@ -156,7 +160,9 @@ describe('canActivateRepeatedly', () => {
                 },
                 actions: { values: [] },
             },
-        } as Pick<Survey, 'type' | 'schedule' | 'conditions'>
+            id: 'test-survey-3',
+            current_iteration: 0,
+        } as Pick<Survey, 'type' | 'schedule' | 'conditions' | 'id' | 'current_iteration'>
         expect(canActivateRepeatedly(survey)).toBe(true)
     })
 
@@ -171,7 +177,9 @@ describe('canActivateRepeatedly', () => {
                 },
                 actions: { values: [] },
             },
-        } as Pick<Survey, 'type' | 'schedule' | 'conditions'>
+            id: 'test-survey-4',
+            current_iteration: 0,
+        } as Pick<Survey, 'type' | 'schedule' | 'conditions' | 'id' | 'current_iteration'>
         expect(canActivateRepeatedly(survey)).toBe(false)
     })
 })

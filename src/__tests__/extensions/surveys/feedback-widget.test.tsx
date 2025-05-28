@@ -4,16 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { FeedbackWidget } from '../../../extensions/surveys'
 import { PostHog } from '../../../posthog-core' // Import PostHog type for mocking
 import { Survey, SurveyQuestionType, SurveyType, SurveyWidgetType } from '../../../posthog-surveys-types'
-
-// Mock PostHog instance
-const mockPosthog = {
-    capture: jest.fn(),
-    getActiveMatchingSurveys: jest.fn(),
-    featureFlags: {
-        isFeatureEnabled: jest.fn().mockReturnValue(true),
-    },
-    get_session_replay_url: jest.fn().mockReturnValue('http://example.com/replay'),
-} as unknown as PostHog
+import { clearInProgressSurveyState, getSurveySeenKey } from '../../../extensions/surveys/surveys-extension-utils'
 
 // Base mock survey for widget type
 const baseWidgetSurvey: Survey = {
@@ -51,6 +42,36 @@ const baseWidgetSurvey: Survey = {
     schedule: null,
     feature_flag_keys: null,
 }
+
+// Mock PostHog instance
+const mockPosthog = {
+    capture: jest.fn(),
+    getActiveMatchingSurveys: jest.fn(),
+    featureFlags: {
+        isFeatureEnabled: jest.fn().mockReturnValue(true),
+    },
+    get_session_replay_url: jest.fn().mockReturnValue('http://example.com/replay'),
+    surveys: {
+        getSurveys: jest.fn(),
+        captureSurveySentEvent: jest.fn().mockImplementation(({ survey, responses }) => {
+            mockPosthog.capture('survey sent', {
+                $survey_id: survey.id,
+                ...responses,
+            })
+            localStorage.setItem(getSurveySeenKey(survey), 'true')
+            window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: survey.id } }))
+            clearInProgressSurveyState(survey)
+        }),
+        captureSurveyDismissedEvent: jest.fn().mockImplementation((survey) => {
+            mockPosthog.capture('survey dismissed', {
+                $survey_id: survey.id,
+            })
+            localStorage.removeItem(getSurveySeenKey(survey))
+            window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: survey.id } }))
+            clearInProgressSurveyState(survey)
+        }),
+    },
+} as unknown as PostHog
 
 // Mock survey with URL condition
 const urlConditionWidgetSurvey: Survey = {
@@ -265,12 +286,11 @@ describe('FeedbackWidget', () => {
         fireEvent.input(textarea, { target: { value: 'Selector feedback!' } })
         const submitButton = screen.getByRole('button', { name: /submit/i })
         fireEvent.click(submitButton)
+        expectSurveySentEvent(selectorWidgetSurvey.id, { '$survey_response_q-open-1': 'Selector feedback!' })
 
         await waitFor(() => {
             expect(screen.getByText('Thanks!')).toBeVisible()
         })
-
-        expectSurveySentEvent(selectorWidgetSurvey.id, { '$survey_response_q-open-1': 'Selector feedback!' })
     })
 
     test('closes survey popup when cancel button is clicked', async () => {
