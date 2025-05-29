@@ -23,3 +23,5 @@ assignableWindow.__PosthogExtensions__.loadChat = assignableWindow.__PosthogExte
     - In the `_onRemoteConfig` function, call `onRemoteConfig()`, e.g., `this.chat.onRemoteConfig(config)`.
     - In the `reset` function, call `reset()`, e.g., `this.chat.reset()`.
     - In the `set_config` function, call `startIfEnabled()`, e.g., `this.chat?.startIfEnabled()`.
+5. In posthhog main repo:
+    - In the `frontend/bin/copy-posthog-js` file add `cp node_modules/posthog-js/dist/chat.js* dist/` 
