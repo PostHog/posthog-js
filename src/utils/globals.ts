@@ -97,8 +97,8 @@ interface PostHogExtensions {
         config: DeadClicksAutoCaptureConfig
     ) => LazyLoadedDeadClicksAutocaptureInterface
     integrations?: {
-        intercom?: { start: (posthog: PostHog) => boolean }
-        crispChat?: { start: (posthog: PostHog) => boolean }
+        intercom?: { start: (posthog: PostHog) => void }
+        crispChat?: { start: (posthog: PostHog) => void }
     }
 }
 

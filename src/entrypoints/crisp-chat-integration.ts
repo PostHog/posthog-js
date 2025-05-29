@@ -11,16 +11,14 @@ assignableWindow.__PosthogExtensions__.integrations = assignableWindow.__Posthog
 assignableWindow.__PosthogExtensions__.integrations.crispChat = {
     start: (posthog: PostHog) => {
         if (!posthog.config.integrations?.crispChat) {
-            return false
+            return
         }
 
         const crispChat = (assignableWindow as any).$crisp
         if (!crispChat) {
             logger.warn(' Crisp Chat not found while initializing the integration')
-            return false
+            return
         }
-
-        posthog.capture('crispChat:integration: start', { crispSessionId: crispChat.get('session:identifier') })
 
         const updateCrispChat = () => {
             const replayUrl = posthog.get_session_replay_url()
@@ -50,6 +48,6 @@ assignableWindow.__PosthogExtensions__.integrations.crispChat = {
             }
         })
 
-        return true
+        logger.info('integration started')
     },
 }
