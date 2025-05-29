@@ -277,6 +277,8 @@ export type BeforeSendFn = (cr: CaptureResult | null) => CaptureResult | null
 
 export type ConfigDefaults = '2025-05-24' | 'unset'
 
+export type ExternalIntegrationKind = 'intercom' | 'crispChat'
+
 /**
  * Configuration options for the PostHog JavaScript SDK.
  * @see https://posthog.com/docs/libraries/js#config
@@ -914,12 +916,9 @@ export interface PostHogConfig {
     request_queue_config?: RequestQueueConfig
 
     /**
-     * Used to configure external integrations.
+     * Used to set-up external integrations with PostHog data - such as session replays, distinct id, etc.
      */
-    integrations?: {
-        intercom?: boolean
-        crispChat?: boolean
-    }
+    integrations?: Record<ExternalIntegrationKind, boolean>
 
     // ------- PREVIEW CONFIGS -------
 

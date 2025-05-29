@@ -1,8 +1,14 @@
 import { PostHog } from '../posthog-core'
+import { ExternalIntegrationKind } from '../types'
 import { assignableWindow, PostHogExtensionKind } from '../utils/globals'
 import { createLogger } from '../utils/logger'
 
 const logger = createLogger('[PostHog ExternalIntegrations]')
+
+const MAPPED_INTEGRATIONS: Record<ExternalIntegrationKind, PostHogExtensionKind> = {
+    intercom: 'intercom-integration',
+    crispChat: 'crisp-chat-integration',
+}
 
 export class ExternalIntegrations {
     constructor(private readonly _instance: PostHog) {}
@@ -15,22 +21,16 @@ export class ExternalIntegrations {
             cb()
         })
     }
+
     public startIfEnabledOrStop() {
-        if (
-            this._instance.config.integrations?.intercom &&
-            !assignableWindow.__PosthogExtensions__?.integrations?.intercom
-        ) {
-            this._loadScript('intercom-integration', () => {
-                assignableWindow.__PosthogExtensions__?.integrations?.intercom?.start(this._instance)
-            })
-        }
-        if (
-            this._instance.config.integrations?.crispChat &&
-            !assignableWindow.__PosthogExtensions__?.integrations?.crispChat
-        ) {
-            this._loadScript('crisp-chat-integration', () => {
-                assignableWindow.__PosthogExtensions__?.integrations?.crispChat?.start(this._instance)
-            })
+        for (const [key, value] of Object.entries(this._instance.config.integrations ?? {})) {
+            if (value && !assignableWindow.__PosthogExtensions__?.integrations?.[key as ExternalIntegrationKind]) {
+                this._loadScript(MAPPED_INTEGRATIONS[key as ExternalIntegrationKind], () => {
+                    assignableWindow.__PosthogExtensions__?.integrations?.[key as ExternalIntegrationKind]?.start(
+                        this._instance
+                    )
+                })
+            }
         }
     }
 }

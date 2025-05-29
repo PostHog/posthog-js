@@ -1,6 +1,6 @@
 import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
-import { DeadClicksAutoCaptureConfig, Properties, RemoteConfig, SiteAppLoader } from '../types'
+import { DeadClicksAutoCaptureConfig, ExternalIntegrationKind, Properties, RemoteConfig, SiteAppLoader } from '../types'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
@@ -96,10 +96,7 @@ interface PostHogExtensions {
         ph: PostHog,
         config: DeadClicksAutoCaptureConfig
     ) => LazyLoadedDeadClicksAutocaptureInterface
-    integrations?: {
-        intercom?: { start: (posthog: PostHog) => void }
-        crispChat?: { start: (posthog: PostHog) => void }
-    }
+    integrations?: Record<ExternalIntegrationKind, { start: (posthog: PostHog) => void } | undefined>
 }
 
 const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win
