@@ -52,6 +52,12 @@ export class PostHogChat {
         }
     }
 
+    reset() {
+        this.messages = []
+        this.conversationId = null
+        this.isMessageSending = false
+    }
+
     sendMessage(conversationId: string, message: string, callback?: PostHogChatCallback<void>): void {
         logger.info('PostHogChat sendMessage', message)
         this.isMessageSending = true

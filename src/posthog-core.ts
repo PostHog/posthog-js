@@ -1709,6 +1709,7 @@ export class PostHog {
         this.persistence?.clear()
         this.sessionPersistence?.clear()
         this.surveys.reset()
+        this.chat.reset()
         this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()
         this._cachedPersonProperties = null
@@ -1886,8 +1887,8 @@ export class PostHog {
             this.sessionRecording?.startIfEnabledOrStop()
             this.autocapture?.startIfEnabled()
             this.heatmaps?.startIfEnabled()
+            this.chat?.startIfEnabled()
             this.surveys.loadIfEnabled()
-            this.chat.startIfEnabled()
             this._sync_opt_out_with_persistence()
         }
     }

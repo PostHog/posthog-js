@@ -8,7 +8,7 @@ import { request } from '../request'
 import { isUndefined } from '../utils/type-utils'
 
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
-assignableWindow.__PosthogExtensions__.loadChat = loadChat
+assignableWindow.__PosthogExtensions__.loadChat = assignableWindow.__PosthogExtensions__.loadChat || loadChat
 
 assignableWindow.__PosthogExtensions__.chat = assignableWindow.__PosthogExtensions__.chat || {
     sendMessage: (
