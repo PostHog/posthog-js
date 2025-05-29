@@ -2,20 +2,20 @@ import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
 import { createLogger } from '../utils/logger'
 
-const logger = createLogger('[PostHog Intercom integration]')
+const logger = createLogger('[PostHog Crisp Chat]')
 
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
 assignableWindow.__PosthogExtensions__.integrations = assignableWindow.__PosthogExtensions__.integrations || {}
 assignableWindow.__PosthogExtensions__.integrations.crispChat = {
     start: (posthog: PostHog) => {
         if (!posthog.config.integrations?.crispChat) {
-            return
+            return false
         }
 
         const crispChat = (assignableWindow as any).$crisp
         if (!crispChat) {
             logger.warn(' Crisp Chat not found while initializing the integration')
-            return
+            return false
         }
 
         crispChat.push([
@@ -36,5 +36,7 @@ assignableWindow.__PosthogExtensions__.integrations.crispChat = {
                 ])
             },
         ])
+        logger.info('integration started')
+        return true
     },
 }
