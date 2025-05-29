@@ -48,6 +48,7 @@ export type AssignableWindow = Window &
  * changes to this interface can be breaking changes for users of the SDK
  */
 
+export type ExternalExtensionKind = 'intercom-integration' | 'crisp-chat-integration'
 export type PostHogExtensionKind =
     | 'toolbar'
     | 'exception-autocapture'
@@ -57,8 +58,7 @@ export type PostHogExtensionKind =
     | 'surveys'
     | 'dead-clicks-autocapture'
     | 'remote-config'
-    | 'intercom-integration'
-    | 'crisp-chat-integration'
+    | ExternalExtensionKind
 
 export interface LazyLoadedDeadClicksAutocaptureInterface {
     start: (observerTarget: Node) => void

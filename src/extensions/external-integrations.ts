@@ -1,11 +1,11 @@
 import { PostHog } from '../posthog-core'
 import { ExternalIntegrationKind } from '../types'
-import { assignableWindow, PostHogExtensionKind } from '../utils/globals'
+import { assignableWindow, ExternalExtensionKind } from '../utils/globals'
 import { createLogger } from '../utils/logger'
 
 const logger = createLogger('[PostHog ExternalIntegrations]')
 
-const MAPPED_INTEGRATIONS: Record<ExternalIntegrationKind, PostHogExtensionKind> = {
+const MAPPED_INTEGRATIONS: Record<ExternalIntegrationKind, ExternalExtensionKind> = {
     intercom: 'intercom-integration',
     crispChat: 'crisp-chat-integration',
 }
@@ -13,7 +13,7 @@ const MAPPED_INTEGRATIONS: Record<ExternalIntegrationKind, PostHogExtensionKind>
 export class ExternalIntegrations {
     constructor(private readonly _instance: PostHog) {}
 
-    private _loadScript(name: PostHogExtensionKind, cb: () => void): void {
+    private _loadScript(name: ExternalExtensionKind, cb: () => void): void {
         assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, name, (err) => {
             if (err) {
                 return logger.error('failed to load script', err)
