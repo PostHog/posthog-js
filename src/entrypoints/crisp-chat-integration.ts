@@ -4,6 +4,8 @@ import { createLogger } from '../utils/logger'
 
 const logger = createLogger('[PostHog Crisp Chat]')
 
+const reportedSessionIds = new Set<string>()
+
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
 assignableWindow.__PosthogExtensions__.integrations = assignableWindow.__PosthogExtensions__.integrations || {}
 assignableWindow.__PosthogExtensions__.integrations.crispChat = {
@@ -18,25 +20,36 @@ assignableWindow.__PosthogExtensions__.integrations.crispChat = {
             return false
         }
 
-        crispChat.push([
-            'on',
-            'session:loaded',
-            (crispSessionId: string) => {
-                const replayUrl = posthog.get_session_replay_url()
-                const personUrl = posthog.requestRouter.endpointFor(
-                    'ui',
-                    `/project/${posthog.config.token}/person/${posthog.get_distinct_id()}`
-                )
+        posthog.capture('crispChat:integration: start', { crispSessionId: crispChat.get('session:identifier') })
 
-                posthog.capture('crispChat:session:loaded', { crispSessionId })
-                crispChat.push([
-                    'set',
-                    'session:event',
-                    [[['posthog:onSessionLoaded', { sessionURL: replayUrl, personURL: personUrl }, 'red']]],
-                ])
-            },
-        ])
-        logger.info('integration started')
+        const updateCrispChat = () => {
+            const replayUrl = posthog.get_session_replay_url()
+            const personUrl = posthog.requestRouter.endpointFor(
+                'ui',
+                `/project/${posthog.config.token}/person/${posthog.get_distinct_id()}`
+            )
+
+            crispChat.push([
+                'set',
+                'session:data',
+                [
+                    [
+                        ['sessionURL', replayUrl],
+                        ['personURL', personUrl],
+                    ],
+                ],
+            ])
+        }
+
+        // this is called immediately if there's a session id
+        // and then again whenever the session id changes
+        posthog.onSessionId((sessionId) => {
+            if (!reportedSessionIds.has(sessionId)) {
+                updateCrispChat()
+                reportedSessionIds.add(sessionId)
+            }
+        })
+
         return true
     },
 }
