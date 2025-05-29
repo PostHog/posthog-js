@@ -2,16 +2,21 @@ import {
     canActivateRepeatedly,
     doesSurveyUrlMatch,
     getFontFamily,
+    getSurveySeen,
     hasEvents,
     hasWaitPeriodPassed,
 } from '../../extensions/surveys/surveys-extension-utils'
 import { Survey, SurveySchedule, SurveyType } from '../../posthog-surveys-types'
+import { SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../../utils/survey-utils'
 
 describe('hasWaitPeriodPassed', () => {
     let originalDate: DateConstructor
     let mockCurrentDate: Date
 
     beforeEach(() => {
+        // Clear localStorage before each test
+        localStorage.clear()
+
         // Store the original Date constructor
         originalDate = global.Date
         // Mock the current date to be 2025-01-15 12:00:00 UTC
@@ -32,49 +37,211 @@ describe('hasWaitPeriodPassed', () => {
     afterEach(() => {
         // Restore the original Date constructor
         global.Date = originalDate
+        // Clear localStorage after each test
+        localStorage.clear()
     })
 
     it('should return true when no wait period is specified', () => {
-        expect(hasWaitPeriodPassed('2025-01-01T12:00:00Z', undefined)).toBe(true)
+        localStorage.setItem('lastSeenSurveyDate', '2025-01-01T12:00:00Z')
+        expect(hasWaitPeriodPassed(undefined)).toBe(true)
     })
 
-    it('should return true when no last seen date is provided', () => {
-        expect(hasWaitPeriodPassed(null, 7)).toBe(true)
+    it('should return true when no last seen date is stored', () => {
+        expect(hasWaitPeriodPassed(7)).toBe(true)
     })
 
     it('should return false when less than wait period has passed', () => {
-        const lastSeenDate = '2025-01-10T12:00:00Z' // 5 days ago
-        expect(hasWaitPeriodPassed(lastSeenDate, 7)).toBe(false)
+        localStorage.setItem('lastSeenSurveyDate', '2025-01-10T12:00:00Z') // 5 days ago
+        expect(hasWaitPeriodPassed(7)).toBe(false)
     })
 
-    it('should return false when the wait period has not passed yet', () => {
-        const lastSeenDate = '2025-01-08T12:00:00Z' // 7 days ago
-        expect(hasWaitPeriodPassed(lastSeenDate, 7)).toBe(false)
-    })
-
-    it('should return true one second after the wait period has passed', () => {
-        const lastSeenDate = '2025-01-08T11:59:59Z' // 7 days ago
-        expect(hasWaitPeriodPassed(lastSeenDate, 1)).toBe(true)
+    it('should return false when exactly the wait period has passed', () => {
+        localStorage.setItem('lastSeenSurveyDate', '2025-01-08T12:00:00Z') // exactly 7 days ago
+        expect(hasWaitPeriodPassed(7)).toBe(false)
     })
 
     it('should return true when more than wait period has passed', () => {
-        const lastSeenDate = '2025-01-01T12:00:00Z' // 14 days ago
-        expect(hasWaitPeriodPassed(lastSeenDate, 7)).toBe(true)
+        localStorage.setItem('lastSeenSurveyDate', '2025-01-01T12:00:00Z') // 14 days ago
+        expect(hasWaitPeriodPassed(7)).toBe(true)
     })
 
-    it('should handle decimal wait periods by rounding up days difference', () => {
-        const lastSeenDate = '2025-01-10T00:00:00Z' // 5.5 days ago
-        expect(hasWaitPeriodPassed(lastSeenDate, 5)).toBe(true)
+    it('should handle partial days by using Math.ceil', () => {
+        localStorage.setItem('lastSeenSurveyDate', '2025-01-14T00:00:00Z') // 1.5 days ago
+        expect(hasWaitPeriodPassed(1)).toBe(true) // Math.ceil(1.5) = 2, which is > 1
     })
 
-    it('should handle invalid date strings by returning false', () => {
-        expect(hasWaitPeriodPassed('invalid-date', 7)).toBe(false)
+    it('should return false for invalid date strings', () => {
+        localStorage.setItem('lastSeenSurveyDate', 'invalid-date')
+        expect(hasWaitPeriodPassed(7)).toBe(false)
     })
 
-    // test case for when just 5 minutes have passed
-    it('should return false when just 5 minutes have passed', () => {
-        const lastSeenDate = '2025-01-15T11:55:00Z' // 5 minutes ago
-        expect(hasWaitPeriodPassed(lastSeenDate, 1)).toBe(false)
+    it('should return false when just a few hours have passed', () => {
+        localStorage.setItem('lastSeenSurveyDate', '2025-01-15T06:00:00Z') // 6 hours ago
+        expect(hasWaitPeriodPassed(1)).toBe(false) // Math.ceil(0.25) = 1, which is not > 1
+    })
+
+    it('should return true when slightly more than wait period has passed', () => {
+        localStorage.setItem('lastSeenSurveyDate', '2025-01-08T11:59:59Z') // 7 days and 1 second ago
+        expect(hasWaitPeriodPassed(7)).toBe(true)
+    })
+})
+
+describe('getSurveySeen', () => {
+    beforeEach(() => {
+        // Clear localStorage before each test
+        localStorage.clear()
+    })
+
+    afterEach(() => {
+        // Clear localStorage after each test
+        localStorage.clear()
+    })
+
+    const baseSurvey: Survey = {
+        id: 'test-survey',
+        name: 'Test Survey',
+        description: 'Test Description',
+        type: SurveyType.Popover,
+        questions: [],
+        appearance: null,
+        conditions: null,
+        start_date: null,
+        end_date: null,
+        current_iteration: null,
+        current_iteration_start_date: null,
+        feature_flag_keys: null,
+        linked_flag_key: null,
+        targeting_flag_key: null,
+        internal_targeting_flag_key: null,
+    }
+
+    describe('when survey has not been seen', () => {
+        it('should return false when no localStorage entry exists', () => {
+            expect(getSurveySeen(baseSurvey)).toBe(false)
+        })
+    })
+
+    describe('when survey has been seen', () => {
+        it('should return true for non-repeatable survey', () => {
+            localStorage.setItem(`${SURVEY_SEEN_PREFIX}${baseSurvey.id}`, 'true')
+            expect(getSurveySeen(baseSurvey)).toBe(true)
+        })
+
+        it('should return false for survey with SurveySchedule.Always', () => {
+            const repeatableSurvey: Survey = {
+                ...baseSurvey,
+                schedule: SurveySchedule.Always,
+            }
+            localStorage.setItem(`${SURVEY_SEEN_PREFIX}${repeatableSurvey.id}`, 'true')
+            expect(getSurveySeen(repeatableSurvey)).toBe(false)
+        })
+
+        it('should return false for survey with repeatedActivation events', () => {
+            const eventRepeatableSurvey: Survey = {
+                ...baseSurvey,
+                conditions: {
+                    events: {
+                        repeatedActivation: true,
+                        values: [{ name: 'test-event' }],
+                    },
+                    actions: null,
+                },
+            }
+            localStorage.setItem(`${SURVEY_SEEN_PREFIX}${eventRepeatableSurvey.id}`, 'true')
+            expect(getSurveySeen(eventRepeatableSurvey)).toBe(false)
+        })
+
+        it('should return true for survey with events but no repeatedActivation', () => {
+            const nonRepeatableSurvey: Survey = {
+                ...baseSurvey,
+                conditions: {
+                    events: {
+                        repeatedActivation: false,
+                        values: [{ name: 'test-event' }],
+                    },
+                    actions: null,
+                },
+            }
+            localStorage.setItem(`${SURVEY_SEEN_PREFIX}${nonRepeatableSurvey.id}`, 'true')
+            expect(getSurveySeen(nonRepeatableSurvey)).toBe(true)
+        })
+
+        it('should return true for survey with events but repeatedActivation undefined', () => {
+            const nonRepeatableSurvey: Survey = {
+                ...baseSurvey,
+                conditions: {
+                    events: {
+                        values: [{ name: 'test-event' }],
+                    },
+                    actions: null,
+                },
+            }
+            localStorage.setItem(`${SURVEY_SEEN_PREFIX}${nonRepeatableSurvey.id}`, 'true')
+            expect(getSurveySeen(nonRepeatableSurvey)).toBe(true)
+        })
+
+        it('should return false for survey that is in progress', () => {
+            const surveyInProgress = {
+                ...baseSurvey,
+                id: 'survey-in-progress',
+            }
+
+            // Mock survey as in progress by setting the in-progress key
+            localStorage.setItem(
+                `${SURVEY_IN_PROGRESS_PREFIX}${surveyInProgress.id}`,
+                JSON.stringify({
+                    surveySubmissionId: 'test-submission-id',
+                })
+            )
+            localStorage.setItem(`${SURVEY_SEEN_PREFIX}${surveyInProgress.id}`, 'true')
+
+            expect(getSurveySeen(surveyInProgress)).toBe(false)
+        })
+    })
+
+    describe('with current_iteration', () => {
+        it('should use iteration-specific key when current_iteration is set', () => {
+            const surveyWithIteration = {
+                ...baseSurvey,
+                id: 'survey-with-iteration',
+                current_iteration: 2,
+            }
+
+            // Set the iteration-specific key
+            localStorage.setItem(
+                `${SURVEY_SEEN_PREFIX}${surveyWithIteration.id}_${surveyWithIteration.current_iteration}`,
+                'true'
+            )
+            expect(getSurveySeen(surveyWithIteration)).toBe(true)
+
+            // Should not be affected by the base key
+            localStorage.setItem(`${SURVEY_SEEN_PREFIX}${surveyWithIteration.id}`, 'true')
+            expect(getSurveySeen(surveyWithIteration)).toBe(true)
+        })
+
+        it('should return false when iteration-specific key is not set', () => {
+            const surveyWithIteration = {
+                ...baseSurvey,
+                id: 'survey-with-iteration',
+                current_iteration: 2,
+            }
+
+            // Set only the base key, not the iteration-specific key
+            localStorage.setItem(`${SURVEY_SEEN_PREFIX}${surveyWithIteration.id}`, 'true')
+            expect(getSurveySeen(surveyWithIteration)).toBe(false)
+        })
+
+        it('should handle current_iteration of 0 correctly', () => {
+            const surveyWithZeroIteration = {
+                ...baseSurvey,
+                id: 'survey-zero-iteration',
+                current_iteration: 0,
+            }
+
+            // Should use base key when current_iteration is 0
+            localStorage.setItem(`${SURVEY_SEEN_PREFIX}${surveyWithZeroIteration.id}`, 'true')
+            expect(getSurveySeen(surveyWithZeroIteration)).toBe(true)
+        })
     })
 })
 
@@ -124,16 +291,19 @@ describe('hasEvents', () => {
 describe('canActivateRepeatedly', () => {
     it('should return true when survey the schedule is Always', () => {
         const survey = {
+            id: 'test-survey',
             schedule: SurveySchedule.Always,
             conditions: undefined,
-        } as Pick<Survey, 'type' | 'schedule' | 'conditions'>
+            current_iteration: null,
+        } as Pick<Survey, 'id' | 'schedule' | 'conditions' | 'current_iteration'>
         expect(canActivateRepeatedly(survey)).toBe(true)
     })
 
     it('should return false when survey has no events', () => {
         const survey = {
-            type: SurveyType.Popover,
+            id: 'test-survey',
             schedule: SurveySchedule.Once,
+            current_iteration: null,
             conditions: {
                 events: {
                     repeatedActivation: true,
@@ -141,14 +311,15 @@ describe('canActivateRepeatedly', () => {
                 },
                 actions: { values: [] },
             },
-        } as Pick<Survey, 'type' | 'schedule' | 'conditions'>
+        } as Pick<Survey, 'id' | 'schedule' | 'conditions' | 'current_iteration'>
         expect(canActivateRepeatedly(survey)).toBe(false)
     })
 
     it('should return true when survey has events and repeatedActivation is true', () => {
         const survey = {
-            type: SurveyType.Popover,
+            id: 'test-survey',
             schedule: SurveySchedule.Once,
+            current_iteration: null,
             conditions: {
                 events: {
                     repeatedActivation: true,
@@ -156,14 +327,15 @@ describe('canActivateRepeatedly', () => {
                 },
                 actions: { values: [] },
             },
-        } as Pick<Survey, 'type' | 'schedule' | 'conditions'>
+        } as Pick<Survey, 'id' | 'schedule' | 'conditions' | 'current_iteration'>
         expect(canActivateRepeatedly(survey)).toBe(true)
     })
 
     it('should return false when survey has events but repeatedActivation is false', () => {
         const survey = {
-            type: SurveyType.Popover,
+            id: 'test-survey',
             schedule: SurveySchedule.Once,
+            current_iteration: null,
             conditions: {
                 events: {
                     repeatedActivation: false,
@@ -171,7 +343,7 @@ describe('canActivateRepeatedly', () => {
                 },
                 actions: { values: [] },
             },
-        } as Pick<Survey, 'type' | 'schedule' | 'conditions'>
+        } as Pick<Survey, 'id' | 'schedule' | 'conditions' | 'current_iteration'>
         expect(canActivateRepeatedly(survey)).toBe(false)
     })
 })
