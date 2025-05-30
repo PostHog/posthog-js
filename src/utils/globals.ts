@@ -96,7 +96,9 @@ interface PostHogExtensions {
         ph: PostHog,
         config: DeadClicksAutoCaptureConfig
     ) => LazyLoadedDeadClicksAutocaptureInterface
-    integrations?: Record<ExternalIntegrationKind, { start: (posthog: PostHog) => void } | undefined>
+    integrations?: {
+        [K in ExternalIntegrationKind]?: { start: (posthog: PostHog) => void }
+    }
 }
 
 const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win
