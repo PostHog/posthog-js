@@ -1,6 +1,7 @@
 import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
 import { DeadClicksAutoCaptureConfig, Properties, RemoteConfig, SiteAppLoader } from '../types'
+import { ChatMessageType } from '../extensions/chat/components/PosthogChatBox'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
@@ -55,12 +56,28 @@ export type PostHogExtensionKind =
     | 'recorder'
     | 'tracing-headers'
     | 'surveys'
+    | 'chat'
     | 'dead-clicks-autocapture'
     | 'remote-config'
 
 export interface LazyLoadedDeadClicksAutocaptureInterface {
     start: (observerTarget: Node) => void
     stop: () => void
+}
+
+export interface LazyLoadedPostHogChatInterface {
+    sendMessage: (
+        conversationId: string,
+        message: string,
+        posthog: PostHog,
+        resolve: (value: void) => void,
+        reject: (reason?: any) => void
+    ) => void
+    getChat: (
+        posthog: PostHog,
+        resolve: (value: { messages?: ChatMessageType[]; conversationId?: string }) => void,
+        reject: (reason?: any) => void
+    ) => void
 }
 
 interface PostHogExtensions {
@@ -80,6 +97,7 @@ interface PostHogExtensions {
     rrweb?: { record: any; version: string }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
     generateSurveys?: (posthog: PostHog) => any | undefined
+    loadChat?: (posthog: PostHog) => any | undefined
     postHogWebVitalsCallbacks?: {
         onLCP: (metric: any) => void
         onCLS: (metric: any) => void
@@ -94,6 +112,7 @@ interface PostHogExtensions {
         ph: PostHog,
         config: DeadClicksAutoCaptureConfig
     ) => LazyLoadedDeadClicksAutocaptureInterface
+    chat?: LazyLoadedPostHogChatInterface
 }
 
 const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win
