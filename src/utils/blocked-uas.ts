@@ -19,6 +19,7 @@ export const DEFAULT_BLOCKED_UA_STRS = [
     'http://yandex.com/bots',
     'hubspot',
     'ia_archiver',
+    'leikibot',
     'linkedinbot',
     'meta-externalagent',
     'mj12bot',
