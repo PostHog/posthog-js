@@ -4,6 +4,8 @@ import { PostHog } from '../posthog-core'
 import {
     Survey,
     SurveyCallback,
+    SurveyEventName,
+    SurveyEventProperties,
     SurveyPosition,
     SurveyQuestion,
     SurveyQuestionBranchingType,
@@ -783,11 +785,11 @@ export function usePopupVisibility(
             }
             setIsPopupVisible(true)
             window.dispatchEvent(new Event('PHSurveyShown'))
-            posthog.capture('survey shown', {
-                $survey_name: survey.name,
-                $survey_id: survey.id,
-                $survey_iteration: survey.current_iteration,
-                $survey_iteration_start_date: survey.current_iteration_start_date,
+            posthog.capture(SurveyEventName.SHOWN, {
+                [SurveyEventProperties.SURVEY_NAME]: survey.name,
+                [SurveyEventProperties.SURVEY_ID]: survey.id,
+                [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
+                [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
                 sessionRecordingUrl: posthog.get_session_replay_url?.(),
             })
             localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
