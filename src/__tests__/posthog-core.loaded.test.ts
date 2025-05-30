@@ -84,6 +84,23 @@ describe('loaded() with flags', () => {
             })
         })
 
+        it('adds only_evaluate_survey_feature_flags query param when configured', async () => {
+            instance = await createPosthog({
+                advanced_only_evaluate_survey_feature_flags: true,
+                loaded: (ph) => {
+                    ph.group('org', 'bazinga', { name: 'Shelly' })
+                },
+            })
+
+            expect(instance._send_request).toHaveBeenCalledTimes(1)
+            expect(instance._send_request.mock.calls[0][0]).toMatchObject({
+                url: 'https://us.i.posthog.com/decide/?v=4&only_evaluate_survey_feature_flags=true',
+                data: {
+                    groups: { org: 'bazinga' },
+                },
+            })
+        })
+
         it('does call decide with a request for flags if called directly (via groups) even if disabled for first load', async () => {
             instance = await createPosthog({
                 advanced_disable_feature_flags_on_first_load: true,
