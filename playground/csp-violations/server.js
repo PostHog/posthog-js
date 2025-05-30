@@ -89,6 +89,19 @@ app.get('/', (req, res) => {
       </div>
       
       <div class="card">
+        <h2>Report-To Debug Cases</h2>
+        <p>Test cases for debugging report-to directive issues:</p>
+        
+        <a href="/debug-enabled" class="button">Debug Enabled (with ?debug=true)</a>
+        <a href="/invalid-content-type" class="button">Invalid Content Type</a>
+        <a href="/report-uri-only" class="button">Report-URI Only</a>
+        <a href="/report-to-only" class="button">Report-To Only</a>
+        <a href="/both-report-directives" class="button">Both Report Directives</a>
+        <a href="/malformed-reporting-endpoints" class="button">Malformed Reporting Endpoints</a>
+        <a href="/sampling-test/default" class="button">Sampling Test (Multiple Violations)</a>
+      </div>
+      
+      <div class="card">
         <h2>CSP Report Endpoint</h2>
         <p>This playground is configured to send CSP violation reports to:</p>
         <pre>${CSP_REPORT_URI}</pre>
@@ -270,6 +283,445 @@ app.get('/eval', (req, res) => {
         setTimeout(() => {
           eval('console.log("Hello, world! - sent from my eval")');
         }, 1000);
+      </script>
+    </body>
+    </html>
+  `)
+})
+
+// Debug enabled test - adds debug=true parameter to CSP report endpoint
+app.get('/debug-enabled', (req, res) => {
+    const debugCSPRules = {
+        ...CSP_RULES,
+        'report-uri': CSP_REPORT_URI + '&type=report-uri&debug=true',
+    }
+    const debugCSPHeader = Object.entries(debugCSPRules)
+        .map(([key, value]) => `${key} ${value}`)
+        .join('; ')
+
+    res.setHeader('Content-Security-Policy-Report-Only', debugCSPHeader)
+    if (USE_REPORT_TO) {
+        res.setHeader('Reporting-Endpoints', `posthog="${CSP_REPORT_URI}&type=report-to&debug=true"`)
+    }
+
+    res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Debug Enabled Test</title>
+      <link href="/static/styles.css" rel="stylesheet">
+      <script src="/dist/main.js"></script>
+      ${POSTHOG_SCRIPT}
+    </head>
+    <body>
+      <h1>Debug Enabled Test</h1>
+      <div class="card">
+        <p>This page has debug=true parameter enabled in CSP report endpoints.</p>
+        <p>CSP reports will include verbose debug logging.</p>
+        <p><a href="/">Back to Home</a></p>
+      </div>
+      <!-- This inline script violates CSP and should trigger debug logs -->
+      <script>
+        console.log("Debug enabled violation - this should generate detailed logs");
+      </script>
+    </body>
+    </html>
+  `)
+})
+
+app.get('/debug-case-insensitive', (req, res) => {
+    const debugCSPRules = {
+        ...CSP_RULES,
+        'report-uri': CSP_REPORT_URI + '&type=report-uri&DEBUG=true',
+    }
+    const debugCSPHeader = Object.entries(debugCSPRules)
+        .map(([key, value]) => `${key} ${value}`)
+        .join('; ')
+
+    res.setHeader('Content-Security-Policy-Report-Only', debugCSPHeader)
+    if (USE_REPORT_TO) {
+        res.setHeader('Reporting-Endpoints', `posthog="${CSP_REPORT_URI}&type=report-to&DEBUG=true"`)
+    }
+
+    res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Debug Case Insensitive Test</title>
+      <link href="/static/styles.css" rel="stylesheet">
+      <script src="/dist/main.js"></script>
+      ${POSTHOG_SCRIPT}
+    </head>
+    <body>
+      <h1>Debug Case Insensitive Test</h1>
+      <div class="card">
+        <p>This page has DEBUG=true parameter (uppercase) to test case insensitive handling.</p>
+        <p><a href="/">Back to Home</a></p>
+      </div>
+      <!-- This inline script violates CSP -->
+      <script>
+        console.log("Case insensitive debug test violation");
+      </script>
+    </body>
+    </html>
+  `)
+})
+
+app.get('/invalid-content-type', (req, res) => {
+    res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Invalid Content Type Test</title>
+      <link href="/static/styles.css" rel="stylesheet">
+      <script src="/dist/main.js"></script>
+      ${POSTHOG_SCRIPT}
+    </head>
+    <body>
+      <h1>Invalid Content Type Test</h1>
+      <div class="card">
+        <p>This page will attempt to send CSP reports with invalid content type.</p>
+        <p>This should trigger error logging for invalid content type.</p>
+        <p><a href="/">Back to Home</a></p>
+      </div>
+      <!-- This inline script violates CSP -->
+      <script>
+        console.log("Invalid content type test violation");
+        
+        // Manually send a CSP report with wrong content type
+        setTimeout(() => {
+          fetch('${CSP_REPORT_URI}&type=manual&debug=true', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'text/plain', // Wrong content type
+            },
+            body: JSON.stringify({
+              'csp-report': {
+                'document-uri': window.location.href,
+                'violated-directive': 'script-src',
+                'blocked-uri': 'inline',
+                'source-file': window.location.href,
+                'line-number': 1,
+                'column-number': 1
+              }
+            })
+          }).catch(console.error);
+        }, 1000);
+      </script>
+    </body>
+    </html>
+  `)
+})
+
+app.get('/report-uri-only', (req, res) => {
+    const reportUriOnlyRules = {
+        'default-src': "'self'",
+        'script-src': `'self' ${POSTHOG_API_HOST} 'nonce-123'`,
+        'connect-src': `'self' ${POSTHOG_API_HOST} ${POSTHOG_UI_HOST} https://*.posthog.com`,
+        'img-src': "'self' data:",
+        'style-src': `'self' ${POSTHOG_UI_HOST}`,
+        'report-uri': CSP_REPORT_URI + '&type=report-uri-only&debug=true',
+    }
+    const reportUriHeader = Object.entries(reportUriOnlyRules)
+        .map(([key, value]) => `${key} ${value}`)
+        .join('; ')
+
+    res.setHeader('Content-Security-Policy-Report-Only', reportUriHeader)
+    // Explicitly NOT setting Reporting-Endpoints header
+
+    res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Report-URI Only Test</title>
+      <link href="/static/styles.css" rel="stylesheet">
+      <script src="/dist/main.js"></script>
+      ${POSTHOG_SCRIPT}
+    </head>
+    <body>
+      <h1>Report-URI Only Test</h1>
+      <div class="card">
+        <p>This page uses only report-uri directive (no report-to).</p>
+        <p>CSP Policy: <code>${reportUriHeader}</code></p>
+        <p><a href="/">Back to Home</a></p>
+      </div>
+      <!-- This inline script violates CSP -->
+      <script>
+        console.log("Report-URI only violation");
+      </script>
+    </body>
+    </html>
+  `)
+})
+
+app.get('/report-to-only', (req, res) => {
+    const reportToOnlyRules = {
+        'default-src': "'self'",
+        'script-src': `'self' ${POSTHOG_API_HOST} 'nonce-123'`,
+        'connect-src': `'self' ${POSTHOG_API_HOST} ${POSTHOG_UI_HOST} https://*.posthog.com`,
+        'img-src': "'self' data:",
+        'style-src': `'self' ${POSTHOG_UI_HOST}`,
+        'report-to': 'posthog-debug',
+    }
+    const reportToHeader = Object.entries(reportToOnlyRules)
+        .map(([key, value]) => `${key} ${value}`)
+        .join('; ')
+
+    res.setHeader('Content-Security-Policy-Report-Only', reportToHeader)
+    res.setHeader('Reporting-Endpoints', `posthog-debug="${CSP_REPORT_URI}&type=report-to-only&debug=true"`)
+
+    res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Report-To Only Test</title>
+      <link href="/static/styles.css" rel="stylesheet">
+      <script src="/dist/main.js"></script>
+      ${POSTHOG_SCRIPT}
+    </head>
+    <body>
+      <h1>Report-To Only Test</h1>
+      <div class="card">
+        <p>This page uses only report-to directive (no report-uri).</p>
+        <p>CSP Policy: <code>${reportToHeader}</code></p>
+        <p>Reporting Endpoints: <code>posthog-debug="${CSP_REPORT_URI}&type=report-to-only&debug=true"</code></p>
+        <p><a href="/">Back to Home</a></p>
+      </div>
+      <!-- This inline script violates CSP -->
+      <script>
+        console.log("Report-To only violation");
+      </script>
+    </body>
+    </html>
+  `)
+})
+
+app.get('/both-report-directives', (req, res) => {
+    const bothReportRules = {
+        'default-src': "'self'",
+        'script-src': `'self' ${POSTHOG_API_HOST} 'nonce-123'`,
+        'connect-src': `'self' ${POSTHOG_API_HOST} ${POSTHOG_UI_HOST} https://*.posthog.com`,
+        'img-src': "'self' data:",
+        'style-src': `'self' ${POSTHOG_UI_HOST}`,
+        'report-uri': CSP_REPORT_URI + '&type=both-report-uri&debug=true',
+        'report-to': 'posthog-both',
+    }
+    const bothReportHeader = Object.entries(bothReportRules)
+        .map(([key, value]) => `${key} ${value}`)
+        .join('; ')
+
+    res.setHeader('Content-Security-Policy-Report-Only', bothReportHeader)
+    res.setHeader('Reporting-Endpoints', `posthog-both="${CSP_REPORT_URI}&type=both-report-to&debug=true"`)
+
+    res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Both Report Directives Test</title>
+      <link href="/static/styles.css" rel="stylesheet">
+      <script src="/dist/main.js"></script>
+      ${POSTHOG_SCRIPT}
+    </head>
+    <body>
+      <h1>Both Report Directives Test</h1>
+      <div class="card">
+        <p>This page uses both report-uri and report-to directives.</p>
+        <p>CSP Policy: <code>${bothReportHeader}</code></p>
+        <p>Reporting Endpoints: <code>posthog-both="${CSP_REPORT_URI}&type=both-report-to&debug=true"</code></p>
+        <p><a href="/">Back to Home</a></p>
+      </div>
+      <!-- This inline script violates CSP -->
+      <script>
+        console.log("Both report directives violation");
+      </script>
+    </body>
+    </html>
+  `)
+})
+
+app.get('/malformed-reporting-endpoints', (req, res) => {
+    const malformedRules = {
+        'default-src': "'self'",
+        'script-src': `'self' ${POSTHOG_API_HOST} 'nonce-123'`,
+        'connect-src': `'self' ${POSTHOG_API_HOST} ${POSTHOG_UI_HOST} https://*.posthog.com`,
+        'img-src': "'self' data:",
+        'style-src': `'self' ${POSTHOG_UI_HOST}`,
+        'report-to': 'malformed-endpoint',
+    }
+    const malformedHeader = Object.entries(malformedRules)
+        .map(([key, value]) => `${key} ${value}`)
+        .join('; ')
+
+    res.setHeader('Content-Security-Policy-Report-Only', malformedHeader)
+    // Malformed Reporting-Endpoints header (missing quotes, invalid format)
+    res.setHeader(
+        'Reporting-Endpoints',
+        `malformed-endpoint=${CSP_REPORT_URI}&type=malformed&debug=true, invalid=syntax`
+    )
+
+    res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Malformed Reporting Endpoints Test</title>
+      <link href="/static/styles.css" rel="stylesheet">
+      <script src="/dist/main.js"></script>
+      ${POSTHOG_SCRIPT}
+    </head>
+    <body>
+      <h1>Malformed Reporting Endpoints Test</h1>
+      <div class="card">
+        <p>This page has malformed Reporting-Endpoints header.</p>
+        <p>CSP Policy: <code>${malformedHeader}</code></p>
+        <p>Malformed Reporting Endpoints: <code>malformed-endpoint=${CSP_REPORT_URI}&type=malformed&debug=true, invalid=syntax</code></p>
+        <p>This should trigger error logging for malformed headers.</p>
+        <p><a href="/">Back to Home</a></p>
+      </div>
+      <!-- This inline script violates CSP -->
+      <script>
+        console.log("Malformed reporting endpoints violation");
+      </script>
+    </body>
+    </html>
+  `)
+})
+
+app.get('/sampling-test/:path?', (req, res) => {
+    // Get the number of different URLs from query parameter, default to 20
+    const numUrls = parseInt(req.query.urls) || 20
+    const useRandomDomains = req.query.random === 'true'
+    const testPath = req.params.path || 'default'
+
+    res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Sampling Test - ${testPath}</title>
+      <link href="/static/styles.css" rel="stylesheet">
+      <script src="/dist/main.js"></script>
+      ${POSTHOG_SCRIPT}
+    </head>
+    <body>
+      <h1>Sampling Test - ${testPath}</h1>
+      <div class="card">
+        <p>This page generates multiple CSP violations to test sampling behavior.</p>
+        <p>Test path: <strong>${testPath}</strong></p>
+        <p>Generating <strong>${numUrls}</strong> violations with ${useRandomDomains ? 'random domains' : 'sequential URLs'}.</p>
+        <p>Each URL includes random query parameters and hashes to bypass URL-based sampling.</p>
+        <p>Some reports may be sampled out and should trigger sampling logs.</p>
+        <p><a href="/">Back to Home</a></p>
+        <div id="violation-count">Violations generated: 0</div>
+        <div id="config">
+          <p>Configuration options:</p>
+          <a href="/sampling-test/test1?urls=10" class="button">Test1 - 10 URLs</a>
+          <a href="/sampling-test/test2?urls=50" class="button">Test2 - 50 URLs</a>
+          <a href="/sampling-test/test3?urls=100" class="button">Test3 - 100 URLs</a>
+          <a href="/sampling-test/random?urls=20&random=true" class="button">Random - 20 Domains</a>
+          <a href="/sampling-test/stress?urls=200&random=true" class="button">Stress - 200 Random</a>
+        </div>
+      </div>
+
+      <!-- Multiple inline scripts to generate many violations -->
+      <script nonce="123">
+        let violationCount = 0;
+        const countElement = document.getElementById('violation-count');
+        const numUrls = ${numUrls};
+        const useRandomDomains = ${useRandomDomains};
+        const testPath = '${testPath}';
+
+        const randomDomains = [
+          'example.com',
+          'test-domain.org',
+          'random-site.net',
+          'fake-cdn.io',
+          'malicious-site.co',
+          'untrusted-source.dev',
+          'external-resource.app',
+          'third-party.xyz',
+        ];
+
+        const getRandomDomain = () => {
+          return randomDomains[Math.floor(Math.random() * randomDomains.length)];
+        };
+
+        const getDomain = (index) => {
+          return useRandomDomains ? getRandomDomain() : 'example.com';
+        };
+
+        const getPath = (index) => {
+          if (useRandomDomains) {
+            const paths = ['script', 'resource', 'asset', 'file', 'content'];
+            const path = paths[Math.floor(Math.random() * paths.length)];
+            const id = Math.floor(Math.random() * 1000);
+            const hash = Math.random().toString(36).substring(2, 15);
+            const queryParams = [
+              \`v=\${Math.floor(Math.random() * 100)}\`,
+              \`t=\${Date.now()}\`,
+              \`r=\${Math.random().toString(36).substring(2, 8)}\`,
+              \`path=\${testPath}\`
+            ].join('&');
+            return \`/\${path}\${id}?\${queryParams}#\${hash}\`;
+          }
+          const hash = Math.random().toString(36).substring(2, 15);
+          const queryParams = [
+            \`v=\${Math.floor(Math.random() * 100)}\`,
+            \`t=\${Date.now() + index}\`,
+            \`r=\${Math.random().toString(36).substring(2, 8)}\`,
+            \`path=\${testPath}\`
+          ].join('&');
+          return \`/script\${index}?\${queryParams}#\${hash}\`;
+        };
+
+        // Generate multiple violations rapidly
+        for (let i = 0; i < numUrls; i++) {
+          setTimeout(() => {
+            const domain = getDomain(i);
+            const scriptPath = getPath(i);
+            const imagePath = getPath(i + 1000);
+
+            try {
+              // This will violate CSP
+              eval(\`console.log("Sampling test violation #\${i + 1} from \${domain} (path: \${testPath})");\`);
+              violationCount++;
+              countElement.textContent = \`Violations generated: \${violationCount}\`;
+            } catch (e) {
+              // Expected to fail due to CSP
+            }
+
+            // Try to load external scripts from different domains/paths
+            const script = document.createElement('script');
+            script.src = \`https://\${domain}\${scriptPath}.js\`;
+            document.head.appendChild(script);
+
+            // And external images from different domains/paths
+            const img = document.createElement('img');
+            img.src = \`https://\${domain}\${imagePath}.jpg\`;
+            img.style.display = 'none';
+            document.body.appendChild(img);
+
+            // Also try some CSS violations
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = \`https://\${domain}\${getPath(i + 2000)}.css\`;
+            document.head.appendChild(link);
+          }, i * 50); // Faster generation for more realistic sampling test
+        }
       </script>
     </body>
     </html>
