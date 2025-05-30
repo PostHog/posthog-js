@@ -237,3 +237,21 @@ export interface ActionStepType {
     /** @default StringMatching.Contains */
     url_matching?: ActionStepStringMatching | null
 }
+
+export enum SurveyEventName {
+    SHOWN = 'survey shown',
+    DISMISSED = 'survey dismissed',
+    SENT = 'survey sent',
+}
+
+export enum SurveyEventProperties {
+    SURVEY_ID = '$survey_id',
+    SURVEY_NAME = '$survey_name',
+    SURVEY_RESPONSE = '$survey_response',
+    SURVEY_ITERATION = '$survey_iteration',
+    SURVEY_ITERATION_START_DATE = '$survey_iteration_start_date',
+    SURVEY_PARTIALLY_COMPLETED = '$survey_partially_completed',
+    SURVEY_SUBMISSION_ID = '$survey_submission_id',
+    SURVEY_QUESTIONS = '$survey_questions',
+    SURVEY_COMPLETED = '$survey_completed',
+}

@@ -1,6 +1,8 @@
 import { defaultPostHog } from './helpers/posthog-instance'
 import type { PostHogConfig } from '../types'
 import { uuidv7 } from '../uuidv7'
+import { SurveyEventName, SurveyEventProperties } from '../posthog-surveys-types'
+import { SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
 
 describe('posthog core', () => {
     const mockURL = jest.fn()
@@ -240,6 +242,65 @@ describe('posthog core', () => {
                 //assert
                 expect(beforeSendMock.mock.calls[0][0].properties.utm_source).toBe('source')
                 expect(beforeSendMock.mock.calls[0][0].properties.utm_medium).toBe(null)
+            })
+        })
+
+        describe('survey events', () => {
+            it('sending survey sent events should mark it as seen in localStorage and set the interaction property', () => {
+                // arrange
+                const { posthog, beforeSendMock } = setup({ debug: false })
+                const survey = {
+                    id: 'testSurvey1',
+                    current_iteration: 1,
+                }
+                const surveySeenKey = `${SURVEY_SEEN_PREFIX}${survey.id}_${survey.current_iteration}`
+
+                // act
+                posthog.capture(SurveyEventName.SENT, {
+                    [SurveyEventProperties.SURVEY_ID]: survey.id,
+                    [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
+                })
+
+                // assert
+                expect(localStorage.getItem(surveySeenKey)).toBe('true')
+                // test if property contains at least $set but dont care about the other properties
+                expect(beforeSendMock.mock.calls[0][0]).toMatchObject({
+                    properties: {
+                        [SurveyEventProperties.SURVEY_ID]: survey.id,
+                        [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
+                    },
+                    $set: {
+                        '$survey_responded/testSurvey1/1': true,
+                    },
+                })
+            })
+            it('sending survey dismissed events should mark it as seen in localStorage and set the interaction property', () => {
+                // arrange
+                const { posthog, beforeSendMock } = setup({ debug: false })
+                const survey = {
+                    id: 'testSurvey1',
+                    current_iteration: 1,
+                }
+                const surveySeenKey = `${SURVEY_SEEN_PREFIX}${survey.id}_${survey.current_iteration}`
+
+                // act
+                posthog.capture(SurveyEventName.DISMISSED, {
+                    [SurveyEventProperties.SURVEY_ID]: survey.id,
+                    [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
+                })
+
+                // assert
+                expect(localStorage.getItem(surveySeenKey)).toBe('true')
+                // test if property contains at least $set but dont care about the other properties
+                expect(beforeSendMock.mock.calls[0][0]).toMatchObject({
+                    properties: {
+                        [SurveyEventProperties.SURVEY_ID]: survey.id,
+                        [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
+                    },
+                    $set: {
+                        '$survey_dismissed/testSurvey1/1': true,
+                    },
+                })
             })
         })
     })

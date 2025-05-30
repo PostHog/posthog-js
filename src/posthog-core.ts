@@ -27,7 +27,7 @@ import { PostHogExceptions } from './posthog-exceptions'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import { PostHogSurveys } from './posthog-surveys'
-import { SurveyCallback, SurveyRenderReason } from './posthog-surveys-types'
+import { SurveyCallback, SurveyEventName, SurveyEventProperties, SurveyRenderReason } from './posthog-surveys-types'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
@@ -75,6 +75,7 @@ import { getPersonPropertiesHash } from './utils/property-utils'
 import { RequestRouter, RequestRouterRegion } from './utils/request-router'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
 import { includes, isDistinctIdStringLike } from './utils/string-utils'
+import { getSurveyInteractionProperty, getSurveySeenKey } from './utils/survey-utils'
 import {
     isArray,
     isEmptyObject,
@@ -935,6 +936,19 @@ export class PostHog {
         const finalSet = { ...data.properties['$set'], ...data['$set'] }
         if (!isEmptyObject(finalSet)) {
             this.setPersonPropertiesForFlags(finalSet)
+        }
+
+        if (event_name === SurveyEventName.DISMISSED || event_name === SurveyEventName.SENT) {
+            const surveyId = properties?.[SurveyEventProperties.SURVEY_ID]
+            const surveyIteration = properties?.[SurveyEventProperties.SURVEY_ITERATION]
+            localStorage.setItem(getSurveySeenKey({ id: surveyId, current_iteration: surveyIteration }), 'true')
+            data.$set = {
+                ...data.$set,
+                [getSurveyInteractionProperty(
+                    { id: surveyId, current_iteration: surveyIteration },
+                    event_name === SurveyEventName.SENT ? 'responded' : 'dismissed'
+                )]: true,
+            }
         }
 
         if (!isNullish(this.config.before_send)) {
