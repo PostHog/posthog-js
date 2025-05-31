@@ -737,6 +737,15 @@ export interface PostHogConfig {
     advanced_disable_toolbar_metrics: boolean
 
     /**
+     * Determines whether PostHog should only evaluate feature flags for surveys.
+     * Useful for when you want to use this library to evaluate feature flags for surveys only but you have additional feature flags
+     * that you evaluate on the server side.
+     *
+     * @default false
+     */
+    advanced_only_evaluate_survey_feature_flags: boolean
+
+    /**
      * Sets timeout for fetching feature flags
      *
      * @default 3000
