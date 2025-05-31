@@ -1,3 +1,7 @@
+## 1.250.0 - 20250-05-30
+
+- revert 1.249.0
+
 ## 1.249.0 - 2025-05-30
 
 - feat(flags): add `advanced_only_evaluate_survey_feature_flags` config to explicitly only evaluate survey flags on the frontend (#1986)
