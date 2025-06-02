@@ -1,5 +1,5 @@
 # the recorder file can have unexpected impact on users' sites
-packages/browser/src/entrypoints/recorder.ts @team-replay
+packages/browser/src/entrypoints/recorder.ts @PostHog/team-replay
 
 packages/browser/src/extensions/surveys/ @PostHog/team-surveys
 packages/browser/src/extensions/surveys.tsx @PostHog/team-surveys
