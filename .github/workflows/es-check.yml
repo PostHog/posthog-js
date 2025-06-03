@@ -8,6 +8,8 @@ jobs:
     name: Build and check ES5/ES6 support
     runs-on: ubuntu-22.04
     steps:
+      - uses: actions/checkout@v4
+
       - uses: ./.github/actions/setup
 
       - run: pnpm --filter=posthog-js build

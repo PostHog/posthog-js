@@ -4,9 +4,6 @@ description: "Sets up a Node.js environment and installs dependencies"
 runs:
   using: "composite"
   steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
     - name: Install pnpm
       uses: pnpm/action-setup@v4
 
