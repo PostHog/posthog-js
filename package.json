@@ -5,5 +5,30 @@
             "@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17": "patches/@rrweb__rrweb-plugin-console-record@2.0.0-alpha.17.patch",
             "@rrweb/record@2.0.0-alpha.17": "patches/@rrweb__record@2.0.0-alpha.17.patch"
         }
+    },
+    "devDependencies": {
+        "eslint": "8.57.0",
+        "eslint-config-prettier": "^8.5.0",
+        "eslint-config-posthog-js": "workspace:./eslint-rules",
+        "eslint-plugin-compat": "^6.0.1",
+        "eslint-plugin-jest": "^28.8.3",
+        "eslint-plugin-no-only-tests": "^3.1.0",
+        "eslint-plugin-posthog-js": "workspace:./eslint-rules",
+        "eslint-plugin-prettier": "^5.2.1",
+        "eslint-plugin-react": "^7.30.1",
+        "eslint-plugin-react-hooks": "^4.6.0",
+        "@typescript-eslint/eslint-plugin": "^8.29.1",
+        "@typescript-eslint/parser": "^8.29.1",
+        "@types/eslint": "^8.44.6",
+        "lint-staged": "^10.2.11"
+    },
+    "lint-staged": {
+        "*.{ts,tsx,js,json}": "prettier --write",
+        "*.js": "eslint --cache --fix",
+        "*.{ts,tsx}": [
+            "eslint packages/browser/src --fix",
+            "eslint packages/browser/playwright --fix",
+            "prettier --write"
+        ]
     }
 }
