@@ -66,18 +66,11 @@ module.exports = {
         react: {
             version: '17.0',
         },
-        'import/resolver': {
-            node: {
-                paths: ['eslint-rules'], // Add the directory containing your custom rules
-                extensions: ['.js', '.jsx', '.ts', '.tsx'], // Ensure ESLint resolves both JS and TS files
-            },
-        },
     },
     overrides: [
         {
             files: 'packages/browser/src/**/*',
             rules: {
-                ...rules,
                 'no-restricted-globals': ['error', 'document', 'window'],
             },
         },
@@ -88,7 +81,6 @@ module.exports = {
             // we don't mind using the latest features in our tests
             extends: extend.filter((s) => s !== 'plugin:compat/recommended'),
             rules: {
-                ...rules,
                 'no-console': 'off',
                 'no-restricted-globals': 'off',
                 'compat/compat': 'off',
@@ -105,7 +97,7 @@ module.exports = {
         },
         {
             files: 'packages/browser/react/src/**/',
-            extends: [...extend, 'plugin:react/recommended', 'plugin:react-hooks/recommended'],
+            extends: ['plugin:react/recommended', 'plugin:react-hooks/recommended'],
         },
         {
             files: 'eslint-rules/**/*',
