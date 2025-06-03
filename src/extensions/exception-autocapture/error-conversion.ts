@@ -14,7 +14,7 @@ import {
 import { defaultStackParser, StackFrame, StackParser } from './stack-trace'
 
 import { isEmptyString, isString, isUndefined } from '../../utils/type-utils'
-import { ErrorEventArgs, SeverityLevel, severityLevels } from '../../types'
+import { SeverityLevel, severityLevels } from '../../types'
 import { getFilenameToChunkIdMap } from './chunk-ids'
 
 type ErrorConversionArgs = {
@@ -63,10 +63,6 @@ export interface Exception {
     }
 }
 
-export interface ErrorConversions {
-    errorToProperties: (args: ErrorEventArgs, metadata?: ErrorMetadata) => ErrorProperties
-    unhandledRejectionToProperties: (args: [ev: PromiseRejectionEvent]) => ErrorProperties
-}
 /**
  * based on the very wonderful MIT licensed Sentry SDK
  */

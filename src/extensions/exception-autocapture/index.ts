@@ -1,15 +1,18 @@
 import { assignableWindow, window } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
-import { ExceptionAutoCaptureConfig, Properties, RemoteConfig } from '../../types'
+import { ExceptionAutoCaptureConfig, RemoteConfig } from '../../types'
 
 import { createLogger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
 import { isObject, isUndefined } from '../../utils/type-utils'
+import { ExceptionRateLimiter } from './exception-rate-limiter'
+import { ErrorProperties } from './error-conversion'
 
 const logger = createLogger('[ExceptionAutocapture]')
 
 export class ExceptionObserver {
     private _instance: PostHog
+    private _rateLimiter: ExceptionRateLimiter
     private _remoteEnabled: boolean | undefined
     private _config: Required<ExceptionAutoCaptureConfig>
     private _unwrapOnError: (() => void) | undefined
@@ -20,6 +23,11 @@ export class ExceptionObserver {
         this._instance = instance
         this._remoteEnabled = !!this._instance.persistence?.props[EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]
         this._config = this._requiredConfig()
+
+        this._rateLimiter = new ExceptionRateLimiter({
+            refillRate: this._instance.config.error_tracking.__mutationRateLimiterRefillRate,
+            bucketSize: this._instance.config.session_recording.__mutationRateLimiterBucketSize,
+        })
 
         this.startIfEnabled()
     }
@@ -127,12 +135,19 @@ export class ExceptionObserver {
         this.startIfEnabled()
     }
 
-    captureException(errorProperties: Properties) {
+    captureException(errorProperties: ErrorProperties) {
         const posthogHost = this._instance.requestRouter.endpointFor('ui')
 
         errorProperties.$exception_personURL = `${posthogHost}/project/${
             this._instance.config.token
         }/person/${this._instance.get_distinct_id()}`
+
+        const isRateLimited = this._rateLimiter.isRateLimited(errorProperties)
+
+        if (isRateLimited) {
+            logger.info('Skipping exception capture because of client rate limiting.')
+            return
+        }
 
         this._instance.exceptions.sendExceptionEvent(errorProperties)
     }

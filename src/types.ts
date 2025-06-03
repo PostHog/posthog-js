@@ -661,6 +661,14 @@ export interface PostHogConfig {
     session_recording: SessionRecordingOptions
 
     /**
+     * Determines the error tracking options.
+     *
+     * @see `ErrorTrackingOptions`
+     * @default {}
+     */
+    error_tracking: ErrorTrackingOptions
+
+    /**
      * Determines the session idle timeout in seconds.
      * Any new event that's happened after this timeout will create a new session.
      *
@@ -958,6 +966,26 @@ export interface PostHogConfig {
 
     /** @deprecated - NOT USED ANYMORE, kept here for backwards compatibility reasons */
     inapp_link_new_window?: boolean
+}
+
+export interface ErrorTrackingOptions {
+    /**
+     * ADVANCED: alters the refill rate for the token bucket mutation throttling
+     * Normally only altered alongside posthog support guidance.
+     * Accepts values between 0 and 100
+     *
+     * @default 10
+     */
+    __mutationRateLimiterRefillRate?: number
+
+    /**
+     * ADVANCED: alters the bucket size for the token bucket mutation throttling
+     * Normally only altered alongside posthog support guidance.
+     * Accepts values between 0 and 100
+     *
+     * @default 100
+     */
+    __mutationRateLimiterBucketSize?: number
 }
 
 export interface SessionRecordingOptions {
@@ -1649,25 +1677,6 @@ export type ErrorEventArgs = [
 // but provided as an array of literal types, so we can constrain the level below
 export const severityLevels = ['fatal', 'error', 'warning', 'log', 'info', 'debug'] as const
 export declare type SeverityLevel = (typeof severityLevels)[number]
-
-export interface ErrorProperties {
-    $exception_type: string
-    $exception_message: string
-    $exception_level: SeverityLevel
-    $exception_source?: string
-    $exception_lineno?: number
-    $exception_colno?: number
-    $exception_DOMException_code?: string
-    $exception_is_synthetic?: boolean
-    $exception_stack_trace_raw?: string
-    $exception_handled?: boolean
-    $exception_personURL?: string
-}
-
-export interface ErrorConversions {
-    errorToProperties: (args: ErrorEventArgs) => ErrorProperties
-    unhandledRejectionToProperties: (args: [ev: PromiseRejectionEvent]) => ErrorProperties
-}
 
 export interface SessionRecordingUrlTrigger {
     url: string

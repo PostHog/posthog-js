@@ -19,8 +19,14 @@ export default function Home() {
             setTime(new Date().toISOString().split('T')[1].split('.')[0])
         }, 1000)
 
+        const l = setInterval(() => {
+            // posthog.captureException('ResizeObserver')
+            // console.log('Capture exception')
+        }, 5)
+
         return () => {
             clearInterval(t)
+            clearInterval(l)
         }
     }, [])
 
