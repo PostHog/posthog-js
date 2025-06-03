@@ -4,6 +4,8 @@ import { PostHog } from '../posthog-core'
 import {
     Survey,
     SurveyCallback,
+    SurveyEventName,
+    SurveyEventProperties,
     SurveyPosition,
     SurveyQuestion,
     SurveyQuestionBranchingType,
@@ -783,11 +785,11 @@ export function usePopupVisibility(
             }
             setIsPopupVisible(true)
             window.dispatchEvent(new Event('PHSurveyShown'))
-            posthog.capture('survey shown', {
-                $survey_name: survey.name,
-                $survey_id: survey.id,
-                $survey_iteration: survey.current_iteration,
-                $survey_iteration_start_date: survey.current_iteration_start_date,
+            posthog.capture(SurveyEventName.SHOWN, {
+                [SurveyEventProperties.SURVEY_NAME]: survey.name,
+                [SurveyEventProperties.SURVEY_ID]: survey.id,
+                [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
+                [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
                 sessionRecordingUrl: posthog.get_session_replay_url?.(),
             })
             localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
@@ -1088,6 +1090,10 @@ export function FeedbackWidget({
     const [showSurvey, setShowSurvey] = useState(false)
     const [styleOverrides, setStyleOverrides] = useState<React.CSSProperties>({})
 
+    const toggleSurvey = () => {
+        setShowSurvey(!showSurvey)
+    }
+
     useEffect(() => {
         if (!posthog) {
             logger.error('FeedbackWidget called without a PostHog instance.')
@@ -1109,7 +1115,7 @@ export function FeedbackWidget({
             if (customEvent.detail?.surveyId === survey.id) {
                 logger.info(`Received show event for feedback button survey ${survey.id}`)
                 setStyleOverrides(customEvent.detail.position || {})
-                setShowSurvey(true) // Show the survey popup
+                toggleSurvey()
             }
         }
 
@@ -1138,6 +1144,10 @@ export function FeedbackWidget({
     }
 
     const resetShowSurvey = () => {
+        // hide the feedback button after answering or closing the survey if it's not always show
+        if (survey.schedule !== SurveySchedule.Always) {
+            setIsFeedbackButtonVisible(false)
+        }
         // important so our view transition has time to run
         setTimeout(() => {
             setShowSurvey(false)
@@ -1147,7 +1157,7 @@ export function FeedbackWidget({
     return (
         <Preact.Fragment>
             {survey.appearance?.widgetType === 'tab' && (
-                <button className="ph-survey-widget-tab" onClick={() => setShowSurvey(!showSurvey)} disabled={readOnly}>
+                <button className="ph-survey-widget-tab" onClick={toggleSurvey} disabled={readOnly}>
                     {survey.appearance?.widgetLabel || ''}
                 </button>
             )}

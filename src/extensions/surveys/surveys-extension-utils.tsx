@@ -4,6 +4,8 @@ import {
     MultipleSurveyQuestion,
     Survey,
     SurveyAppearance,
+    SurveyEventName,
+    SurveyEventProperties,
     SurveyPosition,
     SurveyQuestion,
     SurveySchedule,
@@ -42,6 +44,7 @@ const BLACK_TEXT_COLOR = '#020617' // Maps out to text-slate-950 from tailwind c
 
 // Keep in sync with defaultSurveyAppearance on the main app
 export const defaultSurveyAppearance = {
+    fontFamily: 'inherit',
     backgroundColor: '#eeeded',
     submitButtonColor: 'black',
     submitButtonTextColor: 'white',
@@ -53,15 +56,19 @@ export const defaultSurveyAppearance = {
     displayThankYouMessage: true,
     thankYouMessageHeader: 'Thank you for your feedback!',
     position: SurveyPosition.Right,
-    widgetColor: '#e0a045',
+    widgetType: SurveyWidgetType.Tab,
+    widgetLabel: 'Feedback',
+    widgetColor: 'black',
     zIndex: '2147483647',
     disabledButtonOpacity: '0.6',
     maxWidth: '300px',
     textSubtleColor: '#939393',
     inputBackground: 'white',
     boxPadding: '20px 24px',
-    borderRadius: '10px',
     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+    borderRadius: '10px',
+    shuffleQuestions: false,
+    surveyPopupDelaySeconds: undefined,
 } as const
 
 export const addSurveyCSSVariablesToElement = (
@@ -375,30 +382,21 @@ export const sendSurveyEvent = ({
         logger.error('[survey sent] event not captured, PostHog instance not found.')
         return
     }
-
-    // Mark as seen in localStorage regardless of completion status
-    localStorage.setItem(getSurveySeenKey(survey), 'true')
-
-    // Send the event payload
-    posthog.capture('survey sent', {
-        $survey_name: survey.name,
-        $survey_id: survey.id,
-        $survey_iteration: survey.current_iteration,
-        $survey_iteration_start_date: survey.current_iteration_start_date,
-        $survey_questions: survey.questions.map((question) => ({
+    posthog.capture(SurveyEventName.SENT, {
+        [SurveyEventProperties.SURVEY_NAME]: survey.name,
+        [SurveyEventProperties.SURVEY_ID]: survey.id,
+        [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
+        [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
+        [SurveyEventProperties.SURVEY_QUESTIONS]: survey.questions.map((question) => ({
             id: question.id,
             question: question.question,
             response: getSurveyResponseValue(responses, question.id),
         })),
-        $survey_submission_id: surveySubmissionId,
-        $survey_completed: isSurveyCompleted,
+        [SurveyEventProperties.SURVEY_SUBMISSION_ID]: surveySubmissionId,
+        [SurveyEventProperties.SURVEY_COMPLETED]: isSurveyCompleted,
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
         ...responses,
-        $set: {
-            [getSurveyInteractionProperty(survey, 'responded')]: true,
-        },
     })
-
     if (isSurveyCompleted) {
         // Only dispatch PHSurveySent if the survey is completed, as that removes the survey from focus
         window.dispatchEvent(new CustomEvent('PHSurveySent', { detail: { surveyId: survey.id } }))
@@ -416,29 +414,23 @@ export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly
     }
 
     const inProgressSurvey = getInProgressSurveyState(survey)
-
-    // Send dismissal event
-    posthog.capture('survey dismissed', {
-        $survey_name: survey.name,
-        $survey_id: survey.id,
-        $survey_iteration: survey.current_iteration,
-        $survey_iteration_start_date: survey.current_iteration_start_date,
+    posthog.capture(SurveyEventName.DISMISSED, {
+        [SurveyEventProperties.SURVEY_NAME]: survey.name,
+        [SurveyEventProperties.SURVEY_ID]: survey.id,
+        [SurveyEventProperties.SURVEY_ITERATION]: survey.current_iteration,
+        [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
         // check if the survey is partially completed
-        $survey_partially_completed:
+        [SurveyEventProperties.SURVEY_PARTIALLY_COMPLETED]:
             Object.values(inProgressSurvey?.responses || {}).filter((resp) => !isNullish(resp)).length > 0,
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
         ...inProgressSurvey?.responses,
-        $survey_submission_id: inProgressSurvey?.surveySubmissionId,
-        $survey_questions: survey.questions.map((question) => ({
+        [SurveyEventProperties.SURVEY_SUBMISSION_ID]: inProgressSurvey?.surveySubmissionId,
+        [SurveyEventProperties.SURVEY_QUESTIONS]: survey.questions.map((question) => ({
             id: question.id,
             question: question.question,
             response: getSurveyResponseValue(inProgressSurvey?.responses || {}, question.id),
         })),
-        $set: {
-            [getSurveyInteractionProperty(survey, 'dismissed')]: true,
-        },
     })
-
     // Clear in-progress state on dismissal
     clearInProgressSurveyState(survey)
     localStorage.setItem(getSurveySeenKey(survey), 'true')
@@ -529,15 +521,6 @@ export const getSurveySeenKey = (survey: Survey): string => {
     }
 
     return surveySeenKey
-}
-
-const getSurveyInteractionProperty = (survey: Survey, action: string): string => {
-    let surveyProperty = `$survey_${action}/${survey.id}`
-    if (survey.current_iteration && survey.current_iteration > 0) {
-        surveyProperty = `$survey_${action}/${survey.id}/${survey.current_iteration}`
-    }
-
-    return surveyProperty
 }
 
 const LAST_SEEN_SURVEY_DATE_KEY = 'lastSeenSurveyDate'

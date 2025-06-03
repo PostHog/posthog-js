@@ -398,6 +398,12 @@ export class PostHogFeatureFlags {
         const eligibleForFlagsV2 =
             this._instance.config.__preview_flags_v2 && this._instance.config.__preview_remote_config
 
+        const baseUrl = eligibleForFlagsV2 ? '/flags/?v=2' : '/decide/?v=4'
+        const queryParams = this._instance.config.advanced_only_evaluate_survey_feature_flags
+            ? '&only_evaluate_survey_feature_flags=true'
+            : ''
+        const url = this._instance.requestRouter.endpointFor('api', baseUrl + queryParams)
+
         if (eligibleForFlagsV2) {
             data.timezone = getTimezone()
         }
@@ -405,7 +411,7 @@ export class PostHogFeatureFlags {
         this._requestInFlight = true
         this._instance._send_request({
             method: 'POST',
-            url: this._instance.requestRouter.endpointFor('api', eligibleForFlagsV2 ? '/flags/?v=2' : '/decide/?v=4'),
+            url,
             data,
             compression: this._instance.config.disable_compression ? undefined : Compression.Base64,
             timeout: this._instance.config.feature_flag_request_timeout_ms,

@@ -1,3 +1,20 @@
+## 1.249.2 - 2025-06-03
+
+- fix: hide feedback tab if survey is not recurring (#1988)
+- chore: apply survey seen attributes on posthog capture (#1987)
+
+## 1.249.1 - 2025-06-02
+
+- Fix: Block Leikibot (#1984)
+
+## 1.249.0 - 2025-05-30
+
+- feat(flags): add `advanced_only_evaluate_survey_feature_flags` config to explicitly only evaluate survey flags on the frontend (#1986)
+
+## 1.248.1 - 2025-05-28
+
+- chore: sync with main repo (#1982)
+
 ## 1.248.0 - 2025-05-27
 
 - feat: Add "defaults" to config (#1978)
