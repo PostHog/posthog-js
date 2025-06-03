@@ -974,18 +974,18 @@ export interface ErrorTrackingOptions {
      * Normally only altered alongside posthog support guidance.
      * Accepts values between 0 and 100
      *
-     * @default 10
+     * @default 1
      */
-    __mutationRateLimiterRefillRate?: number
+    __exceptionRateLimiterRefillRate?: number
 
     /**
      * ADVANCED: alters the bucket size for the token bucket mutation throttling
      * Normally only altered alongside posthog support guidance.
      * Accepts values between 0 and 100
      *
-     * @default 100
+     * @default 10
      */
-    __mutationRateLimiterBucketSize?: number
+    __exceptionRateLimiterBucketSize?: number
 }
 
 export interface SessionRecordingOptions {

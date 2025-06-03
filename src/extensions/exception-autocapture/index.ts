@@ -25,8 +25,8 @@ export class ExceptionObserver {
         this._config = this._requiredConfig()
 
         this._rateLimiter = new ExceptionRateLimiter({
-            refillRate: this._instance.config.error_tracking.__mutationRateLimiterRefillRate,
-            bucketSize: this._instance.config.session_recording.__mutationRateLimiterBucketSize,
+            refillRate: this._instance.config.error_tracking.__exceptionRateLimiterRefillRate,
+            bucketSize: this._instance.config.error_tracking.__exceptionRateLimiterBucketSize,
         })
 
         this.startIfEnabled()

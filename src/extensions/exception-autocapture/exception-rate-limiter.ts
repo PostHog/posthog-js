@@ -2,8 +2,13 @@ import { clampToRange } from '../../utils/number-utils'
 import { ErrorProperties } from './error-conversion'
 
 export class ExceptionRateLimiter {
-    private _bucketSize = 100
-    private _refillRate = 10
+    // We refill the buckets every 10 seconds.
+    // The default bucket size of 10 and refill rate of 1 means we
+    // capture ten exceptions of a type before burst protection kicks in,
+    // after which we capture one exception of each type every 10 seconds
+
+    private _bucketSize = 10
+    private _refillRate = 1
     private _exceptionBuckets: Record<string, number> = {}
 
     constructor(
@@ -26,7 +31,7 @@ export class ExceptionRateLimiter {
         )
         setInterval(() => {
             this._refillBuckets()
-        }, 1000)
+        }, 10000)
     }
 
     private _refillBuckets = () => {
@@ -41,20 +46,15 @@ export class ExceptionRateLimiter {
 
     public isRateLimited = (properties: ErrorProperties) => {
         const exception = properties.$exception_list[0]
+        const exceptionType = exception?.type ?? 'Exception'
 
-        if (!exception) {
-            return false
-        }
+        const bucketSize = this._exceptionBuckets[exceptionType] ?? this._bucketSize
 
-        const exceptionType = exception.type || 'default'
-
-        this._exceptionBuckets[exceptionType] = this._exceptionBuckets[exceptionType] ?? this._bucketSize
-
-        if (this._exceptionBuckets[exceptionType] === 0) {
+        if (bucketSize === 0) {
             return true
         }
 
-        this._exceptionBuckets[exceptionType] = Math.max(this._exceptionBuckets[exceptionType] - 1, 0)
+        this._exceptionBuckets[exceptionType] = Math.max(bucketSize - 1, 0)
 
         return false
     }

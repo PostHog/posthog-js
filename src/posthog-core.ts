@@ -200,6 +200,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     person_profiles: 'identified_only',
     before_send: undefined,
     request_queue_config: { flush_interval_ms: DEFAULT_FLUSH_INTERVAL_MS },
+    error_tracking: {},
 
     // Used for internal testing
     _onCapture: __NOOP,
