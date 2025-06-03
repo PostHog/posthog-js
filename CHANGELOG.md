@@ -1,3 +1,8 @@
+## 1.249.2 - 2025-06-03
+
+- fix: hide feedback tab if survey is not recurring (#1988)
+- chore: apply survey seen attributes on posthog capture (#1987)
+
 ## 1.249.1 - 2025-06-02
 
 - Fix: Block Leikibot (#1984)
