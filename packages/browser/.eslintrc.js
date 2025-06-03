@@ -50,7 +50,7 @@ module.exports = {
     parserOptions: {
         ecmaVersion: 2018,
         sourceType: 'module',
-        project: null,
+        project: true,
     },
     plugins: [
         'prettier',
@@ -68,12 +68,32 @@ module.exports = {
         },
         'import/resolver': {
             node: {
-                paths: ['../../eslint-rules'], // Add the directory containing your custom rules
+                paths: ['eslint-rules'], // Add the directory containing your custom rules
                 extensions: ['.js', '.jsx', '.ts', '.tsx'], // Ensure ESLint resolves both JS and TS files
             },
         },
     },
     overrides: [
+        {
+            files: 'packages/browser/src/**/*',
+            rules: {
+                ...rules,
+                'no-restricted-globals': ['error', 'document', 'window'],
+            },
+        },
+        {
+            files: 'packages/browser/src/__tests__/**/*',
+            // the same set of config as in the root
+            // but excluding the 'plugin:compat/recommended' rule
+            // we don't mind using the latest features in our tests
+            extends: extend.filter((s) => s !== 'plugin:compat/recommended'),
+            rules: {
+                ...rules,
+                'no-console': 'off',
+                'no-restricted-globals': 'off',
+                'compat/compat': 'off',
+            },
+        },
         {
             files: ['**/*.js'],
             parserOptions: {
@@ -84,7 +104,11 @@ module.exports = {
             },
         },
         {
-            files: 'eslint-rules/**/*.js',
+            files: 'packages/browser/react/src/**/',
+            extends: [...extend, 'plugin:react/recommended', 'plugin:react-hooks/recommended'],
+        },
+        {
+            files: 'eslint-rules/**/*',
             extends: ['eslint:recommended', 'prettier'],
             rules: {
                 'prettier/prettier': 'error',
@@ -97,5 +121,52 @@ module.exports = {
                 node: true,
             },
         },
+        {
+            files: 'packages/browser/playground/cypress/**/*',
+            globals: {
+                cy: true,
+                Cypress: true,
+            },
+        },
+        {
+            files: 'packages/browser/testcafe/**/*',
+            globals: {
+                __dirname: true,
+            },
+        },
+        {
+            files: ['packages/browser/playwright/**/*.ts'],
+            rules: {
+                'posthog-js/no-direct-array-check': 'off',
+                'posthog-js/no-direct-undefined-check': 'off',
+                'posthog-js/no-direct-null-check': 'off',
+                '@typescript-eslint/naming-convention': 'off',
+            },
+            parserOptions: {
+                project: null,
+            },
+        },
+        {
+            files: ['packages/browser/react/**/*.ts'],
+            rules: {
+                'posthog-js/no-direct-null-check': 'off',
+            },
+        },
+        {
+            files: ['packages/browser/playground/**/*'],
+            rules: {
+                'no-console': 'off',
+                '@typescript-eslint/no-require-imports': 'off',
+                'no-undef': 'off',
+            },
+            env: {
+                node: true,
+            },
+            parserOptions: {
+                project: null,
+            },
+        },
     ],
+    root: true,
+    ignorePatterns: ['packages/browser/playground/error-tracking/**/*'],
 }

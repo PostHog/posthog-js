@@ -1,10 +1,16 @@
 {
     "packageManager": "pnpm@9.15.4",
+    "scripts": {
+        "build-rollup": "pnpm -r build-rollup"
+    },
     "pnpm": {
         "patchedDependencies": {
             "@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17": "patches/@rrweb__rrweb-plugin-console-record@2.0.0-alpha.17.patch",
             "@rrweb/record@2.0.0-alpha.17": "patches/@rrweb__record@2.0.0-alpha.17.patch"
         }
+    },
+    "scripts": {
+        "build-rollup": "pnpm -r build-rollup"
     },
     "devDependencies": {
         "eslint": "8.57.0",
