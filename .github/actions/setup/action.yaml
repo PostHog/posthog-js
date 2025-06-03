@@ -1,15 +1,12 @@
 name: "Setup Workspace Environment"
 description: "Sets up a Node.js environment and installs dependencies"
 
-inputs:
-  node_version:
-    description: "Node.js version to use"
-    required: false
-    default: "18"
-
 runs:
   using: "composite"
   steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
     - name: Install pnpm
       uses: pnpm/action-setup@v4
 
@@ -19,11 +16,10 @@ runs:
       run: echo "PNPM_STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
 
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v2
       with:
-        node-version: ${{ inputs.node_version }}
+        node-version: 18
         registry-url: https://registry.npmjs.org
-        cache: "pnpm"
 
     - uses: actions/cache@v4
       id: pnpm-cache
