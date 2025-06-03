@@ -9,9 +9,6 @@
             "@rrweb/record@2.0.0-alpha.17": "patches/@rrweb__record@2.0.0-alpha.17.patch"
         }
     },
-    "scripts": {
-        "build-rollup": "pnpm -r build-rollup"
-    },
     "devDependencies": {
         "eslint": "8.57.0",
         "eslint-config-prettier": "^8.5.0",
