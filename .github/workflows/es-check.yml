@@ -8,12 +8,9 @@ jobs:
     name: Build and check ES5/ES6 support
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
-
       - uses: ./.github/actions/setup
 
-      - run: pnpm build
-        working-directory: packages/browser
+      - run: pnpm --filter=posthog-js build
 
       - name: Run es-check to check if our ie11 bundle is ES5 compatible
         run: npx es-check@7.2.1 es5 packages/browser/dist/array.full.es5.js
