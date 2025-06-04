@@ -1,5 +1,8 @@
 {
     "packageManager": "pnpm@9.15.4",
+    "scripts": {
+        "build-rollup": "pnpm -r build-rollup"
+    },
     "pnpm": {
         "patchedDependencies": {
             "@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17": "patches/@rrweb__rrweb-plugin-console-record@2.0.0-alpha.17.patch",
