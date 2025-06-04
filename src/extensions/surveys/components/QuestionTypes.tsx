@@ -343,7 +343,7 @@ export function MultipleChoiceQuestion({
 
             // Focus the input when open choice is selected
             if (newOpenSelected) {
-                setTimeout(() => openChoiceInputRef.current?.focus(), 0)
+                setTimeout(() => openChoiceInputRef.current?.focus(), 150)
             }
             return
         }
@@ -483,30 +483,26 @@ export function MultipleChoiceQuestion({
                                     onChange={() => handleChoiceChange(choice, isOpenChoice)}
                                     aria-controls={openInputId}
                                 />
-                                {isOpenChoice ? (
-                                    <>
-                                        <span>{choice}:</span>
-                                        <input
-                                            type="text"
-                                            ref={openChoiceInputRef}
-                                            id={openInputId}
-                                            name={`question${displayQuestionIndex}Open`}
-                                            value={openEndedState.inputValue}
-                                            onKeyDown={handleOpenEndedKeyDown}
-                                            onInput={handleOpenEndedInputChange}
-                                            onClick={(e) => {
-                                                // Ensure the checkbox/radio gets checked when clicking the input
-                                                if (!openEndedState.isSelected) {
-                                                    handleChoiceChange(choice, true)
-                                                }
-                                                e.stopPropagation()
-                                            }}
-                                            aria-label={`${choice} - please specify`}
-                                            placeholder="Please specify..."
-                                        />
-                                    </>
-                                ) : (
-                                    choice
+                                <span>{isOpenChoice ? `${choice}:` : choice}</span>
+                                {isOpenChoice && (
+                                    <input
+                                        type="text"
+                                        ref={openChoiceInputRef}
+                                        id={openInputId}
+                                        name={`question${displayQuestionIndex}Open`}
+                                        value={openEndedState.inputValue}
+                                        onKeyDown={handleOpenEndedKeyDown}
+                                        onInput={handleOpenEndedInputChange}
+                                        onClick={(e) => {
+                                            // Ensure the checkbox/radio gets checked when clicking the input
+                                            if (!openEndedState.isSelected) {
+                                                handleChoiceChange(choice, true)
+                                            }
+                                            e.stopPropagation()
+                                        }}
+                                        aria-label={`${choice} - please specify`}
+                                        placeholder="Please specify..."
+                                    />
                                 )}
                             </label>
                         )
