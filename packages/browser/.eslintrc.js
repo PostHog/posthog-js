@@ -57,12 +57,6 @@ module.exports = {
                 '@typescript-eslint/no-require-imports': 'off',
                 'no-undef': 'off',
             },
-            env: {
-                node: true,
-            },
-            parserOptions: {
-                project: null,
-            },
         },
     ],
     ignorePatterns: ['./playground/error-tracking/**/*'],
