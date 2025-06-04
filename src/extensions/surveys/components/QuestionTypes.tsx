@@ -29,6 +29,55 @@ export interface CommonQuestionProps {
     initialValue?: string | string[] | number | null
 }
 
+// Enhanced TypeScript interfaces for better type safety
+interface OpenEndedInputState {
+    isSelected: boolean
+    inputValue: string
+}
+
+// Type guards for better type safety
+const isValidStringArray = (value: unknown): value is string[] => {
+    return isArray(value) && value.every((item) => isString(item))
+}
+
+const initializeSelectedChoices = (
+    initialValue: string | string[] | number | null | undefined,
+    questionType: SurveyQuestionType
+): string | string[] | null => {
+    if (isString(initialValue)) {
+        return initialValue
+    }
+    if (isValidStringArray(initialValue)) {
+        return initialValue
+    }
+    return questionType === SurveyQuestionType.SingleChoice ? null : []
+}
+
+const initializeOpenEndedState = (
+    initialValue: string | string[] | number | null | undefined,
+    choices: string[]
+): OpenEndedInputState => {
+    if (isString(initialValue) && !choices.includes(initialValue)) {
+        return {
+            isSelected: true,
+            inputValue: initialValue,
+        }
+    }
+    if (isValidStringArray(initialValue)) {
+        const openEndedValue = initialValue.find((choice) => !choices.includes(choice))
+        if (openEndedValue) {
+            return {
+                isSelected: true,
+                inputValue: openEndedValue,
+            }
+        }
+    }
+    return {
+        isSelected: false,
+        inputValue: '',
+    }
+}
+
 export function OpenTextQuestion({
     question,
     forceDisableHtml,
@@ -254,32 +303,6 @@ export function RatingButton({
     )
 }
 
-function isSubmitDisabled(
-    selectedChoices: string | string[] | null,
-    openChoiceSelected: boolean,
-    openEndedInput: string,
-    optional: boolean
-): boolean {
-    if (optional) {
-        return false
-    }
-
-    if (isNull(selectedChoices)) {
-        return true
-    }
-
-    if (isArray(selectedChoices)) {
-        if (!openChoiceSelected && selectedChoices.length === 0) {
-            return true
-        }
-        if (openChoiceSelected && !openEndedInput && selectedChoices.length === 0) {
-            return true
-        }
-    }
-
-    return false
-}
-
 export function MultipleChoiceQuestion({
     question,
     forceDisableHtml,
@@ -294,34 +317,16 @@ export function MultipleChoiceQuestion({
 }) {
     const openChoiceInputRef = useRef<HTMLInputElement>(null)
     const choices = useMemo(() => getDisplayOrderChoices(question), [question])
-    const [selectedChoices, setSelectedChoices] = useState<string | string[] | null>(() => {
-        if (isString(initialValue)) {
-            return initialValue
-        }
-        if (isArray(initialValue)) {
-            return initialValue
-        }
-        return question.type === SurveyQuestionType.SingleChoice ? null : []
-    })
-    const [openChoiceSelected, setOpenChoiceSelected] = useState(() => {
-        if (isString(initialValue)) {
-            return !choices.includes(initialValue)
-        }
-        if (isArray(initialValue)) {
-            // check if initialValue IS NOT in choices
-            return !choices.some((choice) => initialValue.includes(choice))
-        }
-        return false
-    })
-    const [openEndedInput, setOpenEndedInput] = useState(() => {
-        if (isString(initialValue) && !choices.includes(initialValue)) {
-            return initialValue
-        }
-        if (isArray(initialValue)) {
-            return initialValue.find((choice) => !choices.includes(choice)) || ''
-        }
-        return ''
-    })
+
+    // Enhanced state management with better initialization
+    const [selectedChoices, setSelectedChoices] = useState<string | string[] | null>(() =>
+        initializeSelectedChoices(initialValue, question.type)
+    )
+
+    const [openEndedState, setOpenEndedState] = useState<OpenEndedInputState>(() =>
+        initializeOpenEndedState(initialValue, choices)
+    )
+
     const { isPreviewMode } = useSurveyContext()
 
     const inputType = question.type === SurveyQuestionType.SingleChoice ? 'radio' : 'checkbox'
@@ -330,10 +335,15 @@ export function MultipleChoiceQuestion({
 
     const handleChoiceChange = (val: string, isOpenChoice: boolean) => {
         if (isOpenChoice) {
-            setOpenChoiceSelected(!openChoiceSelected)
+            const newOpenSelected = !openEndedState.isSelected
+            setOpenEndedState((prev) => ({
+                ...prev,
+                isSelected: newOpenSelected,
+                inputValue: newOpenSelected ? prev.inputValue : '',
+            }))
+
             // Focus the input when open choice is selected
-            if (!openChoiceSelected) {
-                // Use a small delay to ensure the focus happens after the state update
+            if (newOpenSelected) {
                 setTimeout(() => openChoiceInputRef.current?.focus(), 0)
             }
             return
@@ -341,7 +351,13 @@ export function MultipleChoiceQuestion({
 
         if (question.type === SurveyQuestionType.SingleChoice) {
             setSelectedChoices(val)
-            setOpenChoiceSelected(false) // Deselect open choice when selecting another option
+            // Deselect open choice when selecting another option
+            setOpenEndedState((prev) => ({
+                ...prev,
+                isSelected: false,
+                inputValue: '',
+            }))
+
             if (shouldSkipSubmit) {
                 onSubmit(val)
                 if (isPreviewMode) {
@@ -362,9 +378,50 @@ export function MultipleChoiceQuestion({
 
     const handleOpenEndedInputChange = (e: React.FormEvent<HTMLInputElement>) => {
         e.stopPropagation()
-        setOpenEndedInput(e.currentTarget.value)
+        const newValue = e.currentTarget.value
+
+        setOpenEndedState((prev) => ({
+            ...prev,
+            inputValue: newValue,
+        }))
+
         if (question.type === SurveyQuestionType.SingleChoice) {
-            setSelectedChoices(e.currentTarget.value)
+            setSelectedChoices(newValue)
+        }
+    }
+
+    // Enhanced submit disabled logic with better type safety
+    const isSubmitDisabled = (): boolean => {
+        if (question.optional) {
+            return false
+        }
+
+        if (isNull(selectedChoices)) {
+            return true
+        }
+
+        if (isArray(selectedChoices)) {
+            if (!openEndedState.isSelected && selectedChoices.length === 0) {
+                return true
+            }
+            if (openEndedState.isSelected && !openEndedState.inputValue && selectedChoices.length === 0) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    // Enhanced submit handler with better logic
+    const handleSubmit = (isPreview: boolean = false) => {
+        if (openEndedState.isSelected && question.type === SurveyQuestionType.MultipleChoice) {
+            if (isArray(selectedChoices)) {
+                isPreview
+                    ? onPreviewSubmit([...selectedChoices, openEndedState.inputValue])
+                    : onSubmit([...selectedChoices, openEndedState.inputValue])
+            }
+        } else {
+            isPreview ? onPreviewSubmit(selectedChoices) : onSubmit(selectedChoices)
         }
     }
 
@@ -383,7 +440,7 @@ export function MultipleChoiceQuestion({
                         const choiceClass = `choice-option${isOpenChoice ? ' choice-option-open' : ''}`
 
                         const isChecked = isOpenChoice
-                            ? openChoiceSelected
+                            ? openEndedState.isSelected
                             : question.type === SurveyQuestionType.SingleChoice
                               ? selectedChoices === choice
                               : isArray(selectedChoices) && selectedChoices.includes(choice)
@@ -406,14 +463,14 @@ export function MultipleChoiceQuestion({
                                                 ref={openChoiceInputRef}
                                                 id={`surveyQuestion${displayQuestionIndex}Choice${idx}Open`}
                                                 name={`question${displayQuestionIndex}`}
-                                                value={openEndedInput}
+                                                value={openEndedState.inputValue}
                                                 onKeyDown={(e) => {
                                                     e.stopPropagation()
                                                 }}
-                                                onInput={(e) => handleOpenEndedInputChange(e)}
+                                                onInput={handleOpenEndedInputChange}
                                                 onClick={(e) => {
                                                     // Ensure the checkbox/radio gets checked when clicking the input
-                                                    if (!openChoiceSelected) {
+                                                    if (!openEndedState.isSelected) {
                                                         handleChoiceChange(choice, true)
                                                     }
                                                     e.stopPropagation()
@@ -432,31 +489,10 @@ export function MultipleChoiceQuestion({
             </div>
             <BottomSection
                 text={question.buttonText || 'Submit'}
-                submitDisabled={isSubmitDisabled(
-                    selectedChoices,
-                    openChoiceSelected,
-                    openEndedInput,
-                    !!question.optional
-                )}
+                submitDisabled={isSubmitDisabled()}
                 appearance={appearance}
-                onSubmit={() => {
-                    if (openChoiceSelected && question.type === SurveyQuestionType.MultipleChoice) {
-                        if (isArray(selectedChoices)) {
-                            onSubmit([...selectedChoices, openEndedInput])
-                        }
-                    } else {
-                        onSubmit(selectedChoices)
-                    }
-                }}
-                onPreviewSubmit={() => {
-                    if (openChoiceSelected && question.type === SurveyQuestionType.MultipleChoice) {
-                        if (isArray(selectedChoices)) {
-                            onPreviewSubmit([...selectedChoices, openEndedInput])
-                        }
-                    } else {
-                        onPreviewSubmit(selectedChoices)
-                    }
-                }}
+                onSubmit={() => handleSubmit(false)}
+                onPreviewSubmit={() => handleSubmit(true)}
                 skipSubmitButton={shouldSkipSubmit}
             />
         </Fragment>
