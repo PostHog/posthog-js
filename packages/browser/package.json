@@ -41,7 +41,6 @@
     "module": "dist/module.js",
     "types": "dist/module.d.ts",
     "files": [
-        "lib/*",
         "dist/*",
         "react/dist/*",
         "react/package.json"
