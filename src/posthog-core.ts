@@ -268,6 +268,7 @@ class DeprecatedWebPerformanceObserver {
 export class PostHog {
     __loaded: boolean
     config: PostHogConfig
+    _originalUserConfig?: Partial<PostHogConfig>
 
     rateLimiter: RateLimiter
     scrollManager: ScrollManager
@@ -431,6 +432,7 @@ export class PostHog {
 
         this.__loaded = true
         this.config = {} as PostHogConfig // will be set right below
+        this._originalUserConfig = config // Store original user config for migration
         this._triggered_notifs = []
 
         if (config.person_profiles) {
@@ -2255,7 +2257,28 @@ export class PostHog {
      * Handles migration from old `advanced_disable_decide` to new `advanced_disable_flags`
      */
     _shouldDisableFlags(): boolean {
-        return migrateConfigField(this.config, 'advanced_disable_flags', 'advanced_disable_decide', false, logger)
+        // Check if advanced_disable_flags was explicitly set in original config
+        const originalConfig = this._originalUserConfig || {}
+        if ('advanced_disable_flags' in originalConfig) {
+            return !!originalConfig.advanced_disable_flags
+        }
+
+        // Check if advanced_disable_flags was set post-init (different from default false)
+        if (this.config.advanced_disable_flags !== false) {
+            return !!this.config.advanced_disable_flags
+        }
+
+        // Check for post-init changes to advanced_disable_decide
+        if (this.config.advanced_disable_decide === true) {
+            logger.warn(
+                "Config field 'advanced_disable_decide' is deprecated. Please use 'advanced_disable_flags' instead. " +
+                    'The old field will be removed in a future major version.'
+            )
+            return true
+        }
+
+        // Fall back to migration logic for original user config
+        return migrateConfigField(originalConfig, 'advanced_disable_flags', 'advanced_disable_decide', false, logger)
     }
 
     private _runBeforeSend(data: CaptureResult): CaptureResult | null {

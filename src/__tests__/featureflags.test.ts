@@ -40,6 +40,8 @@ describe('featureflags', () => {
             ),
             _onRemoteConfig: jest.fn(),
             reloadFeatureFlags: () => featureFlags.reloadFeatureFlags(),
+            _shouldDisableFlags: () =>
+                instance.config.advanced_disable_flags || instance.config.advanced_disable_decide || false,
         }
 
         featureFlags = new PostHogFeatureFlags(instance)
