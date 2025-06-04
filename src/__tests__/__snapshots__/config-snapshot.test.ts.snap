@@ -323,6 +323,16 @@ exports[`config snapshot for PostHogConfig 1`] = `
       \\"number\\"
     ]
   },
+  \\"error_tracking\\": {
+    \\"__exceptionRateLimiterRefillRate\\": [
+      \\"undefined\\",
+      \\"number\\"
+    ],
+    \\"__exceptionRateLimiterBucketSize\\": [
+      \\"undefined\\",
+      \\"number\\"
+    ]
+  },
   \\"session_idle_timeout_seconds\\": \\"number\\",
   \\"mask_all_element_attributes\\": [
     \\"false\\",
