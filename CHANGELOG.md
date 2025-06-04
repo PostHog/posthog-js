@@ -1,3 +1,8 @@
+## 1.249.3 - 2025-06-04
+
+- fix: set survey properties before sending the event (#1997)
+- chore: more playground scenarios (#1985)
+
 ## 1.249.2 - 2025-06-03
 
 - fix: hide feedback tab if survey is not recurring (#1988)
