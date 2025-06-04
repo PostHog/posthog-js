@@ -1135,7 +1135,7 @@ export interface SessionRecordingOptions {
      *
      * @default 10
      */
-    __mutationRateLimiterRefillRate?: number
+    __mutationThrottlerRefillRate?: number
 
     /**
      * ADVANCED: alters the bucket size for the token bucket mutation throttling
@@ -1144,7 +1144,7 @@ export interface SessionRecordingOptions {
      *
      * @default 100
      */
-    __mutationRateLimiterBucketSize?: number
+    __mutationThrottlerBucketSize?: number
 }
 
 export type SessionIdChangedCallback = (

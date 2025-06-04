@@ -314,11 +314,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
       \\"undefined\\",
       \\"number\\"
     ],
-    \\"__mutationRateLimiterRefillRate\\": [
+    \\"__mutationThrottlerRefillRate\\": [
       \\"undefined\\",
       \\"number\\"
     ],
-    \\"__mutationRateLimiterBucketSize\\": [
+    \\"__mutationThrottlerBucketSize\\": [
       \\"undefined\\",
       \\"number\\"
     ]
