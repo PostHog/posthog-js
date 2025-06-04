@@ -9,14 +9,7 @@ import {
     SurveyQuestionType,
 } from '../../../posthog-surveys-types'
 import { isArray, isNull, isNumber, isString } from '../../../utils/type-utils'
-import {
-    checkSVG,
-    dissatisfiedEmoji,
-    neutralEmoji,
-    satisfiedEmoji,
-    veryDissatisfiedEmoji,
-    verySatisfiedEmoji,
-} from '../icons'
+import { dissatisfiedEmoji, neutralEmoji, satisfiedEmoji, veryDissatisfiedEmoji, verySatisfiedEmoji } from '../icons'
 import { getDisplayOrderChoices, useSurveyContext } from '../surveys-extension-utils'
 import { BottomSection } from './BottomSection'
 import { QuestionHeader } from './QuestionHeader'
@@ -390,7 +383,30 @@ export function MultipleChoiceQuestion({
         }
     }
 
-    // Enhanced submit disabled logic with better type safety
+    const handleOpenEndedKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        e.stopPropagation()
+
+        // Handle Enter key to submit form if valid
+        if (e.key === 'Enter' && !isSubmitDisabled()) {
+            e.preventDefault()
+            handleSubmit(false)
+        }
+
+        // Handle Escape key to clear input and deselect
+        if (e.key === 'Escape') {
+            e.preventDefault()
+            setOpenEndedState((prev) => ({
+                ...prev,
+                isSelected: false,
+                inputValue: '',
+            }))
+            if (question.type === SurveyQuestionType.SingleChoice) {
+                setSelectedChoices(null)
+            }
+        }
+    }
+
+    // Enhanced submit disabled logic with better type safety and validation awareness
     const isSubmitDisabled = (): boolean => {
         if (question.optional) {
             return false
@@ -404,9 +420,10 @@ export function MultipleChoiceQuestion({
             if (!openEndedState.isSelected && selectedChoices.length === 0) {
                 return true
             }
-            if (openEndedState.isSelected && !openEndedState.inputValue && selectedChoices.length === 0) {
-                return true
-            }
+        }
+
+        if (openEndedState.isSelected && openEndedState.inputValue.trim() === '') {
+            return true
         }
 
         return false
@@ -434,10 +451,17 @@ export function MultipleChoiceQuestion({
                     descriptionContentType={question.descriptionContentType}
                     forceDisableHtml={forceDisableHtml}
                 />
-                <div className="multiple-choice-options limit-height">
+                <fieldset className="multiple-choice-options limit-height">
+                    <legend className="sr-only">
+                        {question.type === SurveyQuestionType.MultipleChoice ? ' Select all that apply' : ' Select one'}
+                    </legend>
                     {choices.map((choice: string, idx: number) => {
                         const isOpenChoice = !!question.hasOpenChoice && idx === question.choices.length - 1
-                        const choiceClass = `choice-option${isOpenChoice ? ' choice-option-open' : ''}`
+                        const choiceClass = isOpenChoice ? ' choice-option-open' : ''
+                        const openInputId = isOpenChoice
+                            ? `surveyQuestion${displayQuestionIndex}Choice${idx}Open`
+                            : undefined
+                        const inputName = `surveyQuestion${displayQuestionIndex}Choice${idx}`
 
                         const isChecked = isOpenChoice
                             ? openEndedState.isSelected
@@ -446,46 +470,43 @@ export function MultipleChoiceQuestion({
                               : isArray(selectedChoices) && selectedChoices.includes(choice)
 
                         return (
-                            <div className={choiceClass} key={idx}>
+                            <label className={choiceClass} key={idx}>
                                 <input
                                     type={inputType}
-                                    id={`surveyQuestion${displayQuestionIndex}Choice${idx}`}
-                                    name={`question${displayQuestionIndex}`}
+                                    name={inputName}
                                     checked={isChecked}
-                                    onClick={() => handleChoiceChange(choice, isOpenChoice)}
+                                    onChange={() => handleChoiceChange(choice, isOpenChoice)}
+                                    aria-controls={openInputId}
                                 />
-                                <label htmlFor={`surveyQuestion${displayQuestionIndex}Choice${idx}`}>
-                                    {isOpenChoice ? (
-                                        <>
-                                            <span>{choice}:</span>
-                                            <input
-                                                type="text"
-                                                ref={openChoiceInputRef}
-                                                id={`surveyQuestion${displayQuestionIndex}Choice${idx}Open`}
-                                                name={`question${displayQuestionIndex}`}
-                                                value={openEndedState.inputValue}
-                                                onKeyDown={(e) => {
-                                                    e.stopPropagation()
-                                                }}
-                                                onInput={handleOpenEndedInputChange}
-                                                onClick={(e) => {
-                                                    // Ensure the checkbox/radio gets checked when clicking the input
-                                                    if (!openEndedState.isSelected) {
-                                                        handleChoiceChange(choice, true)
-                                                    }
-                                                    e.stopPropagation()
-                                                }}
-                                            />
-                                        </>
-                                    ) : (
-                                        choice
-                                    )}
-                                </label>
-                                <span className="choice-check">{checkSVG}</span>
-                            </div>
+                                {isOpenChoice ? (
+                                    <>
+                                        <span>{choice}:</span>
+                                        <input
+                                            type="text"
+                                            ref={openChoiceInputRef}
+                                            id={openInputId}
+                                            name={`question${displayQuestionIndex}Open`}
+                                            value={openEndedState.inputValue}
+                                            onKeyDown={handleOpenEndedKeyDown}
+                                            onInput={handleOpenEndedInputChange}
+                                            onClick={(e) => {
+                                                // Ensure the checkbox/radio gets checked when clicking the input
+                                                if (!openEndedState.isSelected) {
+                                                    handleChoiceChange(choice, true)
+                                                }
+                                                e.stopPropagation()
+                                            }}
+                                            aria-label={`${choice} - please specify`}
+                                            placeholder="Please specify..."
+                                        />
+                                    </>
+                                ) : (
+                                    choice
+                                )}
+                            </label>
                         )
                     })}
-                </div>
+                </fieldset>
             </div>
             <BottomSection
                 text={question.buttonText || 'Submit'}
