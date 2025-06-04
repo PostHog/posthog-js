@@ -171,12 +171,11 @@
         background: var(--ph-survey-input-background);
         min-width: 100%;
         font-family: inherit;
-        outline-color: var(--ph-survey-border-color);
         border: none;
 
         &:focus-visible,
         &:focus {
-            outline-style: solid;
+            outline: 1.5px solid var(--ph-survey-text-subtle-color);
             outline-offset: 2px;
             @media (max-width: 768px) {
                 font-size: 1rem;
@@ -243,9 +242,7 @@
 
         &:hover {
             &:not(:has(input:checked)) {
-                & label {
-                    border-color: var(--ph-survey-text-subtle-color);
-                }
+                border-color: var(--ph-survey-text-subtle-color);
             }
         }
     }
@@ -269,7 +266,7 @@
 
         /* Focus indicator for accessibility */
         &:focus {
-            outline: 2px solid var(--ph-survey-submit-button-color);
+            outline: 1.5px solid var(--ph-survey-text-subtle-color);
             outline-offset: 2px;
         }
 
@@ -443,32 +440,23 @@
 /* --- Buttons --- */
 /* Submit Button */
 .form-submit {
-    box-sizing: border-box;
-    margin: 0;
     font-family: inherit;
-    overflow: visible;
-    text-transform: none;
-    position: relative;
-    display: inline-block;
     font-weight: 700;
-    white-space: nowrap;
     text-align: center;
-    border: 1.5px solid transparent;
+    border: none;
     cursor: pointer;
     user-select: none;
-    touch-action: manipulation;
     padding: 12px;
     font-size: 14px;
     border-radius: 6px;
-    outline: 0;
     background: var(--ph-survey-submit-button-color);
     color: var(--ph-survey-submit-button-text-color);
-    text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.12);
     box-shadow: 0 2px 0 rgba(0, 0, 0, 0.045);
-    width: 100%;
+    min-width: 100%;
     transition:
         transform 0.15s ease,
-        box-shadow 0.15s ease;
+        box-shadow 0.15s ease,
+        opacity 0.15s ease;
 
     &:not([disabled]) {
         &:hover {
@@ -484,8 +472,17 @@
 
     &[disabled] {
         opacity: var(--ph-survey-disabled-button-opacity);
-        filter: grayscale(50%);
         cursor: not-allowed;
+    }
+
+    &:focus-visible,
+    &:focus {
+        outline: 1.5px solid var(--ph-survey-text-subtle-color);
+        outline-offset: 2px;
+    }
+
+    &:focus:not(:focus-visible) {
+        outline: none;
     }
 }
 

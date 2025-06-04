@@ -322,9 +322,11 @@ export function MultipleChoiceQuestion({
 
     const { isPreviewMode } = useSurveyContext()
 
-    const inputType = question.type === SurveyQuestionType.SingleChoice ? 'radio' : 'checkbox'
-    const shouldSkipSubmit =
-        question.skipSubmitButton && question.type === SurveyQuestionType.SingleChoice && !question.hasOpenChoice
+    const isSingleChoiceQuestion = question.type === SurveyQuestionType.SingleChoice
+    const isMultipleChoiceQuestion = question.type === SurveyQuestionType.MultipleChoice
+
+    const inputType = isSingleChoiceQuestion ? 'radio' : 'checkbox'
+    const shouldSkipSubmit = question.skipSubmitButton && isSingleChoiceQuestion && !question.hasOpenChoice
 
     const handleChoiceChange = (val: string, isOpenChoice: boolean) => {
         if (isOpenChoice) {
@@ -335,6 +337,10 @@ export function MultipleChoiceQuestion({
                 inputValue: newOpenSelected ? prev.inputValue : '',
             }))
 
+            if (isSingleChoiceQuestion) {
+                setSelectedChoices('')
+            }
+
             // Focus the input when open choice is selected
             if (newOpenSelected) {
                 setTimeout(() => openChoiceInputRef.current?.focus(), 0)
@@ -342,7 +348,7 @@ export function MultipleChoiceQuestion({
             return
         }
 
-        if (question.type === SurveyQuestionType.SingleChoice) {
+        if (isSingleChoiceQuestion) {
             setSelectedChoices(val)
             // Deselect open choice when selecting another option
             setOpenEndedState((prev) => ({
@@ -360,7 +366,7 @@ export function MultipleChoiceQuestion({
             return
         }
 
-        if (question.type === SurveyQuestionType.MultipleChoice && isArray(selectedChoices)) {
+        if (isMultipleChoiceQuestion && isArray(selectedChoices)) {
             if (selectedChoices.includes(val)) {
                 setSelectedChoices(selectedChoices.filter((choice) => choice !== val))
             } else {
@@ -378,7 +384,7 @@ export function MultipleChoiceQuestion({
             inputValue: newValue,
         }))
 
-        if (question.type === SurveyQuestionType.SingleChoice) {
+        if (isSingleChoiceQuestion) {
             setSelectedChoices(newValue)
         }
     }
@@ -389,7 +395,7 @@ export function MultipleChoiceQuestion({
         // Handle Enter key to submit form if valid
         if (e.key === 'Enter' && !isSubmitDisabled()) {
             e.preventDefault()
-            handleSubmit(false)
+            handleSubmit()
         }
 
         // Handle Escape key to clear input and deselect
@@ -400,7 +406,7 @@ export function MultipleChoiceQuestion({
                 isSelected: false,
                 inputValue: '',
             }))
-            if (question.type === SurveyQuestionType.SingleChoice) {
+            if (isSingleChoiceQuestion) {
                 setSelectedChoices(null)
             }
         }
@@ -429,16 +435,15 @@ export function MultipleChoiceQuestion({
         return false
     }
 
-    // Enhanced submit handler with better logic
-    const handleSubmit = (isPreview: boolean = false) => {
-        if (openEndedState.isSelected && question.type === SurveyQuestionType.MultipleChoice) {
+    const handleSubmit = () => {
+        if (openEndedState.isSelected && isMultipleChoiceQuestion) {
             if (isArray(selectedChoices)) {
-                isPreview
+                isPreviewMode
                     ? onPreviewSubmit([...selectedChoices, openEndedState.inputValue])
                     : onSubmit([...selectedChoices, openEndedState.inputValue])
             }
         } else {
-            isPreview ? onPreviewSubmit(selectedChoices) : onSubmit(selectedChoices)
+            isPreviewMode ? onPreviewSubmit(selectedChoices) : onSubmit(selectedChoices)
         }
     }
 
@@ -453,7 +458,7 @@ export function MultipleChoiceQuestion({
                 />
                 <fieldset className="multiple-choice-options limit-height">
                     <legend className="sr-only">
-                        {question.type === SurveyQuestionType.MultipleChoice ? ' Select all that apply' : ' Select one'}
+                        {isMultipleChoiceQuestion ? ' Select all that apply' : ' Select one'}
                     </legend>
                     {choices.map((choice: string, idx: number) => {
                         const isOpenChoice = !!question.hasOpenChoice && idx === question.choices.length - 1
@@ -465,7 +470,7 @@ export function MultipleChoiceQuestion({
 
                         const isChecked = isOpenChoice
                             ? openEndedState.isSelected
-                            : question.type === SurveyQuestionType.SingleChoice
+                            : isSingleChoiceQuestion
                               ? selectedChoices === choice
                               : isArray(selectedChoices) && selectedChoices.includes(choice)
 
@@ -512,8 +517,8 @@ export function MultipleChoiceQuestion({
                 text={question.buttonText || 'Submit'}
                 submitDisabled={isSubmitDisabled()}
                 appearance={appearance}
-                onSubmit={() => handleSubmit(false)}
-                onPreviewSubmit={() => handleSubmit(true)}
+                onSubmit={handleSubmit}
+                onPreviewSubmit={handleSubmit}
                 skipSubmitButton={shouldSkipSubmit}
             />
         </Fragment>
