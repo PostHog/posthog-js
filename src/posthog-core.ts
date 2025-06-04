@@ -65,6 +65,7 @@ import {
     eachArray,
     extend,
     isCrossDomainCookie,
+    migrateConfigField,
     safewrapClass,
 } from './utils'
 import { isLikelyBot } from './utils/blocked-uas'
@@ -180,6 +181,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     mask_all_text: false,
     mask_personal_data_properties: false,
     custom_personal_data_properties: [],
+    advanced_disable_flags: false,
     advanced_disable_decide: false,
     advanced_disable_feature_flags: false,
     advanced_disable_feature_flags_on_first_load: false,
@@ -313,7 +315,8 @@ export class PostHog {
     private _internalEventEmitter = new SimpleEventEmitter()
 
     // Legacy property to support existing usage - this isn't technically correct but it's what it has always been - a proxy for flags being loaded
-    public get decideEndpointWasHit(): boolean {
+    // TODO DYLAN: do I need to keep this, or can I rename it?
+    public get flagsEndpointWasHit(): boolean {
         return this.featureFlags?.hasLoadedFlags ?? false
     }
 
@@ -656,7 +659,7 @@ export class PostHog {
         }
 
         new RemoteConfigLoader(this).load()
-        this.featureFlags.decide()
+        this.featureFlags.flags()
     }
 
     _start_queue_if_opted_in(): void {
@@ -2245,6 +2248,14 @@ export class PostHog {
             localStorage && localStorage.setItem('ph_debug', 'true')
             this.set_config({ debug: true })
         }
+    }
+
+    /**
+     * Helper method to check if external API calls (flags/decide) should be disabled
+     * Handles migration from old `advanced_disable_decide` to new `advanced_disable_flags`
+     */
+    _shouldDisableFlags(): boolean {
+        return migrateConfigField(this.config, 'advanced_disable_flags', 'advanced_disable_decide', false, logger)
     }
 
     private _runBeforeSend(data: CaptureResult): CaptureResult | null {

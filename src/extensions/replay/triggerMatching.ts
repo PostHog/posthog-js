@@ -20,7 +20,7 @@ export const TRIGGER_PENDING = TRIGGER + '_pending'
 export const TRIGGER_DISABLED = TRIGGER + '_' + DISABLED
 
 export interface RecordingTriggersStatus {
-    get receivedDecide(): boolean
+    get receivedFlags(): boolean
     get isRecordingEnabled(): false | true | undefined
     get isSampled(): false | true | null
     get urlTriggerMatching(): URLTriggerMatching
@@ -41,7 +41,7 @@ const triggerStatuses = [TRIGGER_ACTIVATED, TRIGGER_PENDING, TRIGGER_DISABLED] a
 export type TriggerStatus = (typeof triggerStatuses)[number]
 
 /**
- * Session recording starts in buffering mode while waiting for "decide response".
+ * Session recording starts in buffering mode while waiting for "flags response".
  * Once the response is received, it might be disabled, active or sampled.
  * When "sampled" that means a sample rate is set, and the last time the session ID rotated
  * the sample rate determined this session should be sent to the server.
@@ -287,7 +287,7 @@ export function nullMatchSessionRecordingStatus(triggersStatus: RecordingTrigger
 }
 
 export function anyMatchSessionRecordingStatus(triggersStatus: RecordingTriggersStatus): SessionRecordingStatus {
-    if (!triggersStatus.receivedDecide) {
+    if (!triggersStatus.receivedFlags) {
         return BUFFERING
     }
 
@@ -330,7 +330,7 @@ export function anyMatchSessionRecordingStatus(triggersStatus: RecordingTriggers
 }
 
 export function allMatchSessionRecordingStatus(triggersStatus: RecordingTriggersStatus): SessionRecordingStatus {
-    if (!triggersStatus.receivedDecide) {
+    if (!triggersStatus.receivedFlags) {
         return BUFFERING
     }
 

@@ -1,7 +1,7 @@
 import { entries, extend } from './utils'
 import { PostHog } from './posthog-core'
 import {
-    DecideResponse,
+    FlagsResponse,
     FeatureFlagsCallback,
     EarlyAccessFeatureCallback,
     EarlyAccessFeatureResponse,
@@ -46,14 +46,14 @@ export const filterActiveFeatureFlags = (featureFlags?: Record<string, string | 
     return activeFeatureFlags
 }
 
-export const parseFeatureFlagDecideResponse = (
-    response: Partial<DecideResponse>,
+export const parseFlagsResponse = (
+    response: Partial<FlagsResponse>,
     persistence: PostHogPersistence,
     currentFlags: Record<string, string | boolean> = {},
     currentFlagPayloads: Record<string, JsonType> = {},
     currentFlagDetails: Record<string, FeatureFlagDetail> = {}
 ) => {
-    const normalizedResponse = normalizeDecideResponse(response)
+    const normalizedResponse = normalizeFlagsResponse(response)
     const flagDetails = normalizedResponse.flags
     const featureFlags = normalizedResponse.featureFlags
     const flagPayloads = normalizedResponse.featureFlagPayloads
@@ -102,7 +102,7 @@ export const parseFeatureFlagDecideResponse = (
         })
 }
 
-const normalizeDecideResponse = (response: Partial<DecideResponse>): Partial<DecideResponse> => {
+const normalizeFlagsResponse = (response: Partial<FlagsResponse>): Partial<FlagsResponse> => {
     const flagDetails = response['flags']
 
     if (flagDetails) {
@@ -161,17 +161,17 @@ export class PostHogFeatureFlags {
     private _reloadingDisabled: boolean = false
     private _additionalReloadRequested: boolean = false
     private _reloadDebouncer?: any
-    private _decideCalled: boolean = false
+    private _flagsCalled: boolean = false
     private _flagsLoadedFromRemote: boolean = false
 
     constructor(private _instance: PostHog) {
         this.featureFlagEventHandlers = []
     }
 
-    decide(): void {
+    flags(): void {
         if (this._instance.config.__preview_remote_config) {
-            // If remote config is enabled we don't call decide and we mark it as called so that we don't simulate it
-            this._decideCalled = true
+            // If remote config is enabled we don't call /flags and we mark it as called so that we don't simulate it
+            this._flagsCalled = true
             return
         }
 
@@ -181,7 +181,7 @@ export class PostHogFeatureFlags {
             (this._instance.config.advanced_disable_feature_flags ||
                 this._instance.config.advanced_disable_feature_flags_on_first_load)
 
-        this._callDecideEndpoint({
+        this._callFlagsEndpoint({
             disableFlags,
         })
     }
@@ -333,7 +333,7 @@ export class PostHogFeatureFlags {
 
         // Debounce multiple calls on the same tick
         this._reloadDebouncer = setTimeout(() => {
-            this._callDecideEndpoint()
+            this._callFlagsEndpoint()
         }, 5)
     }
 
@@ -363,11 +363,11 @@ export class PostHogFeatureFlags {
      * NOTE: This is used both for flags and remote config. Once the RemoteConfig is fully released this will essentially only
      * be for flags and can eventually be replaced with the new flags endpoint
      */
-    _callDecideEndpoint(options?: { disableFlags?: boolean }): void {
-        // Ensure we don't have double queued decide requests
+    _callFlagsEndpoint(options?: { disableFlags?: boolean }): void {
+        // Ensure we don't have double queued /flags requests
         this._clearDebouncer()
-        if (this._instance.config.advanced_disable_decide) {
-            // The way this is documented is essentially used to refuse to ever call the decide endpoint.
+        if (this._instance._shouldDisableFlags()) {
+            // The way this is documented is essentially used to refuse to ever call the /flags endpoint.
             return
         }
         if (this._requestInFlight) {
@@ -391,20 +391,18 @@ export class PostHogFeatureFlags {
             data.disable_flags = true
         }
 
-        // NB: flags v2 requires remote config to be enabled as well, since the idea is that we will skip calling /decide altogether
-        // (which remote config does) and just use the /flags endpoint.  May revisit this if we need to support flags v2 without remote config
-        // (e.g. we could call `/decide` with flags disabled for the data otherwise returned by remote config, and then still call
-        // `/flags/` to get the flag evaluation data).
-        const eligibleForFlagsV2 =
+        // Flags v2 requires remote config to be enabled to skip /flags&config=true and use /flags directly
+        const useRemoteConfigWithFlags =
             this._instance.config.__preview_flags_v2 && this._instance.config.__preview_remote_config
 
-        const baseUrl = eligibleForFlagsV2 ? '/flags/?v=2' : '/decide/?v=4'
+        // if we're not using RemoteConfig (which loads the config info from the JS snippet itself), then get all the data from remote config on the server side
+        const baseUrl = useRemoteConfigWithFlags ? '/flags/?v=2' : '/flags/?v=2&config=true'
         const queryParams = this._instance.config.advanced_only_evaluate_survey_feature_flags
             ? '&only_evaluate_survey_feature_flags=true'
             : ''
         const url = this._instance.requestRouter.endpointFor('api', baseUrl + queryParams)
 
-        if (eligibleForFlagsV2) {
+        if (useRemoteConfigWithFlags) {
             data.timezone = getTimezone()
         }
 
@@ -431,13 +429,13 @@ export class PostHogFeatureFlags {
                 this._requestInFlight = false
 
                 // NB: this block is only reached if this._instance.config.__preview_remote_config is false
-                if (!this._decideCalled) {
-                    this._decideCalled = true
+                if (!this._flagsCalled) {
+                    this._flagsCalled = true
                     this._instance._onRemoteConfig(response.json ?? {})
                 }
 
                 if (data.disable_flags && !this._additionalReloadRequested) {
-                    // If flags are disabled then there is no need to call decide again (flags are the only thing that may change)
+                    // If flags are disabled then there is no need to call /flags again (flags are the only thing that may change)
                     // UNLESS, an additional reload is requested.
                     return
                 }
@@ -458,7 +456,7 @@ export class PostHogFeatureFlags {
 
                 if (this._additionalReloadRequested) {
                     this._additionalReloadRequested = false
-                    this._callDecideEndpoint()
+                    this._callFlagsEndpoint()
                 }
             },
         })
@@ -503,7 +501,7 @@ export class PostHogFeatureFlags {
                     $feature_flag_bootstrapped_response: this._instance.config.bootstrap?.featureFlags?.[key] || null,
                     $feature_flag_bootstrapped_payload:
                         this._instance.config.bootstrap?.featureFlagPayloads?.[key] || null,
-                    // If we haven't yet received a response from the /decide endpoint, we must have used the bootstrapped value
+                    // If we haven't yet received a response from the /flags endpoint, we must have used the bootstrapped value
                     $used_bootstrap_value: !this._flagsLoadedFromRemote,
                 }
 
@@ -578,7 +576,7 @@ export class PostHogFeatureFlags {
         const token = this._instance.config.token
         this._instance._send_request({
             method: 'POST',
-            url: this._instance.requestRouter.endpointFor('api', '/decide/?v=4'),
+            url: this._instance.requestRouter.endpointFor('api', '/flags/?v=2&config=true'),
             data: {
                 distinct_id: this._instance.get_distinct_id(),
                 token,
@@ -618,7 +616,7 @@ export class PostHogFeatureFlags {
         this.featureFlagEventHandlers = this.featureFlagEventHandlers.filter((h) => h !== handler)
     }
 
-    receivedFeatureFlags(response: Partial<DecideResponse>, errorsLoading?: boolean): void {
+    receivedFeatureFlags(response: Partial<FlagsResponse>, errorsLoading?: boolean): void {
         if (!this._instance.persistence) {
             return
         }
@@ -627,13 +625,7 @@ export class PostHogFeatureFlags {
         const currentFlags = this.getFlagVariants()
         const currentFlagPayloads = this.getFlagPayloads()
         const currentFlagDetails = this.getFlagsWithDetails()
-        parseFeatureFlagDecideResponse(
-            response,
-            this._instance.persistence,
-            currentFlags,
-            currentFlagPayloads,
-            currentFlagDetails
-        )
+        parseFlagsResponse(response, this._instance.persistence, currentFlags, currentFlagPayloads, currentFlagDetails)
         this._fireFeatureFlagsCallbacks(errorsLoading)
     }
 

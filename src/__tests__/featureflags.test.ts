@@ -1,6 +1,6 @@
 /*eslint @typescript-eslint/no-empty-function: "off" */
 
-import { filterActiveFeatureFlags, parseFeatureFlagDecideResponse, PostHogFeatureFlags } from '../posthog-featureflags'
+import { filterActiveFeatureFlags, parseFlagsResponse, PostHogFeatureFlags } from '../posthog-featureflags'
 import { PostHogPersistence } from '../posthog-persistence'
 import { RequestRouter } from '../utils/request-router'
 import { PostHogConfig } from '../types'
@@ -31,7 +31,7 @@ describe('featureflags', () => {
             unregister: (key) => instance.persistence.unregister(key),
             get_property: (key) => instance.persistence.props[key],
             capture: () => {},
-            decideEndpointWasHit: false,
+            flagsEndpointWasHit: false,
             _send_request: jest.fn().mockImplementation(({ callback }) =>
                 callback({
                     statusCode: 200,
@@ -67,7 +67,7 @@ describe('featureflags', () => {
         instance.persistence.unregister('$flag_call_reported')
     })
 
-    it('should return flags from persistence even if decide endpoint was not hit', () => {
+    it('should return flags from persistence even if /flags endpoint was not hit', () => {
         featureFlags._hasLoadedFlags = false
 
         expect(featureFlags.getFlags()).toEqual([
@@ -79,7 +79,7 @@ describe('featureflags', () => {
         expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
     })
 
-    it('should return flag details from persistence even if decide endpoint was not hit', () => {
+    it('should return flag details from persistence even if /flags endpoint was not hit', () => {
         instance.persistence.register({
             $feature_flag_details: {
                 'beta-feature': {
@@ -123,7 +123,7 @@ describe('featureflags', () => {
         })
     })
 
-    it('should warn if decide endpoint was not hit and no flags exist', () => {
+    it('should warn if /flags endpoint was not hit and no flags exist', () => {
         ;(window as any).POSTHOG_DEBUG = true
         featureFlags._hasLoadedFlags = false
         instance.persistence.unregister('$enabled_feature_flags')
@@ -667,16 +667,23 @@ describe('featureflags', () => {
         })
     })
 
-    describe('decide()', () => {
-        it('should not call decide if advanced_disable_decide is true', () => {
+    describe('flags()', () => {
+        it('should not call /flags if advanced_disable_decide is true', () => {
             instance.config.advanced_disable_decide = true
-            featureFlags.decide()
+            featureFlags.flags()
 
             expect(instance._send_request).toHaveBeenCalledTimes(0)
         })
 
-        it('should call decide', () => {
-            featureFlags.decide()
+        it('should not call /flags if advanced_disable_flags is true', () => {
+            instance.config.advanced_disable_flags = true
+            featureFlags.flags()
+
+            expect(instance._send_request).toHaveBeenCalledTimes(0)
+        })
+
+        it('should call /flags', () => {
+            featureFlags.flags()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
@@ -685,25 +692,25 @@ describe('featureflags', () => {
             expect(instance._send_request).toHaveBeenCalledTimes(1)
         })
 
-        it('should call decide with flags disabled if set', () => {
+        it('should call /flags with flags disabled if set', () => {
             instance.config.advanced_disable_feature_flags_on_first_load = true
-            featureFlags.decide()
+            featureFlags.flags()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(true)
         })
 
-        it('should call decide with flags disabled if set generally', () => {
+        it('should call /flags with flags disabled if set generally', () => {
             instance.config.advanced_disable_feature_flags = true
-            featureFlags.decide()
+            featureFlags.flags()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(true)
         })
 
-        it('should call decide once even if reload called before', () => {
+        it('should call /flags once even if reload called before', () => {
             featureFlags.reloadFeatureFlags()
-            featureFlags.decide()
+            featureFlags.flags()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
@@ -712,10 +719,10 @@ describe('featureflags', () => {
             expect(instance._send_request).toHaveBeenCalledTimes(1)
         })
 
-        it('should not disable flags if reload was called on decide', () => {
+        it('should not disable flags if reload was called on /flags', () => {
             instance.config.advanced_disable_feature_flags_on_first_load = true
             featureFlags.reloadFeatureFlags()
-            featureFlags.decide()
+            featureFlags.flags()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(undefined)
@@ -727,7 +734,7 @@ describe('featureflags', () => {
         it('should always disable flags if set', () => {
             instance.config.advanced_disable_feature_flags = true
             featureFlags.reloadFeatureFlags()
-            featureFlags.decide()
+            featureFlags.flags()
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toBe(true)
@@ -1305,7 +1312,7 @@ describe('featureflags', () => {
         })
     })
 
-    describe('when subsequent decide v3 calls return partial results', () => {
+    describe('when subsequent /flags?v=1 calls return partial results', () => {
         beforeEach(() => {
             instance._send_request = jest.fn().mockImplementation(({ callback }) =>
                 callback({
@@ -1334,9 +1341,9 @@ describe('featureflags', () => {
         })
     })
 
-    describe('when subsequent decide v4 calls return partial results', () => {
+    describe('when subsequent /flags?v=2 calls return partial results', () => {
         beforeEach(() => {
-            // Need to register v4 flags to test v4 behavior.
+            // Need to register v2 flags to test v2 behavior.
             instance.persistence.register({
                 $feature_flag_payloads: {
                     'beta-feature': {
@@ -1409,7 +1416,7 @@ describe('featureflags', () => {
         })
     })
 
-    describe('when subsequent decide calls return results without errors', () => {
+    describe('when subsequent /flags?v=1 calls return results without errors', () => {
         beforeEach(() => {
             instance._send_request = jest.fn().mockImplementation(({ callback }) =>
                 callback({
@@ -1434,7 +1441,7 @@ describe('featureflags', () => {
         })
     })
 
-    describe('when decide times out or errors out', () => {
+    describe('when /flags times out or errors out', () => {
         beforeEach(() => {
             instance._send_request = jest.fn().mockImplementation(({ callback }) =>
                 callback({
@@ -1461,7 +1468,7 @@ describe('featureflags', () => {
             })
         })
 
-        it('should call onFeatureFlags even when decide errors out', () => {
+        it('should call onFeatureFlags even when /flags errors out', () => {
             let called = false
             let _flags = []
             let _variants = {}
@@ -1553,7 +1560,7 @@ describe('featureflags', () => {
     describe('Feature Flag Request ID', () => {
         const TEST_REQUEST_ID = 'test-request-id-123'
 
-        it('saves requestId from decide response', () => {
+        it('saves requestId from /flags response', () => {
             featureFlags.receivedFeatureFlags({
                 featureFlags: { 'test-flag': true },
                 featureFlagPayloads: {},
@@ -1629,8 +1636,8 @@ describe('featureflags', () => {
             )
         })
 
-        it('updates requestId when new decide response is received', () => {
-            // First decide response
+        it('updates requestId when new /flags response is received', () => {
+            // First /flags response
             featureFlags.receivedFeatureFlags({
                 featureFlags: { 'test-flag': true },
                 featureFlagPayloads: {},
@@ -1639,7 +1646,7 @@ describe('featureflags', () => {
 
             expect(instance.get_property('$feature_flag_request_id')).toEqual(TEST_REQUEST_ID)
 
-            // Second decide response with new ID
+            // Second /flags response with new ID
             const NEW_REQUEST_ID = 'new-request-id-456'
             featureFlags.receivedFeatureFlags({
                 featureFlags: { 'test-flag': true },
@@ -1663,15 +1670,15 @@ describe('featureflags', () => {
     })
 })
 
-describe('parseFeatureFlagDecideResponse', () => {
+describe('parseFlagsResponse', () => {
     let persistence
 
     beforeEach(() => {
         persistence = { register: jest.fn(), unregister: jest.fn() }
     })
 
-    it('enables multivariate feature flags from decide v2^ response', () => {
-        const decideResponse = {
+    it('enables multivariate feature flags from /flags?v=2 response', () => {
+        const flagsResponse = {
             featureFlags: {
                 'beta-feature': true,
                 'alpha-feature-2': true,
@@ -1684,7 +1691,7 @@ describe('parseFeatureFlagDecideResponse', () => {
         }
         jest.spyOn(window.console, 'warn').mockImplementation()
 
-        parseFeatureFlagDecideResponse(decideResponse, persistence)
+        parseFlagsResponse(flagsResponse, persistence)
 
         expect(persistence.register).toHaveBeenCalledWith({
             $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
@@ -1705,8 +1712,8 @@ describe('parseFeatureFlagDecideResponse', () => {
         )
     })
 
-    it('enables feature flag details from decide v3^ response', () => {
-        const decideResponse = {
+    it('enables feature flag details from /flags?v=1 response', () => {
+        const flagsResponse = {
             featureFlags: {
                 'beta-feature': true,
                 'alpha-feature-2': true,
@@ -1719,7 +1726,7 @@ describe('parseFeatureFlagDecideResponse', () => {
         }
         jest.spyOn(window.console, 'warn').mockImplementation()
 
-        parseFeatureFlagDecideResponse(decideResponse, persistence)
+        parseFlagsResponse(flagsResponse, persistence)
 
         expect(persistence.register).toHaveBeenCalledWith({
             $active_feature_flags: ['beta-feature', 'alpha-feature-2', 'multivariate-flag'],
@@ -1740,8 +1747,8 @@ describe('parseFeatureFlagDecideResponse', () => {
         )
     })
 
-    it('enables feature flag details from decide v4^ response', () => {
-        const decideResponse = {
+    it('enables feature flag details from /flags?v=2 response', () => {
+        const flagsResponse = {
             flags: {
                 'beta-feature': {
                     key: 'beta-feature',
@@ -1809,7 +1816,7 @@ describe('parseFeatureFlagDecideResponse', () => {
                 },
             },
         }
-        parseFeatureFlagDecideResponse(decideResponse, persistence)
+        parseFlagsResponse(flagsResponse, persistence)
 
         expect(persistence.register).toHaveBeenCalledWith({
             $active_feature_flags: ['beta-feature', 'alpha-feature', 'multivariate-flag'],
@@ -1892,13 +1899,13 @@ describe('parseFeatureFlagDecideResponse', () => {
         })
     })
 
-    it('enables feature flags from decide response (v1 backwards compatibility)', () => {
+    it('enables feature flags from /flags response (v1 backwards compatibility)', () => {
         // checks that nothing fails when asking for ?v=2 and getting a ?v=1 response
-        const decideResponse = { featureFlags: ['beta-feature', 'alpha-feature-2'] }
+        const flagsResponse = { featureFlags: ['beta-feature', 'alpha-feature-2'] }
         jest.spyOn(window.console, 'warn').mockImplementation()
 
         // @ts-expect-error testing backwards compatibility
-        parseFeatureFlagDecideResponse(decideResponse, persistence)
+        parseFlagsResponse(flagsResponse, persistence)
 
         expect(persistence.register).toHaveBeenLastCalledWith({
             $active_feature_flags: ['beta-feature', 'alpha-feature-2'],
@@ -1912,20 +1919,20 @@ describe('parseFeatureFlagDecideResponse', () => {
 
     it('doesnt remove existing feature flags when no flags are returned', () => {
         jest.spyOn(window.console, 'warn').mockImplementation()
-        parseFeatureFlagDecideResponse({}, persistence)
+        parseFlagsResponse({}, persistence)
 
         expect(persistence.register).not.toHaveBeenCalled()
         expect(persistence.unregister).not.toHaveBeenCalled()
     })
 
-    it('parses the requestId from the decide v3 response', () => {
-        const decideResponse = {
+    it('parses the requestId from the /flags?v=1 response', () => {
+        const flagsResponse = {
             featureFlags: { 'test-flag': true },
             requestId: 'test-request-id-123',
         }
         jest.spyOn(window.console, 'warn').mockImplementation()
 
-        parseFeatureFlagDecideResponse(decideResponse, persistence)
+        parseFlagsResponse(flagsResponse, persistence)
 
         expect(persistence.register).toHaveBeenCalledWith({
             $active_feature_flags: ['test-flag'],
@@ -1940,8 +1947,8 @@ describe('parseFeatureFlagDecideResponse', () => {
         )
     })
 
-    it('parses the requestId from the decide v4 response', () => {
-        const decideResponse = {
+    it('parses the requestId from the /flags?v=2 response', () => {
+        const flagsResponse = {
             flags: {
                 'test-flag': {
                     key: 'test-flag',
@@ -1963,7 +1970,7 @@ describe('parseFeatureFlagDecideResponse', () => {
             requestId: 'test-request-id-123',
         }
 
-        parseFeatureFlagDecideResponse(decideResponse, persistence)
+        parseFlagsResponse(flagsResponse, persistence)
 
         expect(persistence.register).toHaveBeenCalledWith({
             $active_feature_flags: ['test-flag'],

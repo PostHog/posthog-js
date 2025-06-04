@@ -19,7 +19,7 @@ import {
     SurveyQuestionType,
     SurveyType,
 } from '../posthog-surveys-types'
-import { DecideResponse, PostHogConfig, Properties } from '../types'
+import { FlagsResponse, PostHogConfig, Properties } from '../types'
 import * as globals from '../utils/globals'
 import { assignableWindow, window } from '../utils/globals'
 import { RequestRouter } from '../utils/request-router'
@@ -32,7 +32,7 @@ describe('surveys', () => {
     let surveysResponse: { status?: number; surveys?: Survey[] }
     const originalWindowLocation = assignableWindow.location
 
-    const decideResponse = {
+    const flagsResponse = {
         featureFlags: {
             'linked-flag-key': true,
             'survey-targeting-flag-key': true,
@@ -42,7 +42,7 @@ describe('surveys', () => {
             'disabled-internal-targeting-flag-key': false,
         },
         surveys: true,
-    } as unknown as DecideResponse
+    } as unknown as FlagsResponse
 
     const firstSurveys: Survey[] = [
         {
@@ -201,11 +201,11 @@ describe('surveys', () => {
             featureFlags: {
                 _send_request: jest
                     .fn()
-                    .mockImplementation(({ callback }) => callback({ statusCode: 200, json: decideResponse })),
-                getFeatureFlag: jest.fn().mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
+                    .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
+                getFeatureFlag: jest.fn().mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
                 isFeatureEnabled: jest
                     .fn()
-                    .mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
+                    .mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
             },
         } as unknown as PostHog
 

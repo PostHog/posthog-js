@@ -13,7 +13,7 @@ import { SurveyManager } from '../extensions/surveys'
 import { PostHog } from '../posthog-core'
 import { PostHogSurveys } from '../posthog-surveys'
 import { Survey, SurveySchedule, SurveyType } from '../posthog-surveys-types'
-import { DecideResponse } from '../types'
+import { FlagsResponse } from '../types'
 import { assignableWindow } from '../utils/globals'
 import { SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../utils/survey-utils'
 
@@ -57,7 +57,7 @@ describe('posthog-surveys', () => {
             },
         }
 
-        const decideResponse = {
+        const flagsResponse = {
             featureFlags: {
                 'linked-flag-key': true,
                 'survey-targeting-flag-key': true,
@@ -67,7 +67,7 @@ describe('posthog-surveys', () => {
                 'disabled-internal-targeting-flag-key': false,
             },
             surveys: true,
-        } as unknown as DecideResponse
+        } as unknown as FlagsResponse
 
         beforeEach(() => {
             // Reset mocks
@@ -95,13 +95,13 @@ describe('posthog-surveys', () => {
                 featureFlags: {
                     _send_request: jest
                         .fn()
-                        .mockImplementation(({ callback }) => callback({ statusCode: 200, json: decideResponse })),
+                        .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
                     getFeatureFlag: jest
                         .fn()
-                        .mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
+                        .mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
                     isFeatureEnabled: jest
                         .fn()
-                        .mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
+                        .mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
                 },
             } as unknown as PostHog & {
                 get_property: jest.Mock
@@ -138,9 +138,9 @@ describe('posthog-surveys', () => {
             it('should return visible: true if surveys are loaded and the survey is eligible', () => {
                 mockPostHog.get_property.mockReturnValue([survey])
                 surveys['_surveyManager'] = new SurveyManager(mockPostHog as PostHog)
-                decideResponse.featureFlags[survey.targeting_flag_key] = true
-                decideResponse.featureFlags[survey.internal_targeting_flag_key] = true
-                decideResponse.featureFlags[survey.linked_flag_key] = true
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = true
                 const result = surveys.canRenderSurvey(survey.id)
                 expect(result.visible).toBeTruthy()
                 expect(result.disabledReason).toBeUndefined()
@@ -166,27 +166,27 @@ describe('posthog-surveys', () => {
             })
 
             it('cannot render survey if linked_flag is false', () => {
-                decideResponse.featureFlags[survey.targeting_flag_key] = true
-                decideResponse.featureFlags[survey.internal_targeting_flag_key] = true
-                decideResponse.featureFlags[survey.linked_flag_key] = false
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = false
                 const result = surveys['_checkSurveyEligibility'](survey.id)
                 expect(result.eligible).toBeFalsy()
                 expect(result.reason).toEqual('Survey linked feature flag is not enabled')
             })
 
             it('cannot render survey if targeting_feature_flag is false', () => {
-                decideResponse.featureFlags[survey.linked_flag_key] = true
-                decideResponse.featureFlags[survey.internal_targeting_flag_key] = true
-                decideResponse.featureFlags[survey.targeting_flag_key] = false
+                flagsResponse.featureFlags[survey.linked_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.targeting_flag_key] = false
                 const result = surveys['_checkSurveyEligibility'](survey.id)
                 expect(result.eligible).toBeFalsy()
                 expect(result.reason).toEqual('Survey targeting feature flag is not enabled')
             })
 
             it('cannot render survey if internal_targeting_feature_flag is false', () => {
-                decideResponse.featureFlags[survey.targeting_flag_key] = true
-                decideResponse.featureFlags[survey.linked_flag_key] = true
-                decideResponse.featureFlags[survey.internal_targeting_flag_key] = false
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = false
                 const result = surveys['_checkSurveyEligibility'](survey.id)
                 expect(result.eligible).toBeFalsy()
                 expect(result.reason).toEqual(
@@ -195,17 +195,17 @@ describe('posthog-surveys', () => {
             })
 
             it('can render if survey can activate repeatedly', () => {
-                decideResponse.featureFlags[survey.targeting_flag_key] = true
-                decideResponse.featureFlags[survey.linked_flag_key] = true
-                decideResponse.featureFlags[survey.internal_targeting_flag_key] = false
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = false
                 const result = surveys['_checkSurveyEligibility'](repeatableSurvey.id)
                 expect(result.eligible).toBeTruthy()
             })
 
             it('can render a survey that is in progress', () => {
-                decideResponse.featureFlags[survey.targeting_flag_key] = true
-                decideResponse.featureFlags[survey.linked_flag_key] = true
-                decideResponse.featureFlags[survey.internal_targeting_flag_key] = false
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = false
                 localStorage.setItem(
                     `${SURVEY_IN_PROGRESS_PREFIX}${survey.id}`,
                     JSON.stringify({
@@ -219,12 +219,12 @@ describe('posthog-surveys', () => {
             describe('integration with wait period and survey seen checks', () => {
                 beforeEach(() => {
                     // Set all flags to true for integration tests
-                    decideResponse.featureFlags[survey.targeting_flag_key] = true
-                    decideResponse.featureFlags[survey.linked_flag_key] = true
-                    decideResponse.featureFlags[survey.internal_targeting_flag_key] = true
-                    decideResponse.featureFlags[surveyWithWaitPeriod.targeting_flag_key] = true
-                    decideResponse.featureFlags[surveyWithWaitPeriod.linked_flag_key] = true
-                    decideResponse.featureFlags[surveyWithWaitPeriod.internal_targeting_flag_key] = true
+                    flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                    flagsResponse.featureFlags[survey.linked_flag_key] = true
+                    flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                    flagsResponse.featureFlags[surveyWithWaitPeriod.targeting_flag_key] = true
+                    flagsResponse.featureFlags[surveyWithWaitPeriod.linked_flag_key] = true
+                    flagsResponse.featureFlags[surveyWithWaitPeriod.internal_targeting_flag_key] = true
                 })
 
                 it('integrates wait period check with other eligibility criteria', () => {
@@ -270,9 +270,9 @@ describe('posthog-surveys', () => {
                 beforeEach(() => {
                     mockPostHog.get_property.mockReturnValue([surveyWithBothConditions])
                     // Set all flags to true
-                    decideResponse.featureFlags[surveyWithBothConditions.targeting_flag_key] = true
-                    decideResponse.featureFlags[surveyWithBothConditions.linked_flag_key] = true
-                    decideResponse.featureFlags[surveyWithBothConditions.internal_targeting_flag_key] = true
+                    flagsResponse.featureFlags[surveyWithBothConditions.targeting_flag_key] = true
+                    flagsResponse.featureFlags[surveyWithBothConditions.linked_flag_key] = true
+                    flagsResponse.featureFlags[surveyWithBothConditions.internal_targeting_flag_key] = true
                 })
 
                 it('checks wait period before survey seen status (early return)', () => {
@@ -365,7 +365,7 @@ describe('posthog-surveys', () => {
                 expect(mockLoadExternalDependency).not.toHaveBeenCalled()
             })
 
-            it('should not initialize if decide server response is not ready', () => {
+            it('should not initialize if flags server response is not ready', () => {
                 surveys.loadIfEnabled()
 
                 expect(mockGenerateSurveys).not.toHaveBeenCalled()
@@ -373,7 +373,7 @@ describe('posthog-surveys', () => {
             })
 
             it('should set isInitializingSurveys to false after successful initialization', () => {
-                // Set decide server response
+                // Set flags server response
                 surveys['_hasSurveys'] = true
                 mockGenerateSurveys.mockReturnValue({})
 
@@ -383,7 +383,7 @@ describe('posthog-surveys', () => {
             })
 
             it('should set isInitializingSurveys to false after failed initialization', () => {
-                // Set decide server response
+                // Set flags server response
                 surveys['_hasSurveys'] = true
                 mockGenerateSurveys.mockImplementation(() => {
                     throw Error('Test error')
@@ -394,7 +394,7 @@ describe('posthog-surveys', () => {
             })
 
             it('should set isInitializingSurveys to false when loadExternalDependency fails', () => {
-                // Set decide server response but no generateSurveys
+                // Set flags server response but no generateSurveys
                 surveys['_hasSurveys'] = true
                 mockGenerateSurveys = undefined
                 assignableWindow.__PosthogExtensions__.generateSurveys = undefined

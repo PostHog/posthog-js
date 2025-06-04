@@ -4,7 +4,7 @@ import { Page } from '@playwright/test'
 import { CaptureResult } from '../../src/types'
 
 // Local config not set
-// decide comes back - says we shouldn't mask
+// flags comes back - says we shouldn't mask
 
 const remoteMaskingTextSelector = '*'
 
@@ -14,7 +14,7 @@ const startOptions = (masking: Record<string, any>) => ({
             compress_events: false,
         },
     },
-    decideResponseOverrides: {
+    flagsResponseOverrides: {
         sessionRecording: {
             endpoint: '/ses/',
             masking,

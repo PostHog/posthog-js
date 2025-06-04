@@ -699,6 +699,24 @@ export interface PostHogConfig {
 
     /**
      * One of the very first things the PostHog library does when init() is called
+     * is make a request to the /flags endpoint on PostHog's backend.
+     * This endpoint contains information on how to run the PostHog library
+     * so events are properly received in the backend, and it also contains
+     * feature flag evaluation information for the current user.
+     *
+     * This endpoint is required to run most features of this library.
+     * However, if you're not using any of the described features,
+     * you may wish to turn off the call completely to avoid an extra request
+     * and reduce resource usage on both the client and the server.
+     *
+     * @default false
+     */
+    advanced_disable_flags?: boolean
+
+    /**
+     * @deprecated Use `advanced_disable_flags` instead. This will be removed in a future major version.
+     *
+     * One of the very first things the PostHog library does when init() is called
      * is make a request to the /decide endpoint on PostHog's backend.
      * This endpoint contains information on how to run the PostHog library
      * so events are properly received in the backend.
@@ -710,10 +728,12 @@ export interface PostHogConfig {
      *
      * @default false
      */
-    advanced_disable_decide: boolean
+    advanced_disable_decide?: boolean
 
     /**
-     * Will keep /decide running, but without any feature flag requests
+     * Will keep /flags running, but without any feature flags actually evaluted.
+     * Useful for when you need to load the config data associated with the flags endpoint
+     * (e.g. /flags?v=2&config=true), but you don't want to evaluate any feature flags.
      *
      * @default false
      */
@@ -932,7 +952,7 @@ export interface PostHogConfig {
 
     /**
      * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * Enables the new RemoteConfig approach to loading config instead of decide
+     * Enables the new RemoteConfig approach to loading config instead of /flags?v=2&config=true
      * */
     __preview_remote_config?: boolean
 
@@ -1062,7 +1082,7 @@ export interface SessionRecordingOptions {
     recordBody?: boolean
 
     /**
-     * Allows local config to override remote canvas recording settings from the decide response
+     * Allows local config to override remote canvas recording settings from the flags response
      */
     captureCanvas?: SessionRecordingCanvasOptions
 
@@ -1404,9 +1424,10 @@ export interface RemoteConfig {
 }
 
 /**
- * Decide returns everything we have on the remote config plus feature flags and their payloads
+ * Flags returns feature flags and their payloads, and optionally returns everything else from the remote config
+ * assuming it's called with `config=true`
  */
-export interface DecideResponse extends RemoteConfig {
+export interface FlagsResponse extends RemoteConfig {
     featureFlags: Record<string, string | boolean>
     featureFlagPayloads: Record<string, JsonType>
     errorsWhileComputingFlags: boolean

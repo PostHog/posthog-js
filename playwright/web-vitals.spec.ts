@@ -8,7 +8,7 @@ const startOptions = {
             web_vitals: true,
         },
     },
-    decideResponseOverrides: {
+    flagsResponseOverrides: {
         capturePerformance: true,
     },
     url: '/playground/cypress/index.html',

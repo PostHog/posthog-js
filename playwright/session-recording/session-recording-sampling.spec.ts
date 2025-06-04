@@ -5,7 +5,7 @@ const startOptions = {
     options: {
         session_recording: {},
     },
-    decideResponseOverrides: {
+    flagsResponseOverrides: {
         sessionRecording: {
             endpoint: '/ses/',
         },
@@ -18,10 +18,10 @@ const startOptions = {
 test.describe('Session recording - sampling', () => {
     const sampleZeroStartOptions = {
         ...startOptions,
-        decideResponseOverrides: {
-            ...startOptions.decideResponseOverrides,
+        flagsResponseOverrides: {
+            ...startOptions.flagsResponseOverrides,
             sessionRecording: {
-                ...startOptions.decideResponseOverrides.sessionRecording,
+                ...startOptions.flagsResponseOverrides.sessionRecording,
                 sampleRate: '0',
             },
         },

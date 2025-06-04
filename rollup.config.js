@@ -96,7 +96,7 @@ const plugins = (es5) => [
                           '_i',
                           '__SV',
 
-                          // used in decide request, MUST be preserved
+                          // used in flags endpoint, MUST be preserved
                           '_',
 
                           // used in config

@@ -16,7 +16,7 @@ import '@testing-library/jest-dom'
 import * as Preact from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { PostHog } from '../../posthog-core'
-import { DecideResponse } from '../../types'
+import { FlagsResponse } from '../../types'
 import { SURVEY_IN_PROGRESS_PREFIX } from '../../utils/survey-utils'
 
 declare const global: any
@@ -252,7 +252,7 @@ describe('SurveyManager', () => {
     let mockPostHog: PostHog
     let surveyManager: SurveyManager
     let mockSurveys: Survey[]
-    const decideResponse = {
+    const flagsResponse = {
         featureFlags: {
             'linked-flag-key': true,
             'survey-targeting-flag-key': true,
@@ -262,7 +262,7 @@ describe('SurveyManager', () => {
             'disabled-internal-targeting-flag-key': false,
         },
         surveys: true,
-    } as unknown as DecideResponse
+    } as unknown as FlagsResponse
 
     beforeEach(() => {
         mockSurveys = [
@@ -304,11 +304,11 @@ describe('SurveyManager', () => {
             featureFlags: {
                 _send_request: jest
                     .fn()
-                    .mockImplementation(({ callback }) => callback({ statusCode: 200, json: decideResponse })),
-                getFeatureFlag: jest.fn().mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
+                    .mockImplementation(({ callback }) => callback({ statusCode: 200, json: flagsResponse })),
+                getFeatureFlag: jest.fn().mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
                 isFeatureEnabled: jest
                     .fn()
-                    .mockImplementation((featureFlag) => decideResponse.featureFlags[featureFlag]),
+                    .mockImplementation((featureFlag) => flagsResponse.featureFlags[featureFlag]),
             },
             surveys: {
                 getSurveys: jest.fn().mockImplementation((callback) => callback(mockSurveys)),

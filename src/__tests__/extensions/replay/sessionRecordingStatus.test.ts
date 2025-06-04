@@ -27,7 +27,7 @@ type TestConfig = {
 const fakePostHog = { register_for_session: () => {} } as unknown as PostHog
 
 const defaultTriggersStatus: RecordingTriggersStatus = {
-    receivedDecide: true,
+    receivedFlags: true,
     isRecordingEnabled: true,
     isSampled: undefined,
     urlTriggerMatching: {
@@ -59,8 +59,8 @@ const makeLinkedFlagMatcher = (linkedFlag: string | null, linkedFlagSeen: boolea
 const testCases: TestConfig[] = [
     // Basic states
     {
-        name: 'decide not received',
-        config: { receivedDecide: false },
+        name: 'flags not received',
+        config: { receivedFlags: false },
         anyMatchExpected: BUFFERING,
         allMatchExpected: BUFFERING,
     },

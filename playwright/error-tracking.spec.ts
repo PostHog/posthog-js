@@ -6,7 +6,7 @@ test.describe('Exception capture', () => {
     test.describe('Exception autocapture enabled', () => {
         test.beforeEach(async ({ page, context }) => {
             await start(
-                { decideResponseOverrides: { autocaptureExceptions: false }, url: './playground/cypress/index.html' },
+                { flagsResponseOverrides: { autocaptureExceptions: false }, url: './playground/cypress/index.html' },
                 page,
                 context
             )
@@ -50,7 +50,7 @@ test.describe('Exception capture', () => {
                 action: async () => {
                     await start(
                         {
-                            decideResponseOverrides: { autocaptureExceptions: true },
+                            flagsResponseOverrides: { autocaptureExceptions: true },
                             url: './playground/cypress/index.html',
                         },
                         page,

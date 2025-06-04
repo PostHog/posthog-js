@@ -5,13 +5,13 @@ import { PostHogConfig } from '../../src/types'
 import { assertThatRecordingStarted, pollUntilEventCaptured } from '../utils/event-capture-utils'
 
 async function startWith(config: Partial<PostHogConfig>, page: Page, context: BrowserContext) {
-    // there will be a decide call
-    const decideResponse = page.waitForResponse('**/decide/*')
+    // there will be a flags call
+    const flagsResponse = page.waitForResponse('**/flags/*')
 
     await start(
         {
             options: config,
-            decideResponseOverrides: {
+            flagsResponseOverrides: {
                 sessionRecording: {
                     endpoint: '/ses/',
                     networkPayloadCapture: { recordBody: true, recordHeaders: true },
@@ -25,8 +25,8 @@ async function startWith(config: Partial<PostHogConfig>, page: Page, context: Br
         context
     )
 
-    // there will be a decide call
-    await decideResponse
+    // there will be a flags call
+    await flagsResponse
 }
 
 test.describe('Session Recording - opting out', () => {
@@ -95,9 +95,9 @@ test.describe('Session Recording - opting out', () => {
         await assertThatRecordingStarted(page)
     })
 
-    test('does not capture session recordings when decide is disabled', async ({ page, context }) => {
+    test('does not capture session recordings when flags is disabled', async ({ page, context }) => {
         await start(
-            { options: { advanced_disable_decide: true, autocapture: false }, waitForDecide: false },
+            { options: { advanced_disable_flags: true, autocapture: false }, waitForFlags: false },
             page,
             context
         )

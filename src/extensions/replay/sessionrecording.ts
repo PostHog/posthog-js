@@ -253,7 +253,7 @@ export class SessionRecording {
     private _statusMatcher: (triggersStatus: RecordingTriggersStatus) => SessionRecordingStatus =
         nullMatchSessionRecordingStatus
 
-    private _receivedDecide: boolean = false
+    private _receivedFlags: boolean = false
 
     // we have a buffer - that contains PostHog snapshot events ready to be sent to the server
     private _buffer: SnapshotBuffer
@@ -283,7 +283,7 @@ export class SessionRecording {
 
     private _removePageViewCaptureHook: (() => void) | undefined = undefined
     private _onSessionIdListener: (() => void) | undefined = undefined
-    private _persistDecideOnSessionListener: (() => void) | undefined = undefined
+    private _persistFlagsOnSessionListener: (() => void) | undefined = undefined
     private _samplingSessionListener: (() => void) | undefined = undefined
 
     // if pageview capture is disabled,
@@ -425,16 +425,16 @@ export class SessionRecording {
     }
 
     /**
-     * defaults to buffering mode until a decide response is received
-     * once a decide response is received status can be disabled, active or sampled
+     * defaults to buffering mode until a flags response is received
+     * once a flags response is received status can be disabled, active or sampled
      */
     get status(): SessionRecordingStatus {
-        if (!this._receivedDecide) {
+        if (!this._receivedFlags) {
             return BUFFERING
         }
 
         return this._statusMatcher({
-            receivedDecide: this._receivedDecide,
+            receivedFlags: this._receivedFlags,
             isRecordingEnabled: this._isRecordingEnabled,
             isSampled: this._isSampled,
             urlTriggerMatching: this._urlTriggerMatching,
@@ -448,7 +448,7 @@ export class SessionRecording {
         this._captureStarted = false
         this._endpoint = BASE_ENDPOINT
         this._stopRrweb = undefined
-        this._receivedDecide = false
+        this._receivedFlags = false
 
         if (!this._instance.sessionManager) {
             logger.error('started without valid sessionManager')
@@ -505,8 +505,8 @@ export class SessionRecording {
             addEventListener(window, 'online', this._onOnline)
             addEventListener(window, 'visibilitychange', this._onVisibilityChange)
 
-            // on reload there might be an already sampled session that should be continued before decide response,
-            // so we call this here _and_ in the decide response
+            // on reload there might be an already sampled session that should be continued before flags response,
+            // so we call this here _and_ in the flags response
             this._setupSampling()
 
             this._addEventTriggerListener()
@@ -660,7 +660,7 @@ export class SessionRecording {
             })
         })
 
-        this._receivedDecide = true
+        this._receivedFlags = true
         this.startIfEnabledOrStop()
     }
 
@@ -712,9 +712,9 @@ export class SessionRecording {
 
             persistResponse()
 
-            // in case we see multiple decide responses, we should only use the response from the most recent one
-            this._persistDecideOnSessionListener?.()
-            this._persistDecideOnSessionListener = this._sessionManager.onSessionId(persistResponse)
+            // in case we see multiple flags responses, we should only use the response from the most recent one
+            this._persistFlagsOnSessionListener?.()
+            this._persistFlagsOnSessionListener = this._sessionManager.onSessionId(persistResponse)
         }
     }
 
@@ -1074,10 +1074,10 @@ export class SessionRecording {
         }
 
         // Clear the buffer if waiting for a trigger and only keep data from after the current full snapshot
-        // we always start trigger pending so need to wait for decide before we know if we're really pending
+        // we always start trigger pending so need to wait for flags before we know if we're really pending
         if (
             rawEvent.type === EventType.FullSnapshot &&
-            this._receivedDecide &&
+            this._receivedFlags &&
             this._triggerMatching.triggerStatus(this.sessionId) === TRIGGER_PENDING
         ) {
             this._clearBuffer()
