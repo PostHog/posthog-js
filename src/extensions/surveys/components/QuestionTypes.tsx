@@ -421,21 +421,17 @@ export function MultipleChoiceQuestion({
         if (question.optional) {
             return false
         }
-
         if (isNull(selectedChoices)) {
             return true
         }
-
         if (isArray(selectedChoices)) {
             if (!openEndedState.isSelected && selectedChoices.length === 0) {
                 return true
             }
         }
-
         if (openEndedState.isSelected && openEndedState.inputValue.trim() === '') {
             return true
         }
-
         return false
     }
 
