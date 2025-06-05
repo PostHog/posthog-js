@@ -30,9 +30,9 @@ export const cancelSVG = (
         viewBox="0 0 12 12"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        aria-labelledby="Close survey"
+        aria-labelledby="close-survey-title"
     >
-        <title id="Close survey">Close survey</title>
+        <title id="close-survey-title">Close survey</title>
         <path
             fill-rule="evenodd"
             clip-rule="evenodd"
