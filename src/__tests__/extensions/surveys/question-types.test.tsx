@@ -254,6 +254,7 @@ describe('OpenTextQuestion', () => {
         appearance: mockAppearance,
         onSubmit: jest.fn(),
         onPreviewSubmit: jest.fn(),
+        displayQuestionIndex: 0,
     }
 
     const openTextQuestion: BasicSurveyQuestion = {

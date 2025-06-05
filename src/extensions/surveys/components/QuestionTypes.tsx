@@ -20,6 +20,7 @@ export interface CommonQuestionProps {
     onSubmit: (res: string | string[] | number | null) => void
     onPreviewSubmit: (res: string | string[] | number | null) => void
     initialValue?: string | string[] | number | null
+    displayQuestionIndex: number
 }
 
 interface OpenEndedInputState {
@@ -75,6 +76,7 @@ export function OpenTextQuestion({
     appearance,
     onSubmit,
     onPreviewSubmit,
+    displayQuestionIndex,
     initialValue,
 }: CommonQuestionProps & {
     question: BasicSurveyQuestion
@@ -86,7 +88,7 @@ export function OpenTextQuestion({
         return ''
     })
 
-    const htmlFor = question.id ?? 'open-text-question'
+    const htmlFor = `surveyQuestion${displayQuestionIndex}`
 
     return (
         <Fragment>
@@ -153,7 +155,6 @@ export function RatingQuestion({
     initialValue,
 }: CommonQuestionProps & {
     question: RatingSurveyQuestion
-    displayQuestionIndex: number
 }) {
     const scale = question.scale
     const starting = question.scale === 10 ? 0 : 1
@@ -292,7 +293,6 @@ export function MultipleChoiceQuestion({
     initialValue,
 }: CommonQuestionProps & {
     question: MultipleSurveyQuestion
-    displayQuestionIndex: number
 }) {
     const openChoiceInputRef = useRef<HTMLInputElement>(null)
     const choices = useMemo(() => getDisplayOrderChoices(question), [question])
@@ -308,7 +308,6 @@ export function MultipleChoiceQuestion({
     const isSingleChoiceQuestion = question.type === SurveyQuestionType.SingleChoice
     const isMultipleChoiceQuestion = question.type === SurveyQuestionType.MultipleChoice
 
-    const inputType = isSingleChoiceQuestion ? 'radio' : 'checkbox'
     const shouldSkipSubmit = question.skipSubmitButton && isSingleChoiceQuestion && !question.hasOpenChoice
 
     const handleChoiceChange = (val: string, isOpenChoice: boolean) => {
@@ -395,7 +394,6 @@ export function MultipleChoiceQuestion({
         }
     }
 
-    // Enhanced submit disabled logic with better type safety and validation awareness
     const isSubmitDisabled = (): boolean => {
         if (question.optional) {
             return false
@@ -436,11 +434,8 @@ export function MultipleChoiceQuestion({
                     </legend>
                     {choices.map((choice: string, idx: number) => {
                         const isOpenChoice = !!question.hasOpenChoice && idx === question.choices.length - 1
-                        const choiceClass = isOpenChoice ? ' choice-option-open' : ''
-                        const openInputId = isOpenChoice
-                            ? `surveyQuestion${displayQuestionIndex}Choice${idx}Open`
-                            : undefined
-                        const inputName = `surveyQuestion${displayQuestionIndex}Choice${idx}`
+                        const inputId = `surveyQuestion${displayQuestionIndex}Choice${idx}`
+                        const openInputId = `${inputId}Open`
 
                         const isChecked = isOpenChoice
                             ? openEndedState.isSelected
@@ -449,12 +444,13 @@ export function MultipleChoiceQuestion({
                               : isArray(selectedChoices) && selectedChoices.includes(choice)
 
                         return (
-                            <label className={choiceClass} key={idx}>
+                            <label className={isOpenChoice ? ' choice-option-open' : ''} key={idx}>
                                 <input
-                                    type={inputType}
-                                    name={inputName}
+                                    type={isSingleChoiceQuestion ? 'radio' : 'checkbox'}
+                                    name={inputId}
                                     checked={isChecked}
                                     onChange={() => handleChoiceChange(choice, isOpenChoice)}
+                                    id={inputId}
                                     aria-controls={openInputId}
                                 />
                                 <span>{isOpenChoice ? `${choice}:` : choice}</span>
