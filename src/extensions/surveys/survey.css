@@ -23,6 +23,7 @@
     --ph-survey-scrollbar-thumb-color: var(--ph-survey-border-color);
     --ph-survey-scrollbar-track-color: var(--ph-survey-background-color);
     --ph-survey-input-text-color: #020617;
+    --ph-survey-outline-color: rgba(59, 130, 246, 0.8);
     /* Widget/Embedded Tab CSS Variables */
     --ph-widget-color: #e0a045; /* Default color */
     --ph-widget-text-color: white; /* Default text color (usually white for contrast) */
@@ -86,8 +87,10 @@
     button:focus,
     button:focus-visible,
     input[type='checkbox']:focus,
-    input[type='radio']:focus {
-        outline: 1.5px solid var(--ph-survey-border-color);
+    input[type='radio']:focus,
+    input[type='checkbox']:focus-visible,
+    input[type='radio']:focus-visible {
+        outline: 1.5px solid var(--ph-survey-outline-color);
         border-color: var(--ph-survey-rating-active-bg-color);
         outline-offset: 2px;
     }
