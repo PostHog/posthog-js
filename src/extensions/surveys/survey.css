@@ -39,13 +39,13 @@
     z-index: var(--ph-survey-z-index);
     height: fit-content;
 
-    & * {
+    * {
         box-sizing: border-box;
         font-family: var(--ph-survey-font-family);
         color: var(--ph-survey-text-primary-color);
     }
 
-    & textarea,
+    textarea,
     input[type='text'] {
         margin: 0;
         color: var(--ph-survey-input-text-color);
@@ -60,58 +60,58 @@
     }
 
     /* Focus styles for interactive elements */
-    & textarea:focus,
-    & textarea:focus-visible,
-    & input[type='text']:focus,
-    & input[type='text']:focus-visible,
-    & button:focus,
-    & button:focus-visible,
-    & input[type='checkbox']:focus,
-    & input[type='radio']:focus {
+    textarea:focus,
+    textarea:focus-visible,
+    input[type='text']:focus,
+    input[type='text']:focus-visible,
+    button:focus,
+    button:focus-visible,
+    input[type='checkbox']:focus,
+    input[type='radio']:focus {
         outline: 1.5px solid var(--ph-survey-rating-active-bg-color);
         border-color: var(--ph-survey-rating-active-bg-color);
         outline-offset: 2px;
     }
 
-    & textarea:focus:not(:focus-visible),
-    & input[type='text']:focus:not(:focus-visible),
-    & button:focus:not(:focus-visible),
-    & input[type='checkbox']:focus:not(:focus-visible),
-    & input[type='radio']:focus:not(:focus-visible) {
+    textarea:focus:not(:focus-visible),
+    input[type='text']:focus:not(:focus-visible),
+    button:focus:not(:focus-visible),
+    input[type='checkbox']:focus:not(:focus-visible),
+    input[type='radio']:focus:not(:focus-visible) {
         outline: none;
     }
 
     /* Hover styles for inputs */
-    & textarea:hover:not(:focus),
-    & input[type='text']:hover:not(:focus) {
+    textarea:hover:not(:focus),
+    input[type='text']:hover:not(:focus) {
         border-color: var(--ph-survey-rating-active-bg-color);
     }
 
     /* Responsive font sizing */
     @media (max-width: 768px) {
-        & textarea,
-        & input[type='text'] {
+        textarea,
+        input[type='text'] {
             font-size: 1rem;
         }
     }
 
     /* Standard borders */
-    & .multiple-choice-options label,
-    & .rating-options-number,
-    & .form-cancel,
-    & input[type='checkbox'],
-    & input[type='radio'] {
+    .multiple-choice-options label,
+    .rating-options-number,
+    .form-cancel,
+    input[type='checkbox'],
+    input[type='radio'] {
         border: 1.5px solid var(--ph-survey-border-color);
     }
 
     /* Standard transitions */
-    & label,
-    & input[type='checkbox'],
-    & input[type='radio'],
-    & .ratings-emoji,
-    & .ratings-number,
-    & .footer-branding,
-    & .form-cancel {
+    label,
+    input[type='checkbox'],
+    input[type='radio'],
+    .ratings-emoji,
+    .ratings-number,
+    .footer-branding,
+    .form-cancel {
         transition: all 0.15s ease;
     }
 }
