@@ -20,8 +20,6 @@
     --ph-survey-text-primary-color: #020617; /* Default text color, based on text-slate-950 */
     --ph-survey-text-subtle-color: #939393;
     --ph-survey-input-background: white;
-    --ph-survey-input-focus-shadow: rgba(0, 0, 0, 0.15);
-    --ph-survey-choice-border-hover: rgba(0, 0, 0, 0.4);
     --ph-survey-scrollbar-thumb-color: var(--ph-survey-border-color);
     --ph-survey-scrollbar-track-color: var(--ph-survey-background-color);
     --ph-survey-input-text-color: #020617;
@@ -32,6 +30,79 @@
 
 * {
     box-sizing: border-box;
+    font-family: var(--ph-survey-font-family);
+    color: var(--ph-survey-text-primary-color);
+}
+
+/* --- Shared Styles (Shadow DOM Scoped) --- */
+/* All text inputs and textareas */
+textarea,
+input[type='text'] {
+    color: var(--ph-survey-input-text-color);
+    background: var(--ph-survey-input-background);
+    padding: 8px;
+    border: 1.5px solid var(--ph-survey-border-color);
+    border-radius: 4px;
+    transition:
+        border-color 0.15s ease,
+        box-shadow 0.15s ease,
+        transform 0.1s ease;
+}
+
+/* Focus styles for interactive elements */
+textarea:focus,
+textarea:focus-visible,
+input[type='text']:focus,
+input[type='text']:focus-visible,
+button:focus,
+button:focus-visible,
+input[type='checkbox']:focus,
+input[type='radio']:focus {
+    outline: 1.5px solid var(--ph-survey-rating-active-bg-color);
+    border-color: var(--ph-survey-rating-active-bg-color);
+    outline-offset: 2px;
+}
+
+textarea:focus:not(:focus-visible),
+input[type='text']:focus:not(:focus-visible),
+button:focus:not(:focus-visible),
+input[type='checkbox']:focus:not(:focus-visible),
+input[type='radio']:focus:not(:focus-visible) {
+    outline: none;
+}
+
+/* Hover styles for inputs */
+textarea:hover:not(:focus),
+input[type='text']:hover:not(:focus) {
+    border-color: var(--ph-survey-rating-active-bg-color);
+}
+
+/* Responsive font sizing */
+@media (max-width: 768px) {
+    textarea,
+    input[type='text'] {
+        font-size: 1rem;
+    }
+}
+
+/* Standard borders */
+.multiple-choice-options label,
+.rating-options-number,
+.form-cancel,
+input[type='checkbox'],
+input[type='radio'] {
+    border: 1.5px solid var(--ph-survey-border-color);
+}
+
+/* Standard transitions */
+label,
+input[type='checkbox'],
+input[type='radio'],
+.ratings-emoji,
+.ratings-number,
+.footer-branding,
+.form-cancel {
+    transition: all 0.15s ease;
 }
 
 .ph-survey-widget-tab {
@@ -43,14 +114,11 @@
     transform: rotate(-90deg) translateY(-100%);
     transform-origin: right top;
     padding: 10px 12px;
-    font-weight: 500;
     border-radius: 3px 3px 0 0;
     text-align: center;
     cursor: pointer;
     z-index: var(--ph-survey-z-index);
     transition: padding-bottom 0.1s ease-in-out;
-    font-size: 1rem;
-    font-family: inherit;
     border: none;
 }
 
@@ -132,8 +200,8 @@
 
 /* --- Questions & Description --- */
 .survey-question {
-    font-weight: 500;
     font-size: 14px;
+    font-weight: 500;
 }
 
 .survey-question-description {
@@ -152,9 +220,6 @@
 .thank-you-message {
     position: relative;
     animation: ph-survey-fade-in-up 0.3s ease-out forwards;
-    color: var(--ph-survey-text-primary-color);
-    font-weight: normal;
-    font-family: var(--ph-survey-font-family);
     text-align: left;
     width: 100%;
     z-index: var(--ph-survey-z-index);
@@ -170,36 +235,7 @@
 .survey-form {
     & textarea,
     input[type='text'] {
-        color: var(--ph-survey-input-text-color);
-        background: var(--ph-survey-input-background);
         min-width: 100%;
-        font-family: inherit;
-        padding: 8px;
-        border: 1.5px solid var(--ph-survey-border-color);
-        border-radius: 4px;
-        transition:
-            border-color 0.15s ease,
-            box-shadow 0.15s ease,
-            transform 0.1s ease;
-
-        &:focus,
-        &:focus-visible {
-            outline: 1.5px solid var(--ph-survey-rating-active-bg-color);
-            border-color: var(--ph-survey-rating-active-bg-color);
-            outline-offset: 2px;
-        }
-
-        &:focus:not(:focus-visible) {
-            outline: none;
-        }
-
-        &:hover:not(:focus) {
-            border-color: var(--ph-survey-rating-active-bg-color);
-        }
-
-        @media (max-width: 768px) {
-            font-size: 1rem;
-        }
     }
 
     & textarea {
@@ -240,14 +276,7 @@
         /* The clickable label area that contains the input */
         cursor: pointer;
         padding: 10px;
-        border: 1.5px solid var(--ph-survey-border-color);
-        border-radius: 4px;
         background: var(--ph-survey-input-background);
-        transition:
-            border-color 0.15s ease,
-            background-color 0.15s ease,
-            transform 0.1s ease,
-            box-shadow 0.15s ease;
         color: var(--ph-survey-input-text-color);
         display: flex;
         gap: 8px;
@@ -255,6 +284,12 @@
         position: relative;
         align-items: center;
         flex-wrap: wrap;
+        border-radius: 4px;
+        transition:
+            border-color 0.15s ease,
+            background-color 0.15s ease,
+            transform 0.1s ease,
+            box-shadow 0.15s ease;
 
         &:hover {
             &:not(:has(input:checked)) {
@@ -283,23 +318,17 @@
         -moz-appearance: none;
         width: 1rem;
         height: 1rem;
-        border: 1.5px solid var(--ph-survey-border-color);
-        border-radius: 3px;
         background: var(--ph-survey-input-background);
-        margin: 0;
-        margin-top: 1px; /* Align with text baseline */
         cursor: pointer;
         z-index: 1;
+        position: relative;
+        border-radius: 3px;
         transition:
             all 0.15s cubic-bezier(0.4, 0, 0.2, 1),
             transform 0.1s ease;
-        position: relative;
-        flex-shrink: 0;
 
-        /* Focus indicator for accessibility */
+        /* Focus state handled by shared focus styles above */
         &:focus {
-            outline: 1.5px solid var(--ph-survey-rating-active-bg-color);
-            outline-offset: 2px;
             transform: scale(1.05);
         }
 
@@ -353,6 +382,7 @@
     & input[type='radio']:checked::after {
         content: '';
         position: absolute;
+        box-sizing: content-box;
     }
 
     /* Radio buttons should be circular */
@@ -387,20 +417,6 @@
                 color: var(--ph-survey-text-subtle-color);
                 font-weight: 400;
             }
-
-            &:focus,
-            &:focus-visible {
-                outline: 1.5px solid var(--ph-survey-rating-active-bg-color);
-                border-color: var(--ph-survey-rating-active-bg-color);
-            }
-
-            &:hover:not(:focus) {
-                border-color: var(--ph-survey-rating-active-bg-color);
-            }
-
-            @media (max-width: 768px) {
-                font-size: 1rem;
-            }
         }
 
         /* Show the text input with animation when the choice is selected */
@@ -408,8 +424,6 @@
         &:has(input[type='radio']:checked) input[type='text'] {
             opacity: 1;
             transform: scaleX(1);
-
-            /* Slight delay to create staggered animation */
             transition-delay: 0.075s;
         }
     }
@@ -425,11 +439,11 @@
     font-size: 16px;
     background-color: transparent;
     border: none;
-    padding: 0px;
+    padding: 0;
+    opacity: 0.5;
     transition:
         transform 0.15s ease,
         opacity 0.15s ease;
-    opacity: 0.5;
 
     &:hover {
         cursor: pointer;
@@ -450,45 +464,38 @@
 /* Enhanced Number Rating Container */
 .rating-options-number {
     display: grid;
-    grid-auto-columns: 1fr; /* Equal columns */
-    grid-auto-flow: column; /* Arrange horizontally */
+    grid-auto-columns: 1fr;
+    grid-auto-flow: column;
     border-radius: 6px;
     overflow: hidden;
-    border: 1.5px solid var(--ph-survey-border-color);
 
     & > .ratings-number {
         /* Styles specific to numbers inside the grid */
-        border-right: 1px solid var(--ph-survey-border-color); /* Add dividers */
+        border-right: 1px solid var(--ph-survey-border-color);
         text-align: center;
         cursor: pointer;
-        transition:
-            background-color 0.15s ease,
-            color 0.15s ease; /* Add transitions */
-        color: var(--ph-survey-rating-text-color); /* Default text color */
-        border-left: none; /* Remove default button border */
+        color: var(--ph-survey-rating-text-color);
+        border-left: none;
         border-top: none;
         border-bottom: none;
-        /* padding already set by base .ratings-number */
-        /* Inherits base font-size, font-weight, padding from .ratings-number */
+        transition:
+            background-color 0.15s ease,
+            color 0.15s ease;
 
         &:last-of-type {
-            border-right: 0px; /* Remove last divider */
+            border-right: 0;
         }
         &.rating-active {
-            background: var(--ph-survey-rating-active-bg-color); /* Active background */
-            color: var(--ph-survey-rating-active-text-color); /* Use contrasting text color for active */
+            background: var(--ph-survey-rating-active-bg-color);
+            color: var(--ph-survey-rating-active-text-color);
         }
     }
 }
 
 .ratings-number {
-    /* Base styles for individual number buttons (also used outside grid) */
-    font-size: 16px;
-    font-weight: 600;
-    padding: 8px 0px;
+    padding: 8px 0;
     border: none;
     background-color: var(--ph-survey-rating-bg-color);
-    transition: all 0.15s ease;
 
     & .rating-active {
         background-color: var(--ph-survey-rating-active-bg-color);
@@ -511,14 +518,11 @@
 /* --- Buttons --- */
 /* Submit Button */
 .form-submit {
-    font-family: inherit;
-    font-weight: 700;
     text-align: center;
     border: none;
     cursor: pointer;
     user-select: none;
     padding: 12px;
-    font-size: 14px;
     border-radius: 6px;
     background: var(--ph-survey-submit-button-color);
     color: var(--ph-survey-submit-button-text-color);
@@ -545,21 +549,10 @@
         opacity: var(--ph-survey-disabled-button-opacity);
         cursor: not-allowed;
     }
-
-    &:focus-visible,
-    &:focus {
-        outline: 1.5px solid var(--ph-survey-text-subtle-color);
-        outline-offset: 2px;
-    }
-
-    &:focus:not(:focus-visible) {
-        outline: none;
-    }
 }
 
 /* Cancel Button (Circular X button) */
 .form-cancel {
-    border: 1.5px solid var(--ph-survey-border-color);
     background: white;
     border-radius: 100%;
     line-height: 0;
@@ -581,17 +574,13 @@
 
 /* --- Footer --- */
 .footer-branding {
-    font-size: 11px;
-    text-align: center;
     display: flex;
     justify-content: center;
     gap: 4px;
     align-items: center;
-    font-weight: 500;
     text-decoration: none;
     opacity: 0.6;
     transition: opacity 0.15s ease;
-    color: var(--ph-survey-text-primary-color);
 
     &:hover {
         opacity: 1;
@@ -608,16 +597,12 @@
 }
 
 .thank-you-message-header {
-    margin: 10px 0px 0px;
-    font-weight: 600;
-    font-size: 16px;
-    color: var(--ph-survey-text-primary-color);
+    margin: 10px 0 0;
 }
 
 .thank-you-message-body {
     font-size: 14px;
     opacity: 0.8;
-    color: var(--ph-survey-text-primary-color);
 }
 
 /* --- Scrollable Content --- */
@@ -670,8 +655,8 @@
 /* --- Validation Styles (Subtle for Survey UX) --- */
 /* Invalid text input styling */
 input.invalid {
-    border-color: #dc2626 !important; /* Subtle red border for invalid state */
-    box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.1); /* Very subtle red glow */
+    border-color: #dc2626 !important;
+    box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.1);
 }
 
 /* Validation hint text */
