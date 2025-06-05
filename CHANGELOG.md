@@ -1,3 +1,7 @@
+## 1.249.5 - 2025-06-05
+
+- feat: exception rate limiter by type (#1994)
+
 ## 1.249.4 - 2025-06-05
 
 - fix: use correct key for exception values in suppression rules (#2002)
