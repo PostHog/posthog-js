@@ -51,12 +51,22 @@
     }
 
     textarea,
-    input[type='text'] {
+    input[type='text'],
+    .multiple-choice-options label {
         color: var(--ph-survey-input-text-color);
         background: var(--ph-survey-input-background);
         padding: 8px;
         border: 1.5px solid var(--ph-survey-border-color);
         border-radius: 4px;
+        /* Slightly slower for form inputs to feel more intentional */
+        transition:
+            border-color 0.2s ease-out,
+            box-shadow 0.2s ease-out,
+            transform 0.15s ease-out;
+    }
+
+    textarea,
+    input[type='text'] {
         /* Slightly slower for form inputs to feel more intentional */
         transition:
             border-color 0.2s ease-out,
@@ -77,7 +87,7 @@
     button:focus-visible,
     input[type='checkbox']:focus,
     input[type='radio']:focus {
-        outline: 1.5px solid var(--ph-survey-rating-active-bg-color);
+        outline: 1.5px solid var(--ph-survey-border-color);
         border-color: var(--ph-survey-rating-active-bg-color);
         outline-offset: 2px;
     }
@@ -292,16 +302,11 @@
     & label {
         /* The clickable label area that contains the input */
         cursor: pointer;
-        padding: 10px;
-        background: var(--ph-survey-input-background);
-        color: var(--ph-survey-input-text-color);
         display: flex;
         gap: 8px;
         font-size: 13px;
-        position: relative;
         align-items: center;
         flex-wrap: wrap;
-        border-radius: 4px;
 
         &:hover {
             &:not(:has(input:checked)) {
