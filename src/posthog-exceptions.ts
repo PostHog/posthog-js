@@ -54,13 +54,13 @@ export class PostHogExceptions {
                     acc['$exception_types'].push(type)
                 }
                 if (isString(value) && value.length > 0) {
-                    acc['$exception_messages'].push(value)
+                    acc['$exception_values'].push(value)
                 }
                 return acc
             },
             {
                 $exception_types: [],
-                $exception_messages: [],
+                $exception_values: [],
             }
         )
 
@@ -68,7 +68,7 @@ export class PostHogExceptions {
             const results = rule.values.map((v) => {
                 const compare = propertyComparisons[v.operator]
                 const targets = isArray(v.value) ? v.value : [v.value]
-                const values = exceptionValues[v.key]
+                const values = exceptionValues[v.key] ?? []
                 return targets.length > 0 ? compare(targets, values) : false
             })
             return rule.type === 'OR' ? results.some(Boolean) : results.every(Boolean)

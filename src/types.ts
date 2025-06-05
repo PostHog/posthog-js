@@ -1682,7 +1682,7 @@ export interface ErrorTrackingSuppressionRule {
 }
 
 export interface ErrorTrackingSuppressionRuleValue {
-    key: '$exception_types' | '$exception_messages'
+    key: '$exception_types' | '$exception_values'
     operator: PropertyMatchType
     value: string | string[]
     type: string
