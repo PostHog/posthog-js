@@ -19,7 +19,7 @@ import { AutocaptureConfig, COPY_AUTOCAPTURE_EVENT, EventName, Properties, Remot
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
-import { isBoolean, isFunction, isNull, isObject } from './utils/type-utils'
+import { isFunction, isNull, isObject } from './utils/type-utils'
 import { createLogger } from './utils/logger'
 import { document, window } from './utils/globals'
 import { convertToURL } from './utils/request-utils'
@@ -325,17 +325,16 @@ export class Autocapture {
     }
 
     public get isEnabled(): boolean {
-        const persistedServerDisabled = this.instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
-        const memoryDisabled = this._isDisabledServerSide
-
-        if (
-            isNull(memoryDisabled) &&
-            !isBoolean(persistedServerDisabled) &&
-            !this.instance.config.advanced_disable_decide
-        ) {
-            // We only enable if we know that the server has not disabled it (unless decide is disabled)
+        // If we're not positive whether the server enabled/disabled it, we don't want to enable it yet
+        // This implies that if the /decide request is not made, we will not enable autocapture
+        // but that's not a problem because that's likely an adblocker acting and it'd block our autocapture event anyway
+        //
+        // In the rare case where we've explicitly disabled calling decide, then we'll use the persisted/client value
+        if (isNull(this._isDisabledServerSide) && !this.instance.config.advanced_disable_decide) {
             return false
         }
+
+        const persistedServerDisabled = this.instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
 
         const disabledServer = this._isDisabledServerSide ?? !!persistedServerDisabled
         const disabledClient = !this.instance.config.autocapture
