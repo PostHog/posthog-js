@@ -1,4 +1,4 @@
-import { MutationRateLimiter } from '../../../extensions/replay/mutation-rate-limiter'
+import { MutationThrottler } from '../../../extensions/replay/mutation-throttler'
 import {
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     MUTATION_SOURCE_TYPE,
@@ -25,7 +25,7 @@ const makeEvent = (mutations: {
     timestamp: 1,
 })
 
-describe('MutationRateLimiter', () => {
+describe('MutationThrottler', () => {
     const mockGetNode = jest.fn()
     const mockGetId = jest.fn()
     const rrwebMock: jest.Mock<rrwebRecord> = {
@@ -35,7 +35,7 @@ describe('MutationRateLimiter', () => {
         },
     } as unknown as jest.Mock<rrwebRecord>
 
-    let mutationRateLimiter: MutationRateLimiter
+    let mutationThrottler: MutationThrottler
     let onBlockedNodeMock: (id: number, node: Node | null) => void
 
     beforeEach(() => {
@@ -43,7 +43,7 @@ describe('MutationRateLimiter', () => {
         mockGetId.mockReturnValueOnce(1)
 
         onBlockedNodeMock = jest.fn()
-        mutationRateLimiter = new MutationRateLimiter(rrwebMock as unknown as rrwebRecord, {
+        mutationThrottler = new MutationThrottler(rrwebMock as unknown as rrwebRecord, {
             onBlockedNode: onBlockedNodeMock,
         })
     })
@@ -55,7 +55,7 @@ describe('MutationRateLimiter', () => {
     test('event is passed through unchanged when not throttled', () => {
         const event = makeEvent({})
 
-        const result = mutationRateLimiter.throttleMutations(event)
+        const result = mutationThrottler.throttleMutations(event)
 
         expect(result).toBe(event)
     })
@@ -63,9 +63,9 @@ describe('MutationRateLimiter', () => {
     test('returns undefined if no mutations are left', () => {
         const event = makeEvent({ attributes: [{ id: 1, attributes: { a: 'ttribute' } }] })
 
-        mutationRateLimiter['_mutationBuckets']['1'] = 0
+        mutationThrottler['_rateLimiter']['_buckets']['1'] = 0
 
-        const result = mutationRateLimiter.throttleMutations(event)
+        const result = mutationThrottler.throttleMutations(event)
 
         expect(result).toBeUndefined()
     })
@@ -77,9 +77,9 @@ describe('MutationRateLimiter', () => {
             attributes: [{ id: 1, attributes: { a: 'ttribute' } }],
         })
 
-        mutationRateLimiter['_mutationBuckets']['1'] = 0
+        mutationThrottler['_rateLimiter']['_buckets']['1'] = 0
 
-        const result = mutationRateLimiter.throttleMutations(event)
+        const result = mutationThrottler.throttleMutations(event)
 
         expect(result).toStrictEqual(
             makeEvent({
@@ -96,9 +96,9 @@ describe('MutationRateLimiter', () => {
             attributes: [{ id: 1, attributes: { a: 'ttribute' } }],
         })
 
-        mutationRateLimiter['_mutationBuckets']['1'] = 0
+        mutationThrottler['_rateLimiter']['_buckets']['1'] = 0
 
-        const result = mutationRateLimiter.throttleMutations(event)
+        const result = mutationThrottler.throttleMutations(event)
 
         expect(result).toStrictEqual(
             makeEvent({
@@ -114,7 +114,7 @@ describe('MutationRateLimiter', () => {
             data: {},
         }
 
-        const result = mutationRateLimiter.throttleMutations(event as unknown as eventWithTime)
+        const result = mutationThrottler.throttleMutations(event as unknown as eventWithTime)
 
         expect(result).toBe(event)
     })

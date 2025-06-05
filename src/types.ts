@@ -663,6 +663,14 @@ export interface PostHogConfig {
     session_recording: SessionRecordingOptions
 
     /**
+     * Determines the error tracking options.
+     *
+     * @see `ErrorTrackingOptions`
+     * @default {}
+     */
+    error_tracking: ErrorTrackingOptions
+
+    /**
      * Determines the session idle timeout in seconds.
      * Any new event that's happened after this timeout will create a new session.
      *
@@ -967,6 +975,26 @@ export interface PostHogConfig {
     inapp_link_new_window?: boolean
 }
 
+export interface ErrorTrackingOptions {
+    /**
+     * ADVANCED: alters the refill rate for the token bucket mutation throttling
+     * Normally only altered alongside posthog support guidance.
+     * Accepts values between 0 and 100
+     *
+     * @default 1
+     */
+    __exceptionRateLimiterRefillRate?: number
+
+    /**
+     * ADVANCED: alters the bucket size for the token bucket mutation throttling
+     * Normally only altered alongside posthog support guidance.
+     * Accepts values between 0 and 100
+     *
+     * @default 10
+     */
+    __exceptionRateLimiterBucketSize?: number
+}
+
 export interface SessionRecordingOptions {
     /**
      * Derived from `rrweb.record` options
@@ -1114,7 +1142,7 @@ export interface SessionRecordingOptions {
      *
      * @default 10
      */
-    __mutationRateLimiterRefillRate?: number
+    __mutationThrottlerRefillRate?: number
 
     /**
      * ADVANCED: alters the bucket size for the token bucket mutation throttling
@@ -1123,7 +1151,7 @@ export interface SessionRecordingOptions {
      *
      * @default 100
      */
-    __mutationRateLimiterBucketSize?: number
+    __mutationThrottlerBucketSize?: number
 }
 
 export type SessionIdChangedCallback = (
@@ -1657,25 +1685,6 @@ export type ErrorEventArgs = [
 export const severityLevels = ['fatal', 'error', 'warning', 'log', 'info', 'debug'] as const
 export declare type SeverityLevel = (typeof severityLevels)[number]
 
-export interface ErrorProperties {
-    $exception_type: string
-    $exception_message: string
-    $exception_level: SeverityLevel
-    $exception_source?: string
-    $exception_lineno?: number
-    $exception_colno?: number
-    $exception_DOMException_code?: string
-    $exception_is_synthetic?: boolean
-    $exception_stack_trace_raw?: string
-    $exception_handled?: boolean
-    $exception_personURL?: string
-}
-
-export interface ErrorConversions {
-    errorToProperties: (args: ErrorEventArgs) => ErrorProperties
-    unhandledRejectionToProperties: (args: [ev: PromiseRejectionEvent]) => ErrorProperties
-}
-
 export interface SessionRecordingUrlTrigger {
     url: string
     matching: 'regex'
@@ -1689,7 +1698,7 @@ export interface ErrorTrackingSuppressionRule {
 }
 
 export interface ErrorTrackingSuppressionRuleValue {
-    key: '$exception_types' | '$exception_messages'
+    key: '$exception_types' | '$exception_values'
     operator: PropertyMatchType
     value: string | string[]
     type: string

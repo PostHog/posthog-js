@@ -201,6 +201,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     person_profiles: 'identified_only',
     before_send: undefined,
     request_queue_config: { flush_interval_ms: DEFAULT_FLUSH_INTERVAL_MS },
+    error_tracking: {},
 
     // Used for internal testing
     _onCapture: __NOOP,
@@ -934,13 +935,6 @@ export class PostHog {
             data.properties['$event_time_override_system_time'] = systemTime
         }
 
-        // Top-level $set overriding values from the one from properties is taken from the plugin-server normalizeEvent
-        // This doesn't handle $set_once, because posthog-people doesn't either
-        const finalSet = { ...data.properties['$set'], ...data['$set'] }
-        if (!isEmptyObject(finalSet)) {
-            this.setPersonPropertiesForFlags(finalSet)
-        }
-
         if (event_name === SurveyEventName.DISMISSED || event_name === SurveyEventName.SENT) {
             const surveyId = properties?.[SurveyEventProperties.SURVEY_ID]
             const surveyIteration = properties?.[SurveyEventProperties.SURVEY_ITERATION]
@@ -952,6 +946,13 @@ export class PostHog {
                     event_name === SurveyEventName.SENT ? 'responded' : 'dismissed'
                 )]: true,
             }
+        }
+
+        // Top-level $set overriding values from the one from properties is taken from the plugin-server normalizeEvent
+        // This doesn't handle $set_once, because posthog-people doesn't either
+        const finalSet = { ...data.properties['$set'], ...data['$set'] }
+        if (!isEmptyObject(finalSet)) {
+            this.setPersonPropertiesForFlags(finalSet)
         }
 
         if (!isNullish(this.config.before_send)) {

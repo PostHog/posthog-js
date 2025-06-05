@@ -1,3 +1,4 @@
+import { ErrorProperties } from '../extensions/exception-autocapture/error-conversion'
 import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
 import { DeadClicksAutoCaptureConfig, ExternalIntegrationKind, Properties, RemoteConfig, SiteAppLoader } from '../types'
@@ -75,9 +76,9 @@ interface PostHogExtensions {
     loadSiteApp?: (posthog: PostHog, appUrl: string, callback: (error?: string | Event, event?: Event) => void) => void
 
     errorWrappingFunctions?: {
-        wrapOnError: (captureFn: (props: Properties) => void) => () => void
-        wrapUnhandledRejection: (captureFn: (props: Properties) => void) => () => void
-        wrapConsoleError: (captureFn: (props: Properties) => void) => () => void
+        wrapOnError: (captureFn: (props: ErrorProperties) => void) => () => void
+        wrapUnhandledRejection: (captureFn: (props: ErrorProperties) => void) => () => void
+        wrapConsoleError: (captureFn: (props: ErrorProperties) => void) => () => void
     }
     rrweb?: { record: any; version: string }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
