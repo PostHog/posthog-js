@@ -324,9 +324,9 @@ export function MultipleChoiceQuestion({
                 setSelectedChoices('')
             }
 
-            // Focus the input when open choice is selected
+            // Focus the input when open choice is selected, slight delay because of the animation
             if (newOpenSelected) {
-                setTimeout(() => openChoiceInputRef.current?.focus(), 150)
+                setTimeout(() => openChoiceInputRef.current?.focus(), 75)
             }
             return
         }
