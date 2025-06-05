@@ -16,7 +16,7 @@ module.exports = {
             if (importPath.startsWith('./') || importPath.startsWith('../')) {
                 // For relative paths, check if they contain 'external'
                 // This matches the test case behavior
-                return importPath.includes('external')
+                return importPath.includes('replay/external')
             }
 
             return false
