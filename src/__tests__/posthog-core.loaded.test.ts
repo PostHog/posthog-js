@@ -167,7 +167,7 @@ describe('loaded() with flags', () => {
             const receivedFeatureFlagsSpy = jest.spyOn(instance.featureFlags, 'receivedFeatureFlags')
 
             instance.featureFlags._callDecideEndpoint()
-            jest.runAllTimers()
+            jest.runOnlyPendingTimers()
 
             if (expectedCall) {
                 expect(receivedFeatureFlagsSpy).toHaveBeenCalledWith(expectedArgs, false)

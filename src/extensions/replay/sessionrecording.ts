@@ -41,7 +41,7 @@ import { createLogger } from '../../utils/logger'
 import { assignableWindow, document, PostHogExtensionKind, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
-import { MutationRateLimiter } from './mutation-rate-limiter'
+import { MutationThrottler } from './mutation-throttler'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
 import { clampToRange } from '../../utils/number-utils'
 import Config from '../../config'
@@ -260,7 +260,7 @@ export class SessionRecording {
     // and a queue - that contains rrweb events that we want to send to rrweb, but rrweb wasn't able to accept them yet
     private _queuedRRWebEvents: QueuedRRWebEvent[] = []
 
-    private _mutationRateLimiter?: MutationRateLimiter
+    private _mutationThrottler?: MutationThrottler
     private _captureStarted: boolean
     private _stopRrweb: listenerHandler | undefined
     private _isIdle: boolean | 'unknown' = 'unknown'
@@ -956,11 +956,11 @@ export class SessionRecording {
             return
         }
 
-        this._mutationRateLimiter =
-            this._mutationRateLimiter ??
-            new MutationRateLimiter(rrwebRecord, {
-                refillRate: this._instance.config.session_recording.__mutationRateLimiterRefillRate,
-                bucketSize: this._instance.config.session_recording.__mutationRateLimiterBucketSize,
+        this._mutationThrottler =
+            this._mutationThrottler ??
+            new MutationThrottler(rrwebRecord, {
+                refillRate: this._instance.config.session_recording.__mutationThrottlerRefillRate,
+                bucketSize: this._instance.config.session_recording.__mutationThrottlerBucketSize,
                 onBlockedNode: (id, node) => {
                     const message = `Too many mutations on node '${id}'. Rate limiting. This could be due to SVG animations or something similar`
                     logger.info(message, {
@@ -1083,9 +1083,7 @@ export class SessionRecording {
             this._clearBuffer()
         }
 
-        const throttledEvent = this._mutationRateLimiter
-            ? this._mutationRateLimiter.throttleMutations(rawEvent)
-            : rawEvent
+        const throttledEvent = this._mutationThrottler ? this._mutationThrottler.throttleMutations(rawEvent) : rawEvent
 
         if (!throttledEvent) {
             return

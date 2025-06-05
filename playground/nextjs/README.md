@@ -8,13 +8,6 @@ NEXT_PUBLIC_POSTHOG_KEY='<your-local-api-key>' pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-
-### Against a locally running PostHog instance
-
-```bash
-NEXT_PUBLIC_POSTHOG_KEY='<your-local-api-key>' NEXT_PUBLIC_POSTHOG_HOST='http://localhost:8010' pnpm dev
-```
-
 ### Testing local changes to posthog-js
 
 Running `pnpm dev` will run an additional script that uses pnpm to link `posthog-js` locally to this package.
@@ -22,7 +15,7 @@ Running `pnpm dev` will run an additional script that uses pnpm to link `posthog
 If you need to provide environment variables, you can do so:
 
 ```bash
-NEXT_PUBLIC_POSTHOG_KEY='<your-local-api-key>' NEXT_PUBLIC_POSTHOG_HOST='http://localhost:8000' pnpm dev
+NEXT_PUBLIC_POSTHOG_KEY='<your-local-api-key>' NEXT_PUBLIC_POSTHOG_HOST='http://localhost:8010' pnpm dev
 ```
 
 ### Testing cross-subdomain tracking
@@ -32,12 +25,14 @@ subdomains to localhost. There are a few steps required to do this, these are th
 with Chrome:
 
 Add the following to your /etc/host file:
+
 ```
 127.0.0.1 www.posthog.dev
 127.0.0.1 app.posthog.dev
 ```
 
 To restart your DNS server on MacOS, run:
+
 ```bash
 sudo killall -HUP mDNSResponder
 ```
@@ -50,5 +45,6 @@ NEXT_PUBLIC_POSTHOG_KEY='<your-local-api-key>' NEXT_PUBLIC_POSTHOG_HOST='http://
 
 You can now open the subdomains we added to the host file, but you will likely see a warning about unsafe certificates. To get around this, in Chrome you can type `thisisunsafe` to bypass the warning.
 The subdomains are:
-* [https://www.posthog.dev:3000](https://www.posthog.dev:3000)
-* [https://app.posthog.dev:3000](https://app.posthog.dev:3000)
+
+- [https://www.posthog.dev:3000](https://www.posthog.dev:3000)
+- [https://app.posthog.dev:3000](https://app.posthog.dev:3000)
