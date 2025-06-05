@@ -191,8 +191,7 @@
     }
 }
 
-.survey-box,
-.thank-you-message-container {
+.survey-box {
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -209,7 +208,7 @@
 }
 
 .question-container,
-.thank-you-message-container {
+.thank-you-message {
     animation: ph-survey-question-slide-in 0.25s ease-out forwards;
     display: flex;
     flex-direction: column;

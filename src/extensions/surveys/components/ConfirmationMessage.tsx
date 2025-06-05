@@ -25,25 +25,23 @@ export function ConfirmationMessage({
     const { isPopup } = useContext(SurveyContext)
 
     return (
-        <div className="thank-you-message">
+        <div className="thank-you-message" role="status">
             {isPopup && <Cancel onClick={() => onClose()} />}
-            <div className="thank-you-message-container">
-                <h3 className="thank-you-message-header">{header}</h3>
-                {description &&
-                    renderChildrenAsTextOrHtml({
-                        component: h('div', { className: 'thank-you-message-body' }),
-                        children: description,
-                        renderAsHtml: !forceDisableHtml && contentType !== 'text',
-                    })}
-                {isPopup && (
-                    <BottomSection
-                        text={appearance.thankYouMessageCloseButtonText || 'Close'}
-                        submitDisabled={false}
-                        appearance={appearance}
-                        onSubmit={() => onClose()}
-                    />
-                )}
-            </div>
+            <h3 className="thank-you-message-header">{header}</h3>
+            {description &&
+                renderChildrenAsTextOrHtml({
+                    component: h('div', { className: 'thank-you-message-body' }),
+                    children: description,
+                    renderAsHtml: !forceDisableHtml && contentType !== 'text',
+                })}
+            {isPopup && (
+                <BottomSection
+                    text={appearance.thankYouMessageCloseButtonText || 'Close'}
+                    submitDisabled={false}
+                    appearance={appearance}
+                    onSubmit={() => onClose()}
+                />
+            )}
         </div>
     )
 }

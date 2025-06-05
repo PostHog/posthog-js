@@ -1,4 +1,4 @@
-import { Fragment, h } from 'preact'
+import { h } from 'preact'
 import { useContext } from 'preact/hooks'
 import { SurveyQuestion, SurveyQuestionType } from '../../../posthog-surveys-types'
 import { cancelSVG } from '../icons'
@@ -15,7 +15,7 @@ export function QuestionHeader({
 }) {
     const TitleComponent = question.type === SurveyQuestionType.Open ? 'label' : 'h3'
     return (
-        <Fragment>
+        <div class="question-header">
             <TitleComponent className="survey-question" htmlFor={htmlFor}>
                 {question.question}
             </TitleComponent>
@@ -25,7 +25,7 @@ export function QuestionHeader({
                     children: question.description,
                     renderAsHtml: !forceDisableHtml && question.descriptionContentType !== 'text',
                 })}
-        </Fragment>
+        </div>
     )
 }
 
