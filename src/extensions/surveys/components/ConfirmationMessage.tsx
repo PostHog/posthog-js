@@ -30,7 +30,7 @@ export function ConfirmationMessage({
             <h3 className="thank-you-message-header">{header}</h3>
             {description &&
                 renderChildrenAsTextOrHtml({
-                    component: h('div', { className: 'thank-you-message-body' }),
+                    component: h('p', { className: 'thank-you-message-body' }),
                     children: description,
                     renderAsHtml: !forceDisableHtml && contentType !== 'text',
                 })}
