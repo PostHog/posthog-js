@@ -22,13 +22,11 @@ export interface CommonQuestionProps {
     initialValue?: string | string[] | number | null
 }
 
-// Enhanced TypeScript interfaces for better type safety
 interface OpenEndedInputState {
     isSelected: boolean
     inputValue: string
 }
 
-// Type guards for better type safety
 const isValidStringArray = (value: unknown): value is string[] => {
     return isArray(value) && value.every((item) => isString(item))
 }
@@ -314,12 +312,9 @@ export function MultipleChoiceQuestion({
 }) {
     const openChoiceInputRef = useRef<HTMLInputElement>(null)
     const choices = useMemo(() => getDisplayOrderChoices(question), [question])
-
-    // Enhanced state management with better initialization
     const [selectedChoices, setSelectedChoices] = useState<string | string[] | null>(() =>
         initializeSelectedChoices(initialValue, question.type)
     )
-
     const [openEndedState, setOpenEndedState] = useState<OpenEndedInputState>(() =>
         initializeOpenEndedState(initialValue, choices)
     )

@@ -930,7 +930,7 @@ export function SurveyPopup({
     return (
         <SurveyContext.Provider value={surveyContextValue}>
             <div
-                className="survey-container"
+                className="ph-survey"
                 style={{
                     ...getPopoverPosition(survey.type, survey.appearance?.position, survey.appearance?.widgetType),
                     ...style,
