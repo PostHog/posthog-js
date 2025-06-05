@@ -30,6 +30,10 @@
     --ph-widget-text-color: white; /* Default text color (usually white for contrast) */
 }
 
+* {
+    box-sizing: border-box;
+}
+
 .ph-survey-widget-tab {
     position: fixed;
     top: 50%;
@@ -146,7 +150,6 @@
 
 .survey-form,
 .thank-you-message {
-    box-sizing: border-box;
     position: relative;
     animation: ph-survey-fade-in-up 0.3s ease-out forwards;
     color: var(--ph-survey-text-primary-color);
@@ -167,12 +170,10 @@
 .survey-form {
     & textarea,
     input[type='text'] {
-        box-sizing: border-box;
         color: var(--ph-survey-input-text-color);
         background: var(--ph-survey-input-background);
         min-width: 100%;
         font-family: inherit;
-        border: none;
         padding: 8px;
         border: 1.5px solid var(--ph-survey-border-color);
         border-radius: 4px;
@@ -181,10 +182,10 @@
             box-shadow 0.15s ease,
             transform 0.1s ease;
 
-        &:focus-visible,
-        &:focus {
-            outline: 1.5px solid var(--ph-survey-text-subtle-color);
-            outline-offset: 2px;
+        &:focus,
+        &:focus-visible {
+            outline: 1.5px solid var(--ph-survey-rating-active-bg-color);
+            border-color: var(--ph-survey-rating-active-bg-color);
         }
 
         &:focus:not(:focus-visible) {
@@ -192,7 +193,7 @@
         }
 
         &:hover:not(:focus) {
-            border-color: var(--ph-survey-text-subtle-color);
+            border-color: var(--ph-survey-rating-active-bg-color);
         }
 
         @media (max-width: 768px) {
@@ -268,7 +269,7 @@
         }
 
         &:has(input:checked) {
-            border-color: var(--ph-survey-submit-button-color);
+            border-color: var(--ph-survey-rating-active-bg-color);
             box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
         }
     }
@@ -296,14 +297,14 @@
 
         /* Focus indicator for accessibility */
         &:focus {
-            outline: 1.5px solid var(--ph-survey-text-subtle-color);
+            outline: 1.5px solid var(--ph-survey-rating-active-bg-color);
             outline-offset: 2px;
             transform: scale(1.05);
         }
 
         /* Hover state */
         &:hover {
-            border-color: var(--ph-survey-text-subtle-color);
+            border-color: var(--ph-survey-rating-active-bg-color);
             transform: scale(1.05);
         }
 
@@ -314,8 +315,8 @@
 
         /* Checked state */
         &:checked {
-            background: var(--ph-survey-submit-button-color);
-            border-color: var(--ph-survey-submit-button-color);
+            background: var(--ph-survey-rating-active-bg-color);
+            border-color: var(--ph-survey-rating-active-bg-color);
             transform: scale(1);
         }
 
@@ -326,12 +327,10 @@
 
     /* Checkbox checkmark indicator */
     & input[type='checkbox']:checked::after {
-        content: '';
-        position: absolute;
         left: 4px;
         width: 4px;
         height: 8px;
-        border: solid var(--ph-survey-submit-button-text-color);
+        border: solid var(--ph-survey-rating-active-text-color);
         border-width: 0 2px 2px 0;
         transform: rotate(45deg) scale(0);
         animation: ph-survey-checkmark-reveal 0.2s ease-out 0.1s forwards;
@@ -339,16 +338,20 @@
 
     /* Radio button dot indicator */
     & input[type='radio']:checked::after {
-        content: '';
-        position: absolute;
         left: 5px;
         top: 5px;
         width: 6px;
         height: 6px;
         border-radius: 50%;
-        background: var(--ph-survey-submit-button-text-color);
+        background: var(--ph-survey-rating-active-text-color);
         transform: scale(0);
         animation: ph-survey-radio-reveal 0.15s ease-out 0.05s forwards;
+    }
+
+    & input[type='checkbox']:checked::after,
+    & input[type='radio']:checked::after {
+        content: '';
+        position: absolute;
     }
 
     /* Radio buttons should be circular */
@@ -386,12 +389,12 @@
 
             &:focus,
             &:focus-visible {
-                outline: 1.5px solid var(--ph-survey-text-subtle-color);
-                border-color: var(--ph-survey-submit-button-color);
+                outline: 1.5px solid var(--ph-survey-rating-active-bg-color);
+                border-color: var(--ph-survey-rating-active-bg-color);
             }
 
             &:hover:not(:focus) {
-                border-color: var(--ph-survey-text-subtle-color);
+                border-color: var(--ph-survey-rating-active-bg-color);
             }
 
             @media (max-width: 768px) {

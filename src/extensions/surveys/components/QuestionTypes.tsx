@@ -88,6 +88,8 @@ export function OpenTextQuestion({
         return ''
     })
 
+    const htmlFor = question.id ?? 'open-text-question'
+
     return (
         <Fragment>
             <div className="question-container">
@@ -96,8 +98,10 @@ export function OpenTextQuestion({
                     description={question.description}
                     descriptionContentType={question.descriptionContentType}
                     forceDisableHtml={forceDisableHtml}
+                    htmlFor={htmlFor}
                 />
                 <textarea
+                    id={htmlFor}
                     rows={4}
                     placeholder={appearance?.placeholder}
                     onInput={(e) => {
