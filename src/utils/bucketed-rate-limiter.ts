@@ -21,7 +21,7 @@ export class BucketedRateLimiter<T extends string | number> {
         this._refillRate = clampToRange(
             this._options.refillRate,
             0,
-            Math.min(this._bucketSize, 100), // never refill more than bucket size
+            this._bucketSize, // never refill more than bucket size
             'rate limiter refill rate'
         )
         this._refillInterval = clampToRange(
@@ -38,10 +38,11 @@ export class BucketedRateLimiter<T extends string | number> {
     private _refillBuckets = () => {
         Object.keys(this._buckets).forEach((key) => {
             const newTokens = this._getBucket(key) + this._refillRate
-            this._setBucket(key, newTokens)
 
             if (newTokens >= this._bucketSize) {
                 delete this._buckets[key]
+            } else {
+                this._setBucket(key, newTokens)
             }
         })
     }
@@ -53,7 +54,7 @@ export class BucketedRateLimiter<T extends string | number> {
         this._buckets[String(key)] = value
     }
 
-    public isRateLimited = (key: T) => {
+    public consumeRateLimit = (key: T) => {
         let tokens = this._getBucket(key) ?? this._bucketSize
         tokens = Math.max(tokens - 1, 0)
 

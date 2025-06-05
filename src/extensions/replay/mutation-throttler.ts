@@ -73,7 +73,7 @@ export class MutationThrottler {
             data.attributes = data.attributes.filter((attr) => {
                 const [nodeId] = this._getNodeOrRelevantParent(attr.id)
 
-                const isRateLimited = this._rateLimiter.isRateLimited(nodeId)
+                const isRateLimited = this._rateLimiter.consumeRateLimit(nodeId)
 
                 if (isRateLimited) {
                     return false

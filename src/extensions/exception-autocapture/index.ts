@@ -147,7 +147,7 @@ export class ExceptionObserver {
         }/person/${this._instance.get_distinct_id()}`
 
         const exceptionType = errorProperties.$exception_list[0].type ?? 'Exception'
-        const isRateLimited = this._rateLimiter.isRateLimited(exceptionType)
+        const isRateLimited = this._rateLimiter.consumeRateLimit(exceptionType)
 
         if (isRateLimited) {
             logger.info('Skipping exception capture because of client rate limiting.', {

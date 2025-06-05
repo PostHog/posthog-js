@@ -19,14 +19,14 @@ describe('BucketedRateLimiter', () => {
     })
 
     test('it is not rate limited by default', () => {
-        const result = rateLimiter.isRateLimited('ResizeObserver')
+        const result = rateLimiter.consumeRateLimit('ResizeObserver')
         expect(result).toBe(false)
     })
 
     test('returns true if no mutations are left', () => {
         rateLimiter['_buckets']['ResizeObserver'] = 0
 
-        const result = rateLimiter.isRateLimited('ResizeObserver')
+        const result = rateLimiter.consumeRateLimit('ResizeObserver')
         expect(result).toBe(true)
     })
 })
