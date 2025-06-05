@@ -39,6 +39,11 @@
     z-index: var(--ph-survey-z-index);
     height: fit-content;
 
+    h3,
+    p {
+        margin: 0;
+    }
+
     * {
         box-sizing: border-box;
         font-family: var(--ph-survey-font-family);

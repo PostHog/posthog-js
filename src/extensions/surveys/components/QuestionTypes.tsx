@@ -91,13 +91,7 @@ export function OpenTextQuestion({
     return (
         <Fragment>
             <div className="question-container">
-                <QuestionHeader
-                    question={question.question}
-                    description={question.description}
-                    descriptionContentType={question.descriptionContentType}
-                    forceDisableHtml={forceDisableHtml}
-                    htmlFor={htmlFor}
-                />
+                <QuestionHeader question={question} forceDisableHtml={forceDisableHtml} htmlFor={htmlFor} />
                 <textarea
                     id={htmlFor}
                     rows={4}
@@ -135,12 +129,7 @@ export function LinkQuestion({
     return (
         <Fragment>
             <div className="question-container">
-                <QuestionHeader
-                    question={question.question}
-                    description={question.description}
-                    descriptionContentType={question.descriptionContentType}
-                    forceDisableHtml={forceDisableHtml}
-                />
+                <QuestionHeader question={question} forceDisableHtml={forceDisableHtml} />
             </div>
             <BottomSection
                 text={question.buttonText || 'Submit'}
@@ -193,12 +182,7 @@ export function RatingQuestion({
     return (
         <Fragment>
             <div className="question-container">
-                <QuestionHeader
-                    question={question.question}
-                    description={question.description}
-                    descriptionContentType={question.descriptionContentType}
-                    forceDisableHtml={forceDisableHtml}
-                />
+                <QuestionHeader question={question} forceDisableHtml={forceDisableHtml} />
                 <div className="rating-section">
                     <div className="rating-options">
                         {question.display === 'emoji' && (
@@ -445,12 +429,7 @@ export function MultipleChoiceQuestion({
     return (
         <Fragment>
             <div className="question-container">
-                <QuestionHeader
-                    question={question.question}
-                    description={question.description}
-                    descriptionContentType={question.descriptionContentType}
-                    forceDisableHtml={forceDisableHtml}
-                />
+                <QuestionHeader question={question} forceDisableHtml={forceDisableHtml} />
                 <fieldset className="multiple-choice-options limit-height">
                     <legend className="sr-only">
                         {isMultipleChoiceQuestion ? ' Select all that apply' : ' Select one'}

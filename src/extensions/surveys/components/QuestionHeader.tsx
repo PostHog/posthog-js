@@ -1,32 +1,29 @@
 import { Fragment, h } from 'preact'
 import { useContext } from 'preact/hooks'
-import { SurveyQuestionDescriptionContentType } from '../../../posthog-surveys-types'
+import { SurveyQuestion, SurveyQuestionType } from '../../../posthog-surveys-types'
 import { cancelSVG } from '../icons'
 import { SurveyContext, renderChildrenAsTextOrHtml } from '../surveys-extension-utils'
 
 export function QuestionHeader({
     question,
-    description,
-    descriptionContentType,
     forceDisableHtml,
     htmlFor,
 }: {
-    question: string
-    description?: string | null
-    descriptionContentType?: SurveyQuestionDescriptionContentType
+    question: Pick<SurveyQuestion, 'question' | 'description' | 'descriptionContentType' | 'type'>
     forceDisableHtml: boolean
     htmlFor?: string
 }) {
+    const TitleComponent = question.type === SurveyQuestionType.Open ? 'label' : 'h3'
     return (
         <Fragment>
-            <label className="survey-question" htmlFor={htmlFor}>
-                {question}
-            </label>
-            {description &&
+            <TitleComponent className="survey-question" htmlFor={htmlFor}>
+                {question.question}
+            </TitleComponent>
+            {question.description &&
                 renderChildrenAsTextOrHtml({
-                    component: h('div', { className: 'survey-question-description' }),
-                    children: description,
-                    renderAsHtml: !forceDisableHtml && descriptionContentType !== 'text',
+                    component: h('p', { className: 'survey-question-description' }),
+                    children: question.description,
+                    renderAsHtml: !forceDisableHtml && question.descriptionContentType !== 'text',
                 })}
         </Fragment>
     )
