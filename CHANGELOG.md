@@ -1,3 +1,7 @@
+## 1.249.4 - 2025-06-05
+
+- fix: use correct key for exception values in suppression rules (#2002)
+
 ## 1.249.3 - 2025-06-04
 
 - fix: set survey properties before sending the event (#1997)
@@ -50,7 +54,7 @@
 
 ## 1.244.0 - 2025-05-19
 
- - automation let us down here, and this is identical to 1.243.1
+- automation let us down here, and this is identical to 1.243.1
 
 ## 1.243.1 - 2025-05-19
 
@@ -118,7 +122,7 @@
 ## 1.239.1 - 2025-05-02
 
 - fix: dont mangle some surveys properties (#1934)
-- docs: use history_change option on SPA playgrounds  (#1929)
+- docs: use history_change option on SPA playgrounds (#1929)
 
 ## 1.239.0 - 2025-05-01
 
@@ -240,19 +244,13 @@
 
 ## 1.234.6 - 2025-04-01
 
-
-
 ## 1.234.5 - 2025-04-01
 
 - fix: focus open input field on choice click (#1856)
 
 ## 1.234.4 - 2025-03-31
 
-
-
 ## 1.234.3 - 2025-03-31
-
-
 
 ## 1.234.2 - 2025-03-28
 
@@ -260,8 +258,6 @@
 - fix(err): message must always be a string (#1852)
 
 ## 1.234.1 - 2025-03-27
-
-
 
 ## 1.234.0 - 2025-03-27
 
@@ -281,8 +277,6 @@
 - chore: add onSurveysLoaded listener (#1834)
 
 ## 1.232.6 - 2025-03-24
-
-
 
 ## 1.232.5 - 2025-03-24
 
@@ -312,7 +306,7 @@
 
 ## 1.231.3 - 2025-03-19
 
-- fix: do not allow non string `$current_url`  to be provided (#1835)
+- fix: do not allow non string `$current_url` to be provided (#1835)
 
 ## 1.231.2 - 2025-03-18
 
@@ -403,7 +397,7 @@
 - chore: image blocking example (#1789)
 - chore(): set all github actions to run on ubuntu-22.04 (#1784)
 - fix(flags): Make sure flags are loaded when identify is called (#1785)
-- fix(flags): pass along $initial_ person properties in decide requests automatically (#1781)
+- fix(flags): pass along $initial\_ person properties in decide requests automatically (#1781)
 - chore: Mark peerDependencies as optional (#1777)
 - feat: Make `getQueryParams` more resilient (#1778)
 
@@ -450,8 +444,6 @@
 - fix: improve survey bundle size (#1759)
 
 ## 1.223.1 - 2025-02-22
-
-
 
 ## 1.223.0 - 2025-02-22
 
@@ -507,8 +499,6 @@
 
 ## 1.218.1 - 2025-02-14
 
-
-
 ## 1.218.0 - 2025-02-14
 
 - feat(flags): Add remote config feature flag method that bypasses cached values (#1729)
@@ -555,8 +545,6 @@
 - chore: Drop CI support for Node 16 (EOL), use pnpm 9 internally (#1723)
 
 ## 1.215.7 - 2025-02-10
-
-
 
 ## 1.215.6 - 2025-02-06
 
@@ -642,8 +630,6 @@
 
 ## 1.210.0 - 2025-01-24
 
-
-
 ## 1.209.4 - 2025-01-24
 
 - feat: Annotate our `scroll` events as `passive` (#1684)
@@ -671,8 +657,6 @@
 - fix: correctly cache split css (#1682)
 
 ## 1.208.0 - 2025-01-23
-
-
 
 ## 1.207.9 - 2025-01-23
 
@@ -724,7 +708,7 @@
 
 ## 1.206.0 - 2025-01-14
 
-- feat: add irclid and _kx as campaign parameters (#1648)
+- feat: add irclid and \_kx as campaign parameters (#1648)
 - chore: Rename cklsh constants to cookieless (#1647)
 
 ## 1.205.1 - 2025-01-13
@@ -777,7 +761,7 @@
 
 ## 1.202.3 - 2024-12-18
 
- > NB an error meant this version was never published to NPM
+> NB an error meant this version was never published to NPM
 
 ## 1.202.2 - 2024-12-17
 
@@ -875,8 +859,6 @@
 - feat: allow decide to provide script name for recorder (#1509)
 
 ## 1.192.1 - 2024-11-28
-
-
 
 ## 1.192.0 - 2024-11-28
 
@@ -1146,7 +1128,7 @@
 
 - fix: when capturing without performance entry we can capture manual initiator type (#1422)
 - chore: auto publish alpha versions (#1414)
-- chore: move test file into __tests__ (#1418)
+- chore: move test file into **tests** (#1418)
 
 ## 1.161.5 - 2024-09-16
 
@@ -1558,13 +1540,11 @@
 
 ## 1.135.0 - 2024-05-23
 
-
-
 ## 1.134.0 - 2024-05-23
+
 - fix(survey): Retain question index if questions are shuffled (#1198)
 
 ## 1.133.0 - 2024-05-22
-
 
 ## 1.132.3 - 2024-05-22
 
@@ -1712,7 +1692,7 @@
 ## 1.121.0 - 2024-04-10
 
 - feat(surveys): Add disable config option (#1123)
-- feat: Person Processing 3: Handle $initial props across sessions, send $initial props with all person processing events, remove __preview (#1127)
+- feat: Person Processing 3: Handle $initial props across sessions, send $initial props with all person processing events, remove \_\_preview (#1127)
 
 ## 1.120.5 - 2024-04-10
 
@@ -1770,7 +1750,7 @@
 
 ## 1.117.0 - 2024-04-03
 
-- feat: Add __posthog_debug query string (#1108)
+- feat: Add \_\_posthog_debug query string (#1108)
 
 ## 1.116.7 - 2024-04-03
 
@@ -2098,12 +2078,12 @@ identical to 1.105.1 - bug in CI scripts
 
 ## 1.94.1 - 2023-12-09
 
-- fix: incorrect localhost handling (#930) 
+- fix: incorrect localhost handling (#930)
 
 ## 1.94.0 - 2023-12-08
 
 - feat: Swap to localstorage+cookie as default (#927)
-- fix: sanitize class string more (#925) 
+- fix: sanitize class string more (#925)
 - chore: redirect users to the supportModal when implementation errors occur (#921)
 - chore: Add comment to remind about updating the plugin-server (#924)
 - add wbraid and gbraid to campaignParams (#923)
@@ -2377,8 +2357,6 @@ identical to 1.105.1 - bug in CI scripts
 
 ## 1.78.4 - 2023-09-13
 
-
-
 ## 1.78.3 - 2023-09-13
 
 - feat: different rate limiting handling (#765)
@@ -2428,8 +2406,6 @@ identical to 1.105.1 - bug in CI scripts
 - chore: remove unused capture metrics (#766)
 
 ## 1.75.2 - 2023-07-26
-
-
 
 ## 1.75.1 - 2023-07-26
 
@@ -2512,11 +2488,7 @@ identical to 1.105.1 - bug in CI scripts
 
 ## 1.68.1 - 2023-06-15
 
-
-
 ## 1.68.0 - 2023-06-14
-
-
 
 ## 1.67.2 - 2023-06-12
 
@@ -2524,8 +2496,6 @@ identical to 1.105.1 - bug in CI scripts
 - chore: no compatability testing for test files (#690)
 
 ## 1.67.1 - 2023-06-09
-
-
 
 ## 1.67.0 - 2023-06-07
 
@@ -2555,8 +2525,6 @@ Manual addition of version 1.66.0 because CI failed to automatically bump the ve
 - feat: Add missing maskTextFn for recordings (#679)
 
 ## 1.63.6 - 2023-06-06
-
-
 
 ## 1.63.5 - 2023-06-06
 
@@ -2601,7 +2569,7 @@ Manual addition of version 1.66.0 because CI failed to automatically bump the ve
 
 ## 1.58.0 - 2023-05-26
 
-- Add get_session_id and get_session_replay_url functions  (#647)
+- Add get_session_id and get_session_replay_url functions (#647)
 
 ## 1.57.4 - 2023-05-25
 
@@ -2618,8 +2586,6 @@ Manual addition of version 1.66.0 because CI failed to automatically bump the ve
 - chore: add functional tests (#635)
 
 ## 1.57.2 - 2023-05-17
-
-
 
 ## 1.57.1 - 2023-05-17
 
@@ -2638,7 +2604,7 @@ Manual addition of version 1.66.0 because CI failed to automatically bump the ve
 ## 1.55.2 - 2023-05-09
 
 - feat: Added idle timer to recordings (#626)
-- docs: Add Nuxt 3 demo  (#623)
+- docs: Add Nuxt 3 demo (#623)
 
 ## 1.55.1 - 2023-05-03
 
@@ -2681,7 +2647,7 @@ Manual addition of version 1.66.0 because CI failed to automatically bump the ve
 ## 1.52.0 - 2023-04-05
 
 - fix: Track referrer/search params per browser session (#496)  
-  _**Note:** This change improves the accuracy of properties `$referrer` and `$referring_domain` in a major way. Previously, the values of these properties often represented pure backlinks in non-SPAs (non-single-page applications). Now those values will represent the true referrer for the current browser-level session (effectively: for the tab). Due to this, referrer data after this update _may_ look different. It will be significantly more accurate though._
+  _**Note:** This change improves the accuracy of properties `$referrer` and `$referring_domain` in a major way. Previously, the values of these properties often represented pure backlinks in non-SPAs (non-single-page applications). Now those values will represent the true referrer for the current browser-level session (effectively: for the tab). Due to this, referrer data after this update \_may_ look different. It will be significantly more accurate though.\_
 - ci: Point out and close stale issues/PRs (#602)
 - docs(testcafe): update docs removing posthog server requirements (#594)
 
@@ -2767,7 +2733,7 @@ Manual addition of version 1.66.0 because CI failed to automatically bump the ve
 ## 1.48.1 - 2023-02-28
 
 - chore: expose errors (#557)
--  try the compressed-size-action GH action (#556)
+- try the compressed-size-action GH action (#556)
 
 ## 1.48.0 - 2023-02-27
 
@@ -2800,8 +2766,6 @@ Manual addition of version 1.66.0 because CI failed to automatically bump the ve
 
 ## 1.45.0 - 2023-02-14
 
-
-
 ## 1.43.1 - 2023-02-07
 
 - fix: correctly persist user state across page loads (#531)
@@ -2816,14 +2780,13 @@ Manual addition of version 1.66.0 because CI failed to automatically bump the ve
 
 ## 1.42.2 - 2023-01-26
 
-
-
 ## 1.42.1 - 2023-01-26
+
 - Revert status check
 
 ## 1.42.0 - 2023-01-26
-- N/A
 
+- N/A
 
 ## 1.41.0 - 2023-01-24
 
@@ -3012,7 +2975,7 @@ Manual addition of version 1.66.0 because CI failed to automatically bump the ve
 ## 1.24.0 - 2022-06-01
 
 - feat: Limit session recordings to 24 hours (#405)
-    - a new recording is immediately started and no data is lost 
+    - a new recording is immediately started and no data is lost
 
 ## 1.23.0 - 2022-06-01
 
@@ -3144,7 +3107,7 @@ Manual addition of version 1.66.0 because CI failed to automatically bump the ve
 ## 1.16.3 - 2021-11-12
 
 - Bumping the build for a release (#334)
-- Filter out _nghost attributes from autocapture (#332)
+- Filter out \_nghost attributes from autocapture (#332)
 
 ## 1.16.2 - 2021-11-07
 
@@ -3211,7 +3174,7 @@ Manual addition of version 1.66.0 because CI failed to automatically bump the ve
 - Allow injection from config of a function to call when xhr requests fail (#296)
 - add instructions for developing with Yalc (#303)
 - Revert "Speculative logging for PostHog/posthog#4816 (#293)" (#302)
-- Filter out _ngcontent attributes in autocapture (#298)
+- Filter out \_ngcontent attributes in autocapture (#298)
 - corrects a test where assertion and setup didn't match test name (#299)
 
 ## 1.13.15 - 2021-09-29
@@ -3326,7 +3289,8 @@ Manual addition of version 1.66.0 because CI failed to automatically bump the ve
 - Fix overridden request retry data (#241)
 
 ## 1.11.1 - 2021-06-04
-- Fix: avoid directly accessing localStorage (#239) 
+
+- Fix: avoid directly accessing localStorage (#239)
 
 ## 1.11.0 - 2021-06-02
 
@@ -3401,9 +3365,11 @@ Manual addition of version 1.66.0 because CI failed to automatically bump the ve
 - Fix auto new version (#187)
 
 ## 1.8.7 - 2021-02-11
+
 - Fix internal metric unpacking error
 
 ## 1.8.6 - 2021-02-05
+
 - When logging in as another user, don't link those two identities (#174)
 - Testcafe E2E tests, IE11 fixes (#180)
 
@@ -3432,10 +3398,12 @@ Manual addition of version 1.66.0 because CI failed to automatically bump the ve
 - Fix issues with incorrect headers being set on decide
 
 ## 1.7.1 - 2020-11-27
+
 - Force session recording to use lz64 compression (https://github.com/PostHog/posthog-js/pull/134)
 - Bundle module.js in es5 (https://github.com/PostHog/posthog-js/pull/132)
 
 ## 1.7.0 - 2020-11-26
+
 - Send session recording events to posthog in (short) batches, separate from rest of events to make sure we drop fewer events (#126)
 - Send session recording events to a separate endpoint for newer versions of posthog (#118)
 - Send correct LIB_VERSION to posthog with captures (#119)
@@ -3451,6 +3419,7 @@ Manual addition of version 1.66.0 because CI failed to automatically bump the ve
 - Bugfix: Kill `posthog.capture_links()` and `posthog.capture_forms()`. They were broken since initial release - you can use autocapture instead. (#128)
 
 ## 1.6.0 - 2020-11-05
+
 - Allow updating user properties when calling `posthog.identify('identity, { some: 'value' })` (#105)
 - Allow disabling $feature_flag_called event: `posthog.isFeatureEnabled('flag', { send_event: false }) (#100)
 - Make cookieless analytics possible by passing `persistence: 'memory'` to posthog.init (#82)
@@ -3458,105 +3427,134 @@ Manual addition of version 1.66.0 because CI failed to automatically bump the ve
 - Code cleanup, bug fixes, integration test suite and more tech debt work
 
 ## 1.5.2 - 2020-10-22
+
 - Autocapture bugfix: Ignore extra spaces in classnames #99
 - Improve typing of posthog-js (#103)
 
 ## 1.5.1 - 2020-10-22
+
 - Improve typing of posthog.js #97 (thanks @stonesthatwhisper)
 - Improve session recording, generate $session_id fields #91 #96
 - Fix a bug with session recording events not being saved #95
 - Improve test coverage #94
 
 ## 1.5.0 - 2020-09-08
+
 - Add beta functionality to do session recording
 - Add $feature_flag_called event
 - Add beta Sentry integration
 
 ## 1.4.5 - 2020-09-08
+
 - Fix clicks in shadowroot for Firefox and Safari
 
 ## 1.4.4 - 2020-08-26
+
 - Fix clicks within shadowroot not being captured
 - Fix type definition of loaded
 
 ## 1.4.3 - 2020-08-11
+
 - Remove "?." to support older browsers
 
 ## 1.4.2 - 2020-08-11
+
 - Capture actions even if toolbar is in used
 
 ## 1.4.1 - 2020-08-10
+
 - Remove unused parameter for `.reloadFeatureFlags()`
 
 ## 1.4.0 - 2020-08-10
+
 - Have `.onFeatureFlags(callback)` register multiple callbacks, which get called when feature flags are loaded or updated
 - Update feature flags when `identify` is called.
 - Add option `.reloadFeatureFlags()`. Call it to trigger a reload of feature flags. (See [#71](https://github.com/PostHog/posthog-js/pull/71))
 - Add config option `sanitize_properties` that accepts a function which sanitizes parameters of events (See [#75](https://github.com/PostHog/posthog-js/issues/75))
 
 ## 1.3.8 - 2020-08-07
+
 - Set `secure_cookie` config to `true` if the page is running over https
 
 ## 1.3.7 - 2020-07-28
+
 - Store toolbar session in localStorage (instead of sessionStorage) so you don't need to authorize in every tab you have open
 
 ## 1.3.6 - 2020-07-27
+
 - Fix a parameter in the type definition
 
 ## 1.3.5 - 2020-07-20
+
 - Add flag to respect Do Not Track setting
 
 ## 1.3.4 - 2020-07-16
+
 - Capture safe attributes (id, name and class) if the element is an input (#63)
 
 ## 1.3.3 - 2020-07-16
+
 - Add payload compression support (with lz-string) (#48)
 
 ## 1.3.2 - 2020-07-16
+
 - Fix request batching when loading the library from npm and running `.init()` after DOM load.
 
 ## 1.3.1 - 2020-07-13
+
 - Support loading the toolbar with a `__posthog` has param (was: `state`) and `ph_authorize` action.
 
 ## 1.3.0 - 2020-07-03
+
 - Add TypeScript defintions
 
 ## 1.2.4 - 2020-07-01
+
 - Add support for feature flags (`posthog.isFeatureEnabled('keyword')`)
 
 ## 1.2.3 - 2020-07-01
+
 - Send $host and $pathname with $pageview requests (was just with $autocapture)
 - Track clicks on elements which have `cursor:pointer`
 - Better test suite
 
 ## 1.2.2 - 2020-06-15
+
 - Allow setting properties on anonymous users
 
 ## 1.2.1 - 2020-06-09
+
 - Simplify passing of API token to editor
 
 ## 1.2.0 - 2020-06-08
+
 - Support passing various/dynamic parameters to the toolbar
 
 ## 1.1.2 - 2020-06-04
+
 - Fix another error when using a new posthog-js version with an old posthog version
 
 ## 1.1.1 - 2020-06-04
+
 - Show a error if calling `posthog.identify` with `null` user (#34 by @rushabhnagda11)
 
 ## 1.1.0 - 2020-06-04
+
 - Support loading new PostHog toolbar
 
 ## 1.0.6 - 2020-03-09
+
 - Send beacon on $pageleave
 - Clean up a bunch of code
 - Don't reset device id on reset
 
 ## 1.0.4 - 2020-03-04
+
 - Fix Heroku App Cookie Bug
 - Batch Event Posts
 - Support TurboLinks
 - Send Timestamp with events
 
 ## 1.0.0 - 2020-02-20
+
 First Release.
