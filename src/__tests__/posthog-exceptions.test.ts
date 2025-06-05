@@ -20,7 +20,7 @@ function createSuppressionRule(
             type: 'error_tracking_issue_property',
         },
         {
-            key: '$exception_messages',
+            key: '$exception_values',
             value: 'ReactMinified',
             operator: 'icontains',
             type: 'error_tracking_issue_property',

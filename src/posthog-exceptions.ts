@@ -60,7 +60,7 @@ export class PostHogExceptions {
             },
             {
                 $exception_types: [],
-                $exception_messages: [],
+                $exception_values: [],
             }
         )
 
