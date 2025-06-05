@@ -56,7 +56,7 @@
     .multiple-choice-options label {
         color: var(--ph-survey-input-text-color);
         background: var(--ph-survey-input-background);
-        padding: 8px;
+        padding: 10px;
         border: 1.5px solid var(--ph-survey-border-color);
         border-radius: 4px;
         /* Slightly slower for form inputs to feel more intentional */
@@ -84,8 +84,8 @@
     textarea:focus-visible,
     input[type='text']:focus,
     input[type='text']:focus-visible,
-    button:focus,
-    button:focus-visible,
+    .form-submit:focus,
+    .form-submit:focus-visible,
     input[type='checkbox']:focus,
     input[type='radio']:focus,
     input[type='checkbox']:focus-visible,
