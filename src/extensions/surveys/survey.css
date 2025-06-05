@@ -47,16 +47,20 @@
 
     textarea,
     input[type='text'] {
-        margin: 0;
         color: var(--ph-survey-input-text-color);
         background: var(--ph-survey-input-background);
         padding: 8px;
         border: 1.5px solid var(--ph-survey-border-color);
         border-radius: 4px;
+        /* Slightly slower for form inputs to feel more intentional */
         transition:
-            border-color 0.15s ease,
-            box-shadow 0.15s ease,
-            transform 0.1s ease;
+            border-color 0.2s ease-out,
+            box-shadow 0.2s ease-out,
+            transform 0.15s ease-out;
+    }
+
+    input {
+        margin: 0;
     }
 
     /* Focus styles for interactive elements */
@@ -104,15 +108,26 @@
         border: 1.5px solid var(--ph-survey-border-color);
     }
 
-    /* Standard transitions */
+    /* Standard transitions - optimized for survey UX */
     label,
     input[type='checkbox'],
     input[type='radio'],
     .ratings-emoji,
     .ratings-number,
     .footer-branding,
-    .form-cancel {
-        transition: all 0.15s ease;
+    .form-cancel,
+    .form-submit {
+        transition: all 0.2s ease-out;
+    }
+
+    /* Faster transitions for micro-interactions */
+    @media (prefers-reduced-motion: no-preference) {
+        button:active,
+        input[type='checkbox']:active,
+        input[type='radio']:active,
+        label:active {
+            transition-duration: 0.1s;
+        }
     }
 }
 
@@ -129,7 +144,7 @@
     text-align: center;
     cursor: pointer;
     z-index: var(--ph-survey-z-index);
-    transition: padding-bottom 0.1s ease-in-out;
+    transition: padding-bottom 0.2s ease-out;
     border: none;
 }
 
@@ -283,11 +298,6 @@
         align-items: center;
         flex-wrap: wrap;
         border-radius: 4px;
-        transition:
-            border-color 0.15s ease,
-            background-color 0.15s ease,
-            transform 0.1s ease,
-            box-shadow 0.15s ease;
 
         &:hover {
             &:not(:has(input:checked)) {
@@ -299,7 +309,7 @@
 
         &:active {
             transform: translateY(0);
-            transition-duration: 0.05s;
+            transition-duration: 0.1s;
         }
 
         &:has(input:checked) {
@@ -321,9 +331,10 @@
         z-index: 1;
         position: relative;
         border-radius: 3px;
+        /* Smooth, welcoming transition with slight bounce */
         transition:
-            all 0.15s cubic-bezier(0.4, 0, 0.2, 1),
-            transform 0.1s ease;
+            all 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+            transform 0.15s ease-out;
 
         /* Focus state handled by shared focus styles above */
         &:focus {
@@ -407,9 +418,10 @@
             opacity: 0;
             transform: scaleX(0);
             transform-origin: left center;
+            /* Gentle reveal animation */
             transition:
-                opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-                transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+                opacity 0.3s ease-out,
+                transform 0.3s ease-out;
 
             &::placeholder {
                 color: var(--ph-survey-text-subtle-color);
@@ -422,7 +434,7 @@
         &:has(input[type='radio']:checked) input[type='text'] {
             opacity: 1;
             transform: scaleX(1);
-            transition-delay: 0.075s;
+            transition-delay: 0.1s;
         }
     }
 }
@@ -439,9 +451,6 @@
     border: none;
     padding: 0;
     opacity: 0.5;
-    transition:
-        transform 0.15s ease,
-        opacity 0.15s ease;
 
     &:hover {
         cursor: pointer;
@@ -455,7 +464,8 @@
 
     & svg {
         fill: var(--ph-survey-text-primary-color);
-        transition: fill 0.15s ease;
+        /* Smooth color transitions */
+        transition: fill 0.2s ease-out;
     }
 }
 
@@ -467,7 +477,7 @@
     border-radius: 6px;
     overflow: hidden;
 
-    & > .ratings-number {
+    .ratings-number {
         /* Styles specific to numbers inside the grid */
         border-right: 1px solid var(--ph-survey-border-color);
         text-align: center;
@@ -476,9 +486,7 @@
         border-left: none;
         border-top: none;
         border-bottom: none;
-        transition:
-            background-color 0.15s ease,
-            color 0.15s ease;
+        font-weight: 700;
 
         &:last-of-type {
             border-right: 0;
@@ -516,6 +524,7 @@
 /* --- Buttons --- */
 /* Submit Button */
 .form-submit {
+    font-weight: 700;
     text-align: center;
     border: none;
     cursor: pointer;
@@ -526,10 +535,6 @@
     color: var(--ph-survey-submit-button-text-color);
     box-shadow: 0 2px 0 rgba(0, 0, 0, 0.045);
     min-width: 100%;
-    transition:
-        transform 0.15s ease,
-        box-shadow 0.15s ease,
-        opacity 0.15s ease;
 
     &:not([disabled]) {
         &:hover {
@@ -560,9 +565,6 @@
     top: 0;
     right: 0;
     transform: translate(50%, -50%);
-    transition:
-        opacity 0.15s ease,
-        transform 0.15s ease;
 
     &:hover {
         transform: translate(50%, -50%) scale(1.1);
@@ -580,7 +582,6 @@
     align-items: center;
     text-decoration: none;
     opacity: 0.6;
-    transition: opacity 0.15s ease;
 
     &:hover {
         opacity: 1;
@@ -645,6 +646,16 @@
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
+}
+
+/* Respect user motion preferences */
+@media (prefers-reduced-motion: reduce) {
+    .ph-survey * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }
 
 /* --- Enhanced Animations --- */
