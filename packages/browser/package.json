@@ -9,8 +9,9 @@
     "packageManager": "pnpm@9.15.4",
     "scripts": {
         "start": "pnpm build-react && NODE_OPTIONS=\"--max-old-space-size=8192\" pnpm build-rollup -w",
-        "build": "pnpm build-rollup && pnpm build-react",
+        "build": "pnpm build-rollup && pnpm build-lib && pnpm build-react",
         "build-rollup": "rm -rf lib && tsc -b && rollup -c --bundleConfigAsCjs",
+        "build-lib": "rm -rf lib && tsc -b tsconfig.lib.json",
         "build-react": "cd react; NODE_ENV=dev pnpm i; pnpm build;",
         "lint": "eslint src && eslint playwright",
         "lint:fix": "eslint src --fix && eslint playwright --fix",
@@ -41,6 +42,7 @@
     "module": "dist/module.js",
     "types": "dist/module.d.ts",
     "files": [
+        "lib/*",
         "dist/*",
         "react/dist/*",
         "react/package.json"

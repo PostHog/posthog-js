@@ -7,7 +7,7 @@
         "clean-react": "cd ../../react && pnpm run clean-node-modules",
         "dev": "next dev",
         "dev-crossdomain": "NEXT_PUBLIC_CROSSDOMAIN=1 next dev --experimental-https",
-        "install-deps": "pnpm install --ignore-workspace && pnpm install",
+        "install-deps": "pnpm install && pnpm install --ignore-workspace",
         "build": "pnpm run build-posthog-js && next build --no-lint",
         "start": "next start",
         "lint": "next lint",
