@@ -1,0 +1,23 @@
+name: Import/Export Compatibility Test
+
+on:
+    pull_request:
+    push:
+        branches:
+            - main
+
+jobs:
+    import-export-test:
+        name: Test import/export patterns
+        runs-on: ubuntu-22.04
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '18'
+                  cache: 'pnpm'
+            - run: pnpm install
+            - run: pnpm build-rollup
+            - name: Test import/export compatibility
+              run: pnpm test:imports

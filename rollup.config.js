@@ -286,7 +286,12 @@ const entrypointTargets = entrypoints.map((file) => {
                           },
                       }
                     : {}),
-                ...(format === 'cjs' ? { exports: 'auto' } : {}),
+                ...(format === 'cjs'
+                    ? {
+                          exports: 'named',
+                          outro: 'module.exports = exports.posthog; module.exports.default = exports.posthog; Object.assign(module.exports, exports);',
+                      }
+                    : {}),
             },
         ],
         plugins: [...pluginsForThisFile, visualizer({ filename: `bundle-stats-${fileName}.html`, gzipSize: true })],
