@@ -471,7 +471,6 @@ export function MultipleChoiceQuestion({
                                             e.stopPropagation()
                                         }}
                                         aria-label={`${choice} - please specify`}
-                                        placeholder="Please specify..."
                                     />
                                 )}
                             </label>
