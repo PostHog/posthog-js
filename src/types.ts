@@ -731,9 +731,10 @@ export interface PostHogConfig {
     advanced_disable_decide?: boolean
 
     /**
-     * Will keep /flags running, but without any feature flags actually evaluted.
+     * Will keep /flags running, but without evaluating any feature flags.
      * Useful for when you need to load the config data associated with the flags endpoint
-     * (e.g. /flags?v=2&config=true), but you don't want to evaluate any feature flags.
+     * (e.g. /flags?v=2&config=true) without evaluating any feature flags.  Most folks use this
+     * to save money on feature flag evaluation (by bootstrapping feature flags on the server side).
      *
      * @default false
      */

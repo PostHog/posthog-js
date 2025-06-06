@@ -316,7 +316,11 @@ export class PostHog {
     private _internalEventEmitter = new SimpleEventEmitter()
 
     // Legacy property to support existing usage - this isn't technically correct but it's what it has always been - a proxy for flags being loaded
-    // TODO DYLAN: do I need to keep this, or can I rename it?
+    /** @deprecated Use `flagsEndpointWasHit` instead.  We migrated to using a new feature flag endpoint and the new method is more semantically accurate */
+    public get decideEndpointWasHit(): boolean {
+        return this.featureFlags?.hasLoadedFlags ?? false
+    }
+
     public get flagsEndpointWasHit(): boolean {
         return this.featureFlags?.hasLoadedFlags ?? false
     }
