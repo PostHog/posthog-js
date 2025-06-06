@@ -78,29 +78,16 @@
         "@testing-library/dom": "^9.3.0",
         "@testing-library/jest-dom": "^6.5.0",
         "@testing-library/preact": "^3.2.4",
-        "@types/eslint": "^8.44.6",
         "@types/jest": "^27.5.2",
         "@types/node": "^22.5.0",
         "@types/react-dom": "^18.0.10",
         "@types/sinon": "^17.0.1",
         "@types/web": "^0.0.222",
-        "@typescript-eslint/eslint-plugin": "^8.29.1",
-        "@typescript-eslint/parser": "^8.29.1",
         "babel-jest": "^26.6.3",
         "browserslist": "^4.24.5",
         "compare-versions": "^6.1.0",
         "cssnano": "^7.0.7",
         "date-fns": "^3.6.0",
-        "eslint": "8.57.0",
-        "eslint-config-posthog-js": "link:eslint-rules",
-        "eslint-config-prettier": "^8.5.0",
-        "eslint-plugin-compat": "^6.0.1",
-        "eslint-plugin-jest": "^28.8.3",
-        "eslint-plugin-no-only-tests": "^3.1.0",
-        "eslint-plugin-posthog-js": "link:eslint-rules",
-        "eslint-plugin-prettier": "^5.2.1",
-        "eslint-plugin-react": "^7.30.1",
-        "eslint-plugin-react-hooks": "^4.6.0",
         "expect": "^29.7.0",
         "fast-check": "^2.17.0",
         "http-server": "14.1.1",
@@ -109,7 +96,7 @@
         "jest": "^27.5.1",
         "jsdom": "16.5.0",
         "jsdom-global": "3.0.2",
-        "lint-staged": "^10.2.11",
+        
         "localStorage": "1.0.4",
         "msw": "^1.3.3",
         "node-fetch": "^2.6.11",
@@ -142,15 +129,6 @@
         "rrweb-snapshot": {
             "optional": true
         }
-    },
-    "lint-staged": {
-        "*.{ts,tsx,js,json}": "prettier --write",
-        "*.js": "eslint --cache --fix",
-        "*.{ts,tsx}": [
-            "eslint src --fix",
-            "eslint playwright --fix",
-            "prettier --write"
-        ]
     },
     "browserslist": [
         "> 0.5%, last 2 versions, Firefox ESR, not dead, IE 11"
