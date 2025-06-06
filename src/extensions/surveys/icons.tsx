@@ -24,7 +24,15 @@ export const verySatisfiedEmoji = (
     </svg>
 )
 export const cancelSVG = (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg
+        width="12"
+        height="12"
+        viewBox="0 0 12 12"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        aria-labelledby="close-survey-title"
+    >
+        <title id="close-survey-title">Close survey</title>
         <path
             fill-rule="evenodd"
             clip-rule="evenodd"

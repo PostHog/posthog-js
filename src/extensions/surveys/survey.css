@@ -20,14 +20,133 @@
     --ph-survey-text-primary-color: #020617; /* Default text color, based on text-slate-950 */
     --ph-survey-text-subtle-color: #939393;
     --ph-survey-input-background: white;
-    --ph-survey-input-focus-shadow: rgba(0, 0, 0, 0.15);
-    --ph-survey-choice-border-hover: rgba(0, 0, 0, 0.4);
     --ph-survey-scrollbar-thumb-color: var(--ph-survey-border-color);
     --ph-survey-scrollbar-track-color: var(--ph-survey-background-color);
     --ph-survey-input-text-color: #020617;
+    --ph-survey-outline-color: rgba(59, 130, 246, 0.8);
     /* Widget/Embedded Tab CSS Variables */
     --ph-widget-color: #e0a045; /* Default color */
     --ph-widget-text-color: white; /* Default text color (usually white for contrast) */
+}
+
+.ph-survey {
+    /* Position is set via inline style on host */
+    position: fixed;
+    margin: 0;
+    bottom: 0;
+    min-width: 300px;
+    width: var(--ph-survey-max-width);
+    max-width: 85%;
+    z-index: var(--ph-survey-z-index);
+    height: fit-content;
+
+    h3,
+    p {
+        margin: 0;
+    }
+
+    * {
+        box-sizing: border-box;
+        font-family: var(--ph-survey-font-family);
+        color: var(--ph-survey-text-primary-color);
+    }
+
+    textarea,
+    input[type='text'],
+    .multiple-choice-options label {
+        color: var(--ph-survey-input-text-color);
+        background: var(--ph-survey-input-background);
+        padding: 10px;
+        border: 1.5px solid var(--ph-survey-border-color);
+        border-radius: 4px;
+        /* Slightly slower for form inputs to feel more intentional */
+        transition:
+            border-color 0.2s ease-out,
+            box-shadow 0.2s ease-out,
+            transform 0.15s ease-out;
+    }
+
+    textarea,
+    input[type='text'] {
+        /* Slightly slower for form inputs to feel more intentional */
+        transition:
+            border-color 0.2s ease-out,
+            box-shadow 0.2s ease-out,
+            transform 0.15s ease-out;
+    }
+
+    input {
+        margin: 0;
+    }
+
+    /* Focus styles for interactive elements */
+    textarea:focus,
+    textarea:focus-visible,
+    input[type='text']:focus,
+    input[type='text']:focus-visible,
+    .form-submit:focus,
+    .form-submit:focus-visible,
+    input[type='checkbox']:focus,
+    input[type='radio']:focus,
+    input[type='checkbox']:focus-visible,
+    input[type='radio']:focus-visible {
+        outline: 1.5px solid var(--ph-survey-outline-color);
+        border-color: var(--ph-survey-rating-active-bg-color);
+        outline-offset: 2px;
+    }
+
+    textarea:focus:not(:focus-visible),
+    input[type='text']:focus:not(:focus-visible),
+    button:focus:not(:focus-visible),
+    input[type='checkbox']:focus:not(:focus-visible),
+    input[type='radio']:focus:not(:focus-visible) {
+        outline: none;
+    }
+
+    /* Hover styles for inputs */
+    textarea:hover:not(:focus),
+    input[type='text']:hover:not(:focus) {
+        border-color: var(--ph-survey-rating-active-bg-color);
+    }
+
+    /* Responsive font sizing */
+    @media (max-width: 768px) {
+        textarea,
+        input[type='text'] {
+            font-size: 1rem;
+        }
+    }
+
+    /* Standard borders */
+    .multiple-choice-options label,
+    .rating-options-number,
+    .form-cancel,
+    input[type='checkbox'],
+    input[type='radio'] {
+        border: 1.5px solid var(--ph-survey-border-color);
+    }
+
+    /* Standard transitions - optimized for survey UX */
+    label,
+    input[type='checkbox'],
+    input[type='radio'],
+    .ratings-emoji,
+    .ratings-number,
+    .footer-branding,
+    .form-cancel,
+    .form-submit {
+        transition: all 0.2s ease-out;
+    }
+
+    /* Faster transitions for micro-interactions */
+    @media (prefers-reduced-motion: no-preference) {
+        button:active,
+        input[type='checkbox']:active,
+        input[type='radio']:active,
+        label:active {
+            transition-duration: 0.1s;
+        }
+    }
 }
 
 .ph-survey-widget-tab {
@@ -39,14 +158,11 @@
     transform: rotate(-90deg) translateY(-100%);
     transform-origin: right top;
     padding: 10px 12px;
-    font-weight: 500;
     border-radius: 3px 3px 0 0;
     text-align: center;
     cursor: pointer;
     z-index: var(--ph-survey-z-index);
-    transition: padding-bottom 0.1s ease-in-out;
-    font-size: 1rem;
-    font-family: inherit;
+    transition: padding-bottom 0.2s ease-out;
     border: none;
 }
 
@@ -55,54 +171,16 @@
 }
 
 /* --- Animations --- */
-@keyframes ph-survey-fade-in-up {
+@keyframes ph-survey-fade-in {
     from {
         opacity: 0;
-        transform: translateY(10px);
     }
     to {
         opacity: 1;
-        transform: translateY(0);
     }
 }
 
-@keyframes ph-survey-fade-out-down {
-    from {
-        opacity: 1;
-        transform: translateY(0);
-    }
-    to {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-}
-
-@keyframes ph-survey-question-slide-in {
-    from {
-        opacity: 0.5;
-        transform: translateX(15px);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
-}
-
-/* --- Base Layout & Containers --- */
-.survey-container {
-    /* Position is set via inline style on host */
-    position: fixed;
-    margin: 0;
-    bottom: 0;
-    min-width: 300px;
-    width: var(--ph-survey-max-width);
-    max-width: 85%;
-    z-index: var(--ph-survey-z-index);
-    height: fit-content;
-}
-
-.survey-box,
-.thank-you-message-container {
+.survey-box {
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -119,8 +197,7 @@
 }
 
 .question-container,
-.thank-you-message-container {
-    animation: ph-survey-question-slide-in 0.25s ease-out forwards;
+.thank-you-message {
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -128,8 +205,8 @@
 
 /* --- Questions & Description --- */
 .survey-question {
-    font-weight: 500;
     font-size: 14px;
+    font-weight: 500;
 }
 
 .survey-question-description {
@@ -144,14 +221,13 @@
     flex-direction: column;
 }
 
+.survey-form {
+    animation: ph-survey-fade-in 0.3s ease-out forwards;
+}
+
 .survey-form,
 .thank-you-message {
-    box-sizing: border-box;
     position: relative;
-    animation: ph-survey-fade-in-up 0.3s ease-out forwards;
-    color: var(--ph-survey-text-primary-color);
-    font-weight: normal;
-    font-family: var(--ph-survey-font-family);
     text-align: left;
     width: 100%;
     z-index: var(--ph-survey-z-index);
@@ -167,21 +243,18 @@
 .survey-form {
     & textarea,
     input[type='text'] {
-        color: var(--ph-survey-input-text-color);
-        background: var(--ph-survey-input-background);
-        @media (max-width: 768px) {
-            font-size: 1rem;
-        }
-        font-family: inherit;
+        min-width: 100%;
     }
 
     & textarea {
-        outline: none;
-        padding: 10px;
-        border-radius: 6px;
-        border: 1.5px solid var(--ph-survey-border-color);
-        width: 100%;
-        box-sizing: border-box;
+        &:focus,
+        &:focus-visible {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        &:focus:not(:focus-visible) {
+            box-shadow: none;
+        }
     }
 }
 
@@ -201,120 +274,137 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+    margin: 0;
+    padding: 1px 0;
+    border: none;
 
-    & .choice-option {
-        display: flex;
-        font-size: 13px;
+    & label {
+        /* The clickable label area that contains the input */
         cursor: pointer;
-        position: relative;
+        display: flex;
+        gap: 8px;
+        font-size: 13px;
+        align-items: center;
+        flex-wrap: wrap;
 
         &:hover {
             &:not(:has(input:checked)) {
-                & label {
-                    border-color: var(--ph-survey-text-subtle-color);
-                }
-                & .choice-check {
-                    opacity: 0.5;
-                }
+                border-color: var(--ph-survey-text-subtle-color);
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
             }
+        }
+
+        &:has(input:checked) {
+            border-color: var(--ph-survey-rating-active-bg-color);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
         }
     }
 
-    & input {
-        /* Hidden radio/checkbox */
-        cursor: pointer;
-        position: absolute;
-        opacity: 0;
-        padding: 0;
-        margin: 0;
-        top: 0;
-        left: 0;
-        z-index: 1; /* Input above label content but below checkmark */
-
-        &:checked + label {
-            font-weight: bold;
-            border: 1.5px solid var(--ph-survey-text-subtle-color);
-
-            & + .choice-check {
-                opacity: 1; /* Show fully when checked, override hover */
-            }
-
-            & input {
-                /* Bold text input when "Other" is checked */
-                font-weight: bold;
-            }
-        }
-    }
-
-    & label {
-        /* The clickable label area for open-ended option */
-        width: 100%;
-        cursor: pointer;
-        padding: 10px 35px 10px 10px;
-        border: 1.5px solid var(--ph-survey-border-color);
-        border-radius: 4px;
+    & input[type='checkbox'],
+    & input[type='radio'] {
+        /* Custom styled input - remove native appearance */
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        width: 1rem;
+        height: 1rem;
         background: var(--ph-survey-input-background);
-        transition:
-            border-color 0.15s ease,
-            background-color 0.15s ease;
-        display: block;
+        cursor: pointer;
+        z-index: 1;
         position: relative;
-        box-sizing: border-box;
-        color: var(--ph-survey-input-text-color);
+        border-radius: 3px;
+        /* Smooth, welcoming transition with slight bounce */
+        transition:
+            all 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+            transform 0.15s ease-out;
+
+        /* Focus state handled by shared focus styles above */
+        &:focus {
+            transform: scale(1.05);
+        }
+
+        /* Hover state */
+        &:hover {
+            border-color: var(--ph-survey-rating-active-bg-color);
+            transform: scale(1.05);
+        }
+
+        /* Active state */
+        &:active {
+            transform: scale(0.95);
+        }
+
+        /* Checked state */
+        &:checked {
+            background: var(--ph-survey-rating-active-bg-color);
+            border-color: var(--ph-survey-rating-active-bg-color);
+            transform: scale(1);
+        }
+
+        &:checked:hover {
+            transform: scale(1.05);
+        }
     }
 
-    /* Styles for the "Other" option input field */
+    /* Checkbox checkmark indicator */
+    & input[type='checkbox']:checked::after {
+        left: 4px;
+        width: 4px;
+        height: 8px;
+        border: solid var(--ph-survey-rating-active-text-color);
+        border-width: 0 2px 2px 0;
+        transform: rotate(45deg) scale(0);
+        animation: ph-survey-checkmark-reveal 0.2s ease-out 0.1s forwards;
+    }
+
+    /* Radio button dot indicator */
+    & input[type='radio']:checked::after {
+        left: 5px;
+        top: 5px;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--ph-survey-rating-active-text-color);
+        transform: scale(0);
+        animation: ph-survey-radio-reveal 0.15s ease-out 0.05s forwards;
+    }
+
+    & input[type='checkbox']:checked::after,
+    & input[type='radio']:checked::after {
+        content: '';
+        position: absolute;
+        box-sizing: content-box;
+    }
+
+    /* Radio buttons should be circular */
+    & input[type='radio'] {
+        border-radius: 50%;
+    }
+
+    & input[type='radio']:checked {
+        border: none;
+    }
+
+    & input[type='checkbox']:checked,
+    & input[type='radio']:checked {
+        /* When checked, make following text bold and show checkmark */
+        & ~ * {
+            font-weight: bold;
+        }
+    }
+
+    /* Enhanced styles for the "Other" option input field */
     & .choice-option-open {
-        & label {
-            padding-right: 10px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 4px;
-        }
-
-        & label span {
-            /* Label text for "Other:" */
-            width: 100%; /* Make span take full width */
-        }
-
-        & label input {
-            /* Text input for open-text option in multiple choice question */
-            position: relative;
-            opacity: 1;
-            flex-grow: 1;
-            border: 0;
-            outline: 0;
-            z-index: 2; /* Ensure input is clickable */
-
+        & input[type='text'] {
             &::placeholder {
                 color: var(--ph-survey-text-subtle-color);
+                font-weight: 400;
             }
         }
     }
 }
 
-/* Styles for the checkmark icon */
-.choice-check {
-    position: absolute;
-    right: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    background: transparent;
-    transition: opacity 0.15s ease;
-    opacity: 0; /* Hide by default */
-    pointer-events: none; /* Prevent interaction */
-    z-index: 2; /* Ensure checkmark is above input invisible layer */
-    color: var(--ph-survey-input-text-color);
-
-    & svg {
-        display: block;
-        fill: var(--ph-survey-rating-bg-color); /* Color the checkmark */
-        width: 16px;
-        height: 16px;
-    }
-}
-
-/* Emoji Rating */
+/* Enhanced Emoji Rating */
 .rating-options-emoji {
     display: flex;
     justify-content: space-between;
@@ -324,10 +414,7 @@
     font-size: 16px;
     background-color: transparent;
     border: none;
-    padding: 0px;
-    transition:
-        transform 0.15s ease,
-        opacity 0.15s ease;
+    padding: 0;
     opacity: 0.5;
 
     &:hover {
@@ -342,51 +429,45 @@
 
     & svg {
         fill: var(--ph-survey-text-primary-color);
+        /* Smooth color transitions */
+        transition: fill 0.2s ease-out;
     }
 }
 
-/* Number Rating Container */
+/* Enhanced Number Rating Container */
 .rating-options-number {
     display: grid;
-    grid-auto-columns: 1fr; /* Equal columns */
-    grid-auto-flow: column; /* Arrange horizontally */
+    grid-auto-columns: 1fr;
+    grid-auto-flow: column;
     border-radius: 6px;
     overflow: hidden;
-    border: 1.5px solid var(--ph-survey-border-color);
 
-    & > .ratings-number {
+    .ratings-number {
         /* Styles specific to numbers inside the grid */
-        border-right: 1px solid var(--ph-survey-border-color); /* Add dividers */
+        border-right: 1px solid var(--ph-survey-border-color);
         text-align: center;
         cursor: pointer;
-        transition:
-            background-color 0.15s ease,
-            color 0.15s ease; /* Add transitions */
-        color: var(--ph-survey-rating-text-color); /* Default text color */
-        border-left: none; /* Remove default button border */
+        color: var(--ph-survey-rating-text-color);
+        border-left: none;
         border-top: none;
         border-bottom: none;
-        /* padding already set by base .ratings-number */
-        /* Inherits base font-size, font-weight, padding from .ratings-number */
+        font-weight: 700;
 
         &:last-of-type {
-            border-right: 0px; /* Remove last divider */
+            border-right: 0;
         }
-
         &.rating-active {
-            background: var(--ph-survey-rating-active-bg-color); /* Active background */
-            color: var(--ph-survey-rating-active-text-color); /* Use contrasting text color for active */
+            background: var(--ph-survey-rating-active-bg-color);
+            color: var(--ph-survey-rating-active-text-color);
         }
     }
 }
 
 .ratings-number {
-    /* Base styles for individual number buttons (also used outside grid) */
-    font-size: 16px;
-    font-weight: 600;
-    padding: 8px 0px;
+    padding: 8px 0;
     border: none;
     background-color: var(--ph-survey-rating-bg-color);
+
     & .rating-active {
         background-color: var(--ph-survey-rating-active-bg-color);
     }
@@ -408,32 +489,17 @@
 /* --- Buttons --- */
 /* Submit Button */
 .form-submit {
-    box-sizing: border-box;
-    margin: 0;
-    font-family: inherit;
-    overflow: visible;
-    text-transform: none;
-    position: relative;
-    display: inline-block;
     font-weight: 700;
-    white-space: nowrap;
     text-align: center;
-    border: 1.5px solid transparent;
+    border: none;
     cursor: pointer;
     user-select: none;
-    touch-action: manipulation;
     padding: 12px;
-    font-size: 14px;
     border-radius: 6px;
-    outline: 0;
     background: var(--ph-survey-submit-button-color);
     color: var(--ph-survey-submit-button-text-color);
-    text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.12);
     box-shadow: 0 2px 0 rgba(0, 0, 0, 0.045);
-    width: 100%;
-    transition:
-        transform 0.15s ease,
-        box-shadow 0.15s ease;
+    min-width: 100%;
 
     &:not([disabled]) {
         &:hover {
@@ -449,14 +515,12 @@
 
     &[disabled] {
         opacity: var(--ph-survey-disabled-button-opacity);
-        filter: grayscale(50%);
         cursor: not-allowed;
     }
 }
 
 /* Cancel Button (Circular X button) */
 .form-cancel {
-    border: 1.5px solid var(--ph-survey-border-color);
     background: white;
     border-radius: 100%;
     line-height: 0;
@@ -466,9 +530,6 @@
     top: 0;
     right: 0;
     transform: translate(50%, -50%);
-    transition:
-        opacity 0.15s ease,
-        transform 0.15s ease;
 
     &:hover {
         transform: translate(50%, -50%) scale(1.1);
@@ -479,16 +540,13 @@
 /* --- Footer --- */
 .footer-branding {
     font-size: 11px;
-    text-align: center;
+    font-weight: 500;
     display: flex;
     justify-content: center;
     gap: 4px;
     align-items: center;
-    font-weight: 500;
     text-decoration: none;
     opacity: 0.6;
-    transition: opacity 0.15s ease;
-    color: var(--ph-survey-text-primary-color);
 
     &:hover {
         opacity: 1;
@@ -505,16 +563,12 @@
 }
 
 .thank-you-message-header {
-    margin: 10px 0px 0px;
-    font-weight: 600;
-    font-size: 16px;
-    color: var(--ph-survey-text-primary-color);
+    margin: 10px 0 0;
 }
 
 .thank-you-message-body {
     font-size: 14px;
     opacity: 0.8;
-    color: var(--ph-survey-text-primary-color);
 }
 
 /* --- Scrollable Content --- */
@@ -547,6 +601,57 @@
 }
 
 /* --- Utility Classes --- */
-.bolded {
-    font-weight: 600;
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Respect user motion preferences */
+@media (prefers-reduced-motion: reduce) {
+    .ph-survey * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* --- Enhanced Animations --- */
+/* Checkmark reveal animation */
+@keyframes ph-survey-checkmark-reveal {
+    0% {
+        transform: rotate(45deg) scale(0);
+        opacity: 0;
+    }
+    50% {
+        transform: rotate(45deg) scale(1.2);
+        opacity: 1;
+    }
+    100% {
+        transform: rotate(45deg) scale(1);
+        opacity: 1;
+    }
+}
+
+/* Radio dot reveal animation */
+@keyframes ph-survey-radio-reveal {
+    0% {
+        transform: scale(0);
+        opacity: 0;
+    }
+    50% {
+        transform: scale(1.3);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
 }

@@ -60,7 +60,7 @@ describe('MultipleChoiceQuestion', () => {
             )
 
             // Click on 'Other' option using the radio input id
-            const otherRadio = container.querySelector('#surveyQuestion1Choice3') as HTMLInputElement
+            const otherRadio = getByText('Other:')
             fireEvent.click(otherRadio)
 
             // Type in the open-ended input using its specific id
@@ -74,10 +74,12 @@ describe('MultipleChoiceQuestion', () => {
         })
 
         it('focuses on open-ended input when selecting the option', () => {
-            const { container } = render(<MultipleChoiceQuestion {...baseProps} question={singleChoiceQuestion} />)
+            const { container, getByText } = render(
+                <MultipleChoiceQuestion {...baseProps} question={singleChoiceQuestion} />
+            )
 
             // Click on 'Other' option using the radio input id
-            const otherRadio = container.querySelector('#surveyQuestion1Choice3') as HTMLInputElement
+            const otherRadio = getByText('Other:')
             fireEvent.click(otherRadio)
 
             // Get the input element using its specific id
@@ -186,7 +188,7 @@ describe('MultipleChoiceQuestion', () => {
             fireEvent.click(getByLabelText('Red'))
 
             // Click on 'Other' option using the radio input id
-            const otherRadio = container.querySelector('#surveyQuestion1Choice3') as HTMLInputElement
+            const otherRadio = getByText('Other:')
             fireEvent.click(otherRadio)
 
             // Type in the open-ended input using its specific id
@@ -200,10 +202,12 @@ describe('MultipleChoiceQuestion', () => {
         })
 
         it('focuses on open-ended input when selecting the option', () => {
-            const { container } = render(<MultipleChoiceQuestion {...baseProps} question={multipleChoiceQuestion} />)
+            const { container, getByText } = render(
+                <MultipleChoiceQuestion {...baseProps} question={multipleChoiceQuestion} />
+            )
 
             // Click on 'Other' option using the radio input id
-            const otherRadio = container.querySelector('#surveyQuestion1Choice3') as HTMLInputElement
+            const otherRadio = getByText('Other:')
             fireEvent.click(otherRadio)
 
             // Get the input element using its specific id
@@ -250,6 +254,7 @@ describe('OpenTextQuestion', () => {
         appearance: mockAppearance,
         onSubmit: jest.fn(),
         onPreviewSubmit: jest.fn(),
+        displayQuestionIndex: 0,
     }
 
     const openTextQuestion: BasicSurveyQuestion = {

@@ -9,14 +9,7 @@ import {
     SurveyQuestionType,
 } from '../../../posthog-surveys-types'
 import { isArray, isNull, isNumber, isString } from '../../../utils/type-utils'
-import {
-    checkSVG,
-    dissatisfiedEmoji,
-    neutralEmoji,
-    satisfiedEmoji,
-    veryDissatisfiedEmoji,
-    verySatisfiedEmoji,
-} from '../icons'
+import { dissatisfiedEmoji, neutralEmoji, satisfiedEmoji, veryDissatisfiedEmoji, verySatisfiedEmoji } from '../icons'
 import { getDisplayOrderChoices, useSurveyContext } from '../surveys-extension-utils'
 import { BottomSection } from './BottomSection'
 import { QuestionHeader } from './QuestionHeader'
@@ -27,6 +20,54 @@ export interface CommonQuestionProps {
     onSubmit: (res: string | string[] | number | null) => void
     onPreviewSubmit: (res: string | string[] | number | null) => void
     initialValue?: string | string[] | number | null
+    displayQuestionIndex: number
+}
+
+interface OpenEndedInputState {
+    isSelected: boolean
+    inputValue: string
+}
+
+const isValidStringArray = (value: unknown): value is string[] => {
+    return isArray(value) && value.every((item) => isString(item))
+}
+
+const initializeSelectedChoices = (
+    initialValue: string | string[] | number | null | undefined,
+    questionType: SurveyQuestionType
+): string | string[] | null => {
+    if (isString(initialValue)) {
+        return initialValue
+    }
+    if (isValidStringArray(initialValue)) {
+        return initialValue
+    }
+    return questionType === SurveyQuestionType.SingleChoice ? null : []
+}
+
+const initializeOpenEndedState = (
+    initialValue: string | string[] | number | null | undefined,
+    choices: string[]
+): OpenEndedInputState => {
+    if (isString(initialValue) && !choices.includes(initialValue)) {
+        return {
+            isSelected: true,
+            inputValue: initialValue,
+        }
+    }
+    if (isValidStringArray(initialValue)) {
+        const openEndedValue = initialValue.find((choice) => !choices.includes(choice))
+        if (openEndedValue) {
+            return {
+                isSelected: true,
+                inputValue: openEndedValue,
+            }
+        }
+    }
+    return {
+        isSelected: false,
+        inputValue: '',
+    }
 }
 
 export function OpenTextQuestion({
@@ -35,6 +76,7 @@ export function OpenTextQuestion({
     appearance,
     onSubmit,
     onPreviewSubmit,
+    displayQuestionIndex,
     initialValue,
 }: CommonQuestionProps & {
     question: BasicSurveyQuestion
@@ -46,16 +88,14 @@ export function OpenTextQuestion({
         return ''
     })
 
+    const htmlFor = `surveyQuestion${displayQuestionIndex}`
+
     return (
         <Fragment>
             <div className="question-container">
-                <QuestionHeader
-                    question={question.question}
-                    description={question.description}
-                    descriptionContentType={question.descriptionContentType}
-                    forceDisableHtml={forceDisableHtml}
-                />
+                <QuestionHeader question={question} forceDisableHtml={forceDisableHtml} htmlFor={htmlFor} />
                 <textarea
+                    id={htmlFor}
                     rows={4}
                     placeholder={appearance?.placeholder}
                     onInput={(e) => {
@@ -91,12 +131,7 @@ export function LinkQuestion({
     return (
         <Fragment>
             <div className="question-container">
-                <QuestionHeader
-                    question={question.question}
-                    description={question.description}
-                    descriptionContentType={question.descriptionContentType}
-                    forceDisableHtml={forceDisableHtml}
-                />
+                <QuestionHeader question={question} forceDisableHtml={forceDisableHtml} />
             </div>
             <BottomSection
                 text={question.buttonText || 'Submit'}
@@ -120,7 +155,6 @@ export function RatingQuestion({
     initialValue,
 }: CommonQuestionProps & {
     question: RatingSurveyQuestion
-    displayQuestionIndex: number
 }) {
     const scale = question.scale
     const starting = question.scale === 10 ? 0 : 1
@@ -149,12 +183,7 @@ export function RatingQuestion({
     return (
         <Fragment>
             <div className="question-container">
-                <QuestionHeader
-                    question={question.question}
-                    description={question.description}
-                    descriptionContentType={question.descriptionContentType}
-                    forceDisableHtml={forceDisableHtml}
-                />
+                <QuestionHeader question={question} forceDisableHtml={forceDisableHtml} />
                 <div className="rating-section">
                     <div className="rating-options">
                         {question.display === 'emoji' && (
@@ -254,32 +283,6 @@ export function RatingButton({
     )
 }
 
-function isSubmitDisabled(
-    selectedChoices: string | string[] | null,
-    openChoiceSelected: boolean,
-    openEndedInput: string,
-    optional: boolean
-): boolean {
-    if (optional) {
-        return false
-    }
-
-    if (isNull(selectedChoices)) {
-        return true
-    }
-
-    if (isArray(selectedChoices)) {
-        if (!openChoiceSelected && selectedChoices.length === 0) {
-            return true
-        }
-        if (openChoiceSelected && !openEndedInput && selectedChoices.length === 0) {
-            return true
-        }
-    }
-
-    return false
-}
-
 export function MultipleChoiceQuestion({
     question,
     forceDisableHtml,
@@ -290,58 +293,52 @@ export function MultipleChoiceQuestion({
     initialValue,
 }: CommonQuestionProps & {
     question: MultipleSurveyQuestion
-    displayQuestionIndex: number
 }) {
     const openChoiceInputRef = useRef<HTMLInputElement>(null)
     const choices = useMemo(() => getDisplayOrderChoices(question), [question])
-    const [selectedChoices, setSelectedChoices] = useState<string | string[] | null>(() => {
-        if (isString(initialValue)) {
-            return initialValue
-        }
-        if (isArray(initialValue)) {
-            return initialValue
-        }
-        return question.type === SurveyQuestionType.SingleChoice ? null : []
-    })
-    const [openChoiceSelected, setOpenChoiceSelected] = useState(() => {
-        if (isString(initialValue)) {
-            return !choices.includes(initialValue)
-        }
-        if (isArray(initialValue)) {
-            // check if initialValue IS NOT in choices
-            return !choices.some((choice) => initialValue.includes(choice))
-        }
-        return false
-    })
-    const [openEndedInput, setOpenEndedInput] = useState(() => {
-        if (isString(initialValue) && !choices.includes(initialValue)) {
-            return initialValue
-        }
-        if (isArray(initialValue)) {
-            return initialValue.find((choice) => !choices.includes(choice)) || ''
-        }
-        return ''
-    })
+    const [selectedChoices, setSelectedChoices] = useState<string | string[] | null>(() =>
+        initializeSelectedChoices(initialValue, question.type)
+    )
+    const [openEndedState, setOpenEndedState] = useState<OpenEndedInputState>(() =>
+        initializeOpenEndedState(initialValue, choices)
+    )
+
     const { isPreviewMode } = useSurveyContext()
 
-    const inputType = question.type === SurveyQuestionType.SingleChoice ? 'radio' : 'checkbox'
-    const shouldSkipSubmit =
-        question.skipSubmitButton && question.type === SurveyQuestionType.SingleChoice && !question.hasOpenChoice
+    const isSingleChoiceQuestion = question.type === SurveyQuestionType.SingleChoice
+    const isMultipleChoiceQuestion = question.type === SurveyQuestionType.MultipleChoice
+
+    const shouldSkipSubmit = question.skipSubmitButton && isSingleChoiceQuestion && !question.hasOpenChoice
 
     const handleChoiceChange = (val: string, isOpenChoice: boolean) => {
         if (isOpenChoice) {
-            setOpenChoiceSelected(!openChoiceSelected)
-            // Focus the input when open choice is selected
-            if (!openChoiceSelected) {
-                // Use a small delay to ensure the focus happens after the state update
-                setTimeout(() => openChoiceInputRef.current?.focus(), 0)
+            const newOpenSelected = !openEndedState.isSelected
+            setOpenEndedState((prev) => ({
+                ...prev,
+                isSelected: newOpenSelected,
+                inputValue: newOpenSelected ? prev.inputValue : '',
+            }))
+
+            if (isSingleChoiceQuestion) {
+                setSelectedChoices('')
+            }
+
+            // Focus the input when open choice is selected, slight delay because of the animation
+            if (newOpenSelected) {
+                setTimeout(() => openChoiceInputRef.current?.focus(), 75)
             }
             return
         }
 
-        if (question.type === SurveyQuestionType.SingleChoice) {
+        if (isSingleChoiceQuestion) {
             setSelectedChoices(val)
-            setOpenChoiceSelected(false) // Deselect open choice when selecting another option
+            // Deselect open choice when selecting another option
+            setOpenEndedState((prev) => ({
+                ...prev,
+                isSelected: false,
+                inputValue: '',
+            }))
+
             if (shouldSkipSubmit) {
                 onSubmit(val)
                 if (isPreviewMode) {
@@ -351,7 +348,7 @@ export function MultipleChoiceQuestion({
             return
         }
 
-        if (question.type === SurveyQuestionType.MultipleChoice && isArray(selectedChoices)) {
+        if (isMultipleChoiceQuestion && isArray(selectedChoices)) {
             if (selectedChoices.includes(val)) {
                 setSelectedChoices(selectedChoices.filter((choice) => choice !== val))
             } else {
@@ -362,101 +359,131 @@ export function MultipleChoiceQuestion({
 
     const handleOpenEndedInputChange = (e: React.FormEvent<HTMLInputElement>) => {
         e.stopPropagation()
-        setOpenEndedInput(e.currentTarget.value)
-        if (question.type === SurveyQuestionType.SingleChoice) {
-            setSelectedChoices(e.currentTarget.value)
+        const newValue = e.currentTarget.value
+
+        setOpenEndedState((prev) => ({
+            ...prev,
+            inputValue: newValue,
+        }))
+
+        if (isSingleChoiceQuestion) {
+            setSelectedChoices(newValue)
+        }
+    }
+
+    const handleOpenEndedKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        e.stopPropagation()
+
+        // Handle Enter key to submit form if valid
+        if (e.key === 'Enter' && !isSubmitDisabled()) {
+            e.preventDefault()
+            handleSubmit()
+        }
+
+        // Handle Escape key to clear input and deselect
+        if (e.key === 'Escape') {
+            e.preventDefault()
+            setOpenEndedState((prev) => ({
+                ...prev,
+                isSelected: false,
+                inputValue: '',
+            }))
+            if (isSingleChoiceQuestion) {
+                setSelectedChoices(null)
+            }
+        }
+    }
+
+    const isSubmitDisabled = (): boolean => {
+        if (question.optional) {
+            return false
+        }
+        if (isNull(selectedChoices)) {
+            return true
+        }
+        if (isArray(selectedChoices)) {
+            if (!openEndedState.isSelected && selectedChoices.length === 0) {
+                return true
+            }
+        }
+        if (openEndedState.isSelected && openEndedState.inputValue.trim() === '') {
+            return true
+        }
+        return false
+    }
+
+    const handleSubmit = () => {
+        if (openEndedState.isSelected && isMultipleChoiceQuestion) {
+            if (isArray(selectedChoices)) {
+                isPreviewMode
+                    ? onPreviewSubmit([...selectedChoices, openEndedState.inputValue])
+                    : onSubmit([...selectedChoices, openEndedState.inputValue])
+            }
+        } else {
+            isPreviewMode ? onPreviewSubmit(selectedChoices) : onSubmit(selectedChoices)
         }
     }
 
     return (
         <Fragment>
             <div className="question-container">
-                <QuestionHeader
-                    question={question.question}
-                    description={question.description}
-                    descriptionContentType={question.descriptionContentType}
-                    forceDisableHtml={forceDisableHtml}
-                />
-                <div className="multiple-choice-options limit-height">
+                <QuestionHeader question={question} forceDisableHtml={forceDisableHtml} />
+                <fieldset className="multiple-choice-options limit-height">
+                    <legend className="sr-only">
+                        {isMultipleChoiceQuestion ? ' Select all that apply' : ' Select one'}
+                    </legend>
                     {choices.map((choice: string, idx: number) => {
                         const isOpenChoice = !!question.hasOpenChoice && idx === question.choices.length - 1
-                        const choiceClass = `choice-option${isOpenChoice ? ' choice-option-open' : ''}`
+                        const inputId = `surveyQuestion${displayQuestionIndex}Choice${idx}`
+                        const openInputId = `${inputId}Open`
 
                         const isChecked = isOpenChoice
-                            ? openChoiceSelected
-                            : question.type === SurveyQuestionType.SingleChoice
+                            ? openEndedState.isSelected
+                            : isSingleChoiceQuestion
                               ? selectedChoices === choice
                               : isArray(selectedChoices) && selectedChoices.includes(choice)
 
                         return (
-                            <div className={choiceClass} key={idx}>
+                            <label className={isOpenChoice ? ' choice-option-open' : ''} key={idx}>
                                 <input
-                                    type={inputType}
-                                    id={`surveyQuestion${displayQuestionIndex}Choice${idx}`}
-                                    name={`question${displayQuestionIndex}`}
+                                    type={isSingleChoiceQuestion ? 'radio' : 'checkbox'}
+                                    name={inputId}
                                     checked={isChecked}
-                                    onClick={() => handleChoiceChange(choice, isOpenChoice)}
+                                    onChange={() => handleChoiceChange(choice, isOpenChoice)}
+                                    id={inputId}
+                                    aria-controls={openInputId}
                                 />
-                                <label htmlFor={`surveyQuestion${displayQuestionIndex}Choice${idx}`}>
-                                    {isOpenChoice ? (
-                                        <>
-                                            <span>{choice}:</span>
-                                            <input
-                                                type="text"
-                                                ref={openChoiceInputRef}
-                                                id={`surveyQuestion${displayQuestionIndex}Choice${idx}Open`}
-                                                name={`question${displayQuestionIndex}`}
-                                                value={openEndedInput}
-                                                onKeyDown={(e) => {
-                                                    e.stopPropagation()
-                                                }}
-                                                onInput={(e) => handleOpenEndedInputChange(e)}
-                                                onClick={(e) => {
-                                                    // Ensure the checkbox/radio gets checked when clicking the input
-                                                    if (!openChoiceSelected) {
-                                                        handleChoiceChange(choice, true)
-                                                    }
-                                                    e.stopPropagation()
-                                                }}
-                                            />
-                                        </>
-                                    ) : (
-                                        choice
-                                    )}
-                                </label>
-                                <span className="choice-check">{checkSVG}</span>
-                            </div>
+                                <span>{isOpenChoice ? `${choice}:` : choice}</span>
+                                {isOpenChoice && (
+                                    <input
+                                        type="text"
+                                        ref={openChoiceInputRef}
+                                        id={openInputId}
+                                        name={`question${displayQuestionIndex}Open`}
+                                        value={openEndedState.inputValue}
+                                        onKeyDown={handleOpenEndedKeyDown}
+                                        onInput={handleOpenEndedInputChange}
+                                        onClick={(e) => {
+                                            // Ensure the checkbox/radio gets checked when clicking the input
+                                            if (!openEndedState.isSelected) {
+                                                handleChoiceChange(choice, true)
+                                            }
+                                            e.stopPropagation()
+                                        }}
+                                        aria-label={`${choice} - please specify`}
+                                    />
+                                )}
+                            </label>
                         )
                     })}
-                </div>
+                </fieldset>
             </div>
             <BottomSection
                 text={question.buttonText || 'Submit'}
-                submitDisabled={isSubmitDisabled(
-                    selectedChoices,
-                    openChoiceSelected,
-                    openEndedInput,
-                    !!question.optional
-                )}
+                submitDisabled={isSubmitDisabled()}
                 appearance={appearance}
-                onSubmit={() => {
-                    if (openChoiceSelected && question.type === SurveyQuestionType.MultipleChoice) {
-                        if (isArray(selectedChoices)) {
-                            onSubmit([...selectedChoices, openEndedInput])
-                        }
-                    } else {
-                        onSubmit(selectedChoices)
-                    }
-                }}
-                onPreviewSubmit={() => {
-                    if (openChoiceSelected && question.type === SurveyQuestionType.MultipleChoice) {
-                        if (isArray(selectedChoices)) {
-                            onPreviewSubmit([...selectedChoices, openEndedInput])
-                        }
-                    } else {
-                        onPreviewSubmit(selectedChoices)
-                    }
-                }}
+                onSubmit={handleSubmit}
+                onPreviewSubmit={handleSubmit}
                 skipSubmitButton={shouldSkipSubmit}
             />
         </Fragment>
