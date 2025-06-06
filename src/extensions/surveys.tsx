@@ -61,6 +61,7 @@ const window = _window as Window & typeof globalThis
 const document = _document as Document
 
 const DISPATCH_FEEDBACK_WIDGET_EVENT = 'ph:show_survey_widget'
+const WIDGET_LISTENER_ATTRIBUTE = 'PHWidgetSurveyClickListener'
 
 function getRatingBucketForResponseValue(responseValue: number, scale: number) {
     if (scale === 3) {
@@ -171,11 +172,52 @@ export function getNextSurveyStep(
     return nextQuestionIndex
 }
 
+const SURVEY_NEXT_TO_TRIGGER_PARAMS = {
+    ESTIMATED_MIN_HEIGHT: 250,
+    HORIZONTAL_PADDING: 20,
+    TRIGGER_SPACING: 12,
+} as const
+
+function getNextToTriggerPosition(target: HTMLElement, surveyWidth: number): React.CSSProperties | null {
+    try {
+        const buttonRect = target.getBoundingClientRect()
+        const viewportHeight = window.innerHeight
+        const viewportWidth = window.innerWidth
+        const estimatedMinSurveyHeight = SURVEY_NEXT_TO_TRIGGER_PARAMS.ESTIMATED_MIN_HEIGHT
+        const buttonCenterX = buttonRect.left + buttonRect.width / 2
+        let left = buttonCenterX - surveyWidth / 2
+        const horizontalPadding = SURVEY_NEXT_TO_TRIGGER_PARAMS.HORIZONTAL_PADDING
+        if (left + surveyWidth > viewportWidth - horizontalPadding) {
+            left = viewportWidth - surveyWidth - horizontalPadding
+        }
+        if (left < horizontalPadding) {
+            left = horizontalPadding
+        }
+        const spacing = SURVEY_NEXT_TO_TRIGGER_PARAMS.TRIGGER_SPACING
+        const spaceBelow = viewportHeight - buttonRect.bottom
+        const spaceAbove = buttonRect.top
+        const showAbove = spaceBelow < estimatedMinSurveyHeight && spaceAbove > spaceBelow
+
+        return {
+            position: 'fixed',
+            top: showAbove ? 'auto' : `${buttonRect.bottom + spacing}px`,
+            left: `${left}px`,
+            right: 'auto',
+            bottom: showAbove ? `${viewportHeight - buttonRect.top + spacing}px` : 'auto',
+            zIndex: defaultSurveyAppearance.zIndex,
+        } satisfies React.CSSProperties
+    } catch (error) {
+        logger.warn('Failed to calculate trigger position:', error)
+        return null
+    }
+}
+
 export class SurveyManager {
     private _posthog: PostHog
     private _surveyInFocus: string | null
     private _surveyTimeouts: Map<string, NodeJS.Timeout> = new Map()
-    private _widgetSelectorListeners: Map<string, { element: Element; listener: EventListener }> = new Map()
+    private _widgetSelectorListeners: Map<string, { element: Element; listener: EventListener; survey: Survey }> =
+        new Map()
 
     constructor(posthog: PostHog) {
         this._posthog = posthog
@@ -195,7 +237,7 @@ export class SurveyManager {
         this._clearSurveyTimeout(survey.id)
         this._addSurveyToFocus(survey)
         const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
-        const shadow = retrieveSurveyShadow(survey, this._posthog)
+        const { shadow } = retrieveSurveyShadow(survey, this._posthog)
         if (delaySeconds <= 0) {
             return Preact.render(
                 <SurveyPopup
@@ -225,45 +267,45 @@ export class SurveyManager {
 
     private _handleWidget = (survey: Survey): void => {
         // Ensure widget container exists if it doesn't
-        const shadow = retrieveSurveyShadow(survey, this._posthog)
-        Preact.render(<FeedbackWidget posthog={this._posthog} survey={survey} />, shadow)
-    }
+        const { shadow, isNewlyCreated } = retrieveSurveyShadow(survey, this._posthog)
 
-    private _removeWidgetSelectorListener = (surveyId: string): void => {
-        const existing = this._widgetSelectorListeners.get(surveyId)
-        if (existing) {
-            existing.element.removeEventListener('click', existing.listener)
-            existing.element.removeAttribute('PHWidgetSurveyClickListener')
-            this._widgetSelectorListeners.delete(surveyId)
-            logger.info(`Removed click listener for survey ${surveyId}`)
-        }
-    }
-
-    private _manageWidgetSelectorListener = (survey: Survey): void => {
-        const selector = survey.appearance?.widgetSelector
-        if (!selector) {
+        // If the widget is already rendered, do nothing. Otherwise the widget will be re-rendered every second
+        if (!isNewlyCreated) {
             return
         }
 
+        Preact.render(<FeedbackWidget posthog={this._posthog} survey={survey} key={survey.id} />, shadow)
+    }
+
+    private _removeWidgetSelectorListener = (survey: Pick<Survey, 'id' | 'type' | 'appearance'>): void => {
+        this._removeSurveyFromDom(survey)
+        const existing = this._widgetSelectorListeners.get(survey.id)
+        if (existing) {
+            existing.element.removeEventListener('click', existing.listener)
+            existing.element.removeAttribute(WIDGET_LISTENER_ATTRIBUTE)
+            this._widgetSelectorListeners.delete(survey.id)
+            logger.info(`Removed click listener for survey ${survey.id}`)
+        }
+    }
+
+    private _manageWidgetSelectorListener = (survey: Survey, selector: string): void => {
         const currentElement = document.querySelector(selector)
         const existingListenerData = this._widgetSelectorListeners.get(survey.id)
 
         if (!currentElement) {
-            // Element not found, remove listener if it exists
             if (existingListenerData) {
-                this._removeWidgetSelectorListener(survey.id)
+                this._removeWidgetSelectorListener(survey)
             }
             return
         }
 
-        // Ensure the base widget is rendered first if needed
         this._handleWidget(survey)
 
         if (existingListenerData) {
             // Listener exists, check if element changed
             if (currentElement !== existingListenerData.element) {
                 logger.info(`Selector element changed for survey ${survey.id}. Re-attaching listener.`)
-                this._removeWidgetSelectorListener(survey.id)
+                this._removeWidgetSelectorListener(survey)
                 // Continue to attach listener to the new element below
             } else {
                 // Element is the same, listener already attached, do nothing
@@ -272,48 +314,18 @@ export class SurveyManager {
         }
 
         // Element found, and no listener attached (or it was just removed from old element)
-        if (!currentElement.hasAttribute('PHWidgetSurveyClickListener')) {
+        if (!currentElement.hasAttribute(WIDGET_LISTENER_ATTRIBUTE)) {
             const listener = (event: Event) => {
                 event.stopPropagation() // Prevent bubbling
 
-                if (survey.appearance?.position !== SurveyPosition.NextToTrigger) {
-                    window.dispatchEvent(
-                        new CustomEvent(DISPATCH_FEEDBACK_WIDGET_EVENT, {
-                            detail: { surveyId: survey.id, position: {} },
-                        })
-                    )
-                    return
-                }
+                const positionStyles =
+                    survey.appearance?.position === SurveyPosition.NextToTrigger
+                        ? getNextToTriggerPosition(
+                              event.currentTarget as HTMLElement,
+                              parseInt(survey.appearance?.maxWidth || defaultSurveyAppearance.maxWidth)
+                          )
+                        : {}
 
-                const buttonRect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-                const viewportHeight = window.innerHeight
-                const viewportWidth = window.innerWidth
-                const surveyWidth = parseInt(survey.appearance?.maxWidth || '300')
-                const estimatedMinSurveyHeight = 250 // Keep this estimation
-                const buttonCenterX = buttonRect.left + buttonRect.width / 2
-                let left = buttonCenterX - surveyWidth / 2
-                const horizontalPadding = 20
-                if (left + surveyWidth > viewportWidth - horizontalPadding) {
-                    left = viewportWidth - surveyWidth - horizontalPadding
-                }
-                if (left < horizontalPadding) {
-                    left = horizontalPadding
-                }
-                const spacing = 12
-                const spaceBelow = viewportHeight - buttonRect.bottom
-                const spaceAbove = buttonRect.top
-                const showAbove = spaceBelow < estimatedMinSurveyHeight && spaceAbove > spaceBelow
-
-                const positionStyles: React.CSSProperties = {
-                    position: 'fixed',
-                    top: showAbove ? 'auto' : `${buttonRect.bottom + spacing}px`,
-                    left: `${left}px`,
-                    right: 'auto',
-                    bottom: showAbove ? `${viewportHeight - buttonRect.top + spacing}px` : 'auto',
-                    zIndex: defaultSurveyAppearance.zIndex,
-                }
-
-                // Dispatch event for the FeedbackWidget to catch
                 window.dispatchEvent(
                     new CustomEvent(DISPATCH_FEEDBACK_WIDGET_EVENT, {
                         detail: { surveyId: survey.id, position: positionStyles },
@@ -322,8 +334,8 @@ export class SurveyManager {
             }
 
             addEventListener(currentElement, 'click', listener)
-            currentElement.setAttribute('PHWidgetSurveyClickListener', 'true')
-            this._widgetSelectorListeners.set(survey.id, { element: currentElement, listener })
+            currentElement.setAttribute(WIDGET_LISTENER_ATTRIBUTE, 'true')
+            this._widgetSelectorListeners.set(survey.id, { element: currentElement, listener, survey })
             logger.info(`Attached click listener for feedback button survey ${survey.id}`)
         }
     }
@@ -488,21 +500,23 @@ export class SurveyManager {
             const nonAPISurveyQueue = this._sortSurveysByAppearanceDelay(nonAPISurveys)
 
             // Keep track of surveys processed this cycle to remove listeners for inactive ones
-            const activeSelectorSurveyIds = new Set<string>()
+            const activeSelectorSurveys = new Set<string>()
 
             nonAPISurveyQueue.forEach((survey) => {
                 // Widget Type Logic
                 if (survey.type === SurveyType.Widget) {
                     if (survey.appearance?.widgetType === SurveyWidgetType.Tab) {
-                        // Render tab widget if not already present
                         this._handleWidget(survey)
-                    } else if (
+                        return
+                    }
+
+                    // For selector widget types, we need to manage the listener attachment/detachment dynamically
+                    if (
                         survey.appearance?.widgetType === SurveyWidgetType.Selector &&
                         survey.appearance?.widgetSelector
                     ) {
-                        activeSelectorSurveyIds.add(survey.id)
-                        // Manage the listener attachment/detachment dynamically
-                        this._manageWidgetSelectorListener(survey)
+                        activeSelectorSurveys.add(survey.id)
+                        this._manageWidgetSelectorListener(survey, survey.appearance?.widgetSelector)
                     }
                 }
 
@@ -513,9 +527,9 @@ export class SurveyManager {
             })
 
             // Clean up listeners for surveys that are no longer active or matched
-            this._widgetSelectorListeners.forEach((_, surveyId) => {
-                if (!activeSelectorSurveyIds.has(surveyId)) {
-                    this._removeWidgetSelectorListener(surveyId)
+            this._widgetSelectorListeners.forEach(({ survey }) => {
+                if (!activeSelectorSurveys.has(survey.id)) {
+                    this._removeWidgetSelectorListener(survey)
                 }
             })
         }, forceReload)
@@ -528,17 +542,25 @@ export class SurveyManager {
         this._surveyInFocus = survey.id
     }
 
+    private _removeSurveyFromDom(survey: Pick<Survey, 'id' | 'type' | 'appearance'>): void {
+        try {
+            const shadowContainer = document.querySelector(getSurveyContainerClass(survey, true))
+            if (shadowContainer?.shadowRoot) {
+                Preact.render(null, shadowContainer.shadowRoot)
+            }
+            shadowContainer?.remove()
+        } catch (error) {
+            logger.warn(`Failed to remove survey ${survey.id} from DOM:`, error)
+        }
+    }
+
     private _removeSurveyFromFocus = (survey: SurveyWithTypeAndAppearance): void => {
         if (this._surveyInFocus !== survey.id) {
             logger.error(`Survey ${survey.id} is not in focus. Cannot remove survey ${survey.id}.`)
         }
         this._clearSurveyTimeout(survey.id)
         this._surveyInFocus = null
-        // Remove survey from the DOM and reset Preact lifecycle
-        const shadow = retrieveSurveyShadow(survey, this._posthog)
-        Preact.render(null, shadow)
-        const shadowContainer = document.querySelector(getSurveyContainerClass(survey, true))
-        shadowContainer?.remove()
+        this._removeSurveyFromDom(survey)
     }
 
     // Expose internal state and methods for testing
