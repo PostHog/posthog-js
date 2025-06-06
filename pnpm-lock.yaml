@@ -211,6 +211,9 @@ importers:
       jsdom-global:
         specifier: 3.0.2
         version: 3.0.2(jsdom@16.5.0)
+      lint-staged:
+        specifier: ^10.2.11
+        version: 10.2.11
       localStorage:
         specifier: 1.0.4
         version: 1.0.4
