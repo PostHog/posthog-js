@@ -1,80 +1,83 @@
 name: Autobump
 
 on:
-    pull_request:
-        types: [closed]
+  pull_request:
+    types: [closed]
 
 jobs:
-    label-version-bump:
-        name: Bump version based on PR label
-        runs-on: ubuntu-22.04
-        if: |
-            github.event.pull_request.merged
-            && (
-                contains(github.event.pull_request.labels.*.name, 'bump patch')
-                || contains(github.event.pull_request.labels.*.name, 'bump minor')
-                || contains(github.event.pull_request.labels.*.name, 'bump major')
-            )
-        steps:
-            - name: Check out repository
-              uses: actions/checkout@v4
-              with:
-                  ref: ${{ github.event.pull_request.base.ref }}
-                  token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
-                  fetch-depth: 0
+  label-version-bump:
+    name: Bump version based on PR label
+    runs-on: ubuntu-22.04
+    if: |
+      github.event.pull_request.merged
+      && (
+          contains(github.event.pull_request.labels.*.name, 'bump patch')
+          || contains(github.event.pull_request.labels.*.name, 'bump minor')
+          || contains(github.event.pull_request.labels.*.name, 'bump major')
+      )
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+          fetch-depth: 0
 
-            - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v4
 
-            - name: Detect version bump type
-              id: bump-type
-              run: |
-                  BUMP_TYPE=null
-                  if [[ $BUMP_PATCH_PRESENT == 'true' ]]; then
-                      BUMP_TYPE=patch
-                  fi
-                  if [[ $BUMP_MINOR_PRESENT == 'true' ]]; then
-                      BUMP_TYPE=minor
-                  fi
-                  if [[ $BUMP_MAJOR_PRESENT == 'true' ]]; then
-                      BUMP_TYPE=major
-                  fi
-                  echo "bump-type=$BUMP_TYPE" >> "$GITHUB_OUTPUT"
-              env:
-                  BUMP_PATCH_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'bump patch') }}
-                  BUMP_MINOR_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'bump minor') }}
-                  BUMP_MAJOR_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'bump major') }}
+      - name: Detect version bump type
+        id: bump-type
+        run: |
+          BUMP_TYPE=null
+          if [[ $BUMP_PATCH_PRESENT == 'true' ]]; then
+              BUMP_TYPE=patch
+          fi
+          if [[ $BUMP_MINOR_PRESENT == 'true' ]]; then
+              BUMP_TYPE=minor
+          fi
+          if [[ $BUMP_MAJOR_PRESENT == 'true' ]]; then
+              BUMP_TYPE=major
+          fi
+          echo "bump-type=$BUMP_TYPE" >> "$GITHUB_OUTPUT"
+        env:
+          BUMP_PATCH_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'bump patch') }}
+          BUMP_MINOR_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'bump minor') }}
+          BUMP_MAJOR_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'bump major') }}
 
-            - name: Determine new version
-              id: versions
-              if: steps.bump-type.outputs.bump-type != 'null'
-              run: |
-                  OLD_VERSION=$(jq ".version" package.json -r)
-                  NEW_VERSION=$(npx semver $OLD_VERSION -i ${{ steps.bump-type.outputs.bump-type }})
-                  echo "old-version=$OLD_VERSION" >> "$GITHUB_OUTPUT"
-                  echo "new-version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+      - name: Determine new version
+        id: versions
+        if: steps.bump-type.outputs.bump-type != 'null'
+        run: |
+          OLD_VERSION=$(jq ".version" package.json -r)
+          NEW_VERSION=$(npx semver $OLD_VERSION -i ${{ steps.bump-type.outputs.bump-type }})
+          echo "old-version=$OLD_VERSION" >> "$GITHUB_OUTPUT"
+          echo "new-version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+        working-directory: packages/browser
 
-            - name: Update version in package.json
-              if: steps.bump-type.outputs.bump-type != 'null'
-              run: |
-                  mv package.json package.old.json
-                  jq --indent 4 '.version = "${{ steps.versions.outputs.new-version }}"' package.old.json > package.json
-                  rm package.old.json
+      - name: Update version in package.json
+        if: steps.bump-type.outputs.bump-type != 'null'
+        run: |
+          mv package.json package.old.json
+          jq --indent 4 '.version = "${{ steps.versions.outputs.new-version }}"' package.old.json > package.json
+          rm package.old.json
+        working-directory: packages/browser
 
-            - name: Update CHANGELOG.md
-              run: |
-                  CHANGELOG_HEADING='## ${{ steps.versions.outputs.new-version }} - '$(date --iso-8601)
-                  CHANGELOG_POINTS=$(git log v${{ steps.versions.outputs.old-version }}..${{ github.event.pull_request.base.ref }} --pretty=format:%s --grep='^.*\d*)$' | sed -e 's/^/- /')
-                  mv CHANGELOG.md CHANGELOG.old.md
-                  echo -e "$CHANGELOG_HEADING\n\n$CHANGELOG_POINTS\n\n$(cat CHANGELOG.old.md)" > CHANGELOG.md
-                  rm CHANGELOG.old.md
+      - name: Update CHANGELOG.md
+        run: |
+          CHANGELOG_HEADING='## ${{ steps.versions.outputs.new-version }} - '$(date --iso-8601)
+          CHANGELOG_POINTS=$(git log v${{ steps.versions.outputs.old-version }}..${{ github.event.pull_request.base.ref }} --pretty=format:%s --grep='^.*\d*)$' | sed -e 's/^/- /')
+          mv CHANGELOG.md CHANGELOG.old.md
+          echo -e "$CHANGELOG_HEADING\n\n$CHANGELOG_POINTS\n\n$(cat CHANGELOG.old.md)" > CHANGELOG.md
+          rm CHANGELOG.old.md
+        working-directory: packages/browser
 
-            - name: Update lockfile
-              run: pnpm i
+      - name: Update lockfile
+        run: pnpm i
 
-            - name: Commit bump
-              if: steps.bump-type.outputs.bump-type != 'null'
-              uses: EndBug/add-and-commit@v7
-              with:
-                  branch: ${{ github.event.pull_request.base.ref }}
-                  message: 'chore: Bump version to ${{ steps.versions.outputs.new-version }}'
-                  github_token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+      - name: Commit bump
+        if: steps.bump-type.outputs.bump-type != 'null'
+        uses: EndBug/add-and-commit@v7
+        with:
+          branch: ${{ github.event.pull_request.base.ref }}
+          message: "chore: Bump version to ${{ steps.versions.outputs.new-version }}"
+          github_token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}

@@ -7,6 +7,6 @@
         "typeRoots": ["../../node_modules/@types", "../../src/types"],
         "allowJs": true
     },
-    "include": ["./**/*.ts*"],
+    "include": ["./**/*.ts*", "setup.js"],
     "exclude": []
 }

@@ -10,15 +10,15 @@ jobs:
     name: "Check user has permission to release"
     runs-on: ubuntu-22.04
     outputs:
-# can have multiple outputs
-#      check-result: ${{ steps.check-permissions.outputs.check-result }}
-#      user-permission: ${{ steps.check-permissions.outputs.user-permission }}
+      # can have multiple outputs
+      #      check-result: ${{ steps.check-permissions.outputs.check-result }}
+      #      user-permission: ${{ steps.check-permissions.outputs.user-permission }}
       require-result: ${{ steps.check-permissions.outputs.require-result }}
     steps:
       - uses: actions-cool/check-user-permission@v2
         id: check-permissions
         with:
-          require: 'write'
+          require: "write"
   warn-when-failed:
     name: Warn when the user does not have the required permissions
     runs-on: ubuntu-22.04
@@ -32,8 +32,8 @@ jobs:
     name: Release alpha version based on PR label
     runs-on: ubuntu-22.04
     needs: check-permissions
-    if: needs.check-permissions.outputs.require-result == 'true' && 
-        contains(github.event.pull_request.labels.*.name, 'release alpha')
+    if: needs.check-permissions.outputs.require-result == 'true' &&
+      contains(github.event.pull_request.labels.*.name, 'release alpha')
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -42,13 +42,7 @@ jobs:
           token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          registry-url: https://registry.npmjs.org
-          cache: 'pnpm'
-      - run: pnpm install
+      - uses: ./.github/actions/setup
 
       - name: Determine new version
         id: versions
@@ -58,6 +52,7 @@ jobs:
           NEW_VERSION=$(pnpx semver $OLD_VERSION -i prerelease --preid alpha)
           echo "old-version=$OLD_VERSION" >> "$GITHUB_OUTPUT"
           echo "new-version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+        working-directory: packages/browser
 
       - name: Update version in package.json
         if: steps.bump-type.outputs.bump-type != 'null'
@@ -65,8 +60,10 @@ jobs:
           mv package.json package.old.json
           jq --indent 4 '.version = "${{ steps.versions.outputs.new-version }}"' package.old.json > package.json
           rm package.old.json
+        working-directory: packages/browser
 
       - name: Publish the alpha in the npm registry
-        run: npm publish --access public --tag alpha
+        run: pnpm publish --access public --tag alpha
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        working-directory: packages/browser
