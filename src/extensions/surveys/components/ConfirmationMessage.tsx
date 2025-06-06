@@ -7,7 +7,10 @@ import { Cancel } from './QuestionHeader'
 import { useContext, useEffect } from 'preact/hooks'
 import { SurveyContext } from '../surveys-extension-utils'
 import { addEventListener } from '../../../utils'
-import { document } from '../../../utils/globals'
+import { window as _window } from '../../../utils/globals'
+
+// We cast the types here which is dangerous but protected by the top level generateSurveys call
+const window = _window as Window
 
 export function ConfirmationMessage({
     header,
@@ -33,9 +36,9 @@ export function ConfirmationMessage({
                 onClose()
             }
         }
-        addEventListener(document, 'keydown', handleKeyDown as EventListener)
+        addEventListener(window, 'keydown', handleKeyDown as EventListener)
         return () => {
-            document?.removeEventListener('keydown', handleKeyDown)
+            window.removeEventListener('keydown', handleKeyDown)
         }
     }, [onClose])
 

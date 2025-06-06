@@ -171,36 +171,12 @@
 }
 
 /* --- Animations --- */
-@keyframes ph-survey-fade-in-up {
+@keyframes ph-survey-fade-in {
     from {
         opacity: 0;
-        transform: translateY(10px);
     }
     to {
         opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-@keyframes ph-survey-fade-out-down {
-    from {
-        opacity: 1;
-        transform: translateY(0);
-    }
-    to {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-}
-
-@keyframes ph-survey-question-slide-in {
-    from {
-        opacity: 0.5;
-        transform: translateX(15px);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(0);
     }
 }
 
@@ -222,7 +198,6 @@
 
 .question-container,
 .thank-you-message {
-    animation: ph-survey-question-slide-in 0.25s ease-out forwards;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -246,10 +221,13 @@
     flex-direction: column;
 }
 
+.survey-form {
+    animation: ph-survey-fade-in 0.3s ease-out forwards;
+}
+
 .survey-form,
 .thank-you-message {
     position: relative;
-    animation: ph-survey-fade-in-up 0.3s ease-out forwards;
     text-align: left;
     width: 100%;
     z-index: var(--ph-survey-z-index);
@@ -271,12 +249,10 @@
     & textarea {
         &:focus,
         &:focus-visible {
-            transform: translateY(-1px);
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
         }
 
         &:focus:not(:focus-visible) {
-            transform: none;
             box-shadow: none;
         }
     }
@@ -314,14 +290,8 @@
         &:hover {
             &:not(:has(input:checked)) {
                 border-color: var(--ph-survey-text-subtle-color);
-                transform: translateY(-1px);
                 box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
             }
-        }
-
-        &:active {
-            transform: translateY(0);
-            transition-duration: 0.1s;
         }
 
         &:has(input:checked) {
@@ -426,27 +396,10 @@
     /* Enhanced styles for the "Other" option input field */
     & .choice-option-open {
         & input[type='text'] {
-            /* Start collapsed using transform */
-            opacity: 0;
-            transform: scaleX(0);
-            transform-origin: left center;
-            /* Gentle reveal animation */
-            transition:
-                opacity 0.3s ease-out,
-                transform 0.3s ease-out;
-
             &::placeholder {
                 color: var(--ph-survey-text-subtle-color);
                 font-weight: 400;
             }
-        }
-
-        /* Show the text input with animation when the choice is selected */
-        &:has(input[type='checkbox']:checked) input[type='text'],
-        &:has(input[type='radio']:checked) input[type='text'] {
-            opacity: 1;
-            transform: scaleX(1);
-            transition-delay: 0.1s;
         }
     }
 }
