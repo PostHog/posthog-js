@@ -458,6 +458,8 @@ export class PostHog {
         const initialPersistenceProps = { ...this.persistence.props }
         const initialSessionProps = { ...this.sessionPersistence.props }
 
+        this.register({ $initialization_time: new Date().toISOString() })
+
         this._requestQueue = new RequestQueue(
             (req) => this._send_retriable_request(req),
             this.config.request_queue_config
