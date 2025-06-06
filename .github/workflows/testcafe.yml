@@ -5,12 +5,12 @@ env:
   BROWSERSTACK_USERNAME: "${{ secrets.BROWSERSTACK_USERNAME }}"
   POSTHOG_PROJECT_KEY: "${{ secrets.POSTHOG_PROJECT_KEY }}"
   POSTHOG_API_KEY: "${{ secrets.POSTHOG_API_KEY }}"
-  BROWSERSTACK_DEBUG: 'true'
-  BROWSERSTACK_NETWORK_LOGS: 'true'
-  BROWSERSTACK_CONSOLE: 'info'
-  BROWSERSTACK_FORCE_PROXY: 'true'
-  BROWSERSTACK_USE_AUTOMATE: 'true'
-  BROWSERSTACK_PROJECT_NAME: 'PostHog JS SDK'
+  BROWSERSTACK_DEBUG: "true"
+  BROWSERSTACK_NETWORK_LOGS: "true"
+  BROWSERSTACK_CONSOLE: "info"
+  BROWSERSTACK_FORCE_PROXY: "true"
+  BROWSERSTACK_USE_AUTOMATE: "true"
+  BROWSERSTACK_PROJECT_NAME: "PostHog JS SDK"
 
 jobs:
   browsers:
@@ -20,36 +20,31 @@ jobs:
     strategy:
       matrix:
         browser:
-          - 'chrome:headless'
-          - 'firefox:headless'
-          - 'browserstack:ie'
-          - 'browserstack:safari'
+          - "chrome:headless"
+          - "firefox:headless"
+          - "browserstack:ie"
+          - "browserstack:safari"
         include:
-          - browser: 'chrome:headless'
+          - browser: "chrome:headless"
             name: Chrome
-          - browser: 'firefox:headless'
+          - browser: "firefox:headless"
             name: Firefox
-          - browser: 'browserstack:ie'
+          - browser: "browserstack:ie"
             name: IE11
-          - browser: 'browserstack:safari'
+          - browser: "browserstack:safari"
             name: Safari
 
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'pnpm'
+
+      - uses: ./.github/actions/setup
 
       - name: Serve static files
         run: python -m http.server 8080 &
 
-      - name: Install node dependencies
-        run: pnpm install
-
       - name: Set up posthog-js
         run: pnpm build-rollup
+        working-directory: packages/browser
 
       - name: Run ${{ matrix.name }} test
         timeout-minutes: 10
@@ -58,7 +53,9 @@ jobs:
           RUN_ID: ${{ github.run_id }}
           BROWSER: ${{ matrix.browser }}
         run: pnpm testcafe ${{ matrix.browser }} --stop-on-first-fail
+        working-directory: packages/browser
 
       - name: Check ${{ matrix.name }} events
         timeout-minutes: 10
         run: pnpm check-testcafe-results
+        working-directory: packages/browser
