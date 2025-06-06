@@ -1,75 +1,65 @@
 name: Library checks
 
 on:
-    pull_request:
-    push:
-        branches:
-            - main
+  pull_request:
+  push:
+    branches:
+      - main
 
 jobs:
-    unit:
-        name: Unit tests
-        runs-on: ubuntu-22.04
-        steps:
-            - uses: actions/checkout@v4
-            - uses: pnpm/action-setup@v4
-            - uses: actions/setup-node@v4
-              with:
-                node-version: '18'
-                cache: 'pnpm'
-            - run: pnpm install
-            - run: pnpm build
-            - run: pnpm test:unit
-            - run: pnpm write-mangled-property-names
-            - run: git diff --exit-code # fail if e.g. the mangled properties list has changed, see rollup.config.js
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: pnpm build
+        working-directory: packages/browser
+      - run: pnpm test:unit
+        working-directory: packages/browser
+      - run: pnpm write-mangled-property-names
+        working-directory: packages/browser
+      - run: git diff --exit-code # fail if e.g. the mangled properties list has changed, see rollup.config.js
 
-    integration:
-        name: Playwright E2E tests
-        runs-on: ubuntu-22.04
-        steps:
-            - uses: actions/checkout@v4
-            - uses: pnpm/action-setup@v4
-            - uses: actions/setup-node@v4
-              with:
-                node-version: '18'
-            - run: pnpm install
-            - run: pnpm build
-            - name: Install Playwright Browsers
-              run: pnpm exec playwright install --with-deps
-            - name: Run Playwright tests
-              run: pnpm exec playwright test
-            - uses: actions/upload-artifact@v4
-              if: ${{ !cancelled() }}
-              with:
-                name: playwright-report
-                path: playwright-report/
-                retention-days: 30
+  integration:
+    name: Playwright E2E tests
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: pnpm build
+        working-directory: packages/browser
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install --with-deps
+        working-directory: packages/browser
+      - name: Run Playwright tests
+        run: pnpm exec playwright test
+        working-directory: packages/browser
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: packages/browser/playwright-report/
+          retention-days: 30
 
-    functional:
-        name: Functional tests
-        runs-on: ubuntu-22.04
-        steps:
-            - uses: actions/checkout@v4
-            - uses: pnpm/action-setup@v4
-            - uses: actions/setup-node@v4
-              with:
-                node-version: '18'
-                cache: 'pnpm'
-            - run: pnpm install
-            - run: pnpm run test:functional
+  functional:
+    name: Functional tests
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: pnpm run test:functional
+        working-directory: packages/browser
 
-    lint:
-        name: Lint
-        runs-on: ubuntu-22.04
-        steps:
-            - uses: actions/checkout@v4
-            - uses: pnpm/action-setup@v4
-            - uses: actions/setup-node@v4
-              with:
-                  node-version: '18'
-                  cache: 'pnpm'
-            - run: pnpm install
-
-            - run: pnpm prettier:check
-            - run: pnpm lint
-            - run: pnpm tsc -b
+  lint:
+    name: Lint
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: pnpm prettier:check
+        working-directory: packages/browser
+      - run: pnpm lint
+        working-directory: packages/browser
+      - run: pnpm tsc -b
+        working-directory: packages/browser

@@ -1,5 +1,8 @@
 {
     "packageManager": "pnpm@9.15.4",
+    "scripts": {
+        "build-rollup": "pnpm -r build-rollup"
+    },
     "pnpm": {
         "patchedDependencies": {
             "@rrweb/rrweb-plugin-console-record@2.0.0-alpha.17": "patches/@rrweb__rrweb-plugin-console-record@2.0.0-alpha.17.patch",
@@ -20,7 +23,8 @@
         "@typescript-eslint/eslint-plugin": "^8.29.1",
         "@typescript-eslint/parser": "^8.29.1",
         "@types/eslint": "^8.44.6",
-        "lint-staged": "^10.2.11"
+        "lint-staged": "^10.2.11",
+        "jest-environment-jsdom": "^27.0.1"
     },
     "lint-staged": {
         "*.{ts,tsx,js,json}": "prettier --write",
