@@ -1,15 +1,18 @@
 import { assignableWindow, window } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
-import { ExceptionAutoCaptureConfig, Properties, RemoteConfig } from '../../types'
+import { ExceptionAutoCaptureConfig, RemoteConfig } from '../../types'
 
 import { createLogger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
 import { isObject, isUndefined } from '../../utils/type-utils'
+import { ErrorProperties } from './error-conversion'
+import { BucketedRateLimiter } from '../../utils/bucketed-rate-limiter'
 
 const logger = createLogger('[ExceptionAutocapture]')
 
 export class ExceptionObserver {
     private _instance: PostHog
+    private _rateLimiter: BucketedRateLimiter<string>
     private _remoteEnabled: boolean | undefined
     private _config: Required<ExceptionAutoCaptureConfig>
     private _unwrapOnError: (() => void) | undefined
@@ -20,6 +23,15 @@ export class ExceptionObserver {
         this._instance = instance
         this._remoteEnabled = !!this._instance.persistence?.props[EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]
         this._config = this._requiredConfig()
+
+        // by default captures ten exceptions before rate limiting by exception type
+        // refills at a rate of one token / 10 second period
+        // e.g. will capture 1 exception rate limited exception every 10 seconds until burst ends
+        this._rateLimiter = new BucketedRateLimiter({
+            refillRate: this._instance.config.error_tracking.__exceptionRateLimiterRefillRate ?? 1,
+            bucketSize: this._instance.config.error_tracking.__exceptionRateLimiterBucketSize ?? 10,
+            refillInterval: 10000, // ten seconds in milliseconds
+        })
 
         this.startIfEnabled()
     }
@@ -127,12 +139,22 @@ export class ExceptionObserver {
         this.startIfEnabled()
     }
 
-    captureException(errorProperties: Properties) {
+    captureException(errorProperties: ErrorProperties) {
         const posthogHost = this._instance.requestRouter.endpointFor('ui')
 
         errorProperties.$exception_personURL = `${posthogHost}/project/${
             this._instance.config.token
         }/person/${this._instance.get_distinct_id()}`
+
+        const exceptionType = errorProperties.$exception_list[0].type ?? 'Exception'
+        const isRateLimited = this._rateLimiter.consumeRateLimit(exceptionType)
+
+        if (isRateLimited) {
+            logger.info('Skipping exception capture because of client rate limiting.', {
+                exception: errorProperties.$exception_list[0].type,
+            })
+            return
+        }
 
         this._instance.exceptions.sendExceptionEvent(errorProperties)
     }
