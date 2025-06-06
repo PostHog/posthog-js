@@ -19,6 +19,7 @@
         "prepublishOnly": "pnpm lint && pnpm build && pnpm test && pnpm test:react",
         "test": "pnpm test:unit && pnpm test:custom-eslint-rules && pnpm test:functional",
         "test:unit": "jest src",
+        "test:imports": "./scripts/test-imports.sh",
         "test:custom-eslint-rules": "jest eslint-rules",
         "test:unit:surveys": "jest '.*surveys.*.test.'",
         "test:react": "cd react; pnpm test",
