@@ -63,7 +63,7 @@ jobs:
         working-directory: packages/browser
 
       - name: Publish the alpha in the npm registry
-        run: npm publish --access public --tag alpha
+        run: pnpm publish --access public --tag alpha
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         working-directory: packages/browser
