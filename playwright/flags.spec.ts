@@ -15,7 +15,7 @@ function getBase64EncodedPayloadFromBody(body: unknown): Record<string, any> {
 
 const startOptions = {
     options: {},
-    decideResponseOverrides: {
+    flagsResponseOverrides: {
         sessionRecording: {
             endpoint: '/ses/',
         },
@@ -24,16 +24,16 @@ const startOptions = {
     url: '/playground/cypress/index.html',
 }
 
-test.describe('decide', () => {
-    // we want to grab any requests to decide so we can inspect their payloads
-    let decideRequests: Request[] = []
+test.describe('flags', () => {
+    // we want to grab any requests to flags so we can inspect their payloads
+    let flagsRequests: Request[] = []
 
     test.beforeEach(async ({ page, context }) => {
-        decideRequests = []
+        flagsRequests = []
 
         page.on('request', (request) => {
-            if (request.url().includes('/decide/')) {
-                decideRequests.push(request)
+            if (request.url().includes('/flags/')) {
+                flagsRequests.push(request)
             }
         })
 
@@ -61,11 +61,11 @@ test.describe('decide', () => {
         )
     })
 
-    test('makes decide request on start', async () => {
-        expect(decideRequests.length).toBe(1)
-        const decideRequest = decideRequests[0]
-        const decidePayload = getBase64EncodedPayloadFromBody(decideRequest.postData())
-        expect(decidePayload).toEqual({
+    test('makes flags request on start', async () => {
+        expect(flagsRequests.length).toBe(1)
+        const flagsRequest = flagsRequests[0]
+        const flagsPayload = getBase64EncodedPayloadFromBody(flagsRequest.postData())
+        expect(flagsPayload).toEqual({
             token: 'test token',
             distinct_id: 'new-id',
             person_properties: {
@@ -99,7 +99,7 @@ test.describe('decide', () => {
                 $initial_utm_term: null,
                 $initial_wbraid: null,
             },
-            $anon_distinct_id: decidePayload.$anon_distinct_id,
+            $anon_distinct_id: flagsPayload.$anon_distinct_id,
             groups: {
                 company: 'id:5',
                 playlist: 'id:77',
@@ -111,11 +111,11 @@ test.describe('decide', () => {
         })
     })
 
-    test('does a single decide call on following changes', async ({ page }) => {
-        expect(decideRequests.length).toBe(1)
+    test('does a single flags call on following changes', async ({ page }) => {
+        expect(flagsRequests.length).toBe(1)
 
         await page.waitingForNetworkCausedBy({
-            urlPatternsToWaitFor: ['**/decide/**'],
+            urlPatternsToWaitFor: ['**/flags/**'],
             action: async () => {
                 await page.evaluate(() => {
                     const ph = (window as any).posthog
@@ -125,9 +125,9 @@ test.describe('decide', () => {
                 })
             },
         })
-        // need a short delay so that the decide request can be captured into the decideRequests array
-        await pollUntilCondition(page, () => decideRequests.length >= 2)
+        // need a short delay so that the flags request can be captured into the flagsRequests array
+        await pollUntilCondition(page, () => flagsRequests.length >= 2)
 
-        expect(decideRequests.length).toBe(2)
+        expect(flagsRequests.length).toBe(2)
     })
 })

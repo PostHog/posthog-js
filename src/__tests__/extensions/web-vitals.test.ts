@@ -3,7 +3,7 @@ import '../helpers/mock-logger'
 import { createPosthogInstance } from '../helpers/posthog-instance'
 import { uuidv7 } from '../../uuidv7'
 import { PostHog } from '../../posthog-core'
-import { DecideResponse, PerformanceCaptureConfig, RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
+import { FlagsResponse, PerformanceCaptureConfig, RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
 import { assignableWindow } from '../../utils/globals'
 import { DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS, FIFTEEN_MINUTES_IN_MILLIS } from '../../extensions/web-vitals'
 
@@ -140,7 +140,7 @@ describe('web vitals', () => {
                 // need to force this to get the web vitals script loaded
                 posthog.webVitalsAutocapture!.onRemoteConfig({
                     capturePerformance: { web_vitals: true },
-                } as unknown as DecideResponse)
+                } as unknown as FlagsResponse)
 
                 expect(posthog.webVitalsAutocapture.allowedMetrics).toEqual(expectedAllowedMetrics)
             })
@@ -219,7 +219,7 @@ describe('web vitals', () => {
         }
     )
 
-    describe('afterDecideResponse()', () => {
+    describe('afterFlagsResponse()', () => {
         beforeEach(async () => {
             // we need a set of fake web vitals handlers, so we can manually trigger the events
             assignableWindow.__PosthogExtensions__ = {}
@@ -244,7 +244,7 @@ describe('web vitals', () => {
             })
         })
 
-        it('should not be enabled before the decide response', () => {
+        it('should not be enabled before the flags response', () => {
             expect(posthog.webVitalsAutocapture!.isEnabled).toBe(false)
         })
 
@@ -271,7 +271,7 @@ describe('web vitals', () => {
                 posthog.config.capture_performance = { web_vitals: clientSideOptIn }
                 posthog.webVitalsAutocapture!.onRemoteConfig({
                     capturePerformance: { web_vitals: serverSideOptIn },
-                } as DecideResponse)
+                } as FlagsResponse)
                 expect(posthog.webVitalsAutocapture!.isEnabled).toBe(expected)
             }
         )
@@ -393,7 +393,7 @@ describe('web vitals', () => {
 
         posthog.webVitalsAutocapture!.onRemoteConfig({
             capturePerformance: { web_vitals: true },
-        } as DecideResponse)
+        } as FlagsResponse)
 
         expect(posthog.webVitalsAutocapture!.isEnabled).toBe(true)
     })

@@ -16,7 +16,7 @@ function getGzipEncodedPayloady(req: Request): Record<string, any> {
 
 const startOptions = {
     options: {},
-    decideResponseOverrides: {
+    flagsResponseOverrides: {
         sessionRecording: {
             endpoint: '/ses/',
         },
@@ -95,7 +95,7 @@ test.describe('event capture', () => {
                     },
                     advanced_disable_feature_flags: true,
                 },
-                waitForDecide: false,
+                waitForFlags: false,
             },
             page,
             context

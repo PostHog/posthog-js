@@ -328,12 +328,8 @@ export class Autocapture {
         const persistedServerDisabled = this.instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
         const memoryDisabled = this._isDisabledServerSide
 
-        if (
-            isNull(memoryDisabled) &&
-            !isBoolean(persistedServerDisabled) &&
-            !this.instance.config.advanced_disable_decide
-        ) {
-            // We only enable if we know that the server has not disabled it (unless decide is disabled)
+        if (isNull(memoryDisabled) && !isBoolean(persistedServerDisabled) && !this.instance._shouldDisableFlags()) {
+            // We only enable if we know that the server has not disabled it (unless /flags is disabled)
             return false
         }
 

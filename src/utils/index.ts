@@ -1,7 +1,7 @@
 import { Breaker, Properties } from '../types'
 import { nativeForEach, nativeIndexOf } from './globals'
 import { logger } from './logger'
-import { hasOwnProperty, isArray, isFormData, isNull, isNullish, isNumber, isString } from './type-utils'
+import { hasOwnProperty, isArray, isFormData, isNull, isNullish, isNumber, isString, isUndefined } from './type-utils'
 
 const breaker: Breaker = {}
 
@@ -247,4 +247,40 @@ export function addEventListener(
     // because the whole idea is that we should be calling this instead of the built-in one
     // eslint-disable-next-line posthog-js/no-add-event-listener
     element?.addEventListener(event, callback, { capture, passive })
+}
+
+/**
+ * Helper to migrate deprecated config fields to new field names with appropriate warnings
+ * @param config - The config object to check
+ * @param newField - The new field name to use
+ * @param oldField - The deprecated field name to check for
+ * @param defaultValue - The default value if neither field is set
+ * @param loggerInstance - Optional logger instance for deprecation warnings
+ * @returns The value to use (new field takes precedence over old field)
+ */
+export function migrateConfigField<T>(
+    config: Record<string, any>,
+    newField: string,
+    oldField: string,
+    defaultValue: T,
+    loggerInstance?: { warn: (message: string) => void }
+): T {
+    const hasNewField = newField in config && !isUndefined(config[newField])
+    const hasOldField = oldField in config && !isUndefined(config[oldField])
+
+    if (hasNewField) {
+        return config[newField]
+    }
+
+    if (hasOldField) {
+        if (loggerInstance) {
+            loggerInstance.warn(
+                `Config field '${oldField}' is deprecated. Please use '${newField}' instead. ` +
+                    `The old field will be removed in a future major version.`
+            )
+        }
+        return config[oldField]
+    }
+
+    return defaultValue
 }

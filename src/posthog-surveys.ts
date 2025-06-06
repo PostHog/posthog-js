@@ -33,11 +33,11 @@ export class PostHogSurveys {
         // only load surveys if they are enabled and there are surveys to load
         const surveys = response['surveys']
         if (isNullish(surveys)) {
-            return logger.warn('Decide not loaded yet. Not loading surveys.')
+            return logger.warn('Flags not loaded yet. Not loading surveys.')
         }
         const isArrayResponse = isArray(surveys)
         this._hasSurveys = isArrayResponse ? surveys.length > 0 : surveys
-        logger.info(`decide response received, hasSurveys: ${this._hasSurveys}`)
+        logger.info(`flags response received, hasSurveys: ${this._hasSurveys}`)
         if (this._hasSurveys) {
             this.loadIfEnabled()
         }

@@ -13,7 +13,7 @@ app.listen(port, () => {
     console.log(`Example app listening on port ${port}`)
 })
 
-app.post('/decide', function (req, res) {
+app.post('/flags', function (req, res) {
     res.json({
         editorParams: {},
         featureFlags: ['session-recording-player'],

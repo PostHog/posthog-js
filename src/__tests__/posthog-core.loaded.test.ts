@@ -21,7 +21,7 @@ describe('loaded() with flags', () => {
                 jest.spyOn(ph.featureFlags, 'setGroupPropertiesForFlags')
                 jest.spyOn(ph.featureFlags, 'setReloadingPaused')
                 jest.spyOn(ph.featureFlags, 'reloadFeatureFlags')
-                jest.spyOn(ph.featureFlags, '_callDecideEndpoint')
+                jest.spyOn(ph.featureFlags, '_callFlagsEndpoint')
 
                 config?.loaded?.(ph)
             },
@@ -31,7 +31,7 @@ describe('loaded() with flags', () => {
     }
 
     describe('flag reloading', () => {
-        it('only calls decide once whilst loading', async () => {
+        it('only calls flags once whilst loading', async () => {
             instance = await createPosthog({
                 loaded: (ph) => {
                     ph.group('org', 'bazinga', { name: 'Shelly' })
@@ -41,7 +41,7 @@ describe('loaded() with flags', () => {
             expect(instance._send_request).toHaveBeenCalledTimes(1)
 
             expect(instance._send_request.mock.calls[0][0]).toMatchObject({
-                url: 'https://us.i.posthog.com/decide/?v=4',
+                url: 'https://us.i.posthog.com/flags/?v=2&config=true',
                 data: {
                     groups: { org: 'bazinga' },
                 },
@@ -60,11 +60,11 @@ describe('loaded() with flags', () => {
                     }, 100)
                 },
             })
-            expect(instance.featureFlags._callDecideEndpoint).toHaveBeenCalledTimes(1)
+            expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(1)
             expect(instance._send_request).toHaveBeenCalledTimes(1)
 
             expect(instance._send_request.mock.calls[0][0]).toMatchObject({
-                url: 'https://us.i.posthog.com/decide/?v=4',
+                url: 'https://us.i.posthog.com/flags/?v=2&config=true',
                 data: {
                     groups: { org: 'bazinga' },
                 },
@@ -73,11 +73,11 @@ describe('loaded() with flags', () => {
             jest.runOnlyPendingTimers() // Once for callback
             jest.runOnlyPendingTimers() // Once for potential debounce
 
-            expect(instance.featureFlags._callDecideEndpoint).toHaveBeenCalledTimes(2)
+            expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(2)
             expect(instance._send_request).toHaveBeenCalledTimes(2)
 
             expect(instance._send_request.mock.calls[1][0]).toMatchObject({
-                url: 'https://us.i.posthog.com/decide/?v=4',
+                url: 'https://us.i.posthog.com/flags/?v=2&config=true',
                 data: {
                     groups: { org: 'bazinga2' },
                 },
@@ -94,14 +94,14 @@ describe('loaded() with flags', () => {
 
             expect(instance._send_request).toHaveBeenCalledTimes(1)
             expect(instance._send_request.mock.calls[0][0]).toMatchObject({
-                url: 'https://us.i.posthog.com/decide/?v=4&only_evaluate_survey_feature_flags=true',
+                url: 'https://us.i.posthog.com/flags/?v=2&config=true&only_evaluate_survey_feature_flags=true',
                 data: {
                     groups: { org: 'bazinga' },
                 },
             })
         })
 
-        it('does call decide with a request for flags if called directly (via groups) even if disabled for first load', async () => {
+        it('does call flags with a request for flags if called directly (via groups) even if disabled for first load', async () => {
             instance = await createPosthog({
                 advanced_disable_feature_flags_on_first_load: true,
                 loaded: (ph) => {
@@ -111,7 +111,7 @@ describe('loaded() with flags', () => {
 
             expect(instance.config.advanced_disable_feature_flags_on_first_load).toBe(true)
 
-            expect(instance.featureFlags._callDecideEndpoint).toHaveBeenCalledTimes(1)
+            expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(1)
             expect(instance._send_request).toHaveBeenCalledTimes(1)
 
             expect(instance._send_request.mock.calls[0][0].data.disable_flags).toEqual(undefined)
@@ -119,7 +119,7 @@ describe('loaded() with flags', () => {
             jest.runOnlyPendingTimers() // Once for callback
             jest.runOnlyPendingTimers() // Once for potential debounce
 
-            expect(instance.featureFlags._callDecideEndpoint).toHaveBeenCalledTimes(1)
+            expect(instance.featureFlags._callFlagsEndpoint).toHaveBeenCalledTimes(1)
             expect(instance._send_request).toHaveBeenCalledTimes(1)
         })
     })
@@ -166,7 +166,7 @@ describe('loaded() with flags', () => {
 
             const receivedFeatureFlagsSpy = jest.spyOn(instance.featureFlags, 'receivedFeatureFlags')
 
-            instance.featureFlags._callDecideEndpoint()
+            instance.featureFlags._callFlagsEndpoint()
             jest.runOnlyPendingTimers()
 
             if (expectedCall) {

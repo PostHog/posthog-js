@@ -19,7 +19,7 @@ import {
 } from '../../../extensions/replay/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
 import {
-    DecideResponse,
+    FlagsResponse,
     PerformanceCaptureConfig,
     PostHogConfig,
     Property,
@@ -160,8 +160,8 @@ const createPluginSnapshot = (event = {}): pluginEvent => ({
     ...event,
 })
 
-function makeDecideResponse(partialResponse: Partial<DecideResponse>) {
-    return partialResponse as unknown as DecideResponse
+function makeFlagsResponse(partialResponse: Partial<FlagsResponse>) {
+    return partialResponse as unknown as FlagsResponse
 }
 
 const originalLocation = window!.location
@@ -596,7 +596,7 @@ describe('SessionRecording', () => {
                 sessionRecording.startIfEnabledOrStop()
 
                 sessionRecording.onRemoteConfig(
-                    makeDecideResponse({
+                    makeFlagsResponse({
                         sessionRecording: { endpoint: '/s/', sampleRate: '0.00' },
                     })
                 )
@@ -611,7 +611,7 @@ describe('SessionRecording', () => {
                 sessionRecording.startIfEnabledOrStop()
 
                 sessionRecording.onRemoteConfig(
-                    makeDecideResponse({
+                    makeFlagsResponse({
                         sessionRecording: { endpoint: '/s/', sampleRate: null },
                     })
                 )
@@ -623,7 +623,7 @@ describe('SessionRecording', () => {
                 sessionRecording.startIfEnabledOrStop()
 
                 sessionRecording.onRemoteConfig(
-                    makeDecideResponse({
+                    makeFlagsResponse({
                         sessionRecording: { endpoint: '/s/', sampleRate: '0.00' },
                     })
                 )
@@ -638,7 +638,7 @@ describe('SessionRecording', () => {
                 expect(posthog.capture).not.toHaveBeenCalled()
 
                 sessionRecording.onRemoteConfig(
-                    makeDecideResponse({
+                    makeFlagsResponse({
                         sessionRecording: { endpoint: '/s/', sampleRate: '1.00' },
                     })
                 )
@@ -658,7 +658,7 @@ describe('SessionRecording', () => {
                 sessionRecording.startIfEnabledOrStop()
 
                 sessionRecording.onRemoteConfig(
-                    makeDecideResponse({
+                    makeFlagsResponse({
                         sessionRecording: { endpoint: '/s/', sampleRate: '0.50' },
                     })
                 )
@@ -686,7 +686,7 @@ describe('SessionRecording', () => {
                 sessionRecording.startIfEnabledOrStop()
                 // set sample rate to 0, i.e. no sessions will run
                 sessionRecording.onRemoteConfig(
-                    makeDecideResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.00' } })
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.00' } })
                 )
                 // then check that a session is sampled (i.e. storage is false not true or null)
                 expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
@@ -694,7 +694,7 @@ describe('SessionRecording', () => {
 
                 // then turn sample rate to null
                 sessionRecording.onRemoteConfig(
-                    makeDecideResponse({ sessionRecording: { endpoint: '/s/', sampleRate: null } })
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: null } })
                 )
 
                 // then check that a session is no longer sampled out (i.e. storage is cleared not false)
@@ -707,7 +707,7 @@ describe('SessionRecording', () => {
 
                 // first turn sample rate to null
                 sessionRecording.onRemoteConfig(
-                    makeDecideResponse({ sessionRecording: { endpoint: '/s/', sampleRate: null } })
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: null } })
                 )
 
                 // then check that a session is no longer sampled out (i.e. storage is cleared not false)
@@ -716,7 +716,7 @@ describe('SessionRecording', () => {
 
                 // set sample rate to 0, i.e. no sessions will run
                 sessionRecording.onRemoteConfig(
-                    makeDecideResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.00' } })
+                    makeFlagsResponse({ sessionRecording: { endpoint: '/s/', sampleRate: '0.00' } })
                 )
                 // then check that a session is sampled (i.e. storage is false not true or null)
                 expect(posthog.get_property(SESSION_RECORDING_IS_SAMPLED)).toBe(false)
@@ -753,7 +753,7 @@ describe('SessionRecording', () => {
                 sessionRecording.startIfEnabledOrStop()
 
                 sessionRecording.onRemoteConfig(
-                    makeDecideResponse({
+                    makeFlagsResponse({
                         sessionRecording: { endpoint: '/s/', recordCanvas: null, canvasFps: null, canvasQuality: null },
                     })
                 )
@@ -852,7 +852,7 @@ describe('SessionRecording', () => {
                 windowId: 'windowId',
             })
 
-            sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
 
             // next call to emit won't flush the buffer
             // the events aren't big enough
@@ -886,7 +886,7 @@ describe('SessionRecording', () => {
         })
 
         it('buffers emitted events', () => {
-            sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
             sessionRecording.startIfEnabledOrStop()
             expect(loadScriptMock).toHaveBeenCalled()
 
@@ -923,7 +923,7 @@ describe('SessionRecording', () => {
         })
 
         it('flushes buffer if the size of the buffer hits the limit', () => {
-            sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
             sessionRecording.startIfEnabledOrStop()
             expect(loadScriptMock).toHaveBeenCalled()
             const bigData = 'a'.repeat(RECORDING_MAX_EVENT_SIZE * 0.8)
@@ -968,7 +968,7 @@ describe('SessionRecording', () => {
         })
 
         it('flushes buffer if the session_id changes', () => {
-            sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
             sessionRecording.startIfEnabledOrStop()
 
             expect(sessionRecording['_buffer'].sessionId).toEqual(sessionId)
@@ -1082,7 +1082,7 @@ describe('SessionRecording', () => {
 
         it('can emit when there are circular references', () => {
             posthog.config.session_recording.compress_events = false
-            sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
             sessionRecording.startIfEnabledOrStop()
 
             const someObject = { emit: 1 }
@@ -1383,7 +1383,7 @@ describe('SessionRecording', () => {
 
         beforeEach(() => {
             sessionRecording.startIfEnabledOrStop()
-            sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
             expect(sessionRecording.status).toEqual('active')
 
             startingTimestamp = sessionRecording['_lastActivityTimestamp']
@@ -1765,12 +1765,12 @@ describe('SessionRecording', () => {
     })
 
     describe('linked flags', () => {
-        it('stores the linked flag on decide response', () => {
+        it('stores the linked flag on flags response', () => {
             expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual(null)
             expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
 
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
+                makeFlagsResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
             )
 
             expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual('the-flag-key')
@@ -1790,7 +1790,7 @@ describe('SessionRecording', () => {
 
         it('does not react to flags that are present but false', () => {
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
+                makeFlagsResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
             )
 
             expect(sessionRecording.status).toEqual('buffering')
@@ -1807,7 +1807,7 @@ describe('SessionRecording', () => {
             expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
 
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({
+                makeFlagsResponse({
                     sessionRecording: { endpoint: '/s/', linkedFlag: { flag: 'the-flag-key', variant: 'test-a' } },
                 })
             )
@@ -1835,7 +1835,7 @@ describe('SessionRecording', () => {
             expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
 
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({
+                makeFlagsResponse({
                     // when the variant is any we only send the key
                     sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' },
                 })
@@ -1861,7 +1861,7 @@ describe('SessionRecording', () => {
             expect(sessionRecording['_linkedFlagMatching'].linkedFlagSeen).toEqual(false)
 
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
+                makeFlagsResponse({ sessionRecording: { endpoint: '/s/', linkedFlag: 'the-flag-key' } })
             )
 
             expect(sessionRecording['_linkedFlagMatching'].linkedFlag).toEqual('the-flag-key')
@@ -1888,7 +1888,7 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toEqual('buffering')
 
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({
+                makeFlagsResponse({
                     sessionRecording: {
                         endpoint: '/s/',
                         linkedFlag: 'the-flag-key',
@@ -1963,9 +1963,9 @@ describe('SessionRecording', () => {
             expect(sessionRecording['_minimumDuration']).toBe(null)
         })
 
-        it('can set minimum duration from decide response', () => {
+        it('can set minimum duration from flags response', () => {
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({
+                makeFlagsResponse({
                     sessionRecording: { minimumDurationMilliseconds: 1500 },
                 })
             )
@@ -1974,7 +1974,7 @@ describe('SessionRecording', () => {
 
         it('does not flush if below the minimum duration', () => {
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({
+                makeFlagsResponse({
                     sessionRecording: { minimumDurationMilliseconds: 1500 },
                 })
             )
@@ -1994,7 +1994,7 @@ describe('SessionRecording', () => {
 
         it('does flush if session duration is negative', () => {
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({
+                makeFlagsResponse({
                     sessionRecording: { minimumDurationMilliseconds: 1500 },
                 })
             )
@@ -2019,7 +2019,7 @@ describe('SessionRecording', () => {
 
         it('does not stay buffering after the minimum duration', () => {
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({
+                makeFlagsResponse({
                     sessionRecording: { minimumDurationMilliseconds: 1500 },
                 })
             )
@@ -2066,7 +2066,7 @@ describe('SessionRecording', () => {
 
             expect(sessionRecording['_queuedRRWebEvents']).toHaveLength(0)
 
-            sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
 
             expect(sessionRecording['_queuedRRWebEvents']).toHaveLength(1)
 
@@ -2187,7 +2187,7 @@ describe('SessionRecording', () => {
 
         beforeEach(() => {
             posthog.config.session_recording.compress_events = true
-            sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
             sessionRecording.startIfEnabledOrStop()
             // need to have active event to start recording
             _emit(createIncrementalSnapshot({ type: 3 }))
@@ -2391,7 +2391,7 @@ describe('SessionRecording', () => {
 
         it('does not flush buffer and includes pause event when hitting blocked URL', async () => {
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({
+                makeFlagsResponse({
                     sessionRecording: {
                         endpoint: '/s/',
                         urlBlocklist: [
@@ -2464,7 +2464,7 @@ describe('SessionRecording', () => {
 
         it('only pauses once when sampling determines session should not record', () => {
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({
+                makeFlagsResponse({
                     sessionRecording: {
                         endpoint: '/s/',
                         sampleRate: '0.00',
@@ -2509,7 +2509,7 @@ describe('SessionRecording', () => {
 
         it('flushes buffer and starts when sees event', async () => {
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({
+                makeFlagsResponse({
                     sessionRecording: {
                         endpoint: '/s/',
                         eventTriggers: ['$exception'],
@@ -2537,7 +2537,7 @@ describe('SessionRecording', () => {
 
         it('starts if sees an event but still waiting for a URL when in OR', async () => {
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({
+                makeFlagsResponse({
                     sessionRecording: {
                         endpoint: '/s/',
                         eventTriggers: ['$exception'],
@@ -2567,7 +2567,7 @@ describe('SessionRecording', () => {
 
         it('does not start if sees an event but still waiting for a URL when in AND', async () => {
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({
+                makeFlagsResponse({
                     sessionRecording: {
                         endpoint: '/s/',
                         eventTriggers: ['$exception'],
@@ -2602,7 +2602,7 @@ describe('SessionRecording', () => {
             // and then would immediately stop
 
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({
+                makeFlagsResponse({
                     sessionRecording: {
                         endpoint: '/s/',
                         eventTriggers: ['$exception'],
@@ -2631,7 +2631,7 @@ describe('SessionRecording', () => {
             // and then would immediately stop
 
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({
+                makeFlagsResponse({
                     sessionRecording: {
                         endpoint: '/s/',
                         eventTriggers: ['$exception'],

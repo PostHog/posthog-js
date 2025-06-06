@@ -18,7 +18,7 @@ import {
     META_EVENT_TYPE,
 } from '../../../extensions/replay/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
-import { DecideResponse, PostHogConfig, Property } from '../../../types'
+import { FlagsResponse, PostHogConfig, Property } from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
 import { SessionRecording } from '../../../extensions/replay/sessionrecording'
 import { assignableWindow, window } from '../../../utils/globals'
@@ -76,8 +76,8 @@ const createIncrementalSnapshot = (event = {}): incrementalSnapshotEvent => ({
     ...event,
 })
 
-function makeDecideResponse(partialResponse: Partial<DecideResponse>) {
-    return partialResponse as unknown as DecideResponse
+function makeFlagsResponse(partialResponse: Partial<FlagsResponse>) {
+    return partialResponse as unknown as FlagsResponse
 }
 
 const originalLocation = window!.location
@@ -210,7 +210,7 @@ describe('SessionRecording', () => {
 
         it('loads script based on script config', () => {
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({
+                makeFlagsResponse({
                     sessionRecording: { endpoint: '/s/', scriptConfig: { script: 'experimental-recorder' } },
                 })
             )
@@ -219,7 +219,7 @@ describe('SessionRecording', () => {
 
         it('uses anyMatchSessionRecordingStatus when triggerMatching is "any"', () => {
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({
+                makeFlagsResponse({
                     sessionRecording: { endpoint: '/s/', triggerMatchType: 'any' },
                 })
             )
@@ -229,7 +229,7 @@ describe('SessionRecording', () => {
 
         it('uses allMatchSessionRecordingStatus when triggerMatching is "all"', () => {
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({
+                makeFlagsResponse({
                     sessionRecording: { endpoint: '/s/', triggerMatchType: 'all' },
                 })
             )
@@ -239,7 +239,7 @@ describe('SessionRecording', () => {
 
         it('uses most restrictive when triggerMatching is not specified', () => {
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({
+                makeFlagsResponse({
                     sessionRecording: { endpoint: '/s/' },
                 })
             )
@@ -287,7 +287,7 @@ describe('SessionRecording', () => {
             })
         })
 
-        it('buffers snapshots until decide is received and drops them if disabled', () => {
+        it('buffers snapshots until flags is received and drops them if disabled', () => {
             sessionRecording.startIfEnabledOrStop()
             expect(loadScriptMock).toHaveBeenCalled()
             expect(sessionRecording['status']).toBe('buffering')
@@ -306,34 +306,34 @@ describe('SessionRecording', () => {
                 windowId: 'windowId',
             })
 
-            sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: undefined }))
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: undefined }))
             expect(sessionRecording['status']).toBe('disabled')
             expect(sessionRecording['_buffer'].data.length).toEqual(0)
             expect(posthog.capture).not.toHaveBeenCalled()
         })
 
-        it('emit is not active until decide is called', () => {
+        it('emit is not active until flags is called', () => {
             sessionRecording.startIfEnabledOrStop()
             expect(loadScriptMock).toHaveBeenCalled()
             expect(sessionRecording['status']).toBe('buffering')
 
-            sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
             expect(sessionRecording['status']).toBe('active')
         })
 
-        it('sample rate is null when decide does not return it', () => {
+        it('sample rate is null when flags does not return it', () => {
             sessionRecording.startIfEnabledOrStop()
             expect(loadScriptMock).toHaveBeenCalled()
             expect(sessionRecording['_isSampled']).toBe(null)
 
-            sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
             expect(sessionRecording['_isSampled']).toBe(null)
         })
 
         it('stores true in persistence if recording is enabled from the server', () => {
             posthog.persistence?.register({ [SESSION_RECORDING_ENABLED_SERVER_SIDE]: undefined })
 
-            sessionRecording.onRemoteConfig(makeDecideResponse({ sessionRecording: { endpoint: '/s/' } }))
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: { endpoint: '/s/' } }))
 
             expect(posthog.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)).toBe(true)
         })
@@ -342,7 +342,7 @@ describe('SessionRecording', () => {
             posthog.persistence?.register({ [SESSION_RECORDING_CANVAS_RECORDING]: undefined })
 
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({
+                makeFlagsResponse({
                     sessionRecording: { endpoint: '/s/', recordCanvas: true, canvasFps: 6, canvasQuality: '0.2' },
                 })
             )
@@ -358,7 +358,7 @@ describe('SessionRecording', () => {
             posthog.persistence?.register({ [SESSION_RECORDING_MASKING]: undefined })
 
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({
+                makeFlagsResponse({
                     sessionRecording: { endpoint: '/s/', masking: { maskAllInputs: true, maskTextSelector: '*' } },
                 })
             )
@@ -372,7 +372,7 @@ describe('SessionRecording', () => {
         it('stores false in persistence if recording is not enabled from the server', () => {
             posthog.persistence?.register({ [SESSION_RECORDING_ENABLED_SERVER_SIDE]: undefined })
 
-            sessionRecording.onRemoteConfig(makeDecideResponse({}))
+            sessionRecording.onRemoteConfig(makeFlagsResponse({}))
 
             expect(posthog.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)).toBe(false)
         })
@@ -381,7 +381,7 @@ describe('SessionRecording', () => {
             posthog.persistence?.register({ SESSION_RECORDING_SAMPLE_RATE: undefined })
 
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({
+                makeFlagsResponse({
                     sessionRecording: { endpoint: '/s/', sampleRate: '0.70' },
                 })
             )
@@ -393,7 +393,7 @@ describe('SessionRecording', () => {
         it('starts session recording, saves setting and endpoint when enabled', () => {
             posthog.persistence?.register({ [SESSION_RECORDING_ENABLED_SERVER_SIDE]: undefined })
             sessionRecording.onRemoteConfig(
-                makeDecideResponse({
+                makeFlagsResponse({
                     sessionRecording: { endpoint: '/ses/' },
                 })
             )

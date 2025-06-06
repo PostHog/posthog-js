@@ -18,14 +18,14 @@ describe('FunctionalTests / Feature Flags', () => {
         token = uuidv7()
     })
 
-    test('person properties set in identify() with new distinct_id are sent to decide', async () => {
-        const posthog = await createPosthogInstance(token, { advanced_disable_decide: false })
+    test('person properties set in identify() with new distinct_id are sent to /flags', async () => {
+        const posthog = await createPosthogInstance(token, { advanced_disable_flags: false })
 
         const anonymousId = posthog.get_distinct_id()
 
         await waitFor(() => {
-            expect(getRequests(token)['/decide/']).toEqual([
-                // This is the initial call to the decide endpoint on PostHog init.
+            expect(getRequests(token)['/flags/']).toEqual([
+                // This is the initial call to the flags endpoint on PostHog init.
                 {
                     distinct_id: anonymousId,
                     person_properties: {},
@@ -37,10 +37,10 @@ describe('FunctionalTests / Feature Flags', () => {
 
         resetRequests(token)
 
-        // wait for decide callback
+        // wait for flags callback
         await shortWait()
 
-        // Person properties set here should also be sent to the decide endpoint.
+        // Person properties set here should also be sent to the flags endpoint.
         posthog.identify('test-id', {
             email: 'test@email.com',
         })
@@ -48,8 +48,8 @@ describe('FunctionalTests / Feature Flags', () => {
         await shortWait()
 
         await waitFor(() => {
-            expect(getRequests(token)['/decide/']).toEqual([
-                // Then we have another decide call triggered by the call to
+            expect(getRequests(token)['/flags/']).toEqual([
+                // Then we have another flags call triggered by the call to
                 // `identify()`.
                 {
                     $anon_distinct_id: anonymousId,
@@ -93,14 +93,14 @@ describe('FunctionalTests / Feature Flags', () => {
         })
     })
 
-    test('person properties set in identify() with the same distinct_id are sent to decide', async () => {
-        const posthog = await createPosthogInstance(token, { advanced_disable_decide: false })
+    test('person properties set in identify() with the same distinct_id are sent to flags', async () => {
+        const posthog = await createPosthogInstance(token, { advanced_disable_flags: false })
 
         const anonymousId = posthog.get_distinct_id()
 
         await waitFor(() => {
-            expect(getRequests(token)['/decide/']).toEqual([
-                // This is the initial call to the decide endpoint on PostHog init.
+            expect(getRequests(token)['/flags/']).toEqual([
+                // This is the initial call to the flags endpoint on PostHog init.
                 {
                     distinct_id: anonymousId,
                     person_properties: {},
@@ -112,16 +112,16 @@ describe('FunctionalTests / Feature Flags', () => {
 
         resetRequests(token)
 
-        // wait for decide callback
+        // wait for flags callback
         await shortWait()
 
         // First we identify with a new distinct_id but with no properties set
         posthog.identify('test-id')
 
-        // By this point we should have already called `/decide/` twice.
+        // By this point we should have already called `/flags/` twice.
         await waitFor(() => {
-            expect(getRequests(token)['/decide/']).toEqual([
-                // Then we have another decide call triggered by the first call to
+            expect(getRequests(token)['/flags/']).toEqual([
+                // Then we have another flags call triggered by the first call to
                 // `identify()`.
                 {
                     $anon_distinct_id: anonymousId,
@@ -170,7 +170,7 @@ describe('FunctionalTests / Feature Flags', () => {
         posthog.identify('test-id', { email: 'test@email.com' })
 
         await waitFor(() => {
-            expect(getRequests(token)['/decide/']).toEqual([
+            expect(getRequests(token)['/flags/']).toEqual([
                 {
                     distinct_id: 'test-id',
                     groups: {},
@@ -213,13 +213,13 @@ describe('FunctionalTests / Feature Flags', () => {
     })
 
     test('identify() triggers new request in queue after first request', async () => {
-        const posthog = await createPosthogInstance(token, { advanced_disable_decide: false })
+        const posthog = await createPosthogInstance(token, { advanced_disable_flags: false })
 
         const anonymousId = posthog.get_distinct_id()
 
         await waitFor(() => {
-            expect(getRequests(token)['/decide/']).toEqual([
-                // This is the initial call to the decide endpoint on PostHog init.
+            expect(getRequests(token)['/flags/']).toEqual([
+                // This is the initial call to the flags endpoint on PostHog init.
                 {
                     distinct_id: anonymousId,
                     person_properties: {},
@@ -231,21 +231,21 @@ describe('FunctionalTests / Feature Flags', () => {
 
         resetRequests(token)
 
-        // don't wait for decide callback
+        // don't wait for flags callback
         posthog.identify('test-id', {
             email: 'test2@email.com',
         })
 
         await waitFor(() => {
-            expect(getRequests(token)['/decide/']).toEqual([])
+            expect(getRequests(token)['/flags/']).toEqual([])
         })
 
-        // wait for decide callback
+        // wait for flags callback
         await shortWait()
 
         // now second call should've fired
         await waitFor(() => {
-            expect(getRequests(token)['/decide/']).toEqual([
+            expect(getRequests(token)['/flags/']).toEqual([
                 {
                     $anon_distinct_id: anonymousId,
                     distinct_id: 'test-id',
@@ -290,7 +290,7 @@ describe('FunctionalTests / Feature Flags', () => {
 
     test('identify() does not trigger new request in queue after first request for loaded callback', async () => {
         await createPosthogInstance(token, {
-            advanced_disable_decide: false,
+            advanced_disable_flags: false,
             bootstrap: { distinctID: 'anon-id' },
             loaded: (ph) => {
                 ph.identify('test-id', { email: 'test3@email.com' })
@@ -299,8 +299,8 @@ describe('FunctionalTests / Feature Flags', () => {
         })
 
         await waitFor(() => {
-            expect(getRequests(token)['/decide/']).toEqual([
-                // This is the initial call to the decide endpoint on PostHog init, with all info added from `loaded`.
+            expect(getRequests(token)['/flags/']).toEqual([
+                // This is the initial call to the flags endpoint on PostHog init, with all info added from `loaded`.
                 {
                     $anon_distinct_id: 'anon-id',
                     distinct_id: 'test-id',
@@ -360,7 +360,7 @@ describe('feature flags v2', () => {
         const posthog = await createPosthogInstance(token, {
             __preview_flags_v2: true,
             __preview_remote_config: true,
-            advanced_disable_decide: false,
+            advanced_disable_flags: false,
         })
 
         await waitFor(() => {
@@ -373,15 +373,15 @@ describe('feature flags v2', () => {
         })
     })
 
-    it('should call decide endpoint when not eligible', async () => {
+    it('should call flags endpoint when not eligible', async () => {
         const posthog = await createPosthogInstance(token, {
             __preview_flags_v2: false,
             __preview_remote_config: true,
-            advanced_disable_decide: false,
+            advanced_disable_flags: false,
         })
 
         await waitFor(() => {
-            expect(getRequests(token)['/decide/']).toEqual([
+            expect(getRequests(token)['/flags/']).toEqual([
                 expect.objectContaining({
                     token,
                     distinct_id: posthog.get_distinct_id(),
@@ -391,15 +391,15 @@ describe('feature flags v2', () => {
     })
 
     // TODO: eventually I want to deprecate these behavior, but for now I want to make sure we don't break people
-    it('should call decide endpoint when preview flags is enabled but remote config is disabled', async () => {
+    it('should call flags endpoint when preview flags is enabled but remote config is disabled', async () => {
         const posthog = await createPosthogInstance(token, {
             __preview_flags_v2: true,
             __preview_remote_config: false,
-            advanced_disable_decide: false,
+            advanced_disable_flags: false,
         })
 
         await waitFor(() => {
-            expect(getRequests(token)['/decide/']).toEqual([
+            expect(getRequests(token)['/flags/']).toEqual([
                 expect.objectContaining({
                     token,
                     distinct_id: posthog.get_distinct_id(),

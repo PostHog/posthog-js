@@ -58,7 +58,7 @@ describe('SiteApps', () => {
                 emitCaptureEvent = cb
                 return removeCaptureHook
             }),
-            _afterDecideResponse: jest.fn(),
+            _afterFlagsResponse: jest.fn(),
             get_distinct_id: jest.fn().mockImplementation(() => 'distinctid'),
             _send_request: jest.fn().mockImplementation(({ callback }) => callback?.({ config: {} })),
             featureFlags: {

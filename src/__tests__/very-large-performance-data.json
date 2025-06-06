@@ -1275,7 +1275,7 @@
             "serverTiming": []
         },
         {
-            "name": "http://127.0.0.1:8000/decide/?v=2&ip=1&_=1641815977367",
+            "name": "http://127.0.0.1:8000/flags/?v=2&ip=1&_=1641815977367",
             "entryType": "resource",
             "startTime": 541.4000000003725,
             "duration": 108.59999999962747,

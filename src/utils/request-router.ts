@@ -3,7 +3,7 @@ import { PostHog } from '../posthog-core'
 /**
  * The request router helps simplify the logic to determine which endpoints should be called for which things
  * The basic idea is that for a given region (US or EU), we have a set of endpoints that we should call depending
- * on the type of request (events, replays, decide, etc.) and handle overrides that may come from configs or the decide endpoint
+ * on the type of request (events, replays, flags, etc.) and handle overrides that may come from configs or the flags endpoint
  */
 
 export enum RequestRouterRegion {

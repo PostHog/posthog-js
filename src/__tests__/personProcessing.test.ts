@@ -788,8 +788,8 @@ describe('person processing', () => {
         })
     })
 
-    describe('decide', () => {
-        it('should default the person mode to identified_only when an incomplete decide response is handled', async () => {
+    describe('flags', () => {
+        it('should default the person mode to identified_only when an incomplete flags response is handled', async () => {
             // arrange
             const { posthog, beforeSendMock } = await setup(undefined)
             posthog.capture('startup page view')
@@ -804,7 +804,7 @@ describe('person processing', () => {
             expect(beforeSendMock.mock.calls[1][0].properties.$process_person_profile).toEqual(false)
         })
 
-        it('should NOT change the person mode from user-defined when decide response is handled', async () => {
+        it('should NOT change the person mode from user-defined when flags response is handled', async () => {
             // arrange
             const { posthog, beforeSendMock } = await setup('identified_only')
             posthog.capture('startup page view')

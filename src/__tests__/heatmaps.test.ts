@@ -3,7 +3,7 @@ import './helpers/mock-logger'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
 import { PostHog } from '../posthog-core'
-import { DecideResponse } from '../types'
+import { FlagsResponse } from '../types'
 import { isObject } from '../utils/type-utils'
 import { beforeEach, expect } from '@jest/globals'
 import { HEATMAPS_ENABLED_SERVER_SIDE } from '../constants'
@@ -259,7 +259,7 @@ describe('heatmaps', () => {
                 posthog.config.capture_heatmaps = clientSideOptIn
                 posthog.heatmaps!.onRemoteConfig({
                     heatmaps: serverSideOptIn,
-                } as DecideResponse)
+                } as FlagsResponse)
                 expect(posthog.heatmaps!.isEnabled).toBe(expected)
             }
         )

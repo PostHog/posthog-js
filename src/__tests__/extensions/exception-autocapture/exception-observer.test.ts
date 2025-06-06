@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { PostHog } from '../../../posthog-core'
-import { DecideResponse } from '../../../types'
+import { FlagsResponse } from '../../../types'
 import { ExceptionObserver } from '../../../extensions/exception-autocapture'
 import { assignableWindow, window } from '../../../utils/globals'
 import { createPosthogInstance } from '../../helpers/posthog-instance'
@@ -73,7 +73,7 @@ describe('Exception Observer', () => {
 
     describe('when enabled remotely', () => {
         beforeEach(() => {
-            exceptionObserver.onRemoteConfig({ autocaptureExceptions: true } as DecideResponse)
+            exceptionObserver.onRemoteConfig({ autocaptureExceptions: true } as FlagsResponse)
         })
 
         it('should instrument enabled handlers only when started', () => {
@@ -181,7 +181,7 @@ describe('Exception Observer', () => {
             window!.onerror = originalOnError
             window!.onunhandledrejection = originalOnUnhandledRejection
 
-            exceptionObserver.onRemoteConfig({ autocaptureExceptions: true } as DecideResponse)
+            exceptionObserver.onRemoteConfig({ autocaptureExceptions: true } as FlagsResponse)
         })
 
         it('should wrap original onerror handler if one was present when wrapped', () => {
@@ -229,7 +229,7 @@ describe('Exception Observer', () => {
         })
     })
 
-    describe('when no decide response', () => {
+    describe('when no flags response', () => {
         it('cannot be started', () => {
             expect(exceptionObserver.isEnabled).toBe(false)
             expectNoHandlers()
@@ -240,7 +240,7 @@ describe('Exception Observer', () => {
 
     describe('when disabled', () => {
         beforeEach(() => {
-            exceptionObserver.onRemoteConfig({ autocaptureExceptions: false } as DecideResponse)
+            exceptionObserver.onRemoteConfig({ autocaptureExceptions: false } as FlagsResponse)
         })
 
         it('cannot be started', () => {

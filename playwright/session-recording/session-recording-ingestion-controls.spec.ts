@@ -7,7 +7,7 @@ const startOptions = {
         session_recording: {},
         opt_out_capturing_by_default: true,
     },
-    decideResponseOverrides: {
+    flagsResponseOverrides: {
         sessionRecording: {
             endpoint: '/ses/',
             // a flag that doesn't exist, can never be recorded
