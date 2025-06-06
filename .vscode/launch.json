@@ -11,7 +11,7 @@
             "args": [
                 "jest",
                 "-c",
-                "${workspaceRoot}/jest.config.js",
+                "${workspaceRoot}/packages/browser/jest.config.js",
                 "--runInBand",
                 "--watchAll=false",
                 "--testNamePattern",

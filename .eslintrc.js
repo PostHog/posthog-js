@@ -65,7 +65,7 @@ module.exports = {
         },
         'import/resolver': {
             node: {
-                paths: ['eslint-rules'], // Add the directory containing your custom rules
+                paths: ['../../eslint-rules'], // Add the directory containing your custom rules
                 extensions: ['.js', '.jsx', '.ts', '.tsx'], // Ensure ESLint resolves both JS and TS files
             },
         },
