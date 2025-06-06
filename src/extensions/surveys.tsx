@@ -745,7 +745,7 @@ export function usePopupVisibility(
         transition.finished.then(() => {
             setTimeout(() => {
                 removeDOMAndHidePopup()
-            }, 50)
+            }, 100)
         })
     }
 
