@@ -9,16 +9,14 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'pnpm'
 
-      - run: pnpm install && pnpm build
+      - uses: ./.github/actions/setup
+
+      - run: pnpm build
+        working-directory: packages/browser
 
       - name: Run es-check to check if our ie11 bundle is ES5 compatible
-        run: npx es-check@7.2.1 es5 dist/array.full.es5.js
+        run: npx es-check@7.2.1 es5 packages/browser/dist/array.full.es5.js
 
       - name: Run es-check to check if our main bundle is ES6 compatible
-        run: npx es-check@7.2.1 es6 dist/array.full.js
+        run: npx es-check@7.2.1 es6 packages/browser/dist/array.full.js
