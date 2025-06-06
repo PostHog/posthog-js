@@ -2,7 +2,7 @@ const { readdirSync } = require('fs')
 const { basename } = require('path')
 
 const projectName = 'posthog-js'
-const ruleFiles = readdirSync('eslint-rules').filter(
+const ruleFiles = readdirSync(__dirname).filter(
     (file) => file.endsWith('.js') && file !== 'index.js' && !file.endsWith('test.js')
 )
 const configs = {
