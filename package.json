@@ -40,6 +40,7 @@
     "main": "dist/main.js",
     "module": "dist/module.js",
     "types": "dist/module.d.ts",
+    "type": "module",
     "files": [
         "lib/*",
         "dist/*",
