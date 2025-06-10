@@ -1,3 +1,7 @@
+## 1.250.2 - 2025-06-10
+
+- fix: stop feedback surveys to re-render every second (#2006)
+
 ## 1.250.1 - 2025-06-10
 
 
