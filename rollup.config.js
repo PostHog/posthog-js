@@ -18,7 +18,7 @@ const WRITE_MANGLED_PROPERTIES = process.env.WRITE_MANGLED_PROPERTIES
 const nameCachePath = './terser-mangled-names.json'
 let nameCache = {}
 
-const plugins = (es5) => [
+const plugins = (es5, noExternal) => [
     json(),
     resolve({ browser: true }),
     typescript({ sourceMap: true, outDir: './dist' }),
@@ -78,139 +78,145 @@ const plugins = (es5) => [
         format: {
             comments: false,
         },
-        mangle: es5
-            ? true // Don't mangle properties in the es5 build, as it relies on helpers which don't work well with mangling.
-            : {
-                  // Note:
-                  // PROPERTY MANGLING CAN BREAK YOUR CODE
-                  // But we use it anyway because it's incredible for bundle size, you just need to develop with it in mind.
-                  // Any properties that start with _ will be mangled, which can be a problem if anything with that pattern is
-                  // part of the public interface, or if any API responses we use matches that regex.
-                  // Fix specific instances of this by adding the property to the reserved list.
-                  properties: {
-                      regex: /^_(?!_)/, // only mangle properties that start with a single _
-                      reserved: [
-                          // list any exceptions that shouldn't be mangled, and please add an explanation:
+        mangle:
+            // Don't mangle properties in no-external builds, as it is used in Browser extensions which have to go through a review process with e.g. Google, and they can be weird about obfuscated code.
+            // Don't mangle properties in the es5 build, as it relies on helpers which don't work well with mangling.
+            noExternal || es5
+                ? true
+                : {
+                      // Note:
+                      // PROPERTY MANGLING CAN BREAK YOUR CODE
+                      // But we use it anyway because it's incredible for bundle size, you just need to develop with it in mind.
+                      // Any properties that start with _ will be mangled, which can be a problem if anything with that pattern is
+                      // part of the public interface, or if any API responses we use matches that regex.
+                      // Fix specific instances of this by adding the property to the reserved list.
+                      properties: {
+                          regex: /^_(?!_)/, // only mangle properties that start with a single _
+                          reserved: [
+                              // list any exceptions that shouldn't be mangled, and please add an explanation:
 
-                          // referenced in snippet, MUST be preserved
-                          '_i',
-                          '__SV',
+                              // referenced in snippet, MUST be preserved
+                              '_i',
+                              '__SV',
 
-                          // used in decide request, MUST be preserved
-                          '_',
+                              // used in decide request, MUST be preserved
+                              '_',
 
-                          // used in config
-                          '_url',
-                          '_batchKey',
-                          '_noTruncate',
-                          '_onCapture',
+                              // used in config
+                              '_url',
+                              '_batchKey',
+                              '_noTruncate',
+                              '_onCapture',
 
-                          // used in surveys, however, this shouldn't be needed
-                          // TODO: figure out how to remove them
-                          '_posthog',
-                          '_instance',
-                          '_surveyEventReceiver',
+                              // used in surveys, however, this shouldn't be needed
+                              // TODO: figure out how to remove them
+                              '_posthog',
+                              '_instance',
+                              '_surveyEventReceiver',
 
-                          // part of setup/teardown code, preserve these out of caution
-                          '_init',
-                          '_dom_loaded',
-                          '_execute_array',
-                          '_handle_unload',
+                              // part of setup/teardown code, preserve these out of caution
+                              '_init',
+                              '_dom_loaded',
+                              '_execute_array',
+                              '_handle_unload',
 
-                          // playwright uses these
-                          '_forceAllowLocalhostNetworkCapture',
-                          '_is_bot',
-                          '__ph_loaded',
-                          '_sessionActivityTimestamp',
-                          '_sessionStartTimestamp',
-                          '_sessionTimeoutMs',
+                              // playwright uses these
+                              '_forceAllowLocalhostNetworkCapture',
+                              '_is_bot',
+                              '__ph_loaded',
+                              '_sessionActivityTimestamp',
+                              '_sessionStartTimestamp',
+                              '_sessionTimeoutMs',
 
-                          // set on global window object (the ones using __ are not mangled anyway BUT be abundantly cautious)
-                          '_POSTHOG_REMOTE_CONFIG',
-                          '__POSTHOG_INSTRUMENTED__',
-                          '__PosthogExtensions__',
-                          '__posthog_wrapped__',
-                          '__Posthog__',
-                          '_patchFetch',
-                          '_patchXHR',
+                              // set on global window object (the ones using __ are not mangled anyway BUT be abundantly cautious)
+                              '_POSTHOG_REMOTE_CONFIG',
+                              '__POSTHOG_INSTRUMENTED__',
+                              '__PosthogExtensions__',
+                              '__posthog_wrapped__',
+                              '__Posthog__',
+                              '_patchFetch',
+                              '_patchXHR',
 
-                          // part of the public API (none start with _ so are not mangled anyway BUT be abundantly cautious)
-                          'capture',
-                          'identify',
-                          'alias',
-                          'set',
-                          'set_once',
-                          'set_config',
-                          'register',
-                          'register_once',
-                          'unregister',
-                          'opt_out_capturing',
-                          'has_opted_out_capturing',
-                          'opt_in_capturing',
-                          'reset',
-                          'isFeatureEnabled',
-                          'onFeatureFlags',
-                          'getSurveys',
-                          'getActiveMatchingSurveys',
-                          'captureException',
-                          'posthog',
-                          'version',
-                          'surveys',
-                          'calculateEventProperties',
+                              // set as part of lazy-loading (doesn't start with _ BUT be abundantly cautious)
+                              'loadExternalDependency',
 
-                          // possibly used by naughty users - we should decide if we want make these part of the public API, but be cautious for now
-                          '_isIdentified',
-                          '_is_bot',
-                          '_calculate_event_properties', // deprecated in favour of calculateEventProperties
+                              // part of the public API (none start with _ so are not mangled anyway BUT be abundantly cautious)
+                              'capture',
+                              'identify',
+                              'alias',
+                              'set',
+                              'set_once',
+                              'set_config',
+                              'register',
+                              'register_once',
+                              'unregister',
+                              'opt_out_capturing',
+                              'has_opted_out_capturing',
+                              'opt_in_capturing',
+                              'reset',
+                              'isFeatureEnabled',
+                              'onFeatureFlags',
+                              'getSurveys',
+                              'getActiveMatchingSurveys',
+                              'captureException',
+                              'posthog',
+                              'version',
+                              'surveys',
+                              'calculateEventProperties',
 
-                          // URL parameters
-                          '__posthog_debug',
+                              // possibly used by naughty users - we should decide if we want make these part of the public API, but be cautious for now
+                              '_isIdentified',
+                              '_is_bot',
+                              '_calculate_event_properties', // deprecated in favour of calculateEventProperties
 
-                          // attribution params, not used in a way that would be mangled but be cautious
-                          '_kx',
+                              // URL parameters
+                              '__posthog_debug',
 
-                          // used in rrweb source
-                          '_rrweb',
-                          '_root',
-                          '_css',
-                          '_opts',
-                          '_cssText',
-                          '__context',
-                          '_mappings',
-                          '_processor',
-                          '_args',
-                          '__ln',
-                          '_unchangedStyles',
-                          '__rrweb_original__',
-                          '_Departed',
-                          '_onload',
-                          '_onclick',
-                          '_oncontextmenu',
-                          '_ondblclick',
-                          '_onmousedown',
-                          '_onmouseenter',
-                          '_onmouseleave',
-                          '_onmousemove',
-                          '_onmouseout',
-                          '_onmouseover',
+                              // attribution params, not used in a way that would be mangled but be cautious
+                              '_kx',
 
-                          // Helpers added by the e.g. es5 build. We don't use this, but they can be a starting point if we try to get the es5 build mangled in the future
-                          '_invoke',
-                          '__proto__',
-                          '__await',
-                          '_createClass',
-                          '_classCallCheck',
-                          '__esModule',
-                          '__publicField2',
-                          '__symbol__',
+                              // used in rrweb source
+                              '_rrweb',
+                              '_root',
+                              '_css',
+                              '_opts',
+                              '_cssText',
+                              '__context',
+                              '_mappings',
+                              '_processor',
+                              '_args',
+                              '__ln',
+                              '_unchangedStyles',
+                              '__rrweb_original__',
+                              '_Departed',
+                              '_onload',
+                              '_onclick',
+                              '_oncontextmenu',
+                              '_ondblclick',
+                              '_onmousedown',
+                              '_onmouseenter',
+                              '_onmouseleave',
+                              '_onmousemove',
+                              '_onmouseout',
+                              '_onmouseover',
 
-                          // found in terser-mangled-names.json and couldn't attribute source, so preserve out of caution,
-                          '_sb',
-                          '_mirror',
-                          '_map',
-                      ],
+                              // Helpers added by the e.g. es5 build. We don't use this, but they can be a starting point if we try to get the es5 build mangled in the future
+                              '_invoke',
+                              '__proto__',
+                              '__await',
+                              '_createClass',
+                              '_classCallCheck',
+                              '__esModule',
+                              '__publicField2',
+                              '__symbol__',
+
+                              // found in terser-mangled-names.json and couldn't attribute source, so preserve out of caution,
+                              '_sb',
+                              '_mirror',
+                              '_map',
+                          ],
+                      },
                   },
-              },
     }),
     {
         name: 'save-terser-mangled-names',
@@ -264,7 +270,7 @@ const entrypointTargets = entrypoints.map((file) => {
 
     const fileName = fileParts.join('.')
 
-    const pluginsForThisFile = plugins(fileName.includes('es5'))
+    const pluginsForThisFile = plugins(fileName.includes('es5'), fileName.includes('no-external'))
 
     // we're allowed to console log in this file :)
     // eslint-disable-next-line no-console
