@@ -31,9 +31,9 @@ describe('survey display logic', () => {
 
     test('retrieveSurveyShadow', () => {
         const surveyId = 'randomSurveyId'
-        const mockShadow = retrieveSurveyShadow({ id: surveyId, appearance: {} })
-        expect(mockShadow.mode).toBe('open')
-        expect(mockShadow.host.className).toBe(`PostHogSurvey-${surveyId}`)
+        const { shadow } = retrieveSurveyShadow({ id: surveyId, appearance: {}, type: SurveyType.Popover })
+        expect(shadow.mode).toBe('open')
+        expect(shadow.host.className).toBe(`PostHogSurvey-${surveyId}`)
     })
 
     const mockSurveys: Survey[] = [
@@ -449,7 +449,7 @@ describe('SurveyManager', () => {
 
         surveyManager.callSurveysAndEvaluateDisplayLogic()
 
-        expect(manageWidgetSelectorListenerSpy).toHaveBeenCalledWith(mockSurvey)
+        expect(manageWidgetSelectorListenerSpy).toHaveBeenCalledWith(mockSurvey, '.my-selector')
     })
 
     test('callSurveysAndEvaluateDisplayLogic should not call surveys in focus', () => {
