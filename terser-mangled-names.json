@@ -222,6 +222,7 @@
         "_remove",
         "_removeEventTriggerCaptureHook",
         "_removePageViewCaptureHook",
+        "_removeSurveyFromDom",
         "_removeSurveyFromFocus",
         "_removeWidgetSelectorListener",
         "_reportStarted",

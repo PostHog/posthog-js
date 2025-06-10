@@ -332,7 +332,10 @@ export const retrieveSurveyShadow = (
     const existingDiv = document.querySelector(`.${widgetClassName}`)
 
     if (existingDiv && existingDiv.shadowRoot) {
-        return existingDiv.shadowRoot
+        return {
+            shadow: existingDiv.shadowRoot,
+            isNewlyCreated: false,
+        }
     }
 
     // If it doesn't exist, create it
@@ -349,7 +352,10 @@ export const retrieveSurveyShadow = (
         shadow.appendChild(stylesheet)
     }
     ;(element ? element : document.body).appendChild(div)
-    return shadow
+    return {
+        shadow,
+        isNewlyCreated: true,
+    }
 }
 
 interface SendSurveyEventArgs {
