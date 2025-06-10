@@ -12,10 +12,10 @@ describe('Array entrypoint', () => {
     )
 
     it('should not contain any script loaders', () => {
-        expect(arrayJs).toContain('loadExternalDependency=')
-        expect(arrayFullJs).toContain('loadExternalDependency=')
-        expect(arrayNoExternalJs).not.toContain('loadExternalDependency=')
-        expect(arrayFullNoExternalJs).not.toContain('loadExternalDependency=')
+        expect(arrayJs).toContain('__PosthogExtensions__.loadExternalDependency=')
+        expect(arrayFullJs).toContain('__PosthogExtensions__.loadExternalDependency=')
+        expect(arrayNoExternalJs).not.toContain('__PosthogExtensions__.loadExternalDependency=')
+        expect(arrayFullNoExternalJs).not.toContain('__PosthogExtensions__.loadExternalDependency=')
     })
 })
 
@@ -30,9 +30,9 @@ describe('Module entrypoint', () => {
 
     it('should not contain any script loaders', () => {
         // For the module loader, the code isn't minified
-        expect(moduleJs).toContain('loadExternalDependency=')
-        expect(moduleFullJs).toContain('loadExternalDependency=')
-        expect(moduleNoExternalJs).not.toContain('loadExternalDependency=')
-        expect(moduleFullNoExternalJs).not.toContain('loadExternalDependency=')
+        expect(moduleJs).toContain('__PosthogExtensions__.loadExternalDependency=')
+        expect(moduleFullJs).toContain('__PosthogExtensions__.loadExternalDependency=')
+        expect(moduleNoExternalJs).not.toContain('__PosthogExtensions__.loadExternalDependency=')
+        expect(moduleFullNoExternalJs).not.toContain('__PosthogExtensions__.loadExternalDependency=')
     })
 })
