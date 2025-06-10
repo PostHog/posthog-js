@@ -19,7 +19,7 @@ import { AutocaptureConfig, COPY_AUTOCAPTURE_EVENT, EventName, Properties, Remot
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
-import { isFunction, isNull, isObject } from './utils/type-utils'
+import { isBoolean, isFunction, isNull, isObject } from './utils/type-utils'
 import { createLogger } from './utils/logger'
 import { document, window } from './utils/globals'
 import { convertToURL } from './utils/request-utils'
@@ -325,16 +325,23 @@ export class Autocapture {
     }
 
     public get isEnabled(): boolean {
-        // If we're not positive whether the server enabled/disabled it, we don't want to enable it yet
-        // This implies that if the /decide request is not made, we will not enable autocapture
-        // but that's not a problem because that's likely an adblocker acting and it'd block our autocapture event anyway
-        //
-        // In the rare case where we've explicitly disabled calling decide, then we'll use the persisted/client value
-        if (isNull(this._isDisabledServerSide) && !this.instance.config.advanced_disable_decide) {
-            return false
+        // Special case where we dont care about the client side config,
+        // or any cached values, we only care about the server side config
+        if (this.instance.config.autocapture === 'wait_for_server') {
+            return !this._isDisabledServerSide
         }
 
+        // Else we either use, in order: server side config, server side cached value, client side config
         const persistedServerDisabled = this.instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
+        const memoryDisabled = this._isDisabledServerSide
+
+        if (
+            isNull(memoryDisabled) &&
+            !isBoolean(persistedServerDisabled) &&
+            !this.instance.config.advanced_disable_decide
+        ) {
+            return false
+        }
 
         const disabledServer = this._isDisabledServerSide ?? !!persistedServerDisabled
         const disabledClient = !this.instance.config.autocapture
