@@ -139,6 +139,9 @@ const plugins = (es5, noExternal) => [
                                 '_patchFetch',
                                 '_patchXHR',
 
+                                // set as part of lazy-loading (doesn't start with _ BUT be abundantly cautious)
+                                'loadExternalDependency',
+
                                 // part of the public API (none start with _ so are not mangled anyway BUT be abundantly cautious)
                                 'capture',
                                 'identify',
