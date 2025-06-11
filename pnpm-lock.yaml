@@ -55,9 +55,6 @@ importers:
       eslint-plugin-react-hooks:
         specifier: ^4.6.0
         version: 4.6.0(eslint@8.57.0)
-      jest-environment-jsdom:
-        specifier: ^27.0.1
-        version: 27.5.1
       lint-staged:
         specifier: ^10.2.11
         version: 10.2.11
@@ -205,6 +202,9 @@ importers:
       jest:
         specifier: ^27.5.1
         version: 27.5.1(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.5.0)(typescript@5.5.4))
+      jest-environment-jsdom:
+        specifier: ^27.5.1
+        version: 27.5.1
       jsdom:
         specifier: 16.5.0
         version: 16.5.0
