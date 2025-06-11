@@ -547,16 +547,17 @@ export class PostHogFeatureFlags {
         const useRemoteConfigWithFlags =
             this._instance.config.__preview_flags_v2 && this._instance.config.__preview_remote_config
 
-        const baseUrl = shouldUseDecide(this._instance.config.token)
+        const flagsRoute = shouldUseDecide(this._instance.config.token)
             ? '/decide?v=4'
-            : this._instance.config.__preview_flags_v2 && this._instance.config.__preview_remote_config
+            : useRemoteConfigWithFlags
               ? '/flags/?v=2'
               : '/flags/?v=2&config=true'
 
         const queryParams = this._instance.config.advanced_only_evaluate_survey_feature_flags
             ? '&only_evaluate_survey_feature_flags=true'
             : ''
-        const url = this._instance.requestRouter.endpointFor('api', baseUrl + queryParams)
+
+        const url = this._instance.requestRouter.endpointFor('api', flagsRoute + queryParams)
 
         if (useRemoteConfigWithFlags) {
             data.timezone = getTimezone()
