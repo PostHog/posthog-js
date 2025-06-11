@@ -1586,6 +1586,26 @@ describe('featureflags', () => {
             )
         })
 
+        it('includes groups passed via options in feature flag called event', () => {
+            featureFlags.receivedFeatureFlags({
+                featureFlags: { 'test-flag': true },
+                featureFlagPayloads: {},
+                requestId: TEST_REQUEST_ID,
+            })
+            featureFlags._hasLoadedFlags = true
+
+            featureFlags.getFeatureFlag('test-flag', { groups: { playlist: '1' } })
+
+            expect(instance.capture).toHaveBeenCalledWith(
+                '$feature_flag_called',
+                expect.objectContaining({
+                    $feature_flag: 'test-flag',
+                    $feature_flag_response: true,
+                }),
+                { groups: { playlist: '1' } }
+            )
+        })
+
         it('includes version in feature flag called event', () => {
             // Setup flags with requestId
             featureFlags.receivedFeatureFlags({

@@ -914,6 +914,13 @@ export class PostHog {
             properties: this.calculateEventProperties(event_name, properties || {}, timestamp, uuid),
         }
 
+        if (options?.groups) {
+            data.properties['$groups'] = {
+                ...(data.properties['$groups'] || {}),
+                ...options.groups,
+            }
+        }
+
         if (clientRateLimitContext) {
             data.properties['$lib_rate_limit_remaining_tokens'] = clientRateLimitContext.remainingTokens
         }

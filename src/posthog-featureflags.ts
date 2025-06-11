@@ -472,9 +472,12 @@ export class PostHogFeatureFlags {
      *     if(posthog.getFeatureFlag('my-flag') === 'some-variant') { // do something }
      *
      * @param {Object|String} key Key of the feature flag.
-     * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_called event to PostHog.
+     * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_called event to PostHog. If {groups: {group_type: group_key}}, we will use the group key to evaluate the flag.
      */
-    getFeatureFlag(key: string, options: { send_event?: boolean } = {}): boolean | string | undefined {
+    getFeatureFlag(
+        key: string,
+        options: { send_event?: boolean; groups?: Record<string, string> } = {}
+    ): boolean | string | undefined {
         if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
             logger.warn('getFeatureFlag for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
@@ -533,7 +536,11 @@ export class PostHogFeatureFlags {
                     properties.$feature_flag_original_payload = flagDetails?.metadata?.original_payload
                 }
 
-                this._instance.capture('$feature_flag_called', properties)
+                if (options.groups) {
+                    this._instance.capture('$feature_flag_called', properties, { groups: options.groups })
+                } else {
+                    this._instance.capture('$feature_flag_called', properties)
+                }
             }
         }
         return flagValue
