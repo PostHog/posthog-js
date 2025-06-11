@@ -543,7 +543,8 @@ export class PostHogFeatureFlags {
             data.disable_flags = true
         }
 
-        // Flags v2 requires remote config to be enabled to skip /flags&config=true and use /flags directly
+        // flags supports loading config data with the `config` query param, but if you're using remote config, you
+        // don't need to add that parameter because all the config data is loaded from the remote config endpoint.
         const useRemoteConfigWithFlags =
             this._instance.config.__preview_flags_v2 && this._instance.config.__preview_remote_config
 
