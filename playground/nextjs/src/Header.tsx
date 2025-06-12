@@ -27,6 +27,7 @@ export const PageHeader = () => {
                         <Link href="/replay-examples/long">Long</Link>
                         <Link href="/ecommerce">E-commerce</Link>
                         <Link href="/toolbar-tests">Toolbar Tests</Link>
+                        <Link href="/external_chat">External Chat</Link>
                     </div>
 
                     <div>

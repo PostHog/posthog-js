@@ -11,6 +11,14 @@ import Head from 'next/head'
 import { PostHogProvider } from 'posthog-js/react'
 
 const CDP_DOMAINS = ['https://*.redditstatic.com', 'https://*.reddit.com'].join(' ')
+const CHAT_DOMAINS = [
+    'https://*.intercom.io',
+    'https://*.intercomcdn.com',
+    'wss://*.intercom.io',
+    'https://static.intercomassets.com',
+    'https://*.crisp.chat',
+    'wss://*.relay.crisp.chat',
+].join(' ')
 
 export default function App({ Component, pageProps }: AppProps) {
     const user = useUser()
@@ -43,11 +51,14 @@ export default function App({ Component, pageProps }: AppProps) {
                     httpEquiv="Content-Security-Policy"
                     content={`
                     default-src 'self';
-                    connect-src 'self' ${localhostDomain} https://*.posthog.com https://lottie.host ${CDP_DOMAINS};
-                    script-src 'self' 'unsafe-eval' 'unsafe-inline' ${localhostDomain} https://*.posthog.com ${CDP_DOMAINS};
-                    style-src 'self' 'unsafe-inline' ${localhostDomain} https://*.posthog.com;
-                    img-src 'self' ${localhostDomain} https://*.posthog.com https://lottie.host https://cataas.com ${CDP_DOMAINS};
-                    worker-src 'self' blob:;
+                    connect-src 'self' ${localhostDomain} https://*.posthog.com https://lottie.host ${CDP_DOMAINS} ${CHAT_DOMAINS};
+                    script-src 'self' 'unsafe-eval' 'unsafe-inline' ${localhostDomain} https://*.posthog.com ${CDP_DOMAINS} ${CHAT_DOMAINS};
+                    style-src 'self' 'unsafe-inline' ${localhostDomain} https://*.posthog.com ${CHAT_DOMAINS};
+                    img-src 'self' data: blob: ${localhostDomain} https://*.posthog.com https://lottie.host https://cataas.com ${CDP_DOMAINS} ${CHAT_DOMAINS};
+                    worker-src 'self' blob: ${CHAT_DOMAINS};
+                    font-src 'self' ${localhostDomain} https://*.posthog.com ${CHAT_DOMAINS};
+                    media-src 'self' ${localhostDomain} https://*.posthog.com ${CHAT_DOMAINS};
+                    frame-src 'self' ${localhostDomain} https://*.posthog.com ${CHAT_DOMAINS};
                 `}
                 />
             </Head>
