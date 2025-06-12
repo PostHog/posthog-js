@@ -295,4 +295,32 @@ describe('PostHogFeature component', () => {
         fireEvent.click(screen.getByTestId('hi_example_feature_1_payload'))
         expect(given.posthog.capture).toHaveBeenCalledTimes(1)
     })
+
+    it('should support groups parameter', () => {
+        // Mock posthog to check if groups are passed through
+        const mockPosthog = {
+            ...given.posthog,
+            getFeatureFlag: jest.fn((flag, options) => {
+                // Return different values when groups are passed
+                if (options && options.groups && options.groups.team === '123') {
+                    return 'group_variant'
+                }
+                return FEATURE_FLAG_STATUS[flag]
+            }),
+            getFeatureFlagPayload: jest.fn((flag) => FEATURE_FLAG_PAYLOADS[flag])
+        }
+
+        render(
+            <PostHogProvider client={mockPosthog}>
+                <PostHogFeature flag="test" groups={{ team: '123' }}>
+                    <div data-testid="groupFeature">Group Feature</div>
+                </PostHogFeature>
+            </PostHogProvider>
+        )
+
+        // Verify that getFeatureFlag was called with groups option
+        expect(mockPosthog.getFeatureFlag).toHaveBeenCalledWith('test', expect.objectContaining({
+            groups: { team: '123' }
+        }))
+    })
 })

@@ -11,6 +11,7 @@ export type PostHogFeatureProps = React.HTMLProps<HTMLDivElement> & {
     visibilityObserverOptions?: IntersectionObserverInit
     trackInteraction?: boolean
     trackView?: boolean
+    groups?: Record<string, string>
 }
 
 export function PostHogFeature({
@@ -21,10 +22,11 @@ export function PostHogFeature({
     visibilityObserverOptions,
     trackInteraction,
     trackView,
+    groups,
     ...props
 }: PostHogFeatureProps): JSX.Element | null {
-    const payload = useFeatureFlagPayload(flag)
-    const variant = useFeatureFlagVariantKey(flag)
+    const payload = useFeatureFlagPayload(flag, { groups })
+    const variant = useFeatureFlagVariantKey(flag, { groups })
 
     const shouldTrackInteraction = trackInteraction ?? true
     const shouldTrackView = trackView ?? true
@@ -37,6 +39,7 @@ export function PostHogFeature({
                 options={visibilityObserverOptions}
                 trackInteraction={shouldTrackInteraction}
                 trackView={shouldTrackView}
+                groups={groups}
                 {...props}
             >
                 {childNode}
@@ -128,6 +131,7 @@ function VisibilityAndClickTrackers({
     trackInteraction,
     trackView,
     options,
+    groups,
     ...props
 }: {
     flag: string
@@ -135,11 +139,12 @@ function VisibilityAndClickTrackers({
     trackInteraction: boolean
     trackView: boolean
     options?: IntersectionObserverInit
+    groups?: Record<string, string>
 }): JSX.Element {
     const clickTrackedRef = useRef(false)
     const visibilityTrackedRef = useRef(false)
     const posthog = usePostHog()
-    const variant = useFeatureFlagVariantKey(flag)
+    const variant = useFeatureFlagVariantKey(flag, { groups })
 
     const cachedOnClick = useCallback(() => {
         if (!clickTrackedRef.current && trackInteraction) {

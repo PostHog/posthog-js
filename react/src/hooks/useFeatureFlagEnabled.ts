@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react'
 import { usePostHog } from './usePostHog'
 
-export function useFeatureFlagEnabled(flag: string): boolean | undefined {
+export function useFeatureFlagEnabled(
+    flag: string,
+    options?: { groups?: Record<string, string> }
+): boolean | undefined {
     const client = usePostHog()
 
-    const [featureEnabled, setFeatureEnabled] = useState<boolean | undefined>(() => client.isFeatureEnabled(flag))
+    const [featureEnabled, setFeatureEnabled] = useState<boolean | undefined>(() => 
+        !!client.getFeatureFlag(flag, { send_event: false, ...options })
+    )
 
     useEffect(() => {
         return client.onFeatureFlags(() => {
-            setFeatureEnabled(client.isFeatureEnabled(flag))
+            setFeatureEnabled(!!client.getFeatureFlag(flag, { send_event: false, ...options }))
         })
-    }, [client, flag])
+    }, [client, flag, options])
 
     return featureEnabled
 }
