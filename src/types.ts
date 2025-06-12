@@ -320,11 +320,20 @@ export interface PostHogConfig {
 
     /**
      * Determines whether PostHog should autocapture events.
+     * When set to `false` it will not capture any events.
+     * When set to `true` it will start capturing events immediately,
+     * even before the server data has loaded.
+     * When set to `'wait_for_server'` it will wait for the server data to load before capturing events,
+     * not capturing any events if the server data is not loaded/available.
+     *
+     * You can also pass in an object to configure autocapture.
+     * @see {AutocaptureConfig} for more details.
+     *
      * This setting does not affect capturing pageview events (see `capture_pageview`).
      *
      * @default true
      */
-    autocapture: boolean | AutocaptureConfig
+    autocapture: boolean | 'wait_for_server' | AutocaptureConfig
 
     /**
      * Determines whether PostHog should capture rage clicks.

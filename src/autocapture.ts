@@ -325,6 +325,13 @@ export class Autocapture {
     }
 
     public get isEnabled(): boolean {
+        // Special case where we dont care about the client side config,
+        // or any cached values, we only care about the server side config
+        if (this.instance.config.autocapture === 'wait_for_server') {
+            return !this._isDisabledServerSide
+        }
+
+        // Else we either use, in order: server side config, server side cached value, client side config
         const persistedServerDisabled = this.instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
         const memoryDisabled = this._isDisabledServerSide
 
@@ -333,7 +340,6 @@ export class Autocapture {
             !isBoolean(persistedServerDisabled) &&
             !this.instance.config.advanced_disable_decide
         ) {
-            // We only enable if we know that the server has not disabled it (unless decide is disabled)
             return false
         }
 

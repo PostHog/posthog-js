@@ -17,6 +17,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
   \\"autocapture\\": [
     \\"false\\",
     \\"true\\",
+    \\"\\\\\\"wait_for_server\\\\\\"\\",
     {
       \\"url_allowlist\\": [
         \\"undefined\\",
