@@ -162,8 +162,9 @@ function fnv1a(str: string): string {
         hash ^= str.charCodeAt(i)
         hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24)
     }
-    // Convert to hex string, padding to 8 chars
-    return (hash >>> 0).toString(16).padStart(8, '0')
+    // Convert to hex string, padding to 8 chars - IE11 compatible
+    const hexString = (hash >>> 0).toString(16)
+    return ('00000000' + hexString).slice(-8)
 }
 
 // These are the tokens that are exempt from the feature flag endpoint as part of the global rollout.
