@@ -243,7 +243,7 @@ describe('identify()', () => {
             )
         })
 
-        it('does not update user', () => {
+        it('does not update user when distinct ID is $posthog_cookieless', () => {
             console.error = jest.fn()
 
             instance.debug()
