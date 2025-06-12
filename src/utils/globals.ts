@@ -1,11 +1,11 @@
 import { ErrorProperties } from '../extensions/exception-autocapture/error-conversion'
 import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
-import { DeadClicksAutoCaptureConfig, ExternalIntegrationKind, Properties, RemoteConfig, SiteAppLoader } from '../types'
+import { DeadClicksAutoCaptureConfig, ExternalIntegrationKind, RemoteConfig, SiteAppLoader } from '../types'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
- * like DOM, SSR, Web workers etc.
+ * like DOM, SSR, Web workers, etc.
  *
  * NOTE: Typically we want the "window" but globalThis works for both the typical browser context as
  * well as other contexts such as the web worker context. Window is still exported for any bits that explicitly require it.
