@@ -1,3 +1,7 @@
+## 1.252.0 - 2025-06-12
+
+
+
 ## 1.251.1 - 2025-06-12
 
 - fix: Add warning for when the user tries to identify using the cookieless sentinel distinct ID (#2013)
