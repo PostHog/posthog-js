@@ -1,5 +1,5 @@
 import { Page, BrowserContext } from '@playwright/test'
-import { Compression, DecideResponse, PostHogConfig } from '../../src/types'
+import { Compression, FlagsResponse, PostHogConfig } from '../../src/types'
 import path from 'path'
 import { WindowWithPostHog } from './posthog-playwright-test-base'
 
@@ -20,7 +20,7 @@ export async function gotoPage(page: Page, url: string) {
 }
 
 export interface StartOptions {
-    waitForDecide?: boolean
+    waitForFlags?: boolean
     initPosthog?: boolean
     resetOnInit?: boolean
     // playwright is stricter than cypress on access to the window object
@@ -31,20 +31,20 @@ export interface StartOptions {
     runAfterPostHogInit?: (pg: Page) => void
     type?: 'navigate' | 'reload'
     options?: Partial<PostHogConfig>
-    decideResponseOverrides?: Partial<DecideResponse>
+    flagsResponseOverrides?: Partial<FlagsResponse>
     url?: string
 }
 
 export async function start(
     {
-        waitForDecide = true,
+        waitForFlags = true,
         initPosthog = true,
         resetOnInit = false,
         runBeforePostHogInit = undefined,
         runAfterPostHogInit = undefined,
         type = 'navigate',
         options = {},
-        decideResponseOverrides = {
+        flagsResponseOverrides = {
             sessionRecording: undefined,
             isAuthenticated: false,
             capturePerformance: true,
@@ -56,9 +56,27 @@ export async function start(
 ) {
     options.opt_out_useragent_filter = true
 
-    // Prepare the mocked Decide API response
-    const decideResponse: DecideResponse = {
+    // Prepare the mocked Flags API response
+    const flagsResponse: FlagsResponse = {
         editorParams: {},
+        flags: {
+            'session-recording-player': {
+                key: '7569-insight-cohorts',
+                enabled: true,
+                variant: undefined,
+                reason: {
+                    code: 'condition_match',
+                    condition_index: 0,
+                    description: 'Matched condition set 1',
+                },
+                metadata: {
+                    id: 1421,
+                    version: 1,
+                    description: undefined,
+                    payload: undefined,
+                },
+            },
+        },
         featureFlags: { 'session-recording-player': true },
         featureFlagPayloads: {},
         errorsWhileComputingFlags: false,
@@ -68,19 +86,19 @@ export async function start(
         siteApps: [],
         supportedCompression: [Compression.GZipJS],
         autocaptureExceptions: false,
-        ...decideResponseOverrides,
+        ...flagsResponseOverrides,
     }
 
     // allow promise in e2e tests
     // eslint-disable-next-line compat/compat
-    const decideMock = new Promise((resolve) => {
-        void context.route('**/decide/*', (route) => {
+    const flagsMock = new Promise((resolve) => {
+        void context.route('**/flags/*', (route) => {
             route.fulfill({
                 status: 200,
                 contentType: 'application/json',
-                body: JSON.stringify(decideResponse),
+                body: JSON.stringify(flagsResponse),
             })
-            resolve('mock network to decide was triggered')
+            resolve('mock network to flags was triggered')
         })
     })
 
@@ -140,8 +158,8 @@ export async function start(
         })
     }
 
-    // Wait for `/decide` response if required
-    if (waitForDecide) {
-        await decideMock
+    // Wait for `/flags` response if required
+    if (waitForFlags) {
+        await flagsMock
     }
 }

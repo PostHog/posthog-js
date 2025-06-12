@@ -3,7 +3,7 @@ import { PostHog } from '../posthog-core'
 import { PostHogExceptions } from '../posthog-exceptions'
 import { PostHogPersistence } from '../posthog-persistence'
 import {
-    DecideResponse,
+    FlagsResponse,
     ErrorTrackingSuppressionRule,
     ErrorTrackingSuppressionRuleValue,
     PostHogConfig,
@@ -67,8 +67,8 @@ describe('PostHogExceptions', () => {
     describe('onRemoteConfig', () => {
         it('persists the suppression rules', () => {
             const suppressionRule = createSuppressionRule()
-            const decideResponse: Partial<DecideResponse> = { errorTracking: { suppressionRules: [suppressionRule] } }
-            exceptions.onRemoteConfig(decideResponse as DecideResponse)
+            const flagsResponse: Partial<FlagsResponse> = { errorTracking: { suppressionRules: [suppressionRule] } }
+            exceptions.onRemoteConfig(flagsResponse as FlagsResponse)
             expect(exceptions['_suppressionRules']).toEqual([suppressionRule])
         })
     })
@@ -84,21 +84,21 @@ describe('PostHogExceptions', () => {
             ['GenericError', 'This is a message that contains a ReactMinified error'],
         ])('drops the event if a suppression rule matches', (type, value) => {
             const suppressionRule = createSuppressionRule('OR')
-            exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [suppressionRule] } } as DecideResponse)
+            exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [suppressionRule] } } as FlagsResponse)
             exceptions.sendExceptionEvent({ $exception_list: [{ type, value }] })
             expect(captureMock).not.toBeCalled()
         })
 
         it('captures an exception if no $exception_list property exists', () => {
             const suppressionRule = createSuppressionRule('AND')
-            exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [suppressionRule] } } as DecideResponse)
+            exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [suppressionRule] } } as FlagsResponse)
             exceptions.sendExceptionEvent({ custom_property: true })
             expect(captureMock).toBeCalled()
         })
 
         it('captures an exception if all rule conditions do not match', () => {
             const suppressionRule = createSuppressionRule('AND')
-            exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [suppressionRule] } } as DecideResponse)
+            exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [suppressionRule] } } as FlagsResponse)
             exceptions.sendExceptionEvent({ $exception_list: [{ type: 'TypeError', value: 'This is a type error' }] })
             expect(captureMock).toBeCalled()
         })
@@ -112,7 +112,7 @@ describe('PostHogExceptions', () => {
                     type: 'error_tracking_issue_property',
                 },
             ])
-            exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [suppressionRule] } } as DecideResponse)
+            exceptions.onRemoteConfig({ errorTracking: { suppressionRules: [suppressionRule] } } as FlagsResponse)
             exceptions.sendExceptionEvent({ $exception_list: [{ type: 'TypeError', value: 'This is a type error' }] })
             expect(captureMock).toBeCalled()
         })

@@ -347,7 +347,13 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"true\\"
   ],
   \\"custom_personal_data_properties\\": \\"string[]\\",
+  \\"advanced_disable_flags\\": [
+    \\"undefined\\",
+    \\"false\\",
+    \\"true\\"
+  ],
   \\"advanced_disable_decide\\": [
+    \\"undefined\\",
     \\"false\\",
     \\"true\\"
   ],

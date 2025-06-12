@@ -1,7 +1,7 @@
 import { entries, extend } from './utils'
 import { PostHog } from './posthog-core'
 import {
-    DecideResponse,
+    FlagsResponse,
     FeatureFlagsCallback,
     EarlyAccessFeatureCallback,
     EarlyAccessFeatureResponse,
@@ -46,14 +46,14 @@ export const filterActiveFeatureFlags = (featureFlags?: Record<string, string | 
     return activeFeatureFlags
 }
 
-export const parseFeatureFlagDecideResponse = (
-    response: Partial<DecideResponse>,
+export const parseFlagsResponse = (
+    response: Partial<FlagsResponse>,
     persistence: PostHogPersistence,
     currentFlags: Record<string, string | boolean> = {},
     currentFlagPayloads: Record<string, JsonType> = {},
     currentFlagDetails: Record<string, FeatureFlagDetail> = {}
 ) => {
-    const normalizedResponse = normalizeDecideResponse(response)
+    const normalizedResponse = normalizeFlagsResponse(response)
     const flagDetails = normalizedResponse.flags
     const featureFlags = normalizedResponse.featureFlags
     const flagPayloads = normalizedResponse.featureFlagPayloads
@@ -102,7 +102,7 @@ export const parseFeatureFlagDecideResponse = (
         })
 }
 
-const normalizeDecideResponse = (response: Partial<DecideResponse>): Partial<DecideResponse> => {
+const normalizeFlagsResponse = (response: Partial<FlagsResponse>): Partial<FlagsResponse> => {
     const flagDetails = response['flags']
 
     if (flagDetails) {
@@ -152,6 +152,159 @@ export enum QuotaLimitedResource {
     Recordings = 'recordings',
 }
 
+// FNV-1a hash function
+// https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
+// I know, I know, I'm rolling my own hash function, but I didn't want to take on
+// a crypto dependency and this is just temporary anyway
+function fnv1a(str: string): string {
+    let hash = 0x811c9dc5 // FNV offset basis
+    for (let i = 0; i < str.length; i++) {
+        hash ^= str.charCodeAt(i)
+        hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24)
+    }
+    // Convert to hex string, padding to 8 chars - IE11 compatible
+    const hexString = (hash >>> 0).toString(16)
+    return ('00000000' + hexString).slice(-8)
+}
+
+// These are the tokens that are exempt from the feature flag endpoint as part of the global rollout.
+// We will remove these once we get an idea of how scale looks without them.
+const HASHED_EXEMPT_TOKENS = [
+    '7c6f7b45',
+    '66c1f69c',
+    '2727f65a',
+    'f3287528',
+    '8cc9a311',
+    'eb9f671b',
+    'c0e1c6f9',
+    '057989ec',
+    '723f4019',
+    '7b102104',
+    '563359d3',
+    'bad973ea',
+    'f6f2c4f4',
+    '59454a61',
+    '89ad1076',
+    '4edd0da1',
+    '26c52e72',
+    'a970bd2e',
+    '89cf4454',
+    '16e2b4e7',
+    'fba0e7b6',
+    '301c8488',
+    'bc65d69e',
+    'fe66a3c5',
+    '37926ca6',
+    '52a196df',
+    'd32a7577',
+    '42c4c9ef',
+    '6883bd5a',
+    '04809ff7',
+    'e59430a8',
+    '61be3dd8',
+    '7fa5500b',
+    'bf027177',
+    '8cfdba9b',
+    '96f6df5f',
+    '569798e9',
+    '0ebc61a5',
+    '1b5d7b92',
+    '17ebb0a4',
+    'f97ea965',
+    '85cc817b',
+    '3044dfc1',
+    '0c3fe5c3',
+    'b1f95fa3',
+    '8a6342e8',
+    '72365c68',
+    '12d34ad9',
+    '733853ec',
+    '3beeb69a',
+    '0645bb64',
+    '32de7f98',
+    '5dcbee21',
+    '3fe85053',
+    'ad960278',
+    '9466e5dd',
+    '7ca97b2d',
+    '2ee2a65c',
+    '28fde5f2',
+    '85c52f49',
+    '0ad823f4',
+    'f11b6cc9',
+    'aacf8af9',
+    'ab3e62b3',
+    '3a85ff15',
+    '8a67d3c4',
+    'f5e91ef1',
+    '4b873698',
+    'c5dae949',
+    '5b643d76',
+    '9599c892',
+    '34377448',
+    '2189e408',
+    '3be9ad53',
+    '1a14ce7c',
+    '2a164ded',
+    '8d53ea86',
+    '53bdb37d',
+    'bfc3f590',
+    '8df38ede',
+    'bdb81e49',
+    '38fde5c0',
+    '8d707e6d',
+    '73cbc496',
+    'f9d8a5ef',
+    'd3a9f8c4',
+    'a980d8cd',
+    '5bcfe086',
+    'e4818f68',
+    '4f11fb39',
+    'a13c6ae3',
+    '150c7fbb',
+    '98f3d658',
+    'f84f7377',
+    '1924dd9c',
+    '1f6b63b3',
+    '24748755',
+    '7c0f717c',
+    '8a87f11b',
+    '49f57f22',
+    '3c9e9234',
+    '3772f65b',
+    'dff631b6',
+    'cd609d40',
+    'f853c7f7',
+    '952db5ee',
+    'c5aa8a79',
+    '2d21b6fd',
+    '79b7164c',
+    '4110e26c',
+    'a7d3b43f',
+    '84e1b8f6',
+    '75cc0998',
+    '07f78e33',
+    '10ca9b1a',
+    'ce441b18',
+    '01eb8256',
+    'c0ac4b67',
+    '8e8e5216',
+    'db7943dd',
+    'fa133a95',
+    '498a4508',
+    '21bbda67',
+    '7dbfed69',
+    'be3ec24c',
+    'fc80b8e2',
+]
+
+const hashedExemptTokens = new Set(HASHED_EXEMPT_TOKENS)
+
+function shouldUseDecide(token: string): boolean {
+    const tokenHash = fnv1a(token)
+    return hashedExemptTokens?.has(tokenHash)
+}
+
 export class PostHogFeatureFlags {
     _override_warning: boolean = false
     featureFlagEventHandlers: FeatureFlagsCallback[]
@@ -161,17 +314,17 @@ export class PostHogFeatureFlags {
     private _reloadingDisabled: boolean = false
     private _additionalReloadRequested: boolean = false
     private _reloadDebouncer?: any
-    private _decideCalled: boolean = false
+    private _flagsCalled: boolean = false
     private _flagsLoadedFromRemote: boolean = false
 
     constructor(private _instance: PostHog) {
         this.featureFlagEventHandlers = []
     }
 
-    decide(): void {
+    flags(): void {
         if (this._instance.config.__preview_remote_config) {
-            // If remote config is enabled we don't call decide and we mark it as called so that we don't simulate it
-            this._decideCalled = true
+            // If remote config is enabled we don't call /flags and we mark it as called so that we don't simulate it
+            this._flagsCalled = true
             return
         }
 
@@ -181,7 +334,7 @@ export class PostHogFeatureFlags {
             (this._instance.config.advanced_disable_feature_flags ||
                 this._instance.config.advanced_disable_feature_flags_on_first_load)
 
-        this._callDecideEndpoint({
+        this._callFlagsEndpoint({
             disableFlags,
         })
     }
@@ -333,7 +486,7 @@ export class PostHogFeatureFlags {
 
         // Debounce multiple calls on the same tick
         this._reloadDebouncer = setTimeout(() => {
-            this._callDecideEndpoint()
+            this._callFlagsEndpoint()
         }, 5)
     }
 
@@ -363,11 +516,11 @@ export class PostHogFeatureFlags {
      * NOTE: This is used both for flags and remote config. Once the RemoteConfig is fully released this will essentially only
      * be for flags and can eventually be replaced with the new flags endpoint
      */
-    _callDecideEndpoint(options?: { disableFlags?: boolean }): void {
-        // Ensure we don't have double queued decide requests
+    _callFlagsEndpoint(options?: { disableFlags?: boolean }): void {
+        // Ensure we don't have double queued /flags requests
         this._clearDebouncer()
-        if (this._instance.config.advanced_disable_decide) {
-            // The way this is documented is essentially used to refuse to ever call the decide endpoint.
+        if (this._instance._shouldDisableFlags()) {
+            // The way this is documented is essentially used to refuse to ever call the /flags endpoint.
             return
         }
         if (this._requestInFlight) {
@@ -391,20 +544,24 @@ export class PostHogFeatureFlags {
             data.disable_flags = true
         }
 
-        // NB: flags v2 requires remote config to be enabled as well, since the idea is that we will skip calling /decide altogether
-        // (which remote config does) and just use the /flags endpoint.  May revisit this if we need to support flags v2 without remote config
-        // (e.g. we could call `/decide` with flags disabled for the data otherwise returned by remote config, and then still call
-        // `/flags/` to get the flag evaluation data).
-        const eligibleForFlagsV2 =
+        // flags supports loading config data with the `config` query param, but if you're using remote config, you
+        // don't need to add that parameter because all the config data is loaded from the remote config endpoint.
+        const useRemoteConfigWithFlags =
             this._instance.config.__preview_flags_v2 && this._instance.config.__preview_remote_config
 
-        const baseUrl = eligibleForFlagsV2 ? '/flags/?v=2' : '/decide/?v=4'
+        const flagsRoute = shouldUseDecide(this._instance.config.token)
+            ? '/decide?v=4'
+            : useRemoteConfigWithFlags
+              ? '/flags/?v=2'
+              : '/flags/?v=2&config=true'
+
         const queryParams = this._instance.config.advanced_only_evaluate_survey_feature_flags
             ? '&only_evaluate_survey_feature_flags=true'
             : ''
-        const url = this._instance.requestRouter.endpointFor('api', baseUrl + queryParams)
 
-        if (eligibleForFlagsV2) {
+        const url = this._instance.requestRouter.endpointFor('api', flagsRoute + queryParams)
+
+        if (useRemoteConfigWithFlags) {
             data.timezone = getTimezone()
         }
 
@@ -431,13 +588,13 @@ export class PostHogFeatureFlags {
                 this._requestInFlight = false
 
                 // NB: this block is only reached if this._instance.config.__preview_remote_config is false
-                if (!this._decideCalled) {
-                    this._decideCalled = true
+                if (!this._flagsCalled) {
+                    this._flagsCalled = true
                     this._instance._onRemoteConfig(response.json ?? {})
                 }
 
                 if (data.disable_flags && !this._additionalReloadRequested) {
-                    // If flags are disabled then there is no need to call decide again (flags are the only thing that may change)
+                    // If flags are disabled then there is no need to call /flags again (flags are the only thing that may change)
                     // UNLESS, an additional reload is requested.
                     return
                 }
@@ -458,7 +615,7 @@ export class PostHogFeatureFlags {
 
                 if (this._additionalReloadRequested) {
                     this._additionalReloadRequested = false
-                    this._callDecideEndpoint()
+                    this._callFlagsEndpoint()
                 }
             },
         })
@@ -503,7 +660,7 @@ export class PostHogFeatureFlags {
                     $feature_flag_bootstrapped_response: this._instance.config.bootstrap?.featureFlags?.[key] || null,
                     $feature_flag_bootstrapped_payload:
                         this._instance.config.bootstrap?.featureFlagPayloads?.[key] || null,
-                    // If we haven't yet received a response from the /decide endpoint, we must have used the bootstrapped value
+                    // If we haven't yet received a response from the /flags endpoint, we must have used the bootstrapped value
                     $used_bootstrap_value: !this._flagsLoadedFromRemote,
                 }
 
@@ -578,7 +735,7 @@ export class PostHogFeatureFlags {
         const token = this._instance.config.token
         this._instance._send_request({
             method: 'POST',
-            url: this._instance.requestRouter.endpointFor('api', '/decide/?v=4'),
+            url: this._instance.requestRouter.endpointFor('api', '/flags/?v=2&config=true'),
             data: {
                 distinct_id: this._instance.get_distinct_id(),
                 token,
@@ -618,7 +775,7 @@ export class PostHogFeatureFlags {
         this.featureFlagEventHandlers = this.featureFlagEventHandlers.filter((h) => h !== handler)
     }
 
-    receivedFeatureFlags(response: Partial<DecideResponse>, errorsLoading?: boolean): void {
+    receivedFeatureFlags(response: Partial<FlagsResponse>, errorsLoading?: boolean): void {
         if (!this._instance.persistence) {
             return
         }
@@ -627,13 +784,7 @@ export class PostHogFeatureFlags {
         const currentFlags = this.getFlagVariants()
         const currentFlagPayloads = this.getFlagPayloads()
         const currentFlagDetails = this.getFlagsWithDetails()
-        parseFeatureFlagDecideResponse(
-            response,
-            this._instance.persistence,
-            currentFlags,
-            currentFlagPayloads,
-            currentFlagDetails
-        )
+        parseFlagsResponse(response, this._instance.persistence, currentFlags, currentFlagPayloads, currentFlagDetails)
         this._fireFeatureFlagsCallbacks(errorsLoading)
     }
 

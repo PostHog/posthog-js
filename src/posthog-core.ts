@@ -65,6 +65,7 @@ import {
     eachArray,
     extend,
     isCrossDomainCookie,
+    migrateConfigField,
     safewrapClass,
 } from './utils'
 import { isLikelyBot } from './utils/blocked-uas'
@@ -180,6 +181,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     mask_all_text: false,
     mask_personal_data_properties: false,
     custom_personal_data_properties: [],
+    advanced_disable_flags: false,
     advanced_disable_decide: false,
     advanced_disable_feature_flags: false,
     advanced_disable_feature_flags_on_first_load: false,
@@ -267,6 +269,7 @@ class DeprecatedWebPerformanceObserver {
 export class PostHog {
     __loaded: boolean
     config: PostHogConfig
+    _originalUserConfig?: Partial<PostHogConfig>
 
     rateLimiter: RateLimiter
     scrollManager: ScrollManager
@@ -314,7 +317,12 @@ export class PostHog {
     private _internalEventEmitter = new SimpleEventEmitter()
 
     // Legacy property to support existing usage - this isn't technically correct but it's what it has always been - a proxy for flags being loaded
+    /** @deprecated Use `flagsEndpointWasHit` instead.  We migrated to using a new feature flag endpoint and the new method is more semantically accurate */
     public get decideEndpointWasHit(): boolean {
+        return this.featureFlags?.hasLoadedFlags ?? false
+    }
+
+    public get flagsEndpointWasHit(): boolean {
         return this.featureFlags?.hasLoadedFlags ?? false
     }
 
@@ -429,6 +437,7 @@ export class PostHog {
 
         this.__loaded = true
         this.config = {} as PostHogConfig // will be set right below
+        this._originalUserConfig = config // Store original user config for migration
         this._triggered_notifs = []
 
         if (config.person_profiles) {
@@ -659,7 +668,7 @@ export class PostHog {
         }
 
         new RemoteConfigLoader(this).load()
-        this.featureFlags.decide()
+        this.featureFlags.flags()
     }
 
     _start_queue_if_opted_in(): void {
@@ -2254,6 +2263,35 @@ export class PostHog {
             localStorage && localStorage.setItem('ph_debug', 'true')
             this.set_config({ debug: true })
         }
+    }
+
+    /**
+     * Helper method to check if external API calls (flags/decide) should be disabled
+     * Handles migration from old `advanced_disable_decide` to new `advanced_disable_flags`
+     */
+    _shouldDisableFlags(): boolean {
+        // Check if advanced_disable_flags was explicitly set in original config
+        const originalConfig = this._originalUserConfig || {}
+        if ('advanced_disable_flags' in originalConfig) {
+            return !!originalConfig.advanced_disable_flags
+        }
+
+        // Check if advanced_disable_flags was set post-init (different from default false)
+        if (this.config.advanced_disable_flags !== false) {
+            return !!this.config.advanced_disable_flags
+        }
+
+        // Check for post-init changes to advanced_disable_decide
+        if (this.config.advanced_disable_decide === true) {
+            logger.warn(
+                "Config field 'advanced_disable_decide' is deprecated. Please use 'advanced_disable_flags' instead. " +
+                    'The old field will be removed in a future major version.'
+            )
+            return true
+        }
+
+        // Fall back to migration logic for original user config
+        return migrateConfigField(originalConfig, 'advanced_disable_flags', 'advanced_disable_decide', false, logger)
     }
 
     private _runBeforeSend(data: CaptureResult): CaptureResult | null {

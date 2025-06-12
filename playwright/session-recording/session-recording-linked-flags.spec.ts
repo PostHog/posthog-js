@@ -8,7 +8,7 @@ const startOptions: StartOptions = {
         session_recording: {},
         opt_out_capturing_by_default: true,
     },
-    decideResponseOverrides: {
+    flagsResponseOverrides: {
         sessionRecording: {
             endpoint: '/ses/',
             // a flag which doesn't exist can never be recorded
@@ -31,9 +31,9 @@ test.describe('Session recording - linked flags', () => {
             {
                 ...startOptions,
                 ...startOptionsOverrides,
-                decideResponseOverrides: {
-                    ...startOptions.decideResponseOverrides,
-                    ...startOptionsOverrides.decideResponseOverrides,
+                flagsResponseOverrides: {
+                    ...startOptions.flagsResponseOverrides,
+                    ...startOptionsOverrides.flagsResponseOverrides,
                 },
             },
             page,
@@ -49,7 +49,7 @@ test.describe('Session recording - linked flags', () => {
             options: {
                 opt_out_capturing_by_default: false,
             },
-            decideResponseOverrides: {
+            flagsResponseOverrides: {
                 sessionRecording: { linkedFlag: 'my-linked-flag' },
                 flags: {
                     'my-linked-flag': {
@@ -79,7 +79,7 @@ test.describe('Session recording - linked flags', () => {
             options: {
                 opt_out_capturing_by_default: false,
             },
-            decideResponseOverrides: {
+            flagsResponseOverrides: {
                 sessionRecording: { linkedFlag: 'my-linked-flag' },
                 flags: {
                     'my-linked-flag': {
@@ -107,7 +107,7 @@ test.describe('Session recording - linked flags', () => {
             options: {
                 opt_out_capturing_by_default: false,
             },
-            decideResponseOverrides: {
+            flagsResponseOverrides: {
                 sessionRecording: { linkedFlag: 'replay-filtering-conversion' },
                 flags: {
                     'replay-filtering-conversion': {
@@ -144,7 +144,7 @@ test.describe('Session recording - linked flags', () => {
             options: {
                 opt_out_capturing_by_default: false,
             },
-            decideResponseOverrides: {
+            flagsResponseOverrides: {
                 sessionRecording: {
                     linkedFlag: {
                         flag: 'replay-filtering-conversion',
@@ -186,7 +186,7 @@ test.describe('Session recording - linked flags', () => {
             options: {
                 opt_out_capturing_by_default: false,
             },
-            decideResponseOverrides: {
+            flagsResponseOverrides: {
                 sessionRecording: {
                     linkedFlag: {
                         flag: 'replay-filtering-conversion',
@@ -233,7 +233,7 @@ test.describe('Session recording - linked flags', () => {
                     // we start opted out, so we can test the opt-in and override
                     opt_out_capturing_by_default: true,
                 },
-                decideResponseOverrides: {
+                flagsResponseOverrides: {
                     sessionRecording: { linkedFlag: 'my-linked-flag' },
                     flags: {
                         'not-my-linked-flag': {

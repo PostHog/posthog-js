@@ -14,7 +14,7 @@ test.describe('opting out', () => {
         test('does not capture events when config opts out by default', async ({ page, context }) => {
             await start(
                 {
-                    decideResponseOverrides: {
+                    flagsResponseOverrides: {
                         autocapture_opt_out: true,
                     },
                     options: {
@@ -36,7 +36,7 @@ test.describe('opting out', () => {
         test('sends a $pageview event when opting in', async ({ page, context }) => {
             await start(
                 {
-                    decideResponseOverrides: {
+                    flagsResponseOverrides: {
                         autocapture_opt_out: true,
                     },
                     options: {
@@ -60,7 +60,7 @@ test.describe('opting out', () => {
         test('does not send a duplicate $pageview event when opting in', async ({ page, context }) => {
             await start(
                 {
-                    decideResponseOverrides: {
+                    flagsResponseOverrides: {
                         autocapture_opt_out: true,
                     },
                     options: {
@@ -87,7 +87,7 @@ test.describe('opting out', () => {
         test('does not send any events after that', async ({ page, context }) => {
             await start(
                 {
-                    decideResponseOverrides: {
+                    flagsResponseOverrides: {
                         autocapture_opt_out: false,
                     },
                     url: '/playground/cypress/index.html',

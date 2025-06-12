@@ -6,7 +6,7 @@ const startOptions = {
     options: {
         session_recording: {},
     },
-    decideResponseOverrides: {
+    flagsResponseOverrides: {
         sessionRecording: {
             endpoint: '/ses/',
         },

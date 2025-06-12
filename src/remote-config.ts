@@ -43,7 +43,7 @@ export class RemoteConfigLoader {
                 return
             }
 
-            if (this._instance.config.advanced_disable_decide) {
+            if (this._instance._shouldDisableFlags()) {
                 // This setting is essentially saying "dont call external APIs" hence we respect it here
                 logger.warn('Remote config is disabled. Falling back to local config.')
                 return
@@ -68,7 +68,7 @@ export class RemoteConfigLoader {
     }
 
     private _onRemoteConfig(config?: RemoteConfig): void {
-        // NOTE: Once this is rolled out we will remove the "decide" related code above. Until then the code duplication is fine.
+        // NOTE: Once this is rolled out we will remove the /flags related code above. Until then the code duplication is fine.
         if (!config) {
             logger.error('Failed to fetch remote config from PostHog.')
             return
@@ -83,7 +83,7 @@ export class RemoteConfigLoader {
 
         // We only need to reload if we haven't already loaded the flags or if the request is in flight
         if (config.hasFeatureFlags !== false) {
-            // If the config has feature flags, we need to call decide to get the feature flags
+            // If the config has feature flags, we need to call /flags to get the feature flags
             // This completely separates it from the config logic which is good in terms of separation of concerns
             this._instance.featureFlags.ensureFlagsLoaded()
         }

@@ -6,7 +6,7 @@ const startOptions = {
     options: {
         session_recording: {},
     },
-    decideResponseOverrides: {
+    flagsResponseOverrides: {
         sessionRecording: {
             endpoint: '/ses/',
         },
@@ -19,10 +19,10 @@ const startOptions = {
 test.describe('Session recording - trigger match types 30% sampling + event trigger', () => {
     const sampleThirtyWithTriggerOptions = {
         ...startOptions,
-        decideResponseOverrides: {
-            ...startOptions.decideResponseOverrides,
+        flagsResponseOverrides: {
+            ...startOptions.flagsResponseOverrides,
             sessionRecording: {
-                ...startOptions.decideResponseOverrides.sessionRecording,
+                ...startOptions.flagsResponseOverrides.sessionRecording,
                 sampleRate: '0.3',
                 eventTriggers: ['example'],
             } satisfies RemoteConfig['sessionRecording'],
@@ -32,10 +32,10 @@ test.describe('Session recording - trigger match types 30% sampling + event trig
     test.describe('ANY match type', () => {
         const anyMatchOptions = {
             ...sampleThirtyWithTriggerOptions,
-            decideResponseOverrides: {
-                ...sampleThirtyWithTriggerOptions.decideResponseOverrides,
+            flagsResponseOverrides: {
+                ...sampleThirtyWithTriggerOptions.flagsResponseOverrides,
                 sessionRecording: {
-                    ...sampleThirtyWithTriggerOptions.decideResponseOverrides.sessionRecording,
+                    ...sampleThirtyWithTriggerOptions.flagsResponseOverrides.sessionRecording,
                     triggerMatchType: 'any',
                 } satisfies RemoteConfig['sessionRecording'],
             },
@@ -74,10 +74,10 @@ test.describe('Session recording - trigger match types 30% sampling + event trig
     test.describe('ALL match type', () => {
         const allMatchOptions = {
             ...sampleThirtyWithTriggerOptions,
-            decideResponseOverrides: {
-                ...sampleThirtyWithTriggerOptions.decideResponseOverrides,
+            flagsResponseOverrides: {
+                ...sampleThirtyWithTriggerOptions.flagsResponseOverrides,
                 sessionRecording: {
-                    ...sampleThirtyWithTriggerOptions.decideResponseOverrides.sessionRecording,
+                    ...sampleThirtyWithTriggerOptions.flagsResponseOverrides.sessionRecording,
                     triggerMatchType: 'all',
                 } satisfies RemoteConfig['sessionRecording'],
             },
@@ -121,10 +121,10 @@ test.describe('Session recording - trigger match types 30% sampling + event trig
 test.describe('Session recording - trigger match types 0% sampling + event trigger + URL trigger', () => {
     const sampleZeroWithTriggerOptions = {
         ...startOptions,
-        decideResponseOverrides: {
-            ...startOptions.decideResponseOverrides,
+        flagsResponseOverrides: {
+            ...startOptions.flagsResponseOverrides,
             sessionRecording: {
-                ...startOptions.decideResponseOverrides.sessionRecording,
+                ...startOptions.flagsResponseOverrides.sessionRecording,
                 sampleRate: '0',
                 eventTriggers: ['example'],
                 urlTriggers: [
@@ -140,10 +140,10 @@ test.describe('Session recording - trigger match types 0% sampling + event trigg
     test.describe('ANY match type', () => {
         const anyMatchOptions = {
             ...sampleZeroWithTriggerOptions,
-            decideResponseOverrides: {
-                ...sampleZeroWithTriggerOptions.decideResponseOverrides,
+            flagsResponseOverrides: {
+                ...sampleZeroWithTriggerOptions.flagsResponseOverrides,
                 sessionRecording: {
-                    ...sampleZeroWithTriggerOptions.decideResponseOverrides.sessionRecording,
+                    ...sampleZeroWithTriggerOptions.flagsResponseOverrides.sessionRecording,
                     triggerMatchType: 'any',
                 } satisfies RemoteConfig['sessionRecording'],
             },
@@ -198,10 +198,10 @@ test.describe('Session recording - trigger match types 0% sampling + event trigg
     test.describe('ALL match type', () => {
         const allMatchOptions = {
             ...sampleZeroWithTriggerOptions,
-            decideResponseOverrides: {
-                ...sampleZeroWithTriggerOptions.decideResponseOverrides,
+            flagsResponseOverrides: {
+                ...sampleZeroWithTriggerOptions.flagsResponseOverrides,
                 sessionRecording: {
-                    ...sampleZeroWithTriggerOptions.decideResponseOverrides.sessionRecording,
+                    ...sampleZeroWithTriggerOptions.flagsResponseOverrides.sessionRecording,
                     triggerMatchType: 'all',
                 } satisfies RemoteConfig['sessionRecording'],
             },

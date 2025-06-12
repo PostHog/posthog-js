@@ -352,15 +352,15 @@ describe('posthog core', () => {
         })
     })
 
-    describe('_afterDecideResponse', () => {
-        it('enables compression from decide response', () => {
+    describe('_afterFlagsResponse', () => {
+        it('enables compression from flags response', () => {
             const posthog = posthogWith({})
 
             posthog._onRemoteConfig({ supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig)
 
             expect(posthog.compression).toEqual('gzip-js')
         })
-        it('ignores legacy field defaultIdentifiedOnly from decide response', () => {
+        it('ignores legacy field defaultIdentifiedOnly from flags response', () => {
             const posthog = posthogWith({})
 
             posthog._onRemoteConfig({ defaultIdentifiedOnly: true } as RemoteConfig)
@@ -378,7 +378,7 @@ describe('posthog core', () => {
             expect(posthog.config.person_profiles).toEqual('always')
         })
 
-        it('enables compression from decide response when only one received', () => {
+        it('enables compression from flags response when only one received', () => {
             const posthog = posthogWith({})
 
             posthog._onRemoteConfig({ supportedCompression: ['base64'] } as RemoteConfig)
@@ -386,7 +386,7 @@ describe('posthog core', () => {
             expect(posthog.compression).toEqual('base64')
         })
 
-        it('does not enable compression from decide response if compression is disabled', () => {
+        it('does not enable compression from flags response if compression is disabled', () => {
             const posthog = posthogWith({ disable_compression: true, persistence: 'memory' })
 
             posthog._onRemoteConfig({ supportedCompression: ['gzip-js', 'base64'] } as RemoteConfig)
@@ -921,7 +921,7 @@ describe('posthog core', () => {
             const posthog = defaultPostHog().init('testtoken', defaultConfig, uuidv7())!
 
             posthog.sessionRecording = {
-                afterDecideResponse: jest.fn(),
+                afterFlagsResponse: jest.fn(),
                 startIfEnabledOrStop: jest.fn(),
             } as unknown as SessionRecording
             posthog.persistence = {
@@ -1184,6 +1184,37 @@ describe('posthog core', () => {
         })
     })
 
+    describe('config migration', () => {
+        it('uses advanced_disable_flags when set', () => {
+            const posthog = posthogWith({ advanced_disable_flags: true })
+            expect(posthog._shouldDisableFlags()).toBe(true)
+        })
+
+        it('falls back to advanced_disable_decide with deprecation warning', () => {
+            const warnSpy = jest.spyOn(mockLogger, 'warn')
+            const posthog = posthogWith({ advanced_disable_decide: true })
+            expect(posthog._shouldDisableFlags()).toBe(true)
+            expect(warnSpy).toHaveBeenCalledWith(
+                expect.stringContaining("Config field 'advanced_disable_decide' is deprecated")
+            )
+        })
+
+        it('prioritizes advanced_disable_flags over advanced_disable_decide', () => {
+            const warnSpy = jest.spyOn(mockLogger, 'warn')
+            const posthog = posthogWith({
+                advanced_disable_flags: false,
+                advanced_disable_decide: true,
+            })
+            expect(posthog._shouldDisableFlags()).toBe(false)
+            expect(warnSpy).not.toHaveBeenCalled()
+        })
+
+        it('returns false when neither field is set', () => {
+            const posthog = posthogWith({})
+            expect(posthog._shouldDisableFlags()).toBe(false)
+        })
+    })
+
     describe('_loaded()', () => {
         it('calls loaded config option', () => {
             const posthog = posthogWith({ loaded: jest.fn() })
@@ -1205,7 +1236,7 @@ describe('posthog core', () => {
             expect(mockLogger.critical).toHaveBeenCalledWith('`loaded` function failed', expect.anything())
         })
 
-        describe('/decide', () => {
+        describe('/flags', () => {
             it('is called by default', async () => {
                 const sendRequestMock = jest.fn()
                 await createPosthogInstance(uuidv7(), {
@@ -1215,14 +1246,14 @@ describe('posthog core', () => {
                 })
 
                 expect(sendRequestMock.mock.calls[0][0]).toMatchObject({
-                    url: 'http://localhost/decide/?v=4',
+                    url: 'http://localhost/flags/?v=2&config=true',
                 })
             })
 
-            it('does not call decide if disabled', async () => {
+            it('does not call flags if disabled', async () => {
                 const sendRequestMock = jest.fn()
                 const instance = await createPosthogInstance(uuidv7(), {
-                    advanced_disable_decide: true,
+                    advanced_disable_flags: true,
                     loaded: (ph) => {
                         ph._send_request = sendRequestMock
                     },
