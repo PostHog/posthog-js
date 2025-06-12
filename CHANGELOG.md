@@ -1,3 +1,7 @@
+## 1.251.0 - 2025-06-12
+
+- feat: improve surveys accessibility (#1999)
+
 ## 1.250.2 - 2025-06-10
 
 - fix: stop feedback surveys to re-render every second (#2006)
