@@ -765,7 +765,9 @@ export function usePopupVisibility(
         })
 
         transition.finished.then(() => {
-            removeDOMAndHidePopup()
+            setTimeout(() => {
+                removeDOMAndHidePopup()
+            }, 100)
         })
     }
 
@@ -952,7 +954,7 @@ export function SurveyPopup({
     return (
         <SurveyContext.Provider value={surveyContextValue}>
             <div
-                className="survey-container"
+                className="ph-survey"
                 style={{
                     ...getPopoverPosition(survey.type, survey.appearance?.position, survey.appearance?.widgetType),
                     ...style,
@@ -1210,17 +1212,8 @@ const getQuestionComponent = ({
     onSubmit,
     onPreviewSubmit,
     initialValue,
-}: GetQuestionComponentProps): JSX.Element => {
-    const questionComponents = {
-        [SurveyQuestionType.Open]: OpenTextQuestion,
-        [SurveyQuestionType.Link]: LinkQuestion,
-        [SurveyQuestionType.Rating]: RatingQuestion,
-        [SurveyQuestionType.SingleChoice]: MultipleChoiceQuestion,
-        [SurveyQuestionType.MultipleChoice]: MultipleChoiceQuestion,
-    }
-
-    const commonProps = {
-        question,
+}: GetQuestionComponentProps): JSX.Element | null => {
+    const baseProps = {
         forceDisableHtml,
         appearance,
         onPreviewSubmit: (res: string | string[] | number | null) => {
@@ -1230,18 +1223,21 @@ const getQuestionComponent = ({
             onSubmit(res)
         },
         initialValue,
+        displayQuestionIndex,
     }
 
-    const additionalProps: Record<SurveyQuestionType, any> = {
-        [SurveyQuestionType.Open]: {},
-        [SurveyQuestionType.Link]: {},
-        [SurveyQuestionType.Rating]: { displayQuestionIndex },
-        [SurveyQuestionType.SingleChoice]: { displayQuestionIndex },
-        [SurveyQuestionType.MultipleChoice]: { displayQuestionIndex },
+    switch (question.type) {
+        case SurveyQuestionType.Open:
+            return <OpenTextQuestion {...baseProps} question={question} key={question.id} />
+        case SurveyQuestionType.Link:
+            return <LinkQuestion {...baseProps} question={question} key={question.id} />
+        case SurveyQuestionType.Rating:
+            return <RatingQuestion {...baseProps} question={question} key={question.id} />
+        case SurveyQuestionType.SingleChoice:
+        case SurveyQuestionType.MultipleChoice:
+            return <MultipleChoiceQuestion {...baseProps} question={question} key={question.id} />
+        default:
+            logger.error(`Unsupported question type: ${(question as any).type}`)
+            return null
     }
-
-    const Component = questionComponents[question.type]
-    const componentProps = { ...commonProps, ...additionalProps[question.type] }
-
-    return <Component {...componentProps} key={question.id} />
 }
