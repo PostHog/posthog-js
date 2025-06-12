@@ -32,8 +32,8 @@ assignableWindow.__PosthogExtensions__.integrations.crispChat = {
                 'session:data',
                 [
                     [
-                        ['sessionURL', replayUrl],
-                        ['personURL', personUrl],
+                        ['posthogSessionURL', replayUrl],
+                        ['posthogPersonURL', personUrl],
                     ],
                 ],
             ])
