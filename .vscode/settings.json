@@ -1,6 +1,6 @@
 {
     "jest.runMode": "on-demand",
-    "jest.rootPath": "src",
+    "jest.rootPath": "packages/browser/src",
     "jest.jestCommandLine": "pnpm test:unit",
     "editor.codeActionsOnSave": {
         "source.organizeImports": "never"

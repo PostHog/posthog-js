@@ -1,11 +1,11 @@
 # the recorder file can have unexpected impact on users' sites
-src/entrypoints/recorder.ts @team-replay
+packages/browser/src/entrypoints/recorder.ts @PostHog/team-replay
 
-src/extensions/surveys/ @PostHog/team-surveys
-src/extensions/surveys.tsx @PostHog/team-surveys
-src/extensions/surveys-widget.ts @PostHog/team-surveys
-src/entrypoints/surveys.ts @PostHog/team-surveys
-src/entrypoints/surveys-preview.es.ts @PostHog/team-surveys
-src/posthog-surveys-types.ts @PostHog/team-surveys
-src/posthog-surveys.ts @PostHog/team-surveys
-src/utils/survey-event-receiver.ts @PostHog/team-surveys
+packages/browser/src/extensions/surveys/ @PostHog/team-surveys
+packages/browser/src/extensions/surveys.tsx @PostHog/team-surveys
+packages/browser/src/extensions/surveys-widget.ts @PostHog/team-surveys
+packages/browser/src/entrypoints/surveys.ts @PostHog/team-surveys
+packages/browser/src/entrypoints/surveys-preview.es.ts @PostHog/team-surveys
+packages/browser/src/posthog-surveys-types.ts @PostHog/team-surveys
+packages/browser/src/posthog-surveys.ts @PostHog/team-surveys
+packages/browser/src/utils/survey-event-receiver.ts @PostHog/team-surveys

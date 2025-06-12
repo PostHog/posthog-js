@@ -1,0 +1,5 @@
+{
+    "name": "eslint-plugin-posthog-js",
+    "main": "index.js",
+    "type": "commonjs"
+}
