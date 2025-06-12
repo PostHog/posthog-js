@@ -1,3 +1,15 @@
+## 1.250.2 - 2025-06-10
+
+- fix: stop feedback surveys to re-render every second (#2006)
+
+## 1.250.1 - 2025-06-10
+
+
+
+## 1.250.0 - 2025-06-09
+
+
+
 ## 1.249.5 - 2025-06-05
 
 - feat: exception rate limiter by type (#1994)
