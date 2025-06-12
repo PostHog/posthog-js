@@ -1513,6 +1513,12 @@ export class PostHog {
             )
             return
         }
+        if (new_distinct_id === COOKIELESS_SENTINEL_VALUE) {
+            logger.critical(
+                `The string "${COOKIELESS_SENTINEL_VALUE}" was set in posthog.identify which indicates an error. This ID is only used as a sentinel value.`
+            )
+            return
+        }
 
         if (!this._requirePersonProcessing('posthog.identify')) {
             return

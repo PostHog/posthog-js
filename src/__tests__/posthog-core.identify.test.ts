@@ -242,6 +242,21 @@ describe('identify()', () => {
                 'Unique user id has not been set in posthog.identify'
             )
         })
+
+        it('does not update user when distinct ID is $posthog_cookieless', () => {
+            console.error = jest.fn()
+
+            instance.debug()
+
+            instance.identify('$posthog_cookieless')
+
+            expect(beforeSendMock).not.toHaveBeenCalled()
+            expect(instance.register).not.toHaveBeenCalled()
+            expect(console.error).toHaveBeenCalledWith(
+                '[PostHog.js]',
+                'The string "$posthog_cookieless" was set in posthog.identify which indicates an error. This ID is only used as a sentinel value.'
+            )
+        })
     })
 
     describe('reloading feature flags', () => {
