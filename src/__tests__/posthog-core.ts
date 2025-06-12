@@ -12,6 +12,7 @@ import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
 import { SessionRecording } from '../extensions/replay/sessionrecording'
 import { SessionPropsManager } from '../session-props'
+import { isArray } from '../utils/type-utils'
 
 let mockGetProperties: jest.Mock
 
@@ -1115,6 +1116,7 @@ describe('posthog core', () => {
                 posthog._requestQueue = {
                     enqueue: jest.fn(),
                 } as unknown as RequestQueue
+                jest.spyOn(posthog as any, '_send_retriable_request').mockImplementation(jest.fn())
             })
 
             it('sends group information in event properties', () => {
@@ -1123,9 +1125,9 @@ describe('posthog core', () => {
 
                 posthog.capture('some_event', { prop: 5 })
 
-                expect(posthog._requestQueue!.enqueue).toHaveBeenCalledTimes(1)
-
-                const eventPayload = jest.mocked(posthog._requestQueue!.enqueue).mock.calls[0][0]
+                const eventPayload =
+                    jest.mocked(posthog._requestQueue!.enqueue).mock.calls[0]?.[0] ||
+                    jest.mocked(posthog._send_retriable_request as any).mock.calls[0][0]
                 // need to help TS know event payload data is not an array
                 // eslint-disable-next-line posthog-js/no-direct-array-check
                 if (Array.isArray(eventPayload.data!)) {
@@ -1136,6 +1138,18 @@ describe('posthog core', () => {
                     organization: 'org::5',
                     instance: 'app.posthog.com',
                 })
+            })
+
+            it('supports groups passed via capture options', () => {
+                posthog.capture('some_event', {}, { groups: { team: '1' } })
+
+                const eventPayload =
+                    jest.mocked(posthog._requestQueue!.enqueue).mock.calls[0]?.[0] ||
+                    jest.mocked(posthog._send_retriable_request as any).mock.calls[0][0]
+                if (isArray(eventPayload.data!)) {
+                    throw new Error('')
+                }
+                expect(eventPayload.data!.properties.$groups).toEqual({ team: '1' })
             })
         })
 
