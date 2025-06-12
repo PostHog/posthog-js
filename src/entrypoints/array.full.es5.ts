@@ -5,6 +5,7 @@
 // it doesn't include recorder which doesn't support IE11,
 // and it doesn't include "web-vitals" that doesn't support IE11
 
+import 'core-js/features/object/entries'
 import 'core-js/features/object/from-entries'
 
 import './surveys'
