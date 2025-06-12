@@ -254,7 +254,7 @@ describe('identify()', () => {
             expect(instance.register).not.toHaveBeenCalled()
             expect(console.error).toHaveBeenCalledWith(
                 '[PostHog.js]',
-                'The string "$posthog_cookieless" was set in posthog.identify which indicates an error. This ID is only use as a sentinel value.'
+                'The string "$posthog_cookieless" was set in posthog.identify which indicates an error. This ID is only used as a sentinel value.'
             )
         })
     })
