@@ -42,6 +42,7 @@ import {
     CaptureOptions,
     CaptureResult,
     Compression,
+    ConfigDefaults,
     EarlyAccessFeatureCallback,
     EarlyAccessFeatureStage,
     EventName,
@@ -56,7 +57,6 @@ import {
     SessionIdChangedCallback,
     SnippetArrayItem,
     ToolbarParams,
-    ConfigDefaults,
 } from './types'
 import {
     _copyAndTruncateStrings,
@@ -1899,18 +1899,11 @@ export class PostHog {
             }
             if (this.config.debug) {
                 Config.DEBUG = true
-                logger.info(
-                    'set_config',
-                    JSON.stringify(
-                        {
-                            config,
-                            oldConfig,
-                            newConfig: { ...this.config },
-                        },
-                        null,
-                        2
-                    )
-                )
+                logger.info('set_config', {
+                    config,
+                    oldConfig,
+                    newConfig: { ...this.config },
+                })
             }
 
             this.sessionRecording?.startIfEnabledOrStop()

@@ -914,6 +914,15 @@ describe('posthog core', () => {
             expect(posthog.config.on_xhr_error).toBe(fakeOnXHRError)
         })
 
+        it('should not fail with recursive object in config', () => {
+            // this will happen if people are passing e.g. window.analytics
+            const config: Record<string, any> = {
+                debug: true,
+            }
+            config.recursive = config
+            posthogWith(config as Partial<PostHogConfig>)
+        })
+
         it.skip('does not load feature flags, session recording', () => {
             // TODO this didn't make a tonne of sense in the given form
             // it makes no sense now
