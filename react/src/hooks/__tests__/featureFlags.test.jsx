@@ -29,7 +29,16 @@ describe('useFeatureFlagPayload hook', () => {
 
     given('posthog', () => ({
         isFeatureEnabled: (flag) => !!FEATURE_FLAG_STATUS[flag],
-        getFeatureFlag: (flag) => FEATURE_FLAG_STATUS[flag],
+        getFeatureFlag: (flag, options) => {
+            // Mock that groups options are passed through
+            if (options && options.groups) {
+                // Return different values when groups are passed to test the functionality
+                if (flag === 'group_specific_flag' && options.groups.team === '123') {
+                    return 'group_variant'
+                }
+            }
+            return FEATURE_FLAG_STATUS[flag]
+        },
         getFeatureFlagPayload: (flag) => FEATURE_FLAG_PAYLOADS[flag],
         onFeatureFlags: (callback) => {
             const activeFlags = []
@@ -89,5 +98,19 @@ describe('useFeatureFlagPayload hook', () => {
             wrapper: given.renderProvider,
         })
         expect(result.current).toEqual(expected)
+    })
+
+    it('should pass groups to feature flag variant key', () => {
+        let { result } = renderHook(() => useFeatureFlagVariantKey('group_specific_flag', { groups: { team: '123' } }), {
+            wrapper: given.renderProvider,
+        })
+        expect(result.current).toEqual('group_variant')
+    })
+
+    it('should pass groups to feature flag enabled check', () => {
+        let { result } = renderHook(() => useFeatureFlagEnabled('group_specific_flag', { groups: { team: '123' } }), {
+            wrapper: given.renderProvider,
+        })
+        expect(result.current).toEqual(true)
     })
 })

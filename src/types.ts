@@ -1275,6 +1275,11 @@ export interface CaptureOptions {
     skip_client_rate_limiting?: boolean
 
     /**
+     * If set, overrides the groups sent with this event
+     */
+    groups?: Record<string, string>
+
+    /**
      * If set, overrides the desired transport method
      */
     transport?: RequestWithOptions['transport']
