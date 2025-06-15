@@ -1,3 +1,7 @@
+## 1.252.1 - 2025-06-15
+
+- Fix crash when config has circular references (#2015)
+
 ## 1.252.0 - 2025-06-12
 
 
