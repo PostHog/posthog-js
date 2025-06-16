@@ -213,7 +213,7 @@ function getNextToTriggerPosition(target: HTMLElement, surveyWidth: number): Rea
 }
 
 // Keep in sync with posthog/constants.py on main repo
-const SURVEY_TARGETING_FLAG_PREFIX = 'survey-targeting'
+const SURVEY_TARGETING_FLAG_PREFIX = 'survey-targeting-'
 
 export class SurveyManager {
     private _posthog: PostHog
