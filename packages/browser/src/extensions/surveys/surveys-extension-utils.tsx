@@ -63,12 +63,17 @@ export const defaultSurveyAppearance = {
     disabledButtonOpacity: '0.6',
     maxWidth: '300px',
     textSubtleColor: '#939393',
-    inputBackground: 'white',
     boxPadding: '20px 24px',
     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
     borderRadius: '10px',
     shuffleQuestions: false,
     surveyPopupDelaySeconds: undefined,
+    // Not customizable atm
+    outlineColor: 'rgba(59, 130, 246, 0.8)',
+    inputBackground: 'white',
+    inputTextColor: BLACK_TEXT_COLOR,
+    scrollbarThumbColor: 'var(--ph-survey-border-color)',
+    scrollbarTrackColor: 'var(--ph-survey-background-color)',
 } as const
 
 export const addSurveyCSSVariablesToElement = (
@@ -79,9 +84,9 @@ export const addSurveyCSSVariablesToElement = (
     const effectiveAppearance = { ...defaultSurveyAppearance, ...appearance }
     const hostStyle = element.style
 
-    const isSurveyOnBottom = [SurveyPosition.Center, SurveyPosition.Left, SurveyPosition.Right].includes(
-        effectiveAppearance.position
-    )
+    const surveyHasBottomBorder =
+        ![SurveyPosition.Center, SurveyPosition.Left, SurveyPosition.Right].includes(effectiveAppearance.position) ||
+        (type === SurveyType.Widget && appearance?.widgetType === SurveyWidgetType.Tab)
 
     hostStyle.setProperty('--ph-survey-font-family', getFontFamily(effectiveAppearance.fontFamily))
     hostStyle.setProperty('--ph-survey-box-padding', effectiveAppearance.boxPadding)
@@ -89,7 +94,7 @@ export const addSurveyCSSVariablesToElement = (
     hostStyle.setProperty('--ph-survey-z-index', effectiveAppearance.zIndex)
     hostStyle.setProperty('--ph-survey-border-color', effectiveAppearance.borderColor)
     // Non-bottom surveys or tab surveys have the border bottom
-    if (!isSurveyOnBottom || (type === SurveyType.Widget && appearance?.widgetType !== SurveyWidgetType.Tab)) {
+    if (surveyHasBottomBorder) {
         hostStyle.setProperty('--ph-survey-border-radius', effectiveAppearance.borderRadius)
         hostStyle.setProperty('--ph-survey-border-bottom', '1.5px solid var(--ph-survey-border-color)')
     } else {
@@ -122,8 +127,6 @@ export const addSurveyCSSVariablesToElement = (
         getContrastingTextColor(effectiveAppearance.backgroundColor)
     )
     hostStyle.setProperty('--ph-survey-text-subtle-color', effectiveAppearance.textSubtleColor)
-    hostStyle.setProperty('--ph-survey-input-background', effectiveAppearance.inputBackground)
-    hostStyle.setProperty('--ph-survey-input-text-color', getContrastingTextColor(effectiveAppearance.inputBackground))
     hostStyle.setProperty('--ph-widget-color', effectiveAppearance.widgetColor)
     hostStyle.setProperty('--ph-widget-text-color', getContrastingTextColor(effectiveAppearance.widgetColor))
     hostStyle.setProperty('--ph-widget-z-index', effectiveAppearance.zIndex)
@@ -132,6 +135,12 @@ export const addSurveyCSSVariablesToElement = (
     if (effectiveAppearance.backgroundColor === 'white') {
         hostStyle.setProperty('--ph-survey-input-background', '#f8f8f8')
     }
+
+    hostStyle.setProperty('--ph-survey-input-background', effectiveAppearance.inputBackground)
+    hostStyle.setProperty('--ph-survey-input-text-color', getContrastingTextColor(effectiveAppearance.inputBackground))
+    hostStyle.setProperty('--ph-survey-scrollbar-thumb-color', effectiveAppearance.scrollbarThumbColor)
+    hostStyle.setProperty('--ph-survey-scrollbar-track-color', effectiveAppearance.scrollbarTrackColor)
+    hostStyle.setProperty('--ph-survey-outline-color', effectiveAppearance.outlineColor)
 }
 
 function nameToHex(name: string) {

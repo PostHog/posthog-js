@@ -10,7 +10,6 @@
     --ph-survey-border-radius: 10px;
     --ph-survey-background-color: #eeeded;
     --ph-survey-box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    --ph-survey-disabled-button-opacity: 0.6;
     --ph-survey-submit-button-color: black;
     --ph-survey-submit-button-text-color: white;
     --ph-survey-rating-bg-color: white;
@@ -19,14 +18,16 @@
     --ph-survey-rating-active-text-color: white;
     --ph-survey-text-primary-color: #020617; /* Default text color, based on text-slate-950 */
     --ph-survey-text-subtle-color: #939393;
-    --ph-survey-input-background: white;
-    --ph-survey-scrollbar-thumb-color: var(--ph-survey-border-color);
-    --ph-survey-scrollbar-track-color: var(--ph-survey-background-color);
-    --ph-survey-input-text-color: #020617;
-    --ph-survey-outline-color: rgba(59, 130, 246, 0.8);
     /* Widget/Embedded Tab CSS Variables */
     --ph-widget-color: #e0a045; /* Default color */
     --ph-widget-text-color: white; /* Default text color (usually white for contrast) */
+    /* Not customizable atm */
+    --ph-survey-scrollbar-thumb-color: var(--ph-survey-border-color);
+    --ph-survey-scrollbar-track-color: var(--ph-survey-background-color);
+    --ph-survey-outline-color: rgba(59, 130, 246, 0.8);
+    --ph-survey-input-background: white;
+    --ph-survey-input-text-color: #020617;
+    --ph-survey-disabled-button-opacity: 0.6;
 }
 
 .ph-survey {
@@ -285,7 +286,6 @@
         gap: 8px;
         font-size: 13px;
         align-items: center;
-        flex-wrap: wrap;
 
         &:hover {
             &:not(:has(input:checked)) {
@@ -297,6 +297,14 @@
         &:has(input:checked) {
             border-color: var(--ph-survey-rating-active-bg-color);
             box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        &.choice-option-open {
+            flex-wrap: wrap;
+        }
+
+        & span {
+            color: inherit;
         }
     }
 
@@ -313,6 +321,7 @@
         z-index: 1;
         position: relative;
         border-radius: 3px;
+        flex-shrink: 0;
         /* Smooth, welcoming transition with slight bounce */
         transition:
             all 0.2s cubic-bezier(0.4, 0, 0.2, 1),

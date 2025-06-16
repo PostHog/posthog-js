@@ -823,14 +823,6 @@ export function usePopupVisibility(
                 sessionRecordingUrl: posthog.get_session_replay_url?.(),
             })
             localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
-            setTimeout(() => {
-                const inputField = document
-                    .querySelector(getSurveyContainerClass(survey, true))
-                    ?.shadowRoot?.querySelector('textarea') as HTMLElement
-                if (inputField) {
-                    inputField.focus()
-                }
-            }, 100)
         }
 
         addEventListener(window, 'PHSurveyClosed', handleSurveyClosed as EventListener)
