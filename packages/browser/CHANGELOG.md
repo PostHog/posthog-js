@@ -1,3 +1,7 @@
+## 1.253.4 - 2025-06-16
+
+- fix: some style problems in multiple/single-choice questions (#2016)
+
 ## 1.253.3 - 2025-06-16
 
 - fix: don't call ff events for surveys (#2022)
