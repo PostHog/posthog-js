@@ -386,7 +386,7 @@ export class SurveyManager {
         if (!flagKey) {
             return true
         }
-        return !!this._posthog.featureFlags.isFeatureEnabled(flagKey)
+        return !!this._posthog.featureFlags.isFeatureEnabled(flagKey, { send_event: false })
     }
 
     private _isSurveyConditionMatched(survey: Survey): boolean {
@@ -471,7 +471,7 @@ export class SurveyManager {
             if (!key || !value) {
                 return true
             }
-            return this._posthog.featureFlags.isFeatureEnabled(value)
+            return this._isSurveyFeatureFlagEnabled(value)
         })
     }
 
