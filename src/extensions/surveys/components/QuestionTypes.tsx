@@ -1,5 +1,5 @@
 import { Fragment } from 'preact'
-import { useMemo, useRef, useState } from 'preact/hooks'
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import {
     BasicSurveyQuestion,
     LinkSurveyQuestion,
@@ -81,12 +81,19 @@ export function OpenTextQuestion({
 }: CommonQuestionProps & {
     question: BasicSurveyQuestion
 }) {
+    const inputRef = useRef<HTMLTextAreaElement>(null)
     const [text, setText] = useState<string>(() => {
         if (isString(initialValue)) {
             return initialValue
         }
         return ''
     })
+
+    useEffect(() => {
+        setTimeout(() => {
+            inputRef.current?.focus()
+        }, 100)
+    }, [])
 
     const htmlFor = `surveyQuestion${displayQuestionIndex}`
 
@@ -95,6 +102,7 @@ export function OpenTextQuestion({
             <div className="question-container">
                 <QuestionHeader question={question} forceDisableHtml={forceDisableHtml} htmlFor={htmlFor} />
                 <textarea
+                    ref={inputRef}
                     id={htmlFor}
                     rows={4}
                     placeholder={appearance?.placeholder}
@@ -444,7 +452,7 @@ export function MultipleChoiceQuestion({
                               : isArray(selectedChoices) && selectedChoices.includes(choice)
 
                         return (
-                            <label className={isOpenChoice ? ' choice-option-open' : ''} key={idx}>
+                            <label className={isOpenChoice ? 'choice-option-open' : ''} key={idx}>
                                 <input
                                     type={isSingleChoiceQuestion ? 'radio' : 'checkbox'}
                                     name={inputId}
