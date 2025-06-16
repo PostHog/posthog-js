@@ -1,5 +1,6 @@
 /// <reference lib="dom" />
 
+import { expect, it, describe, beforeEach, afterEach, jest } from '@jest/globals'
 import { SURVEYS_REQUEST_TIMEOUT_MS } from '../constants'
 import { generateSurveys, getNextSurveyStep, SurveyManager } from '../extensions/surveys'
 import {
@@ -790,6 +791,117 @@ describe('surveys', () => {
                 expect(data.map((s) => s.id)).toContain('survey-without-flags')
                 expect(data.map((s) => s.id)).not.toContain('survey-with-disabled-flags')
             })
+        })
+    })
+
+    describe('_isSurveyFeatureFlagEnabled', () => {
+        let surveyManager: SurveyManager
+
+        beforeEach(() => {
+            surveys.loadIfEnabled()
+            surveyManager = (surveys as any)._surveyManager
+        })
+
+        it('returns true when flagKey is null', () => {
+            const result = surveyManager.getTestAPI().isSurveyFeatureFlagEnabled(null)
+            expect(result).toBe(true)
+        })
+
+        it('returns true when flagKey is undefined', () => {
+            const result = surveyManager.getTestAPI().isSurveyFeatureFlagEnabled(undefined)
+            expect(result).toBe(true)
+        })
+
+        it('returns true when flagKey is empty string', () => {
+            const result = surveyManager.getTestAPI().isSurveyFeatureFlagEnabled('')
+            expect(result).toBe(true)
+        })
+
+        it('returns true when regular feature flag is enabled', () => {
+            const result = surveyManager.getTestAPI().isSurveyFeatureFlagEnabled('linked-flag-key')
+            expect(result).toBe(true)
+            // Verify that isFeatureEnabled was called with send_event: true for regular flags
+            expect(instance.featureFlags.isFeatureEnabled).toHaveBeenCalledWith('linked-flag-key', {
+                send_event: true,
+            })
+        })
+
+        it('returns false when regular feature flag is disabled', () => {
+            const result = surveyManager.getTestAPI().isSurveyFeatureFlagEnabled('survey-targeting-flag-key2')
+            expect(result).toBe(false)
+            expect(instance.featureFlags.isFeatureEnabled).toHaveBeenCalledWith('survey-targeting-flag-key2', {
+                send_event: false,
+            })
+        })
+
+        it('returns true when survey targeting flag is enabled', () => {
+            const result = surveyManager.getTestAPI().isSurveyFeatureFlagEnabled('survey-targeting-flag-key')
+            expect(result).toBe(true)
+            // Verify that isFeatureEnabled was called with send_event: false for survey targeting flags
+            expect(instance.featureFlags.isFeatureEnabled).toHaveBeenCalledWith('survey-targeting-flag-key', {
+                send_event: false,
+            })
+        })
+
+        it('returns false when survey targeting flag is disabled', () => {
+            const result = surveyManager.getTestAPI().isSurveyFeatureFlagEnabled('survey-targeting-disabled-flag')
+            expect(result).toBe(false)
+            expect(instance.featureFlags.isFeatureEnabled).toHaveBeenCalledWith('survey-targeting-disabled-flag', {
+                send_event: false,
+            })
+        })
+
+        it('sets send_event to false for flags starting with survey-targeting- prefix', () => {
+            surveyManager.getTestAPI().isSurveyFeatureFlagEnabled('survey-targeting-some-test-flag')
+            expect(instance.featureFlags.isFeatureEnabled).toHaveBeenCalledWith('survey-targeting-some-test-flag', {
+                send_event: false,
+            })
+        })
+
+        it('sets send_event to true for flags not starting with survey-targeting- prefix', () => {
+            surveyManager.getTestAPI().isSurveyFeatureFlagEnabled('regular-feature-flag')
+            expect(instance.featureFlags.isFeatureEnabled).toHaveBeenCalledWith('regular-feature-flag', {
+                send_event: true,
+            })
+        })
+
+        it('handles flags with survey-targeting- anywhere but not at start correctly', () => {
+            surveyManager.getTestAPI().isSurveyFeatureFlagEnabled('my-survey-targeting-flag')
+            expect(instance.featureFlags.isFeatureEnabled).toHaveBeenCalledWith('my-survey-targeting-flag', {
+                send_event: true,
+            })
+        })
+
+        it('correctly converts truthy/falsy flag values to boolean', () => {
+            // Mock different return values
+            const mockIsFeatureEnabled = jest.fn()
+            instance.featureFlags.isFeatureEnabled = mockIsFeatureEnabled
+
+            // Test truthy values
+            mockIsFeatureEnabled.mockReturnValue('true')
+            expect(surveyManager.getTestAPI().isSurveyFeatureFlagEnabled('test-flag')).toBe(true)
+
+            mockIsFeatureEnabled.mockReturnValue(1)
+            expect(surveyManager.getTestAPI().isSurveyFeatureFlagEnabled('test-flag')).toBe(true)
+
+            mockIsFeatureEnabled.mockReturnValue({})
+            expect(surveyManager.getTestAPI().isSurveyFeatureFlagEnabled('test-flag')).toBe(true)
+
+            // Test falsy values
+            mockIsFeatureEnabled.mockReturnValue(false)
+            expect(surveyManager.getTestAPI().isSurveyFeatureFlagEnabled('test-flag')).toBe(false)
+
+            mockIsFeatureEnabled.mockReturnValue(0)
+            expect(surveyManager.getTestAPI().isSurveyFeatureFlagEnabled('test-flag')).toBe(false)
+
+            mockIsFeatureEnabled.mockReturnValue('')
+            expect(surveyManager.getTestAPI().isSurveyFeatureFlagEnabled('test-flag')).toBe(false)
+
+            mockIsFeatureEnabled.mockReturnValue(null)
+            expect(surveyManager.getTestAPI().isSurveyFeatureFlagEnabled('test-flag')).toBe(false)
+
+            mockIsFeatureEnabled.mockReturnValue(undefined)
+            expect(surveyManager.getTestAPI().isSurveyFeatureFlagEnabled('test-flag')).toBe(false)
         })
     })
 
