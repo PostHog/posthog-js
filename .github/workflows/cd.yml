@@ -1,236 +1,217 @@
-name: 'CD'
+name: "CD"
 
 on:
-    push:
-        branches:
-            - main
+  push:
+    branches:
+      - main
 
 jobs:
-    check-package-version:
-        name: Check package version and detect an update
-        runs-on: ubuntu-22.04
-        outputs:
-            committed-version: ${{ steps.check-package-version.outputs.committed-version }}
-            published-version: ${{ steps.check-package-version.outputs.published-version }}
-            is-new-version: ${{ steps.check-package-version.outputs.is-new-version }}
-        steps:
-            - name: Checkout the repository
-              uses: actions/checkout@v2
+  check-package-version:
+    name: Check package version and detect an update
+    runs-on: ubuntu-22.04
+    outputs:
+      committed-version: ${{ steps.check-package-version.outputs.committed-version }}
+      published-version: ${{ steps.check-package-version.outputs.published-version }}
+      is-new-version: ${{ steps.check-package-version.outputs.is-new-version }}
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v2
 
-            - name: Check package version and detect an update
-              id: check-package-version
-              uses: PostHog/check-package-version@v2
+      - name: Check package version and detect an update
+        id: check-package-version
+        uses: PostHog/check-package-version@v2
 
-    release:
-        name: Publish release if new version
-        runs-on: ubuntu-22.04
-        needs: check-package-version
-        if: needs.check-package-version.outputs.is-new-version == 'true'
+  release:
+    name: Publish release if new version
+    runs-on: ubuntu-22.04
+    needs: check-package-version
+    if: needs.check-package-version.outputs.is-new-version == 'true'
+    env:
+      COMMITTED_VERSION: ${{ needs.check-package-version.outputs.committed-version }}
+      PUBLISHED_VERSION: ${{ needs.check-package-version.outputs.published-version }}
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+
+      - uses: ./.github/actions/setup
+
+      - name: Publish the package in the npm registry
+        run: pnpm publish --access public
+        working-directory: packages/browser
         env:
-            COMMITTED_VERSION: ${{ needs.check-package-version.outputs.committed-version }}
-            PUBLISHED_VERSION: ${{ needs.check-package-version.outputs.published-version }}
-        steps:
-            - name: Checkout the repository
-              uses: actions/checkout@v4
-              with:
-                  fetch-depth: 0
-                  token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+          DATABASE_URL: "postgres://postgres:postgres@localhost:${{ job.services.postgres.ports[5432] }}/postgres"
+          REDIS_URL: "redis://localhost"
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-            - uses: pnpm/action-setup@v4
-
-            - name: Set up Node 18
-              uses: actions/setup-node@v4
-              with:
-                  node-version: 18
-                  registry-url: https://registry.npmjs.org
-
-            - name: Get pnpm cache directory path
-              id: pnpm-cache-dir
-              run: echo "PNPM_STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
-
-            - uses: actions/cache@v3
-              id: pnpm-cache
-              with:
-                  path: |
-                      ${{ steps.pnpm-cache-dir.outputs.PNPM_STORE_PATH }}
-                  key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
-                  restore-keys: |
-                      ${{ runner.os }}-pnpm-
-            - name: Install package.json dependencies with pnpm
-              run: pnpm install --frozen-lockfile
-
-            - name: Publish the package in the npm registry
-              run: npm publish --access public
-              env:
-                  DATABASE_URL: 'postgres://postgres:postgres@localhost:${{ job.services.postgres.ports[5432] }}/postgres'
-                  REDIS_URL: 'redis://localhost'
-                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-            - name: Create GitHub release
-              env:
-                GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: |
-                # read from the first until the second header in the changelog file
-                # this assumes the formatting of the file
-                # and that this workflow is always running for the most recent entry in the file 
-                LAST_CHANGELOG_ENTRY=$(awk -v defText="see CHANGELOG.md" '/^## /{if (flag) exit; flag=1} flag && /^##$/{exit} flag; END{if (!flag) print defText}' CHANGELOG.md)
-                # the action we used to use was archived, and made it really difficult to create a release with a body
-                # because the LAST_CHANGELOG_ENTRY contains bash special characters so passing it between steps
-                # was a pain.
-                # we can use the github cli to create a release with a body
-                # all as part of one step
-                gh api \
-                  --method POST \
-                  -H "Accept: application/vnd.github+json" \
-                  -H "X-GitHub-Api-Version: 2022-11-28" \
-                  /repos/posthog/posthog-js/releases \
-                  -f tag_name="v${{ env.COMMITTED_VERSION }}" \
-                -f target_commitish='main' \
-                -f name="${{ env.COMMITTED_VERSION }}" \
-                -f body="$LAST_CHANGELOG_ENTRY" \
-                -F draft=false \
-                -F prerelease=false \
-                -F generate_release_notes=false 
-
-    create-posthog-main-repo-pull-request:
-        name: Create main repo PR with new posthog-js version
-        runs-on: ubuntu-22.04
-        needs: [check-package-version, release]
+      - name: Create GitHub release
+        working-directory: packages/browser
         env:
-            COMMITTED_VERSION: ${{ needs.check-package-version.outputs.committed-version }}
-            PUBLISHED_VERSION: ${{ needs.check-package-version.outputs.published-version }}
-        steps:
-            - name: Check out main repo
-              uses: actions/checkout@v2
-              with:
-                  repository: 'PostHog/posthog'
-                  token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # read from the first until the second header in the changelog file
+          # this assumes the formatting of the file
+          # and that this workflow is always running for the most recent entry in the file
+          LAST_CHANGELOG_ENTRY=$(awk -v defText="see CHANGELOG.md" '/^## /{if (flag) exit; flag=1} flag && /^##$/{exit} flag; END{if (!flag) print defText}' CHANGELOG.md)
+          # the action we used to use was archived, and made it really difficult to create a release with a body
+          # because the LAST_CHANGELOG_ENTRY contains bash special characters so passing it between steps
+          # was a pain.
+          # we can use the github cli to create a release with a body
+          # all as part of one step
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/posthog/posthog-js/releases \
+            -f tag_name="v${{ env.COMMITTED_VERSION }}" \
+          -f target_commitish='main' \
+          -f name="${{ env.COMMITTED_VERSION }}" \
+          -f body="$LAST_CHANGELOG_ENTRY" \
+          -F draft=false \
+          -F prerelease=false \
+          -F generate_release_notes=false
 
-            - uses: pnpm/action-setup@v4
+  create-posthog-main-repo-pull-request:
+    name: Create main repo PR with new posthog-js version
+    runs-on: ubuntu-22.04
+    needs: [check-package-version, release]
+    env:
+      COMMITTED_VERSION: ${{ needs.check-package-version.outputs.committed-version }}
+      PUBLISHED_VERSION: ${{ needs.check-package-version.outputs.published-version }}
+    steps:
+      - name: Check out main repo
+        uses: actions/checkout@v2
+        with:
+          repository: "PostHog/posthog"
+          token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
 
-            - name: Set up Node.js
-              uses: actions/setup-node@v3
-              with:
-                  node-version: 18
-                  cache: pnpm
+      - uses: pnpm/action-setup@v4
 
-            - name: Install new posthog-js version in main repo
-              id: pnpm-upgrade
-              run: |
-                  OUTGOING_VERSION=$(jq '.dependencies["posthog-js"]' package.json -r)
-                  echo "outgoing-version=$OUTGOING_VERSION" >> "$GITHUB_OUTPUT"
-                  for i in $(seq 1 $RETRY_TIMES); do
-                      # Retry loop because of npm being _eventually_ consistent
-                      if pnpm --filter=@posthog/frontend upgrade posthog-js@${{ env.COMMITTED_VERSION }}; then
-                          break
-                      else
-                          [ $i -ne $RETRY_TIMES ] && sleep $RETRY_WAIT_SECONDS || false
-                      fi
-                  done
-              env:
-                  RETRY_TIMES: 20
-                  RETRY_WAIT_SECONDS: 5
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: pnpm
 
-            - name: Create main repo pull request
-              id: main-repo-pr
-              uses: peter-evans/create-pull-request@v3
-              with:
-                  token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
-                  commit-message: 'chore(deps): Update posthog-js to ${{ env.COMMITTED_VERSION }}'
-                  branch: posthog-js-${{ env.COMMITTED_VERSION }}
-                  delete-branch: true
-                  labels: automerge
-                  title: 'chore(deps): Update posthog-js to ${{ env.COMMITTED_VERSION }}'
-                  body: |
-                      ## Changes
-
-                      posthog-js version ${{ env.COMMITTED_VERSION }} has been released. This updates PostHog to use it.
-
-                      https://github.com/PostHog/posthog-js/compare/v${{ steps.pnpm-upgrade.outputs.outgoing-version }}...v${{ env.COMMITTED_VERSION }} • [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/posthog-js?activeTab=version)
-
-            - name: Output pull request result
-              run: |
-                  echo "PostHog pull request for posthog-js version ${{ env.COMMITTED_VERSION }} ready: ${{ steps.main-repo-pr.outputs.pull-request-url }}"
-
-            - name: get deployer token
-              id: deployer
-              uses: getsentry/action-github-app-token@v2
-              with:
-                  app_id: ${{ secrets.DEPLOYER_APP_ID }}
-                  private_key: ${{ secrets.DEPLOYER_APP_PRIVATE_KEY }}
-
-            - name: Stamp PR
-              run: |
-                # unbelievably github has a race condition where if you commit and
-                # approve too quickly on a PR with "auto-merge" enabled it can miss
-                # the new commit in the merge commit (but it looks like the PR has the change)
-                # Sleep 5 should work
-                sleep 5
-                pull_number=$(jq --raw-output .pull_request.number "$GITHUB_EVENT_PATH")
-
-                pull_number=${{ steps.main-repo-pr.outputs.pull-request-number }}
-                curl -L \
-                -X POST \
-                -H "Accept: application/vnd.github+json" \
-                -H "Authorization: Bearer ${{ steps.deployer.outputs.token }}" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                https://api.github.com/repos/posthog/posthog/pulls/${pull_number}/reviews \
-                -d '{"body":"PostHog JS auto approved.","event":"APPROVE","comments":[]}'
-
-    create-posthog-com-repo-pull-request:
-        name: Create posthog.com repo PR with new posthog-js version
-        runs-on: ubuntu-22.04
-        needs: [check-package-version, release]
+      - name: Install new posthog-js version in main repo
+        id: pnpm-upgrade
+        run: |
+          OUTGOING_VERSION=$(jq '.dependencies["posthog-js"]' package.json -r)
+          echo "outgoing-version=$OUTGOING_VERSION" >> "$GITHUB_OUTPUT"
+          for i in $(seq 1 $RETRY_TIMES); do
+              # Retry loop because of npm being _eventually_ consistent
+              if pnpm --filter=@posthog/frontend upgrade posthog-js@${{ env.COMMITTED_VERSION }}; then
+                  break
+              else
+                  [ $i -ne $RETRY_TIMES ] && sleep $RETRY_WAIT_SECONDS || false
+              fi
+          done
         env:
-            COMMITTED_VERSION: ${{ needs.check-package-version.outputs.committed-version }}
-            PUBLISHED_VERSION: ${{ needs.check-package-version.outputs.published-version }}
-        steps:
-            - name: Check out main repo
-              uses: actions/checkout@v2
-              with:
-                  repository: 'PostHog/posthog.com'
-                  token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+          RETRY_TIMES: 20
+          RETRY_WAIT_SECONDS: 5
 
-            - name: Set up Node.js
-              uses: actions/setup-node@v3
-              with:
-                  node-version: 18
-                  cache: yarn
+      - name: Create main repo pull request
+        id: main-repo-pr
+        uses: peter-evans/create-pull-request@v3
+        with:
+          token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+          commit-message: "chore(deps): Update posthog-js to ${{ env.COMMITTED_VERSION }}"
+          branch: posthog-js-${{ env.COMMITTED_VERSION }}
+          delete-branch: true
+          labels: automerge
+          title: "chore(deps): Update posthog-js to ${{ env.COMMITTED_VERSION }}"
+          body: |
+            ## Changes
 
-            - name: Install new posthog-js version in posthog.com repo
-              id: yarn-upgrade
-              run: |
-                  OUTGOING_VERSION=$(jq '.dependencies["posthog-js"]' package.json -r)
-                  echo "outgoing-version=$OUTGOING_VERSION" >> "$GITHUB_OUTPUT"
-                  for i in $(seq 1 $RETRY_TIMES); do
-                      # Retry loop because of npm being _eventually_ consistent
-                      if yarn upgrade posthog-js@${{ env.COMMITTED_VERSION }}; then
-                          break
-                      else
-                          [ $i -ne $RETRY_TIMES ] && sleep $RETRY_WAIT_SECONDS || false
-                      fi
-                  done
-              env:
-                  RETRY_TIMES: 20
-                  RETRY_WAIT_SECONDS: 5
+            posthog-js version ${{ env.COMMITTED_VERSION }} has been released. This updates PostHog to use it.
 
-            - name: Create posthog.com repo pull request
-              id: com-repo-pr
-              uses: peter-evans/create-pull-request@v3
-              with:
-                  token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
-                  commit-message: 'chore(deps): Update posthog-js to ${{ env.COMMITTED_VERSION }}'
-                  branch: posthog-js-${{ env.COMMITTED_VERSION }}
-                  delete-branch: true
-                  labels: automerge
-                  title: 'chore(deps): Update posthog-js to ${{ env.COMMITTED_VERSION }}'
-                  body: |
-                      ## Changes
+            https://github.com/PostHog/posthog-js/compare/v${{ steps.pnpm-upgrade.outputs.outgoing-version }}...v${{ env.COMMITTED_VERSION }} • [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/posthog-js?activeTab=version)
 
-                      posthog-js version ${{ env.COMMITTED_VERSION }} has been released. This updates PostHog to use it.
+      - name: Output pull request result
+        run: |
+          echo "PostHog pull request for posthog-js version ${{ env.COMMITTED_VERSION }} ready: ${{ steps.main-repo-pr.outputs.pull-request-url }}"
 
-                      https://github.com/PostHog/posthog-js/compare/v${{ steps.pnpm-upgrade.outputs.outgoing-version }}...v${{ env.COMMITTED_VERSION }} • [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/posthog-js?activeTab=version)
+      - name: get deployer token
+        id: deployer
+        uses: getsentry/action-github-app-token@v2
+        with:
+          app_id: ${{ secrets.DEPLOYER_APP_ID }}
+          private_key: ${{ secrets.DEPLOYER_APP_PRIVATE_KEY }}
 
-            - name: Output pull request result
-              run: |
-                  echo "PostHog pull request for posthog-js version ${{ env.COMMITTED_VERSION }} ready: ${{ steps.com-repo-pr.outputs.pull-request-url }}"
+      - name: Stamp PR
+        run: |
+          # unbelievably github has a race condition where if you commit and
+          # approve too quickly on a PR with "auto-merge" enabled it can miss
+          # the new commit in the merge commit (but it looks like the PR has the change)
+          # Sleep 5 should work
+          sleep 5
+          pull_number=$(jq --raw-output .pull_request.number "$GITHUB_EVENT_PATH")
+
+          pull_number=${{ steps.main-repo-pr.outputs.pull-request-number }}
+          curl -L \
+          -X POST \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer ${{ steps.deployer.outputs.token }}" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          https://api.github.com/repos/posthog/posthog/pulls/${pull_number}/reviews \
+          -d '{"body":"PostHog JS auto approved.","event":"APPROVE","comments":[]}'
+
+  create-posthog-com-repo-pull-request:
+    name: Create posthog.com repo PR with new posthog-js version
+    runs-on: ubuntu-22.04
+    needs: [check-package-version, release]
+    env:
+      COMMITTED_VERSION: ${{ needs.check-package-version.outputs.committed-version }}
+      PUBLISHED_VERSION: ${{ needs.check-package-version.outputs.published-version }}
+    steps:
+      - name: Check out main repo
+        uses: actions/checkout@v2
+        with:
+          repository: "PostHog/posthog.com"
+          token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: yarn
+
+      - name: Install new posthog-js version in posthog.com repo
+        id: yarn-upgrade
+        run: |
+          OUTGOING_VERSION=$(jq '.dependencies["posthog-js"]' package.json -r)
+          echo "outgoing-version=$OUTGOING_VERSION" >> "$GITHUB_OUTPUT"
+          for i in $(seq 1 $RETRY_TIMES); do
+              # Retry loop because of npm being _eventually_ consistent
+              if yarn upgrade posthog-js@${{ env.COMMITTED_VERSION }}; then
+                  break
+              else
+                  [ $i -ne $RETRY_TIMES ] && sleep $RETRY_WAIT_SECONDS || false
+              fi
+          done
+        env:
+          RETRY_TIMES: 20
+          RETRY_WAIT_SECONDS: 5
+
+      - name: Create posthog.com repo pull request
+        id: com-repo-pr
+        uses: peter-evans/create-pull-request@v3
+        with:
+          token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+          commit-message: "chore(deps): Update posthog-js to ${{ env.COMMITTED_VERSION }}"
+          branch: posthog-js-${{ env.COMMITTED_VERSION }}
+          delete-branch: true
+          labels: automerge
+          title: "chore(deps): Update posthog-js to ${{ env.COMMITTED_VERSION }}"
+          body: |
+            ## Changes
+
+            posthog-js version ${{ env.COMMITTED_VERSION }} has been released. This updates PostHog to use it.
+
+            https://github.com/PostHog/posthog-js/compare/v${{ steps.pnpm-upgrade.outputs.outgoing-version }}...v${{ env.COMMITTED_VERSION }} • [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/posthog-js?activeTab=version)
+
+      - name: Output pull request result
+        run: |
+          echo "PostHog pull request for posthog-js version ${{ env.COMMITTED_VERSION }} ready: ${{ steps.com-repo-pr.outputs.pull-request-url }}"
