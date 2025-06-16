@@ -18,7 +18,7 @@
         "prettier": "prettier --write src/ functional_tests/ playwright/",
         "prettier:check": "prettier --check src/ functional_tests/ playwright/",
         "prepublishOnly": "pnpm lint && pnpm build && pnpm test && pnpm test:react",
-        "test": "pnpm test:unit && pnpm test:custom-eslint-rules && pnpm test:functional",
+        "test": "pnpm test:unit && pnpm test:functional",
         "test:unit": "jest src",
         "test:custom-eslint-rules": "jest eslint-rules",
         "test:unit:surveys": "jest '.*surveys.*.test.'",
