@@ -1,3 +1,8 @@
+## 1.253.3 - 2025-06-16
+
+- fix: don't call ff events for surveys (#2022)
+- chore: move readme to root (#2023)
+
 ## 1.253.2 - 2025-06-16
 
 - Revert "Revert "remove custom eslint rules (#2019)" (#2020)" (#2021)
