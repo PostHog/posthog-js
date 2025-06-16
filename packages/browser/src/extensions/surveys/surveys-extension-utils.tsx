@@ -63,12 +63,16 @@ export const defaultSurveyAppearance = {
     disabledButtonOpacity: '0.6',
     maxWidth: '300px',
     textSubtleColor: '#939393',
-    inputBackground: 'white',
     boxPadding: '20px 24px',
     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
     borderRadius: '10px',
     shuffleQuestions: false,
     surveyPopupDelaySeconds: undefined,
+    outlineColor: 'rgba(59, 130, 246, 0.8)',
+    inputBackground: 'white',
+    inputTextColor: getContrastingTextColor('white'),
+    scrollbarThumbColor: 'var(--ph-survey-border-color)',
+    scrollbarTrackColor: 'var(--ph-survey-background-color)',
 } as const
 
 export const addSurveyCSSVariablesToElement = (
@@ -122,8 +126,6 @@ export const addSurveyCSSVariablesToElement = (
         getContrastingTextColor(effectiveAppearance.backgroundColor)
     )
     hostStyle.setProperty('--ph-survey-text-subtle-color', effectiveAppearance.textSubtleColor)
-    hostStyle.setProperty('--ph-survey-input-background', effectiveAppearance.inputBackground)
-    hostStyle.setProperty('--ph-survey-input-text-color', getContrastingTextColor(effectiveAppearance.inputBackground))
     hostStyle.setProperty('--ph-widget-color', effectiveAppearance.widgetColor)
     hostStyle.setProperty('--ph-widget-text-color', getContrastingTextColor(effectiveAppearance.widgetColor))
     hostStyle.setProperty('--ph-widget-z-index', effectiveAppearance.zIndex)
@@ -132,6 +134,12 @@ export const addSurveyCSSVariablesToElement = (
     if (effectiveAppearance.backgroundColor === 'white') {
         hostStyle.setProperty('--ph-survey-input-background', '#f8f8f8')
     }
+
+    hostStyle.setProperty('--ph-survey-input-background', effectiveAppearance.inputBackground)
+    hostStyle.setProperty('--ph-survey-input-text-color', getContrastingTextColor(effectiveAppearance.inputBackground))
+    hostStyle.setProperty('--ph-survey-scrollbar-thumb-color', effectiveAppearance.scrollbarThumbColor)
+    hostStyle.setProperty('--ph-survey-scrollbar-track-color', effectiveAppearance.scrollbarTrackColor)
+    hostStyle.setProperty('--ph-survey-outline-color', effectiveAppearance.outlineColor)
 }
 
 function nameToHex(name: string) {
