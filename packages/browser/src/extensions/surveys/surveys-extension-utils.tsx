@@ -71,7 +71,7 @@ export const defaultSurveyAppearance = {
     // Not customizable atm
     outlineColor: 'rgba(59, 130, 246, 0.8)',
     inputBackground: 'white',
-    inputTextColor: getContrastingTextColor('white'),
+    inputTextColor: BLACK_TEXT_COLOR,
     scrollbarThumbColor: 'var(--ph-survey-border-color)',
     scrollbarTrackColor: 'var(--ph-survey-background-color)',
 } as const
