@@ -212,6 +212,9 @@ function getNextToTriggerPosition(target: HTMLElement, surveyWidth: number): Rea
     }
 }
 
+// Keep in sync with posthog/constants.py on main repo
+const SURVEY_TARGETING_FLAG_PREFIX = 'survey-targeting-'
+
 export class SurveyManager {
     private _posthog: PostHog
     private _surveyInFocus: string | null
@@ -386,7 +389,9 @@ export class SurveyManager {
         if (!flagKey) {
             return true
         }
-        return !!this._posthog.featureFlags.isFeatureEnabled(flagKey)
+        return !!this._posthog.featureFlags.isFeatureEnabled(flagKey, {
+            send_event: !flagKey.startsWith(SURVEY_TARGETING_FLAG_PREFIX),
+        })
     }
 
     private _isSurveyConditionMatched(survey: Survey): boolean {
@@ -471,7 +476,7 @@ export class SurveyManager {
             if (!key || !value) {
                 return true
             }
-            return this._posthog.featureFlags.isFeatureEnabled(value)
+            return this._isSurveyFeatureFlagEnabled(value)
         })
     }
 
@@ -575,6 +580,7 @@ export class SurveyManager {
             manageWidgetSelectorListener: this._manageWidgetSelectorListener,
             sortSurveysByAppearanceDelay: this._sortSurveysByAppearanceDelay,
             checkFlags: this._checkFlags.bind(this),
+            isSurveyFeatureFlagEnabled: this._isSurveyFeatureFlagEnabled.bind(this),
         }
     }
 }
