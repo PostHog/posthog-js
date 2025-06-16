@@ -1,3 +1,8 @@
+## 1.253.0 - 2025-06-16
+
+- chore: update readme instructions (#2017)
+- chore: workspace migration (#1991)
+
 ## 1.252.1 - 2025-06-15
 
 - Fix crash when config has circular references (#2015)
