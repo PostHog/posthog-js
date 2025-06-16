@@ -20,6 +20,8 @@ jobs:
       - name: Check package version and detect an update
         id: check-package-version
         uses: PostHog/check-package-version@v2
+        with:
+          path: packages/browser
 
   release:
     name: Publish release if new version
