@@ -580,6 +580,7 @@ export class SurveyManager {
             manageWidgetSelectorListener: this._manageWidgetSelectorListener,
             sortSurveysByAppearanceDelay: this._sortSurveysByAppearanceDelay,
             checkFlags: this._checkFlags.bind(this),
+            isSurveyFeatureFlagEnabled: this._isSurveyFeatureFlagEnabled.bind(this),
         }
     }
 }
