@@ -35,8 +35,8 @@ import {
     RatingQuestion,
 } from './surveys/components/QuestionTypes'
 import {
+    addSurveyCSSVariablesToElement,
     canActivateRepeatedly,
-    retrieveSurveyShadow,
     defaultSurveyAppearance,
     dismissedSurveyEvent,
     doesSurveyDeviceTypesMatch,
@@ -47,13 +47,13 @@ import {
     getSurveyContainerClass,
     getSurveyResponseKey,
     getSurveySeen,
+    getSurveyStylesheet,
     hasWaitPeriodPassed,
     isSurveyInProgress,
+    retrieveSurveyShadow,
     sendSurveyEvent,
     setInProgressSurveyState,
     SurveyContext,
-    getSurveyStylesheet,
-    addSurveyCSSVariablesToElement,
 } from './surveys/surveys-extension-utils'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
@@ -823,14 +823,6 @@ export function usePopupVisibility(
                 sessionRecordingUrl: posthog.get_session_replay_url?.(),
             })
             localStorage.setItem('lastSeenSurveyDate', new Date().toISOString())
-            setTimeout(() => {
-                const inputField = document
-                    .querySelector(getSurveyContainerClass(survey, true))
-                    ?.shadowRoot?.querySelector('textarea') as HTMLElement
-                if (inputField) {
-                    inputField.focus()
-                }
-            }, 100)
         }
 
         addEventListener(window, 'PHSurveyClosed', handleSurveyClosed as EventListener)
