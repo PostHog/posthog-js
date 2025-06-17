@@ -2,13 +2,13 @@ import { SessionIdManager } from '../sessionid'
 import { patch } from '../extensions/replay/rrweb-plugins/patch'
 import { assignableWindow, window } from '../utils/globals'
 
-const addTracingHeaders = (sessionManager: SessionIdManager | undefined, distinctId: string, req: Request) => {
+const addTracingHeaders = (distinctId: string, sessionManager: SessionIdManager | undefined, req: Request) => {
     if (sessionManager) {
         const { sessionId, windowId } = sessionManager.checkAndGetSessionAndWindowId(true)
         req.headers.set('X-POSTHOG-SESSION-ID', sessionId)
         req.headers.set('X-POSTHOG-WINDOW-ID', windowId)
-        req.headers.set('X-POSTHOG-DISTINCT-ID', distinctId)
     }
+    req.headers.set('X-POSTHOG-DISTINCT-ID', distinctId)
 }
 
 const patchFetch = (distinctId: string, sessionManager?: SessionIdManager): (() => void) => {
@@ -20,7 +20,7 @@ const patchFetch = (distinctId: string, sessionManager?: SessionIdManager): (() 
             // eslint-disable-next-line compat/compat
             const req = new Request(url, init)
 
-            addTracingHeaders(sessionManager, distinctId, req)
+            addTracingHeaders(distinctId, sessionManager, req)
 
             return originalFetch(req)
         }
@@ -51,7 +51,7 @@ const patchXHR = (distinctId: string, sessionManager?: SessionIdManager): (() =>
                 // eslint-disable-next-line compat/compat
                 const req = new Request(url)
 
-                addTracingHeaders(sessionManager, distinctId, req)
+                addTracingHeaders(distinctId, sessionManager, req)
 
                 return originalOpen.call(xhr, method, req.url, async, username, password)
             }
