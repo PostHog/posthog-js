@@ -113,7 +113,7 @@ function _getCampaignParamsFromUrl(url: string, customParams?: string[]): Record
     const params: Record<string, any> = {}
     each(campaign_keywords, function (kwkey) {
         const kw = getQueryParam(url, kwkey)
-        params[kwkey] = kw ?? null
+        params[kwkey] = kw ? kw : null
     })
 
     return params
@@ -123,7 +123,7 @@ function _getCampaignParamsFromCookie(): Record<string, string> {
     const params: Record<string, any> = {}
     each(COOKIE_CAMPAIGN_PARAMS, function (kwkey) {
         const kw = cookieStore._get(kwkey)
-        params[kwkey] = kw ?? null
+        params[kwkey] = kw ? kw : null
     })
 
     return params
