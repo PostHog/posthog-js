@@ -242,6 +242,9 @@ export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostH
     return newConfig
 }
 
+/**
+ * @deprecated
+ */
 class DeprecatedWebPerformanceObserver {
     get _forceAllowLocalhost(): boolean {
         return this.__forceAllowLocalhost
@@ -258,7 +261,16 @@ class DeprecatedWebPerformanceObserver {
 }
 
 /**
- * PostHog Library Object
+ * 
+ * This is the SDK reference for the PostHog JavaScript Web SDK. 
+ * You can learn more about example usage in the 
+ * [JavaScript Web SDK documentation](/docs/libraries/js). 
+ * You can also follow [framework specific guides](/docs/frameworks) 
+ * to integrate PostHog into your project.
+ * 
+ * This SDK is designed for browser environments. 
+ * Use the PostHog [Node.js SDK](/docs/libraries/node) for server-side usage.
+ * 
  * @constructor
  */
 export class PostHog {
@@ -315,7 +327,7 @@ export class PostHog {
         return this.featureFlags?.hasLoadedFlags ?? false
     }
 
-    /** DEPRECATED: We keep this to support existing usage but now one should just call .setPersonProperties */
+    /** @deprecated Use `setPersonProperties` instead. We keep this to support existing usage. */
     people: {
         set: (prop: string | Properties, to?: string, callback?: RequestCallback) => void
         set_once: (prop: string | Properties, to?: string, callback?: RequestCallback) => void
@@ -367,20 +379,61 @@ export class PostHog {
      * 
      * @remarks
      * All new instances are added to the main posthog object as sub properties (such as
-     * posthog.library_name) and also returned by this function.
+     * `posthog.library_name`) and also returned by this function. [Learn more about configuration options](/docs/libraries/js/config)
      *
-     * @param token - Your PostHog API token
-     * @param config - A dictionary of config options to override. See {@link https://github.com/posthog/posthog-js/blob/6e0e873/src/posthog-core.js#L57-L91 | default config options}
-     * @param name - The name for the new posthog instance that you want created
-     * 
-     * @public
+     * @example
+     * ```js
+     * // basic initialization
+     * posthog.init(
+     * '<ph_project_api_key>', { 
+     *     api_host: '<ph_client_api_host>', 
+     *     defaults: '<ph_posthog_js_defaults>' 
+     * })
+     * ```
      * 
      * @example
      * ```js
-     * posthog.init('sTMFPsFhdP1Ssg', {
-     *     opt_out_capturing_by_default: true,
-     * });
+     * // multiple instances
+     * posthog.init('<ph_project_api_key>', {}, 'project1')
+     * posthog.init('<ph_project_api_key>', {}, 'project2')
      * ```
+     * 
+     * @example
+     * ```js
+     * // with a callback
+     * posthog.init('<ph_project_api_key>', {
+     *     before_send: (event: CaptureResult | null): CaptureResult | null => {
+     *         if (!event) {
+     *             return null
+     *         }
+     *         event.properties = {
+     *             ...event.properties,
+     *             <property_name>: '<override_value>'
+     *         }
+     *
+     *         event.$set = {
+     *             ...event.$set,
+     *             <property_name>: '<override_value>'
+     *         }
+     *         event.$set_once = {
+     *             ...event.$set_once,
+     *             <property_name>: '<override_value>'
+     *         }
+     *
+     *         return event
+     *     }
+     * })
+     * ```
+     * 
+     * @public
+     *
+     * @param token - Your PostHog API token
+     * @param config - A dictionary of config options to override. See [default config options](https://github.com/posthog/posthog-js/blob/6e0e873/src/posthog-core.js#L57-L91)
+     * @param name - The name for the new posthog instance that you want created
+     * 
+     * {@label Initialization}
+     * 
+     * @returns The newly initialized PostHog instance
      */
     init(
         token: string,
@@ -838,18 +891,14 @@ export class PostHog {
      * @public 
      *
      * @example
-     *
+     * ```js
      * // Capture a user registration event with properties
-     *
-     * ```
      * posthog.capture('user_signed_up', {'referral_code': '123456', 'login_type': 'email', 'trial': true});
      * ```
      *
      * @example
-     *
+     * ```js
      * // Capture a pageview event
-     *
-     * ```
      * posthog.capture('$pageview');
      * ```
      *
@@ -993,27 +1042,25 @@ export class PostHog {
     }
 
     /**
-     * Calculates event properties before sending to PostHog. This method is used internally and can also be used by integrations (e.g. Segment) to enrich events with PostHog properties before sending them to Segment, which is required for some PostHog products to work correctly (e.g. to have a correct $session_id property).
-     *
-     * @public 
-     *
+     * Calculates event properties before sending to PostHog.
+     * 
      * @example
-     *
+     * ```js
      * // Calculate event properties for a custom event
-     *
-     * ```
      * const properties = posthog.calculateEventProperties('custom_event', { event: 'prop' }, new Date(), 'uuid123');
      * ```
      *
      * @remarks
-     * This method is used internally to calculate the event properties before sending it to PostHog. It can also be used by integrations (e.g. Segment) to enrich events with PostHog properties before sending them to Segment, which is required for some PostHog products to work correctly (e.g. to have a correct $session_id property).
+     * This method is used internally and can also be used by integrations (e.g. Segment) to enrich events with PostHog properties before sending them to Segment, which is required for some PostHog products to work correctly (e.g. to have a correct $session_id property).
      *
-     * @param {String} eventName The name of the event. This can be anything the user does - 'Button Click', 'Sign Up', '$pageview', etc.
-     * @param {Object} eventProperties The properties to include with the event.
-     * @param {Date} [timestamp] The timestamp of the event, e.g. for calculating time on page. If not set, it'll automatically be set to the current time.
-     * @param {String} [uuid] The uuid of the event, e.g. for storing the $pageview ID.
-     * @param {Boolean} [readOnly] Set this if you do not intend to actually send the event, and therefore do not want to update internal state e.g. session timeout
-     */
+     * @param eventName - The name of the event, e.g. 'Button Click', 'Sign Up', '$pageview'.
+     * @param eventProperties - The properties to include with the event.
+     * @param timestamp - The timestamp of the event. Defaults to the current time.
+     * @param uuid - The UUID of the event.
+     * @param readOnly - If true, the event won't be sent and internal state won't be updated.
+     * 
+     * @public
+    */
     public calculateEventProperties(
         eventName: string,
         eventProperties: Properties,
@@ -1193,24 +1240,20 @@ export class PostHog {
      *
      * @public 
      * 
- * @example
-     * 
-     * ```
-     *
+     * @example
+     * ```js
      * // register 'Gender' as a super property
-     * 
      * posthog.register({'Gender': 'Female'});
-     *```
+     * ```
      * 
      * @example
-     * ```
+     * ```js
      * // register several super properties when a user signs up
-     * 
      * posthog.register({
-     *     'Email': 'jdoe@example
-     *.com',
+     *     'Email': 'jdoe@example.com',
      *     'Account Type': 'Free'
      * });
+     * ```
      *
      * @remarks
      * ### Usage:
@@ -1220,8 +1263,7 @@ export class PostHog {
      *
      *     // register several super properties when a user signs up
      *     posthog.register({
-     *         'Email': 'jdoe@example
-     *.com',
+     *         'Email': 'jdoe@example.com',
      *         'Account Type': 'Free'
      *     });
      *
@@ -1241,15 +1283,13 @@ export class PostHog {
      *
      * @public 
      * 
- * @example
- * 
- * ```
-     *
+     * @example
+     * ```js
      * // register a super property for the first time only
-     * 
      * posthog.register_once({
      *     'First Login Date': new Date().toISOString()
      * });
+     * ```
      * 
      * @remarks
      * ### Usage:
@@ -1276,45 +1316,35 @@ export class PostHog {
     }
 
     /**
-     * Register a set of super properties, which are included with all events, but only
-     * for THIS SESSION. These will overwrite all other super property values.
-     *
-     * Unlike regular super properties, which last in LocalStorage for a long time,
-     * session super properties get cleared after a session ends.
+     * Register a set of super properties, which are included with all events for the current session.
      *
      * @public 
      * 
- * @example
- * 
- * ```
-     *
+     * @example
+     * ```js
      * // register on all events this session
+     * posthog.register_for_session({'referer': document.referrer});
+     * ```
      * 
-     * posthog.register_for_session({'referer': customGetReferer()});
-     *
+     * @example
+     * ```js
      * // register several session super properties when a user signs up
-     * 
      * posthog.register_for_session({
      *     'selectedPlan': 'pro',
      *     'completedSteps': 4,
      * });
+     * ```
+     *
+     * @example
+     * ```js
+     * // Display the properties
+     * console.log(posthog.sessionPersistence.properties())
+     * ```
      *
      * @remarks
-     * ### Usage:
+     * These properties will overwrite any existing super properties for the duration of the session. They are cleared when the session ends.
      *
-     *     // register on all events this session
-     *     posthog.register_for_session({'referer': customGetReferer()});
-     *
-     *     // register several session super properties when a user signs up
-     *     posthog.register_for_session({
-     *         'selectedPlan': 'pro',
-     *         'completedSteps': 4,
-     *     });
-     *
-     *     // Display the properties
-     *     console.log(posthog.sessionPersistence.properties())
-     *
-     * @param {Object} properties An associative array of properties to store about the user
+     * @param properties - An object of properties to store for the session.
      */
     register_for_session(properties: Properties): void {
         this.sessionPersistence?.register(properties)
@@ -1323,14 +1353,14 @@ export class PostHog {
     /**
      * Deletes a super property stored with the current user.
      *
-     * @param property - The name of the super property to remove
-     * 
      * @public
      * 
- * @example
- * 
- * ```
+     * @example
+     * ```js
      * posthog.unregister('Gender');
+     * ```
+     *
+     * @param property - The name of the super property to remove.
      */
     unregister(property: string): void {
         this.persistence?.unregister(property)
@@ -1339,14 +1369,14 @@ export class PostHog {
     /**
      * Deletes a session super property stored with the current user.
      *
-     * @param property - The name of the session super property to remove
-     * 
      * @public
      * 
- * @example
- * 
- * ```
+     * @example
+     * ```js
      * posthog.unregister_for_session('referer');
+     * ```
+     *
+     * @param property - The name of the session super property to remove.
      */
     unregister_for_session(property: string): void {
         this.sessionPersistence?.unregister(property)
@@ -1356,35 +1386,38 @@ export class PostHog {
         this.register({ [prop]: value })
     }
 
-    /*
-     * Get feature flag value for user (supports multivariate flags).
+    /**
+     * Get the value of a feature flag for the current user.
      *
-     * ### Usage:
+     * @public
      *
-     *     if(posthog.getFeatureFlag('beta-feature') === 'some-value') { // do something }
+     * @example
+     * ```js
+     * if (posthog.getFeatureFlag('beta-feature') === 'some-value') {
+     *    // do something
+     * }
+     * ```
      *
-     * @param {Object|String} prop Key of the feature flag.
-     * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
+     * @param key - The key of the feature flag.
+     * @param options - If `send_event` is false, no `$feature_flag_called` event will be sent.
+     * @returns The value of the flag if it's enabled, or `false` if it's disabled.
      */
     getFeatureFlag(key: string, options?: { send_event?: boolean }): boolean | string | undefined {
         return this.featureFlags.getFeatureFlag(key, options)
     }
 
-    /*
-     * Get feature flag payload value matching key for user (supports multivariate flags).
+    /**
+     * Get the payload of a feature flag for the current user.
      *
-     * ### Usage:
-     *
-     * @param key - The key of the feature flag
-     * 
-     * @returns The payload of the feature flag, or undefined if not found
-     * 
      * @public
      *
- * @example
- * 
- * ```
+     * @example
+     * ```js
      * const flagPayload = posthog.getFeatureFlagPayload('my-feature-flag');
+     * ```
+     *
+     * @param key - The key of the feature flag.
+     * @returns The payload of the feature flag, or `undefined` if not found.
      */
     getFeatureFlagPayload(key: string): JsonType {
         const payload = this.featureFlags.getFeatureFlagPayload(key)
@@ -1407,12 +1440,11 @@ export class PostHog {
      * @param options.send_event - Whether to send an event to PostHog when checking the flag
      * 
      * @returns true if the flag is enabled, false if disabled, or undefined if not found
-     * 
+     *
      * @public
      *
- * @example
- * 
- * ```
+     * @example
+     * ```
      * if (posthog.isFeatureEnabled('my-feature-flag')) {
      *     // Feature is enabled
      * }
@@ -1540,18 +1572,16 @@ export class PostHog {
     canRenderSurveyAsync(surveyId: string, forceReload = false): Promise<SurveyRenderReason> {
         return this.surveys.canRenderSurveyAsync(surveyId, forceReload)
     }
-
     /**
      * Identify a user with a unique ID instead of a PostHog
      * randomly generated distinct_id. If the method is never called,
      * then unique visitors will be identified by a UUID that is generated
      * the first time they visit the site.
      *
-     * @public 
+     * @public
      * 
- * @example
- * 
- * ```
+     * @example
+     * ```
      *
      * posthog.identify('distinct_id', { email: 'max@hedgehogmail.com', name: 'Max Hedgehog' }, { first_visited_url: '/blog' });
      *
@@ -1561,8 +1591,7 @@ export class PostHog {
      * ### Usage:
      *
      *      posthog.identify('[user unique id]')
-     *      posthog.identify('[user unique id]', { email: 'john@example
-     *.com' })
+     *      posthog.identify('[user unique id]', { email: 'john@example.com' })
      *      posthog.identify('[user unique id]', {}, { referral_code: '12345' })
      *
      * ### Notes:
@@ -1742,9 +1771,8 @@ export class PostHog {
      * 
      * @public
      *
- * @example
- * 
- * ```
+     * @example
+     * ```
      * posthog.group('organization', 'org::5', { name: 'Acme Inc.', employees: 100 });
      */
     group(groupType: string, groupKey: string, groupPropertiesToSet?: Properties): void {
@@ -1804,9 +1832,8 @@ export class PostHog {
      * 
      * @public
      *
- * @example
- * 
- * ```
+     * @example
+     * ```
      * posthog.setPersonPropertiesForFlags({ email: 'user@example.com', plan: 'pro' });
      */
     setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
@@ -1822,9 +1849,8 @@ export class PostHog {
      *
      * @public 
      *
- * @example
- * 
- * ```
+     * @example
+     * ```
      * posthog.setGroupPropertiesForFlags({ 'organization': { name: 'Acme Inc.', employees: 100 } });
      *
      * @remarks
@@ -1854,9 +1880,8 @@ export class PostHog {
      *
      * @public 
      * 
- * @example
- * 
- * ```
+     * @example
+     * ```
      *
      * // Reset all user data when they log out
      * 
@@ -1914,9 +1939,8 @@ export class PostHog {
      *
      * @public 
      * 
- * @example
- * 
- * ```
+     * @example
+     * ```
      *
      * // Get the current distinct ID
      * 
@@ -1953,9 +1977,8 @@ export class PostHog {
      * 
      * @public
      *
- * @example
- * 
- * ```
+     * @example
+     * ```
      * const sessionId = posthog.getSessionId();
      */
     getSessionId(): string {
@@ -1992,46 +2015,39 @@ export class PostHog {
 
     /**
      * Create an alias, which PostHog will use to link two distinct_ids going forward (not retroactively).
-     * Multiple aliases can map to the same original ID, but not vice-versa. Aliases can also be chained - the following is a valid scenario:
-     *
-     *     posthog.alias('new_id', 'original_id');
-     *     posthog.alias('newer_id', 'new_id');
-     *
-     * If the original ID is not passed in, we will use the current distinct_id - probably the auto-generated GUID.
-     *
-     * @public 
-     * 
- * @example
- * 
- * ```
-     *
-     * posthog.alias('new_id', 'original_id');
      *
      * @remarks
-     * ### Notes:
+     * Multiple aliases can map to the same original ID, but not vice-versa. Aliases can also be chained.
+     * If the original ID is not passed in, we will use the current distinct_id.
      *
-     * The best practice is to call alias() when a unique user is created (registration, etc).
-     * The alias() call should be made before any identify() calls.
+     * The best practice is to call `alias()` when a unique user is created (e.g. at registration),
+     * and before any `identify()` calls for that user.
      *
-     * In PostHog, aliases are different from distinct_ids. The following code will not work:
+     * In PostHog, aliases are different from distinct_ids. The following will **not** work:
      *
-     *     posthog.identify('user_123');
-     *     posthog.alias('user_456', 'user_123');
-     *     posthog.identify('user_456');
-     *
-     * The first identify() call will create an ID mapping of: `user_123` -> (actual distinct_id)
-     * The alias() call will create an ID mapping of: `user_456` -> `user_123`
-     * The second identify() call will change the ID mapping to: `user_456` -> (new actual distinct_id)
-     * which will break the alias chain.
+     * ```js
+     * posthog.identify('user_123');
+     * posthog.alias('user_456', 'user_123');
+     * posthog.identify('user_456'); // This breaks the alias chain.
+     * ```
      *
      * Instead, do this:
      *
-     *     posthog.alias('user_456', 'user_123');
-     *     posthog.identify('user_123');
-     *     posthog.identify('user_456');
+     * ```js
+     * posthog.alias('user_456', 'user_123');
+     * posthog.identify('user_123');
+     * posthog.identify('user_456');
+     * ```
      *
-     * @param {String} alias A unique identifier that you want to use for this user in the future.
-     * @param {String} [original] The current identifier being used for this user.
+     * @example
+     * ```js
+     * posthog.alias('new_id', 'original_id');
+     * ```
+     *
+     * @public
+     *
+     * @param alias - A unique identifier that you want to use for this user in the future.
+     * @param original - The current identifier being used for this user. Defaults to the current distinct_id.
      */
     alias(alias: string, original?: string): CaptureResult | void | number {
         // If the $people_distinct_id key exists in persistence, there has been a previous
@@ -2060,8 +2076,20 @@ export class PostHog {
 
     /**
      * Update the configuration of a posthog library instance.
-     *
-     * @param {Partial<PostHogConfig>} config A dictionary of new configuration values to update
+     * 
+     * [Learn more about configuration options](/docs/libraries/js/config)
+     * 
+     * {@label Initialization}
+     * 
+     * @public
+     * 
+     * @example
+     * ```
+     * // Set the debug flag to true
+     * posthog.set_config({ debug: true });
+     * ```
+     * 
+     * @param config - A dictionary of new configuration values to update
      */
     set_config(config: Partial<PostHogConfig>): void {
         const oldConfig = { ...this.config }
@@ -2239,9 +2267,8 @@ export class PostHog {
      * 
      * @public
      *
- * @example
- * 
- * ```
+     * @example
+     * ```
      * const instanceName = posthog.toString();
      */
     toString(): string {
@@ -2330,25 +2357,22 @@ export class PostHog {
      * Opt the user in to data capturing and cookies/localstorage for this PostHog instance
      * If the config.opt_out_persistence_by_default is set to false, the SDK persistence will be enabled.
      *
- * @example
- * 
- * ```
+     * @example
+     * ```
      *
      * // Opt user in
      * 
      * posthog.opt_in_capturing();
      * 
- * @example
- * 
- * ```
+     * @example
+     * ```
      *
      * // Opt user in with specific event name, properties
      * 
      * posthog.opt_in_capturing({
      *     capture_event_name: 'User opted in',
      *     capture_properties: {
-     *         'email': 'jdoe@example
-     *.com'
+     *         'email': 'jdoe@example.com'
      *     }
      * });
      * @param {Object} [config] A dictionary of config options to override
@@ -2408,11 +2432,10 @@ export class PostHog {
      *
      * @public 
      *
- * @example
- * 
- * ```
+     * @example
+     * ```
      * posthog.clear_opt_in_out_capturing();
-     *
+     * ```
      * @remarks
      * This method clears the user's opt in/out status of data capturing and cookies/localstorage for this PostHog instance.
      */
@@ -2460,7 +2483,6 @@ export class PostHog {
             }
         }
     }
-
     /**
      * Enables or disables debug mode.
      * You can also enable debug mode by appending `?__posthog_debug=true` to the URL
@@ -2538,9 +2560,8 @@ export class PostHog {
      *
      * @public 
      *
- * @example
- * 
- * ```
+     * @example
+     * ```
      * const windowId = posthog.getWindowId();
      *
      * @remarks
@@ -2659,3 +2680,5 @@ export function init_as_module(): PostHog {
 
     return posthogMain
 }
+
+

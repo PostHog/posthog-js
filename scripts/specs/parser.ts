@@ -1,6 +1,9 @@
 const apiExtractor = require('@microsoft/api-extractor-model');
 const utils = require('./utils');
-const { writeFileSync } = require('fs');
+const { writeFileSync, readFileSync } = require('fs');
+const path = require('path');
+
+const packageJson = JSON.parse(readFileSync(path.resolve(__dirname, '../../package.json'), 'utf8'));
 
 // Load the API model from the JSON file
 const apiPackage = apiExtractor.ApiPackage.loadFromJsonFile('docs/posthog-js.api.json');
@@ -46,8 +49,10 @@ const methodInfo = methods?.map((method: any) => {
         id: apiMethod.name,
         title: apiMethod.name,
         description: utils.getDocComment(apiMethod),
-        category: '',
+        path: posthogClass.fileUrlPath,
+        category: utils.extractCategoryTags(apiMethod),
         details: utils.getRemarks(apiMethod),
+        releaseTag: utils.isMethodDeprecated(apiMethod) ? 'deprecated' : utils.getMethodReleaseTag(apiMethod),
         showDocs: true,
         returnType: {
             id: returnType,
@@ -159,11 +164,12 @@ const output = {
     id: 'posthog-js',
     "hogRef": "0.1",
     "info": {
+        version: packageJson.version,
         "id": "posthog-js",
         "title": "PostHog JavaScript Web SDK",
         "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
         "slugPrefix": "posthog-js",
-        "specUrl": "https://github.com/PostHog/posthog-js/blob/main/posthog-js-references.json"
+        "specUrl": "https://github.com/PostHog/posthog-js"
     },
     classes: [
         {
@@ -171,20 +177,22 @@ const output = {
             id: posthogClass?.name || 'PostHog',
             title: posthogClass?.name || 'PostHog',
             functions: (methodInfo || []).map((func: any) => ({
-                category: func.category || 'default',
+                category: func.category || '',
                 description: func.description,
                 details: func.details,
                 id: func.id,
                 showDocs: true,
                 title: func.title,
                 examples: func.examples,
+                releaseTag: func.releaseTag,
                 params: (func.params || []).map((param: any) => ({
                     description: param.description || '',
                     isOptional: param.isOptional || false,
                     type: param.type || '',
                     name: param.name || ''
                 })),
-                returnType: func.returnType || { id: 'void', name: 'void' }
+                returnType: func.returnType || { id: 'void', name: 'void' },
+                ...(func.path ? { path: func.path } : {})
             }))
         }
     ],
