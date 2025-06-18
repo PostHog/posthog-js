@@ -35,7 +35,9 @@
         "deprecate-old-versions": "node scripts/deprecate-old-versions.mjs",
         "check-testcafe-results": "ts-node testcafe/check-testcafe-results.js",
         "run-testcafe-localhost": "node scripts/run-testcafe-localhost.mjs",
-        "write-mangled-property-names": "WRITE_MANGLED_PROPERTIES=1 pnpm build-rollup"
+        "write-mangled-property-names": "WRITE_MANGLED_PROPERTIES=1 pnpm build-rollup",
+        "gen-specs": "npx tsc && npx api-extractor run --config ./api-extractor.json --local",
+        "parse-specs": "ts-node scripts/specs/parser.ts"
     },
     "main": "dist/main.js",
     "module": "dist/module.js",
@@ -61,6 +63,9 @@
         "@babel/preset-env": "7.27.2",
         "@babel/preset-typescript": "^7.27.1",
         "@jest/globals": "^27.5.1",
+        "@microsoft/api-extractor": "^7.52.8",
+        "@microsoft/api-extractor-model": "^7.30.6",
+        "@microsoft/tsdoc": "^0.15.1",
         "@playwright/test": "^1.52.0",
         "@posthog/rrweb-plugin-console-record": "^0.0.13",
         "@posthog/rrweb-record": "^0.0.13",
@@ -128,6 +133,7 @@
         "testcafe-browser-provider-browserstack": "1.14.0",
         "ts-node": "^10.9.2",
         "tslib": "^2.5.0",
+        "typedoc": "^0.28.5",
         "typescript": "^5.5.4",
         "yargs": "^17.7.2"
     },
