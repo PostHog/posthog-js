@@ -1,7 +1,4 @@
-/*eslint-env node */
-
 // https://eslint.org/docs/v8.x/use/configure/configuration-files
-
 const rules = {
     'prettier/prettier': 'error',
     'prefer-spread': 'off',
@@ -47,11 +44,6 @@ module.exports = {
         Buffer: 'readonly',
     },
     parser: '@typescript-eslint/parser',
-    parserOptions: {
-        ecmaVersion: 2018,
-        sourceType: 'module',
-        project: null,
-    },
     plugins: [
         'prettier',
         '@typescript-eslint',
@@ -64,27 +56,14 @@ module.exports = {
     rules,
     overrides: [
         {
-            files: ['**/*.js'],
+            files: ['rollup.config.js', '.eslintrc.js', 'jest.config.js'],
             parserOptions: {
-                project: null, // <- prevents the TS parser from trying to parse it with type info
-            },
-            rules: {
-                '@typescript-eslint/naming-convention': 'off',
-            },
-        },
-        {
-            files: 'eslint-rules/**/*.js',
-            extends: ['eslint:recommended', 'prettier'],
-            rules: {
-                'prettier/prettier': 'error',
-                '@typescript-eslint/no-var-requires': 'off',
-                '@typescript-eslint/no-require-imports': 'off',
-                'posthog-js/no-direct-null-check': 'off',
-                'posthog-js/no-direct-boolean-check': 'off',
+                project: null,
             },
             env: {
                 node: true,
             },
         },
     ],
+    ignorePatterns: ['node_modules', 'dist'],
 }

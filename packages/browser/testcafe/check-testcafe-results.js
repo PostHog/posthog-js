@@ -32,7 +32,6 @@ const asserts = {
     assertCustomEventsWorkAndAreAccessibleViaApi,
 }
 async function main() {
-    // eslint-disable-next-line no-console
     log(`
 Waiting for events from tests to appear in PostHog.
 You can manually confirm whether the events have shown up at https://us.posthog.com/project/${POSTHOG_API_PROJECT}/activity/explore
@@ -62,6 +61,5 @@ If they seem to be failing unexpectedly, check grafana for ingestion lag at http
 
 main().catch((e) => {
     error(e)
-    // eslint-disable-next-line no-undef
     process.exit(1)
 })

@@ -13,7 +13,6 @@ import cssnano from 'cssnano'
 import fs from 'fs'
 import path from 'path'
 
-// eslint-disable-next-line no-undef
 const WRITE_MANGLED_PROPERTIES = process.env.WRITE_MANGLED_PROPERTIES
 const nameCachePath = './terser-mangled-names.json'
 let nameCache = {}

@@ -11,7 +11,6 @@ import {
 } from './helpers'
 import { expect } from 'expect'
 
-// eslint-disable-next-line no-undef
 fixture('posthog.js capture')
     .page('http://localhost:8000/playground/cypress-full/index.html')
     .requestHooks(captureLogger, staticFilesMock)

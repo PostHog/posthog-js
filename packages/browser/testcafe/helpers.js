@@ -6,7 +6,6 @@ import fetch from 'node-fetch'
 // NOTE: These tests are run against a dedicated test project in PostHog cloud
 // but can be overridden to call a local API when running locally
 // User admin for the test project: https://us.posthog.com/admin/posthog/organization/0182397e-3df4-0000-52e3-d890b5a16955/change/
-// eslint-disable-next-line no-undef
 const currentEnv = process.env
 export const {
     POSTHOG_PROJECT_KEY,
@@ -32,16 +31,13 @@ export const captureLogger = RequestLogger(/ip=1/, {
 export const staticFilesMock = RequestMock()
     .onRequestTo(/array.full.js/)
     .respond((req, res) => {
-        // eslint-disable-next-line no-undef
         const ENV_BROWSER = process.env.BROWSER
         const fileToRead = ENV_BROWSER === 'browserstack:ie' ? '../dist/array.full.es5.js' : '../dist/array.full.js'
-        // eslint-disable-next-line no-undef
         const arrayjs = fs.readFileSync(path.resolve(__dirname, fileToRead))
         res.setBody(arrayjs)
     })
     .onRequestTo(/playground/)
     .respond((req, res) => {
-        // eslint-disable-next-line no-undef
         const html = fs.readFileSync(path.resolve(__dirname, '../playground/cypress-full/index.html'))
         res.setBody(html)
     })
