@@ -1,4 +1,3 @@
-// eslint-disable-next-line no-undef
 module.exports = {
     testPathIgnorePatterns: ['/node_modules/', '/cypress/', '/react/', '/test_data/', '/testcafe/'],
     moduleFileExtensions: ['js', 'json', 'ts', 'tsx'],

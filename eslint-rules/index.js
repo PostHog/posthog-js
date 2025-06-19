@@ -3,7 +3,7 @@ const { basename } = require('path')
 
 const projectName = 'posthog-js'
 const ruleFiles = readdirSync(__dirname).filter(
-    (file) => file.endsWith('.js') && file !== 'index.js' && !file.endsWith('test.js')
+    (file) => file.endsWith('.js') && file !== 'index.js' && file !== '.eslintrc.js' && !file.endsWith('test.js')
 )
 const configs = {
     all: {
