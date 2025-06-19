@@ -23,8 +23,7 @@ jobs:
           node_version: ${{ matrix.node-version }}
 
       - name: Build project
-        run: pnpm run build
-        working-directory: packages/browser
+        run: pnpm build
 
       # once its built we can see if we can use it on the forced version
       - name: Override TypeScript version

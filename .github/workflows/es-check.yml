@@ -13,7 +13,6 @@ jobs:
       - uses: ./.github/actions/setup
 
       - run: pnpm build
-        working-directory: packages/browser
 
       - name: Run es-check to check if our ie11 bundle is ES5 compatible
         run: npx es-check@7.2.1 es5 packages/browser/dist/array.full.es5.js

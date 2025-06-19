@@ -43,8 +43,7 @@ jobs:
         run: python -m http.server 8080 &
 
       - name: Set up posthog-js
-        run: pnpm build-rollup
-        working-directory: packages/browser
+        run: pnpm --filter=posthog-js build
 
       - name: Run ${{ matrix.name }} test
         timeout-minutes: 10

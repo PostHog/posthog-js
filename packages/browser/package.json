@@ -8,11 +8,8 @@
     "homepage": "https://posthog.com/docs/libraries/js",
     "packageManager": "pnpm@9.15.4",
     "scripts": {
-        "start": "pnpm build-react && NODE_OPTIONS=\"--max-old-space-size=8192\" pnpm build-rollup -w",
-        "build": "pnpm build-rollup && pnpm build-lib && pnpm build-react",
-        "build-rollup": "rm -rf lib && tsc -b && rollup -c --bundleConfigAsCjs",
-        "build-lib": "rm -rf lib && tsc -b tsconfig.lib.json",
-        "build-react": "cd react; NODE_ENV=dev pnpm i; pnpm build;",
+        "start": "NODE_OPTIONS=\"--max-old-space-size=8192\" hereby start",
+        "build": "hereby build",
         "lint": "eslint src && eslint playwright && eslint react",
         "lint:fix": "eslint src --fix && eslint playwright --fix && eslint react --fix",
         "prettier": "prettier --write src/ functional_tests/ playwright/",
@@ -36,7 +33,7 @@
         "deprecate-old-versions": "node scripts/deprecate-old-versions.mjs",
         "check-testcafe-results": "ts-node testcafe/check-testcafe-results.js",
         "run-testcafe-localhost": "node scripts/run-testcafe-localhost.mjs",
-        "write-mangled-property-names": "WRITE_MANGLED_PROPERTIES=1 pnpm build-rollup"
+        "write-mangled-property-names": "WRITE_MANGLED_PROPERTIES=1 hereby build-dist"
     },
     "main": "dist/main.js",
     "module": "dist/module.js",

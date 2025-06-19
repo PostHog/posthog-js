@@ -14,11 +14,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
       - run: pnpm build
-        working-directory: packages/browser
-      - run: pnpm test:unit
-        working-directory: packages/browser
-      - run: pnpm write-mangled-property-names
-        working-directory: packages/browser
+      - run: pnpm --filter=posthog-js test:unit
+      - run: pnpm --filter=posthog-js write-mangled-property-names
       - run: git diff --exit-code # fail if e.g. the mangled properties list has changed, see rollup.config.js
 
   integration:
@@ -28,13 +25,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
       - run: pnpm build
-        working-directory: packages/browser
       - name: Install Playwright Browsers
-        run: pnpm exec playwright install --with-deps
-        working-directory: packages/browser
+        run: pnpm --filter=posthog-js exec playwright install --with-deps
       - name: Run Playwright tests
-        run: pnpm exec playwright test
-        working-directory: packages/browser
+        run: pnpm --filter=posthog-js exec playwright test
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
@@ -48,8 +42,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
-      - run: pnpm run test:functional
-        working-directory: packages/browser
+      - run: pnpm --filter=posthog-js run test:functional
 
   lint:
     name: Lint
@@ -57,9 +50,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
-      - run: pnpm prettier:check
-        working-directory: packages/browser
-      - run: pnpm lint
-        working-directory: packages/browser
-      - run: pnpm tsc -b
-        working-directory: packages/browser
+      - run: pnpm --filter=posthog-js prettier:check
+      - run: pnpm --filter=posthog-js lint
+      - run: pnpm --filter=posthog-js tsc -b
