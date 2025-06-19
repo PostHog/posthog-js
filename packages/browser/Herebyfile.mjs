@@ -4,6 +4,7 @@ import { task } from 'hereby'
 import { globSync } from 'glob'
 import path from 'path'
 import fs from 'fs'
+import os from 'os'
 
 const cleanLib = task({
     name: 'clean-lib',
@@ -30,23 +31,16 @@ const cleanDist = task({
     },
 })
 
-function buildEntrypoint(file) {
-    return task({
-        name: 'build-entrypoint-' + file,
-        dependencies: [buildLib, cleanDist],
-        hiddenFromTaskList: true,
-        run: async () => {
-            await exec('rollup', ['-c', '--entrypoint', file])
-        },
-    })
-}
-
-const entrypoints = readdirSync('./src/entrypoints')
-
 export const buildDist = task({
     name: 'build-dist',
-    dependencies: [...entrypoints.map(buildEntrypoint)],
+    dependencies: [buildLib, cleanDist],
     run: async () => {
+        const entrypoints = readdirSync('./src/entrypoints')
+        const cpus = os.cpus().length
+        console.log(`Building ${entrypoints.length} entrypoints using ${cpus} CPUs`)
+        await pool(cpus, entrypoints, (file) => {
+            return exec('rollup', ['-c', '--entrypoint', file])
+        })
         if (process.env.WRITE_MANGLED_PROPERTIES) {
             let globalNames = new Set()
             const files = globSync('debug/*/terser-mangled-names.json')
@@ -106,5 +100,42 @@ function exec(cmd, args, options) {
                 reject(new Error(`Command failed with exit code ${code}`))
             }
         })
+    })
+}
+
+function pool(concurrency, args, factory) {
+    return new Promise((resolve, reject) => {
+        if (args.length === 0) {
+            resolve([])
+            return
+        }
+
+        const results = []
+        let completed = 0
+        let running = 0
+        let index = 0
+
+        function processNext() {
+            while (running < concurrency && index < args.length) {
+                const currentIndex = index++
+                running++
+
+                factory(args[currentIndex])
+                    .then((result) => {
+                        results[currentIndex] = result
+                        completed++
+                        running--
+
+                        if (completed === args.length) {
+                            resolve(results)
+                        } else {
+                            processNext()
+                        }
+                    })
+                    .catch(reject)
+            }
+        }
+
+        processNext()
     })
 }
