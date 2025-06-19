@@ -65,6 +65,7 @@ module.exports = {
             },
             rules: {
                 'compat/compat': 'off',
+                'no-console': 'off',
             },
         },
     ],
