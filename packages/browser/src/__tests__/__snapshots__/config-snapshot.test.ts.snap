@@ -126,6 +126,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"false\\",
     \\"true\\"
   ],
+  \\"disable_surveys_automatic_display\\": [
+    \\"false\\",
+    \\"true\\"
+  ],
   \\"disable_web_experiments\\": [
     \\"false\\",
     \\"true\\"
