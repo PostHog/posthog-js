@@ -11,6 +11,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
       - run: pnpm build
-        working-directory: packages/browser
-      - run: pnpm test
-        working-directory: packages/browser/react
+      - run: pnpm --filter=posthog-js-react test
