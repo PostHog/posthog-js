@@ -81,6 +81,7 @@ export function OpenTextQuestion({
 }: CommonQuestionProps & {
     question: BasicSurveyQuestion
 }) {
+    const { isPreviewMode } = useSurveyContext()
     const inputRef = useRef<HTMLTextAreaElement>(null)
     const [text, setText] = useState<string>(() => {
         if (isString(initialValue)) {
@@ -91,9 +92,11 @@ export function OpenTextQuestion({
 
     useEffect(() => {
         setTimeout(() => {
-            inputRef.current?.focus()
+            if (!isPreviewMode) {
+                inputRef.current?.focus()
+            }
         }, 100)
-    }, [])
+    }, [isPreviewMode])
 
     const htmlFor = `surveyQuestion${displayQuestionIndex}`
 
