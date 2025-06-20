@@ -74,6 +74,9 @@ describe('survey display logic', () => {
         },
         get_session_replay_url: jest.fn(),
         capture: jest.fn().mockImplementation((eventName) => eventName),
+        config: {
+            disable_surveys_automatic_display: false,
+        },
     } as unknown as PostHog
 
     test('callSurveysAndEvaluateDisplayLogic runs on interval irrespective of url change', () => {

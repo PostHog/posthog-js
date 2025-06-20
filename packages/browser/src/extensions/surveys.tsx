@@ -658,6 +658,11 @@ export function generateSurveys(posthog: PostHog) {
     }
 
     const surveyManager = new SurveyManager(posthog)
+    if (posthog.config.disable_surveys_automatic_display) {
+        logger.info('Surveys automatic display is disabled. Skipping call surveys and evaluate display logic.')
+        return surveyManager
+    }
+
     surveyManager.callSurveysAndEvaluateDisplayLogic(true)
 
     // recalculate surveys every second to check if URL or selectors have changed

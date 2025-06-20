@@ -474,11 +474,18 @@ export interface PostHogConfig {
     disable_cookie?: boolean
 
     /**
-     * Determines whether PostHog should disable surveys.
+     * Determines whether PostHog should disable all surveys functionality.
      *
      * @default false
      */
     disable_surveys: boolean
+
+    /**
+     * Determines whether PostHog should disable automatic display of surveys. If this is true, popup or widget surveys will not be shown when display conditions are met.
+     *
+     * @default false
+     */
+    disable_surveys_automatic_display: boolean
 
     /**
      * Determines whether PostHog should disable web experiments.
