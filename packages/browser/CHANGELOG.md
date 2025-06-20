@@ -1,3 +1,8 @@
+## 1.255.1 - 2025-06-20
+
+- chore: new survey config (#2031)
+- split configuration and fix react linting (#2028)
+
 ## 1.255.0 - 2025-06-18
 
 - feat: enhance campaign parameter retrieval from cookies and URL (#2027)
