@@ -325,4 +325,17 @@ export class PostHogSurveys {
         }
         this._surveyManager.renderSurvey(survey, elem)
     }
+
+    renderSurveyPopup(surveyId: string) {
+        if (isNullish(this._surveyManager)) {
+            logger.warn('init was not called')
+            return
+        }
+        const survey = this._getSurveyById(surveyId)
+        if (!survey) {
+            logger.warn('Survey not found')
+            return
+        }
+        this._surveyManager.handlePopoverSurvey(survey, true)
+    }
 }
