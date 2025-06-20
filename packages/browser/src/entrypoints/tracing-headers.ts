@@ -2,15 +2,16 @@ import { SessionIdManager } from '../sessionid'
 import { patch } from '../extensions/replay/rrweb-plugins/patch'
 import { assignableWindow, window } from '../utils/globals'
 
-const addTracingHeaders = (sessionManager: SessionIdManager | undefined, req: Request) => {
+const addTracingHeaders = (distinctId: string, sessionManager: SessionIdManager | undefined, req: Request) => {
     if (sessionManager) {
         const { sessionId, windowId } = sessionManager.checkAndGetSessionAndWindowId(true)
         req.headers.set('X-POSTHOG-SESSION-ID', sessionId)
         req.headers.set('X-POSTHOG-WINDOW-ID', windowId)
     }
+    req.headers.set('X-POSTHOG-DISTINCT-ID', distinctId)
 }
 
-const patchFetch = (sessionManager?: SessionIdManager): (() => void) => {
+const patchFetch = (distinctId: string, sessionManager?: SessionIdManager): (() => void) => {
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     return patch(window, 'fetch', (originalFetch: typeof fetch) => {
@@ -19,14 +20,14 @@ const patchFetch = (sessionManager?: SessionIdManager): (() => void) => {
             // eslint-disable-next-line compat/compat
             const req = new Request(url, init)
 
-            addTracingHeaders(sessionManager, req)
+            addTracingHeaders(distinctId, sessionManager, req)
 
             return originalFetch(req)
         }
     })
 }
 
-const patchXHR = (sessionManager?: SessionIdManager): (() => void) => {
+const patchXHR = (distinctId: string, sessionManager?: SessionIdManager): (() => void) => {
     return patch(
         // we can assert this is present because we've checked previously
         window!.XMLHttpRequest.prototype,
@@ -50,7 +51,7 @@ const patchXHR = (sessionManager?: SessionIdManager): (() => void) => {
                 // eslint-disable-next-line compat/compat
                 const req = new Request(url)
 
-                addTracingHeaders(sessionManager, req)
+                addTracingHeaders(distinctId, sessionManager, req)
 
                 return originalOpen.call(xhr, method, req.url, async, username, password)
             }

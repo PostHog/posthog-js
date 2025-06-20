@@ -1,5 +1,3 @@
-/* eslint-disable no-console */
-
 import React, { FunctionComponent } from 'react'
 import { PostHogContext } from '../context'
 import { isFunction } from '../utils/type-utils'
@@ -42,6 +40,7 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
 
     componentDidCatch(error: unknown, errorInfo: React.ErrorInfo) {
         const { componentStack } = errorInfo
+        //eslint-disable-next-line react/prop-types
         const { additionalProperties } = this.props
         this.setState({
             error,
@@ -58,6 +57,7 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
     }
 
     public render(): React.ReactNode {
+        //eslint-disable-next-line react/prop-types
         const { children, fallback } = this.props
         const state = this.state
 
@@ -75,7 +75,7 @@ export class PostHogErrorBoundary extends React.Component<PostHogErrorBoundaryPr
         if (React.isValidElement(element)) {
             return element as React.ReactElement
         }
-
+        //eslint-disable-next-line no-console
         console.warn(__POSTHOG_ERROR_MESSAGES.INVALID_FALLBACK)
         return <></>
     }

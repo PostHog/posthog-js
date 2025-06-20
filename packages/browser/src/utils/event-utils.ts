@@ -6,6 +6,7 @@ import { each, extend, extendArray, stripEmptyProperties } from './index'
 import { document, location, userAgent, window } from './globals'
 import { detectBrowser, detectBrowserVersion, detectDevice, detectDeviceType, detectOS } from './user-agent-utils'
 import { stripLeadingDollar } from './string-utils'
+import { cookieStore } from '../storage'
 
 const URL_REGEX_PREFIX = 'https?://(.*)'
 
@@ -73,6 +74,11 @@ export const EVENT_TO_PERSON_PROPERTIES = [
 
 export const MASKED = '<masked>'
 
+// Campaign params that can be read from the cookie store
+export const COOKIE_CAMPAIGN_PARAMS = [
+    'li_fat_id', // linkedin
+]
+
 export function getCampaignParams(
     customTrackedParams?: string[],
     maskPersonalDataProperties?: boolean,
@@ -86,7 +92,19 @@ export function getCampaignParams(
         ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, customPersonalDataProperties || [])
         : []
 
-    return _getCampaignParamsFromUrl(maskQueryParams(document.URL, paramsToMask, MASKED), customTrackedParams)
+    // Initially get campaign params from the URL
+    const urlCampaignParams = _getCampaignParamsFromUrl(
+        maskQueryParams(document.URL, paramsToMask, MASKED),
+        customTrackedParams
+    )
+
+    // But we can also get some of them from the cookie store
+    // For example: https://learn.microsoft.com/en-us/linkedin/marketing/conversions/enabling-first-party-cookies?view=li-lms-2025-05#reading-li_fat_id-from-cookies
+    const cookieCampaignParams = _getCampaignParamsFromCookie()
+
+    // Prefer the values found in the urlCampaignParams if possible
+    // `extend` will override the values if found in the second argument
+    return extend(cookieCampaignParams, urlCampaignParams)
 }
 
 function _getCampaignParamsFromUrl(url: string, customParams?: string[]): Record<string, string> {
@@ -95,6 +113,16 @@ function _getCampaignParamsFromUrl(url: string, customParams?: string[]): Record
     const params: Record<string, any> = {}
     each(campaign_keywords, function (kwkey) {
         const kw = getQueryParam(url, kwkey)
+        params[kwkey] = kw ? kw : null
+    })
+
+    return params
+}
+
+function _getCampaignParamsFromCookie(): Record<string, string> {
+    const params: Record<string, any> = {}
+    each(COOKIE_CAMPAIGN_PARAMS, function (kwkey) {
+        const kw = cookieStore._get(kwkey)
         params[kwkey] = kw ? kw : null
     })
 

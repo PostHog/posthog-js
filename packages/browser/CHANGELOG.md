@@ -1,3 +1,12 @@
+## 1.255.0 - 2025-06-18
+
+- feat: enhance campaign parameter retrieval from cookies and URL (#2027)
+
+## 1.254.0 - 2025-06-17
+
+- feat: add distinct id tracing header (#2026)
+- Add flags project board workflow (#2014)
+
 ## 1.253.4 - 2025-06-16
 
 - fix: some style problems in multiple/single-choice questions (#2016)

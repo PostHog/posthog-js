@@ -1,16 +1,14 @@
-/*eslint-env node */
-
 module.exports = {
-    parserOptions: {
-        ecmaVersion: 2018,
-        sourceType: 'module',
-        project: true,
-    },
     overrides: [
         {
             files: './src/**/*',
             rules: {
                 'no-restricted-globals': ['error', 'document', 'window'],
+            },
+            parserOptions: {
+                ecmaVersion: 2018,
+                sourceType: 'module',
+                project: true,
             },
         },
         {
@@ -36,6 +34,10 @@ module.exports = {
             files: './testcafe/**/*',
             globals: {
                 __dirname: true,
+                fixture: true,
+            },
+            env: {
+                node: true,
             },
         },
         {
