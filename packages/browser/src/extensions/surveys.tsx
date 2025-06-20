@@ -239,13 +239,17 @@ export class SurveyManager {
     handlePopoverSurvey = (survey: Survey, ignoreDelay: boolean = false): void => {
         this._clearSurveyTimeout(survey.id)
         this._addSurveyToFocus(survey)
-        const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
+        const delaySeconds = ignoreDelay ? 0 : survey.appearance?.surveyPopupDelaySeconds || 0
+        const surveyWithDelay = {
+            ...survey,
+            appearance: { ...survey.appearance, surveyPopupDelaySeconds: delaySeconds },
+        }
         const { shadow } = retrieveSurveyShadow(survey, this._posthog)
         if (delaySeconds <= 0 || ignoreDelay) {
             return Preact.render(
                 <SurveyPopup
                     posthog={this._posthog}
-                    survey={survey}
+                    survey={surveyWithDelay}
                     removeSurveyFromFocus={this._removeSurveyFromFocus}
                 />,
                 shadow
