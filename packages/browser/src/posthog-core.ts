@@ -1430,7 +1430,7 @@ export class PostHog {
         this.surveys.renderSurvey(surveyId, selector)
     }
 
-    /** Render a styled survey popup. */
+    /** Render a styled survey popup. Notice that this method ignores any delay or conditions set on the survey. */
     renderSurveyPopup(surveyId: string): void {
         this.surveys.renderSurveyPopup(surveyId)
     }
