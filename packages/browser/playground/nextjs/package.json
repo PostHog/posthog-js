@@ -8,8 +8,8 @@
         "dev": "pnpm run clean-react && next dev",
         "dev-crossdomain": "NEXT_PUBLIC_CROSSDOMAIN=1 next dev --experimental-https",
         "install-deps": "pnpm run build-posthog-js && pnpm install",
-        "build": "next build --no-lint",
-        "start": "next start",
+        "build": "pnpm run clean-react && next build --no-lint",
+        "start": "pnpm run clean-react && next start",
         "lint": "next lint",
         "build-posthog-js": "cd ../../ && NODE_ENV=dev pnpm i && pnpm run build"
     },
