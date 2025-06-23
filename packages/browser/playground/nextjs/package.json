@@ -5,13 +5,13 @@
     "packageManager": "pnpm@9.15.4",
     "scripts": {
         "clean-react": "cd ../../react && pnpm run clean-node-modules",
-        "dev": "next dev",
+        "dev": "pnpm run clean-react && next dev",
         "dev-crossdomain": "NEXT_PUBLIC_CROSSDOMAIN=1 next dev --experimental-https",
-        "install-deps": "pnpm install && pnpm run build-posthog-js && pnpm install --ignore-workspace",
+        "install-deps": "pnpm run build-posthog-js && pnpm install",
         "build": "next build --no-lint",
-        "start": "next start",
+        "start": "pnpm run clean-react && next start",
         "lint": "next lint",
-        "build-posthog-js": "pnpm --filter=posthog-js build"
+        "build-posthog-js": "cd ../../ && NODE_ENV=dev pnpm i && pnpm run build && cd playground/nextjs && pnpm run clean-react"
     },
     "dependencies": {
         "@lottiefiles/react-lottie-player": "^3.5.4",
@@ -21,8 +21,8 @@
         "cookie": "^0.7.2",
         "eslint": "^8.57.1",
         "hls.js": "^1.5.15",
-        "next": "14.2.20",
-        "posthog-js": "file:../..",
+        "next": "14.2.30",
+        "posthog-js": "file:../../dist",
         "react": "18.3.1",
         "react-dom": "18.3.1",
         "socket.io": "^4.8.1",
