@@ -1,0 +1,2 @@
+packages:
+  - '.' # TODO delete this file and make the root workspace's file respect exclusion rules for this folder - weirdly tricky to do so
