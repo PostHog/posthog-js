@@ -11,7 +11,7 @@
         "build": "next build --no-lint",
         "start": "pnpm run clean-react && next start",
         "lint": "next lint",
-        "build-posthog-js": "cd ../../ && NODE_ENV=dev pnpm i && pnpm run build && pnpm run clean-react"
+        "build-posthog-js": "cd ../../ && NODE_ENV=dev pnpm i && pnpm run build && cd playground/nextjs && pnpm run clean-react"
     },
     "dependencies": {
         "@lottiefiles/react-lottie-player": "^3.5.4",
