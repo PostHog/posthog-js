@@ -1,0 +1,12 @@
+{
+    "maxWorkers": 1,
+    "testEnvironment": "node",
+    "testTimeout": 6000,
+    "testRegex": "\\.e2e\\.ts$",
+    "verbose": true,
+    "preset": "ts-jest",
+    "setupFilesAfterEnv": [
+        "./init.ts"
+    ]
+
+}
