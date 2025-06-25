@@ -168,6 +168,9 @@ importers:
         specifier: ^3.24.1
         version: 3.25.67
     devDependencies:
+      '@posthog-tooling/tsconfig-base':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig-base
       '@types/jest':
         specifier: ^29.5.14
         version: 29.5.14
