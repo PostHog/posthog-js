@@ -1,0 +1,11 @@
+{
+  "name": "posthog-core",
+  "version": "2.2.0",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PostHog/posthog-js-lite.git",
+    "directory": "posthog-core"
+  }
+}
