@@ -1,0 +1,42 @@
+{
+  "name": "@posthog/nextjs",
+  "version": "0.0.1",
+  "description": "NextJS SDK for Posthog 🦔",
+  "main": "./lib/index.cjs",
+  "module": "./lib/index.mjs",
+  "types": "./lib/index.d.ts",
+  "scripts": {
+    "prepublishOnly": "cd .. && yarn build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PostHog/posthog-js-lite.git",
+    "directory": "posthog-nextjs"
+  },
+  "author": {
+    "name": "PostHog",
+    "email": "hey@posthog.com",
+    "url": "https://posthog.com"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@posthog/cli": "^0.3.1"
+  },
+  "keywords": [
+    "posthog",
+    "nextjs"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.15.23",
+    "next": "^12.1.0"
+  },
+  "peerDependencies": {
+    "next": ">12.1.0"
+  },
+  "files": [
+    "lib/"
+  ]
+}

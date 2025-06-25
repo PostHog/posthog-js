@@ -1,0 +1,6 @@
+{
+    "name": "@posthog-tooling/tsconfig",
+    "files": [
+        "tsconfig.json"
+    ]
+}

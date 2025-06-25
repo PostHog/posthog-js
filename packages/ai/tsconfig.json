@@ -1,0 +1,10 @@
+{
+    "extends": "@posthog-tooling/tsconfig",
+    "compilerOptions": {
+        "baseUrl": "./",
+        "rootDir": "./",
+        "incremental": false,
+        "types": ["node", "jest"]
+    },
+    "exclude": ["node_modules/**/*", "**/dist/**", "**/lib/**", "**/*.spec.*", "rollup.config.mjs"]
+}

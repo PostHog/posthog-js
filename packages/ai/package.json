@@ -1,0 +1,91 @@
+{
+    "name": "@posthog/ai",
+    "version": "5.1.0",
+    "description": "PostHog Node.js AI integrations",
+    "author": "PostHog",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/PostHog/posthog-js.git",
+        "directory": "packages/ai"
+    },
+    "bugs": {
+        "url": "https://github.com/PostHog/posthog-js/issues"
+    },
+    "homepage": "https://github.com/PostHog/posthog-js#readme",
+    "main": "lib/index.cjs",
+    "module": "lib/index.mjs",
+    "types": "lib/index.d.ts",
+    "license": "MIT",
+    "keywords": [
+        "posthog",
+        "ai",
+        "openai",
+        "anthropic",
+        "gemini",
+        "llm",
+        "observability"
+    ],
+    "directories": {
+        "lib": "lib",
+        "test": "tests"
+    },
+    "engines": {
+        "node": ">=20"
+    },
+    "scripts": {
+        "test": "jest",
+        "build": "rollup -c"
+    },
+    "exports": {
+        ".": {
+            "require": "./lib/index.cjs",
+            "import": "./lib/index.mjs",
+            "types": "./lib/index.d.ts"
+        },
+        "./anthropic": {
+            "require": "./lib/anthropic/index.cjs",
+            "import": "./lib/anthropic/index.mjs",
+            "types": "./lib/anthropic/index.d.ts"
+        },
+        "./gemini": {
+            "require": "./lib/gemini/index.cjs",
+            "import": "./lib/gemini/index.mjs",
+            "types": "./lib/gemini/index.d.ts"
+        },
+        "./openai": {
+            "require": "./lib/openai/index.cjs",
+            "import": "./lib/openai/index.mjs",
+            "types": "./lib/openai/index.d.ts"
+        },
+        "./vercel": {
+            "require": "./lib/vercel/index.cjs",
+            "import": "./lib/vercel/index.mjs",
+            "types": "./lib/vercel/index.d.ts"
+        },
+        "./langchain": {
+            "require": "./lib/langchain/index.cjs",
+            "import": "./lib/langchain/index.mjs",
+            "types": "./lib/langchain/index.d.ts"
+        }
+    },
+    "dependencies": {
+        "@anthropic-ai/sdk": "^0.36.3",
+        "@google/genai": "^1.1.0",
+        "@langchain/core": "^0.3.37",
+        "ai": "^4.1.0",
+        "langchain": "^0.3.15",
+        "openai": "^5.0.0",
+        "uuid": "^11.0.5",
+        "zod": "^3.24.1"
+    },
+    "devDependencies": {
+        "@types/jest": "^29.5.14",
+        "@types/node": "^20.0.0",
+        "node-fetch": "^3.3.2",
+        "@posthog-tooling/rollup-utils": "workspace:*",
+        "@posthog-tooling/tsconfig": "workspace:*"
+    },
+    "peerDependencies": {
+        "posthog-node": "workspace:*"
+    }
+}

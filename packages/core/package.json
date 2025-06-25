@@ -1,0 +1,18 @@
+{
+    "name": "@posthog/core",
+    "version": "2.2.0",
+    "license": "MIT",
+    "main": "src/index.ts",
+    "scripts": {
+        "test": "jest",
+        "build": ""
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/PostHog/posthog-js.git",
+        "directory": "packages/core"
+    },
+    "devDependencies": {
+        "@posthog-tooling/tsconfig": "workspace:*"
+    }
+}
