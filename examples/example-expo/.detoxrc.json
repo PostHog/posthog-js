@@ -1,0 +1,47 @@
+{
+  "testRunner": "jest",
+  "runnerConfig": "e2e/config.json",
+  "skipLegacyWorkersInjection": true,
+  "apps": {
+    "ios": {
+      "type": "ios.app",
+      "binaryPath": "e2e/bin/Exponent.app"
+    }
+  },
+  "devices": {
+    "simulator": {
+      "type": "ios.simulator",
+      "device": {
+        "type": "iPhone 12 Pro"
+      }
+    }
+  },
+  "configurations": {
+    "ios": {
+      "device": "simulator",
+      "app": "ios",
+      "artifacts": {}
+    }
+  },
+  "artifacts": {
+    "rootDir": ".artifacts",
+    "plugins": {
+      "screenshot": {
+        "shouldTakeAutomaticSnapshots": true,
+        "keepOnlyFailedTestsArtifacts": false,
+        "takeWhen": {
+          "testStart": false,
+          "testDone": true
+        }
+      },
+      "video": {
+        "android": {
+          "bitRate": 4000000
+        },
+        "simulator": {
+          "codec": "hevc"
+        }
+      }
+    }
+  }
+}

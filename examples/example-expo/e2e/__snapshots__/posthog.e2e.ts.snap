@@ -1,0 +1,105 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`PostHog React Native E2E should autocapture taps 1`] = `
+Array [
+  Object {
+    "$el_text": "I have the property \\"ph-label\\" which means touching me will be autocaptured with a specific label",
+    "attr__accessible": true,
+    "attr__allowFontScaling": true,
+    "attr__ellipsizeMode": "tail",
+    "attr__isHighlighted": false,
+    "attr__ph-label": "special-text",
+    "attr__style": "",
+    "attr__testID": "example-ph-label",
+    "tag_name": "special-text",
+  },
+  Object {
+    "$el_text": "I have the property \\"ph-label\\" which means touching me will be autocaptured with a specific label",
+    "attr__ph-label": "special-text",
+    "attr__testID": "example-ph-label",
+    "tag_name": "special-text",
+  },
+  Object {
+    "attr__style": "backgroundColor:rgba(0,0,0,.1);padding:15;borderRadius:10;marginBottom:10",
+    "tag_name": "View",
+  },
+  Object {
+    "tag_name": "View",
+  },
+  Object {
+    "attr__style": "flex:1",
+    "tag_name": "ScrollView",
+  },
+  Object {
+    "attr__style": "flex:1",
+    "tag_name": "ScrollView",
+  },
+  Object {
+    "tag_name": "PostHogDemoScreen",
+  },
+  Object {
+    "attr__name": "TabOne",
+    "tag_name": "StaticContainer",
+  },
+  Object {
+    "tag_name": "EnsureSingleNavigator",
+  },
+  Object {
+    "tag_name": "SceneView",
+  },
+  Object {
+    "attr__style": "flex:1",
+    "tag_name": "View",
+  },
+  Object {
+    "attr__accessibilityElementsHidden": false,
+    "attr__importantForAccessibility": "auto",
+    "attr__style": "flex:1;backgroundColor:rgb(242, 242, 242);flexDirection:column-reverse",
+    "tag_name": "View",
+  },
+  Object {
+    "attr__accessibilityElementsHidden": false,
+    "attr__importantForAccessibility": "auto",
+    "attr__style": "flex:1;flexDirection:column-reverse",
+    "tag_name": "Background",
+  },
+  Object {
+    "attr__focused": true,
+    "attr__style": "",
+    "tag_name": "Screen",
+  },
+  Object {
+    "attr__activityState": 2,
+    "attr__style": "position:absolute;left:0;right:0;top:0;bottom:0;zIndex:0",
+    "tag_name": "AnimatedComponent",
+  },
+  Object {
+    "attr__freeze": false,
+    "tag_name": "MaybeFreeze",
+  },
+  Object {
+    "attr__activityState": 2,
+    "attr__enabled": true,
+    "attr__style": "position:absolute;left:0;right:0;top:0;bottom:0;zIndex:0",
+    "tag_name": "Screen",
+  },
+  Object {
+    "attr__enabled": true,
+    "attr__style": "position:absolute;left:0;right:0;top:0;bottom:0;zIndex:0",
+    "attr__visible": true,
+    "tag_name": "MaybeScreen",
+  },
+  Object {
+    "attr__enabled": true,
+    "attr__hasTwoStates": true,
+    "attr__style": "flex:1;overflow:hidden",
+    "tag_name": "ScreenContainer",
+  },
+  Object {
+    "attr__enabled": true,
+    "attr__hasTwoStates": true,
+    "attr__style": "flex:1;overflow:hidden",
+    "tag_name": "MaybeScreenContainer",
+  },
+]
+`;
