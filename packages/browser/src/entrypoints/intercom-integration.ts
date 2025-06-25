@@ -16,7 +16,7 @@ assignableWindow.__PosthogExtensions__.integrations.intercom = {
 
         const intercom = (assignableWindow as any).Intercom
         if (!intercom) {
-            logger.warn(' Intercom not found while initializing the integration')
+            logger.warn('Intercom not found while initializing the integration')
             return
         }
 
