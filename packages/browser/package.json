@@ -14,7 +14,7 @@
         "build-lib": "rm -rf lib && tsc -b tsconfig.lib.json",
         "build-react": "cd react; NODE_ENV=dev pnpm i; pnpm build;",
         "lint": "eslint src playwright",
-        "lint:fix": "eslint src --fix && eslint playwright --fix && eslint react --fix",
+        "lint:fix": "eslint src playwright --fix",
         "prettier": "prettier --write src/ functional_tests/ playwright/",
         "prettier:check": "prettier --check src/ functional_tests/ playwright/",
         "prepublishOnly": "pnpm lint && pnpm build && pnpm test && pnpm test:react",
