@@ -30,9 +30,9 @@ These dependencies are marked as optional to reduce installation size for users 
 > Run `pnpm --filter=posthog-js build` at least once before running tests.
 
 
-- Unit tests: run `pnpm  --filter=posthog-js test`.
-- Cypress: run `pnpm start` to have a test server running and separately `pnpm cypress` to launch Cypress test engine.
-- Playwright: run e.g. `pnpm exec playwright test --ui --project webkit --project firefox` to run with UI and in webkit and firefox
+- Unit tests: run `pnpm --filter=posthog-js test`.
+
+- Playwright: run `pnpm --filter=posthog-js start` to have a test server running and then run e.g. `pnpm --filter=posthog-js exec playwright test --ui --project webkit --project firefox` to run with UI and in webkit and firefox
 
 ### Running TestCafe E2E tests with BrowserStack
 
