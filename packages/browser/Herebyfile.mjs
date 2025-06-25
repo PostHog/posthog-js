@@ -36,9 +36,11 @@ export const buildDist = task({
     dependencies: [buildLib, cleanDist],
     run: async () => {
         const entrypoints = readdirSync('./src/entrypoints')
-        const cpus = os.cpus().length
-        console.log(`Building ${entrypoints.length} entrypoints using ${cpus} CPUs`)
-        await pool(cpus, entrypoints, (file) => {
+        const maxConcurrency = process.env.MAX_CONCURRENCY
+            ? parseInt(process.env.MAX_CONCURRENCY)
+            : os.cpus().length / 2
+        console.log(`Building ${entrypoints.length} entrypoints using ${maxConcurrency} processes`)
+        await pool(maxConcurrency, entrypoints, (file) => {
             return exec('rollup', ['-c', '--entrypoint', file])
         })
         if (process.env.WRITE_MANGLED_PROPERTIES) {
