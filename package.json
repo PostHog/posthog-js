@@ -15,11 +15,11 @@
     "devDependencies": {
         "eslint": "8.57.0",
         "eslint-config-prettier": "^8.5.0",
-        "eslint-config-posthog-js": "workspace:./eslint-rules",
+        "eslint-config-posthog-js": "workspace:./tooling/eslint-plugin-posthog-js",
         "eslint-plugin-compat": "^6.0.1",
         "eslint-plugin-jest": "^28.8.3",
         "eslint-plugin-no-only-tests": "^3.1.0",
-        "eslint-plugin-posthog-js": "workspace:./eslint-rules",
+        "eslint-plugin-posthog-js": "workspace:./tooling/eslint-plugin-posthog-js",
         "eslint-plugin-prettier": "^5.2.1",
         "eslint-plugin-react": "^7.30.1",
         "eslint-plugin-react-hooks": "^4.6.0",
