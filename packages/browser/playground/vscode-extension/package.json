@@ -1,0 +1,26 @@
+{
+  "name": "posthog-vscode-playground",
+  "displayName": "PostHog VS Code Playground",
+  "description": "A playground for testing PostHog integration in a VS Code extension.",
+  "version": "0.0.1",
+  "publisher": "posthog",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "activationEvents": [
+    "onCommand:posthog.start"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "posthog.start",
+        "title": "Start PostHog Playground",
+        "category": "PostHog"
+      }
+    ]
+  },
+  "devDependencies": {
+    "vscode": "*"
+  }
+} 
