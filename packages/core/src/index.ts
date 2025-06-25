@@ -52,7 +52,10 @@ export * as utils from './utils'
 class PostHogFetchHttpError extends Error {
   name = 'PostHogFetchHttpError'
 
-  constructor(public response: PostHogFetchResponse, public reqByteLength: number) {
+  constructor(
+    public response: PostHogFetchResponse,
+    public reqByteLength: number
+  ) {
     super('HTTP error while fetching PostHog: status=' + response.status + ', reqByteLength=' + reqByteLength)
   }
 

@@ -64,6 +64,21 @@ module.exports = {
                 node: true,
             },
         },
+        {
+            files: ['packages/ai/**', 'packages/core/**', 'packages/react-native/**'],
+            rules: {
+                'no-console': 'off',
+                'posthog-js/no-direct-array-check': 'off',
+                '@typescript-eslint/no-unused-vars': 'off',
+                '@typescript-eslint/naming-convention': 'off',
+                'posthog-js/no-direct-undefined-check': 'off',
+                'posthog-js/no-direct-boolean-check': 'off',
+                'posthog-js/no-direct-null-check': 'off',
+                'posthog-js/no-direct-function-check': 'off',
+                '@typescript-eslint/ban-ts-comment': 'off',
+                'no-constant-condition': 'off',
+            },
+        },
     ],
     ignorePatterns: ['node_modules', 'dist'],
 }
