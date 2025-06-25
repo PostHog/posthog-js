@@ -20,7 +20,11 @@ export interface PostHogCoreTestClientMocks {
 export class PostHogCoreTestClient extends PostHogCore {
   public _cachedDistinctId?: string
 
-  constructor(private mocks: PostHogCoreTestClientMocks, apiKey: string, options?: PostHogCoreOptions) {
+  constructor(
+    private mocks: PostHogCoreTestClientMocks,
+    apiKey: string,
+    options?: PostHogCoreOptions
+  ) {
     super(apiKey, options)
 
     this.setupBootstrap(options)
