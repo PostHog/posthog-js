@@ -92,6 +92,7 @@ import {
 } from './utils/type-utils'
 import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
+import { ExternalIntegrations } from './extensions/external-integration'
 
 /*
 SIMPLE STYLE GUIDE:
