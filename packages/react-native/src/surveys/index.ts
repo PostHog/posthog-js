@@ -1,0 +1,6 @@
+export { PostHogSurveyProvider } from './PostHogSurveyProvider'
+export type { PostHogSurveyProviderProps } from './PostHogSurveyProvider'
+export { SurveyModal } from './components/SurveyModal'
+export type { SurveyModalProps } from './components/SurveyModal'
+export type { Survey, SurveyAppearance } from '../../../posthog-core/src'
+export { Questions } from './components/Surveys'
