@@ -11,9 +11,12 @@
         }
     },
     "devDependencies": {
+        "@types/eslint": "^8.44.6",
+        "@typescript-eslint/eslint-plugin": "^8.29.1",
+        "@typescript-eslint/parser": "^8.29.1",
         "eslint": "8.57.0",
-        "eslint-config-prettier": "^8.5.0",
         "eslint-config-posthog-js": "workspace:./eslint-rules",
+        "eslint-config-prettier": "^8.5.0",
         "eslint-plugin-compat": "^6.0.1",
         "eslint-plugin-jest": "^28.8.3",
         "eslint-plugin-no-only-tests": "^3.1.0",
@@ -21,10 +24,12 @@
         "eslint-plugin-prettier": "^5.2.1",
         "eslint-plugin-react": "^7.30.1",
         "eslint-plugin-react-hooks": "^4.6.0",
-        "@typescript-eslint/eslint-plugin": "^8.29.1",
-        "@typescript-eslint/parser": "^8.29.1",
-        "@types/eslint": "^8.44.6",
-        "lint-staged": "^10.2.11"
+        "lint-staged": "^10.2.11",
+        "tslib": "catalog:",
+        "ts-jest": "catalog:",
+        "ts-node": "catalog:",
+        "rollup": "catalog:",
+        "typescript": "catalog:"
     },
     "lint-staged": {
         "*.{ts,tsx,js,json}": "prettier --write",

@@ -56,7 +56,7 @@ module.exports = {
     rules,
     overrides: [
         {
-            files: ['rollup.config.js', '.eslintrc.js', 'jest.config.js'],
+            files: ['rollup.config.js', 'rollup.config.mjs', '.eslintrc.js', 'jest.config.js'],
             parserOptions: {
                 project: null,
             },
@@ -64,6 +64,16 @@ module.exports = {
                 node: true,
             },
         },
+        {
+            files: ['packages/ai/**'],
+            rules: {
+                'no-console': 'off',
+                'posthog-js/no-direct-array-check': 'off',
+                '@typescript-eslint/no-unused-vars': 'off',
+                '@typescript-eslint/naming-convention': 'off',
+                'posthog-js/no-direct-undefined-check': 'off',
+            },
+        },
     ],
-    ignorePatterns: ['node_modules', 'dist'],
+    ignorePatterns: ['node_modules/**', 'dist/**'],
 }

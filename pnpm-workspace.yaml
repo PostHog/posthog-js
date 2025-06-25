@@ -1,5 +1,12 @@
 packages:
   # all packages in direct subdirs of packages/
   - "packages/*"
+  - "tooling/*"
   - "packages/browser/react"
-  - "eslint-rules"
+
+catalog:
+  typescript: "^5.8.3"
+  tslib: "^2.4.0"
+  ts-jest: "^29.0.0"
+  ts-node: "^10.9.1"
+  rollup: "^4.44.0"

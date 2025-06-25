@@ -33,3 +33,4 @@ cypress/downloads/downloads.html
 /blob-report/
 /playwright/.cache/
 /stats
+.turbo
