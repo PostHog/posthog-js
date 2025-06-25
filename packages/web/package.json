@@ -12,7 +12,8 @@
   },
   "scripts": {
     "test": "jest -c jest.config.js",
-    "lint": "eslint src",
+    "lint": "eslint src test",
+    "lint:fix": "eslint src test --fix",
     "prepublishOnly": "cd .. && yarn build"
   }
 }

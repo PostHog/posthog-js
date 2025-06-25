@@ -9,6 +9,7 @@
     "directory": "posthog-core"
   },
   "scripts": {
-    "lint": "eslint src"
+    "lint": "eslint src test",
+    "lint:fix": "eslint src test --fix"
   }
 }

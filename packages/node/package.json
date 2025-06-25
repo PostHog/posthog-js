@@ -9,7 +9,8 @@
   },
   "scripts": {
     "prepublishOnly": "cd .. && yarn build",
-    "lint": "eslint src"
+    "lint": "eslint src test",
+    "lint:fix": "eslint src test --fix"
   },
   "engines": {
     "node": ">=20"

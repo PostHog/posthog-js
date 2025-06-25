@@ -3,7 +3,8 @@
     "packageManager": "pnpm@9.15.4",
     "scripts": {
         "build-rollup": "pnpm -r build-rollup",
-        "lint": "pnpm -r lint"
+        "lint": "pnpm -r lint",
+        "lint:fix": "pnpm -r lint:fix"
     },
     "pnpm": {
         "patchedDependencies": {
