@@ -16,7 +16,7 @@ assignableWindow.__PosthogExtensions__.integrations.crispChat = {
 
         const crispChat = (assignableWindow as any).$crisp
         if (!crispChat) {
-            logger.warn(' Crisp Chat not found while initializing the integration')
+            logger.warn('Crisp Chat not found while initializing the integration')
             return
         }
 
