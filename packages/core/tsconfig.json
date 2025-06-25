@@ -1,7 +1,15 @@
 {
-  "extends": "../tsconfig.json",
+  "extends": "@posthog-tooling/tsconfig-base",
   "compilerOptions": {
-    "composite": true,
-    "target": "es2020"
-  }
+    "rootDir": "./src",
+    "baseUrl": "./src",
+    "outDir": "dist",
+    "module": "CommonJS",
+    "moduleResolution": "node10",
+    "composite": false,
+    "declaration": true,
+    "declarationMap": true
+  },
+  "include": ["src/**/*", "test/**/*"],
+  "exclude": ["node_modules", "test/**/*"]
 }

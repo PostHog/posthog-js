@@ -1,5 +1,10 @@
-import { parseBody, waitForPromises } from './test-utils/test-utils'
-import { createTestClient, PostHogCoreTestClient, PostHogCoreTestClientMocks } from './test-utils/PostHogCoreTestClient'
+import {
+  parseBody,
+  waitForPromises,
+  createTestClient,
+  PostHogCoreTestClient,
+  PostHogCoreTestClientMocks,
+} from '../src/testing'
 import { PostHogPersistedProperty } from '../src'
 
 describe('PostHog Core', () => {

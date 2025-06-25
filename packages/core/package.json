@@ -2,15 +2,35 @@
   "name": "posthog-core",
   "version": "2.2.0",
   "license": "MIT",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "repository": {
     "type": "git",
-    "url": "https://github.com/PostHog/posthog-js-lite.git",
-    "directory": "posthog-core"
+    "url": "https://github.com/PostHog/posthog-js.git",
+    "directory": "packages/core"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "lint": "eslint src test",
-    "lint:fix": "eslint src test --fix"
+    "lint:fix": "eslint src test --fix",
+    "build": "tsc -b",
+    "test": "jest"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./vendor/*": {
+      "types": "./dist/vendor/*.d.ts",
+      "default": "./dist/vendor/*.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
   },
   "devDependencies": {
     "@posthog-tooling/tsconfig-base": "workspace:*"
