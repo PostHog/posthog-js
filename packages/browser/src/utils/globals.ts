@@ -99,7 +99,7 @@ interface PostHogExtensions {
         config: DeadClicksAutoCaptureConfig
     ) => LazyLoadedDeadClicksAutocaptureInterface
     integrations?: {
-        [K in ExternalIntegrationKind]?: { start: (posthog: PostHog) => void }
+        [K in ExternalIntegrationKind]?: { start: (posthog: PostHog) => void; stop: () => void }
     }
 }
 

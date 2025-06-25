@@ -5,6 +5,7 @@ import { createLogger } from '../utils/logger'
 const logger = createLogger('[PostHog Crisp Chat]')
 
 const reportedSessionIds = new Set<string>()
+let sessionIdListenerUnsubscribe: undefined | (() => void) = undefined
 
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
 assignableWindow.__PosthogExtensions__.integrations = assignableWindow.__PosthogExtensions__.integrations || {}
@@ -41,7 +42,7 @@ assignableWindow.__PosthogExtensions__.integrations.crispChat = {
 
         // this is called immediately if there's a session id
         // and then again whenever the session id changes
-        posthog.onSessionId((sessionId) => {
+        sessionIdListenerUnsubscribe = posthog.onSessionId((sessionId) => {
             if (!reportedSessionIds.has(sessionId)) {
                 updateCrispChat()
                 reportedSessionIds.add(sessionId)
@@ -49,5 +50,9 @@ assignableWindow.__PosthogExtensions__.integrations.crispChat = {
         })
 
         logger.info('integration started')
+    },
+    stop: () => {
+        sessionIdListenerUnsubscribe?.()
+        sessionIdListenerUnsubscribe = undefined
     },
 }
