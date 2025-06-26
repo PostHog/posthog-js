@@ -323,9 +323,6 @@ importers:
       react-test-renderer:
         specifier: ^17.0.1
         version: 17.0.2(react@17.0.2)
-      rimraf:
-        specifier: ^3.0.2
-        version: 3.0.2
       rollup:
         specifier: ^2.35.1
         version: 2.79.2
