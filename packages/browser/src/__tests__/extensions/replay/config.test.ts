@@ -79,21 +79,21 @@ describe('config', () => {
                 ],
                 [
                     {
-                        name: 'https://app.posthog.com/s/?ip=1&ver=123',
+                        name: 'https://app.posthog.com/s/?ip=0&ver=123',
                     },
                     undefined,
                     undefined,
                 ],
                 [
                     {
-                        name: 'https://app.posthog.com/e/?ip=1&ver=123',
+                        name: 'https://app.posthog.com/e/?ip=0&ver=123',
                     },
                     undefined,
                     undefined,
                 ],
                 [
                     {
-                        name: 'https://app.posthog.com/i/v0/e/?ip=1&ver=123',
+                        name: 'https://app.posthog.com/i/v0/e/?ip=0&ver=123',
                     },
                     undefined,
                     undefined,
@@ -101,7 +101,7 @@ describe('config', () => {
                 [
                     {
                         // even an imaginary future world of rust session replay capture
-                        name: 'https://app.posthog.com/i/v0/s/?ip=1&ver=123',
+                        name: 'https://app.posthog.com/i/v0/s/?ip=0&ver=123',
                     },
                     undefined,
                     undefined,
@@ -109,7 +109,7 @@ describe('config', () => {
                 [
                     {
                         // using a relative path as a reverse proxy api host
-                        name: 'https://app.posthog.com/ingest/s/?ip=1&ver=123',
+                        name: 'https://app.posthog.com/ingest/s/?ip=0&ver=123',
                     },
                     undefined,
                     '/ingest',
@@ -117,7 +117,7 @@ describe('config', () => {
                 [
                     {
                         // using a reverse proxy with a path
-                        name: 'https://app.posthog.com/ingest/s/?ip=1&ver=123',
+                        name: 'https://app.posthog.com/ingest/s/?ip=0&ver=123',
                     },
                     undefined,
                     'https://app.posthog.com/ingest',

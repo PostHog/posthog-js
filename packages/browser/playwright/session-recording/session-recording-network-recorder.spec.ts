@@ -138,7 +138,7 @@ test.beforeEach(async ({ context }) => {
                                   'fetch',
                               ],
                               // webkit isn't capturing this failed request in the pre-wrapped fetch performance observer records
-                              // [/https:\/\/localhost:\d+\/array\/test%20token\/config\?ip=1&_=\d+&ver=1\.\d\d\d\.\d+/, 'fetch'],
+                              // [/https:\/\/localhost:\d+\/array\/test%20token\/config\?ip=0&_=\d+&ver=1\.\d\d\d\.\d+/, 'fetch'],
                               [/https:\/\/localhost:\d+\/static\/recorder.js\?v=1\.\d\d\d\.\d+/, 'script'],
                               [/https:\/\/example.com/, expectedInitiatorType],
                               // webkit is duplicating this, it is picked up in the initial performance observer records
@@ -159,7 +159,7 @@ test.beforeEach(async ({ context }) => {
                                   'fetch',
                               ],
                               [
-                                  /https:\/\/localhost:\d+\/array\/test%20token\/config\?ip=1&_=\d+&ver=1\.\d\d\d\.\d+/,
+                                  /https:\/\/localhost:\d+\/array\/test%20token\/config\?ip=0&_=\d+&ver=1\.\d\d\d\.\d+/,
                                   'fetch',
                               ],
                               [/https:\/\/localhost:\d+\/static\/recorder.js\?v=1\.\d\d\d\.\d+/, 'script'],
