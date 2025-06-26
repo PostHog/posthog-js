@@ -1,5 +1,4 @@
 module.exports = {
-  ignorePatterns: ['src/vendor/**/*'],
   overrides: [
     {
       files: ['src/**/*'],
@@ -9,4 +8,5 @@ module.exports = {
       },
     },
   ],
+  ignorePatterns: ['src/vendor/**/*', 'dist/**/*', 'node_modules/**/*', 'coverage/**/*'],
 }

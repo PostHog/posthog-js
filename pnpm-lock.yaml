@@ -168,6 +168,9 @@ importers:
         specifier: ^3.24.1
         version: 3.25.67
     devDependencies:
+      '@posthog-tooling/rollup-utils':
+        specifier: workspace:*
+        version: link:../../tooling/rollup-utils
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
@@ -470,6 +473,9 @@ importers:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
+      tsup:
+        specifier: 'catalog:'
+        version: 8.5.0(postcss@8.5.3)(typescript@5.5.4)(yaml@2.8.0)
 
   packages/nextjs-config:
     dependencies:
