@@ -15,14 +15,14 @@
     "scripts": {
         "prebuild": "npm run clean",
         "start": "tsc-watch",
-        "clean": "rimraf dist",
+        "clean": "pnpx rimraf dist",
         "build": "pnpm clean && cross-env NODE_ENV=production rollup -c rollup.config.ts",
         "test": "jest",
         "lint": "eslint src",
         "test:debug": "jest --runInBand",
         "prepublishOnly": "pnpm test && pnpm build",
         "link-posthog-js": "pnpm link ..",
-        "clean-node-modules": "rimraf node_modules && pnpm run link-posthog-js"
+        "clean-node-modules": "pnpx rimraf node_modules && pnpm run link-posthog-js"
     },
     "main": "dist/umd/index.js",
     "module": "dist/esm/index.js",
@@ -57,7 +57,6 @@
         "react": "^17.0.1",
         "react-dom": "^17.0.1",
         "react-test-renderer": "^17.0.1",
-        "rimraf": "^3.0.2",
         "rollup": "^2.35.1",
         "rollup-plugin-typescript2": "^0.29.0",
         "ts-jest": "^26.4.4",
