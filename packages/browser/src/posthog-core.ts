@@ -609,7 +609,7 @@ export class PostHog {
 
         if (this.config.ip) {
             logger.warn(
-                'The `ip` config option is deprecated. See https://posthog.com/tutorials/web-redact-properties#hiding-customer-ip-address for more information on how to discard IP addresses.'
+                'The `ip` config option has NO EFFECT AT ALL and has been deprecated. Use a custom transformation or "Discard IP data" project setting instead. See https://posthog.com/tutorials/web-redact-properties#hiding-customer-ip-address for more information.'
             )
         }
 
