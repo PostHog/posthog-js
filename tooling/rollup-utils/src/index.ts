@@ -38,6 +38,11 @@ export function external(packageJson: any) {
         ...listDeps(packageJson.peerDependencies),
         ...listDeps(packageJson.devDependencies),
     ])
+    // posthog-core is internal for now
+    // we will bundle it in other libraries for now
+    if (externals.has('posthog-core')) {
+        externals.delete('posthog-core')
+    }
     return Array.from(externals)
 }
 
