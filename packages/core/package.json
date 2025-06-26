@@ -34,7 +34,6 @@
     }
   },
   "devDependencies": {
-    "@posthog-tooling/tsconfig-base": "workspace:*",
-    "tsup": "catalog:"
+    "@posthog-tooling/tsconfig-base": "workspace:*"
   }
 }
