@@ -163,7 +163,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_external_dependency_loading: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
-    ip: true,
+    ip: false,
     opt_out_capturing_by_default: false,
     opt_out_persistence_by_default: false,
     opt_out_useragent_filter: false,
@@ -605,6 +605,12 @@ export class PostHog {
         if (isFunction(this.config._onCapture) && this.config._onCapture !== __NOOP) {
             logger.warn('onCapture is deprecated. Please use `before_send` instead')
             this.on('eventCaptured', (data) => this.config._onCapture(data.event, data))
+        }
+
+        if (this.config.ip) {
+            logger.warn(
+                'The `ip` config option is deprecated. See https://posthog.com/tutorials/web-redact-properties#hiding-customer-ip-address for more information on how to discard IP addresses.'
+            )
         }
 
         return this
