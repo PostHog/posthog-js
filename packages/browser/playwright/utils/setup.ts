@@ -118,6 +118,7 @@ export async function start(
                 const opts: Partial<PostHogConfig> = {
                     api_host: 'https://localhost:1234',
                     debug: true,
+                    ip: false, // Prevent IP deprecation warning in Playwright tests
                     before_send: (event) => {
                         const win = window as WindowWithPostHog
                         win.capturedEvents = win.capturedEvents || []
