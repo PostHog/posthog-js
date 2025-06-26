@@ -537,7 +537,7 @@ export interface PostHogConfig {
     /**
      * Determines whether PostHog should capture IP addresses.
      *
-     * @default true
+     * @default false
      */
     /** @deprecated - use a custom transformation or "Discard IP data" project setting instead: @see https://posthog.com/tutorials/web-redact-properties */
     ip: boolean
