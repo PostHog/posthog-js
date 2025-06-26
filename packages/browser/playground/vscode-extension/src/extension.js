@@ -3,16 +3,33 @@ const vscode = require('vscode');
 function activate(context) {
     context.subscriptions.push(
         vscode.commands.registerCommand('posthog.start', () => {
+            // Set to true to load the script from a local file, false to load from the CDN
+            const runFromLocal = true; 
+
             const panel = vscode.window.createWebviewPanel(
                 'posthogPlayground',
                 'PostHog Playground',
                 vscode.ViewColumn.One,
                 {
-                    enableScripts: true
+                    enableScripts: true,
+                    // Only grant access to local files if we are running from local
+                    localResourceRoots: runFromLocal ? [vscode.Uri.joinPath(context.extensionUri, '..', '..')] : []
                 }
             );
 
-            panel.webview.html = getWebviewContent();
+            let scriptSrc;
+            if (runFromLocal) {
+                // Get the path to the script on disk
+                const onDiskPath = vscode.Uri.joinPath(context.extensionUri, '..', '..', 'dist', 'array.full.js');
+                // And get the special URI to use with the webview
+                scriptSrc = panel.webview.asWebviewUri(onDiskPath);
+            } else {
+                // Use the CDN URL
+                scriptSrc = 'https://app.posthog.com/static/array.full.js';
+            }
+
+
+            panel.webview.html = getWebviewContent(scriptSrc);
 
             panel.webview.onDidReceiveMessage(
                 message => {
@@ -29,7 +46,7 @@ function activate(context) {
     );
 }
 
-function getWebviewContent() {
+function getWebviewContent(scriptSrc) {
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -37,12 +54,13 @@ function getWebviewContent() {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PostHog Playground</title>
     <script>
-        !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host+"/static/array.full.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+        !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src="${scriptSrc}",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture identify alias people.set people.set_once set_config register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
         posthog.init(
-       'YOUR_PROJECT_KEY_HERE', 
+        'YOUR_PROJECT_KEY_HERE', 
         {
         api_host: 'http://localhost:8010', 
         defaults: '2025-05-24',
+        debug:true,
         enable_recording_console_log: true,
         disable_session_recording: false,
         persistence: 'localStorage+cookie',
