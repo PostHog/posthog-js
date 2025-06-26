@@ -14,10 +14,8 @@
         "noEmit": false,
         "incremental": true,
         "strict": true,
-        "baseUrl": "./", // this must be specified if "paths" is specified.
-        "rootDir": "./",
-        "lib": ["ES2020", "ES2022.Error"],
-        "jsx": "react"
-    },
-    "exclude": ["**/dist/**", "node_modules", "dist", "**/*.spec.*"]
+        "rootDir": ".",
+        "lib": ["ES2020"],
+        "types": ["node", "jest"]
+    }
 }

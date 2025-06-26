@@ -25,11 +25,10 @@
         "rollup-plugin-typescript2": "^0.36.0"
     },
     "peerDependencies": {
-        "rollup": "^2.77.0"
+        "rollup": ">=2.77.0",
+        "typescript": ">=5.0.0"
     },
     "devDependencies": {
-        "@types/node": "^24.0.3",
-        "tsup": "^8.5.0",
-        "typescript": "^5.8.3"
+        "tsup": "^8.5.0"
     }
 }
