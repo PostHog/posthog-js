@@ -1,7 +1,7 @@
 {
     "compilerOptions": {
-        "module": "ESNext",
-        "moduleResolution": "node",
+        "module": "esnext",
+        "moduleResolution": "bundler",
         "isolatedModules": true,
         "esModuleInterop": true,
         "declaration": false,
@@ -15,7 +15,7 @@
         "incremental": true,
         "strict": true,
         "rootDir": ".",
-        "lib": ["ES2020"],
+        "lib": ["es2022"],
         "types": ["node", "jest"]
     }
 }
