@@ -373,7 +373,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     )
 
     const flagWasLocallyEvaluated = response !== undefined
-    let requestId = undefined
+    let requestId: string | undefined = undefined
     let flagDetail: FeatureFlagDetail | undefined = undefined
     if (!flagWasLocallyEvaluated && !onlyEvaluateLocally) {
       const remoteResponse = await super.getFeatureFlagDetailStateless(
@@ -455,7 +455,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     personProperties = adjustedProperties.allPersonProperties
     groupProperties = adjustedProperties.allGroupProperties
 
-    let response = undefined
+    let response: JsonType | undefined = undefined
 
     const localEvaluationEnabled = this.featureFlagsPoller !== undefined
     if (localEvaluationEnabled) {
