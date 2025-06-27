@@ -449,15 +449,15 @@ importers:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.1
       commander:
         specifier: ^9.3.0
         version: 9.5.0
       mitata:
         specifier: ^1.0.21
         version: 1.0.34
+      posthog-core:
+        specifier: workspace:*
+        version: link:../core
 
   packages/react-native:
     devDependencies:

@@ -1,8 +1,9 @@
 {
   "extends": "@posthog-tooling/tsconfig-base",
   "compilerOptions": {
-    "incremental": false,
-    "types": ["node"],
-    "typeRoots": ["./node_modules/@types", "../node_modules/@types"]
-  }
+    "rootDir": ".",
+    "module": "ESNext",
+    "moduleResolution": "bundler"
+  },
+  "include": ["src/**/*"]
 }
