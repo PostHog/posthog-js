@@ -21,17 +21,9 @@
   "files": [
     "dist"
   ],
-  "dependencies": {
-    "posthog-core": "workspace:*"
-  },
   "devDependencies": {
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@posthog-tooling/rollup-utils": "workspace:*",
     "posthog-core": "workspace:*"
-  },
-  "dependenciesMeta": {
-    "posthog-core": {
-      "injected": true
-    }
   }
 }
