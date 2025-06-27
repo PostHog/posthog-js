@@ -26,7 +26,7 @@ configs.push({
 
 configs.push({
   input: `./src/index.ts`,
-  output: [{ file: `./lib/index.d.ts`, format: 'es' }],
+  output: [{ file: `./dist/index.d.ts`, format: 'es' }],
   external: externalDeps,
   plugins: [resolve({ extensions }), dts()],
 })
@@ -39,13 +39,13 @@ providers.forEach((provider) => {
     input: `./src/${provider}/index.ts`,
     output: [
       {
-        file: `./lib/${provider}/index.cjs`,
+        file: `./dist/${provider}/index.cjs`,
         sourcemap: true,
         exports: 'named',
         format: 'cjs',
       },
       {
-        file: `./lib/${provider}/index.mjs`,
+        file: `./dist/${provider}/index.mjs`,
         sourcemap: true,
         format: 'es',
       },
@@ -66,7 +66,7 @@ providers.forEach((provider) => {
 
   configs.push({
     input: `./src/${provider}/index.ts`,
-    output: [{ file: `./lib/${provider}/index.d.ts`, format: 'es' }],
+    output: [{ file: `./dist/${provider}/index.d.ts`, format: 'es' }],
     external: externalDeps,
     plugins: [resolve({ extensions }), dts()],
   })
