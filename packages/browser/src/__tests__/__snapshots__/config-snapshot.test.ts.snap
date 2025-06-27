@@ -155,10 +155,6 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"false\\",
     \\"true\\"
   ],
-  \\"ip\\": [
-    \\"false\\",
-    \\"true\\"
-  ],
   \\"opt_out_capturing_by_default\\": [
     \\"false\\",
     \\"true\\"
@@ -547,6 +543,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
   ],
   \\"inapp_link_new_window\\": [
     \\"undefined\\",
+    \\"false\\",
+    \\"true\\"
+  ],
+  \\"ip\\": [
     \\"false\\",
     \\"true\\"
   ]
