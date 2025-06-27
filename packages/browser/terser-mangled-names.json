@@ -116,7 +116,7 @@
         "_hasBootstrappedFeatureFlags",
         "_hasLoadedFlags",
         "_hasPersonProcessing",
-        "_hasSurveys",
+        "_isSurveysEnabled",
         "_ignoreClick",
         "_initialPageviewCaptured",
         "_initialPersonProfilesConfig",
