@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { hasEvents } from './surveys-utils'
-import { Survey } from '../../../posthog-core/src'
+import { Survey } from 'posthog-core'
 import { PostHog } from '../posthog-rn'
 
 const SURVEY_SHOWN_EVENT_NAME = 'survey shown'

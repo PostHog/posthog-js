@@ -2,21 +2,22 @@
   "name": "posthog-react-native",
   "version": "4.1.2",
   "license": "MIT",
-  "main": "lib/posthog-react-native/index.js",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
   "files": [
     "lib/"
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/PostHog/posthog-js-lite.git",
-    "directory": "posthog-react-native"
+    "url": "https://github.com/PostHog/posthog-js.git",
+    "directory": "packages/react-native"
   },
   "scripts": {
     "pretest": "npm run prebuild",
     "lint": "eslint src test",
     "lint:fix": "eslint src test --fix",
     "test": "jest -c jest.config.js",
-    "prepublishOnly": "cd .. && yarn build",
+    "prepublishOnly": "pnpm lint && pnpm test && pnpm build",
     "prebuild": "node -p \"'export const version = ' + JSON.stringify(require('./package.json').version)\" > src/version.ts",
     "build": "rm -rf lib && tsc --outDir ./lib && babel ./lib --out-dir lib --extensions '.js'"
   },
@@ -24,14 +25,13 @@
     "@babel/cli": "^7.19.3",
     "@react-native-async-storage/async-storage": "^1.17.10",
     "@react-navigation/native": "^5.0.10",
-    "@types/jest": "^28.1.5",
+    "@types/react": "^17.0.87",
     "@types/react-native": "^0.69.1",
     "expo": "^45.0.6",
     "expo-application": "^4.0.0",
     "expo-device": "^4.0.0",
     "expo-file-system": "^13.0.0",
     "expo-localization": "^11.0.0",
-    "jest-expo": "^46.0.1",
     "react": "18.2.0",
     "react-native": "^0.69.1",
     "react-native-device-info": "^10.3.0",
@@ -41,7 +41,8 @@
     "react-native-safe-area-context": "^4.10.1",
     "react-native-svg": "^15.0.0",
     "@posthog-tooling/tsconfig-base": "workspace:*",
-    "@posthog-tooling/rollup-utils": "workspace:*"
+    "@posthog-tooling/rollup-utils": "workspace:*",
+    "posthog-core": "workspace:*"
   },
   "peerDependencies": {
     "@react-native-async-storage/async-storage": ">=1.0.0",
