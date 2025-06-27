@@ -34,7 +34,8 @@
   "devDependencies": {
     "@types/node": "^22.15.23",
     "next": "^12.1.0",
-    "@posthog-tooling/tsconfig-base": "workspace:*"
+    "@posthog-tooling/tsconfig-base": "workspace:*",
+    "@posthog-tooling/rollup-utils": "workspace:*"
   },
   "peerDependencies": {
     "next": ">12.1.0"
