@@ -4,8 +4,8 @@
     "rootDir": "./src",
     "baseUrl": "./src",
     "outDir": "dist",
-    "module": "CommonJS",
-    "moduleResolution": "node10",
+    "module": "ES6",
+    "moduleResolution": "node",
     "composite": false,
     "declaration": true,
     "declarationMap": true

@@ -1,4 +1,4 @@
-module.exports = {
+export default {
   collectCoverage: true,
   clearMocks: true,
   fakeTimers: { enableGlobally: true },
