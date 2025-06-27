@@ -4,5 +4,6 @@
     "rootDir": ".",
     "module": "ESNext",
     "moduleResolution": "bundler"
-  }
+  },
+  "include": ["src/**/*"]
 }
