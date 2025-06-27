@@ -2,6 +2,15 @@
     "tasks": {
         "build": {
             "dependsOn": ["^build"]
+        },
+        "lint": {
+            "dependsOn": []
+        },
+        "lint:fix": {
+            "dependsOn": []
+        },
+        "test": {
+            "dependsOn": ["lint"]
         }
     }
 }
