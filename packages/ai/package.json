@@ -11,13 +11,17 @@
   "module": "lib/index.mjs",
   "types": "lib/index.d.ts",
   "license": "MIT",
+  "scripts": {
+    "test": "jest",
+    "lint": "eslint src tests",
+    "lint:fix": "eslint src tests --fix",
+    "build": "rollup -c rollup.config.ts --configPlugin @rollup/plugin-typescript",
+    "prepublishOnly": "pnpm lint && pnpm test && pnpm build"
+  },
   "devDependencies": {
-    "@types/jest": "^29.5.14",
-    "@types/node": "^20.0.0",
     "node-fetch": "^3.3.2",
-    "typescript": "^4.7.4",
-    "@posthog-tooling/tsconfig-base": "workspace:*",
-    "@posthog-tooling/rollup-utils": "workspace:*"
+    "@posthog-tooling/rollup-utils": "workspace:*",
+    "@posthog-tooling/tsconfig-base": "workspace:*"
   },
   "keywords": [
     "posthog",
@@ -43,12 +47,6 @@
   },
   "peerDependencies": {
     "posthog-node": "^5.0.0"
-  },
-  "scripts": {
-    "test": "jest",
-    "lint": "eslint src tests",
-    "lint:fix": "eslint src tests --fix",
-    "prepublishOnly": "cd .. && yarn build"
   },
   "exports": {
     ".": {
