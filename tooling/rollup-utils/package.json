@@ -29,6 +29,6 @@
         "typescript": ">=5.0.0"
     },
     "devDependencies": {
-        "tsup": "catalog:"
+        "typescript": "catalog:"
     }
 }
