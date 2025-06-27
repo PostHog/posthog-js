@@ -13,6 +13,8 @@
   },
   "scripts": {
     "pretest": "npm run prebuild",
+    "lint": "eslint src test",
+    "lint:fix": "eslint src test --fix",
     "test": "jest -c jest.config.js",
     "prepublishOnly": "cd .. && yarn build",
     "prebuild": "node -p \"'export const version = ' + JSON.stringify(require('./package.json').version)\" > src/version.ts",

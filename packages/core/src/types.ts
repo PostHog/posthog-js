@@ -447,11 +447,10 @@ export type Survey = {
   name: string
   description?: string
   type: SurveyType
-  feature_flag_keys?:
-    | {
-        key: string
-        value?: string
-      }[]
+  feature_flag_keys?: {
+    key: string
+    value?: string
+  }[]
   linked_flag_key?: string
   targeting_flag_key?: string
   internal_targeting_flag_key?: string

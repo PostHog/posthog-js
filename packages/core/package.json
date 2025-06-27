@@ -7,5 +7,9 @@
     "type": "git",
     "url": "https://github.com/PostHog/posthog-js-lite.git",
     "directory": "posthog-core"
+  },
+  "scripts": {
+    "lint": "eslint src test",
+    "lint:fix": "eslint src test --fix"
   }
 }
