@@ -4,7 +4,7 @@
   "description": "PostHog Node.js integration",
   "repository": {
     "type": "git",
-    "url": "https://github.com/PostHog/posthog-js.git",
+    "url": "git+https://github.com/PostHog/posthog-js.git",
     "directory": "packages/node"
   },
   "scripts": {
@@ -15,7 +15,7 @@
     "prepublishOnly": "pnpm lint && pnpm test && pnpm build"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=18"
   },
   "files": [
     "dist",
