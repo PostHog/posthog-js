@@ -132,7 +132,7 @@ export const getFlagDetailsFromFlagsAndPayloads = (
 }
 
 export const getFeatureFlagValue = (detail: FeatureFlagDetail | undefined): FeatureFlagValue | undefined => {
-  return detail === undefined ? undefined : detail.variant ?? detail.enabled
+  return detail === undefined ? undefined : (detail.variant ?? detail.enabled)
 }
 
 export const parsePayload = (response: any): any => {
