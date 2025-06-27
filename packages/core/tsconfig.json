@@ -1,0 +1,15 @@
+{
+  "extends": "@posthog-tooling/tsconfig-base",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "baseUrl": "./src",
+    "outDir": "dist",
+    "module": "ES6",
+    "moduleResolution": "node",
+    "composite": false,
+    "declaration": true,
+    "declarationMap": true
+  },
+  "include": ["src/**/*", "test/**/*"],
+  "exclude": ["node_modules", "test/**/*"]
+}

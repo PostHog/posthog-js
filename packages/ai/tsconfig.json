@@ -1,0 +1,10 @@
+{
+  "extends": "@posthog-tooling/tsconfig-base",
+  "compilerOptions": {
+    "incremental": false,
+    "types": ["node", "jest"],
+    "typeRoots": ["./node_modules/@types", "../node_modules/@types"],
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true
+  }
+}

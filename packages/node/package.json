@@ -1,0 +1,73 @@
+{
+  "name": "posthog-node",
+  "version": "5.1.1",
+  "description": "PostHog Node.js integration",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PostHog/posthog-js.git",
+    "directory": "packages/node"
+  },
+  "scripts": {
+    "lint": "eslint src test",
+    "lint:fix": "eslint src test --fix",
+    "test": "jest",
+    "build": "rollup -c",
+    "prepublishOnly": "pnpm lint && pnpm test && pnpm build"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "PostHog",
+    "email": "hey@posthog.com",
+    "url": "https://posthog.com"
+  },
+  "main": "dist/node/index.cjs",
+  "module": "dist/node/index.mjs",
+  "types": "dist/index.d.ts",
+  "devDependencies": {
+    "commander": "^9.3.0",
+    "mitata": "^1.0.21",
+    "@posthog-tooling/tsconfig-base": "workspace:*",
+    "@posthog-tooling/rollup-utils": "workspace:*",
+    "posthog-core": "workspace:*"
+  },
+  "keywords": [
+    "posthog",
+    "stats",
+    "analysis",
+    "funnels"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "edge": {
+        "import": "./dist/edge/index.mjs",
+        "require": "./dist/edge/index.cjs",
+        "default": "./dist/edge/index.mjs"
+      },
+      "node": {
+        "import": "./dist/node/index.mjs",
+        "require": "./dist/node/index.cjs",
+        "default": "./dist/node/index.mjs"
+      },
+      "edge-light": {
+        "import": "./dist/edge/index.mjs",
+        "require": "./dist/edge/index.cjs",
+        "default": "./dist/edge/index.mjs"
+      },
+      "workerd": {
+        "import": "./dist/edge/index.mjs",
+        "require": "./dist/edge/index.cjs",
+        "default": "./dist/edge/index.mjs"
+      },
+      "import": "./dist/node/index.mjs",
+      "require": "./dist/node/index.cjs"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+.App {
+  padding: 2rem;
+}
+
+.Button {
+  outline: none;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  background: #61dafb;
+  color: #61dafb;
+  color: #282c34;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.Debugger {
+  padding: 1rem;
+  background: #fff;
+}

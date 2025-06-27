@@ -1,0 +1,23 @@
+{
+  "name": "posthog-js-lite",
+  "version": "4.1.0",
+  "license": "MIT",
+  "main": "lib/index.cjs",
+  "module": "lib/index.mjs",
+  "types": "lib/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PostHog/posthog-js-lite.git",
+    "directory": "posthog-web"
+  },
+  "scripts": {
+    "test": "jest -c jest.config.js",
+    "lint": "eslint src test",
+    "lint:fix": "eslint src test --fix",
+    "prepublishOnly": "cd .. && yarn build"
+  },
+  "devDependencies": {
+    "@posthog-tooling/tsconfig-base": "workspace:*",
+    "@posthog-tooling/rollup-utils": "workspace:*"
+  }
+}
