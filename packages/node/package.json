@@ -28,7 +28,8 @@
     "@types/node": "^20.0.0",
     "commander": "^9.3.0",
     "mitata": "^1.0.21",
-    "@posthog-tooling/tsconfig-base": "workspace:*"
+    "@posthog-tooling/tsconfig-base": "workspace:*",
+    "@posthog-tooling/rollup-utils": "workspace:*"
   },
   "keywords": [
     "posthog",
