@@ -24,15 +24,15 @@ These dependencies are marked as optional to reduce installation size for users 
 
 ##
 
-## Testing
+## Testing posthog-js
 
 > [!NOTE]
-> Run `pnpm build` at least once before running tests.
+> Run `pnpm --filter=posthog-js build` at least once before running tests.
 
 
-- Unit tests: run `pnpm test`.
-- Cypress: run `pnpm start` to have a test server running and separately `pnpm cypress` to launch Cypress test engine.
-- Playwright: run e.g. `pnpm exec playwright test --ui --project webkit --project firefox` to run with UI and in webkit and firefox
+- Unit tests: run `pnpm --filter=posthog-js test`.
+
+- Playwright: run `pnpm --filter=posthog-js start` to have a test server running and then run e.g. `pnpm --filter=posthog-js exec playwright test --ui --project webkit --project firefox` to run with UI and in webkit and firefox
 
 ### Running TestCafe E2E tests with BrowserStack
 
@@ -83,7 +83,7 @@ We have 2 options for linking this project to your local version: via [pnpm link
 #### local paths (preferred)
 
 - from whichever repo needs to require `posthog-js`, go to the `package.json` of that file, and replace the `posthog-js` dependency version number with `file:<relative_or_absolute_path_to_local_module>`
-- e.g. from the `package.json` within `posthog`, replace `"posthog-js": "1.131.4"` with `"posthog-js": "file:../posthog-js"`
+- e.g. from the `package.json` within `posthog`, replace `"posthog-js": "1.131.4"` with `"posthog-js": "file:/Users/yourhomefolder/github/posthog-js/packages/browser"`
 - run `pnpm install` from the root of the project in which you just created a local path
 
 Then, once this link has been created, any time you need to make a change to `posthog-js`, you can run `pnpm build` from the `posthog-js` root and the changes will appear in the other repo.

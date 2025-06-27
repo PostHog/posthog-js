@@ -513,6 +513,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
       ]
     }
   ],
+  \\"integrations\\": [
+    \\"undefined\\",
+    \\"Record<ExternalIntegrationKind, boolean>\\"
+  ],
   \\"__add_tracing_headers\\": [
     \\"undefined\\",
     \\"false\\",
