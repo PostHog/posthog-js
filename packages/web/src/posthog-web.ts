@@ -1,4 +1,4 @@
-import { version } from '../package.json'
+import { version } from './version'
 
 import { PostHogCore, getFetch } from 'posthog-core'
 import type {
