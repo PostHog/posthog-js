@@ -56,7 +56,7 @@ module.exports = {
     rules,
     overrides: [
         {
-            files: ['rollup.config.js', '.eslintrc.js', 'jest.config.js'],
+            files: ['rollup.config.js', '.eslintrc.js', 'jest.config.js', 'babel.config.js'],
             parserOptions: {
                 project: null,
             },
