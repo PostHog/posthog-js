@@ -1,5 +1,5 @@
 {
-  "extends": "../tsconfig.json",
+  "extends": "@posthog-tooling/tsconfig-base",
   "compilerOptions": {
     "incremental": false,
     "lib": ["DOM", "ES2020", "ES2022.Error"]

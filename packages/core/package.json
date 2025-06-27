@@ -11,5 +11,8 @@
   "scripts": {
     "lint": "eslint src test",
     "lint:fix": "eslint src test --fix"
+  },
+  "devDependencies": {
+    "@posthog-tooling/tsconfig-base": "workspace:*"
   }
 }

@@ -29,8 +29,8 @@ importers:
         specifier: 8.57.0
         version: 8.57.0
       eslint-config-posthog-js:
-        specifier: workspace:./eslint-rules
-        version: link:eslint-rules
+        specifier: workspace:./tooling/eslint-plugin-posthog-js
+        version: link:tooling/eslint-plugin-posthog-js
       eslint-config-prettier:
         specifier: ^8.5.0
         version: 8.5.0(eslint@8.57.0)
@@ -44,8 +44,8 @@ importers:
         specifier: ^3.1.0
         version: 3.1.0
       eslint-plugin-posthog-js:
-        specifier: workspace:./eslint-rules
-        version: link:eslint-rules
+        specifier: workspace:./tooling/eslint-plugin-posthog-js
+        version: link:tooling/eslint-plugin-posthog-js
       eslint-plugin-prettier:
         specifier: ^5.2.1
         version: 5.2.1(@types/eslint@8.44.6)(eslint-config-prettier@8.5.0(eslint@8.57.0))(eslint@8.57.0)(prettier@3.4.2)
@@ -58,8 +58,6 @@ importers:
       lint-staged:
         specifier: ^10.2.11
         version: 10.2.11
-
-  eslint-rules: {}
 
   packages/ai:
     dependencies:
@@ -91,6 +89,9 @@ importers:
         specifier: ^3.24.1
         version: 3.25.67
     devDependencies:
+      '@posthog-tooling/tsconfig-base':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig-base
       '@types/jest':
         specifier: ^29.5.14
         version: 29.5.14
@@ -382,7 +383,11 @@ importers:
         specifier: ^4.1.3
         version: 4.9.5
 
-  packages/core: {}
+  packages/core:
+    devDependencies:
+      '@posthog-tooling/tsconfig-base':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig-base
 
   packages/nextjs-config:
     dependencies:
@@ -390,6 +395,9 @@ importers:
         specifier: ^0.3.1
         version: 0.3.1
     devDependencies:
+      '@posthog-tooling/tsconfig-base':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig-base
       '@types/node':
         specifier: ^22.15.23
         version: 22.15.33
@@ -399,6 +407,9 @@ importers:
 
   packages/node:
     devDependencies:
+      '@posthog-tooling/tsconfig-base':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig-base
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.1
@@ -414,6 +425,9 @@ importers:
       '@babel/cli':
         specifier: ^7.19.3
         version: 7.27.2(@babel/core@7.27.1)
+      '@posthog-tooling/tsconfig-base':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig-base
       '@react-native-async-storage/async-storage':
         specifier: ^1.17.10
         version: 1.24.0(react-native@0.69.12(@babel/core@7.27.1)(@babel/preset-env@7.27.2(@babel/core@7.27.1))(react@18.2.0))
@@ -469,7 +483,15 @@ importers:
         specifier: ^15.0.0
         version: 15.12.0(react-native@0.69.12(@babel/core@7.27.1)(@babel/preset-env@7.27.2(@babel/core@7.27.1))(react@18.2.0))(react@18.2.0)
 
-  packages/web: {}
+  packages/web:
+    devDependencies:
+      '@posthog-tooling/tsconfig-base':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig-base
+
+  tooling/eslint-plugin-posthog-js: {}
+
+  tooling/tsconfig-base: {}
 
 packages:
 
@@ -1329,7 +1351,7 @@ packages:
 
   '@expo/bunyan@4.0.1':
     resolution: {integrity: sha512-+Lla7nYSiHZirgK+U/uYzsLv/X+HaJienbD5AKX1UQZHYfWaP+9uuQluRB4GrEVWF0GZ7vEVp/jzaOT9k/SQlg==}
-    engines: {node: '>=0.10.0'}
+    engines: {'0': node >=0.10.0}
 
   '@expo/cli@0.1.7':
     resolution: {integrity: sha512-F81fPthpT7QtVu1P7QeZMezGn0tCcalCh3ANIzWBaQZNG4vly7mo2dp3PMGzNdmXq6yt93bJ4HbfS+0/NpKl7g==}
