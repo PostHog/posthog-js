@@ -1,5 +1,5 @@
 import { plugins, external, resolve, dts } from '@posthog-tooling/rollup-utils'
-import packageJson from './package.json'
+import packageJson from './package.json' with { type: 'json' }
 
 const runtimes = ['node', 'edge']
 const configs = []
