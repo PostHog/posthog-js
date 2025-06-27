@@ -1,4 +1,4 @@
-import { assert, removeTrailingSlash, currentISOTime, currentTimestamp } from '../src/utils'
+import { assert, removeTrailingSlash, currentISOTime, currentTimestamp } from '../utils'
 
 describe('utils', () => {
   describe('assert', () => {

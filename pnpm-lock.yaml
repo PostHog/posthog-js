@@ -488,9 +488,9 @@ importers:
       '@react-navigation/native':
         specifier: ^5.0.10
         version: 5.9.8(react-native@0.69.12(@babel/core@7.27.1)(@babel/preset-env@7.27.2(@babel/core@7.27.1))(react@18.2.0))(react@18.2.0)
-      '@types/jest':
-        specifier: ^28.1.5
-        version: 28.1.8
+      '@types/react':
+        specifier: ^17.0.87
+        version: 17.0.87
       '@types/react-native':
         specifier: ^0.69.1
         version: 0.69.26
@@ -512,6 +512,9 @@ importers:
       jest-expo:
         specifier: ^46.0.1
         version: 46.0.2(@babel/core@7.27.1)(jest@29.7.0(@types/node@20.19.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@20.19.1)(typescript@5.5.4)))(react@18.2.0)
+      posthog-core:
+        specifier: workspace:*
+        version: link:../core
       posthog-react-native-session-replay:
         specifier: ^1.1.1
         version: 1.1.1(react-native@0.69.12(@babel/core@7.27.1)(@babel/preset-env@7.27.2(@babel/core@7.27.1))(react@18.2.0))(react@18.2.0)

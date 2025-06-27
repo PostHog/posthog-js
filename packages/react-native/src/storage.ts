@@ -1,4 +1,4 @@
-import { isPromise } from '../../posthog-core/src/utils'
+import { utils } from 'posthog-core'
 import { PostHogCustomStorage } from './types'
 
 const POSTHOG_STORAGE_KEY = '.posthog-rn.json'
@@ -16,7 +16,7 @@ export class PostHogRNStorage {
 
     const preloadResult = this.storage.getItem(POSTHOG_STORAGE_KEY)
 
-    if (isPromise(preloadResult)) {
+    if (utils.isPromise(preloadResult)) {
       this.preloadPromise = preloadResult.then((res) => {
         this.populateMemoryCache(res)
       })
