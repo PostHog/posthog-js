@@ -479,9 +479,9 @@ importers:
       '@react-navigation/native':
         specifier: ^5.0.10
         version: 5.9.8(react-native@0.69.12(@babel/core@7.27.1)(@babel/preset-env@7.27.2(@babel/core@7.27.1))(react@18.2.0))(react@18.2.0)
-      '@types/jest':
-        specifier: ^28.1.5
-        version: 28.1.8
+      '@types/react':
+        specifier: ^17.0.87
+        version: 17.0.87
       '@types/react-native':
         specifier: ^0.69.1
         version: 0.69.26
@@ -503,6 +503,9 @@ importers:
       jest-expo:
         specifier: ^46.0.1
         version: 46.0.2(@babel/core@7.27.1)(jest@29.7.0(@types/node@20.19.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@20.19.1)(typescript@5.5.4)))(react@18.2.0)
+      posthog-core:
+        specifier: workspace:*
+        version: link:../core
       posthog-react-native-session-replay:
         specifier: ^1.1.1
         version: 1.1.1(react-native@0.69.12(@babel/core@7.27.1)(@babel/preset-env@7.27.2(@babel/core@7.27.1))(react@18.2.0))(react@18.2.0)
@@ -17501,7 +17504,7 @@ snapshots:
       jest-environment-jsdom: 26.6.2
       jest-environment-node: 26.6.2
       jest-get-type: 26.3.0
-      jest-jasmine2: 26.6.3
+      jest-jasmine2: 26.6.3(ts-node@10.9.2(@types/node@22.15.33)(typescript@4.9.5))
       jest-regex-util: 26.0.0
       jest-resolve: 26.6.2
       jest-util: 26.6.2
@@ -17820,7 +17823,7 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.3
 
-  jest-jasmine2@26.6.3:
+  jest-jasmine2@26.6.3(ts-node@10.9.2(@types/node@22.15.33)(typescript@4.9.5)):
     dependencies:
       '@babel/traverse': 7.27.1
       '@jest/environment': 26.6.2
@@ -17841,7 +17844,11 @@ snapshots:
       pretty-format: 26.6.2
       throat: 5.0.0
     transitivePeerDependencies:
+      - bufferutil
+      - canvas
       - supports-color
+      - ts-node
+      - utf-8-validate
 
   jest-jasmine2@27.5.1:
     dependencies:
