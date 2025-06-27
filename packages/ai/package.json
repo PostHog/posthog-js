@@ -7,17 +7,21 @@
     "url": "git+https://github.com/PostHog/posthog-js-lite.git",
     "directory": "posthog-ai"
   },
-  "main": "lib/index.cjs",
-  "module": "lib/index.mjs",
-  "types": "lib/index.d.ts",
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
   "license": "MIT",
+  "scripts": {
+    "test": "jest",
+    "lint": "eslint src tests",
+    "lint:fix": "eslint src tests --fix",
+    "build": "rollup -c rollup.config.ts --configPlugin @rollup/plugin-typescript",
+    "prepublishOnly": "pnpm lint && pnpm test && pnpm build"
+  },
   "devDependencies": {
-    "@types/jest": "^29.5.14",
-    "@types/node": "^20.0.0",
     "node-fetch": "^3.3.2",
-    "typescript": "^4.7.4",
-    "@posthog-tooling/tsconfig-base": "workspace:*",
-    "@posthog-tooling/rollup-utils": "workspace:*"
+    "@posthog-tooling/rollup-utils": "workspace:*",
+    "@posthog-tooling/tsconfig-base": "workspace:*"
   },
   "keywords": [
     "posthog",
@@ -44,42 +48,36 @@
   "peerDependencies": {
     "posthog-node": "^5.0.0"
   },
-  "scripts": {
-    "test": "jest",
-    "lint": "eslint src tests",
-    "lint:fix": "eslint src tests --fix",
-    "prepublishOnly": "cd .. && yarn build"
-  },
   "exports": {
     ".": {
-      "require": "./lib/index.cjs",
-      "import": "./lib/index.mjs",
-      "types": "./lib/index.d.ts"
+      "require": "./dist/index.cjs",
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.ts"
     },
     "./anthropic": {
-      "require": "./lib/anthropic/index.cjs",
-      "import": "./lib/anthropic/index.mjs",
-      "types": "./lib/anthropic/index.d.ts"
+      "require": "./dist/anthropic/index.cjs",
+      "import": "./dist/anthropic/index.mjs",
+      "types": "./dist/anthropic/index.d.ts"
     },
     "./gemini": {
-      "require": "./lib/gemini/index.cjs",
-      "import": "./lib/gemini/index.mjs",
-      "types": "./lib/gemini/index.d.ts"
+      "require": "./dist/gemini/index.cjs",
+      "import": "./dist/gemini/index.mjs",
+      "types": "./dist/gemini/index.d.ts"
     },
     "./openai": {
-      "require": "./lib/openai/index.cjs",
-      "import": "./lib/openai/index.mjs",
-      "types": "./lib/openai/index.d.ts"
+      "require": "./dist/openai/index.cjs",
+      "import": "./dist/openai/index.mjs",
+      "types": "./dist/openai/index.d.ts"
     },
     "./vercel": {
-      "require": "./lib/vercel/index.cjs",
-      "import": "./lib/vercel/index.mjs",
-      "types": "./lib/vercel/index.d.ts"
+      "require": "./dist/vercel/index.cjs",
+      "import": "./dist/vercel/index.mjs",
+      "types": "./dist/vercel/index.d.ts"
     },
     "./langchain": {
-      "require": "./lib/langchain/index.cjs",
-      "import": "./lib/langchain/index.mjs",
-      "types": "./lib/langchain/index.d.ts"
+      "require": "./dist/langchain/index.cjs",
+      "import": "./dist/langchain/index.mjs",
+      "types": "./dist/langchain/index.d.ts"
     }
   },
   "directories": {
