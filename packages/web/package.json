@@ -17,6 +17,7 @@
     "prepublishOnly": "cd .. && yarn build"
   },
   "devDependencies": {
-    "@posthog-tooling/tsconfig-base": "workspace:*"
+    "@posthog-tooling/tsconfig-base": "workspace:*",
+    "@posthog-tooling/rollup-utils": "workspace:*"
   }
 }
