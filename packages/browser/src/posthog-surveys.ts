@@ -82,14 +82,14 @@ export class PostHogSurveys {
         // we default to true here because people can fetch and render surveys manually
         // this could happen if:
         // 1. they have the surveys feature disabled in the project settings
-        // 2. they disable remmote config and fetch API calls
-        const hasSurveys = this._isSurveysEnabled ?? true
+        // 2. they disable remote config and flags API calls
+        const isSurveysEnabled = this._isSurveysEnabled ?? true
 
         try {
             const generateSurveys = phExtensions.generateSurveys
             if (generateSurveys) {
                 // Surveys code is already loaded
-                this._completeSurveyInitialization(generateSurveys, hasSurveys)
+                this._completeSurveyInitialization(generateSurveys, isSurveysEnabled)
                 return
             }
 
@@ -107,7 +107,7 @@ export class PostHogSurveys {
                     this._handleSurveyLoadError('Could not load surveys script', err)
                 } else {
                     // Need to get the function reference again inside the callback
-                    this._completeSurveyInitialization(phExtensions.generateSurveys, hasSurveys)
+                    this._completeSurveyInitialization(phExtensions.generateSurveys, isSurveysEnabled)
                 }
             })
         } catch (e) {
