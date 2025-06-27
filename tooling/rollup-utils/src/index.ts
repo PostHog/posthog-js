@@ -17,14 +17,10 @@ export const plugins = (extensions: string[]): Plugin[] => [
         tsconfig: `./tsconfig.json`,
     }),
     babel({
-        extensions,
+        configFile: './babel.config.js',
         babelHelpers: 'bundled',
+        extensions,
         include: [`./src/**/*`],
-        presets: [
-            ['@babel/preset-env', { targets: { node: 'current' } }],
-            '@babel/preset-typescript',
-            '@babel/preset-react',
-        ],
     }),
 ]
 
