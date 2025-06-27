@@ -1,7 +1,12 @@
 import { PostHogPersistedProperty, PostHogV2FlagsResponse } from '../src'
 import { normalizeFlagsResponse } from '../src/featureFlagUtils'
-import { createTestClient, PostHogCoreTestClient, PostHogCoreTestClientMocks } from './test-utils/PostHogCoreTestClient'
-import { parseBody, waitForPromises } from './test-utils/test-utils'
+import {
+  parseBody,
+  waitForPromises,
+  createTestClient,
+  PostHogCoreTestClient,
+  PostHogCoreTestClientMocks,
+} from '../src/testing'
 
 describe('PostHog Feature Flags v4', () => {
   let posthog: PostHogCoreTestClient

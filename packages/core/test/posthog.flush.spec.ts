@@ -1,5 +1,10 @@
-import { createTestClient, PostHogCoreTestClient, PostHogCoreTestClientMocks } from './test-utils/PostHogCoreTestClient'
-import { delay, waitForPromises } from './test-utils/test-utils'
+import {
+  delay,
+  waitForPromises,
+  createTestClient,
+  PostHogCoreTestClient,
+  PostHogCoreTestClientMocks,
+} from '../src/testing'
 import { PostHogPersistedProperty } from '../src'
 
 describe('PostHog Core', () => {
