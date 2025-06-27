@@ -12,7 +12,7 @@
         "target": "es2020",
         "sourceMap": true,
         "noEmit": false,
-        "incremental": true,
+        "incremental": false,
         "strict": true,
         "rootDir": ".",
         "lib": ["es2022"],

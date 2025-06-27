@@ -34,3 +34,6 @@ cypress/downloads/downloads.html
 /playwright/.cache/
 /stats
 packages/browser/docs
+
+dist
+tsconfig.tsbuildinfo

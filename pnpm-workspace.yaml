@@ -3,3 +3,6 @@ packages:
   - "packages/*"
   - "tooling/*"
   - "packages/browser/react"
+
+catalog:
+  tsup: "^8.5.0"
