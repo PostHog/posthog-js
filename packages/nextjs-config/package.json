@@ -6,7 +6,9 @@
   "module": "./lib/index.mjs",
   "types": "./lib/index.d.ts",
   "scripts": {
-    "prepublishOnly": "cd .. && yarn build"
+    "prepublishOnly": "cd .. && yarn build",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix"
   },
   "repository": {
     "type": "git",
