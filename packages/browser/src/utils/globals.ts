@@ -80,7 +80,7 @@ interface PostHogExtensions {
     }
     rrweb?: { record: any; version: string }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
-    generateSurveys?: (posthog: PostHog, hasSurveys: boolean) => any | undefined
+    generateSurveys?: (posthog: PostHog, isSurveysEnabled: boolean) => any | undefined
     postHogWebVitalsCallbacks?: {
         onLCP: (metric: any) => void
         onCLS: (metric: any) => void

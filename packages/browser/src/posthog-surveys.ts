@@ -16,7 +16,11 @@ import {
 import { isArray, isNullish } from './utils/type-utils'
 
 export class PostHogSurveys {
-    private _hasSurveys?: boolean
+    // this is set to undefined until the remote config is loaded
+    // then it's set to true if there are surveys to load
+    // or false if there are no surveys to load
+    // or false if the surveys feature is disabled in the project settings
+    private _isSurveysEnabled?: boolean
     public _surveyEventReceiver: SurveyEventReceiver | null
     private _surveyManager: SurveyManager | null = null
     private _isFetchingSurveys: boolean = false
@@ -36,8 +40,8 @@ export class PostHogSurveys {
             return logger.warn('Flags not loaded yet. Not loading surveys.')
         }
         const isArrayResponse = isArray(surveys)
-        this._hasSurveys = isArrayResponse ? surveys.length > 0 : surveys
-        logger.info(`flags response received, hasSurveys: ${this._hasSurveys}`)
+        this._isSurveysEnabled = isArrayResponse ? surveys.length > 0 : surveys
+        logger.info(`flags response received, isSurveysEnabled: ${this._isSurveysEnabled}`)
         this.loadIfEnabled()
     }
 
@@ -79,7 +83,7 @@ export class PostHogSurveys {
         // this could happen if:
         // 1. they have the surveys feature disabled in the project settings
         // 2. they disable remmote config and fetch API calls
-        const hasSurveys = this._hasSurveys ?? true
+        const hasSurveys = this._isSurveysEnabled ?? true
 
         try {
             const generateSurveys = phExtensions.generateSurveys
@@ -117,10 +121,10 @@ export class PostHogSurveys {
 
     /** Helper to finalize survey initialization */
     private _completeSurveyInitialization(
-        generateSurveysFn: (instance: PostHog, hasSurveys: boolean) => any,
-        hasSurveys: boolean
+        generateSurveysFn: (instance: PostHog, isSurveysEnabled: boolean) => any,
+        isSurveysEnabled: boolean
     ): void {
-        this._surveyManager = generateSurveysFn(this._instance, hasSurveys)
+        this._surveyManager = generateSurveysFn(this._instance, isSurveysEnabled)
         this._surveyEventReceiver = new SurveyEventReceiver(this._instance)
         logger.info('Surveys loaded successfully')
         this._notifySurveyCallbacks({ isLoaded: true })
