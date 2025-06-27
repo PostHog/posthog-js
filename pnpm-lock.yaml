@@ -131,18 +131,9 @@ importers:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
-      '@types/jest':
-        specifier: ^29.5.14
-        version: 29.5.14
-      '@types/node':
-        specifier: ^20.0.0
-        version: 20.19.1
       node-fetch:
         specifier: ^3.3.2
         version: 3.3.2
-      typescript:
-        specifier: ^4.7.4
-        version: 4.9.5
 
   packages/browser:
     dependencies:
