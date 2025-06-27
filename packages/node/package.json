@@ -4,32 +4,38 @@
   "description": "PostHog Node.js integration",
   "repository": {
     "type": "git",
-    "url": "https://github.com/PostHog/posthog-js-lite.git",
-    "directory": "posthog-node"
+    "url": "https://github.com/PostHog/posthog-js.git",
+    "directory": "packages/node"
   },
   "scripts": {
-    "prepublishOnly": "cd .. && yarn build",
     "lint": "eslint src test",
-    "lint:fix": "eslint src test --fix"
+    "lint:fix": "eslint src test --fix",
+    "test": "jest",
+    "build": "rollup -c",
+    "prepublishOnly": "pnpm lint && pnpm test && pnpm build"
   },
   "engines": {
     "node": ">=20"
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "license": "MIT",
   "author": {
     "name": "PostHog",
     "email": "hey@posthog.com",
     "url": "https://posthog.com"
   },
-  "main": "lib/node/index.cjs",
-  "module": "lib/node/index.mjs",
-  "types": "lib/index.d.ts",
+  "main": "dist/node/index.cjs",
+  "module": "dist/node/index.mjs",
+  "types": "dist/index.d.ts",
   "devDependencies": {
-    "@types/node": "^20.0.0",
     "commander": "^9.3.0",
     "mitata": "^1.0.21",
     "@posthog-tooling/tsconfig-base": "workspace:*",
-    "@posthog-tooling/rollup-utils": "workspace:*"
+    "@posthog-tooling/rollup-utils": "workspace:*",
+    "posthog-core": "workspace:*"
   },
   "keywords": [
     "posthog",
@@ -39,29 +45,29 @@
   ],
   "exports": {
     ".": {
-      "types": "./lib/index.d.ts",
+      "types": "./dist/index.d.ts",
       "edge": {
-        "import": "./lib/edge/index.mjs",
-        "require": "./lib/edge/index.cjs",
-        "default": "./lib/edge/index.mjs"
+        "import": "./dist/edge/index.mjs",
+        "require": "./dist/edge/index.cjs",
+        "default": "./dist/edge/index.mjs"
       },
       "node": {
-        "import": "./lib/node/index.mjs",
-        "require": "./lib/node/index.cjs",
-        "default": "./lib/node/index.mjs"
+        "import": "./dist/node/index.mjs",
+        "require": "./dist/node/index.cjs",
+        "default": "./dist/node/index.mjs"
       },
       "edge-light": {
-        "import": "./lib/edge/index.mjs",
-        "require": "./lib/edge/index.cjs",
-        "default": "./lib/edge/index.mjs"
+        "import": "./dist/edge/index.mjs",
+        "require": "./dist/edge/index.cjs",
+        "default": "./dist/edge/index.mjs"
       },
       "workerd": {
-        "import": "./lib/edge/index.mjs",
-        "require": "./lib/edge/index.cjs",
-        "default": "./lib/edge/index.mjs"
+        "import": "./dist/edge/index.mjs",
+        "require": "./dist/edge/index.cjs",
+        "default": "./dist/edge/index.mjs"
       },
-      "import": "./lib/node/index.mjs",
-      "require": "./lib/node/index.cjs"
+      "import": "./dist/node/index.mjs",
+      "require": "./dist/node/index.cjs"
     }
   }
 }
