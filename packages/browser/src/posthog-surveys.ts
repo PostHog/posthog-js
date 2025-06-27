@@ -38,9 +38,7 @@ export class PostHogSurveys {
         const isArrayResponse = isArray(surveys)
         this._hasSurveys = isArrayResponse ? surveys.length > 0 : surveys
         logger.info(`flags response received, hasSurveys: ${this._hasSurveys}`)
-        if (this._hasSurveys) {
-            this.loadIfEnabled()
-        }
+        this.loadIfEnabled()
     }
 
     reset(): void {
@@ -69,10 +67,6 @@ export class PostHogSurveys {
             logger.info('Disabled. Not loading surveys.')
             return
         }
-        if (!this._hasSurveys) {
-            logger.info('No surveys to load.')
-            return
-        }
 
         const phExtensions = assignableWindow?.__PosthogExtensions__
         if (!phExtensions) {
@@ -81,12 +75,13 @@ export class PostHogSurveys {
         }
 
         this._isInitializingSurveys = true
+        const hasSurveys = this._hasSurveys ?? false
 
         try {
             const generateSurveys = phExtensions.generateSurveys
             if (generateSurveys) {
                 // Surveys code is already loaded
-                this._completeSurveyInitialization(generateSurveys)
+                this._completeSurveyInitialization(generateSurveys, hasSurveys)
                 return
             }
 
@@ -104,7 +99,7 @@ export class PostHogSurveys {
                     this._handleSurveyLoadError('Could not load surveys script', err)
                 } else {
                     // Need to get the function reference again inside the callback
-                    this._completeSurveyInitialization(phExtensions.generateSurveys)
+                    this._completeSurveyInitialization(phExtensions.generateSurveys, hasSurveys)
                 }
             })
         } catch (e) {
@@ -117,8 +112,11 @@ export class PostHogSurveys {
     }
 
     /** Helper to finalize survey initialization */
-    private _completeSurveyInitialization(generateSurveysFn: (instance: PostHog) => any): void {
-        this._surveyManager = generateSurveysFn(this._instance)
+    private _completeSurveyInitialization(
+        generateSurveysFn: (instance: PostHog, hasSurveys: boolean) => any,
+        hasSurveys: boolean
+    ): void {
+        this._surveyManager = generateSurveysFn(this._instance, hasSurveys)
         this._surveyEventReceiver = new SurveyEventReceiver(this._instance)
         logger.info('Surveys loaded successfully')
         this._notifySurveyCallbacks({ isLoaded: true })
