@@ -1432,9 +1432,14 @@ export class PostHog {
         this.surveys.getActiveMatchingSurveys(callback, forceReload)
     }
 
-    /** Render a survey on a specific element. */
+    /** Render an unstyled survey on a specific element. */
     renderSurvey(surveyId: string, selector: string): void {
         this.surveys.renderSurvey(surveyId, selector)
+    }
+
+    /** Render a styled survey popup. Notice that this method ignores any delay or conditions set on the survey. */
+    renderSurveyPopup(surveyId: string): void {
+        this.surveys.renderSurveyPopup(surveyId)
     }
 
     /**

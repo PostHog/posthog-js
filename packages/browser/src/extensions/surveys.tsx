@@ -236,16 +236,20 @@ export class SurveyManager {
         }
     }
 
-    private _handlePopoverSurvey = (survey: Survey): void => {
+    handlePopoverSurvey = (survey: Survey, ignoreDelay: boolean = false): void => {
         this._clearSurveyTimeout(survey.id)
         this._addSurveyToFocus(survey)
-        const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
+        const delaySeconds = ignoreDelay ? 0 : survey.appearance?.surveyPopupDelaySeconds || 0
+        const surveyWithDelay = {
+            ...survey,
+            appearance: { ...survey.appearance, surveyPopupDelaySeconds: delaySeconds },
+        }
         const { shadow } = retrieveSurveyShadow(survey, this._posthog)
-        if (delaySeconds <= 0) {
+        if (delaySeconds <= 0 || ignoreDelay) {
             return Preact.render(
                 <SurveyPopup
                     posthog={this._posthog}
-                    survey={survey}
+                    survey={surveyWithDelay}
                     removeSurveyFromFocus={this._removeSurveyFromFocus}
                 />,
                 shadow
@@ -527,7 +531,7 @@ export class SurveyManager {
 
                 // Popover Type Logic (only one shown at a time)
                 if (isNull(this._surveyInFocus) && survey.type === SurveyType.Popover) {
-                    this._handlePopoverSurvey(survey)
+                    this.handlePopoverSurvey(survey)
                 }
             })
 
@@ -576,7 +580,7 @@ export class SurveyManager {
             surveyInFocus: this._surveyInFocus,
             surveyTimeouts: this._surveyTimeouts,
             handleWidget: this._handleWidget,
-            handlePopoverSurvey: this._handlePopoverSurvey,
+            handlePopoverSurvey: this.handlePopoverSurvey,
             manageWidgetSelectorListener: this._manageWidgetSelectorListener,
             sortSurveysByAppearanceDelay: this._sortSurveysByAppearanceDelay,
             checkFlags: this._checkFlags.bind(this),
