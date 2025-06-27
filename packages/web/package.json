@@ -2,22 +2,36 @@
   "name": "posthog-js-lite",
   "version": "4.1.0",
   "license": "MIT",
-  "main": "lib/index.cjs",
-  "module": "lib/index.mjs",
-  "types": "lib/index.d.ts",
   "repository": {
     "type": "git",
-    "url": "https://github.com/PostHog/posthog-js-lite.git",
-    "directory": "posthog-web"
+    "url": "https://github.com/PostHog/posthog-js.git",
+    "directory": "packages/web"
   },
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
   "scripts": {
     "test": "jest -c jest.config.js",
     "lint": "eslint src test",
     "lint:fix": "eslint src test --fix",
-    "prepublishOnly": "cd .. && yarn build"
+    "prebuild": "node -p \"'export const version = ' + JSON.stringify(require('./package.json').version)\" > src/version.ts",
+    "build": "rollup -c",
+    "prepublishOnly": "pnpm lint && pnpm test && pnpm build"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "posthog-core": "workspace:*"
   },
   "devDependencies": {
     "@posthog-tooling/tsconfig-base": "workspace:*",
-    "@posthog-tooling/rollup-utils": "workspace:*"
+    "@posthog-tooling/rollup-utils": "workspace:*",
+    "posthog-core": "workspace:*"
+  },
+  "dependenciesMeta": {
+    "posthog-core": {
+      "injected": true
+    }
   }
 }
