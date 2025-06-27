@@ -75,7 +75,11 @@ export class PostHogSurveys {
         }
 
         this._isInitializingSurveys = true
-        const hasSurveys = this._hasSurveys ?? false
+        // we default to true here because people can fetch and render surveys manually
+        // this could happen if:
+        // 1. they have the surveys feature disabled in the project settings
+        // 2. they disable remmote config and fetch API calls
+        const hasSurveys = this._hasSurveys ?? true
 
         try {
             const generateSurveys = phExtensions.generateSurveys
