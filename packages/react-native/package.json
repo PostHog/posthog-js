@@ -8,15 +8,15 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/PostHog/posthog-js-lite.git",
-    "directory": "posthog-react-native"
+    "url": "https://github.com/PostHog/posthog-js.git",
+    "directory": "packages/react-native"
   },
   "scripts": {
     "pretest": "npm run prebuild",
     "lint": "eslint src test",
     "lint:fix": "eslint src test --fix",
     "test": "jest -c jest.config.js",
-    "prepublishOnly": "cd .. && yarn build",
+    "prepublishOnly": "pnpm lint && pnpm test && pnpm build",
     "prebuild": "node -p \"'export const version = ' + JSON.stringify(require('./package.json').version)\" > src/version.ts",
     "build": "rm -rf lib && tsc --outDir ./lib && babel ./lib --out-dir lib --extensions '.js'"
   },
@@ -31,7 +31,6 @@
     "expo-device": "^4.0.0",
     "expo-file-system": "^13.0.0",
     "expo-localization": "^11.0.0",
-    "jest-expo": "^46.0.1",
     "react": "18.2.0",
     "react-native": "^0.69.1",
     "react-native-device-info": "^10.3.0",
