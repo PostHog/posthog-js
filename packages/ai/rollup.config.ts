@@ -59,7 +59,7 @@ providers.forEach((provider) => {
         extensions,
         babelHelpers: 'bundled',
         include: ['./src/**/*.{js,jsx,ts,tsx}'],
-        presets: [['@babel/preset-env', { targets: { node: 'current' } }], '@babel/preset-typescript'],
+        presets: [['@babel/preset-env', { targets: { node: '20.0' } }], '@babel/preset-typescript'],
       }),
     ],
   })
