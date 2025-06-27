@@ -535,10 +535,6 @@ importers:
         version: 15.12.0(react-native@0.69.12(@babel/core@7.27.1)(@babel/preset-env@7.27.2(@babel/core@7.27.1))(react@18.2.0))(react@18.2.0)
 
   packages/web:
-    dependencies:
-      posthog-core:
-        specifier: workspace:*
-        version: link:../core
     devDependencies:
       '@posthog-tooling/rollup-utils':
         specifier: workspace:*
@@ -546,6 +542,9 @@ importers:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
+      posthog-core:
+        specifier: workspace:*
+        version: link:../core
 
   tooling/eslint-plugin-posthog-js: {}
 
@@ -17587,7 +17586,7 @@ snapshots:
       jest-environment-jsdom: 26.6.2
       jest-environment-node: 26.6.2
       jest-get-type: 26.3.0
-      jest-jasmine2: 26.6.3(ts-node@10.9.2(@types/node@22.15.33)(typescript@4.9.5))
+      jest-jasmine2: 26.6.3
       jest-regex-util: 26.0.0
       jest-resolve: 26.6.2
       jest-util: 26.6.2
@@ -17911,7 +17910,7 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.3
 
-  jest-jasmine2@26.6.3(ts-node@10.9.2(@types/node@22.15.33)(typescript@4.9.5)):
+  jest-jasmine2@26.6.3:
     dependencies:
       '@babel/traverse': 7.27.1
       '@jest/environment': 26.6.2
@@ -17932,11 +17931,7 @@ snapshots:
       pretty-format: 26.6.2
       throat: 5.0.0
     transitivePeerDependencies:
-      - bufferutil
-      - canvas
       - supports-color
-      - ts-node
-      - utf-8-validate
 
   jest-jasmine2@27.5.1:
     dependencies:
