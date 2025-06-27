@@ -2,11 +2,11 @@
     "name": "@posthog-tooling/rollup-utils",
     "version": "1.0.0",
     "description": "Rollup utilities for Posthog",
+    "type": "module",
     "main": "dist/index.js",
-    "module": "dist/index.mjs",
     "types": "dist/index.d.ts",
     "scripts": {
-        "build": "tsup src/index.ts --format cjs,esm --dts --out-dir dist"
+        "build": "tsc -b"
     },
     "keywords": [],
     "author": "",
