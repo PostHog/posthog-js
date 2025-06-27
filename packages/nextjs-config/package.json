@@ -33,7 +33,8 @@
   ],
   "devDependencies": {
     "@types/node": "^22.15.23",
-    "next": "^12.1.0"
+    "next": "^12.1.0",
+    "@posthog-tooling/tsconfig-base": "workspace:*"
   },
   "peerDependencies": {
     "next": ">12.1.0"
