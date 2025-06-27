@@ -1,5 +1,10 @@
-import { parseBody, waitForPromises } from './test-utils/test-utils'
-import { createTestClient, PostHogCoreTestClient, PostHogCoreTestClientMocks } from './test-utils/PostHogCoreTestClient'
+import {
+  parseBody,
+  waitForPromises,
+  createTestClient,
+  PostHogCoreTestClient,
+  PostHogCoreTestClientMocks,
+} from '../src/testing'
 import { uuidv7 } from '../src/vendor/uuidv7'
 
 describe('PostHog Core', () => {
