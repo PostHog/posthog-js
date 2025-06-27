@@ -2,7 +2,8 @@
   "name": "posthog-react-native",
   "version": "4.1.2",
   "license": "MIT",
-  "main": "lib/posthog-react-native/index.js",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
   "files": [
     "lib/"
   ],
