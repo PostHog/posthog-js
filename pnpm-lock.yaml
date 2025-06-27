@@ -9,6 +9,9 @@ catalogs:
     tsup:
       specifier: ^8.5.0
       version: 8.5.0
+    typescript:
+      specifier: ^5.5.4
+      version: 5.5.4
 
 patchedDependencies:
   '@rrweb/record@2.0.0-alpha.17':
@@ -580,13 +583,10 @@ importers:
       rollup-plugin-typescript2:
         specifier: ^0.36.0
         version: 0.36.0(rollup@2.79.2)(typescript@5.5.4)
-      typescript:
-        specifier: '>=5.0.0'
-        version: 5.5.4
     devDependencies:
-      tsup:
+      typescript:
         specifier: 'catalog:'
-        version: 8.5.0(postcss@8.5.3)(typescript@5.5.4)(yaml@2.8.0)
+        version: 5.5.4
 
   tooling/tsconfig-base: {}
 
