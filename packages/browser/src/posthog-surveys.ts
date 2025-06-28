@@ -1,5 +1,4 @@
 import { SURVEYS } from './constants'
-import { SurveyManager } from './extensions/surveys'
 import { PostHog } from './posthog-core'
 import { Survey, SurveyCallback, SurveyRenderReason } from './posthog-surveys-types'
 import { RemoteConfig } from './types'
@@ -18,7 +17,7 @@ import { isArray, isNullish } from './utils/type-utils'
 export class PostHogSurveys {
     private _hasSurveys?: boolean
     public _surveyEventReceiver: SurveyEventReceiver | null
-    private _surveyManager: SurveyManager | null = null
+    private _surveyManager: any | null = null
     private _isFetchingSurveys: boolean = false
     private _isInitializingSurveys: boolean = false
     private _surveyCallbacks: SurveyCallback[] = []
