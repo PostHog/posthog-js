@@ -542,13 +542,6 @@ export interface PostHogConfig {
     secure_cookie: boolean
 
     /**
-     * Determines whether PostHog should capture IP addresses.
-     *
-     * @default true
-     */
-    ip: boolean
-
-    /**
      * Determines if users should be opted out of PostHog tracking by default,
      * requiring additional logic to opt them into capturing by calling `posthog.opt_in_capturing()`.
      *
@@ -994,6 +987,12 @@ export interface PostHogConfig {
 
     /** @deprecated - NOT USED ANYMORE, kept here for backwards compatibility reasons */
     inapp_link_new_window?: boolean
+
+    /**
+     * @deprecated - THIS OPTION HAS NO EFFECT, kept here for backwards compatibility reasons.
+     * Use a custom transformation or "Discard IP data" project setting instead: @see https://posthog.com/tutorials/web-redact-properties#hiding-customer-ip-address.
+     */
+    ip: boolean
 }
 
 export interface ErrorTrackingOptions {
