@@ -78,12 +78,14 @@ export class PostHogSurveys {
             return
         }
 
+        const isSurveysEnabled = this._isSurveysEnabled
+
+        // waiting for remote config to load
+        if (isSurveysEnabled == undefined) {
+            return
+        }
+
         this._isInitializingSurveys = true
-        // we default to true here because people can fetch and render surveys manually
-        // this could happen if:
-        // 1. they have the surveys feature disabled in the project settings
-        // 2. they disable remote config and flags API calls
-        const isSurveysEnabled = this._isSurveysEnabled ?? true
 
         try {
             const generateSurveys = phExtensions.generateSurveys
