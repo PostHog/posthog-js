@@ -374,7 +374,7 @@ describe('posthog-surveys', () => {
 
             it('should set isInitializingSurveys to false after successful initialization', () => {
                 // Set flags server response
-                surveys['_hasSurveys'] = true
+                surveys['_isSurveysEnabled'] = true
                 mockGenerateSurveys.mockReturnValue({})
 
                 surveys.loadIfEnabled()
@@ -384,7 +384,7 @@ describe('posthog-surveys', () => {
 
             it('should set isInitializingSurveys to false after failed initialization', () => {
                 // Set flags server response
-                surveys['_hasSurveys'] = true
+                surveys['_isSurveysEnabled'] = true
                 mockGenerateSurveys.mockImplementation(() => {
                     throw Error('Test error')
                 })
@@ -395,7 +395,7 @@ describe('posthog-surveys', () => {
 
             it('should set isInitializingSurveys to false when loadExternalDependency fails', () => {
                 // Set flags server response but no generateSurveys
-                surveys['_hasSurveys'] = true
+                surveys['_isSurveysEnabled'] = true
                 mockGenerateSurveys = undefined
                 assignableWindow.__PosthogExtensions__.generateSurveys = undefined
 
@@ -409,7 +409,7 @@ describe('posthog-surveys', () => {
             })
 
             it('should call the callback with the surveys when they are loaded', () => {
-                surveys['_hasSurveys'] = true
+                surveys['_isSurveysEnabled'] = true
                 mockGenerateSurveys.mockReturnValue({})
                 const callback = jest.fn()
                 const mockSurveys = [{ id: 'test-survey' }]
@@ -430,7 +430,7 @@ describe('posthog-surveys', () => {
             })
 
             it('should call the callback with an error when surveys are not loaded', () => {
-                surveys['_hasSurveys'] = true
+                surveys['_isSurveysEnabled'] = true
                 mockGenerateSurveys.mockImplementation(() => {
                     throw new Error('Error initializing surveys')
                 })

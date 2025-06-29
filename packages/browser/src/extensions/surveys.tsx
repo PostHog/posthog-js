@@ -651,7 +651,7 @@ export const renderFeedbackWidgetPreview = ({
 }
 
 // This is the main exported function
-export function generateSurveys(posthog: PostHog) {
+export function generateSurveys(posthog: PostHog, isSurveysEnabled: boolean) {
     // NOTE: Important to ensure we never try and run surveys without a window environment
     if (!document || !window) {
         return
@@ -660,6 +660,11 @@ export function generateSurveys(posthog: PostHog) {
     const surveyManager = new SurveyManager(posthog)
     if (posthog.config.disable_surveys_automatic_display) {
         logger.info('Surveys automatic display is disabled. Skipping call surveys and evaluate display logic.')
+        return surveyManager
+    }
+
+    if (!isSurveysEnabled) {
+        logger.info('There are no surveys to load or Surveys is disabled in the project settings.')
         return surveyManager
     }
 

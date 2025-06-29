@@ -13,10 +13,14 @@ import {
     SURVEY_IN_PROGRESS_PREFIX,
     SURVEY_SEEN_PREFIX,
 } from './utils/survey-utils'
-import { isArray, isNullish } from './utils/type-utils'
+import { isArray, isNullish, isUndefined } from './utils/type-utils'
 
 export class PostHogSurveys {
-    private _hasSurveys?: boolean
+    // this is set to undefined until the remote config is loaded
+    // then it's set to true if there are surveys to load
+    // or false if there are no surveys to load
+    // or false if the surveys feature is disabled in the project settings
+    private _isSurveysEnabled?: boolean = undefined
     public _surveyEventReceiver: SurveyEventReceiver | null
     private _surveyManager: SurveyManager | null = null
     private _isFetchingSurveys: boolean = false
@@ -36,11 +40,9 @@ export class PostHogSurveys {
             return logger.warn('Flags not loaded yet. Not loading surveys.')
         }
         const isArrayResponse = isArray(surveys)
-        this._hasSurveys = isArrayResponse ? surveys.length > 0 : surveys
-        logger.info(`flags response received, hasSurveys: ${this._hasSurveys}`)
-        if (this._hasSurveys) {
-            this.loadIfEnabled()
-        }
+        this._isSurveysEnabled = isArrayResponse ? surveys.length > 0 : surveys
+        logger.info(`flags response received, isSurveysEnabled: ${this._isSurveysEnabled}`)
+        this.loadIfEnabled()
     }
 
     reset(): void {
@@ -69,14 +71,17 @@ export class PostHogSurveys {
             logger.info('Disabled. Not loading surveys.')
             return
         }
-        if (!this._hasSurveys) {
-            logger.info('No surveys to load.')
-            return
-        }
 
         const phExtensions = assignableWindow?.__PosthogExtensions__
         if (!phExtensions) {
             logger.error('PostHog Extensions not found.')
+            return
+        }
+
+        const isSurveysEnabled = this._isSurveysEnabled
+
+        // waiting for remote config to load
+        if (isUndefined(isSurveysEnabled)) {
             return
         }
 
@@ -86,7 +91,7 @@ export class PostHogSurveys {
             const generateSurveys = phExtensions.generateSurveys
             if (generateSurveys) {
                 // Surveys code is already loaded
-                this._completeSurveyInitialization(generateSurveys)
+                this._completeSurveyInitialization(generateSurveys, isSurveysEnabled)
                 return
             }
 
@@ -104,7 +109,7 @@ export class PostHogSurveys {
                     this._handleSurveyLoadError('Could not load surveys script', err)
                 } else {
                     // Need to get the function reference again inside the callback
-                    this._completeSurveyInitialization(phExtensions.generateSurveys)
+                    this._completeSurveyInitialization(phExtensions.generateSurveys, isSurveysEnabled)
                 }
             })
         } catch (e) {
@@ -117,8 +122,11 @@ export class PostHogSurveys {
     }
 
     /** Helper to finalize survey initialization */
-    private _completeSurveyInitialization(generateSurveysFn: (instance: PostHog) => any): void {
-        this._surveyManager = generateSurveysFn(this._instance)
+    private _completeSurveyInitialization(
+        generateSurveysFn: (instance: PostHog, isSurveysEnabled: boolean) => any,
+        isSurveysEnabled: boolean
+    ): void {
+        this._surveyManager = generateSurveysFn(this._instance, isSurveysEnabled)
         this._surveyEventReceiver = new SurveyEventReceiver(this._instance)
         logger.info('Surveys loaded successfully')
         this._notifySurveyCallbacks({ isLoaded: true })
