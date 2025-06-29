@@ -13,14 +13,14 @@ import {
     SURVEY_IN_PROGRESS_PREFIX,
     SURVEY_SEEN_PREFIX,
 } from './utils/survey-utils'
-import { isArray, isNullish } from './utils/type-utils'
+import { isArray, isNullish, isUndefined } from './utils/type-utils'
 
 export class PostHogSurveys {
     // this is set to undefined until the remote config is loaded
     // then it's set to true if there are surveys to load
     // or false if there are no surveys to load
     // or false if the surveys feature is disabled in the project settings
-    private _isSurveysEnabled?: boolean
+    private _isSurveysEnabled?: boolean = undefined
     public _surveyEventReceiver: SurveyEventReceiver | null
     private _surveyManager: SurveyManager | null = null
     private _isFetchingSurveys: boolean = false
@@ -81,7 +81,7 @@ export class PostHogSurveys {
         const isSurveysEnabled = this._isSurveysEnabled
 
         // waiting for remote config to load
-        if (isSurveysEnabled == undefined) {
+        if (isUndefined(isSurveysEnabled)) {
             return
         }
 
