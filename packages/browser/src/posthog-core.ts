@@ -92,6 +92,7 @@ import {
 } from './utils/type-utils'
 import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
+import { ExternalIntegrations } from './extensions/external-integration'
 
 /*
 SIMPLE STYLE GUIDE:
@@ -299,6 +300,7 @@ export class PostHog {
     _requestQueue?: RequestQueue
     _retryQueue?: RetryQueue
     sessionRecording?: SessionRecording
+    externalIntegrations?: ExternalIntegrations
     webPerformance = new DeprecatedWebPerformanceObserver()
 
     _initialPageviewCaptured: boolean
@@ -355,6 +357,7 @@ export class PostHog {
         this.rateLimiter = new RateLimiter(this)
         this.requestRouter = new RequestRouter(this)
         this.consent = new ConsentManager(this)
+        this.externalIntegrations = new ExternalIntegrations(this)
         // NOTE: See the property definition for deprecation notice
         this.people = {
             set: (prop: string | Properties, to?: string, callback?: RequestCallback) => {
@@ -1918,6 +1921,7 @@ export class PostHog {
             this.heatmaps?.startIfEnabled()
             this.surveys.loadIfEnabled()
             this._sync_opt_out_with_persistence()
+            this.externalIntegrations?.startIfEnabledOrStop()
         }
     }
 
