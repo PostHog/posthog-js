@@ -2236,23 +2236,22 @@ export class PostHog {
     /**
      * Returns the value of the session super property named property_name. If no such
      * property is set, getSessionProperty() will return the undefined value.
-     *
-     * ### Notes:
-     *
+     * 
+     * @remarks
      * This is based on browser-level `sessionStorage`, NOT the PostHog session.
      * getSessionProperty() can only be called after the PostHog library has finished loading.
-     * init() has a loaded function available to handle this automatically. For example:
-     *
+     * init() has a loaded function available to handle this automatically.
+     * 
      * @example
      * ```js
-     * // check session state
-     * if (posthog.getSessionProperty('onboarding_completed')) {
-     *     // show advanced features
-     * }
+     * // grab value for 'user_id' after the posthog library has loaded
+     * posthog.init('YOUR PROJECT TOKEN', {
+     *     loaded: function(posthog) {
+     *         user_id = posthog.getSessionProperty('user_id');
+     *     }
+     * });
      * ```
-     *
-     * @public
-     *
+     * 
      * @param {String} property_name The name of the session super property you want to retrieve
      */
     getSessionProperty(property_name: string): Property | undefined {
