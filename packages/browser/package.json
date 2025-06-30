@@ -20,7 +20,6 @@
         "prepublishOnly": "pnpm lint && pnpm build && pnpm test",
         "test": "pnpm test:unit && pnpm test:functional",
         "test:unit": "jest src",
-        "test:custom-eslint-rules": "jest eslint-rules",
         "test:unit:surveys": "jest '.*surveys.*.test.'",
         "test:functional": "jest functional_tests",
         "test-watch": "jest --watch src",

@@ -11,7 +11,7 @@
     "clean": "rimraf dist coverage",
     "lint": "eslint src test",
     "lint:fix": "eslint src test --fix",
-    "test": "jest",
+    "test:unit": "jest",
     "build": "rollup -c",
     "dev": "rollup -cw",
     "prepublishOnly": "pnpm lint && pnpm test && pnpm build"

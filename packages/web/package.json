@@ -12,7 +12,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "clean": "rimraf dist coverage",
-    "test": "jest -c jest.config.js",
+    "test:unit": "jest -c jest.config.js",
     "lint": "eslint src test",
     "lint:fix": "eslint src test --fix",
     "prebuild": "node -p \"'export const version = ' + JSON.stringify(require('./package.json').version)\" > src/version.ts",

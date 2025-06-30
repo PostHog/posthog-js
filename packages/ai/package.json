@@ -13,7 +13,7 @@
   "license": "MIT",
   "scripts": {
     "clean": "rimraf dist",
-    "test": "jest",
+    "test:unit": "jest",
     "lint": "eslint src tests",
     "lint:fix": "eslint src tests --fix",
     "build": "rollup -c rollup.config.ts --configPlugin @rollup/plugin-typescript",
