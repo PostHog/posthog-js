@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { usePostHog } from './usePostHog'
-import { JsonType, FeatureFlagValue } from 'posthog-core/src'
+import { JsonType, FeatureFlagValue } from 'posthog-core'
 import { PostHog } from '../posthog-rn'
 
 export function useFeatureFlag(flag: string, client?: PostHog): FeatureFlagValue | undefined {
