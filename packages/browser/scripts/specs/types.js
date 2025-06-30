@@ -86,6 +86,14 @@ function processTypeAliasMember(member, typeDef, apiPackage) {
     const detailedType = extractDetailedTypeInfo(member);
     if (!detailedType) return;
 
+    // Check if this is a callback type
+    const callbackExample = utils.generateCallbackExample(detailedType.signature);
+    if (callbackExample) {
+        typeDef.example = callbackExample;
+        typeDef.params = [];
+        return;
+    }
+
     const literalValues = extractLiteralValues(member, apiPackage);
     if (literalValues.length > 0) {
         // For string literal unions, create an example instead of properties

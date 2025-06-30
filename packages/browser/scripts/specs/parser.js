@@ -1,5 +1,4 @@
 const apiExtractor = require('@microsoft/api-extractor-model');
-const utils = require('./utils');
 const documentation = require('./documentation');
 const examples = require('./examples');
 const methods = require('./methods');
@@ -38,18 +37,12 @@ const filterPublicMethods = (posthogClass) =>
     ) || [];
 
 // Transform parameters
-const transformParameter = (method) => (param) => {
-    const paramType = param.parameterTypeExcerpt?.text || 'any';
-    const callbackExample = utils.generateCallbackExample(paramType);
-    
-    return {
-        description: documentation.getParamDescription(method, param.name) || '',
-        isOptional: param.isOptional || false,
-        type: paramType,
-        name: param.name || '',
-        ...(callbackExample ? { example: callbackExample } : {})
-    };
-};
+const transformParameter = (method) => (param) => ({
+    description: documentation.getParamDescription(method, param.name) || '',
+    isOptional: param.isOptional || false,
+    type: param.parameterTypeExcerpt?.text || 'any',
+    name: param.name || ''
+});
 
 // Transform methods
 const transformMethod = (posthogClass) => (method) => {
