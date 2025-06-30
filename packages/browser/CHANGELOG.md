@@ -1,3 +1,7 @@
+## 1.256.0 - 2025-06-30
+
+- feat: push replay and person data to intercom and crisp chat (#2039)
+
 ## 1.255.3 - 2025-06-30
 
 
