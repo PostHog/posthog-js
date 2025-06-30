@@ -311,6 +311,7 @@ export class WrappedResponses extends OpenAIOrignal.Responses {
                 client: this.phClient,
                 distinctId: posthogDistinctId ?? traceId,
                 traceId,
+                //@ts-expect-error
                 model: openAIParams.model,
                 provider: 'openai',
                 input: openAIParams.input,
@@ -327,6 +328,7 @@ export class WrappedResponses extends OpenAIOrignal.Responses {
                 client: this.phClient,
                 distinctId: posthogDistinctId ?? traceId,
                 traceId,
+                //@ts-expect-error
                 model: openAIParams.model,
                 provider: 'openai',
                 input: openAIParams.input,
@@ -356,6 +358,7 @@ export class WrappedResponses extends OpenAIOrignal.Responses {
               client: this.phClient,
               distinctId: posthogDistinctId ?? traceId,
               traceId,
+              //@ts-expect-error
               model: openAIParams.model,
               provider: 'openai',
               input: openAIParams.input,
@@ -380,6 +383,7 @@ export class WrappedResponses extends OpenAIOrignal.Responses {
             client: this.phClient,
             distinctId: posthogDistinctId ?? traceId,
             traceId,
+            //@ts-expect-error
             model: openAIParams.model,
             provider: 'openai',
             input: openAIParams.input,
@@ -438,6 +442,7 @@ export class WrappedResponses extends OpenAIOrignal.Responses {
             client: this.phClient,
             distinctId: posthogDistinctId ?? traceId,
             traceId,
+            //@ts-expect-error
             model: openAIParams.model,
             provider: 'openai',
             input: openAIParams.input,
@@ -461,6 +466,7 @@ export class WrappedResponses extends OpenAIOrignal.Responses {
             client: this.phClient,
             distinctId: posthogDistinctId ?? traceId,
             traceId,
+            //@ts-expect-error
             model: openAIParams.model,
             provider: 'openai',
             input: openAIParams.input,
