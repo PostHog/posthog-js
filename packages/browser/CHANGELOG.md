@@ -1,3 +1,14 @@
+## 1.255.2 - 2025-06-30
+
+- fix: word break on open ended choices (#2065)
+- chore: make it easier to run locally (#2061)
+- chore: deprecate ip config (#2053)
+- Fix dev on nextjs playground (#2051)
+- feat: add vscode extension playground (#2041)
+- chore: add a top-level changelog (#2040)
+- chore: improve eslint rule (#2038)
+- chore: Make nextjs playground work with regular install (#2035)
+
 ## 1.255.1 - 2025-06-20
 
 - chore: new survey config (#2031)
