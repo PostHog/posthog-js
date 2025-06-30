@@ -79,6 +79,9 @@ importers:
       jest-environment-node:
         specifier: ^29.7.0
         version: 29.7.0
+      jest-expo:
+        specifier: ^46.0.1
+        version: 46.0.2(@babel/core@7.27.1)(jest@29.7.0(@types/node@20.19.1)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@20.19.1)(typescript@5.5.4)))(react@18.2.0)
       lint-staged:
         specifier: ^10.2.11
         version: 10.2.11
@@ -448,7 +451,7 @@ importers:
         version: 22.15.33
       next:
         specifier: ^12.1.0
-        version: 12.3.7(@babel/core@7.27.1)(react-dom@17.0.2(react@18.2.0))(react@18.2.0)
+        version: 12.3.7(@babel/core@7.27.1)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
       tsup:
         specifier: 'catalog:'
         version: 8.5.0(postcss@8.5.3)(typescript@5.5.4)(yaml@2.8.0)
@@ -13673,7 +13676,6 @@ snapshots:
   '@types/istanbul-reports@3.0.4':
     dependencies:
       '@types/istanbul-lib-report': 3.0.0
-    optional: true
 
   '@types/jest@27.5.2':
     dependencies:
@@ -13818,7 +13820,6 @@ snapshots:
   '@types/yargs@17.0.33':
     dependencies:
       '@types/yargs-parser': 15.0.0
-    optional: true
 
   '@typescript-eslint/eslint-plugin@8.29.1(@typescript-eslint/parser@8.29.1(eslint@8.57.0)(typescript@5.5.4))(eslint@8.57.0)(typescript@5.5.4)':
     dependencies:
@@ -17588,7 +17589,7 @@ snapshots:
       jest-environment-jsdom: 26.6.2
       jest-environment-node: 26.6.2
       jest-get-type: 26.3.0
-      jest-jasmine2: 26.6.3
+      jest-jasmine2: 26.6.3(ts-node@10.9.2(@types/node@22.15.33)(typescript@4.9.5))
       jest-regex-util: 26.0.0
       jest-resolve: 26.6.2
       jest-util: 26.6.2
@@ -17912,7 +17913,7 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.3
 
-  jest-jasmine2@26.6.3:
+  jest-jasmine2@26.6.3(ts-node@10.9.2(@types/node@22.15.33)(typescript@4.9.5)):
     dependencies:
       '@babel/traverse': 7.27.1
       '@jest/environment': 26.6.2
@@ -17933,7 +17934,11 @@ snapshots:
       pretty-format: 26.6.2
       throat: 5.0.0
     transitivePeerDependencies:
+      - bufferutil
+      - canvas
       - supports-color
+      - ts-node
+      - utf-8-validate
 
   jest-jasmine2@27.5.1:
     dependencies:
