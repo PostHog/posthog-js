@@ -1584,7 +1584,7 @@ export class PostHog {
      * Associates a user with a unique identifier instead of an auto-generated ID.
      *
      * @remarks
-     * By default, PostHog assigns each user a randomly generated `distinct_id`. Use this method to 
+     * By default, PostHog assigns each user a randomly generated `distinct_id`. Use this method to
      * replace that ID with your own unique identifier (like a user ID from your database).
      *
      * #### User Merging Behavior
@@ -1610,7 +1610,7 @@ export class PostHog {
      * @example
      * ```js
      * // identify with set and set_once properties
-     * posthog.identify('user_12345', 
+     * posthog.identify('user_12345',
      *     { last_login: new Date() },  // updates every time
      *     { signup_date: new Date() }  // sets only once
      * )
@@ -2236,12 +2236,12 @@ export class PostHog {
     /**
      * Returns the value of the session super property named property_name. If no such
      * property is set, getSessionProperty() will return the undefined value.
-     * 
+     *
      * @remarks
      * This is based on browser-level `sessionStorage`, NOT the PostHog session.
      * getSessionProperty() can only be called after the PostHog library has finished loading.
      * init() has a loaded function available to handle this automatically.
-     * 
+     *
      * @example
      * ```js
      * // grab value for 'user_id' after the posthog library has loaded
@@ -2251,7 +2251,7 @@ export class PostHog {
      *     }
      * });
      * ```
-     * 
+     *
      * @param {String} property_name The name of the session super property you want to retrieve
      */
     getSessionProperty(property_name: string): Property | undefined {
