@@ -17,6 +17,7 @@ const NO_DOCS_TYPES = [
     'BigInt',
     'Map',
     'Set',
+    'PostHog' // The entire ref is the posthog class lol
 ];
 
 const HOG_REF = '0.1';
@@ -77,11 +78,22 @@ const PROPERTIES_EXAMPLE = `// Properties is a Record<string, Property>
     $plugins_deferred: ['plugin4'],
     $ip: '192.168.1.1'
 }`;
+
+const PROPERTY_EXAMPLE = `// It can be a string
+"max@example.com"
+// It can be an object like field
+{
+    firstName: 'Max',
+    lastName: 'Hog',
+    isAdmin: true,
+}
+`
 module.exports = {
     NO_DOCS_TYPES,
     HOG_REF,
     SPEC_INFO,
     OUTPUT_FILE_PATH,   
-    PROPERTIES_EXAMPLE
+    PROPERTIES_EXAMPLE,
+    PROPERTY_EXAMPLE
 }; 
 
