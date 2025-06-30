@@ -1,3 +1,7 @@
+## 1.255.3 - 2025-06-30
+
+
+
 ## 1.255.2 - 2025-06-30
 
 - fix: word break on open ended choices (#2065)
