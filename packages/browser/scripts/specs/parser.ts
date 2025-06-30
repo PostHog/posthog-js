@@ -1,6 +1,6 @@
 const apiExtractor = require('@microsoft/api-extractor-model');
 const utils = require('./utils');
-const { apiExtractorUtils } = require('./api-extractor-utils');
+const apiExtractorUtils = require('./api-extractor-utils');
 const { writeFileSync, readFileSync } = require('fs');
 const path = require('path');
 const { NO_DOCS_TYPES, HOG_REF, SPEC_INFO, OUTPUT_FILE_PATH } = require('./constants');

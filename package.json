@@ -2,9 +2,7 @@
     "private": true,
     "packageManager": "pnpm@9.15.4",
     "scripts": {
-        "build-rollup": "pnpm -r build-rollup",
-        "gen-specs": "npx tsc && npx api-extractor run --config ./api-extractor.json --local",
-        "parse-specs": "ts-node scripts/specs/parser.ts"
+        "build-rollup": "pnpm -r build-rollup"
 
     },
     "pnpm": {

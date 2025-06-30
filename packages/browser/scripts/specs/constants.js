@@ -77,7 +77,6 @@ const PROPERTIES_EXAMPLE = `// Properties is a Record<string, Property>
     $plugins_deferred: ['plugin4'],
     $ip: '192.168.1.1'
 }`;
-
 module.exports = {
     NO_DOCS_TYPES,
     HOG_REF,
@@ -85,3 +84,4 @@ module.exports = {
     OUTPUT_FILE_PATH,   
     PROPERTIES_EXAMPLE
 }; 
+
