@@ -13,8 +13,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
-      - run: turbo build
-      - run: turbo test:unit
+      - run: pnpm build
+      - run: pnpm test:unit
       - run: pnpm write-mangled-property-names
         working-directory: packages/browser
       - run: git diff --exit-code # fail if e.g. the mangled properties list has changed, see rollup.config.js
