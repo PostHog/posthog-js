@@ -1,7 +1,7 @@
 import { ErrorProperties } from '../extensions/exception-autocapture/error-conversion'
 import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
-import { DeadClicksAutoCaptureConfig, RemoteConfig, SiteAppLoader } from '../types'
+import { DeadClicksAutoCaptureConfig, ExternalIntegrationKind, RemoteConfig, SiteAppLoader } from '../types'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
@@ -49,6 +49,8 @@ export type AssignableWindow = Window &
  * changes to this interface can be breaking changes for users of the SDK
  */
 
+export type ExternalExtensionKind = 'intercom-integration' | 'crisp-chat-integration'
+
 export type PostHogExtensionKind =
     | 'toolbar'
     | 'exception-autocapture'
@@ -58,6 +60,7 @@ export type PostHogExtensionKind =
     | 'surveys'
     | 'dead-clicks-autocapture'
     | 'remote-config'
+    | ExternalExtensionKind
 
 export interface LazyLoadedDeadClicksAutocaptureInterface {
     start: (observerTarget: Node) => void
@@ -95,6 +98,9 @@ interface PostHogExtensions {
         ph: PostHog,
         config: DeadClicksAutoCaptureConfig
     ) => LazyLoadedDeadClicksAutocaptureInterface
+    integrations?: {
+        [K in ExternalIntegrationKind]?: { start: (posthog: PostHog) => void; stop: () => void }
+    }
 }
 
 const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win
