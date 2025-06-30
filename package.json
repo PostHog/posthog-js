@@ -133,7 +133,6 @@
         "testcafe-browser-provider-browserstack": "1.14.0",
         "ts-node": "^10.9.2",
         "tslib": "^2.5.0",
-        "typedoc": "^0.28.5",
         "typescript": "^5.5.4",
         "yargs": "^17.7.2"
     },
