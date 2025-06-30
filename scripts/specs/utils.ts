@@ -1,240 +1,107 @@
 const { TSDocConfiguration, TSDocParser } = require('@microsoft/tsdoc');
-const { ApiDocumentedItem, ReleaseTag } = require('@microsoft/api-extractor-model');
 
-function getDocComment(apiItem: any) {
-  if (!apiItem.tsdocComment) {
-    return 'No description available';
-  }
+function renderDocNodeToText(docNode: any): string {
+  if (!docNode?.nodes) return '';
 
-  // Get the summary section
-  const summarySection = apiItem.tsdocComment.summarySection;
-  if (summarySection) {
-    return renderDocNodeToText(summarySection);
-  }
-
-  return 'No description available';
-}
-
-function getParamDescription(apiMethod: any, paramName: string) {
-  if (!apiMethod.tsdocComment || !apiMethod.tsdocComment.params) {
-    return 'No description available';
-  }
-
-  // Look for @param tags
-  const paramBlocks = apiMethod.tsdocComment.params;
-  const paramBlock = paramBlocks.tryGetBlockByName(paramName);
-
-  if (paramBlock && paramBlock.content) {
-    return renderDocNodeToText(paramBlock.content);
-  }
-
-  return 'No description available';
-}
-
-// Combined renderDocNodeToText implementation
-function renderDocNodeToText(docNode: any) {
-  if (!docNode || !docNode.nodes) return '';
-
-  let result = '';
-  for (const node of docNode.nodes) {
+  return docNode.nodes.map((node: any) => {
     switch (node.kind) {
-      case 'PlainText':
-        // Prefer .text || '' for safety
-        result += node.text || '';
-        break;
-      case 'CodeSpan':
-        result += `\`${node.code || ''}\``;
-        break;
-      case 'FencedCodeBlock':
-        result += `\`\`\`${node.language || ''}\n${node.code || ''}\n\`\`\``;
-        break;
-      case 'Paragraph':
-        // Recursively render and add a newline
-        result += renderDocNodeToText(node) + '\n';
-        break;
-      case 'SoftBreak':
-        // Use space for soft break (as in the more complete version)
-        result += ' ';
-        break;
-      default:
-        if (node.nodes) {
-          result += renderDocNodeToText(node);
-        }
-        break;
+      case 'PlainText': return node.text || '';
+      case 'CodeSpan': return `\`${node.code || ''}\``;
+      case 'FencedCodeBlock': return `\`\`\`${node.language || ''}\n${node.code || ''}\n\`\`\``;
+      case 'Paragraph': return renderDocNodeToText(node) + '\n';
+      case 'SoftBreak': return ' ';
+      default: return node.nodes ? renderDocNodeToText(node) : '';
     }
-  }
-  return result.trim();
+  }).join('').trim();
 }
 
 function extractFirstComment(content: string): { title: string } {
-  const lines = content.trim().split('\n');
-
-  let title = '';
-  if (lines.length > 0) {
-    const firstLine = lines[0].trim();
-    const commentMatch = firstLine.match(/^(\s*\/\/\s*|\s*#\s*)(.+)$/);
-    if (commentMatch) {
-      title = commentMatch[2].trim();
-    }
-  }
-  return { title };
+  const firstLine = content.trim().split('\n')[0]?.trim() || '';
+  const commentMatch = firstLine.match(/^(\s*\/\/\s*|\s*#\s*)(.+)$/);
+  return { title: commentMatch?.[2]?.trim() || '' };
 }
 
-
-function extractInlineTags(docNode: any): any[] {
-  const inlineTags: any[] = [];
+function processCodeNodes(nodes: any): string {
+  if (!nodes) return '';
   
-  // Recursively traverse the document tree
-  function traverse(node: any): void {
-    if (!node) return;
-    // Check for inline tags
-    if (node.kind === 'LinkTag') {
-      const linkTag = node;
-      inlineTags.push(linkTag);
-    } else if (node.kind === 'InlineTag') {
-      const inlineTag = node;
-      inlineTags.push(inlineTag);
-    }
-    
-    // Traverse child nodes
-    for (const child of node.getChildNodes()) {
-      traverse(child);
-    }
-  }
-  
-  traverse(docNode);
-  return inlineTags;
-}
-
-function extractCategoryTags(apiMethod: any): string {
-  const inlineTags = extractInlineTags(apiMethod.tsdocComment);
-  const categories: any[] = [];
-  for (const tag of inlineTags) {
-    if (tag.tagName === '@label') {
-      categories.push(tag.tagContent);
-    }
-  }
-  return categories[0] || '';
-}
-
-function extractExampleTags(apiMethod: any) {
-  if (!apiMethod.tsdocComment || !apiMethod.tsdocComment._customBlocks) {
-    return [];
-  }
-  const examples: any[] = [];
-  for (const block of apiMethod.tsdocComment._customBlocks) {
-    if (block.blockTag && block.blockTag.tagName === '@example') {
-      const example = {
-        id: '',
-        name: '',
-        code: '',
-      };
-      if (block.content && block.content.nodes) {
-        const rawContent = processCodeNodes(block.content.nodes);
-        const { title } = extractFirstComment(rawContent);
-        example.id = title.toLowerCase().replace(/ /g, '_');
-        example.name = title;
-        example.code = rawContent;
-      }
-      examples.push(example);
-    }
-  }
-  if (examples.length === 0) {
-    return [templateExample(apiMethod)];
-  }
-  return examples;
-}
-
-function processCodeNodes(nodes: any) {
-  let result = '';
-
-  if (!nodes) {
-    return '';
-  }
-
-  for (const node of nodes) {
+  return nodes.map((node: any) => {
     switch (node.kind) {
-      case 'PlainText':
-        result += node.text;
-        break;
-      case 'Paragraph':
-        result += processCodeNodes(node.nodes);
-        if (result && !result.endsWith('\n')) {
-          result += '\n';
-        }
-        break;
-      case 'SoftBreak':
-        result += '\n';
-        break;
-      case 'FencedCode':
-        result += `${node.code || ''}`;
-        break;
-      case 'ErrorText':
-        result += node.text || '';
-        break;
-      default:
-        // Handle other node types if needed
-        if (node.nodes) {
-          result += processCodeNodes(node.nodes);
-        }
-        break;
+      case 'PlainText': return node.text;
+      case 'Paragraph': return processCodeNodes(node.nodes) + (processCodeNodes(node.nodes) ? '\n' : '');
+      case 'SoftBreak': return '\n';
+      case 'FencedCode': return node.code || '';
+      case 'ErrorText': return node.text || '';
+      default: return node.nodes ? processCodeNodes(node.nodes) : '';
     }
+  }).join('');
+}
+
+// Check if signature is a simple object type
+function isSimpleObjectType(signature: string): boolean {
+  const trimmed = signature.trim();
+  return trimmed.startsWith('{') && trimmed.endsWith('}') && 
+         !/[|&]|typeof |keyof /.test(trimmed);
+}
+
+// Parse object type signature into properties
+function parseObjectTypeSignature(signature: string) {
+  const cleaned = signature.replace(/^\s*{\s*|\s*}\s*$/g, '').trim();
+  if (!cleaned) return [];
+
+  return splitObjectProperties(cleaned)
+    .map(parseProperty)
+    .filter((prop): prop is { name: string; type: string; description: string } => prop !== null);
+}
+
+// Split object properties handling nested structures
+function splitObjectProperties(content: string): string[] {
+  const parts: string[] = [];
+  let current = '';
+  let depth = 0;
+  let inAngleBrackets = 0;
+
+  for (const char of content) {
+    if (char === '{') depth++;
+    else if (char === '}') depth--;
+    else if (char === '<') inAngleBrackets++;
+    else if (char === '>') inAngleBrackets--;
+    else if (char === ';' && depth === 0 && inAngleBrackets === 0) {
+      parts.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += char;
   }
-  return result;
+  if (current.trim()) parts.push(current.trim());
+  
+  return parts;
 }
 
-function getRemarks(apiItem: any) {
-  if (!apiItem.tsdocComment || !apiItem.tsdocComment.remarksBlock) {
-    return null;
+// Parse individual property
+function parseProperty(part: string) {
+  const colonIndex = part.indexOf(':');
+  if (colonIndex === -1) return null;
+
+  let name = part.substring(0, colonIndex).trim();
+  let type = part.substring(colonIndex + 1).trim();
+
+  const isOptional = name.endsWith('?');
+  if (isOptional) {
+    name = name.slice(0, -1).trim();
+    type = type.replace(/\s*\|\s*undefined$/, '');
   }
 
-  return renderDocNodeToText(apiItem.tsdocComment.remarksBlock.content);
-}
-
-// template example for a method when not using @example
-function templateExample(apiMethod: any) {
-  const methodName = apiMethod.name;
-  const params = apiMethod.params || [];
-
-  const paramList = params.map((p: any) => `<${p.name}>`).join(', ');
-
-  const example = `
-// Generated example for ${methodName}
-posthog.${methodName}(${paramList});
-    `;
-
-  return {
-    id: methodName.toLowerCase().replace(/ /g, '_'),
-    name: `Generated example for ${methodName}`,
-    code: example
-  };
-}
-
-function getMethodReleaseTag(apiMethod: any): string {
-  switch (apiMethod.releaseTag) {
-    case ReleaseTag.Internal:
-      return 'internal';
-    case ReleaseTag.Alpha:
-      return 'alpha';
-    case ReleaseTag.Beta:
-      return 'beta';
-    case ReleaseTag.Public:
-      return 'public';
-    default:
-      return 'public'; // fallback
-  }
-}
-
-function isMethodDeprecated(apiMethod: any): boolean {
-  return apiMethod.tsdocComment?.deprecatedBlock !== undefined;
+  return name && type ? {
+    name,
+    type: isOptional ? `${type} | undefined` : type,
+    description: 'No description available'
+  } : null;
 }
 
 module.exports = {
-  getDocComment,
-  getParamDescription,
-  extractExampleTags,
-  getRemarks,
-  extractCategoryTags,
-  getMethodReleaseTag,
-  isMethodDeprecated
+  renderDocNodeToText,
+  extractFirstComment,
+  processCodeNodes,
+  parseObjectTypeSignature,
+  isSimpleObjectType,
 };

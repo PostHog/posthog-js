@@ -1,217 +1,95 @@
 const apiExtractor = require('@microsoft/api-extractor-model');
 const utils = require('./utils');
+const { apiExtractorUtils } = require('./api-extractor-utils');
 const { writeFileSync, readFileSync } = require('fs');
 const path = require('path');
+const { NO_DOCS_TYPES, HOG_REF, SPEC_INFO, OUTPUT_FILE_PATH } = require('./constants');
+const { PROPERTIES_EXAMPLE } = require('./constants');
 
+
+// Load package.json for version number
 const packageJson = JSON.parse(readFileSync(path.resolve(__dirname, '../../package.json'), 'utf8'));
 
 // Load the API model from the JSON file
+// Run `pnpm run gen-specs` to generate the API model
 const apiPackage = apiExtractor.ApiPackage.loadFromJsonFile('docs/posthog-js.api.json');
 
 // Get the entry points and find the PostHog class
+// TODO: we can handle all exposed classes in the future
 const entryPoints = apiPackage.entryPoints;
 const posthogClass = entryPoints[0].members.find((member: any) =>
     member.kind === apiExtractor.ApiItemKind.Class && member.name === 'PostHog'
 );
 
-// Get all the members of the PostHog class that are methods
 const methods = posthogClass?.members.filter((member: any) =>
     member.kind === apiExtractor.ApiItemKind.Method && !member.name.startsWith('_')
 );
 
-// set of definitions to include in specs
-const definitions = new Set()
-
-// Helper function to split and add types to definitions
-function addTypeToDefinitions(type: string) {
-    if (!type) return;
-
-    // Split union types
-    const unionTypes = type.split('|').map(t => t.trim());
-    // Split intersection types
-    const allTypes = unionTypes.flatMap(t => t.split('&').map(t => t.trim()));
-
-    // Add each type to definitions
-    allTypes.forEach(t => {
-        if (t && t !== 'any' && t !== 'void' && t !== 'undefined' && t !== 'null') {
-            definitions.add(t);
-        }
-    });
-}
-
-// Extract method information
-const methodInfo = methods?.map((method: any) => {
-    const apiMethod = method;
-    const returnType = apiMethod.returnTypeExcerpt?.text || 'any';
-    addTypeToDefinitions(returnType);
+// Extract method information directly in the final format
+const functions = methods?.map((method: any) => {
+    const returnType = method.returnTypeExcerpt?.text || 'any';
 
     return {
-        id: apiMethod.name,
-        title: apiMethod.name,
-        description: utils.getDocComment(apiMethod),
-        path: posthogClass.fileUrlPath,
-        category: utils.extractCategoryTags(apiMethod),
-        details: utils.getRemarks(apiMethod),
-        releaseTag: utils.isMethodDeprecated(apiMethod) ? 'deprecated' : utils.getMethodReleaseTag(apiMethod),
+        category: apiExtractorUtils.extractCategoryTags(method) || '',
+        description: apiExtractorUtils.getDocComment(method),
+        details: apiExtractorUtils.getRemarks(method),
+        id: method.name,
         showDocs: true,
+        title: method.name,
+        examples: apiExtractorUtils.extractExampleTags(method),
+        releaseTag: apiExtractorUtils.isMethodDeprecated(method) ? 'deprecated' : apiExtractorUtils.getMethodReleaseTag(method),
+        params: method.parameters.map((param: any) => {
+            const paramType = param.parameterTypeExcerpt?.text || 'any';
+            return {
+                description: apiExtractorUtils.getParamDescription(method, param.name) || '',
+                isOptional: param.isOptional || false,
+                type: paramType || '',
+                name: param.name || ''
+            };
+        }),
         returnType: {
             id: returnType,
             name: returnType
         },
-        params: apiMethod.parameters.map((param: any) => {
-            const paramType = param.parameterTypeExcerpt?.text || 'any';
-            addTypeToDefinitions(paramType);
-            return {
-                name: param.name,
-                isOptional: param.isOptional,
-                type: paramType,
-                description: utils.getParamDescription(apiMethod, param.name)
-            };
-        }),
-        examples: utils.extractExampleTags(apiMethod)
+        ...(posthogClass.fileUrlPath ? { path: posthogClass.fileUrlPath } : {})
     };
+}) || [];
+
+// Resolve type definitions (now returns final format)
+const types = apiExtractorUtils.resolveTypeDefinitions(apiPackage);
+
+const properties = types.map((type: any) => {
+    if (type.name === 'Properties') {
+        return {
+            ...type,
+            example: PROPERTIES_EXAMPLE
+        };
+    }
+    return type;
 });
-
-// Find all type definitions in the API package
-interface TypeDefinition {
-    name: string;
-    id: string;
-    params?: {
-        name: string;
-        type: string;
-        description: string;
-    }[];
-    path?: string;
-}
-
-// Helper function to find a type by its canonical reference
-function findTypeByCanonicalReference(apiPackage: any, canonicalReference: any) {
-    if (!canonicalReference) return null;
-
-    // Extract the type name from the canonical reference
-    const typeName = canonicalReference.toString().split('!')[1];
-    if (!typeName) return null;
-
-    for (const entryPoint of apiPackage.entryPoints) {
-        for (const member of entryPoint.members) {
-            if (member.name === typeName) {
-                return member;
-            }
-        }
-    }
-    return null;
-}
-
-const typeDefinitions: TypeDefinition[] = [];
-for (const entryPoint of entryPoints) {
-    for (const member of entryPoint.members) {
-        if (member.kind === apiExtractor.ApiItemKind.TypeAlias ||
-            member.kind === apiExtractor.ApiItemKind.Interface) {
-            let path = undefined;
-            if (member.fileUrlPath) {
-                path = member.fileUrlPath;
-            }
-            const typeDef: TypeDefinition = {
-                name: member.name,
-                id: member.name,
-                params: [],
-                path
-            };
-
-            // If it's an interface, get its properties
-            if (member.kind === apiExtractor.ApiItemKind.Interface) {
-                for (const prop of member.members) {
-                    if (prop.kind === apiExtractor.ApiItemKind.PropertySignature) {
-                        typeDef.params?.push({
-                            name: prop.name,
-                            type: prop.propertyTypeExcerpt?.text || 'any',
-                            description: utils.getDocComment(prop)
-                        });
-                    }
-                }
-            } else if (member.kind === apiExtractor.ApiItemKind.TypeAlias) {
-                // For type aliases, check if they reference another type
-                const typeExcerpt = member.typeExcerpt;
-                if (typeExcerpt) {
-                    // Look for references in the tokens
-                    for (const token of typeExcerpt.tokens) {
-                        if (token._kind === 'Reference' && token._canonicalReference) {
-                            const referencedType = findTypeByCanonicalReference(apiPackage, token._canonicalReference);
-                            if (referencedType && referencedType.kind === apiExtractor.ApiItemKind.Interface) {
-                                for (const prop of referencedType.members) {
-                                    if (prop.kind === apiExtractor.ApiItemKind.PropertySignature) {
-                                        typeDef.params?.push({
-                                            name: prop.name,
-                                            type: prop.propertyTypeExcerpt?.text || 'any',
-                                            description: utils.getDocComment(prop)
-                                        });
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            typeDefinitions.push(typeDef);
-        }
-    }
-}
 
 // Compose the output to match the GraphQL query structure
 const output = {
     // Classes section (for this script, we only have one class: PostHog)
-    id: 'posthog-js',
-    "hogRef": "0.1",
-    "info": {
+    id: SPEC_INFO.id,
+    hogRef: HOG_REF,
+    info: {
         version: packageJson.version,
-        "id": "posthog-js",
-        "title": "PostHog JavaScript Web SDK",
-        "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
-        "slugPrefix": "posthog-js",
-        "specUrl": "https://github.com/PostHog/posthog-js"
+        ...SPEC_INFO
     },
+    noDocsTypes: NO_DOCS_TYPES,
     classes: [
         {
-            description: utils.getDocComment(posthogClass),
+            description: apiExtractorUtils.getDocComment(posthogClass),
             id: posthogClass?.name || 'PostHog',
             title: posthogClass?.name || 'PostHog',
-            functions: (methodInfo || []).map((func: any) => ({
-                category: func.category || '',
-                description: func.description,
-                details: func.details,
-                id: func.id,
-                showDocs: true,
-                title: func.title,
-                examples: func.examples,
-                releaseTag: func.releaseTag,
-                params: (func.params || []).map((param: any) => ({
-                    description: param.description || '',
-                    isOptional: param.isOptional || false,
-                    type: param.type || '',
-                    name: param.name || ''
-                })),
-                returnType: func.returnType || { id: 'void', name: 'void' },
-                ...(func.path ? { path: func.path } : {})
-            }))
+            functions: functions
         }
     ],
     // Types section
-    types: typeDefinitions.map((type: TypeDefinition) => ({
-        id: type.id,
-        name: type.name,
-        properties: (type.params || []).map((param: any) => ({
-            description: param.description,
-            type: param.type,
-            name: param.name,
-            // include extra properties if any in the future
-        })),
-        // include extra properties if any
-        ...(type.path ? { path: type.path } : {})
-    }))
+    types: types
 };
 
-writeFileSync('docs/posthog-js-references.json', JSON.stringify(output, null, 2));
-console.log('Method information written to docs/posthog-js-references.json');
+writeFileSync(OUTPUT_FILE_PATH, JSON.stringify(output, null, 2));
 
 

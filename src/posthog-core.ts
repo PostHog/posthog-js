@@ -907,12 +907,13 @@ export class PostHog {
      * 
      * We recommend using a `[object] [verb]` format for your event names, where `[object]` is the entity that the behavior relates to, and `[verb]` is the behavior itself. For example, `project created`, `user signed up`, or `invite sent`.
      * 
-     * @param {String} event_name The name of the event. This can be anything the user does - 'Button Click', 'Sign Up', 'Item Purchased', etc.
-     * @param {Object} [properties] A set of properties to include with the event you're sending. These describe the user who did the event or details about the event itself.
-     * @param {Object} [config] Optional configuration for this capture request.
-     * @param {String} [config.transport] Transport method for network request ('XHR' or 'sendBeacon').
-     * @param {Date} [config.timestamp] Timestamp is a Date object. If not set, it'll automatically be set to the current time.
-     */
+     /**
+      * @param event_name - The name of the event. This can be anything the user does, such as 'Button Click', 'Sign Up', 'Item Purchased', etc.
+      * @param properties - A set of properties to include with the event you're sending. These describe the user who did the event or details about the event itself.
+      * @param options - Optional configuration for this capture request.
+      * @param options.transport - Transport method for the network request ('XHR' or 'sendBeacon').
+      * @param options.timestamp - Timestamp as a Date object. If not set, it will automatically be set to the current time.
+      */
     capture(
         event_name: EventName,
         properties?: Properties | null,
