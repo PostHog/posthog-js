@@ -2,8 +2,8 @@
  * @jest-environment jsdom
  */
 
-import { waitForPromises } from 'posthog-core/test/test-utils/test-utils'
-import { PostHog } from '..'
+import { waitForPromises } from 'posthog-core/testing'
+import { PostHog } from '../src'
 
 describe('PostHogWeb', () => {
   let fetch: jest.Mock
