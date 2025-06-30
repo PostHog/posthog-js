@@ -36,11 +36,12 @@
         "jest-environment-node": "^29.7.0",
         "jest-expo": "^46.0.1",
         "lint-staged": "^10.2.11",
+        "rimraf": "^6.0.1",
         "rollup": "^2.77.0",
         "ts-jest": "^29.0.0",
         "ts-node": "^10.9.1",
         "turbo": "^2.5.4",
-        "typescript": "^5.5.4"
+        "typescript": "catalog:"
     },
     "lint-staged": {
         "*.{ts,tsx,js,json}": "prettier --write",

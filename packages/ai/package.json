@@ -12,10 +12,12 @@
   "types": "dist/index.d.ts",
   "license": "MIT",
   "scripts": {
+    "clean": "rimraf dist",
     "test": "jest",
     "lint": "eslint src tests",
     "lint:fix": "eslint src tests --fix",
     "build": "rollup -c rollup.config.ts --configPlugin @rollup/plugin-typescript",
+    "dev": "rollup -c rollup.config.ts --configPlugin @rollup/plugin-typescript --watch",
     "prepublishOnly": "pnpm lint && pnpm test && pnpm build"
   },
   "devDependencies": {

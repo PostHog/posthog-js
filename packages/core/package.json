@@ -14,9 +14,11 @@
     "dist"
   ],
   "scripts": {
+    "clean": "rimraf dist",
     "lint": "eslint src test",
     "lint:fix": "eslint src test --fix",
     "build": "tsc -b",
+    "dev": "tsc -w",
     "test": "jest"
   },
   "exports": {
