@@ -13,10 +13,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
-      - run: pnpm build
-        working-directory: packages/browser
-      - run: pnpm test:unit
-        working-directory: packages/browser
+      - run: turbo build
+      - run: turbo test:unit
       - run: pnpm write-mangled-property-names
         working-directory: packages/browser
       - run: git diff --exit-code # fail if e.g. the mangled properties list has changed, see rollup.config.js
@@ -48,8 +46,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
-      - run: pnpm run test:functional
-        working-directory: packages/browser
+      - run: turbo test:functional
 
   lint:
     name: Lint
@@ -59,5 +56,3 @@ jobs:
       - uses: ./.github/actions/setup
       - name: Lint all packages
         run: pnpm lint
-      - run: pnpm tsc -b
-        working-directory: packages/browser
