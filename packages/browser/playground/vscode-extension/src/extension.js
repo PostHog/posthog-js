@@ -51,7 +51,7 @@ function getWebviewContent(context, webview) {
         posthog.init(
        '${process.env.POSTHOG_PROJECT_KEY || 'YOUR_PROJECT_KEY_HERE'}',
         {
-        api_host: 'http://localhost:8010', 
+        api_host: '${process.env.POSTHOG_API_HOST || 'http://localhost:8010'}',
         defaults: '2025-05-24',
         debug: true,
         enable_recording_console_log: true,

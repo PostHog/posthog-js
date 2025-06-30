@@ -19,12 +19,14 @@ By default, the playground is configured to use a local build of `posthog-js`. I
 
 To use the production snippet from the PostHog CDN, you will need to set `runningLocally` to `false`.
 
-### Project Key
+### Environment Variables
 
-For simplicity, the PostHog project key is loaded from a `.env` file in the root of the `posthog-js` repository.
+The PostHog project key and API host are loaded from a `.env` file in the root of the `posthog-js` repository.
 
 1.  If you don't already have one, create a `.env` file at the root of the `posthog-js` project.
 2.  Add your PostHog Project Key to the `.env` file:
     ```
     POSTHOG_PROJECT_KEY=<your-project-key>
-    ``` 
+    POSTHOG_API_HOST=<your-api-host>
+    ```
+    If `POSTHOG_API_HOST` is not set, it will default to `http://localhost:8010`. 
