@@ -82,7 +82,7 @@ describe('survey display logic', () => {
     test('callSurveysAndEvaluateDisplayLogic runs on interval irrespective of url change', () => {
         jest.useFakeTimers()
         jest.spyOn(global, 'setInterval')
-        generateSurveys(mockPostHog)
+        generateSurveys(mockPostHog, true)
         expect(mockPostHog.surveys.getSurveys).toBeCalledTimes(1)
         expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1000)
 
