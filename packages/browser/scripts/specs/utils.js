@@ -264,6 +264,7 @@ module.exports = {
   parseObjectTypeSignature,
   isSimpleObjectType,
   generateCallbackExample,
+  isCallbackType,
   textToId,
   formatParameterList,
   generateExampleCode,

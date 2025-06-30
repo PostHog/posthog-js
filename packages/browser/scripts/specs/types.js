@@ -86,10 +86,10 @@ function processTypeAliasMember(member, typeDef, apiPackage) {
     const detailedType = extractDetailedTypeInfo(member);
     if (!detailedType) return;
 
-    // Check if this is a callback type
-    const callbackExample = utils.generateCallbackExample(detailedType.signature);
-    if (callbackExample) {
-        typeDef.example = callbackExample;
+    // Check if this is a callback type and extract full signature
+    const callbackSignature = extractCallbackSignature(detailedType, member);
+    if (callbackSignature) {
+        typeDef.example = callbackSignature;
         typeDef.params = [];
         return;
     }
@@ -106,6 +106,59 @@ function processTypeAliasMember(member, typeDef, apiPackage) {
     } else {
         typeDef.detailedType = detailedType;
     }
+}
+
+// Extract callback signature from type alias
+function extractCallbackSignature(detailedType, member) {
+    const signature = detailedType.signature;
+    
+    // Check if this is a function type by looking for function patterns
+    const isFunctionPattern = signature.includes('=>') || 
+                             signature.includes(': ') || 
+                             utils.isCallbackType(member.name) ||
+                             member.name.includes('Callback');
+    
+    if (!isFunctionPattern) {
+        return null;
+    }
+    
+    // Extract function signature from the tokens
+    const functionSignature = extractFunctionFromTokens(detailedType.tokens);
+    if (functionSignature) {
+        return functionSignature;
+    }
+    
+    // For known callback patterns, extract the full signature
+    if (signature.includes('=>')) {
+        return signature.trim();
+    }
+    
+    // Fallback to generic callback for simple function types
+    return '() => {}';
+}
+
+// Extract function signature from tokens
+function extractFunctionFromTokens(tokens) {
+    if (!tokens || tokens.length === 0) return null;
+    
+    // Join all tokens to get the full signature, looking for function patterns
+    const fullText = tokens.map(token => token.text).join('');
+    
+    // Clean up the signature to make it more readable
+    let cleanSignature = fullText
+        .replace(/^\s*\(\s*/, '(')  // Clean leading spaces in params
+        .replace(/\s*\)\s*$/, ')')  // Clean trailing spaces in params
+        .replace(/\s*=>\s*/g, ' => ')  // Normalize arrow function spacing
+        .replace(/\s*:\s*/g, ': ')     // Normalize type annotation spacing
+        .replace(/\s*,\s*/g, ', ')     // Normalize comma spacing
+        .trim();
+    
+    // If it looks like a function, return it
+    if (cleanSignature.includes('=>') || cleanSignature.includes(': ')) {
+        return cleanSignature;
+    }
+    
+    return null;
 }
 
 // Extract detailed type information and tokens
