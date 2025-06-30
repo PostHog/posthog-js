@@ -1,8 +1,11 @@
 {
     "tasks": {
-        "clean": {},
+        "clean": {
+            "cache": false
+        },
         "build": {
-            "dependsOn": ["^build", "clean"]
+            "dependsOn": ["^build", "clean"],
+            "cache": false
         },
         "lint": {
             "dependsOn": []
@@ -16,8 +19,7 @@
         "test:functional": {},
         "test:e2e": {},
         "test": {
-            "dependsOn": ["lint", "test:unit", "test:functional", "test:e2e"],
-            "cache": false
+            "dependsOn": ["lint", "test:unit", "test:functional", "test:e2e"]
         },
         "dev": {
             "cache": false,
