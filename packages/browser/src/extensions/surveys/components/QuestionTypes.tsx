@@ -456,15 +456,17 @@ export function MultipleChoiceQuestion({
 
                         return (
                             <label className={isOpenChoice ? 'choice-option-open' : ''} key={idx}>
-                                <input
-                                    type={isSingleChoiceQuestion ? 'radio' : 'checkbox'}
-                                    name={inputId}
-                                    checked={isChecked}
-                                    onChange={() => handleChoiceChange(choice, isOpenChoice)}
-                                    id={inputId}
-                                    aria-controls={openInputId}
-                                />
-                                <span>{isOpenChoice ? `${choice}:` : choice}</span>
+                                <div className="response-choice">
+                                    <input
+                                        type={isSingleChoiceQuestion ? 'radio' : 'checkbox'}
+                                        name={inputId}
+                                        checked={isChecked}
+                                        onChange={() => handleChoiceChange(choice, isOpenChoice)}
+                                        id={inputId}
+                                        aria-controls={openInputId}
+                                    />
+                                    <span>{isOpenChoice ? `${choice}:` : choice}</span>
+                                </div>
                                 {isOpenChoice && (
                                     <input
                                         type="text"
