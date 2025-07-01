@@ -1,15 +1,8 @@
 # Contributing
 
-## Running E2E tests with Detox
-
-See [Example Expo Readme](../examples/example-expo/README.md)
-
 ## Running sample app with Expo
 
-```sh
-cd ../examples/example-expo-latest
-yarn && yarn start
-```
+See [Example Expo 53](../examples/example-expo-53/README.md)
 
 ## Running tests
 

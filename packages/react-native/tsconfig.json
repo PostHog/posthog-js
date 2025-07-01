@@ -1,13 +1,12 @@
 {
-  "extends": "@posthog-tooling/tsconfig-base",
+  "extends": "../tsconfig.json",
   "compilerOptions": {
-    "rootDir": ".",
     "declaration": true,
     "esModuleInterop": true,
     "jsx": "react-native",
     "lib": ["ESNext"],
     "module": "ESNext",
-    "moduleResolution": "bundler",
+    "moduleResolution": "node16",
     "noEmitOnError": true,
     "outDir": "./lib",
     "skipLibCheck": true,
