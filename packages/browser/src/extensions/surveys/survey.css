@@ -281,6 +281,7 @@
 
     & label,
     & .response-choice {
+        color: inherit;
         display: flex;
         align-items: center;
         gap: 8px;
