@@ -16,10 +16,10 @@
         "clean": "rimraf dist",
         "build": "rollup -c rollup.config.ts",
         "dev": "rollup -c rollup.config.ts --watch",
-        "test": "jest",
+        "test:unit": "jest",
         "lint": "eslint src",
         "test:debug": "jest --runInBand",
-        "prepublishOnly": "pnpm test && pnpm build"
+        "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build"
     },
     "main": "dist/umd/index.js",
     "module": "dist/esm/index.js",

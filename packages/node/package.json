@@ -14,7 +14,7 @@
     "test:unit": "jest",
     "build": "rollup -c",
     "dev": "rollup -cw",
-    "prepublishOnly": "pnpm lint && pnpm test && pnpm build"
+    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build"
   },
   "engines": {
     "node": ">=18"

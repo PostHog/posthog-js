@@ -18,7 +18,7 @@
     "lint:fix": "eslint src tests --fix",
     "build": "rollup -c rollup.config.ts --configPlugin @rollup/plugin-typescript",
     "dev": "rollup -c rollup.config.ts --configPlugin @rollup/plugin-typescript --watch",
-    "prepublishOnly": "pnpm lint && pnpm test && pnpm build"
+    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build"
   },
   "devDependencies": {
     "node-fetch": "^3.3.2",
