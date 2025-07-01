@@ -37,7 +37,8 @@
     "mitata": "^1.0.21",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@posthog-tooling/rollup-utils": "workspace:*",
-    "posthog-core": "workspace:*"
+    "posthog-core": "workspace:*",
+    "jest": "catalog:"
   },
   "keywords": [
     "posthog",

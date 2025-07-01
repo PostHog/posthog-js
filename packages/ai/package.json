@@ -23,7 +23,8 @@
   "devDependencies": {
     "node-fetch": "^3.3.2",
     "@posthog-tooling/rollup-utils": "workspace:*",
-    "@posthog-tooling/tsconfig-base": "workspace:*"
+    "@posthog-tooling/tsconfig-base": "workspace:*",
+    "jest": "catalog:"
   },
   "keywords": [
     "posthog",

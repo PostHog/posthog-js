@@ -1,4 +1,4 @@
-import { resolve, commonjs, typescript } from '@posthog-tooling/rollup-utils'
+import { resolve, typescript, commonjs } from '@posthog-tooling/rollup-utils'
 import copy from 'rollup-plugin-copy'
 
 const plugins = [
@@ -8,12 +8,11 @@ const plugins = [
         mainFields: ['module', 'main', 'jsnext:main', 'browser'],
         extensions: ['.js', '.jsx', '.ts', '.tsx'],
     }),
+    commonjs(),
     // Compile typescript to javascript
     typescript({
         useTsconfigDeclarationDir: true,
     }),
-    // Convert commonjs modules to esm
-    commonjs(),
 ]
 
 /**
@@ -31,7 +30,7 @@ const buildEsm = {
         dir: 'dist/esm',
         format: 'esm',
     },
-    plugins: [...plugins],
+    plugins,
 }
 
 /**
@@ -50,14 +49,21 @@ const buildUmd = {
             'posthog-js': 'posthog',
         },
     },
+    plugins,
+}
+
+const syncWithPosthogJs = {
+    // rollup expects an input file
+    input: 'sync.js',
+    output: {
+        file: '../browser/react/sync.js',
+        format: 'cjs',
+    },
     plugins: [
-        ...plugins,
-        // Copy the build to the browser directory for retrocompatibility
         copy({
             targets: [{ src: 'dist/*', dest: '../browser/react/dist' }],
-            hook: 'buildEnd',
         }),
     ],
 }
 
-export default [buildEsm, buildUmd]
+export default [buildEsm, buildUmd, syncWithPosthogJs]
