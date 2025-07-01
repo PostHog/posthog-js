@@ -1,12 +1,14 @@
 import { resolve, typescript, commonjs } from '@posthog-tooling/rollup-utils'
 import copy from 'rollup-plugin-copy'
 
+const extensions = ['.js', '.jsx', '.ts', '.tsx']
+
 const plugins = [
     // Resolve modules from node_modules
     resolve({
         preferBuiltins: false,
         mainFields: ['module', 'main', 'jsnext:main', 'browser'],
-        extensions: ['.js', '.jsx', '.ts', '.tsx'],
+        extensions,
     }),
     commonjs(),
     // Compile typescript to javascript
@@ -49,21 +51,13 @@ const buildUmd = {
             'posthog-js': 'posthog',
         },
     },
-    plugins,
-}
-
-const syncWithPosthogJs = {
-    // rollup expects an input file
-    input: 'sync.js',
-    output: {
-        file: '../browser/react/sync.js',
-        format: 'cjs',
-    },
     plugins: [
+        ...plugins,
         copy({
+            hook: 'writeBundle',
             targets: [{ src: 'dist/*', dest: '../browser/react/dist' }],
         }),
     ],
 }
 
-export default [buildEsm, buildUmd, syncWithPosthogJs]
+export default [buildEsm, buildUmd]
