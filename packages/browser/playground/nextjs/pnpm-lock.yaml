@@ -33,8 +33,8 @@ importers:
         specifier: 14.2.30
         version: 14.2.30(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       posthog-js:
-        specifier: file:../../dist
-        version: dist@file:../../dist
+        specifier: workspace:*
+        version: link:../..
       react:
         specifier: 18.3.1
         version: 18.3.1
@@ -435,9 +435,6 @@ packages:
 
   didyoumean@1.2.2:
     resolution: {integrity: sha512-gxtyfqMg7GKyhQmb056K7M3xszy/myH8w+B4RT+QXBQsvAOdc3XymqDDPHx1BgPgsdAA5SIifona89YtRATDzw==}
-
-  dist@file:../../dist:
-    resolution: {directory: ../../dist, type: directory}
 
   dlv@1.1.3:
     resolution: {integrity: sha512-+HlytyjlPKnIG8XuRG8WvmBP8xs8P71y+SKKS6ZXWoEgLuePxtDoUEiH7WkdePWrQ5JBpE6aoVqfZfJUQkjXwA==}
@@ -1473,8 +1470,6 @@ snapshots:
   deep-is@0.1.4: {}
 
   didyoumean@1.2.2: {}
-
-  dist@file:../../dist: {}
 
   dlv@1.1.3: {}
 
