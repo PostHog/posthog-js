@@ -4,7 +4,7 @@
     "rootDir": "./src",
     "baseUrl": "./src",
     "outDir": "dist",
-    "module": "ES6",
+    "module": "CommonJS",
     "moduleResolution": "node",
     "composite": false,
     "declaration": true,
