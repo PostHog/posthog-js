@@ -15,7 +15,7 @@
     "scripts": {
         "clean": "rimraf dist",
         "build": "rollup -c",
-        "dev": "rollup -c --watch",
+        "dev": "rollup -cw",
         "test:unit": "jest",
         "lint": "eslint src",
         "test:debug": "jest --runInBand",
