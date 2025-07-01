@@ -1749,6 +1749,7 @@ export class PostHog {
         this.persistence?.clear()
         this.sessionPersistence?.clear()
         this.surveys.reset()
+        this.featureFlags.reset()
         this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()
         this._cachedPersonProperties = null
