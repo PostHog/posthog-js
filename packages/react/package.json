@@ -14,8 +14,8 @@
     "packageManager": "pnpm@9.15.4",
     "scripts": {
         "clean": "rimraf dist",
-        "build": "rollup -c rollup.config.ts",
-        "dev": "rollup -c rollup.config.ts --watch",
+        "build": "rollup -c",
+        "dev": "rollup -c --watch",
         "test:unit": "jest",
         "lint": "eslint src",
         "test:debug": "jest --runInBand",
