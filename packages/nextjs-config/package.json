@@ -17,9 +17,11 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "prepublishOnly": "pnpm lint && pnpm test && pnpm build",
+    "clean": "rimraf dist",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
-    "build": "tsup src/index.ts --format cjs,esm --dts --out-dir dist"
+    "build": "tsup src/index.ts --format cjs,esm --dts --out-dir dist",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --out-dir dist --watch"
   },
   "exports": {
     ".": {

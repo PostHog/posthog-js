@@ -11,11 +11,13 @@
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "scripts": {
-    "test": "jest -c jest.config.js",
+    "clean": "rimraf dist coverage",
+    "test:unit": "jest -c jest.config.js",
     "lint": "eslint src test",
     "lint:fix": "eslint src test --fix",
     "prebuild": "node -p \"'export const version = ' + JSON.stringify(require('./package.json').version)\" > src/version.ts",
     "build": "rollup -c",
+    "dev": "rollup -c -w",
     "prepublishOnly": "pnpm lint && pnpm test && pnpm build"
   },
   "files": [
