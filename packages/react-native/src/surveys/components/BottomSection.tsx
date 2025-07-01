@@ -19,7 +19,11 @@ export function BottomSection({
   return (
     <View style={styles.bottomSection}>
       <TouchableOpacity
-        style={[styles.button, { backgroundColor: appearance.submitButtonColor }]}
+        style={[
+          styles.button,
+          { backgroundColor: appearance.submitButtonColor },
+          submitDisabled && styles.buttonDisabled,
+        ]}
         disabled={submitDisabled}
         onPress={() => {
           onSubmit()
@@ -49,5 +53,8 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontSize: 16,
+  },
+  buttonDisabled: {
+    opacity: 0.5,
   },
 })

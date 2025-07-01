@@ -1,5 +1,18 @@
 # Next
 
+# 4.1.4 - 2025-07-01
+
+## Fixed
+
+1. avoid navigation tracking crash when using the new navigation version
+
+# 4.1.3 - 2025-06-26
+
+## Fixed
+
+1. Multiple choice question response
+2. Survey button disabled style
+
 # 4.1.2 - 2025-06-24
 
 ## Fixed
