@@ -13,13 +13,13 @@
     "directory": "packages/react-native"
   },
   "scripts": {
-    "pretest": "npm run prebuild",
+    "clean": "rimraf lib",
     "lint": "eslint src test",
     "lint:fix": "eslint src test --fix",
-    "test": "jest -c jest.config.js",
+    "test:unit": "jest -c jest.config.js",
     "prepublishOnly": "pnpm lint && pnpm test && pnpm build",
     "prebuild": "node -p \"'export const version = ' + JSON.stringify(require('./package.json').version)\" > src/version.ts",
-    "build": "rm -rf lib && tsc --outDir ./lib && babel ./lib --out-dir lib --extensions '.js'"
+    "build": "tsc --outDir ./lib && babel ./lib --out-dir lib --extensions '.js'"
   },
   "devDependencies": {
     "@babel/cli": "^7.19.3",
@@ -42,7 +42,8 @@
     "react-native-svg": "^15.0.0",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@posthog-tooling/rollup-utils": "workspace:*",
-    "posthog-core": "workspace:*"
+    "posthog-core": "workspace:*",
+    "typescript": "catalog:"
   },
   "peerDependencies": {
     "@react-native-async-storage/async-storage": ">=1.0.0",
