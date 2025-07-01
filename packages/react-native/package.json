@@ -2,10 +2,10 @@
   "name": "posthog-react-native",
   "version": "4.1.4",
   "license": "MIT",
-  "main": "lib/index.js",
-  "types": "lib/index.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "files": [
-    "lib/"
+    "dist/"
   ],
   "repository": {
     "type": "git",
@@ -13,13 +13,13 @@
     "directory": "packages/react-native"
   },
   "scripts": {
-    "clean": "rimraf lib",
+    "clean": "rimraf dist",
     "lint": "eslint src test",
     "lint:fix": "eslint src test --fix",
     "test:unit": "jest -c jest.config.js",
     "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
     "prebuild": "node -p \"'export const version = ' + JSON.stringify(require('./package.json').version)\" > src/version.ts",
-    "build": "tsc --outDir ./lib && babel ./lib --out-dir lib --extensions '.js'"
+    "build": "tsc -b && babel ./dist --out-dir dist --extensions '.js'"
   },
   "devDependencies": {
     "@babel/cli": "^7.19.3",
@@ -46,6 +46,7 @@
     "typescript": "catalog:",
     "jest": "catalog:",
     "jest-expo": "catalog:",
+    "jest-environment-node": "catalog:",
     "ts-jest": "catalog:"
   },
   "peerDependencies": {
