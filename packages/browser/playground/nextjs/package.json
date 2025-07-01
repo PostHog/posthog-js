@@ -2,7 +2,7 @@
     "name": "playground-nextjs",
     "version": "0.1.0",
     "private": true,
-    "packageManager": "pnpm@9.15.4",
+    "packageManager": "pnpm@10.12.4",
     "scripts": {
         "clean-react": "cd ../../react && pnpm run clean-node-modules",
         "dev": "next dev",
