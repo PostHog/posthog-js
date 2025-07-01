@@ -1,8 +1,5 @@
-import * as path from 'path'
-import resolve from '@rollup/plugin-node-resolve'
-import commonjs from '@rollup/plugin-commonjs'
-import typescript from 'rollup-plugin-typescript2'
-import packageJson from './package.json'
+import { resolve, commonjs, typescript } from '@posthog-tooling/rollup-utils'
+import copy from 'rollup-plugin-copy'
 
 const plugins = [
     // Resolve modules from node_modules
@@ -31,10 +28,10 @@ const buildEsm = {
     output: {
         entryFileNames: '[name].js',
         chunkFileNames: '[name]-deps.js',
-        dir: path.dirname(packageJson.module),
+        dir: 'dist/esm',
         format: 'esm',
     },
-    plugins,
+    plugins: [...plugins],
 }
 
 /**
@@ -42,17 +39,25 @@ const buildEsm = {
  */
 const buildUmd = {
     external: ['posthog-js', 'react'],
-    input: 'src/index.ts',
+    input: './src/index.ts',
     output: {
-        file: packageJson.main,
+        file: 'dist/umd/index.js',
         name: 'PosthogReact',
         format: 'umd',
         esModule: false,
         globals: {
             react: 'React',
+            'posthog-js': 'posthog',
         },
     },
-    plugins,
+    plugins: [
+        ...plugins,
+        // Copy the build to the browser directory for retrocompatibility
+        copy({
+            targets: [{ src: 'dist/*', dest: '../browser/react/dist' }],
+            hook: 'buildEnd',
+        }),
+    ],
 }
 
 export default [buildEsm, buildUmd]
