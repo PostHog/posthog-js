@@ -23,7 +23,7 @@
     },
     "main": "dist/umd/index.js",
     "module": "dist/esm/index.js",
-    "types": "dist/types",
+    "types": "dist/types/index.d.ts",
     "files": [
         "dist/*",
         "README.md"

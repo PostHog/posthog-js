@@ -5,6 +5,7 @@
         "isolatedModules": true,
         "esModuleInterop": true,
         "declaration": false,
+        "noEmitOnError": true,
         "removeComments": false,
         "emitDecoratorMetadata": true,
         "experimentalDecorators": true,

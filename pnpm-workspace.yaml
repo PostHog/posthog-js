@@ -6,6 +6,7 @@ packages:
 catalog:
   tsup: "^8.5.0"
   typescript: "^5.5.4"
+  rollup: "^4.44.1"
   tslib: "^2.5.0"
   jest: "^29.7.0"
   jest-environment-jsdom: "^29.7.0"

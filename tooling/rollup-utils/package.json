@@ -21,14 +21,14 @@
         "@rollup/plugin-json": "^6.1.0",
         "@rollup/plugin-node-resolve": "^16.0.1",
         "rollup-plugin-dts": "^6.1.1",
-        "rollup-plugin-dts-bundle": "^1.0.0",
-        "rollup-plugin-typescript2": "^0.36.0"
+        "@rollup/plugin-typescript": "^12.1.4"
     },
     "peerDependencies": {
-        "rollup": ">=2.77.0",
-        "typescript": ">=5.0.0"
+        "rollup": "catalog:",
+        "typescript": "catalog:"
     },
     "devDependencies": {
-        "typescript": "catalog:"
+        "typescript": "catalog:",
+        "rollup": "catalog:"
     }
 }

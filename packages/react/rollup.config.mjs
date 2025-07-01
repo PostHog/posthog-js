@@ -1,4 +1,4 @@
-import { resolve, typescript, commonjs } from '@posthog-tooling/rollup-utils'
+import { resolve, typescript, commonjs, dts } from '@posthog-tooling/rollup-utils'
 import copy from 'rollup-plugin-copy'
 
 const extensions = ['.js', '.jsx', '.ts', '.tsx']
@@ -13,7 +13,7 @@ const plugins = [
     commonjs(),
     // Compile typescript to javascript
     typescript({
-        useTsconfigDeclarationDir: true,
+        tsconfig: './tsconfig.json',
     }),
 ]
 
@@ -27,10 +27,9 @@ const buildEsm = {
         'src/index.ts',
     ],
     output: {
-        entryFileNames: '[name].js',
-        chunkFileNames: '[name]-deps.js',
-        dir: 'dist/esm',
+        file: 'dist/esm/index.js',
         format: 'esm',
+        sourcemap: true,
     },
     plugins,
 }
@@ -45,14 +44,26 @@ const buildUmd = {
         file: 'dist/umd/index.js',
         name: 'PosthogReact',
         format: 'umd',
+        sourcemap: true,
         esModule: false,
         globals: {
             react: 'React',
             'posthog-js': 'posthog',
         },
     },
+    plugins,
+}
+
+const buildTypes = {
+    external: ['posthog-js', 'react'],
+    input: './src/index.ts',
+    output: {
+        file: 'dist/types/index.d.ts',
+        format: 'es',
+    },
     plugins: [
-        ...plugins,
+        resolve(),
+        dts(),
         copy({
             hook: 'writeBundle',
             targets: [{ src: 'dist/*', dest: '../browser/react/dist' }],
@@ -60,4 +71,4 @@ const buildUmd = {
     ],
 }
 
-export default [buildEsm, buildUmd]
+export default [buildEsm, buildUmd, buildTypes]

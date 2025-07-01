@@ -5,7 +5,9 @@
         },
         "build": {
             "dependsOn": ["^build", "clean"],
-            "cache": false
+            "cache": true,
+            "inputs": ["src/**", "tsconfig.json", "package.json", "babel.config.js"],
+            "outputs": ["dist/**"]
         },
         "lint": {
             "dependsOn": []
