@@ -3,6 +3,7 @@
     "packageManager": "pnpm@9.15.4",
     "scripts": {
         "build-rollup": "pnpm --filter=posthog-js build-rollup",
+        "clean": "turbo clean",
         "lint": "turbo lint",
         "lint:fix": "turbo lint:fix",
         "test": "turbo test",
