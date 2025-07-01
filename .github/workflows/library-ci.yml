@@ -26,7 +26,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
       - run: pnpm build
-        working-directory: packages/browser
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps
         working-directory: packages/browser
@@ -46,6 +45,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
+      - run: pnpm build
       - run: pnpm test:functional
 
   lint:
