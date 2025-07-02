@@ -19,7 +19,8 @@
     "test:unit": "jest -c jest.config.js",
     "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
     "prebuild": "node -p \"'export const version = ' + JSON.stringify(require('./package.json').version)\" > src/version.ts",
-    "build": "tsc -b && babel ./dist --out-dir dist --extensions '.js'"
+    "build": "tsc -b && babel ./dist --out-dir dist --extensions '.js'",
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "devDependencies": {
     "@babel/cli": "^7.19.3",
