@@ -8,7 +8,7 @@
 
 ## 1.255.3 - 2025-06-30
 
-
+- fix: init surveys manager if surveys is disabled in the project settings (#2056)
 
 ## 1.255.2 - 2025-06-30
 
