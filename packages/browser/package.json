@@ -37,7 +37,7 @@
         "check-testcafe-results": "ts-node testcafe/check-testcafe-results.js",
         "run-testcafe-localhost": "node scripts/run-testcafe-localhost.mjs",
         "write-mangled-property-names": "WRITE_MANGLED_PROPERTIES=1 pnpm build-rollup",
-        "gen-specs": "npx tsc && npx api-extractor run --config ./api-extractor.json --local",
+        "gen-specs": "pnpm exec tsc && pnpm exec api-extractor run --config ./api-extractor.json --local",
         "parse-specs": "node scripts/specs/parser.js"
     },
     "main": "dist/main.js",
