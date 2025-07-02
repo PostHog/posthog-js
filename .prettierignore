@@ -1,0 +1,4 @@
+lib
+
+posthog-react-native/src/version.ts
+posthog-core/src/vendor/*

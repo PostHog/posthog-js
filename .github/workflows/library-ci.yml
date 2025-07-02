@@ -57,9 +57,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
-      - run: pnpm prettier:check
-        working-directory: packages/browser
-      - run: pnpm lint
-        working-directory: packages/browser
+      - name: Lint all packages
+        run: pnpm lint
       - run: pnpm tsc -b
         working-directory: packages/browser
