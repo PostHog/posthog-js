@@ -7,7 +7,17 @@
             "dependsOn": ["^build", "clean"],
             "cache": true,
             "inputs": ["src/**", "tsconfig.json", "package.json", "babel.config.js"],
-            "outputs": ["dist/**"]
+            "outputs": ["dist/**", "lib/**"]
+        },
+        "package": {
+            "dependsOn": ["build"],
+            "inputs": ["dist/**"],
+            "env": ["PACKAGE_DEST"]
+        },
+        "posthog-js#package": {
+            "dependsOn": ["@posthog/react#build"],
+            "inputs": ["dist/**", "lib/**", "react/**"],
+            "env": ["PACKAGE_DEST"]
         },
         "lint": {
             "dependsOn": []

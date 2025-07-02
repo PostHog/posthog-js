@@ -19,7 +19,8 @@
         "test:unit": "jest",
         "lint": "eslint src",
         "test:debug": "jest --runInBand",
-        "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build"
+        "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
+        "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
     },
     "main": "dist/umd/index.js",
     "module": "dist/esm/index.js",

@@ -36,3 +36,4 @@ cypress/downloads/downloads.html
 dist
 tsconfig.tsbuildinfo
 .turbo
+target
