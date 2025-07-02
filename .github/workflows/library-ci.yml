@@ -12,8 +12,10 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup
-      - run: pnpm build
+      - name: Setup environment
+        uses: ./.github/actions/setup
+        with:
+          build: true
       - run: pnpm test:unit
       - run: pnpm write-mangled-property-names
         working-directory: packages/browser
@@ -24,8 +26,10 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup
-      - run: pnpm build
+      - name: Setup environment
+        uses: ./.github/actions/setup
+        with:
+          build: true
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps
         working-directory: packages/browser
@@ -44,8 +48,10 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup
-      - run: pnpm build
+      - name: Setup environment
+        uses: ./.github/actions/setup
+        with:
+          build: true
       - run: pnpm test:functional
 
   lint:
@@ -53,6 +59,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup
+      - name: Setup environment
+        uses: ./.github/actions/setup
       - name: Lint all packages
         run: pnpm lint
