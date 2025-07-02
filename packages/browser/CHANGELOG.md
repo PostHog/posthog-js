@@ -1,10 +1,14 @@
+## 1.256.1 - 2025-07-02
+
+- fix survey input color on dark backgrounds (#2071)
+
 ## 1.256.0 - 2025-06-30
 
 - feat: push replay and person data to intercom and crisp chat (#2039)
 
 ## 1.255.3 - 2025-06-30
 
-
+- fix: init surveys manager if surveys is disabled in the project settings (#2056)
 
 ## 1.255.2 - 2025-06-30
 
