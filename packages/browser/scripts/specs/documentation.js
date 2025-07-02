@@ -1,5 +1,5 @@
 const utils = require('./utils');
-
+const { NO_DESCRIPTION_AVAILABLE } = require('./constants');
 // Documentation extraction functions
 const hasDocumentationSummary = (apiItem) => 
   Boolean(apiItem.tsdocComment?.summarySection);
@@ -15,7 +15,7 @@ const extractSummaryText = (apiItem) =>
 const getDocComment = (apiItem) => 
   hasDocumentationSummary(apiItem) 
     ? extractSummaryText(apiItem)
-    : 'No description available';
+    : NO_DESCRIPTION_AVAILABLE;
 
 // for parameter documentation
 const findParamBlock = (apiMethod, paramName) =>
@@ -32,7 +32,7 @@ const extractParamContent = (paramBlock) =>
  */
 const getParamDescription = (apiMethod, paramName) => {
   const paramBlock = findParamBlock(apiMethod, paramName);
-  return extractParamContent(paramBlock) || 'No description available';
+  return extractParamContent(paramBlock) || NO_DESCRIPTION_AVAILABLE;
 };
 
 // for remarks extraction

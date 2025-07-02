@@ -1,5 +1,5 @@
 const { TSDocConfiguration, TSDocParser } = require('@microsoft/tsdoc');
-
+const { NO_DESCRIPTION_AVAILABLE } = require('./constants');
 // for node rendering
 const nodeRenderers = {
   PlainText: (node) => node.text || '',
@@ -186,7 +186,7 @@ const parseProperty = (part) => {
   return name && type ? {
     name,
     type: isOptional ? `${type} | undefined` : type,
-    description: 'No description available'
+    description: NO_DESCRIPTION_AVAILABLE
   } : null;
 };
 
