@@ -92,7 +92,7 @@ module.exports = {
     NO_DOCS_TYPES,
     HOG_REF,
     SPEC_INFO,
-    OUTPUT_FILE_PATH,   
+    OUTPUT_FILE_PATH,
     PROPERTIES_EXAMPLE,
     PROPERTY_EXAMPLE
 }; 
