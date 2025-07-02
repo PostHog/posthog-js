@@ -21,17 +21,15 @@ runs:
     - name: Checkout the repository
       uses: actions/checkout@v4
 
-    - uses: ./.github/actions/setup
-
-    - name: Build workspace
-      shell: bash
-      run: pnpm build
+    - name: Setup workspace
+      uses: ./.github/actions/setup
+      with:
+        build: true
 
     - name: Tag repository with package_name and package_version
       shell: bash
       run: |
         git tag -a "${{ inputs.package_name }}@${{ inputs.package_version }}" -m "${{ inputs.package_name }}@${{ inputs.package_version }}"
-        git push origin "${{ inputs.package_name }}@${{ inputs.package_version }}"
 
     - name: Publish package to NPM
       shell: bash
@@ -41,6 +39,11 @@ runs:
         DATABASE_URL: "postgres://postgres:postgres@localhost:${{ job.services.postgres.ports[5432] }}/postgres"
         REDIS_URL: "redis://localhost"
         NODE_AUTH_TOKEN: ${{ inputs.npm_token }}
+
+    - name: Push tag to GitHub
+      shell: bash
+      run: |
+        git push origin "${{ inputs.package_name }}@${{ inputs.package_version }}"
 
     - name: Create GitHub release
       working-directory: ${{ inputs.package_path }}
@@ -69,8 +72,3 @@ runs:
         -F draft=false \
         -F prerelease=false \
         -F generate_release_notes=false
-
-    ## tag repository with package_name and package_version
-    ## publish package to NPM
-    ## create GitHub release with package_name and package_version
-    ## push tags

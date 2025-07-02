@@ -11,6 +11,7 @@ jobs:
     if: |
       github.event.pull_request.merged
       && contains(github.event.pull_request.labels.*.name, 'release')
+      && github.event.pull_request.base.ref == 'main'
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -31,10 +32,10 @@ jobs:
       - name: Update lockfile
         run: pnpm install
 
-      - name: Commit bump
-        if: steps.bump-type.outputs.bump-type != 'null'
+      - name: Commit updated lockfile
         uses: EndBug/add-and-commit@v7
         with:
+          add: "pnpm-lock.yaml"
           branch: ${{ github.event.pull_request.base.ref }}
-          message: "chore: update versions"
+          message: "chore: update versions and lockfile"
           github_token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}

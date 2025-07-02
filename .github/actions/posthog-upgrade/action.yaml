@@ -68,7 +68,7 @@ runs:
 
           ${{ inputs.package_name }} version ${{ inputs.package_version }} has been released. This updates PostHog to use it.
 
-          https://github.com/PostHog/posthog-js/compare/${{ replace(replace(inputs.package_name, '@', ''), '/', '-') }}@${{ steps.pnpm-upgrade.outputs.outgoing-version }}...${{ replace(replace(inputs.package_name, '@', ''), '/', '-') }}@${{ inputs.package_version }} • [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/${{ inputs.package_name }}?activeTab=version)
+          https://github.com/PostHog/posthog-js/compare/${{ inputs.package_name }}@${{ steps.pnpm-upgrade.outputs.outgoing-version }}...${{ inputs.package_name }}@${{ inputs.package_version }} • [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/${{ inputs.package_name }}?activeTab=version)
 
     - name: Output pull request result
       shell: bash
@@ -90,8 +90,6 @@ runs:
         # the new commit in the merge commit (but it looks like the PR has the change)
         # Sleep 5 should work
         sleep 5
-        pull_number=$(jq --raw-output .pull_request.number "$GITHUB_EVENT_PATH")
-
         pull_number=${{ steps.main-repo-pr.outputs.pull-request-number }}
         curl -L \
         -X POST \

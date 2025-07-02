@@ -35,7 +35,7 @@ runs:
         echo "outgoing-version=$OUTGOING_VERSION" >> "$GITHUB_OUTPUT"
         for i in $(seq 1 $RETRY_TIMES); do
             # Retry loop because of npm being _eventually_ consistent
-            if yarn upgrade {{ inputs.package_name }}@${{ inputs.package_version }}; then
+            if yarn upgrade ${{ inputs.package_name }}@${{ inputs.package_version }}; then
                 break
             else
                 [ $i -ne $RETRY_TIMES ] && sleep $RETRY_WAIT_SECONDS || false
@@ -50,7 +50,7 @@ runs:
       uses: peter-evans/create-pull-request@v3
       with:
         token: ${{ inputs.github_bot_token }}
-        commit-message: "chore(deps): Update ${{ inputs.package_name }} to ${{ env.COMMITTED_VERSION }}"
+        commit-message: "chore(deps): Update ${{ inputs.package_name }} to ${{ inputs.package_version }}"
         branch: ${{ replace(replace(inputs.package_name, '@', ''), '/', '-') }}-${{ inputs.package_version }}
         delete-branch: true
         labels: automerge
@@ -60,7 +60,7 @@ runs:
 
           ${{ inputs.package_name }} version ${{ inputs.package_version }} has been released. This updates PostHog to use it.
 
-          https://github.com/PostHog/posthog-js/compare/${{ replace(replace(inputs.package_name, '@', ''), '/', '-') }}@${{ steps.pnpm-upgrade.outputs.outgoing-version }}...${{ replace(replace(inputs.package_name, '@', ''), '/', '-') }}@${{ inputs.package_version }} • [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/${{ inputs.package_name }}?activeTab=version)
+          https://github.com/PostHog/posthog-js/compare/${{ inputs.package_name }}@${{ steps.yarn-upgrade.outputs.outgoing-version }}...${{ inputs.package_name }}@${{ inputs.package_version }} • [GitHub releases](https://github.com/PostHog/posthog-js/releases) • [npm releases](https://www.npmjs.com/package/${{ inputs.package_name }}?activeTab=version)
 
     - name: Output pull request result
       shell: bash
