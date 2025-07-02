@@ -25,29 +25,28 @@ export const posthog: PostHog = POSTHOG_USE_SNIPPET
  * This is only an example - data privacy requirements are different for every project
  */
 export function cookieConsentGiven(): null | boolean {
-    if (typeof window === 'undefined') return null
-    return localStorage.getItem('cookie_consent') === 'true'
+    return posthog.consent.isOptedIn() ? true : posthog.consent.isOptedOut() ? false : null
 }
 
 export const configForConsent = (): Partial<PostHogConfig> => {
-    const consentGiven = localStorage.getItem('cookie_consent') === 'true'
+    const consentGiven = !!cookieConsentGiven()
 
     return {
         persistence: consentGiven ? 'localStorage+cookie' : 'memory',
         disable_surveys: !consentGiven,
-        autocapture: consentGiven,
         disable_session_recording: !consentGiven,
     }
 }
 
 export const updatePostHogConsent = (consentGiven: boolean) => {
     if (consentGiven) {
-        localStorage.setItem('cookie_consent', 'true')
+        posthog.set_config(configForConsent())
+        posthog.consent.optInOut(true)
     } else {
-        localStorage.removeItem('cookie_consent')
+        posthog.consent.optInOut(false)
+        posthog.reset()
+        posthog.set_config(configForConsent())
     }
-
-    posthog.set_config(configForConsent())
 }
 
 if (typeof window !== 'undefined') {
@@ -59,6 +58,7 @@ if (typeof window !== 'undefined') {
             ignoreClass: 'ph-ignore-image',
         },
         debug: true,
+        autocapture: true,
         capture_pageview: 'history_change',
         disable_web_experiments: false,
         scroll_root_selector: ['#scroll_element', 'html'],
@@ -66,8 +66,9 @@ if (typeof window !== 'undefined') {
         person_profiles: PERSON_PROCESSING_MODE === 'never' ? 'identified_only' : PERSON_PROCESSING_MODE,
         persistence_name: `${process.env.NEXT_PUBLIC_POSTHOG_KEY}_nextjs`,
         opt_in_site_apps: true,
+        opt_out_capturing_by_default: true,
         __preview_remote_config: true,
-        __preview_experimental_cookieless_mode: false,
+        __preview_experimental_cookieless_mode: true,
         __preview_flags_v2: true,
         ...configForConsent(),
     })

@@ -136,78 +136,81 @@ let ENQUEUE_REQUESTS = !SUPPORTS_REQUEST && userAgent?.indexOf('MSIE') === -1 &&
 // NOTE: Remember to update `types.ts` when changing a default value
 // to guarantee documentation is up to date, make sure to also update our website docs
 // NOTE²: This shouldn't ever change because we try very hard to be backwards-compatible
-export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
-    api_host: 'https://us.i.posthog.com',
-    ui_host: null,
-    token: '',
-    autocapture: true,
-    rageclick: true,
-    cross_subdomain_cookie: isCrossDomainCookie(document?.location),
-    persistence: 'localStorage+cookie', // up to 1.92.0 this was 'cookie'. It's easy to migrate as 'localStorage+cookie' will migrate data from cookie storage
-    persistence_name: '',
-    loaded: __NOOP,
-    save_campaign_params: true,
-    custom_campaign_params: [],
-    custom_blocked_useragents: [],
-    save_referrer: true,
-    capture_pageview: defaults === '2025-05-24' ? 'history_change' : true,
-    capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
-    defaults: defaults ?? 'unset',
-    debug: (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
-    cookie_expiration: 365,
-    upgrade: false,
-    disable_session_recording: false,
-    disable_persistence: false,
-    disable_web_experiments: true, // disabled in beta.
-    disable_surveys: false,
-    disable_surveys_automatic_display: false,
-    disable_external_dependency_loading: false,
-    enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
-    secure_cookie: window?.location?.protocol === 'https:',
-    ip: true,
-    opt_out_capturing_by_default: false,
-    opt_out_persistence_by_default: false,
-    opt_out_useragent_filter: false,
-    opt_out_capturing_persistence_type: 'localStorage',
-    opt_out_capturing_cookie_prefix: null,
-    opt_in_site_apps: false,
-    property_denylist: [],
-    respect_dnt: false,
-    sanitize_properties: null,
-    request_headers: {}, // { header: value, header2: value }
-    request_batching: true,
-    properties_string_max_length: 65535,
-    session_recording: {},
-    mask_all_element_attributes: false,
-    mask_all_text: false,
-    mask_personal_data_properties: false,
-    custom_personal_data_properties: [],
-    advanced_disable_flags: false,
-    advanced_disable_decide: false,
-    advanced_disable_feature_flags: false,
-    advanced_disable_feature_flags_on_first_load: false,
-    advanced_only_evaluate_survey_feature_flags: false,
-    advanced_disable_toolbar_metrics: false,
-    feature_flag_request_timeout_ms: 3000,
-    surveys_request_timeout_ms: SURVEYS_REQUEST_TIMEOUT_MS,
-    on_request_error: (res) => {
-        const error = 'Bad HTTP status: ' + res.statusCode + ' ' + res.text
-        logger.error(error)
-    },
-    get_device_id: (uuid) => uuid,
-    capture_performance: undefined,
-    name: 'posthog',
-    bootstrap: {},
-    disable_compression: false,
-    session_idle_timeout_seconds: 30 * 60, // 30 minutes
-    person_profiles: 'identified_only',
-    before_send: undefined,
-    request_queue_config: { flush_interval_ms: DEFAULT_FLUSH_INTERVAL_MS },
-    error_tracking: {},
+export const defaultConfig = (defaults?: ConfigDefaults) => {
+    return {
+        api_host: 'https://us.i.posthog.com',
+        ui_host: null,
+        token: '',
+        autocapture: true,
+        rageclick: true,
+        cross_subdomain_cookie: isCrossDomainCookie(document?.location),
+        persistence: 'localStorage+cookie', // up to 1.92.0 this was 'cookie'. It's easy to migrate as 'localStorage+cookie' will migrate data from cookie storage
+        persistence_name: '',
+        loaded: __NOOP,
+        save_campaign_params: true,
+        custom_campaign_params: [],
+        custom_blocked_useragents: [],
+        save_referrer: true,
+        capture_pageview: defaults === '2025-05-24' ? 'history_change' : true,
+        capture_pageleave: 'if_capture_pageview', // We'll only capture pageleave events if capture_pageview is also true
+        defaults: defaults ?? 'unset',
+        debug:
+            (location && isString(location?.search) && location.search.indexOf('__posthog_debug=true') !== -1) || false,
+        cookie_expiration: 365,
+        upgrade: false,
+        disable_session_recording: false,
+        disable_persistence: false,
+        disable_web_experiments: true, // disabled in beta.
+        disable_surveys: false,
+        disable_surveys_automatic_display: false,
+        disable_external_dependency_loading: false,
+        enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
+        secure_cookie: window?.location?.protocol === 'https:',
+        ip: true,
+        opt_out_capturing_by_default: false,
+        opt_out_persistence_by_default: false,
+        opt_out_useragent_filter: false,
+        opt_out_capturing_persistence_type: 'localStorage',
+        opt_out_capturing_cookie_prefix: null,
+        opt_in_site_apps: false,
+        property_denylist: [],
+        respect_dnt: false,
+        sanitize_properties: null,
+        request_headers: {}, // { header: value, header2: value }
+        request_batching: true,
+        properties_string_max_length: 65535,
+        session_recording: {},
+        mask_all_element_attributes: false,
+        mask_all_text: false,
+        mask_personal_data_properties: false,
+        custom_personal_data_properties: [],
+        advanced_disable_flags: false,
+        advanced_disable_decide: false,
+        advanced_disable_feature_flags: false,
+        advanced_disable_feature_flags_on_first_load: false,
+        advanced_only_evaluate_survey_feature_flags: false,
+        advanced_disable_toolbar_metrics: false,
+        feature_flag_request_timeout_ms: 3000,
+        surveys_request_timeout_ms: SURVEYS_REQUEST_TIMEOUT_MS,
+        on_request_error: (res) => {
+            const error = 'Bad HTTP status: ' + res.statusCode + ' ' + res.text
+            logger.error(error)
+        },
+        get_device_id: (uuid) => uuid,
+        capture_performance: undefined,
+        name: 'posthog',
+        bootstrap: {},
+        disable_compression: false,
+        session_idle_timeout_seconds: 30 * 60, // 30 minutes
+        person_profiles: 'identified_only',
+        before_send: undefined,
+        request_queue_config: { flush_interval_ms: DEFAULT_FLUSH_INTERVAL_MS },
+        error_tracking: {},
 
-    // Used for internal testing
-    _onCapture: __NOOP,
-})
+        // Used for internal testing
+        _onCapture: __NOOP,
+    } satisfies PostHogConfig
+}
 
 export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostHogConfig> => {
     const renames: Partial<PostHogConfig> = {}
@@ -1877,6 +1880,36 @@ export class PostHog {
             this.identify(alias)
             return -1
         }
+    }
+
+    _handleCookielessConsent(): CaptureResult | void | number {
+        if (!this.config.__preview_experimental_cookieless_mode) {
+            logger.critical(
+                'doCookieConsent is only available in cookieless mode. Please enable __preview_experimental_cookieless_mode in your PostHog config.'
+            )
+            return -1
+        }
+        const existingDistinctId = this.get_distinct_id()
+        if (existingDistinctId !== COOKIELESS_SENTINEL_VALUE) {
+            logger.critical(
+                `doCookieConsent can only be called when the distinct_id is ${COOKIELESS_SENTINEL_VALUE}. Current distinct_id is ${existingDistinctId}.`
+            )
+            return -2
+        }
+
+        // create a new anon distinct id
+        const uuid = this.config.get_device_id(uuidv7())
+
+        // alias that new distinct id to our cookieless distinct id
+        const captureResult = this.capture('$create_alias', { alias: uuid, distinct_id: COOKIELESS_SENTINEL_VALUE })
+
+        // persist
+        this.register({
+            distinct_id: uuid,
+            [ALIAS_ID_KEY]: uuid,
+        })
+
+        return captureResult
     }
 
     /**

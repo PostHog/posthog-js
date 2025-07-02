@@ -45,6 +45,7 @@ export class ConsentManager {
     }
 
     public optInOut(isOptedIn: boolean) {
+        const previouslyOptedIn = this.isOptedIn()
         this._storage._set(
             this._storageKey,
             isOptedIn ? 1 : 0,
@@ -52,6 +53,10 @@ export class ConsentManager {
             this._config.cross_subdomain_cookie,
             this._config.secure_cookie
         )
+
+        if (isOptedIn && !previouslyOptedIn) {
+            this._instance._handleCookielessConsent()
+        }
     }
 
     public reset() {

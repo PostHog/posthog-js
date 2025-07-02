@@ -1,21 +1,24 @@
 /* eslint-disable posthog-js/no-direct-null-check */
 import { useEffect, useState } from 'react'
-import { cookieConsentGiven, updatePostHogConsent } from './posthog'
+import { cookieConsentGiven, posthog, updatePostHogConsent } from './posthog'
 
 export function useCookieConsent(): [boolean | null, (consentGiven: boolean) => void] {
+    // this will be null during SSR and will be set to true/false on the client
     const [consentGiven, setConsentGiven] = useState<boolean | null>(null)
-
     useEffect(() => {
-        setConsentGiven(cookieConsentGiven())
+        const storedConsent = cookieConsentGiven()
+        console.log({ storedConsent, consent: posthog.consent })
+        setConsentGiven(storedConsent)
     }, [])
 
-    useEffect(() => {
-        if (consentGiven === null) return
+    const onConsentGiven = (consent: boolean) => {
+        if (consent !== consentGiven) {
+            updatePostHogConsent(consent)
+        }
+        setConsentGiven(consent)
+    }
 
-        updatePostHogConsent(consentGiven)
-    }, [consentGiven])
-
-    return [consentGiven, setConsentGiven]
+    return [consentGiven, onConsentGiven]
 }
 
 export function CookieBanner() {
