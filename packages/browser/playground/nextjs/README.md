@@ -21,7 +21,7 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 ### Testing local changes to packages
 
-Wait for the tarball to be created, then run:
+Update your files, wait for the package script to finish, then, from this folder, run:
 ```bash
 pnpm install
 NEXT_PUBLIC_POSTHOG_KEY='<your-local-api-key>' pnpm dev
