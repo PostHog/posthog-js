@@ -44,3 +44,5 @@ pnpm changeset
 ```
 
 CLI will prompt questions about the changes you've made and will generate a changeset file for you.
+
+Add a `release` label to your PR to publish automatically your changes when it's merged.
