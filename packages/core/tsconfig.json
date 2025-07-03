@@ -4,11 +4,12 @@
     "rootDir": "./src",
     "baseUrl": "./src",
     "outDir": "dist",
-    "module": "ES6",
+    "module": "CommonJS",
     "moduleResolution": "node",
     "composite": false,
     "declaration": true,
-    "declarationMap": true
+    "declarationMap": true,
+    "target": "ES2015"
   },
   "include": ["src/**/*", "test/**/*"],
   "exclude": ["node_modules", "test/**/*"]

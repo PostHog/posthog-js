@@ -14,7 +14,7 @@
     "test:unit": "jest",
     "build": "rollup -c",
     "dev": "rollup -cw",
-    "prepublishOnly": "pnpm lint && pnpm test && pnpm build"
+    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build"
   },
   "engines": {
     "node": ">=18"
@@ -32,12 +32,15 @@
   "main": "dist/node/index.cjs",
   "module": "dist/node/index.mjs",
   "types": "dist/index.d.ts",
+  "dependencies": {
+    "posthog-core": "workspace:*"
+  },
   "devDependencies": {
     "commander": "^9.3.0",
     "mitata": "^1.0.21",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@posthog-tooling/rollup-utils": "workspace:*",
-    "posthog-core": "workspace:*"
+    "jest": "catalog:"
   },
   "keywords": [
     "posthog",

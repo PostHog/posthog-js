@@ -1,5 +1,4 @@
-import { PostHogPersistedProperty } from 'posthog-core'
-import { PostHog, PostHogCustomStorage } from '../index'
+import { PostHog, PostHogCustomStorage, PostHogPersistedProperty } from '../src'
 import { Linking, AppState, AppStateStatus } from 'react-native'
 import { waitForExpect } from './test-utils'
 import { PostHogRNStorage } from '../src/storage'

@@ -2,7 +2,6 @@
   "name": "posthog-core",
   "version": "2.2.0",
   "license": "MIT",
-  "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "repository": {
@@ -40,6 +39,7 @@
     }
   },
   "devDependencies": {
-    "@posthog-tooling/tsconfig-base": "workspace:*"
+    "@posthog-tooling/tsconfig-base": "workspace:*",
+    "jest": "catalog:"
   }
 }
