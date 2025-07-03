@@ -18,7 +18,8 @@
     "prebuild": "node -p \"'export const version = ' + JSON.stringify(require('./package.json').version)\" > src/version.ts",
     "build": "rollup -c",
     "dev": "rollup -c -w",
-    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build"
+    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "files": [
     "dist"

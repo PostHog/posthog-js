@@ -4,10 +4,21 @@
             "cache": false
         },
         "build": {
-            "dependsOn": ["^build", "clean"],
-            "cache": true,
-            "inputs": ["src/**", "tsconfig.json", "package.json", "babel.config.js"],
-            "outputs": ["dist/**"]
+            "dependsOn": ["^build"],
+            "inputs": ["src/**", "tsconfig.json", "package.json", ".babelrc", "babel.config.js", "rollup.config.mjs"],
+            "outputs": ["dist/**", "lib/**", "react/**"]
+        },
+        "package": {
+            "cache": false,
+            "dependsOn": ["build"],
+            "inputs": ["dist/**", "package.json"],
+            "env": ["PACKAGE_DEST"]
+        },
+        "posthog-js#package": {
+            "dependsOn": ["@posthog/react#build"],
+            "inputs": ["dist/**", "lib/**", "react/**"],
+            "env": ["PACKAGE_DEST"],
+            "cache": false
         },
         "lint": {
             "dependsOn": []
