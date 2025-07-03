@@ -18,7 +18,8 @@
     "lint:fix": "eslint src tests --fix",
     "build": "rollup -c",
     "dev": "rollup -c --watch",
-    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build"
+    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "devDependencies": {
     "node-fetch": "^3.3.2",
@@ -52,6 +53,9 @@
   "peerDependencies": {
     "posthog-node": "^5.0.0"
   },
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "require": "./dist/index.cjs",
