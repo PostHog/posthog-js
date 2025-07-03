@@ -1,6 +1,6 @@
 ## PostHog demo project
 
-From the posthog-js root folder, run :
+From the posthog-js root folder, run:
 ```bash
 pnpm package:watch
 ```
