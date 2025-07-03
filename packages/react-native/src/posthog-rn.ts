@@ -27,6 +27,8 @@ import {
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativeSessionReplay } from './optional/OptionalSessionReplay'
 
+export { PostHogPersistedProperty }
+
 export type PostHogOptions = PostHogCoreOptions & {
   /** Allows you to provide the storage type. By default 'file'.
    * 'file' will try to load the best available storage, the provided 'customStorage', 'customAsyncStorage' or in-memory storage.

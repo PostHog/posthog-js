@@ -22,5 +22,11 @@ module.exports = {
                 'posthog-js/no-direct-null-check': 'off',
             },
         },
+        {
+            files: ['./src/**/*.test.*'],
+            rules: {
+                'react/prop-types': 'off',
+            },
+        },
     ],
 }

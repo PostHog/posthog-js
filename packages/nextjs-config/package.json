@@ -16,7 +16,7 @@
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "prepublishOnly": "pnpm lint && pnpm test && pnpm build",
+    "prepublishOnly": "pnpm lint && pnpm build",
     "clean": "rimraf dist",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",

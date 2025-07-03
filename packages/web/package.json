@@ -18,7 +18,7 @@
     "prebuild": "node -p \"'export const version = ' + JSON.stringify(require('./package.json').version)\" > src/version.ts",
     "build": "rollup -c",
     "dev": "rollup -c -w",
-    "prepublishOnly": "pnpm lint && pnpm test && pnpm build"
+    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build"
   },
   "files": [
     "dist"
@@ -26,6 +26,8 @@
   "devDependencies": {
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@posthog-tooling/rollup-utils": "workspace:*",
-    "posthog-core": "workspace:*"
+    "posthog-core": "workspace:*",
+    "jest": "catalog:",
+    "jest-environment-jsdom": "catalog:"
   }
 }

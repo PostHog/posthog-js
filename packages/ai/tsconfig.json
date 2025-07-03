@@ -4,6 +4,8 @@
     "rootDir": ".",
     "incremental": false,
     "skipLibCheck": true,
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler"
   }
 }
