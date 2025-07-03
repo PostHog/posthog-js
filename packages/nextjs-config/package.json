@@ -21,7 +21,8 @@
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "build": "tsup src/index.ts --format cjs,esm --dts --out-dir dist",
-    "dev": "tsup src/index.ts --format cjs,esm --dts --out-dir dist --watch"
+    "dev": "tsup src/index.ts --format cjs,esm --dts --out-dir dist --watch",
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "exports": {
     ".": {

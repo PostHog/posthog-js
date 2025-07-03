@@ -14,14 +14,14 @@
     "test:unit": "jest",
     "build": "rollup -c",
     "dev": "rollup -cw",
-    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build"
+    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "engines": {
     "node": ">=18"
   },
   "files": [
-    "dist",
-    "README.md"
+    "dist"
   ],
   "license": "MIT",
   "author": {

@@ -1,6 +1,6 @@
 {
     "private": true,
-    "packageManager": "pnpm@9.15.4",
+    "packageManager": "pnpm@10.12.4",
     "scripts": {
         "build-rollup": "pnpm --filter=posthog-js build-rollup",
         "clean": "turbo clean",
@@ -11,7 +11,9 @@
         "test:functional": "turbo test:functional",
         "test:e2e": "turbo test:e2e",
         "build": "turbo build",
-        "dev": "turbo dev"
+        "dev": "turbo dev",
+        "package": "export PACKAGE_DEST=$(pwd)/target && turbo package",
+        "package:watch": "export PACKAGE_DEST=$(pwd)/target && turbo watch package"
     },
     "pnpm": {
         "patchedDependencies": {
