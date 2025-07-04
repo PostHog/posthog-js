@@ -423,19 +423,31 @@ export class PostHog {
         config?: OnlyValidKeys<Partial<PostHogConfig>, Partial<PostHogConfig>>,
         name?: string
     ): PostHog {
+        let instance: PostHog
         if (!name || name === PRIMARY_INSTANCE_NAME) {
             // This means we are initializing the primary instance (i.e. this)
-            return this._init(token, config, name)
+            instance = this._init(token, config, name)
         } else {
-            const namedPosthog = instances[name] ?? new PostHog()
-            namedPosthog._init(token, config, name)
-            instances[name] = namedPosthog
-
-            // Add as a property to the primary instance (this isn't type-safe but its how it was always done)
-            ;(instances[PRIMARY_INSTANCE_NAME] as any)[name] = namedPosthog
-
-            return namedPosthog
+            instance = instances[name] ?? new PostHog()
+            instance = instance._init(token, config, name)
+            instances[name] = instance
         }
+
+        // Add as a property to the primary instance (this isn't type-safe but its how it was always done)
+        if (instances[PRIMARY_INSTANCE_NAME] && name) {
+            const anyInstance = instances[PRIMARY_INSTANCE_NAME] as any
+            anyInstance[name] = instance
+        }
+
+        // If this is installed via NPM (rather than the script/CDN version),
+        // it's hard to get access to the PostHog instance for debugging purposes
+        // since it won't be available in the global `window` object.
+        // For that reason, we set `window.posthog` to the PRIMARY_INSTANCE when running this
+        if (isUndefined(assignableWindow.posthog)) {
+            assignableWindow.posthog = instances[PRIMARY_INSTANCE_NAME]
+        }
+
+        return instance
     }
 
     // posthog._init(token:string, config:object, name:string)
