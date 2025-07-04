@@ -1047,4 +1047,16 @@ export class PostHogFeatureFlags {
             this._instance.unregister(STORED_GROUP_PROPERTIES_KEY)
         }
     }
+
+    reset(): void {
+        this._hasLoadedFlags = false
+        this._requestInFlight = false
+        this._reloadingDisabled = false
+        this._additionalReloadRequested = false
+        this._flagsCalled = false
+        this._flagsLoadedFromRemote = false
+        this.$anon_distinct_id = undefined
+        this._clearDebouncer()
+        this._override_warning = false
+    }
 }
