@@ -651,7 +651,7 @@ export const renderFeedbackWidgetPreview = ({
 }
 
 // This is the main exported function
-export function generateSurveys(posthog: PostHog, isSurveysEnabled: boolean) {
+export function generateSurveys(posthog: PostHog, isSurveysEnabled: boolean | undefined) {
     // NOTE: Important to ensure we never try and run surveys without a window environment
     if (!document || !window) {
         return
@@ -663,7 +663,9 @@ export function generateSurveys(posthog: PostHog, isSurveysEnabled: boolean) {
         return surveyManager
     }
 
-    if (!isSurveysEnabled) {
+    // NOTE: The `generateSurveys` function used to accept just a single parameter, without any `isSurveysEnabled` parameter.
+    // To keep compatibility with old clients, we'll consider `undefined` the same as `true`
+    if (isSurveysEnabled === false) {
         logger.info('There are no surveys to load or Surveys is disabled in the project settings.')
         return surveyManager
     }
