@@ -1,3 +1,9 @@
+## 1.256.2 - 2025-07-04
+
+- fix: Fix backwards compatibility (#2074)
+- feat: Sdk spec gen (#2029)
+- Fix CHANGELOG.md (#2068)
+
 ## 1.256.1 - 2025-07-02
 
 - fix survey input color on dark backgrounds (#2071)
