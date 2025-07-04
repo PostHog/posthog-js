@@ -18,8 +18,20 @@ const win: (Window & typeof globalThis) | undefined = typeof window !== 'undefin
 
 export type AssignableWindow = Window &
     typeof globalThis & {
+        /*
+         * Main PostHog instance
+         */
+        posthog: any
+
+        /*
+         * This is our contract between (potentially) lazily loaded extensions and the SDK
+         */
         __PosthogExtensions__?: PostHogExtensions
 
+        /**
+         * When loading remote config, we assign it to this global configuration
+         * for ease of sharing it with the rest of the SDK
+         */
         _POSTHOG_REMOTE_CONFIG?: Record<
             string,
             {
@@ -28,20 +40,97 @@ export type AssignableWindow = Window &
             }
         >
 
-        doNotTrack: any
-        posthogCustomizations: any
-        posthogErrorWrappingFunctions: any
-        rrweb: any
-        rrwebConsoleRecord: any
-        getRecordNetworkPlugin: any
+        /**
+         * If this is set on the window, our logger will log to the console
+         * for ease of debugging. Used for testing purposes only.
+         *
+         * @see {Config.DEBUG} from config.ts
+         */
         POSTHOG_DEBUG: any
-        posthog: any
+
+        // Exposed by the browser
+        doNotTrack: any
+
+        // See entrypoints/customizations.full.ts
+        posthogCustomizations: any
+
+        /**
+         * This is a legacy way to expose these functions, but we still need to support it for backwards compatibility
+         * Can be removed once we drop support for 1.161.1
+         *
+         * See entrypoints/exception-autocapture.ts
+         *
+         * @deprecated use `__PosthogExtensions__.errorWrappingFunctions` instead
+         */
+        posthogErrorWrappingFunctions: any
+
+        /**
+         * This is a legacy way to expose these functions, but we still need to support it for backwards compatibility
+         * Can be removed once we drop support for 1.161.1
+         *
+         * See entrypoints/posthog-recorder.ts
+         *
+         * @deprecated use `__PosthogExtensions__.rrweb` instead
+         */
+        rrweb: any
+
+        /**
+         * This is a legacy way to expose these functions, but we still need to support it for backwards compatibility
+         * Can be removed once we drop support for 1.161.1
+         *
+         * See entrypoints/posthog-recorder.ts
+         *
+         * @deprecated use `__PosthogExtensions__.rrwebConsoleRecord` instead
+         */
+        rrwebConsoleRecord: any
+
+        /**
+         * This is a legacy way to expose these functions, but we still need to support it for backwards compatibility
+         * Can be removed once we drop support for 1.161.1
+         *
+         * See entrypoints/posthog-recorder.ts
+         *
+         * @deprecated use `__PosthogExtensions__.getRecordNetworkPlugin` instead
+         */
+        getRecordNetworkPlugin: any
+
+        /**
+         * This is a legacy way to expose these functions, but we still need to support it for backwards compatibility
+         * Can be removed once we drop support for 1.161.1
+         *
+         * See entrypoints/web-vitals.ts
+         *
+         * @deprecated use `__PosthogExtensions__.postHogWebVitalsCallbacks` instead
+         */
+        postHogWebVitalsCallbacks: any
+
+        /**
+         * This is a legacy way to expose these functions, but we still need to support it for backwards compatibility
+         * Can be removed once we drop support for 1.161.1
+         *
+         * See entrypoints/tracing-headers.ts
+         *
+         * @deprecated use `__PosthogExtensions__.postHogTracingHeadersPatchFns` instead
+         */
+        postHogTracingHeadersPatchFns: any
+
+        /**
+         * This is a legacy way to expose these functions, but we still need to support it for backwards compatibility
+         * Can be removed once we drop support for 1.161.1
+         *
+         * See entrypoints/surveys.ts
+         *
+         * @deprecated use `__PosthogExtensions__.generateSurveys` instead
+         */
+        extendPostHogWithSurveys: any
+
+        /*
+         * These are used to handle our toolbar state.
+         * @see {Toolbar} from extensions/toolbar.ts
+         */
         ph_load_toolbar: any
         ph_load_editor: any
         ph_toolbar_state: any
-        postHogWebVitalsCallbacks: any
-        postHogTracingHeadersPatchFns: any
-        extendPostHogWithSurveys: any
     } & Record<`__$$ph_site_app_${string}`, any>
 
 /**
