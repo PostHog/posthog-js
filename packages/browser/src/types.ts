@@ -693,17 +693,23 @@ export interface PostHogConfig {
     mask_all_text: boolean
 
     /**
-     * Prevent autocapture from capturing personal data properties.
-     * These include campaign parameters, UTM parameters, and other parameters that could be considered personal data under e.g. GDPR.
-     *
+     * Mask personal data properties from the current URL.
+     * This will mask personal data properties such as advertising IDs (gclid, fbclid, etc.), and you can also add
+     * custom properties to mask with `custom_personal_data_properties`.
      * @default false
+     * @see {PERSONAL_DATA_CAMPAIGN_PARAMS} - Default campaign parameters that are masked by default.
+     * @see {PostHogConfig.custom_personal_data_properties} - Custom list of personal data properties to mask.
      */
     mask_personal_data_properties: boolean
 
     /**
      * Custom list of personal data properties to mask.
      *
+     * E.g. if you added `email` to this list, then any `email` property in the URL will be masked.
+     * https://www.example.com/login?email=john.doe%40example.com => https://www.example.com/login?email=<MASKED>
+     *
      * @default []
+     * @see {PostHogConfig.mask_personal_data_properties} - Must be enabled for this to take effect.
      */
     custom_personal_data_properties: string[]
 
