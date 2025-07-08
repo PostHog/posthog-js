@@ -1,3 +1,10 @@
+## 1.257.0 - 2025-07-08
+
+- one for flags and flags for all (#2079)
+- Fix comment (#2078)
+- feat: Enhance AssignableWindow type with additional properties for better SDK integration (#2077)
+- reset flags internal state when posthog.reset is called (#2066)
+
 ## 1.256.2 - 2025-07-04
 
 - fix: Fix backwards compatibility (#2074)
