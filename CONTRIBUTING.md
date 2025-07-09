@@ -10,7 +10,7 @@ This will install all the workspace dependencies.
 
 Go to the `packages` directory and run:
 ```shell
-turbo dev
+pnpm dev
 ```
 It will watch for changes and rebuild the packages.
 
@@ -18,27 +18,27 @@ It will watch for changes and rebuild the packages.
 
 To run tests for a specific package, navigate to the package directory and run:
 ```shell
-turbo test
+pnpm test
 ```
 
 or from the root of the project, run:
 ```shell
-turbo --filter=<package-name> test
+pnpm --filter=<package-name> test
 ```
 
 ## Building
 
-Go to the `packages` directory and run:
+From the root folder, run:
 ```shell
-turbo build
+pnpm build
 ```
-This will rebuild all packages, this package depends on.
+This will build all packages, by taking dependencies into account.
 
 ## Releases
 
 Releases are managed with changeset, you can find more information on the [changeset repository](https://github.com/changesets/changesets).
 
-Before submitting a PR, run:
+Before submitting a PR, create a changeset by running:
 ```
 pnpm changeset
 ```
