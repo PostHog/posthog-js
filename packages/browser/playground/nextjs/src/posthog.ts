@@ -26,14 +26,13 @@ export const posthog: PostHog = POSTHOG_USE_SNIPPET
  */
 export function cookieConsentGiven(): null | boolean {
     if (typeof window === 'undefined') return null
-    return localStorage.getItem('cookie_consent') === 'true'
+    return posthog.has_opted_in_capturing()
 }
 
 export const configForConsent = (): Partial<PostHogConfig> => {
-    const consentGiven = localStorage.getItem('cookie_consent') === 'true'
+    const consentGiven = posthog.has_opted_in_capturing()
 
     return {
-        persistence: consentGiven ? 'localStorage+cookie' : 'memory',
         disable_surveys: !consentGiven,
         autocapture: consentGiven,
         disable_session_recording: !consentGiven,
@@ -42,9 +41,9 @@ export const configForConsent = (): Partial<PostHogConfig> => {
 
 export const updatePostHogConsent = (consentGiven: boolean) => {
     if (consentGiven) {
-        localStorage.setItem('cookie_consent', 'true')
+        posthog.opt_in_capturing()
     } else {
-        localStorage.removeItem('cookie_consent')
+        posthog.opt_out_capturing()
     }
 
     posthog.set_config(configForConsent())
@@ -62,10 +61,12 @@ if (typeof window !== 'undefined') {
         capture_pageview: 'history_change',
         disable_web_experiments: false,
         scroll_root_selector: ['#scroll_element', 'html'],
-        persistence: cookieConsentGiven() ? 'localStorage+cookie' : 'memory',
+        persistence: 'localStorage+cookie',
         person_profiles: PERSON_PROCESSING_MODE === 'never' ? 'identified_only' : PERSON_PROCESSING_MODE,
         persistence_name: `${process.env.NEXT_PUBLIC_POSTHOG_KEY}_nextjs`,
         opt_in_site_apps: true,
+        opt_out_capturing_by_default: true,
+        opt_out_persistence_by_default: true,
         integrations: {
             intercom: true,
             crispChat: true,
