@@ -1,6 +1,6 @@
 import { ERROR_TRACKING_SUPPRESSION_RULES } from './constants'
 import { PostHog } from './posthog-core'
-import { ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
+import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
 import { propertyComparisons } from './utils/property-utils'
 import { isArray, isString } from './utils/type-utils'
@@ -29,13 +29,13 @@ export class PostHogExceptions {
         }
     }
 
-    sendExceptionEvent(properties: Properties) {
+    sendExceptionEvent(properties: Properties): CaptureResult | undefined {
         if (this._matchesSuppressionRule(properties)) {
             logger.info('Skipping exception capture because a suppression rule matched')
             return
         }
 
-        this._instance.capture('$exception', properties, {
+        return this._instance.capture('$exception', properties, {
             _noTruncate: true,
             _batchKey: 'exceptionEvent',
         })
