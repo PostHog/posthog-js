@@ -486,12 +486,13 @@ export class PostHog {
 
         this.compression = config.disable_compression ? undefined : Compression.GZipJS
 
-        this.persistence = new PostHogPersistence(this.config)
+        const persistenceDisabled = this._is_persistence_disabled()
+
+        this.persistence = new PostHogPersistence(this.config, persistenceDisabled)
         this.sessionPersistence =
             this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
                 ? this.persistence
-                : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
-        this._sync_opt_out_with_persistence()
+                : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' }, persistenceDisabled)
 
         // should I store the initial person profiles config in persistence?
         const initialPersistenceProps = { ...this.persistence.props }
@@ -2099,11 +2100,12 @@ export class PostHog {
         if (isObject(config)) {
             extend(this.config, configRenames(config))
 
-            this.persistence?.update_config(this.config, oldConfig)
+            const isPersistenceDisabled = this._is_persistence_disabled()
+            this.persistence?.update_config(this.config, oldConfig, isPersistenceDisabled)
             this.sessionPersistence =
                 this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
                     ? this.persistence
-                    : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
+                    : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' }, isPersistenceDisabled)
 
             if (localStore._is_supported() && localStore._get('ph_debug') === 'true') {
                 this.config.debug = true
@@ -2325,12 +2327,16 @@ export class PostHog {
         return true
     }
 
-    private _sync_opt_out_with_persistence(): void {
+    private _is_persistence_disabled(): boolean {
         const isOptedOut = this.consent.isOptedOut()
         const defaultPersistenceDisabled = this.config.opt_out_persistence_by_default
 
         // TRICKY: We want a deterministic state for persistence so that a new pageload has the same persistence
-        const persistenceDisabled = this.config.disable_persistence || (isOptedOut && !!defaultPersistenceDisabled)
+        return this.config.disable_persistence || (isOptedOut && !!defaultPersistenceDisabled)
+    }
+
+    private _sync_opt_out_with_persistence(): boolean {
+        const persistenceDisabled = this._is_persistence_disabled()
 
         if (this.persistence?._disabled !== persistenceDisabled) {
             this.persistence?.set_disabled(persistenceDisabled)
@@ -2338,6 +2344,7 @@ export class PostHog {
         if (this.sessionPersistence?._disabled !== persistenceDisabled) {
             this.sessionPersistence?.set_disabled(persistenceDisabled)
         }
+        return persistenceDisabled
     }
 
     /**
