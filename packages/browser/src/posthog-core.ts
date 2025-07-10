@@ -2188,9 +2188,9 @@ export class PostHog {
     }
 
     /** Capture a caught exception manually */
-    captureException(error: unknown, additionalProperties?: Properties): void {
+    captureException(error: unknown, additionalProperties?: Properties): CaptureResult | undefined {
         const syntheticException = new Error('PostHog syntheticException')
-        this.exceptions.sendExceptionEvent({
+        return this.exceptions.sendExceptionEvent({
             ...errorToProperties(
                 isError(error) ? { error, event: error.message } : { event: error as Event | string },
                 // create synthetic error to get stack in cases where user input does not contain one
