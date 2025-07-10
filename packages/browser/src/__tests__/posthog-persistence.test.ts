@@ -2,10 +2,12 @@
 import { PostHogPersistence } from '../posthog-persistence'
 import { INITIAL_PERSON_INFO, SESSION_ID, USER_STATE } from '../constants'
 import { PostHogConfig } from '../types'
-import Mock = jest.Mock
 import { PostHog } from '../posthog-core'
 import { window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
+import { sessionStore } from '../storage'
+import { defaultPostHog } from './helpers/posthog-instance'
+import Mock = jest.Mock
 
 let referrer = '' // No referrer by default
 Object.defineProperty(document, 'referrer', { get: () => referrer })
@@ -265,5 +267,26 @@ describe('persistence', () => {
             expect(window.sessionStorage.getItem(persistenceKey)).toBeTruthy()
             expect(document.cookie).toEqual('')
         })
+    })
+})
+
+describe('posthog instance persistence', () => {
+    it('should not write to session storage if opt_out_persistence_by_default is set', () => {
+        // mock session storage
+        const spy = jest.spyOn(sessionStore, '_set')
+
+        // init posthog while opting out
+        defaultPostHog().init(uuidv7(), {
+            opt_out_persistence_by_default: true,
+            opt_out_capturing_by_default: true,
+            persistence: 'localStorage+cookie',
+        })
+
+        // we do one call to check if session storage is supported, but don't actually store anything
+        // the important thing is that we don't store the session id or window id, etc. This test was added alongside
+        // a fix which prevented this
+        const calls = spy.mock.calls.filter(([key]) => key !== '__support__')
+
+        expect(calls).toEqual([])
     })
 })

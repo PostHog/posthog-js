@@ -12,7 +12,6 @@ import { SessionIdManager } from '../sessionid'
 import { RequestQueue } from '../request-queue'
 import { SessionRecording } from '../extensions/replay/sessionrecording'
 import { SessionPropsManager } from '../session-props'
-import { sessionStore } from '../storage'
 
 let mockGetProperties: jest.Mock
 
@@ -1001,25 +1000,6 @@ describe('posthog core', () => {
                     $device_id: expect.stringMatching(/^custom-[0-9a-f-]+$/),
                     distinct_id: expect.stringMatching(/^custom-[0-9a-f-]+$/),
                 })
-            })
-        })
-
-        describe('persistence', () => {
-            it('should not write to session storage if opt_out_persistence_by_default is set', () => {
-                // mock session storage
-                const spy = jest.spyOn(sessionStore, '_set')
-
-                // init posthog with opt_out_capturing_by_default
-                defaultPostHog().init('testtoken', {
-                    opt_out_persistence_by_default: true,
-                    opt_out_capturing_by_default: true,
-                    persistence: 'localStorage+cookie',
-                })
-
-                // we do one call to check if session storage is supported, but don't actually store anything
-                // the main thing is that we don't store the session id or window id, etc. This test was added alongside
-                // a fix which prevented this
-                expect(spy.mock.calls).toEqual([['__support__', 'xyz']])
             })
         })
     })
