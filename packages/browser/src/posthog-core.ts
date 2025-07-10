@@ -491,6 +491,7 @@ export class PostHog {
             this.config.persistence === 'sessionStorage' || this.config.persistence === 'memory'
                 ? this.persistence
                 : new PostHogPersistence({ ...this.config, persistence: 'sessionStorage' })
+        this._sync_opt_out_with_persistence()
 
         // should I store the initial person profiles config in persistence?
         const initialPersistenceProps = { ...this.persistence.props }
@@ -554,8 +555,6 @@ export class PostHog {
                 s: initialSessionProps,
             })
         }
-
-        this._sync_opt_out_with_persistence()
 
         // isUndefined doesn't provide typehint here so wouldn't reduce bundle as we'd need to assign
         // eslint-disable-next-line posthog-js/no-direct-undefined-check
