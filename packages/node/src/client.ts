@@ -8,12 +8,12 @@ import {
   PostHogFetchResponse,
   PostHogFlagsAndPayloadsResponse,
   PostHogPersistedProperty,
-} from 'posthog-core'
+} from '@posthog/core'
 import { EventMessage, GroupIdentifyMessage, IdentifyMessage, IPostHog, PostHogOptions } from './types'
-import { FeatureFlagDetail, FeatureFlagValue } from 'posthog-core'
+import { FeatureFlagDetail, FeatureFlagValue } from '@posthog/core'
 import { FeatureFlagsPoller } from './extensions/feature-flags/feature-flags'
 import ErrorTracking from './extensions/error-tracking'
-import { getFeatureFlagValue } from 'posthog-core'
+import { getFeatureFlagValue } from '@posthog/core'
 import { PostHogMemoryStorage } from './storage-memory'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),

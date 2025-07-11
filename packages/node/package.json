@@ -33,7 +33,7 @@
   "module": "dist/node/index.mjs",
   "types": "dist/index.d.ts",
   "dependencies": {
-    "posthog-core": "workspace:*"
+    "@posthog/core": "workspace:*"
   },
   "devDependencies": {
     "commander": "^9.3.0",

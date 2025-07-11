@@ -1,6 +1,6 @@
 import { PostHog } from '../../src/entrypoints/index.node'
 import { PostHogSentryIntegration } from '../../src/extensions/sentry-integration'
-import { waitForPromises } from 'posthog-core/testing'
+import { waitForPromises } from '@posthog/core/testing'
 
 jest.mock('../../package.json', () => ({ version: '1.2.3' }))
 

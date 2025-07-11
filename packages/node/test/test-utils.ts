@@ -1,4 +1,4 @@
-import { PostHogV2FlagsResponse } from 'posthog-core'
+import { PostHogV2FlagsResponse } from '@posthog/core'
 import util from 'util'
 
 type ErrorResponse = {
