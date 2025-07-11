@@ -27,7 +27,7 @@
   "devDependencies": {
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@posthog-tooling/rollup-utils": "workspace:*",
-    "posthog-core": "workspace:*",
+    "@posthog/core": "workspace:*",
     "jest": "catalog:",
     "jest-environment-jsdom": "catalog:"
   }

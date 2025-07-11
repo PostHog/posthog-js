@@ -1,6 +1,6 @@
 import { FeatureFlagCondition, FlagProperty, PostHogFeatureFlag, PropertyGroup } from '../../types'
-import type { FeatureFlagValue, JsonType, PostHogFetchOptions, PostHogFetchResponse } from 'posthog-core'
-import { safeSetTimeout } from 'posthog-core'
+import type { FeatureFlagValue, JsonType, PostHogFetchOptions, PostHogFetchResponse } from '@posthog/core'
+import { safeSetTimeout } from '@posthog/core'
 import { hashSHA1 } from './crypto'
 
 const SIXTY_SECONDS = 60 * 1000

@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react'
 import { ScrollView, StyleProp, ViewStyle } from 'react-native'
 
 import { getDisplayOrderQuestions, SurveyAppearanceTheme } from '../surveys-utils'
-import { Survey, SurveyAppearance, SurveyQuestion, maybeAdd } from 'posthog-core'
+import { Survey, SurveyAppearance, SurveyQuestion, maybeAdd } from '@posthog/core'
 import { LinkQuestion, MultipleChoiceQuestion, OpenTextQuestion, RatingQuestion } from './QuestionTypes'
 import { PostHog } from '../../posthog-rn'
 import { usePostHog } from '../../hooks/usePostHog'

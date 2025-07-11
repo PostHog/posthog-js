@@ -2,7 +2,7 @@ import React from 'react'
 import { StyleSheet, Text, View, ViewStyle } from 'react-native'
 
 import { getContrastingTextColor, SurveyAppearanceTheme } from '../surveys-utils'
-import { SurveyQuestionDescriptionContentType } from 'posthog-core'
+import { SurveyQuestionDescriptionContentType } from '@posthog/core'
 import { BottomSection } from './BottomSection'
 
 export function ConfirmationMessage({

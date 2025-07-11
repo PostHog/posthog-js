@@ -1,5 +1,5 @@
 {
-  "name": "posthog-core",
+  "name": "@posthog/core",
   "version": "2.2.0",
   "license": "MIT",
   "main": "dist/index.js",

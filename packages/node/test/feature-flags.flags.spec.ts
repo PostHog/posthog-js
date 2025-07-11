@@ -1,8 +1,8 @@
 import { PostHog } from '../src/entrypoints/index.node'
 import { PostHogOptions } from '../src/types'
 import { apiImplementation, apiImplementationV4 } from './test-utils'
-import { waitForPromises } from 'posthog-core/testing'
-import { PostHogV2FlagsResponse } from 'posthog-core'
+import { waitForPromises } from '@posthog/core/testing'
+import { PostHogV2FlagsResponse } from '@posthog/core'
 
 jest.spyOn(console, 'debug').mockImplementation()
 

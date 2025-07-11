@@ -2,7 +2,7 @@
  * @jest-environment jsdom
  */
 
-import { waitForPromises } from 'posthog-core/testing'
+import { waitForPromises } from '@posthog/core/testing'
 import { PostHog } from '../src'
 
 describe('PostHogWeb', () => {
