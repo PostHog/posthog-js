@@ -1,4 +1,4 @@
-import { utils } from 'posthog-core'
+import { utils } from '@posthog/core'
 import { version } from '../package.json'
 
 export function getContext(window: Window | undefined): any {
