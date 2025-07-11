@@ -1,0 +1,20 @@
+{
+  "name": "example-gcp-functions",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "prestart": "yarn build:posthog",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build:posthog": "yarn build:posthog:publish && yarn build:posthog:link",
+    "build:posthog:publish": "cd ../../posthog-node && yalc publish --replace",
+    "build:posthog:link": "yalc add posthog-node",
+    "start": "functions-framework --target=helloWorld"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google-cloud/functions-framework": "^3.4.0",
+    "posthog-node": "file:.yalc/posthog-node"
+  }
+}

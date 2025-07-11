@@ -1,0 +1,34 @@
+{
+    "name": "@posthog-tooling/rollup-utils",
+    "version": "1.0.0",
+    "description": "Rollup utilities for Posthog",
+    "type": "module",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "build": "tsc -b"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "@babel/core": "^7.18.6",
+        "@babel/preset-env": "^7.18.6",
+        "@babel/preset-react": "^7.18.6",
+        "@babel/preset-typescript": "^7.18.6",
+        "@rollup/plugin-babel": "^6.0.4",
+        "@rollup/plugin-commonjs": "^28.0.6",
+        "@rollup/plugin-json": "^6.1.0",
+        "@rollup/plugin-node-resolve": "^16.0.1",
+        "rollup-plugin-dts": "^6.1.1",
+        "@rollup/plugin-typescript": "^12.1.4"
+    },
+    "peerDependencies": {
+        "rollup": "catalog:",
+        "typescript": "catalog:"
+    },
+    "devDependencies": {
+        "typescript": "catalog:",
+        "rollup": "catalog:"
+    }
+}

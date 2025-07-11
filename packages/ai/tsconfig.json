@@ -1,0 +1,11 @@
+{
+  "extends": "@posthog-tooling/tsconfig-base",
+  "compilerOptions": {
+    "rootDir": ".",
+    "incremental": false,
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler"
+  }
+}

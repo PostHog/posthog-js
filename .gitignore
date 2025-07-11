@@ -14,7 +14,6 @@ node_modules
 .mypy_cache
 package-lock.json
 .idea
-dist/*
 lib/
 static/*
 .yalc
@@ -34,3 +33,8 @@ cypress/downloads/downloads.html
 /playwright/.cache/
 /stats
 packages/browser/docs
+
+dist
+tsconfig.tsbuildinfo
+.turbo
+target

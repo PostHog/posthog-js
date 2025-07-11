@@ -1,5 +1,11 @@
 PostHog JS is a mono-repo. The changelogs are in the individual packages
 
-# Browser
+# Packages
 
-[Browser/web SDK changelog](./packages/browser/CHANGELOG.md)
+- [posthog-js](./packages/browser/CHANGELOG.md)
+- [posthog-js-lite](./packages/web/CHANGELOG.md)
+- [posthog-node](./packages/node/CHANGELOG.md)
+- [posthog-react-native](./packages/react-native/CHANGELOG.md)
+- [@posthog/react](./packages/react/CHANGELOG.md)
+- [@posthog/ai](./packages/ai/CHANGELOG.md)
+- [@posthog/nextjs-config](./packages/nextjs-config/CHANGELOG.md)

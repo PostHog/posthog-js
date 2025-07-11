@@ -1,16 +1,31 @@
 ## PostHog demo project
 
-First, run the development server:
+From the posthog-js root folder, run:
+```bash
+pnpm package:watch
+```
+It will watch for package changes and recreate local tarballs inside the `target` folder
 
+In another terminal window, from the nextjs directory, run:
+```bash
+pnpm install
+```
+All posthog packages will be resolved from the local tarball folder using the `.pnpmfile.cjs`
+
+Then start the development server:
 ```bash
 NEXT_PUBLIC_POSTHOG_KEY='<your-local-api-key>' pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-### Testing local changes to posthog-js
+### Testing local changes to packages
 
-Running `pnpm dev` will run an additional script that uses pnpm to link `posthog-js` locally to this package.
+Update your files, wait for the package script to finish, then, from this folder, run:
+```bash
+pnpm install
+NEXT_PUBLIC_POSTHOG_KEY='<your-local-api-key>' pnpm dev
+```
 
 If you need to provide environment variables, you can do so:
 
