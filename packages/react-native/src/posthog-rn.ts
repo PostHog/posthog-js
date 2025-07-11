@@ -13,7 +13,7 @@ import {
   logFlushError,
   maybeAdd,
   FeatureFlagValue,
-} from 'posthog-core'
+} from '@posthog/core'
 import { getLegacyValues } from './legacy'
 import { PostHogRNStorage, PostHogRNSyncMemoryStorage } from './storage'
 import { version } from './version'
