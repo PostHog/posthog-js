@@ -2,15 +2,17 @@
     "name": "example-expo-53",
     "main": "expo-router/entry",
     "version": "1.0.0",
+    "packageManager": "yarn@4.0.0",
     "scripts": {
         "start": "expo start",
         "reset-project": "node ./scripts/reset-project.js",
         "android": "expo run:android",
         "ios": "expo run:ios",
-        "web": "expo start --web",
+        "web": "expo start --web --clear",
         "lint": "expo lint"
     },
     "dependencies": {
+        "@expo/metro-runtime": "~5.0.4",
         "@expo/vector-icons": "^14.1.0",
         "@react-navigation/bottom-tabs": "^7.3.10",
         "@react-navigation/elements": "^2.3.8",
@@ -36,14 +38,14 @@
         "posthog-react-native-session-replay": "^1.1.1",
         "react": "19.0.0",
         "react-dom": "19.0.0",
-        "react-native": "0.79.4",
+        "react-native": "0.79.5",
         "react-native-gesture-handler": "~2.24.0",
         "react-native-reanimated": "~3.17.4",
         "react-native-safe-area-context": "5.4.0",
         "react-native-screens": "~4.11.1",
+        "react-native-svg": "15.11.2",
         "react-native-web": "~0.20.0",
-        "react-native-webview": "13.13.5",
-        "react-native-svg": "15.11.2"
+        "react-native-webview": "13.13.5"
     },
     "devDependencies": {
         "@babel/core": "^7.25.2",
@@ -52,5 +54,9 @@
         "eslint-config-expo": "~9.2.0",
         "typescript": "~5.8.3"
     },
-    "private": true
+    "private": true,
+    "resolutions": {
+        "posthog-react-native": "file:../../target/posthog-react-native.tgz",
+        "@posthog/core": "file:../../target/posthog-core.tgz"
+    }
 }

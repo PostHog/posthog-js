@@ -22,6 +22,9 @@
     "build": "tsc -b && babel ./dist --out-dir dist --extensions '.js'",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
+  "dependencies": {
+    "@posthog/core": "workspace:*"
+  },
   "devDependencies": {
     "@babel/cli": "^7.19.3",
     "@babel/plugin-transform-private-property-in-object": "^7.27.1",
@@ -40,7 +43,6 @@
     "jest": "catalog:",
     "jest-environment-node": "catalog:",
     "jest-expo": "catalog:",
-    "@posthog/core": "workspace:*",
     "posthog-react-native-session-replay": "^1.1.1",
     "react": "18.2.0",
     "react-native": "^0.69.1",
