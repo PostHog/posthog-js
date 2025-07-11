@@ -5,7 +5,12 @@ import { PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
-import { localPlusCookieStore, sessionStore } from '../storage'
+import {
+    localPlusCookieStore,
+    resetLocalStorageSupported,
+    resetSessionStorageSupported,
+    sessionStore,
+} from '../storage'
 import { defaultPostHog } from './helpers/posthog-instance'
 import Mock = jest.Mock
 
@@ -271,16 +276,24 @@ describe('persistence', () => {
 })
 
 describe('posthog instance persistence', () => {
+    beforeEach(() => {
+        resetSessionStorageSupported()
+        resetLocalStorageSupported()
+    })
     it('should not write to storage if opt_out_persistence_by_default and opt_out_capturing_by_default is true', () => {
         const sessionSpy = jest.spyOn(sessionStore, '_set')
         const localPlusCookieSpy = jest.spyOn(localPlusCookieStore, '_set')
 
         // init posthog while opting out
-        defaultPostHog().init(uuidv7(), {
-            opt_out_persistence_by_default: true,
-            opt_out_capturing_by_default: true,
-            persistence: 'localStorage+cookie',
-        })
+        defaultPostHog().init(
+            uuidv7(),
+            {
+                opt_out_persistence_by_default: true,
+                opt_out_capturing_by_default: true,
+                persistence: 'localStorage+cookie',
+            },
+            uuidv7()
+        )
 
         // we do one call to check if session storage is supported, but don't actually store anything
         // the important thing is that we don't store the session id or window id, etc. This test was added alongside
@@ -297,11 +310,15 @@ describe('posthog instance persistence', () => {
         const localPlusCookieSpy = jest.spyOn(localPlusCookieStore, '_set')
 
         // init posthog while opting out
-        defaultPostHog().init(uuidv7(), {
-            opt_out_persistence_by_default: false,
-            opt_out_capturing_by_default: false,
-            persistence: 'localStorage+cookie',
-        })
+        defaultPostHog().init(
+            uuidv7(),
+            {
+                opt_out_persistence_by_default: false,
+                opt_out_capturing_by_default: false,
+                persistence: 'localStorage+cookie',
+            },
+            uuidv7()
+        )
 
         const sessionCalls = sessionSpy.mock.calls.filter(([key]) => key !== '__support__')
         const localPlusCookieCalls = localPlusCookieSpy.mock.calls.filter(([key]) => key !== '__support__')

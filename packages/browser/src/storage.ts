@@ -179,6 +179,9 @@ export const cookieStore: PersistentStore = {
 }
 
 let _localStorage_supported: boolean | null = null
+export const resetLocalStorageSupported = () => {
+    _localStorage_supported = null
+}
 
 export const localStore: PersistentStore = {
     _is_supported: function () {
