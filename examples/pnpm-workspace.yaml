@@ -1,3 +1,0 @@
-pnpmfile: .pnpmfile.cjs
-packages:
-  - "example-expo-53"
