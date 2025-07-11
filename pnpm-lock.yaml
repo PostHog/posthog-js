@@ -508,6 +508,10 @@ importers:
         version: 5.8.2
 
   packages/react-native:
+    dependencies:
+      '@posthog/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       '@babel/cli':
         specifier: ^7.19.3
@@ -521,9 +525,6 @@ importers:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
-      '@posthog/core':
-        specifier: workspace:*
-        version: link:../core
       '@react-native-async-storage/async-storage':
         specifier: ^1.17.10
         version: 1.24.0(react-native@0.69.12(@babel/core@7.27.1)(@babel/preset-env@7.27.2(@babel/core@7.27.1))(react@18.2.0))
