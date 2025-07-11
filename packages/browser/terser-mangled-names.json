@@ -135,6 +135,7 @@
         "_isSurveyConditionMatched",
         "_isSurveyFeatureFlagEnabled",
         "_isSurveysEnabled",
+        "_is_persistence_disabled",
         "_is_supported",
         "_lastActivityTimestamp",
         "_lastHref",
