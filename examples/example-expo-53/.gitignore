@@ -38,6 +38,5 @@ yarn-error.*
 
 app-example
 
-yarn.lock
 yalc.lock
 package-lock.json

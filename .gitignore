@@ -38,3 +38,4 @@ dist
 tsconfig.tsbuildinfo
 .turbo
 target
+.yarn

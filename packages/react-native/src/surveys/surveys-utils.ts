@@ -5,7 +5,7 @@ import {
   SurveyQuestion,
   SurveyPosition,
   SurveyQuestionDescriptionContentType,
-} from 'posthog-core'
+} from '@posthog/core'
 
 export const defaultBackgroundColor = '#eeeded' as const
 
