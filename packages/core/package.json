@@ -3,6 +3,7 @@
   "version": "2.2.0",
   "license": "MIT",
   "main": "dist/index.js",
+  "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "repository": {
     "type": "git",
@@ -16,31 +17,36 @@
     "clean": "rimraf dist",
     "lint": "eslint src test",
     "lint:fix": "eslint src test --fix",
-    "build": "tsc -b",
-    "dev": "tsc -w",
+    "build": "rslib build",
+    "dev": "rslib build -w",
     "test:unit": "jest",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "require": "./dist/index.js",
+      "import": "./dist/index.mjs"
     },
     "./vendor/*": {
       "types": "./dist/vendor/*.d.ts",
-      "default": "./dist/vendor/*.js"
+      "require": "./dist/vendor/*.js",
+      "import": "./dist/vendor/*.mjs"
     },
     "./testing": {
       "types": "./dist/testing/index.d.ts",
-      "default": "./dist/testing/index.js"
+      "require": "./dist/testing/index.js",
+      "import": "./dist/testing/index.mjs"
     },
     "./utils": {
       "types": "./dist/utils.d.ts",
-      "default": "./dist/utils.js"
+      "require": "./dist/utils.js",
+      "import": "./dist/utils.mjs"
     }
   },
   "devDependencies": {
     "@posthog-tooling/tsconfig-base": "workspace:*",
+    "@rslib/core": "catalog:",
     "jest": "catalog:"
   }
 }

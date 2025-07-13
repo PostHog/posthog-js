@@ -14,3 +14,4 @@ catalog:
   jest-expo: "^47.0.1"
   "@types/jest": "^29.7.0"
   ts-jest: "^29.0.0"
+  "@rslib/core": "^0.10.5"
