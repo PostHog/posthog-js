@@ -1,5 +1,5 @@
 import type * as http from 'node:http'
-import { uuidv7 } from 'posthog-core/vendor/uuidv7'
+import { uuidv7 } from '@posthog/core/vendor/uuidv7'
 import ErrorTracking from './error-tracking'
 import { PostHogBackendClient } from '../client'
 

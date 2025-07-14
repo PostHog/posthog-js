@@ -1,4 +1,4 @@
-import { PostHogPersistedProperty } from 'posthog-core'
+import { PostHogPersistedProperty } from '@posthog/core'
 import { useCallback, useEffect, useState } from 'react'
 import { usePostHog } from '../hooks/usePostHog'
 

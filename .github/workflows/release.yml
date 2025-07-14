@@ -20,7 +20,7 @@ jobs:
             npm_token_secret: NPM_TOKEN # TODO: Change to standard token once able
           - name: posthog-js
             npm_token_secret: NPM_TOKEN # TODO: Change to standard token once able
-          - name: posthog-core
+          - name: "@posthog/core"
             npm_token_secret: NPM_TOKEN # TODO: Change to standard token once able
           - name: "@posthog/react"
             npm_token_secret: NPM_TOKEN # TODO: Change to standard token once able
