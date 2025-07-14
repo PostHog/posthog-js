@@ -34,7 +34,7 @@
         "playwright:surveys:ui": "pnpm exec playwright test playwright/surveys/* --ui --project webkit --project firefox --project chromium",
         "prepare": "[ -z \"$VERCEL\" ] && husky install || echo \"Skipping husky install on vercel build\"",
         "deprecate-old-versions": "node scripts/deprecate-old-versions.mjs",
-        "check-api-results": "ts-node playwright/integration/check-api-results.ts",
+        "check-api-results": "ts-node playwright/ingestion/check-api-results.ts",
         "run-testcafe-localhost": "node scripts/run-testcafe-localhost.mjs",
         "write-mangled-property-names": "WRITE_MANGLED_PROPERTIES=1 pnpm build-rollup",
         "gen-specs": "pnpm exec tsc && pnpm exec api-extractor run --config ./api-extractor.json --local",
