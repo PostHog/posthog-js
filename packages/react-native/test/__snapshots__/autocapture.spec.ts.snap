@@ -1,0 +1,90 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`PostHog React Native autocapture should capture a valid event 1`] = `
+[
+  "touch",
+  [
+    {
+      "$el_text": "I have the property \"ph-label\" which means touching me will be autocaptured with a specific label",
+      "attr__ph-label": "special-text",
+      "attr__testID": "example-ph-label",
+      "tag_name": "special-text",
+    },
+    {
+      "$el_text": "I have the property \"ph-label\" which means touching me will be autocaptured with a specific label",
+      "attr__testID": "example-ph-label",
+      "tag_name": "higher-level-element",
+    },
+    {
+      "attr__style": "backgroundColor:rgba(0,0,0,.1);padding:15;borderRadius:10;marginBottom:10",
+      "tag_name": "higher-level-element",
+    },
+    {
+      "attr__ph-label": "higher-level-element",
+      "tag_name": "higher-level-element",
+    },
+    {
+      "attr__style": "flex:1",
+      "tag_name": "ScrollView",
+    },
+    {
+      "attr__style": "flex:1",
+      "tag_name": "ScrollView",
+    },
+    {
+      "tag_name": "PostHogDemoScreen",
+    },
+    {
+      "tag_name": "StaticContainer",
+    },
+    {
+      "tag_name": "EnsureSingleNavigator",
+    },
+    {
+      "tag_name": "SceneView",
+    },
+    {
+      "attr__style": "flex:1",
+      "tag_name": "View",
+    },
+    {
+      "attr__style": "flex:1;backgroundColor:rgb(242, 242, 242);flexDirection:column-reverse",
+      "tag_name": "View",
+    },
+    {
+      "attr__style": "flex:1;flexDirection:column-reverse",
+      "tag_name": "Background",
+    },
+    {
+      "tag_name": "Screen",
+    },
+    {
+      "attr__style": "position:absolute;left:0;right:0;top:0;bottom:0;zIndex:0",
+      "tag_name": "AnimatedComponent",
+    },
+    {
+      "tag_name": "MaybeFreeze",
+    },
+    {
+      "attr__style": "position:absolute;left:0;right:0;top:0;bottom:0;zIndex:0",
+      "tag_name": "Screen",
+    },
+    {
+      "attr__style": "position:absolute;left:0;right:0;top:0;bottom:0;zIndex:0",
+      "tag_name": "MaybeScreen",
+    },
+    {
+      "attr__style": "flex:1;overflow:hidden",
+      "tag_name": "ScreenContainer",
+    },
+    {
+      "attr__style": "flex:1;overflow:hidden",
+      "tag_name": "MaybeScreenContainer",
+    },
+  ],
+  {
+    "$touch_x": 1,
+    "$touch_y": 2,
+  },
+]
+`;

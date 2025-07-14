@@ -33,3 +33,6 @@ cypress/downloads/downloads.html
 /blob-report/
 /playwright/.cache/
 /stats
+
+react/sync.js
+react/dist

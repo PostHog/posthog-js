@@ -1,0 +1,1051 @@
+{
+  "elementType": {},
+  "memoizedProps": {
+    "testID": "example-ph-no-capture",
+    "children": "I have the property \"ph-no-capture\" which means touching me will not be picked up by autocapture",
+    "accessible": true,
+    "allowFontScaling": true,
+    "ellipsizeMode": "tail",
+    "isHighlighted": false
+  },
+  "return": {
+    "elementType": {},
+    "memoizedProps": {
+      "value": true
+    },
+    "return": {
+      "elementType": {
+        "displayName": "Text"
+      },
+      "memoizedProps": {
+        "testID": "example-ph-no-capture",
+        "children": "I have the property \"ph-no-capture\" which means touching me will not be picked up by autocapture"
+      },
+      "return": {
+        "elementType": {},
+        "memoizedProps": {
+          "style": {
+            "backgroundColor": "rgba(0,0,0,.1)",
+            "padding": 15,
+            "borderRadius": 10,
+            "marginBottom": 10
+          },
+          "ph-no-capture": true
+        },
+        "return": {
+          "elementType": {},
+          "memoizedProps": {
+            "value": false
+          },
+          "return": {
+            "elementType": {
+              "displayName": "View"
+            },
+            "memoizedProps": {
+              "style": {
+                "backgroundColor": "rgba(0,0,0,.1)",
+                "padding": 15,
+                "borderRadius": 10,
+                "marginBottom": 10
+              },
+              "ph-no-capture": true
+            },
+            "return": {
+              "elementType": {},
+              "memoizedProps": {},
+              "return": {
+                "elementType": {},
+                "memoizedProps": {
+                  "value": false
+                },
+                "return": {
+                  "elementType": {
+                    "displayName": "View"
+                  },
+                  "memoizedProps": {},
+                  "return": {
+                    "elementType": {},
+                    "memoizedProps": {},
+                    "return": {
+                      "elementType": {},
+                      "memoizedProps": {
+                        "style": [
+                          false,
+                          {
+                            "padding": 20
+                          }
+                        ],
+                        "collapsable": false
+                      },
+                      "return": {
+                        "elementType": {},
+                        "memoizedProps": {
+                          "style": [
+                            {
+                              "flexGrow": 1,
+                              "flexShrink": 1,
+                              "flexDirection": "column",
+                              "overflow": "scroll"
+                            },
+                            {
+                              "flex": 1
+                            }
+                          ],
+                          "alwaysBounceVertical": true,
+                          "sendMomentumEvents": false,
+                          "snapToStart": true,
+                          "snapToEnd": true,
+                          "pagingEnabled": false
+                        },
+                        "return": {
+                          "elementType": {
+                            "name": "ScrollView"
+                          },
+                          "memoizedProps": {
+                            "style": {
+                              "flex": 1
+                            }
+                          },
+                          "return": {
+                            "elementType": {
+                              "displayName": "ScrollView"
+                            },
+                            "memoizedProps": {
+                              "style": {
+                                "flex": 1
+                              }
+                            },
+                            "return": {
+                              "elementType": {
+                                "name": "PostHogDemoScreen"
+                              },
+                              "memoizedProps": {},
+                              "return": {
+                                "elementType": {
+                                  "name": "StaticContainer"
+                                },
+                                "memoizedProps": {
+                                  "name": "TabOne"
+                                },
+                                "return": {
+                                  "elementType": {},
+                                  "memoizedProps": {
+                                    "name": "TabOne"
+                                  },
+                                  "return": {
+                                    "elementType": {},
+                                    "memoizedProps": {},
+                                    "return": {
+                                      "elementType": {
+                                        "name": "EnsureSingleNavigator"
+                                      },
+                                      "memoizedProps": {},
+                                      "return": {
+                                        "elementType": {},
+                                        "memoizedProps": {},
+                                        "return": {
+                                          "elementType": {
+                                            "name": "SceneView"
+                                          },
+                                          "memoizedProps": {},
+                                          "return": {
+                                            "elementType": {},
+                                            "memoizedProps": {},
+                                            "return": {
+                                              "elementType": {},
+                                              "memoizedProps": {},
+                                              "return": {
+                                                "elementType": {},
+                                                "memoizedProps": {},
+                                                "return": {
+                                                  "elementType": {},
+                                                  "memoizedProps": {
+                                                    "value": 91
+                                                  },
+                                                  "return": {
+                                                    "elementType": {},
+                                                    "memoizedProps": {
+                                                      "value": true
+                                                    },
+                                                    "return": {
+                                                      "elementType": {},
+                                                      "memoizedProps": {
+                                                        "style": {
+                                                          "flex": 1
+                                                        }
+                                                      },
+                                                      "return": {
+                                                        "elementType": {},
+                                                        "memoizedProps": {
+                                                          "value": false
+                                                        },
+                                                        "return": {
+                                                          "elementType": {
+                                                            "displayName": "View"
+                                                          },
+                                                          "memoizedProps": {
+                                                            "style": {
+                                                              "flex": 1
+                                                            }
+                                                          },
+                                                          "return": {
+                                                            "elementType": {},
+                                                            "memoizedProps": {
+                                                              "accessibilityElementsHidden": false,
+                                                              "importantForAccessibility": "auto",
+                                                              "style": [
+                                                                {
+                                                                  "flex": 1,
+                                                                  "backgroundColor": "rgb(242, 242, 242)"
+                                                                },
+                                                                [
+                                                                  {
+                                                                    "flex": 1,
+                                                                    "flexDirection": "column-reverse"
+                                                                  },
+                                                                  null
+                                                                ]
+                                                              ]
+                                                            },
+                                                            "return": {
+                                                              "elementType": {},
+                                                              "memoizedProps": {
+                                                                "value": false
+                                                              },
+                                                              "return": {
+                                                                "elementType": {
+                                                                  "displayName": "View"
+                                                                },
+                                                                "memoizedProps": {
+                                                                  "accessibilityElementsHidden": false,
+                                                                  "importantForAccessibility": "auto",
+                                                                  "style": [
+                                                                    {
+                                                                      "flex": 1,
+                                                                      "backgroundColor": "rgb(242, 242, 242)"
+                                                                    },
+                                                                    [
+                                                                      {
+                                                                        "flex": 1,
+                                                                        "flexDirection": "column-reverse"
+                                                                      },
+                                                                      null
+                                                                    ]
+                                                                  ]
+                                                                },
+                                                                "return": {
+                                                                  "elementType": {
+                                                                    "name": "Background"
+                                                                  },
+                                                                  "memoizedProps": {
+                                                                    "accessibilityElementsHidden": false,
+                                                                    "importantForAccessibility": "auto",
+                                                                    "style": [
+                                                                      {
+                                                                        "flex": 1,
+                                                                        "flexDirection": "column-reverse"
+                                                                      },
+                                                                      null
+                                                                    ]
+                                                                  },
+                                                                  "return": {
+                                                                    "elementType": {
+                                                                      "name": "Screen"
+                                                                    },
+                                                                    "memoizedProps": {
+                                                                      "focused": true
+                                                                    },
+                                                                    "return": {
+                                                                      "elementType": {},
+                                                                      "memoizedProps": {
+                                                                        "value": 79
+                                                                      },
+                                                                      "return": {
+                                                                        "elementType": {},
+                                                                        "memoizedProps": {
+                                                                          "activityState": 2,
+                                                                          "collapsable": false,
+                                                                          "style": {
+                                                                            "position": "absolute",
+                                                                            "left": 0,
+                                                                            "right": 0,
+                                                                            "top": 0,
+                                                                            "bottom": 0,
+                                                                            "zIndex": 0
+                                                                          }
+                                                                        },
+                                                                        "return": {
+                                                                          "elementType": {
+                                                                            "name": "AnimatedComponent"
+                                                                          },
+                                                                          "memoizedProps": {
+                                                                            "style": [
+                                                                              {
+                                                                                "position": "absolute",
+                                                                                "left": 0,
+                                                                                "right": 0,
+                                                                                "top": 0,
+                                                                                "bottom": 0
+                                                                              },
+                                                                              {
+                                                                                "zIndex": 0
+                                                                              }
+                                                                            ],
+                                                                            "activityState": 2
+                                                                          },
+                                                                          "return": {
+                                                                            "elementType": {},
+                                                                            "memoizedProps": {
+                                                                              "style": [
+                                                                                {
+                                                                                  "position": "absolute",
+                                                                                  "left": 0,
+                                                                                  "right": 0,
+                                                                                  "top": 0,
+                                                                                  "bottom": 0
+                                                                                },
+                                                                                {
+                                                                                  "zIndex": 0
+                                                                                }
+                                                                              ],
+                                                                              "activityState": 2
+                                                                            },
+                                                                            "return": {
+                                                                              "elementType": {
+                                                                                "name": "MaybeFreeze"
+                                                                              },
+                                                                              "memoizedProps": {
+                                                                                "freeze": false
+                                                                              },
+                                                                              "return": {
+                                                                                "elementType": {
+                                                                                  "name": "Screen"
+                                                                                },
+                                                                                "memoizedProps": {
+                                                                                  "activityState": 2,
+                                                                                  "style": [
+                                                                                    {
+                                                                                      "position": "absolute",
+                                                                                      "left": 0,
+                                                                                      "right": 0,
+                                                                                      "top": 0,
+                                                                                      "bottom": 0
+                                                                                    },
+                                                                                    {
+                                                                                      "zIndex": 0
+                                                                                    }
+                                                                                  ],
+                                                                                  "enabled": true
+                                                                                },
+                                                                                "return": {
+                                                                                  "elementType": {
+                                                                                    "name": "MaybeScreen"
+                                                                                  },
+                                                                                  "memoizedProps": {
+                                                                                    "style": [
+                                                                                      {
+                                                                                        "position": "absolute",
+                                                                                        "left": 0,
+                                                                                        "right": 0,
+                                                                                        "top": 0,
+                                                                                        "bottom": 0
+                                                                                      },
+                                                                                      {
+                                                                                        "zIndex": 0
+                                                                                      }
+                                                                                    ],
+                                                                                    "visible": true,
+                                                                                    "enabled": true
+                                                                                  },
+                                                                                  "return": {
+                                                                                    "elementType": {},
+                                                                                    "memoizedProps": {
+                                                                                      "style": {
+                                                                                        "flex": 1,
+                                                                                        "overflow": "hidden"
+                                                                                      }
+                                                                                    },
+                                                                                    "return": {
+                                                                                      "elementType": {
+                                                                                        "name": "ScreenContainer"
+                                                                                      },
+                                                                                      "memoizedProps": {
+                                                                                        "enabled": true,
+                                                                                        "hasTwoStates": true,
+                                                                                        "style": {
+                                                                                          "flex": 1,
+                                                                                          "overflow": "hidden"
+                                                                                        }
+                                                                                      },
+                                                                                      "return": {
+                                                                                        "elementType": {
+                                                                                          "name": "MaybeScreenContainer"
+                                                                                        },
+                                                                                        "memoizedProps": {
+                                                                                          "enabled": true,
+                                                                                          "hasTwoStates": true,
+                                                                                          "style": {
+                                                                                            "flex": 1,
+                                                                                            "overflow": "hidden"
+                                                                                          }
+                                                                                        },
+                                                                                        "return": {
+                                                                                          "elementType": {},
+                                                                                          "memoizedProps": {
+                                                                                            "style": [
+                                                                                              {
+                                                                                                "flex": 1
+                                                                                              },
+                                                                                              null
+                                                                                            ]
+                                                                                          },
+                                                                                          "return": {
+                                                                                            "elementType": {},
+                                                                                            "memoizedProps": {
+                                                                                              "value": false
+                                                                                            },
+                                                                                            "return": {
+                                                                                              "elementType": {
+                                                                                                "displayName": "View"
+                                                                                              },
+                                                                                              "memoizedProps": {
+                                                                                                "style": [
+                                                                                                  {
+                                                                                                    "flex": 1
+                                                                                                  },
+                                                                                                  null
+                                                                                                ]
+                                                                                              },
+                                                                                              "return": {
+                                                                                                "elementType": {
+                                                                                                  "displayName": "SafeAreaInsetsContext"
+                                                                                                },
+                                                                                                "memoizedProps": {},
+                                                                                                "return": {
+                                                                                                  "elementType": {
+                                                                                                    "name": "SafeAreaProviderCompat"
+                                                                                                  },
+                                                                                                  "memoizedProps": {},
+                                                                                                  "return": {
+                                                                                                    "elementType": {
+                                                                                                      "name": "BottomTabView"
+                                                                                                    },
+                                                                                                    "memoizedProps": {},
+                                                                                                    "return": {
+                                                                                                      "elementType": {},
+                                                                                                      "memoizedProps": {},
+                                                                                                      "return": {
+                                                                                                        "elementType": {
+                                                                                                          "name": ""
+                                                                                                        },
+                                                                                                        "memoizedProps": {},
+                                                                                                        "return": {
+                                                                                                          "elementType": {
+                                                                                                            "name": "BottomTabNavigator"
+                                                                                                          },
+                                                                                                          "memoizedProps": {
+                                                                                                            "initialRouteName": "TabOne"
+                                                                                                          },
+                                                                                                          "return": {
+                                                                                                            "elementType": {
+                                                                                                              "name": "BottomTabNavigator"
+                                                                                                            },
+                                                                                                            "memoizedProps": {},
+                                                                                                            "return": {
+                                                                                                              "elementType": {
+                                                                                                                "name": "StaticContainer"
+                                                                                                              },
+                                                                                                              "memoizedProps": {
+                                                                                                                "name": "Root"
+                                                                                                              },
+                                                                                                              "return": {
+                                                                                                                "elementType": {},
+                                                                                                                "memoizedProps": {
+                                                                                                                  "name": "Root"
+                                                                                                                },
+                                                                                                                "return": {
+                                                                                                                  "elementType": {},
+                                                                                                                  "memoizedProps": {},
+                                                                                                                  "return": {
+                                                                                                                    "elementType": {
+                                                                                                                      "name": "EnsureSingleNavigator"
+                                                                                                                    },
+                                                                                                                    "memoizedProps": {},
+                                                                                                                    "return": {
+                                                                                                                      "elementType": {},
+                                                                                                                      "memoizedProps": {},
+                                                                                                                      "return": {
+                                                                                                                        "elementType": {
+                                                                                                                          "name": "SceneView"
+                                                                                                                        },
+                                                                                                                        "memoizedProps": {},
+                                                                                                                        "return": {
+                                                                                                                          "elementType": {},
+                                                                                                                          "memoizedProps": {},
+                                                                                                                          "return": {
+                                                                                                                            "elementType": {},
+                                                                                                                            "memoizedProps": {},
+                                                                                                                            "return": {
+                                                                                                                              "elementType": {},
+                                                                                                                              "memoizedProps": {},
+                                                                                                                              "return": {
+                                                                                                                                "elementType": {},
+                                                                                                                                "memoizedProps": {
+                                                                                                                                  "style": [
+                                                                                                                                    {
+                                                                                                                                      "flex": 1
+                                                                                                                                    },
+                                                                                                                                    {
+                                                                                                                                      "backgroundColor": "rgb(242, 242, 242)"
+                                                                                                                                    },
+                                                                                                                                    null
+                                                                                                                                  ]
+                                                                                                                                },
+                                                                                                                                "return": {
+                                                                                                                                  "elementType": {},
+                                                                                                                                  "memoizedProps": {
+                                                                                                                                    "value": false
+                                                                                                                                  },
+                                                                                                                                  "return": {
+                                                                                                                                    "elementType": {
+                                                                                                                                      "displayName": "View"
+                                                                                                                                    },
+                                                                                                                                    "memoizedProps": {
+                                                                                                                                      "style": [
+                                                                                                                                        {
+                                                                                                                                          "flex": 1
+                                                                                                                                        },
+                                                                                                                                        {
+                                                                                                                                          "backgroundColor": "rgb(242, 242, 242)"
+                                                                                                                                        },
+                                                                                                                                        null
+                                                                                                                                      ]
+                                                                                                                                    },
+                                                                                                                                    "return": {
+                                                                                                                                      "elementType": {
+                                                                                                                                        "name": "DebugContainer"
+                                                                                                                                      },
+                                                                                                                                      "memoizedProps": {
+                                                                                                                                        "style": [
+                                                                                                                                          {
+                                                                                                                                            "flex": 1
+                                                                                                                                          },
+                                                                                                                                          {
+                                                                                                                                            "backgroundColor": "rgb(242, 242, 242)"
+                                                                                                                                          },
+                                                                                                                                          null
+                                                                                                                                        ],
+                                                                                                                                        "stackPresentation": "push"
+                                                                                                                                      },
+                                                                                                                                      "return": {
+                                                                                                                                        "elementType": {
+                                                                                                                                          "name": "MaybeNestedStack"
+                                                                                                                                        },
+                                                                                                                                        "memoizedProps": {
+                                                                                                                                          "presentation": "card",
+                                                                                                                                          "headerHeight": 91
+                                                                                                                                        },
+                                                                                                                                        "return": {
+                                                                                                                                          "elementType": {},
+                                                                                                                                          "memoizedProps": {
+                                                                                                                                            "value": 0
+                                                                                                                                          },
+                                                                                                                                          "return": {
+                                                                                                                                            "elementType": {},
+                                                                                                                                            "memoizedProps": {
+                                                                                                                                              "value": false
+                                                                                                                                            },
+                                                                                                                                            "return": {
+                                                                                                                                              "elementType": {},
+                                                                                                                                              "memoizedProps": {},
+                                                                                                                                              "return": {
+                                                                                                                                                "elementType": {},
+                                                                                                                                                "memoizedProps": {},
+                                                                                                                                                "return": {
+                                                                                                                                                  "elementType": {},
+                                                                                                                                                  "memoizedProps": {},
+                                                                                                                                                  "return": {
+                                                                                                                                                    "elementType": {},
+                                                                                                                                                    "memoizedProps": {
+                                                                                                                                                      "replaceAnimation": "push",
+                                                                                                                                                      "stackPresentation": "push",
+                                                                                                                                                      "swipeDirection": "horizontal",
+                                                                                                                                                      "collapsable": false,
+                                                                                                                                                      "style": {
+                                                                                                                                                        "position": "absolute",
+                                                                                                                                                        "left": 0,
+                                                                                                                                                        "right": 0,
+                                                                                                                                                        "top": 0,
+                                                                                                                                                        "bottom": 0
+                                                                                                                                                      }
+                                                                                                                                                    },
+                                                                                                                                                    "return": {
+                                                                                                                                                      "elementType": {
+                                                                                                                                                        "name": "AnimatedComponent"
+                                                                                                                                                      },
+                                                                                                                                                      "memoizedProps": {
+                                                                                                                                                        "style": {
+                                                                                                                                                          "position": "absolute",
+                                                                                                                                                          "left": 0,
+                                                                                                                                                          "right": 0,
+                                                                                                                                                          "top": 0,
+                                                                                                                                                          "bottom": 0
+                                                                                                                                                        },
+                                                                                                                                                        "replaceAnimation": "push",
+                                                                                                                                                        "stackPresentation": "push",
+                                                                                                                                                        "swipeDirection": "horizontal"
+                                                                                                                                                      },
+                                                                                                                                                      "return": {
+                                                                                                                                                        "elementType": {},
+                                                                                                                                                        "memoizedProps": {
+                                                                                                                                                          "style": {
+                                                                                                                                                            "position": "absolute",
+                                                                                                                                                            "left": 0,
+                                                                                                                                                            "right": 0,
+                                                                                                                                                            "top": 0,
+                                                                                                                                                            "bottom": 0
+                                                                                                                                                          },
+                                                                                                                                                          "replaceAnimation": "push",
+                                                                                                                                                          "stackPresentation": "push",
+                                                                                                                                                          "swipeDirection": "horizontal"
+                                                                                                                                                        },
+                                                                                                                                                        "return": {
+                                                                                                                                                          "elementType": {
+                                                                                                                                                            "name": "MaybeFreeze"
+                                                                                                                                                          },
+                                                                                                                                                          "memoizedProps": {
+                                                                                                                                                            "freeze": false
+                                                                                                                                                          },
+                                                                                                                                                          "return": {
+                                                                                                                                                            "elementType": {
+                                                                                                                                                              "name": "Screen"
+                                                                                                                                                            },
+                                                                                                                                                            "memoizedProps": {
+                                                                                                                                                              "enabled": true,
+                                                                                                                                                              "style": {
+                                                                                                                                                                "position": "absolute",
+                                                                                                                                                                "left": 0,
+                                                                                                                                                                "right": 0,
+                                                                                                                                                                "top": 0,
+                                                                                                                                                                "bottom": 0
+                                                                                                                                                              },
+                                                                                                                                                              "replaceAnimation": "push",
+                                                                                                                                                              "stackPresentation": "push",
+                                                                                                                                                              "swipeDirection": "horizontal",
+                                                                                                                                                              "isNativeStack": true
+                                                                                                                                                            },
+                                                                                                                                                            "return": {
+                                                                                                                                                              "elementType": {
+                                                                                                                                                                "name": "SceneView"
+                                                                                                                                                              },
+                                                                                                                                                              "memoizedProps": {
+                                                                                                                                                                "index": 0
+                                                                                                                                                              },
+                                                                                                                                                              "return": {
+                                                                                                                                                                "elementType": {},
+                                                                                                                                                                "memoizedProps": {
+                                                                                                                                                                  "style": {
+                                                                                                                                                                    "flex": 1
+                                                                                                                                                                  }
+                                                                                                                                                                },
+                                                                                                                                                                "return": {
+                                                                                                                                                                  "elementType": {
+                                                                                                                                                                    "name": "ScreenStack"
+                                                                                                                                                                  },
+                                                                                                                                                                  "memoizedProps": {
+                                                                                                                                                                    "style": {
+                                                                                                                                                                      "flex": 1
+                                                                                                                                                                    }
+                                                                                                                                                                  },
+                                                                                                                                                                  "return": {
+                                                                                                                                                                    "elementType": {
+                                                                                                                                                                      "name": "NativeStackViewInner"
+                                                                                                                                                                    },
+                                                                                                                                                                    "memoizedProps": {},
+                                                                                                                                                                    "return": {
+                                                                                                                                                                      "elementType": {},
+                                                                                                                                                                      "memoizedProps": {
+                                                                                                                                                                        "style": [
+                                                                                                                                                                          {
+                                                                                                                                                                            "flex": 1
+                                                                                                                                                                          },
+                                                                                                                                                                          null
+                                                                                                                                                                        ]
+                                                                                                                                                                      },
+                                                                                                                                                                      "return": {
+                                                                                                                                                                        "elementType": {},
+                                                                                                                                                                        "memoizedProps": {
+                                                                                                                                                                          "value": false
+                                                                                                                                                                        },
+                                                                                                                                                                        "return": {
+                                                                                                                                                                          "elementType": {
+                                                                                                                                                                            "displayName": "View"
+                                                                                                                                                                          },
+                                                                                                                                                                          "memoizedProps": {
+                                                                                                                                                                            "style": [
+                                                                                                                                                                              {
+                                                                                                                                                                                "flex": 1
+                                                                                                                                                                              },
+                                                                                                                                                                              null
+                                                                                                                                                                            ]
+                                                                                                                                                                          },
+                                                                                                                                                                          "return": {
+                                                                                                                                                                            "elementType": {
+                                                                                                                                                                              "displayName": "SafeAreaInsetsContext"
+                                                                                                                                                                            },
+                                                                                                                                                                            "memoizedProps": {},
+                                                                                                                                                                            "return": {
+                                                                                                                                                                              "elementType": {
+                                                                                                                                                                                "name": "SafeAreaProviderCompat"
+                                                                                                                                                                              },
+                                                                                                                                                                              "memoizedProps": {},
+                                                                                                                                                                              "return": {
+                                                                                                                                                                                "elementType": {
+                                                                                                                                                                                  "name": "NativeStackView"
+                                                                                                                                                                                },
+                                                                                                                                                                                "memoizedProps": {},
+                                                                                                                                                                                "return": {
+                                                                                                                                                                                  "elementType": {},
+                                                                                                                                                                                  "memoizedProps": {},
+                                                                                                                                                                                  "return": {
+                                                                                                                                                                                    "elementType": {
+                                                                                                                                                                                      "name": ""
+                                                                                                                                                                                    },
+                                                                                                                                                                                    "memoizedProps": {},
+                                                                                                                                                                                    "return": {
+                                                                                                                                                                                      "elementType": {
+                                                                                                                                                                                        "name": "NativeStackNavigator"
+                                                                                                                                                                                      },
+                                                                                                                                                                                      "memoizedProps": {},
+                                                                                                                                                                                      "return": {
+                                                                                                                                                                                        "elementType": {
+                                                                                                                                                                                          "name": "RootNavigator"
+                                                                                                                                                                                        },
+                                                                                                                                                                                        "memoizedProps": {},
+                                                                                                                                                                                        "return": {
+                                                                                                                                                                                          "elementType": {},
+                                                                                                                                                                                          "memoizedProps": {},
+                                                                                                                                                                                          "return": {
+                                                                                                                                                                                            "elementType": {},
+                                                                                                                                                                                            "memoizedProps": {
+                                                                                                                                                                                              "ph-label": "PostHogProvider",
+                                                                                                                                                                                              "style": {
+                                                                                                                                                                                                "flex": 1
+                                                                                                                                                                                              }
+                                                                                                                                                                                            },
+                                                                                                                                                                                            "return": {
+                                                                                                                                                                                              "elementType": {},
+                                                                                                                                                                                              "memoizedProps": {
+                                                                                                                                                                                                "value": false
+                                                                                                                                                                                              },
+                                                                                                                                                                                              "return": {
+                                                                                                                                                                                                "elementType": {
+                                                                                                                                                                                                  "displayName": "View"
+                                                                                                                                                                                                },
+                                                                                                                                                                                                "memoizedProps": {
+                                                                                                                                                                                                  "ph-label": "PostHogProvider",
+                                                                                                                                                                                                  "style": {
+                                                                                                                                                                                                    "flex": 1
+                                                                                                                                                                                                  }
+                                                                                                                                                                                                },
+                                                                                                                                                                                                "return": {
+                                                                                                                                                                                                  "elementType": {
+                                                                                                                                                                                                    "name": "PostHogProvider"
+                                                                                                                                                                                                  },
+                                                                                                                                                                                                  "memoizedProps": {
+                                                                                                                                                                                                    "apiKey": "phc_FzKQvNvps9ZUTxF5KJR9jIKdGb4bq4HNBa9SRyAHi0C",
+                                                                                                                                                                                                    "autocapture": true
+                                                                                                                                                                                                  },
+                                                                                                                                                                                                  "return": {
+                                                                                                                                                                                                    "elementType": {},
+                                                                                                                                                                                                    "memoizedProps": {},
+                                                                                                                                                                                                    "return": {
+                                                                                                                                                                                                      "elementType": {
+                                                                                                                                                                                                        "name": "EnsureSingleNavigator"
+                                                                                                                                                                                                      },
+                                                                                                                                                                                                      "memoizedProps": {},
+                                                                                                                                                                                                      "return": {
+                                                                                                                                                                                                        "elementType": {},
+                                                                                                                                                                                                        "memoizedProps": {},
+                                                                                                                                                                                                        "return": {
+                                                                                                                                                                                                          "elementType": {},
+                                                                                                                                                                                                          "memoizedProps": {},
+                                                                                                                                                                                                          "return": {
+                                                                                                                                                                                                            "elementType": {},
+                                                                                                                                                                                                            "memoizedProps": {},
+                                                                                                                                                                                                            "return": {
+                                                                                                                                                                                                              "elementType": {},
+                                                                                                                                                                                                              "memoizedProps": {},
+                                                                                                                                                                                                              "return": {
+                                                                                                                                                                                                                "elementType": {},
+                                                                                                                                                                                                                "memoizedProps": {},
+                                                                                                                                                                                                                "return": {
+                                                                                                                                                                                                                  "elementType": {},
+                                                                                                                                                                                                                  "memoizedProps": {},
+                                                                                                                                                                                                                  "return": {
+                                                                                                                                                                                                                    "elementType": {},
+                                                                                                                                                                                                                    "memoizedProps": {},
+                                                                                                                                                                                                                    "return": {
+                                                                                                                                                                                                                      "elementType": {
+                                                                                                                                                                                                                        "name": "ThemeProvider"
+                                                                                                                                                                                                                      },
+                                                                                                                                                                                                                      "memoizedProps": {},
+                                                                                                                                                                                                                      "return": {
+                                                                                                                                                                                                                        "elementType": {},
+                                                                                                                                                                                                                        "memoizedProps": {},
+                                                                                                                                                                                                                        "return": {
+                                                                                                                                                                                                                          "elementType": {},
+                                                                                                                                                                                                                          "memoizedProps": {},
+                                                                                                                                                                                                                          "return": {
+                                                                                                                                                                                                                            "elementType": {
+                                                                                                                                                                                                                              "name": "Navigation"
+                                                                                                                                                                                                                            },
+                                                                                                                                                                                                                            "memoizedProps": {
+                                                                                                                                                                                                                              "colorScheme": "light"
+                                                                                                                                                                                                                            },
+                                                                                                                                                                                                                            "return": {
+                                                                                                                                                                                                                              "elementType": {},
+                                                                                                                                                                                                                              "memoizedProps": {},
+                                                                                                                                                                                                                              "return": {
+                                                                                                                                                                                                                                "elementType": {},
+                                                                                                                                                                                                                                "memoizedProps": {},
+                                                                                                                                                                                                                                "return": {
+                                                                                                                                                                                                                                  "elementType": {},
+                                                                                                                                                                                                                                  "memoizedProps": {
+                                                                                                                                                                                                                                    "style": [
+                                                                                                                                                                                                                                      {
+                                                                                                                                                                                                                                        "flex": 1
+                                                                                                                                                                                                                                      },
+                                                                                                                                                                                                                                      null
+                                                                                                                                                                                                                                    ]
+                                                                                                                                                                                                                                  },
+                                                                                                                                                                                                                                  "return": {
+                                                                                                                                                                                                                                    "elementType": {
+                                                                                                                                                                                                                                      "name": "SafeAreaProvider"
+                                                                                                                                                                                                                                    },
+                                                                                                                                                                                                                                    "memoizedProps": {},
+                                                                                                                                                                                                                                    "return": {
+                                                                                                                                                                                                                                      "elementType": {
+                                                                                                                                                                                                                                        "name": "App"
+                                                                                                                                                                                                                                      },
+                                                                                                                                                                                                                                      "memoizedProps": {
+                                                                                                                                                                                                                                        "rootTag": 111
+                                                                                                                                                                                                                                      },
+                                                                                                                                                                                                                                      "return": {
+                                                                                                                                                                                                                                        "elementType": {
+                                                                                                                                                                                                                                          "name": "ExpoRoot"
+                                                                                                                                                                                                                                        },
+                                                                                                                                                                                                                                        "memoizedProps": {
+                                                                                                                                                                                                                                          "rootTag": 111
+                                                                                                                                                                                                                                        },
+                                                                                                                                                                                                                                        "return": {
+                                                                                                                                                                                                                                          "elementType": {},
+                                                                                                                                                                                                                                          "memoizedProps": {
+                                                                                                                                                                                                                                            "collapsable": true,
+                                                                                                                                                                                                                                            "pointerEvents": "box-none",
+                                                                                                                                                                                                                                            "style": {
+                                                                                                                                                                                                                                              "flex": 1
+                                                                                                                                                                                                                                            }
+                                                                                                                                                                                                                                          },
+                                                                                                                                                                                                                                          "return": {
+                                                                                                                                                                                                                                            "elementType": {},
+                                                                                                                                                                                                                                            "memoizedProps": {
+                                                                                                                                                                                                                                              "value": false
+                                                                                                                                                                                                                                            },
+                                                                                                                                                                                                                                            "return": {
+                                                                                                                                                                                                                                              "elementType": {
+                                                                                                                                                                                                                                                "displayName": "View"
+                                                                                                                                                                                                                                              },
+                                                                                                                                                                                                                                              "memoizedProps": {
+                                                                                                                                                                                                                                                "collapsable": true,
+                                                                                                                                                                                                                                                "pointerEvents": "box-none",
+                                                                                                                                                                                                                                                "style": {
+                                                                                                                                                                                                                                                  "flex": 1
+                                                                                                                                                                                                                                                }
+                                                                                                                                                                                                                                              },
+                                                                                                                                                                                                                                              "return": {
+                                                                                                                                                                                                                                                "elementType": {
+                                                                                                                                                                                                                                                  "name": "DevAppContainer"
+                                                                                                                                                                                                                                                },
+                                                                                                                                                                                                                                                "memoizedProps": {
+                                                                                                                                                                                                                                                  "fabric": false,
+                                                                                                                                                                                                                                                  "showArchitectureIndicator": false
+                                                                                                                                                                                                                                                },
+                                                                                                                                                                                                                                                "return": {
+                                                                                                                                                                                                                                                  "elementType": {},
+                                                                                                                                                                                                                                                  "memoizedProps": {
+                                                                                                                                                                                                                                                    "style": {
+                                                                                                                                                                                                                                                      "flex": 1
+                                                                                                                                                                                                                                                    },
+                                                                                                                                                                                                                                                    "pointerEvents": "box-none"
+                                                                                                                                                                                                                                                  },
+                                                                                                                                                                                                                                                  "return": {
+                                                                                                                                                                                                                                                    "elementType": {},
+                                                                                                                                                                                                                                                    "memoizedProps": {
+                                                                                                                                                                                                                                                      "value": false
+                                                                                                                                                                                                                                                    },
+                                                                                                                                                                                                                                                    "return": {
+                                                                                                                                                                                                                                                      "elementType": {
+                                                                                                                                                                                                                                                        "displayName": "View"
+                                                                                                                                                                                                                                                      },
+                                                                                                                                                                                                                                                      "memoizedProps": {
+                                                                                                                                                                                                                                                        "style": {
+                                                                                                                                                                                                                                                          "flex": 1
+                                                                                                                                                                                                                                                        },
+                                                                                                                                                                                                                                                        "pointerEvents": "box-none"
+                                                                                                                                                                                                                                                      },
+                                                                                                                                                                                                                                                      "return": {
+                                                                                                                                                                                                                                                        "elementType": {},
+                                                                                                                                                                                                                                                        "memoizedProps": {
+                                                                                                                                                                                                                                                          "value": 111
+                                                                                                                                                                                                                                                        },
+                                                                                                                                                                                                                                                        "return": {
+                                                                                                                                                                                                                                                          "elementType": {
+                                                                                                                                                                                                                                                            "name": "AppContainer"
+                                                                                                                                                                                                                                                          },
+                                                                                                                                                                                                                                                          "memoizedProps": {
+                                                                                                                                                                                                                                                            "rootTag": 111,
+                                                                                                                                                                                                                                                            "showArchitectureIndicator": false,
+                                                                                                                                                                                                                                                            "internal_excludeLogBox": false
+                                                                                                                                                                                                                                                          },
+                                                                                                                                                                                                                                                          "return": {
+                                                                                                                                                                                                                                                            "elementType": {},
+                                                                                                                                                                                                                                                            "memoizedProps": {},
+                                                                                                                                                                                                                                                            "return": {
+                                                                                                                                                                                                                                                              "elementType": {
+                                                                                                                                                                                                                                                                "displayName": "main(RootComponent)",
+                                                                                                                                                                                                                                                                "name": "ComponentWithDisplayName"
+                                                                                                                                                                                                                                                              },
+                                                                                                                                                                                                                                                              "memoizedProps": {},
+                                                                                                                                                                                                                                                              "return": {
+                                                                                                                                                                                                                                                                "elementType": {},
+                                                                                                                                                                                                                                                                "memoizedProps": {},
+                                                                                                                                                                                                                                                                "return": {}
+                                                                                                                                                                                                                                                              }
+                                                                                                                                                                                                                                                            }
+                                                                                                                                                                                                                                                          }
+                                                                                                                                                                                                                                                        }
+                                                                                                                                                                                                                                                      }
+                                                                                                                                                                                                                                                    }
+                                                                                                                                                                                                                                                  }
+                                                                                                                                                                                                                                                }
+                                                                                                                                                                                                                                              }
+                                                                                                                                                                                                                                            }
+                                                                                                                                                                                                                                          }
+                                                                                                                                                                                                                                        }
+                                                                                                                                                                                                                                      }
+                                                                                                                                                                                                                                    }
+                                                                                                                                                                                                                                  }
+                                                                                                                                                                                                                                }
+                                                                                                                                                                                                                              }
+                                                                                                                                                                                                                            }
+                                                                                                                                                                                                                          }
+                                                                                                                                                                                                                        }
+                                                                                                                                                                                                                      }
+                                                                                                                                                                                                                    }
+                                                                                                                                                                                                                  }
+                                                                                                                                                                                                                }
+                                                                                                                                                                                                              }
+                                                                                                                                                                                                            }
+                                                                                                                                                                                                          }
+                                                                                                                                                                                                        }
+                                                                                                                                                                                                      }
+                                                                                                                                                                                                    }
+                                                                                                                                                                                                  }
+                                                                                                                                                                                                }
+                                                                                                                                                                                              }
+                                                                                                                                                                                            }
+                                                                                                                                                                                          }
+                                                                                                                                                                                        }
+                                                                                                                                                                                      }
+                                                                                                                                                                                    }
+                                                                                                                                                                                  }
+                                                                                                                                                                                }
+                                                                                                                                                                              }
+                                                                                                                                                                            }
+                                                                                                                                                                          }
+                                                                                                                                                                        }
+                                                                                                                                                                      }
+                                                                                                                                                                    }
+                                                                                                                                                                  }
+                                                                                                                                                                }
+                                                                                                                                                              }
+                                                                                                                                                            }
+                                                                                                                                                          }
+                                                                                                                                                        }
+                                                                                                                                                      }
+                                                                                                                                                    }
+                                                                                                                                                  }
+                                                                                                                                                }
+                                                                                                                                              }
+                                                                                                                                            }
+                                                                                                                                          }
+                                                                                                                                        }
+                                                                                                                                      }
+                                                                                                                                    }
+                                                                                                                                  }
+                                                                                                                                }
+                                                                                                                              }
+                                                                                                                            }
+                                                                                                                          }
+                                                                                                                        }
+                                                                                                                      }
+                                                                                                                    }
+                                                                                                                  }
+                                                                                                                }
+                                                                                                              }
+                                                                                                            }
+                                                                                                          }
+                                                                                                        }
+                                                                                                      }
+                                                                                                    }
+                                                                                                  }
+                                                                                                }
+                                                                                              }
+                                                                                            }
+                                                                                          }
+                                                                                        }
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                              }
+                                                                            }
+                                                                          }
+                                                                        }
+                                                                      }
+                                                                    }
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

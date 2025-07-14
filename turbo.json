@@ -1,0 +1,42 @@
+{
+    "tasks": {
+        "clean": {
+            "cache": false
+        },
+        "build": {
+            "dependsOn": ["^build"],
+            "inputs": ["src/**", "tsconfig.json", "package.json", ".babelrc", "babel.config.js", "rollup.config.mjs"],
+            "outputs": ["dist/**", "lib/**", "react/**"]
+        },
+        "package": {
+            "cache": false,
+            "dependsOn": ["build"],
+            "inputs": ["dist/**", "package.json"],
+            "env": ["PACKAGE_DEST"]
+        },
+        "posthog-js#package": {
+            "dependsOn": ["@posthog/react#build"],
+            "inputs": ["dist/**", "lib/**", "react/**"],
+            "env": ["PACKAGE_DEST"],
+            "cache": false
+        },
+        "lint": {
+            "dependsOn": []
+        },
+        "lint:fix": {
+            "dependsOn": []
+        },
+        "test:unit": {
+            "cache": false
+        },
+        "test:functional": {},
+        "test:e2e": {},
+        "test": {
+            "dependsOn": ["lint", "test:unit", "test:functional", "test:e2e"]
+        },
+        "dev": {
+            "cache": false,
+            "persistent": true
+        }
+    }
+}

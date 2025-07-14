@@ -15,5 +15,5 @@
     "dependencies": {
         "posthog-js": "file:../../dist/"
     },
-    "packageManager": "pnpm@9.15.4"
+    "packageManager": "pnpm@10.12.4"
 }
