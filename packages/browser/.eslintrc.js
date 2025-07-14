@@ -47,9 +47,13 @@ module.exports = {
                 'posthog-js/no-direct-undefined-check': 'off',
                 'posthog-js/no-direct-null-check': 'off',
                 '@typescript-eslint/naming-convention': 'off',
+                'compat/compat': 'off',
             },
             parserOptions: {
                 project: null,
+            },
+            env: {
+                node: true,
             },
         },
         {

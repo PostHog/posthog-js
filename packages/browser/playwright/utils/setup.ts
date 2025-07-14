@@ -112,41 +112,10 @@ export async function start(
 
     // Initialize PostHog if required
     if (initPosthog) {
-        await page.evaluate(
-            // TS very unhappy with passing PostHogConfig here, so just pass an object
-            (posthogOptions: Record<string, any>) => {
-                const opts: Partial<PostHogConfig> = {
-                    api_host: 'https://localhost:1234',
-                    debug: true,
-                    ip: false, // Prevent IP deprecation warning in Playwright tests
-                    before_send: (event) => {
-                        const win = window as WindowWithPostHog
-                        win.capturedEvents = win.capturedEvents || []
-
-                        if (event) {
-                            win.capturedEvents.push(event)
-                        }
-
-                        return event
-                    },
-                    loaded: (ph) => {
-                        if (ph.sessionRecording) {
-                            ph.sessionRecording._forceAllowLocalhostNetworkCapture = true
-                        }
-                        // playwright can't serialize functions to pass around from the playwright to browser context
-                        // if we want to run custom code in the loaded function we need to pass it on the page's window,
-                        // but it's a new window so we have to create it in the `before_posthog_init` option
-                        ;(window as any).__ph_loaded?.(ph)
-                    },
-                    opt_out_useragent_filter: true,
-                    ...posthogOptions,
-                }
-
-                const windowPosthog = (window as WindowWithPostHog).posthog
-                windowPosthog?.init('test token', opts)
-            },
-            options as Record<string, any>
-        )
+        await page.posthog.init('test token', {
+            api_host: 'https://localhost:1234',
+            ...options,
+        } as PostHogConfig)
     }
 
     runAfterPostHogInit?.(page)

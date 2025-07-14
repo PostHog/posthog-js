@@ -1,0 +1,38 @@
+name: Playwright Tests
+
+on: [pull_request]
+
+env:
+  POSTHOG_PROJECT_KEY: "${{ secrets.POSTHOG_PROJECT_KEY }}"
+  POSTHOG_API_KEY: "${{ secrets.POSTHOG_API_KEY }}"
+
+jobs:
+  integration:
+    name: Playwright - ${{ matrix.name }}
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        project:
+          - "chromium"
+          - "firefox"
+          - "webkit"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: pnpm build
+        working-directory: packages/browser
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install ${{ matrix.project }} --with-deps
+        working-directory: packages/browser
+      - name: Run Playwright tests
+        run: pnpm exec playwright test --project ${{ matrix.project }}
+        working-directory: packages/browser
+      - name: Check ingested events
+        run: pnpm check-api-results
+        working-directory: packages/browser
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: packages/browser/playwright-report/
+          retention-days: 30

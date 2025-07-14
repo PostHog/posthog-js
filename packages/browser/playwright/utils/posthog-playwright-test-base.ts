@@ -1,6 +1,6 @@
 import { test as base, Page, expect } from '@playwright/test'
 import { PostHog } from '../../src/posthog-core'
-import { CaptureResult } from '../../src/types'
+import { CaptureResult, PostHogConfig } from '../../src/types'
 
 const lazyLoadedJSFiles = [
     'array',
@@ -37,42 +37,130 @@ declare module '@playwright/test' {
             urlPatternsToWaitFor: (string | RegExp)[]
             action: () => Promise<void>
         }) => Promise<void>
-
+        delay(ms: number): Promise<void>
         expectCapturedEventsToBe(expectedEvents: string[]): Promise<void>
+        expectEventsCount(expectedCounts: Record<string, number>): Promise<void>
+        posthog: {
+            init: (token: string, options: Partial<PostHogConfig>) => Promise<void>
+            register: (props: { [key: string]: any }) => Promise<void>
+            waitToLoad: () => Promise<void>
+        }
+    }
+}
+
+export const extendPage = (page) => {
+    page.delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
+    // Add custom methods to the page object
+    page.resetCapturedEvents = async function () {
+        await this.evaluate(() => {
+            ;(window as WindowWithPostHog).capturedEvents = []
+        })
+    }
+
+    page.capturedEvents = async function (): Promise<CaptureResult[]> {
+        return this.evaluate(() => {
+            return (window as WindowWithPostHog).capturedEvents || []
+        })
+    }
+
+    page.waitingForNetworkCausedBy = async function (options: {
+        urlPatternsToWaitFor: (string | RegExp)[]
+        action: () => Promise<void>
+    }) {
+        const responsePromises = options.urlPatternsToWaitFor.map((urlPattern) => {
+            return this.waitForResponse(urlPattern)
+        })
+
+        await options.action()
+
+        // eslint-disable-next-line compat/compat
+        await Promise.allSettled(responsePromises)
+    }
+
+    page.expectEventsCount = async function (expectedCounts: Record<string, number>) {
+        const capturedEvents: CaptureResult[] = await this.capturedEvents()
+        const capturedMap = capturedEvents.reduce((agg, event) => {
+            agg[event.event] = (agg[event.event] || 0) + 1
+            return agg
+        }, {})
+        expect(capturedMap).toEqual(expect.objectContaining(expectedCounts))
+    }
+
+    page.expectCapturedEventsToBe = async function (expectedEvents: string[]) {
+        const capturedEvents = await this.capturedEvents()
+        expect(capturedEvents.map((x) => x.event)).toEqual(expectedEvents)
+    }
+
+    page.posthog = {
+        async init(token: string, options: Partial<PostHogConfig>) {
+            await page.evaluate(
+                // TS very unhappy with passing PostHogConfig here, so just pass an object
+                (args: Record<string, any>) => {
+                    const opts: Partial<PostHogConfig> = {
+                        api_host: args.options.api_host,
+                        debug: args.options.debug ?? true,
+                        ip: false, // Prevent IP deprecation warning in Playwright tests
+                        before_send: (event) => {
+                            const win = window as WindowWithPostHog
+                            win.capturedEvents = win.capturedEvents || []
+
+                            if (event) {
+                                win.capturedEvents.push(event)
+                            }
+
+                            return event
+                        },
+                        loaded: (ph) => {
+                            if (ph.sessionRecording) {
+                                ph.sessionRecording._forceAllowLocalhostNetworkCapture = true
+                            }
+                            window.isLoaded = true
+                            // playwright can't serialize functions to pass around from the playwright to browser context
+                            // if we want to run custom code in the loaded function we need to pass it on the page's window,
+                            // but it's a new window so we have to create it in the `before_posthog_init` option
+                            ;(window as any).__ph_loaded?.(ph)
+                        },
+                        opt_out_useragent_filter: true,
+                        ...args.options,
+                    }
+
+                    const windowPosthog = (window as WindowWithPostHog).posthog
+                    windowPosthog?.init(args.token, opts)
+                },
+                { token, options } as { token: string; options: Record<string, any> }
+            )
+        },
+        async register(records: Record<string, string>) {
+            await page.evaluate(
+                // TS very unhappy with passing PostHogConfig here, so just pass an object
+                (args: Record<string, any>) => {
+                    const windowPosthog = (window as WindowWithPostHog).posthog
+                    windowPosthog?.register(args)
+                },
+                records
+            )
+        },
+        async waitToLoad() {
+            await page.evaluate(() => {
+                return new Promise((resolve) => {
+                    const checkLoaded = () => {
+                        if (window?.isLoaded) {
+                            resolve(true)
+                        } else {
+                            setTimeout(checkLoaded, 100)
+                        }
+                    }
+                    checkLoaded()
+                })
+            })
+        },
     }
 }
 
 export const test = base.extend<{ mockStaticAssets: void; page: Page }>({
     page: async ({ page }, use) => {
-        // Add custom methods to the page object
-        page.resetCapturedEvents = async function () {
-            await this.evaluate(() => {
-                ;(window as WindowWithPostHog).capturedEvents = []
-            })
-        }
-        page.capturedEvents = async function () {
-            return this.evaluate(() => {
-                return (window as WindowWithPostHog).capturedEvents || []
-            })
-        }
-        page.waitingForNetworkCausedBy = async function (options: {
-            urlPatternsToWaitFor: (string | RegExp)[]
-            action: () => Promise<void>
-        }) {
-            const responsePromises = options.urlPatternsToWaitFor.map((urlPattern) => {
-                return this.waitForResponse(urlPattern)
-            })
-
-            await options.action()
-
-            // eslint-disable-next-line compat/compat
-            await Promise.allSettled(responsePromises)
-        }
-        page.expectCapturedEventsToBe = async function (expectedEvents: string[]) {
-            const capturedEvents = await this.capturedEvents()
-            expect(capturedEvents.map((x) => x.event)).toEqual(expectedEvents)
-        }
-
+        extendPage(page)
         // Pass the extended page to the test
         await use(page)
     },

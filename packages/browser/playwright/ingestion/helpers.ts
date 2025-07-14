@@ -1,7 +1,8 @@
 import * as fs from 'fs'
 import path from 'path'
-import { ClientFunction, RequestLogger, RequestMock } from 'testcafe'
 import fetch from 'node-fetch'
+import { Page } from '@playwright/test'
+import { PostHogConfig } from '../../src/types'
 
 // NOTE: These tests are run against a dedicated test project in PostHog cloud
 // but can be overridden to call a local API when running locally
@@ -19,108 +20,21 @@ export const {
 
 const HEADERS = { Authorization: `Bearer ${POSTHOG_API_KEY}` }
 
-export const captureLogger = RequestLogger(/ip=0/, {
-    logRequestHeaders: true,
-    logRequestBody: true,
-    logResponseHeaders: true,
-    logResponseBody: true,
-    stringifyRequestBody: true,
-    stringifyResponseBody: true,
-})
-
-export const staticFilesMock = RequestMock()
-    .onRequestTo(/array.full.js/)
-    .respond((req, res) => {
-        const ENV_BROWSER = process.env.BROWSER
-        const fileToRead = ENV_BROWSER === 'browserstack:ie' ? '../dist/array.full.es5.js' : '../dist/array.full.js'
-        const arrayjs = fs.readFileSync(path.resolve(__dirname, fileToRead))
-        res.setBody(arrayjs)
-    })
-    .onRequestTo(/playground/)
-    .respond((req, res) => {
-        const html = fs.readFileSync(path.resolve(__dirname, '../playground/cypress-full/index.html'))
-        res.setBody(html)
-    })
-
-export const initPosthog = (testName, config) => {
-    let testSessionId = Math.round(Math.random() * 10000000000).toString()
-    log(`Initializing posthog with testSessionId "${testSessionId}"`)
-
-    const posthogConfig = {
-        ...config,
-        debug: true,
-        api_host: POSTHOG_API_HOST,
-        api_key: POSTHOG_PROJECT_KEY,
-        bootstrap: {
-            distinctID: 'automated-tester', // We set this to get around the ingestion delay for new distinctIDs
-            isIdentifiedID: true,
-        },
-        opt_out_useragent_filter: true,
-        request_batching: false,
-    }
-
-    const register = {
-        testSessionId,
-        testName,
-        testBranchName: BRANCH_NAME,
-        testRunId: RUN_ID,
-        testBrowser: BROWSER,
-    }
-
-    return ClientFunction(
-        (clientPosthogConfig = {}) => {
-            clientPosthogConfig.loaded = () => {
-                window.loaded = true
-                window.fullCaptures = []
-            }
-            clientPosthogConfig.before_send = (event) => {
-                window.fullCaptures.push(event)
-                return event
-            }
-            window.posthog.init(clientPosthogConfig.api_key, clientPosthogConfig)
-            window.posthog.register(register)
-
-            return testSessionId
-        },
-        {
-            dependencies: {
-                register,
-                testSessionId,
-            },
-        }
-    )(posthogConfig)
-}
-
-export const isLoaded = ClientFunction(() => !!window.loaded)
-export const numCaptures = ClientFunction(() => window.captures.length)
-
-export const capturesMap = ClientFunction(() => {
-    const map = {}
-    window.fullCaptures.forEach((capture) => {
-        const eventName = capture.event
-        if (!map[eventName]) {
-            map[eventName] = 0
-        }
-        map[eventName]++
-    })
-    return map
-})
-
-// test code, doesn't need to be IE11 compatible
-// eslint-disable-next-line compat/compat
-export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-
 // NOTE: This is limited by the real production ingestion lag, which you can see in grafana is usually
 // in the low minutes https://grafana.prod-us.posthog.dev/d/homepage/homepage
 // This means that this test can fail if the ingestion lag is higher than the timeout, so we're pretty
 // generous with the timeout here.
 export async function retryUntilResults(
-    operation,
-    target_results,
-    { deadline = undefined, polling_interval_seconds = 30, max_allowed_api_errors = 5 } = {}
+    operation: () => Promise<any>,
+    target_results: number,
+    {
+        maxDurationSeconds = 10 * 60,
+        pollingIntervalSeconds = 30,
+        maxAllowedApiErrors = 5,
+    }: { maxDurationSeconds?: number; pollingIntervalSeconds?: number; maxAllowedApiErrors?: number }
 ) {
     const start = Date.now()
-    deadline = deadline ?? start + 10 * 60 * 1000 // default to 10 minutes
+    const deadline = start + maxDurationSeconds * 1000
     let api_errors = 0
     let attempts = 0
     let last_api_error = null
@@ -147,16 +61,16 @@ export async function retryUntilResults(
                 log(`Expected ${target_results} results, got ${results.length} (attempt ${attempts})`)
             }
         }
-        await delay(polling_interval_seconds * 1000)
-    } while (api_errors < max_allowed_api_errors && Date.now() <= deadline)
+        await delay(pollingIntervalSeconds * 1000)
+    } while (api_errors < maxAllowedApiErrors && Date.now() <= deadline)
 
-    if (api_errors >= max_allowed_api_errors && last_api_error) {
+    if (api_errors >= maxAllowedApiErrors && last_api_error) {
         throw last_api_error
     }
     throw new Error(`Timed out after ${elapsedSeconds} seconds (attempt ${attempts})`)
 }
 
-export async function queryAPI(testSessionId) {
+export async function queryAPI(testSessionId: string) {
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
     const url = `${POSTHOG_API_HOST}/api/projects/${POSTHOG_API_PROJECT}/events?properties=[{"key":"testSessionId","value":["${testSessionId}"],"operator":"exact","type":"event"}]&after=${yesterday}`
     const response = await fetch(url, {
@@ -185,7 +99,7 @@ export function error(...args) {
 }
 
 export function santizeTestName(testName) {
-    return `${testName.replaceAll(/[/ ]/g, '_')}.results.json`
+    return `${testName.replaceAll(/[/ ]/g, '_')}`
 }
 
 export function writeResultsJsonFile(testName, testSessionId, assertFunction) {
@@ -202,4 +116,41 @@ export function getResultsJsonFiles() {
             const data = fs.readFileSync(path.join(__dirname, file))
             return JSON.parse(data.toString())
         })
+}
+
+export async function initPostHog(
+    page: Page,
+    testName: string,
+    responses: Response[],
+    options: Partial<PostHogConfig> = {}
+): Promise<string> {
+    if (!process.env.POSTHOG_PROJECT_KEY) {
+        throw new Error('You must provide a POSTHOG_PROJECT_KEY environment variable')
+    }
+    page.on('response', (res: Response) => {
+        responses.push(res)
+    })
+    const testSessionId = Math.round(Math.random() * 10000000000).toString()
+    // mock posthog.js array
+    await page.goto('/playground/cypress-full/index.html', { waitUntil: 'networkidle' })
+    await page.posthog.init(process.env.POSTHOG_PROJECT_KEY, {
+        api_host: process.env.POSTHOG_API_HOST,
+        request_batching: false,
+        bootstrap: {
+            distinctID: 'automated-tester', // We set this to get around the ingestion delay for new distinctIDs
+            isIdentifiedID: true,
+        },
+        opt_out_useragent_filter: true,
+        ...options,
+    })
+    const register = {
+        testSessionId,
+        testName,
+        testBranchName: BRANCH_NAME,
+        testRunId: RUN_ID,
+        testBrowser: BROWSER,
+    }
+    await page.posthog.register(register)
+    await page.posthog.waitToLoad()
+    return testSessionId
 }

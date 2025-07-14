@@ -5,24 +5,11 @@
 // This happens after the testcafe tests have all finished, so that we are not waiting on ingestion lag per test, only
 // once when all tests have finished.
 
-// Some hackiness follows, allowing us to import the assert function from a test file without running the tests
-// themselves:
-const testCafeMock = {
-    test: () => testCafeMock,
-    page: () => testCafeMock,
-    fixture: () => testCafeMock,
-    requestHooks: () => testCafeMock,
-    afterEach: () => testCafeMock,
-}
-// eslint-disable-next-line no-undef
-globalThis.fixture = () => testCafeMock
-// eslint-disable-next-line no-undef
-globalThis.test = () => testCafeMock
 import {
     assertConfigOptionsChangeAutocaptureBehaviourAccordingly,
     assertAutocapturedEventsWorkAndAreAccessibleViaApi,
     assertCustomEventsWorkAndAreAccessibleViaApi,
-} from './e2e.spec'
+} from './checks'
 // end of hackiness
 
 import { getResultsJsonFiles, log, error, POSTHOG_API_PROJECT } from './helpers'
@@ -31,6 +18,7 @@ const asserts = {
     assertAutocapturedEventsWorkAndAreAccessibleViaApi,
     assertCustomEventsWorkAndAreAccessibleViaApi,
 }
+
 async function main() {
     log(`
 Waiting for events from tests to appear in PostHog.
@@ -46,7 +34,7 @@ If they seem to be failing unexpectedly, check grafana for ingestion lag at http
     log(JSON.stringify(files, null, 2))
 
     // the deadline is the same for each assert, as the ingestion lag will be happening in parallel
-    const deadline = Date.now() + 1000 * 60 * 30 // 30 minutes
+    const maxDurationSeconds = 60 * 30 // 30 minutes
 
     for (const file of files) {
         const testSessionId = file.testSessionId
@@ -55,7 +43,7 @@ If they seem to be failing unexpectedly, check grafana for ingestion lag at http
         if (!testSessionId || !assertFunction) {
             throw new Error(`Invalid results file: ${file}`)
         }
-        await assertFunction(testSessionId, deadline)
+        await assertFunction(testSessionId, maxDurationSeconds)
     }
 }
 
