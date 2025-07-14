@@ -50,11 +50,12 @@ test('Custom events work and are accessible via /api/event', async (t) => {
 })
 
 export async function assertCustomEventsWorkAndAreAccessibleViaApi(testSessionId, deadline) {
-    const results = await retryUntilResults(() => queryAPI(testSessionId), 3, { deadline })
-    expect(results.length).toEqual(3)
+    const results = await retryUntilResults(() => queryAPI(testSessionId), 4, { deadline })
+    expect(results.length).toEqual(4)
     expect(results.filter(({ event }) => event === 'custom-event').length).toEqual(1)
     expect(results.filter(({ event }) => event === '$pageview').length).toEqual(1)
     expect(results.filter(({ event }) => event === '$autocapture').length).toEqual(1)
+    expect(results.filter(({ event }) => event === '$pageleave').length).toEqual(1)
 }
 
 test('Autocaptured events work and are accessible via /api/event', async (t) => {
