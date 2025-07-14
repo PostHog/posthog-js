@@ -30,17 +30,25 @@ export const captureLogger = RequestLogger(/ip=0/, {
 
 export const staticFilesMock = RequestMock()
     .onRequestTo(/array.full.js/)
-    .respond((req, res) => {
-        const ENV_BROWSER = process.env.BROWSER
-        const fileToRead = ENV_BROWSER === 'browserstack:ie' ? '../dist/array.full.es5.js' : '../dist/array.full.js'
-        const arrayjs = fs.readFileSync(path.resolve(__dirname, fileToRead))
-        res.setBody(arrayjs)
-    })
+    .respond(
+        (req, res) => {
+            const ENV_BROWSER = process.env.BROWSER
+            const fileToRead = ENV_BROWSER === 'browserstack:ie' ? '../dist/array.full.es5.js' : '../dist/array.full.js'
+            const arrayjs = fs.readFileSync(path.resolve(__dirname, fileToRead))
+            res.setBody(arrayjs)
+        },
+        200,
+        { 'access-control-allow-origin': '*', 'content-type': 'application/javascript' }
+    )
     .onRequestTo(/playground/)
-    .respond((req, res) => {
-        const html = fs.readFileSync(path.resolve(__dirname, '../playground/cypress-full/index.html'))
-        res.setBody(html)
-    })
+    .respond(
+        (req, res) => {
+            const html = fs.readFileSync(path.resolve(__dirname, '../playground/cypress-full/index.html'))
+            res.setBody(html)
+        },
+        200,
+        { 'access-control-allow-origin': '*' }
+    )
 
 export const initPosthog = (testName, config) => {
     let testSessionId = Math.round(Math.random() * 10000000000).toString()
