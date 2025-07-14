@@ -19,6 +19,7 @@ export const {
 } = currentEnv
 
 const HEADERS = { Authorization: `Bearer ${POSTHOG_API_KEY}` }
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
 // NOTE: This is limited by the real production ingestion lag, which you can see in grafana is usually
 // in the low minutes https://grafana.prod-us.posthog.dev/d/homepage/homepage
