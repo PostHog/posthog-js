@@ -8,7 +8,7 @@ env:
 
 jobs:
   integration:
-    name: Playwright - ${{ matrix.name }}
+    name: Playwright - ${{ matrix.project }}
     runs-on: ubuntu-22.04
     strategy:
       matrix:
