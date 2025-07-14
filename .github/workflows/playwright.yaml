@@ -27,6 +27,11 @@ jobs:
       - name: Run Playwright tests
         run: pnpm exec playwright test --project ${{ matrix.project }}
         working-directory: packages/browser
+        timeout-minutes: 10
+        env:
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+          RUN_ID: ${{ github.run_id }}
+          BROWSER: ${{ matrix.project }}
       - name: Check ingested events
         run: pnpm check-api-results
         working-directory: packages/browser
