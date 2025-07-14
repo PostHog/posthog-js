@@ -1,6 +1,6 @@
 import { PostHog } from '../src/entrypoints/index.node'
 import { anyFlagsCall, anyLocalEvalCall, apiImplementation, isPending } from './test-utils'
-import { waitForPromises, wait } from 'posthog-core/testing'
+import { waitForPromises, wait } from '@posthog/core/testing'
 import { randomUUID } from 'crypto'
 
 jest.mock('../package.json', () => ({ version: '1.2.3' }))

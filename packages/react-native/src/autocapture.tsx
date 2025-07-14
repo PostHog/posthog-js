@@ -1,5 +1,5 @@
 import { PostHog } from './posthog-rn'
-import { PostHogAutocaptureElement, JsonType } from 'posthog-core'
+import { PostHogAutocaptureElement, JsonType } from '@posthog/core'
 import { PostHogAutocaptureOptions } from './types'
 
 interface Element {

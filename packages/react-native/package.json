@@ -40,7 +40,7 @@
     "jest": "catalog:",
     "jest-environment-node": "catalog:",
     "jest-expo": "catalog:",
-    "posthog-core": "workspace:*",
+    "@posthog/core": "workspace:*",
     "posthog-react-native-session-replay": "^1.1.1",
     "react": "18.2.0",
     "react-native": "^0.69.1",

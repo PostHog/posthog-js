@@ -6,7 +6,7 @@ import {
   relativeDateParseForFeatureFlagMatching,
 } from '../src/extensions/feature-flags/feature-flags'
 import { anyFlagsCall, anyLocalEvalCall, apiImplementation } from './test-utils'
-import { waitForPromises } from 'posthog-core/testing'
+import { waitForPromises } from '@posthog/core/testing'
 
 jest.spyOn(console, 'debug').mockImplementation()
 
