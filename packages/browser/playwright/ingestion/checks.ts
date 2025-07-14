@@ -2,8 +2,8 @@ import { expect } from '@playwright/test'
 import { queryAPI, retryUntilResults } from './helpers'
 
 export async function assertCustomEventsWorkAndAreAccessibleViaApi(testSessionId: string, maxDurationSeconds: number) {
-    const results = await retryUntilResults(() => queryAPI(testSessionId), 4, { maxDurationSeconds })
-    expect(results.length).toEqual(4)
+    const results = await retryUntilResults(() => queryAPI(testSessionId), 3, { maxDurationSeconds })
+    expect(results.length).toEqual(3)
     expect(results.filter(({ event }) => event === 'custom-event').length).toEqual(1)
     expect(results.filter(({ event }) => event === '$pageview').length).toEqual(1)
     expect(results.filter(({ event }) => event === '$autocapture').length).toEqual(1)
