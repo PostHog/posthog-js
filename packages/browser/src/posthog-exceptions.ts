@@ -32,7 +32,7 @@ export class PostHogExceptions {
         }
     }
 
-    private get _captureExtensionExtensions() {
+    private get _captureExtensionExceptions() {
         const enabled_server_side = !!this._instance.get_property(ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS)
         const enabled_client_side = this._instance.config.error_tracking.captureExtensionExceptions
         return enabled_client_side ?? enabled_server_side ?? false
@@ -44,7 +44,7 @@ export class PostHogExceptions {
             return
         }
 
-        if (!this._captureExtensionExtensions && this._isExtensionException(properties)) {
+        if (!this._captureExtensionExceptions && this._isExtensionException(properties)) {
             logger.info('Skipping exception capture because it was thrown by an extension')
             return
         }
