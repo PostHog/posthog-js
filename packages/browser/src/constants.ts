@@ -14,6 +14,7 @@ export const AUTOCAPTURE_DISABLED_SERVER_SIDE = '$autocapture_disabled_server_si
 export const HEATMAPS_ENABLED_SERVER_SIDE = '$heatmaps_enabled_server_side'
 export const EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE = '$exception_capture_enabled_server_side'
 export const ERROR_TRACKING_SUPPRESSION_RULES = '$error_tracking_suppression_rules'
+export const ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS = '$error_tracking_capture_extension_exceptions'
 export const WEB_VITALS_ENABLED_SERVER_SIDE = '$web_vitals_enabled_server_side'
 export const DEAD_CLICKS_ENABLED_SERVER_SIDE = '$dead_clicks_enabled_server_side'
 export const WEB_VITALS_ALLOWED_METRICS = '$web_vitals_allowed_metrics'
