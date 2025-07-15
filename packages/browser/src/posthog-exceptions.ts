@@ -1,4 +1,5 @@
-import { ERROR_TRACKING_SUPPRESSION_RULES } from './constants'
+import { ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS, ERROR_TRACKING_SUPPRESSION_RULES } from './constants'
+import { Exception } from './extensions/exception-autocapture/error-conversion'
 import { PostHog } from './posthog-core'
 import { ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
@@ -18,6 +19,7 @@ export class PostHogExceptions {
 
     onRemoteConfig(response: RemoteConfig) {
         const suppressionRules = response.errorTracking?.suppressionRules ?? []
+        const captureExtensionExceptions = response.errorTracking?.captureExtensionExceptions
 
         // store this in-memory in case persistence is disabled
         this._suppressionRules = suppressionRules
@@ -25,13 +27,25 @@ export class PostHogExceptions {
         if (this._instance.persistence) {
             this._instance.persistence.register({
                 [ERROR_TRACKING_SUPPRESSION_RULES]: this._suppressionRules,
+                [ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS]: captureExtensionExceptions,
             })
         }
+    }
+
+    private get _captureExtensionExtensions() {
+        const enabled_server_side = !!this._instance.get_property(ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS)
+        const enabled_client_side = this._instance.config.error_tracking.captureExtensionExceptions
+        return enabled_client_side ?? enabled_server_side ?? false
     }
 
     sendExceptionEvent(properties: Properties) {
         if (this._matchesSuppressionRule(properties)) {
             logger.info('Skipping exception capture because a suppression rule matched')
+            return
+        }
+
+        if (!this._captureExtensionExtensions && this._isExtensionException(properties)) {
+            logger.info('Skipping exception capture because it was thrown by an extension')
             return
         }
 
@@ -73,5 +87,16 @@ export class PostHogExceptions {
             })
             return rule.type === 'OR' ? results.some(Boolean) : results.every(Boolean)
         })
+    }
+
+    private _isExtensionException(properties: Properties): boolean {
+        const exceptionList = properties.$exception_list
+
+        if (!exceptionList || !isArray(exceptionList)) {
+            return false
+        }
+
+        const frames = (exceptionList as Exception[]).flatMap((e) => e.stacktrace?.frames ?? [])
+        return frames.some((f) => f.filename && f.filename.startsWith('chrome-extension://'))
     }
 }
