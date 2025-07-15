@@ -324,6 +324,11 @@ exports[`config snapshot for PostHogConfig 1`] = `
     ]
   },
   \\"error_tracking\\": {
+    \\"captureExtensionExceptions\\": [
+      \\"undefined\\",
+      \\"false\\",
+      \\"true\\"
+    ],
     \\"__exceptionRateLimiterRefillRate\\": [
       \\"undefined\\",
       \\"number\\"
