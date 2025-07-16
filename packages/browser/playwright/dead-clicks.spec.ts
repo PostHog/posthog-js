@@ -1,23 +1,16 @@
-import { expect, test } from './utils/posthog-playwright-test-base'
-import { start } from './utils/setup'
-import { pollUntilEventCaptured } from './utils/event-capture-utils'
-
-const startOptions = {
-    options: {
-        capture_dead_clicks: true,
-    },
-    url: '/playground/cypress/index.html',
-}
+import { expect, test } from './fixtures'
 
 test.describe('Dead clicks', () => {
-    test('capture dead clicks when configured to', async ({ page, context }) => {
-        await start(startOptions, page, context)
+    test.use({ posthogOptions: { capture_dead_clicks: true }, url: '/playground/cypress/index.html' })
+
+    test('capture dead clicks when configured to', async ({ page, posthog, events }) => {
+        await posthog.init()
 
         await page.locator('[data-cy-not-an-order-button]').click()
 
-        await pollUntilEventCaptured(page, '$dead_click')
+        await events.waitForEvent('$dead_click')
 
-        const deadClicks = (await page.capturedEvents()).filter((event) => event.event === '$dead_click')
+        const deadClicks = events.filter((event) => event.event === '$dead_click')
         expect(deadClicks.length).toBe(1)
         const deadClick = deadClicks[0]
 
@@ -30,10 +23,8 @@ test.describe('Dead clicks', () => {
         expect(deadClick.properties.$dead_click_absolute_timeout).toBe(true)
     })
 
-    test('does not capture dead click for selected text', async ({ page, context }) => {
-        await start(startOptions, page, context)
-
-        await page.resetCapturedEvents()
+    test('does not capture dead click for selected text', async ({ page, posthog, events }) => {
+        await posthog.init()
 
         const locator = page.locator('[data-cy-dead-click-text]')
         const boundingBox = await locator.boundingBox()
@@ -54,6 +45,7 @@ test.describe('Dead clicks', () => {
         expect(selection?.trim().length).toBeGreaterThan(0)
 
         await page.waitForTimeout(1000)
-        await page.expectCapturedEventsToBe([])
+
+        events.expectMatchList(['$pageview'])
     })
 })

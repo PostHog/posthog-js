@@ -1,9 +1,9 @@
-import { expect, test, WindowWithPostHog } from './utils/posthog-playwright-test-base'
-import { start } from './utils/setup'
-import { BeforeSendFn } from '../src/types'
+import { CaptureResult } from '../src/types'
+import { test } from './fixtures'
+import { WindowWithPostHog } from './fixtures/posthog'
 
 const startOptions = {
-    options: {
+    posthogOptions: {
         session_recording: {},
     },
     flagsResponseOverrides: {
@@ -16,54 +16,35 @@ const startOptions = {
 }
 
 test.describe('before_send', () => {
-    test('can sample and edit with before_send', async ({ page, context }) => {
-        await start(startOptions, page, context)
+    test.use(startOptions)
 
+    test('can sample and edit with before_send', async ({ page, posthog, events }) => {
         await page.evaluate(() => {
-            const posthog = (window as WindowWithPostHog).posthog
-            if (!posthog) {
-                throw new Error('PostHog is not initialized')
-            }
             let counter = 0
-            // box the original before_send function
-            const og: BeforeSendFn[] = Array.isArray(posthog.config.before_send)
-                ? posthog.config.before_send
-                : posthog.config.before_send !== undefined
-                  ? [posthog.config.before_send]
-                  : []
-
-            posthog.config.before_send = [
-                (cr) => {
-                    if (!cr) {
+            ;(window as WindowWithPostHog)['before_send'] = (cr: CaptureResult) => {
+                if (!cr) {
+                    return null
+                }
+                if (cr.event === 'custom-event') {
+                    counter++
+                    if (counter === 2) {
                         return null
                     }
-
-                    if (cr.event === 'custom-event') {
-                        counter++
-                        if (counter === 2) {
-                            return null
-                        }
+                }
+                if (cr.event === '$autocapture') {
+                    return {
+                        ...cr,
+                        event: 'redacted',
                     }
-                    if (cr.event === '$autocapture') {
-                        return {
-                            ...cr,
-                            event: 'redacted',
-                        }
-                    }
-                    return cr
-                },
-                // these tests rely on existing before_send function to capture events
-                // so we have to add it back in here
-                ...og,
-            ]
+                }
+                return cr
+            }
         })
 
+        await posthog.init({}, ['before_send'])
         await page.locator('[data-cy-custom-event-button]').click()
         await page.locator('[data-cy-custom-event-button]').click()
-
-        const captures = (await page.capturedEvents()).map((x) => x.event)
-
-        expect(captures).toEqual([
+        events.expectMatchList([
             // before adding the new before sendfn
             '$pageview',
             'redacted',

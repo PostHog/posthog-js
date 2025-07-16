@@ -1,56 +1,50 @@
-import { expect, test, WindowWithPostHog } from './utils/posthog-playwright-test-base'
-import { start } from './utils/setup'
+import { expect, test } from './fixtures'
 
 test.describe('Identify', () => {
-    test.beforeEach(async ({ page, context }) => {
-        await start({}, page, context)
+    test.use({ url: '/playground/cypress/index.html' })
+    test.beforeEach(async ({ posthog }) => {
+        await posthog.init()
     })
 
-    test('uses the v7 uuid format for device id', async ({ page }) => {
-        await page.evaluate(() => {
-            const ph = (window as WindowWithPostHog).posthog
-            ph?.capture('an-anonymous-event')
-        })
-        const capturedEvents = await page.capturedEvents()
+    test('uses the v7 uuid format for device id', async ({ posthog, events }) => {
+        await posthog.capture('an-anonymous-event')
+        await events.waitForEvent('an-anonymous-event')
+        const capturedEvents = events.all()
         const deviceIds = new Set(capturedEvents.map((e) => e.properties['$device_id']))
         expect(deviceIds.size).toEqual(1)
         const [deviceId] = deviceIds
         expect(deviceId.length).toEqual(36)
     })
 
-    test('opt out capturing does not fail after identify', async ({ page }) => {
-        await page.evaluate(() => {
-            const ph = (window as WindowWithPostHog).posthog
-            ph?.identify('some-id')
+    test('opt out capturing does not fail after identify', async ({ posthog }) => {
+        await posthog.evaluate((ph) => {
+            ph.identify('some-id')
+            ph.opt_out_capturing()
         })
-        await page.evaluate(() => {
-            const ph = (window as WindowWithPostHog).posthog
-            ph?.opt_out_capturing()
-        })
-        const isOptedOut = await page.evaluate(() => {
-            const ph = (window as WindowWithPostHog).posthog
-            return ph?.has_opted_out_capturing()
+        const isOptedOut = await posthog.evaluate((ph) => {
+            return ph.has_opted_out_capturing()
         })
         expect(isOptedOut).toEqual(true)
     })
 
-    test('merges people as expected when reset is called', async ({ page }) => {
-        await page.evaluate(() => {
-            const ph = (window as WindowWithPostHog).posthog
-            ph?.capture('an-anonymous-event')
-            ph?.identify('first-identify')
-            ph?.capture('an-identified-event')
-            ph?.identify('second-identify-should-not-be-merged')
-            ph?.capture('another-identified-event')
-            ph?.reset()
-            ph?.capture('an-anonymous-event')
-            ph?.identify('third-identify')
-            ph?.capture('an-identified-event')
+    test('merges people as expected when reset is called', async ({ posthog, events }) => {
+        await events.waitForEvent('$pageview')
+        await posthog.evaluate((ph) => {
+            ph.capture('an-anonymous-event')
+            ph.identify('first-identify')
+            ph.capture('an-identified-event')
+            ph.identify('second-identify-should-not-be-merged')
+            ph.capture('another-identified-event')
+            ph.reset()
+            ph.capture('an-anonymous-event')
+            ph.identify('third-identify')
+            ph.capture('an-identified-event')
         })
-        const capturedEvents = await page.capturedEvents()
-        const eventsSeen = capturedEvents.map((e) => e.event)
-        expect(eventsSeen.filter((e) => e === '$identify').length).toEqual(2)
-        expect(eventsSeen).toEqual([
+        const capturedEvents = events.all()
+        events.expectCountMap({
+            $identify: 2,
+        })
+        events.expectMatchList([
             '$pageview',
             'an-anonymous-event',
             '$identify',
@@ -60,6 +54,7 @@ test.describe('Identify', () => {
             '$identify',
             'an-identified-event',
         ])
+
         expect(new Set(capturedEvents.map((e) => e.properties['$device_id'])).size).toEqual(1)
 
         // the first two events share a distinct id

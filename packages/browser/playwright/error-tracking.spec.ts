@@ -1,23 +1,16 @@
-import { expect, test } from './utils/posthog-playwright-test-base'
-import { start } from './utils/setup'
-import { pollUntilEventCaptured } from './utils/event-capture-utils'
+import { expect, test } from './fixtures'
 
 test.describe('Exception capture', () => {
-    test.describe('Exception autocapture enabled', () => {
-        test.beforeEach(async ({ page, context }) => {
-            await start(
-                { flagsResponseOverrides: { autocaptureExceptions: false }, url: './playground/cypress/index.html' },
-                page,
-                context
-            )
-        })
+    test.use({ url: './playground/cypress/index.html' })
+    test.beforeEach(async ({ posthog }) => {
+        await posthog.init()
+    })
 
-        test('manual exception capture of error', async ({ page }) => {
+    test.describe('Exception autocapture disabled', () => {
+        test.use({ flagsOverrides: { autocaptureExceptions: false } })
+        test('manual exception capture of error', async ({ page, events }) => {
             await page.click('[data-cy-exception-button]')
-
-            await pollUntilEventCaptured(page, '$exception')
-
-            const captures = await page.capturedEvents()
+            const captures = events.all()
             expect(captures.map((c) => c.event)).toEqual(['$pageview', '$autocapture', '$exception'])
             expect(captures[2].event).toEqual('$exception')
             expect(captures[2].properties.extra_prop).toEqual(2)
@@ -27,12 +20,9 @@ test.describe('Exception capture', () => {
             expect(captures[2].properties.$exception_list[0].type).toEqual('Error')
         })
 
-        test('manual exception capture of string', async ({ page }) => {
+        test('manual exception capture of string', async ({ page, events }) => {
             await page.click('[data-cy-exception-string-button]')
-
-            await pollUntilEventCaptured(page, '$exception')
-
-            const captures = await page.capturedEvents()
+            const captures = events.all()
             expect(captures.map((c) => c.event)).toEqual(['$pageview', '$autocapture', '$exception'])
             expect(captures[2].event).toEqual('$exception')
             expect(captures[2].properties.extra_prop).toEqual(2)
@@ -41,31 +31,19 @@ test.describe('Exception capture', () => {
             expect(captures[2].properties.$exception_list[0].value).toEqual('I am a plain old string')
             expect(captures[2].properties.$exception_list[0].type).toEqual('Error')
         })
+
+        test('should not capture thrown exceptions', async ({ page, events }) => {
+            await page.click('[data-cy-button-throws-error]')
+            events.expectMatchList(['$pageview', '$autocapture'])
+        })
     })
 
     test.describe('Exception autocapture enabled', () => {
-        test.beforeEach(async ({ page, context }) => {
-            await page.waitingForNetworkCausedBy({
-                urlPatternsToWaitFor: ['**/exception-autocapture.js*'],
-                action: async () => {
-                    await start(
-                        {
-                            flagsResponseOverrides: { autocaptureExceptions: true },
-                            url: './playground/cypress/index.html',
-                        },
-                        page,
-                        context
-                    )
-                },
-            })
-        })
+        test.use({ flagsOverrides: { autocaptureExceptions: true } })
 
-        test('adds stacktrace to captured strings', async ({ page, browserName }) => {
+        test('adds stacktrace to captured strings', async ({ page, events, browserName }) => {
             await page.click('[data-cy-exception-string-button]')
-
-            await pollUntilEventCaptured(page, '$exception')
-
-            const captures = await page.capturedEvents()
+            const captures = events.all()
             expect(captures.map((c) => c.event)).toEqual(['$pageview', '$autocapture', '$exception'])
             expect(captures[2].event).toEqual('$exception')
             expect(captures[2].properties.$exception_list[0].stacktrace.type).toEqual('raw')
@@ -74,6 +52,15 @@ test.describe('Exception capture', () => {
                 // turns out firefox and chromium capture different info :/
                 browserName === 'chromium' ? 'HTMLButtonElement.onclick' : 'onclick'
             )
+        })
+
+        test('should capture thrown exceptions', async ({ page, events }) => {
+            await page.click('[data-cy-button-throws-error]')
+            events.expectCountMap({
+                $pageview: 1,
+                $autocapture: 1,
+                $exception: 1,
+            })
         })
     })
 })

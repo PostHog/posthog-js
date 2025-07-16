@@ -1,8 +1,9 @@
-import { expect, test } from './utils/posthog-playwright-test-base'
+import { expect, test } from './fixtures'
 import { Request } from '@playwright/test'
-import { start } from './utils/setup'
 import { PostHog } from '../src/posthog-core'
-import { pollUntilCondition } from './utils/event-capture-utils'
+import { PosthogPage } from './fixtures/posthog'
+import { BasePage } from './fixtures/page'
+import { NetworkPage } from './fixtures/network'
 
 function getBase64EncodedPayloadFromBody(body: unknown): Record<string, any> {
     if (typeof body !== 'string') {
@@ -13,64 +14,47 @@ function getBase64EncodedPayloadFromBody(body: unknown): Record<string, any> {
     return JSON.parse(Buffer.from(data, 'base64').toString())
 }
 
-const startOptions = {
-    options: {},
-    flagsResponseOverrides: {
-        sessionRecording: {
-            endpoint: '/ses/',
-        },
-        capturePerformance: true,
-    },
-    url: '/playground/cypress/index.html',
+async function initFlags(page: BasePage, posthog: PosthogPage, network: NetworkPage, flagsRequests: Request[]) {
+    page.on('request', (request) => {
+        if (request.url().includes('/flags/')) {
+            flagsRequests.push(request)
+        }
+    })
+    await page.evaluate(() => {
+        ;(window as any).__ph_loaded = (ph: PostHog) => {
+            ph.identify('new-id')
+            ph.group('company', 'id:5', { id: 5, company_name: 'Awesome Inc' })
+            ph.group('playlist', 'id:77', { length: 8 })
+        }
+    })
+    const flagsPromise = network.waitForFlags()
+    await posthog.init()
+    await flagsPromise
 }
 
 test.describe('flags', () => {
-    // we want to grab any requests to flags so we can inspect their payloads
-    let flagsRequests: Request[] = []
-
-    test.beforeEach(async ({ page, context }) => {
-        flagsRequests = []
-
-        page.on('request', (request) => {
-            if (request.url().includes('/flags/')) {
-                flagsRequests.push(request)
-            }
-        })
-
-        await start(
-            {
-                ...startOptions,
-                options: {
-                    ...startOptions.options,
-                },
-                runBeforePostHogInit: async (page) => {
-                    // it's tricky to pass functions as args the way posthog config is passed in playwright
-                    // so here we set the function on the window object
-                    // and then call it in the loaded function during init
-                    await page.evaluate(() => {
-                        ;(window as any).__ph_loaded = (ph: PostHog) => {
-                            ph.identify('new-id')
-                            ph.group('company', 'id:5', { id: 5, company_name: 'Awesome Inc' })
-                            ph.group('playlist', 'id:77', { length: 8 })
-                        }
-                    })
-                },
+    test.use({
+        flagsOverrides: {
+            sessionRecording: {
+                endpoint: '/ses/',
             },
-            page,
-            context
-        )
+            capturePerformance: true,
+        },
+        url: '/playground/cypress/index.html',
     })
 
-    test('makes flags request on start', async () => {
+    test('makes flags request on start', async ({ page, posthog, network }) => {
+        const flagsRequests: Request[] = []
+        await initFlags(page, posthog, network, flagsRequests)
         expect(flagsRequests.length).toBe(1)
         const flagsRequest = flagsRequests[0]
         const flagsPayload = getBase64EncodedPayloadFromBody(flagsRequest.postData())
         expect(flagsPayload).toEqual({
-            token: 'test token',
+            token: expect.stringMatching(/.+/),
             distinct_id: 'new-id',
             person_properties: {
                 $initial__kx: null,
-                $initial_current_url: 'http://localhost:8082/playground/cypress/index.html',
+                $initial_current_url: 'http://localhost:2345/playground/cypress/index.html',
                 $initial_dclid: null,
                 $initial_epik: null,
                 $initial_fbclid: null,
@@ -78,7 +62,7 @@ test.describe('flags', () => {
                 $initial_gbraid: null,
                 $initial_gclid: null,
                 $initial_gclsrc: null,
-                $initial_host: 'localhost:8082',
+                $initial_host: 'localhost:2345',
                 $initial_igshid: null,
                 $initial_irclid: null,
                 $initial_li_fat_id: null,
@@ -111,22 +95,19 @@ test.describe('flags', () => {
         })
     })
 
-    test('does a single flags call on following changes', async ({ page }) => {
+    test('does a single flags call on following changes', async ({ page, posthog, network }) => {
+        const flagsRequests: Request[] = []
+        await initFlags(page, posthog, network, flagsRequests)
         expect(flagsRequests.length).toBe(1)
-
-        await page.waitingForNetworkCausedBy({
-            urlPatternsToWaitFor: ['**/flags/**'],
-            action: async () => {
-                await page.evaluate(() => {
-                    const ph = (window as any).posthog
-                    ph.group('company', 'id:6')
-                    ph.group('playlist', 'id:77')
-                    ph.group('anothergroup', 'id:99')
-                })
-            },
+        await page.evaluate(() => {
+            const ph = (window as any).posthog
+            ph.group('company', 'id:6')
+            ph.group('playlist', 'id:77')
+            ph.group('anothergroup', 'id:99')
         })
+        await page.waitForResponse('**/flags/**')
         // need a short delay so that the flags request can be captured into the flagsRequests array
-        await pollUntilCondition(page, () => flagsRequests.length >= 2)
+        await page.waitForCondition(() => flagsRequests.length >= 2)
 
         expect(flagsRequests.length).toBe(2)
     })
