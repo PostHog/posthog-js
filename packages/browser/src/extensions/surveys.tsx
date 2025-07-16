@@ -504,13 +504,13 @@ export class SurveyManager {
 
     public callSurveysAndEvaluateDisplayLogic = (forceReload: boolean = false): void => {
         this.getActiveMatchingSurveys((surveys) => {
-            const inAppSurveys = surveys.filter(
+            const inAppSurveysWithDisplayLogic = surveys.filter(
                 (survey) => survey.type === SurveyType.Popover || survey.type === SurveyType.Widget
             )
 
             // Create a queue of surveys sorted by their appearance delay.  We will evaluate the display logic
             // for each survey in the queue in order, and only display one survey at a time.
-            const inAppSurveysQueue = this._sortSurveysByAppearanceDelay(inAppSurveys)
+            const inAppSurveysQueue = this._sortSurveysByAppearanceDelay(inAppSurveysWithDisplayLogic)
 
             // Keep track of surveys processed this cycle to remove listeners for inactive ones
             const activeSelectorSurveys = new Set<string>()
