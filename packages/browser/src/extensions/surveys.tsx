@@ -418,6 +418,12 @@ export class SurveyManager {
             return eligibility
         }
 
+        if (survey.type === SurveyType.ExternalSurvey) {
+            eligibility.eligible = false
+            eligibility.reason = `External survey are never eligible to be shown in the app`
+            return eligibility
+        }
+
         if (!this._isSurveyFeatureFlagEnabled(survey.linked_flag_key)) {
             eligibility.eligible = false
             eligibility.reason = `Survey linked feature flag is not enabled`
