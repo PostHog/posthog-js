@@ -420,7 +420,7 @@ export class SurveyManager {
 
         if (survey.type === SurveyType.ExternalSurvey) {
             eligibility.eligible = false
-            eligibility.reason = `External survey are never eligible to be shown in the app`
+            eligibility.reason = `External surveys are never eligible to be shown in the app`
             return eligibility
         }
 
