@@ -48,12 +48,26 @@ module.exports = {
                 'posthog-js/no-direct-null-check': 'off',
                 '@typescript-eslint/naming-convention': 'off',
                 'compat/compat': 'off',
-            },
-            parserOptions: {
-                project: null,
+                '@typescript-eslint/no-unsafe-function-type': 'off',
+                'no-empty-pattern': 'off',
+                '@typescript-eslint/no-empty-object-type': 'off',
             },
             env: {
                 node: true,
+            },
+        },
+        {
+            files: './playwright/mock-server.mjs',
+            rules: {
+                'no-console': 'off',
+            },
+            env: {
+                node: true,
+            },
+            parserOptions: {
+                ecmaVersion: 2018,
+                sourceType: 'module',
+                project: true,
             },
         },
         {

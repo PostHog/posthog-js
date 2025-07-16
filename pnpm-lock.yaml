@@ -235,9 +235,6 @@ importers:
       node-fetch:
         specifier: ^2.6.11
         version: 2.6.11
-      path-to-regexp:
-        specifier: ^8.2.0
-        version: 8.2.0
       postcss:
         specifier: ^8.5.3
         version: 8.5.3
