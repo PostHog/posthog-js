@@ -1,24 +1,15 @@
 import { expect } from '@playwright/test'
-import { queryAPI, retryUntilResults } from './helpers'
 
-export async function assertCustomEventsWorkAndAreAccessibleViaApi(testSessionId: string, maxDurationSeconds: number) {
-    const results = await retryUntilResults(() => queryAPI(testSessionId), 3, { maxDurationSeconds })
-    expect(results.length).toEqual(3)
-    expect(results.filter(({ event }) => event === 'custom-event').length).toEqual(1)
-    expect(results.filter(({ event }) => event === '$pageview').length).toEqual(1)
-    expect(results.filter(({ event }) => event === '$autocapture').length).toEqual(1)
+export async function assertCustomEventsWorkAndAreAccessibleViaApi(events: any[]) {
+    expect(events.length).toEqual(3)
+    expect(events.filter(({ event }) => event === 'custom-event').length).toEqual(1)
+    expect(events.filter(({ event }) => event === '$pageview').length).toEqual(1)
+    expect(events.filter(({ event }) => event === '$autocapture').length).toEqual(1)
 }
 
-export async function assertAutocapturedEventsWorkAndAreAccessibleViaApi(
-    testSessionId: string,
-    maxDurationSeconds: number
-) {
-    const results = await retryUntilResults(() => queryAPI(testSessionId), 3, {
-        maxDurationSeconds,
-    })
-
-    expect(results.filter(({ event }) => event === '$pageview').length).toEqual(1)
-    const autocapturedEvents = results.filter((e) => e.event === '$autocapture')
+export async function assertAutocapturedEventsWorkAndAreAccessibleViaApi(events: any[]) {
+    expect(events.filter(({ event }) => event === '$pageview').length).toEqual(1)
+    const autocapturedEvents = events.filter((e) => e.event === '$autocapture')
 
     expect(autocapturedEvents.length).toEqual(2)
 
@@ -45,15 +36,8 @@ export async function assertAutocapturedEventsWorkAndAreAccessibleViaApi(
     ])
 }
 
-export async function assertConfigOptionsChangeAutocaptureBehaviourAccordingly(
-    testSessionId: string,
-    maxDurationSeconds: number
-) {
-    const results = await retryUntilResults(() => queryAPI(testSessionId), 3, {
-        maxDurationSeconds,
-    })
-
-    const autocapturedEvents = results.filter((e) => e.event === '$autocapture')
+export async function assertConfigOptionsChangeAutocaptureBehaviourAccordingly(events: any[]) {
+    const autocapturedEvents = events.filter((e) => e.event === '$autocapture')
     expect(autocapturedEvents.length).toEqual(2)
 
     const autocapturedLinkElement = autocapturedEvents.filter((e) => e.elements[0].tag_name === 'a')[0].elements[0]

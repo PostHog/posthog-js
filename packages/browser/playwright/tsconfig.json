@@ -1,11 +1,10 @@
 {
-    "extends": "../../tsconfig.json",
+    "extends": "../tsconfig.json",
     "compilerOptions": {
         "target": "esnext",
         "module": "commonjs",
         "checkJs": false,
-        "skipLibCheck": true,
-        "noCheck": true
+        "skipLibCheck": true
     },
     "include": ["./**/*"]
 }
