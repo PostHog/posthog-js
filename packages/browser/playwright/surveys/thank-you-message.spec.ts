@@ -1,13 +1,5 @@
-import { expect, test } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
-
-const startOptions = {
-    options: {},
-    flagsResponseOverrides: {
-        surveys: true,
-    },
-    url: './playground/cypress/index.html',
-}
+import { expect, test } from '../fixtures'
+import { initSurveys } from './utils'
 
 const emojiRatingQuestion = {
     type: 'rating',
@@ -25,26 +17,22 @@ const appearanceWithThanks = {
 }
 
 test.describe('surveys - feedback widget', () => {
-    test('shows confirmation message after submitting', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            type: 'popover',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [emojiRatingQuestion],
-                            appearance: { ...appearanceWithThanks, backgroundColor: 'black' },
-                        },
-                    ],
+    test.use({ flagsOverrides: { surveys: true }, url: './playground/cypress/index.html' })
+    test('shows confirmation message after submitting', async ({ page, posthog, network }) => {
+        await initSurveys(
+            [
+                {
+                    id: '123',
+                    name: 'Test survey',
+                    type: 'popover',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [emojiRatingQuestion],
+                    appearance: { ...appearanceWithThanks, backgroundColor: 'black' },
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+            ],
+            posthog,
+            network
+        )
 
         await expect(page.locator('.PostHogSurvey-123 .ratings-emoji')).toHaveCount(5)
         await page.locator('.PostHogSurvey-123 .ratings-emoji').first().click()
@@ -53,26 +41,21 @@ test.describe('surveys - feedback widget', () => {
         await expect(page.locator('.PostHogSurvey-123 .thank-you-message')).toBeVisible()
     })
 
-    test('counts down with auto disappear after 5 seconds', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            type: 'popover',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [emojiRatingQuestion],
-                            appearance: { ...appearanceWithThanks, autoDisappear: true },
-                        },
-                    ],
+    test('counts down with auto disappear after 5 seconds', async ({ page, posthog, network }) => {
+        await initSurveys(
+            [
+                {
+                    id: '123',
+                    name: 'Test survey',
+                    type: 'popover',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [emojiRatingQuestion],
+                    appearance: { ...appearanceWithThanks, autoDisappear: true },
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+            ],
+            posthog,
+            network
+        )
 
         await expect(page.locator('.PostHogSurvey-123 .ratings-emoji')).toHaveCount(5)
         await page.locator('.PostHogSurvey-123 .ratings-emoji').first().click()

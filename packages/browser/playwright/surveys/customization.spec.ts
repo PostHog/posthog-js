@@ -1,14 +1,6 @@
-import { pollUntilEventCaptured } from '../utils/event-capture-utils'
-import { expect, test } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
-
-const startOptions = {
-    options: {},
-    flagsResponseOverrides: {
-        surveys: true,
-    },
-    url: './playground/cypress/index.html',
-}
+import { expect, test } from '../fixtures'
+import { NetworkPage } from '../fixtures/network'
+import { PosthogPage } from '../fixtures/posthog'
 
 const openTextQuestion = {
     type: 'open',
@@ -53,29 +45,30 @@ const black = 'rgb(0, 0, 0)'
 const white = 'rgb(255, 255, 255)'
 
 test.describe('surveys - customization', () => {
-    test('automatically sets text color based on background color', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            type: 'popover',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [openTextQuestion],
-                            appearance: {
-                                backgroundColor: '#000000',
-                                submitButtonColor: '#ffffff',
-                            },
-                        },
-                    ],
+    test.use({
+        flagsOverrides: {
+            surveys: true,
+        },
+        url: './playground/cypress/index.html',
+    })
+    test('automatically sets text color based on background color', async ({ page, posthog, events, network }) => {
+        await initSurveys(
+            [
+                {
+                    id: '123',
+                    name: 'Test survey',
+                    type: 'popover',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [openTextQuestion],
+                    appearance: {
+                        backgroundColor: '#000000',
+                        submitButtonColor: '#ffffff',
+                    },
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+            ],
+            posthog,
+            network
+        )
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-question')).toHaveText(
@@ -90,57 +83,51 @@ test.describe('surveys - customization', () => {
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toHaveCSS('background-color', black)
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toHaveCSS('color', white)
 
-        await page.locator('.PostHogSurvey-123').locator('textarea').type('This is great!')
+        await page.locator('.PostHogSurvey-123').locator('textarea').fill('This is great!')
 
         await page.locator('.PostHogSurvey-123').locator('.form-submit').click()
 
-        await pollUntilEventCaptured(page, 'survey sent')
+        await events.waitForEvent('survey sent')
     })
 
-    test('does not show posthog logo if whiteLabel exists', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            type: 'popover',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [openTextQuestion],
-                            appearance: { whiteLabel: true },
-                        },
-                    ],
+    test('does not show posthog logo if whiteLabel exists', async ({ page, posthog, network }) => {
+        await initSurveys(
+            [
+                {
+                    id: '123',
+                    name: 'Test survey',
+                    type: 'popover',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [openTextQuestion],
+                    appearance: { whiteLabel: true },
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+            ],
+            posthog,
+            network
+        )
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
         await expect(page.locator('.PostHogSurvey-123').locator('.footer-branding')).not.toBeVisible()
     })
 
-    test('allows html customization for question and thank you element description', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            type: 'popover',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [linkQuestionWithHTMLContentType],
-                        },
-                    ],
+    test('allows html customization for question and thank you element description', async ({
+        page,
+        posthog,
+        network,
+    }) => {
+        await initSurveys(
+            [
+                {
+                    id: '123',
+                    name: 'Test survey',
+                    type: 'popover',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [linkQuestionWithHTMLContentType],
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+            ],
+            posthog,
+            network
+        )
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-question')).toHaveText(
@@ -153,26 +140,22 @@ test.describe('surveys - customization', () => {
 
     test('allows html customization for question missing the descriptionContentType field (backfilling against surveys made before we introduced this field)', async ({
         page,
-        context,
+        network,
+        posthog,
     }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            type: 'popover',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [linkQuestionWithNoContentType],
-                        },
-                    ],
+        await initSurveys(
+            [
+                {
+                    id: '123',
+                    name: 'Test survey',
+                    type: 'popover',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [linkQuestionWithNoContentType],
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+            ],
+            posthog,
+            network
+        )
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-question')).toHaveText(
@@ -183,30 +166,25 @@ test.describe('surveys - customization', () => {
         )
     })
 
-    test('allows html customization for thank you message body', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            type: 'popover',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [openTextQuestion],
-                            appearance: {
-                                ...appearanceWithThanks,
-                                thankYouMessageDescription: '<h3>html thank you message!</h3>',
-                                thankYouMessageDescriptionContentType: 'html',
-                            },
-                        },
-                    ],
+    test('allows html customization for thank you message body', async ({ page, posthog, network, events }) => {
+        await initSurveys(
+            [
+                {
+                    id: '123',
+                    name: 'Test survey',
+                    type: 'popover',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [openTextQuestion],
+                    appearance: {
+                        ...appearanceWithThanks,
+                        thankYouMessageDescription: '<h3>html thank you message!</h3>',
+                        thankYouMessageDescriptionContentType: 'html',
+                    },
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+            ],
+            posthog,
+            network
+        )
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-question')).toHaveText(
@@ -220,31 +198,27 @@ test.describe('surveys - customization', () => {
         await expect(page.locator('.PostHogSurvey-123').locator('.thank-you-message-body h3')).toHaveText(
             'html thank you message!'
         )
-        await pollUntilEventCaptured(page, 'survey sent')
+        await events.waitForEvent('survey sent')
     })
 
     test('does not render html customization for question descriptions if the question.survey-question-descriptionContentType does not permit it', async ({
         page,
-        context,
+        posthog,
+        network,
     }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            type: 'popover',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [linkQuestionWithTextContentType],
-                        },
-                    ],
+        await initSurveys(
+            [
+                {
+                    id: '123',
+                    name: 'Test survey',
+                    type: 'popover',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [linkQuestionWithTextContentType],
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+            ],
+            posthog,
+            network
+        )
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-question')).toHaveText(
@@ -258,31 +232,28 @@ test.describe('surveys - customization', () => {
 
     test('does not render html customization for thank you message body if the question.thankYouMessageDescriptionContentType does not permit it', async ({
         page,
-        context,
+        posthog,
+        network,
+        events,
     }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            type: 'popover',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [openTextQuestion],
-                            appearance: {
-                                ...appearanceWithThanks,
-                                thankYouMessageDescription: '<h3>html thank you message!</h3>',
-                                thankYouMessageDescriptionContentType: 'text',
-                            },
-                        },
-                    ],
+        await initSurveys(
+            [
+                {
+                    id: '123',
+                    name: 'Test survey',
+                    type: 'popover',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [openTextQuestion],
+                    appearance: {
+                        ...appearanceWithThanks,
+                        thankYouMessageDescription: '<h3>html thank you message!</h3>',
+                        thankYouMessageDescriptionContentType: 'text',
+                    },
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+            ],
+            posthog,
+            network
+        )
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-question')).toHaveText(
@@ -297,6 +268,12 @@ test.describe('surveys - customization', () => {
         await expect(page.locator('.PostHogSurvey-123').locator('.thank-you-message-body')).toHaveText(
             '<h3>html thank you message!</h3>'
         )
-        await pollUntilEventCaptured(page, 'survey sent')
+        await events.waitForEvent('survey sent')
     })
 })
+
+async function initSurveys(surveys: any[], posthog: PosthogPage, network: NetworkPage) {
+    await network.mockSurveys(surveys)
+    await posthog.init()
+    await network.waitForSurveys()
+}

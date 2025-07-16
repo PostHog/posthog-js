@@ -92,6 +92,10 @@ export class NetworkPage {
         })
     }
 
+    async waitForSurveys() {
+        await this.page.waitForResponse('**/surveys/**')
+    }
+
     async mockStatic() {
         await Promise.all(
             files.map((file) => {

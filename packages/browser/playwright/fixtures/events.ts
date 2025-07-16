@@ -45,6 +45,10 @@ export class EventsPage {
         return this.filter((event) => event.event === name)
     }
 
+    getLastEventByName(name: string): CaptureResult | null {
+        return this.filterByName(name).pop() ?? null
+    }
+
     count(predicate: (event: CaptureResult) => boolean): number {
         const results = this.filter(predicate)
         return results.length

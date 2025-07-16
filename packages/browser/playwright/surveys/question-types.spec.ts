@@ -1,15 +1,6 @@
 import { getSurveyResponseKey } from '../../src/extensions/surveys/surveys-extension-utils'
-import { pollUntilEventCaptured } from '../utils/event-capture-utils'
-import { expect, test } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
-
-const startOptions = {
-    options: {},
-    flagsResponseOverrides: {
-        surveys: true,
-    },
-    url: './playground/cypress/index.html',
-}
+import { expect, test } from '../fixtures'
+import { initSurveys } from './utils'
 
 const openTextQuestion = {
     type: 'open',
@@ -73,26 +64,27 @@ const appearanceWithThanks = {
 }
 
 test.describe('surveys - core display logic', () => {
-    test('shows the same to user if they do not dismiss or respond to it', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            type: 'popover',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [openTextQuestion],
-                            appearance: appearanceWithThanks,
-                        },
-                    ],
+    test.use({ flagsOverrides: { surveys: true }, url: './playground/cypress/index.html' })
+    test('shows the same to user if they do not dismiss or respond to it', async ({
+        page,
+        posthog,
+        network,
+        events,
+    }) => {
+        await initSurveys(
+            [
+                {
+                    id: '123',
+                    name: 'Test survey',
+                    type: 'popover',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [openTextQuestion],
+                    appearance: appearanceWithThanks,
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+            ],
+            posthog,
+            network
+        )
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-question')).toHaveText(
@@ -104,29 +96,24 @@ test.describe('surveys - core display logic', () => {
         await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('textarea').fill('Great job!')
         await page.locator('.PostHogSurvey-123').locator('.form-submit').click()
 
-        await pollUntilEventCaptured(page, 'survey sent')
+        await events.waitForEvent('survey sent')
     })
 
-    test('rating questions that are on the 10 scale start at 0', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            type: 'popover',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [npsRatingQuestion, { ...npsRatingQuestion, scale: 5 }],
-                            appearance: appearanceWithThanks,
-                        },
-                    ],
+    test('rating questions that are on the 10 scale start at 0', async ({ page, posthog, network }) => {
+        await initSurveys(
+            [
+                {
+                    id: '123',
+                    name: 'Test survey',
+                    type: 'popover',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [npsRatingQuestion, { ...npsRatingQuestion, scale: 5 }],
+                    appearance: appearanceWithThanks,
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+            ],
+            posthog,
+            network
+        )
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
         await expect(page.locator('.PostHogSurvey-123').locator('.ratings-number')).toHaveCount(11)
@@ -142,30 +129,21 @@ test.describe('surveys - core display logic', () => {
         await expect(page.locator('.PostHogSurvey-123').locator('.ratings-number').first()).toHaveText('0')
     })
 
-    test('multiple question surveys', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '12345',
-                            name: 'Test survey',
-                            type: 'popover',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [
-                                multipleChoiceQuestion,
-                                openTextQuestion,
-                                { ...npsRatingQuestion, optional: true },
-                            ],
-                            appearance: appearanceWithThanks,
-                        },
-                    ],
+    test('multiple question surveys', async ({ page, posthog, network, events }) => {
+        await initSurveys(
+            [
+                {
+                    id: '12345',
+                    name: 'Test survey',
+                    type: 'popover',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [multipleChoiceQuestion, openTextQuestion, { ...npsRatingQuestion, optional: true }],
+                    appearance: appearanceWithThanks,
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+            ],
+            posthog,
+            network
+        )
 
         await expect(page.locator('.PostHogSurvey-12345').locator('.survey-form')).toBeVisible()
         await page.locator('.PostHogSurvey-12345').locator('#surveyQuestion0Choice1').click()
@@ -180,8 +158,8 @@ test.describe('surveys - core display logic', () => {
         await page.locator('.PostHogSurvey-12345').locator('.form-submit').click()
         await expect(page.locator('.PostHogSurvey-12345').locator('.thank-you-message')).not.toBeVisible()
 
-        await pollUntilEventCaptured(page, 'survey sent')
-        const captures = await page.capturedEvents()
+        await events.waitForEvent('survey sent')
+        const captures = events.all()
         expect(captures.map((c) => c.event)).toEqual([
             '$pageview',
             'survey shown',
@@ -220,25 +198,20 @@ test.describe('surveys - core display logic', () => {
         ])
     })
 
-    test('multiple choice questions with open choice', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '12345',
-                            name: 'Test survey',
-                            type: 'popover',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [{ ...multipleChoiceQuestion, hasOpenChoice: true }],
-                        },
-                    ],
+    test('multiple choice questions with open choice', async ({ page, posthog, network, events }) => {
+        await initSurveys(
+            [
+                {
+                    id: '12345',
+                    name: 'Test survey',
+                    type: 'popover',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [{ ...multipleChoiceQuestion, hasOpenChoice: true }],
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+            ],
+            posthog,
+            network
+        )
 
         await expect(page.locator('.PostHogSurvey-12345').locator('.survey-form')).toBeVisible()
         await page.locator('.PostHogSurvey-12345').locator('#surveyQuestion0Choice3').click()
@@ -246,9 +219,8 @@ test.describe('surveys - core display logic', () => {
         await page.locator('.PostHogSurvey-12345').locator('input[type=text]').type('Newsletters')
         await page.locator('.PostHogSurvey-12345').locator('.form-submit').click()
 
-        await pollUntilEventCaptured(page, 'survey sent')
-        const captures = await page.capturedEvents()
-        expect(captures.map((c) => c.event)).toEqual([
+        await events.waitForEvent('survey sent')
+        events.expectMatchList([
             '$pageview',
             'survey shown',
             '$autocapture',
@@ -256,7 +228,7 @@ test.describe('surveys - core display logic', () => {
             '$autocapture',
             'survey sent',
         ])
-        const surveySent = captures.find((c) => c.event === 'survey sent')
+        const surveySent = events.findByName('survey sent')
         expect(surveySent!.properties[getSurveyResponseKey('multiple_choice_1')]).toEqual(['Tutorials', 'Newsletters'])
         expect(surveySent!.properties['$survey_questions']).toEqual([
             {
@@ -267,26 +239,21 @@ test.describe('surveys - core display logic', () => {
         ])
     })
 
-    test('single choice questions with open choice', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '12345',
-                            name: 'single choice survey',
-                            type: 'popover',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [{ ...singleChoiceQuestion, hasOpenChoice: true }],
-                            appearance: { backgroundColor: 'black', submitButtonColor: 'white' },
-                        },
-                    ],
+    test('single choice questions with open choice', async ({ page, posthog, network, events }) => {
+        await initSurveys(
+            [
+                {
+                    id: '12345',
+                    name: 'single choice survey',
+                    type: 'popover',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [{ ...singleChoiceQuestion, hasOpenChoice: true }],
+                    appearance: { backgroundColor: 'black', submitButtonColor: 'white' },
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+            ],
+            posthog,
+            network
+        )
 
         await expect(page.locator('.PostHogSurvey-12345').locator('.survey-form')).toBeVisible()
         await page.locator('.PostHogSurvey-12345').locator('#surveyQuestion0Choice3').click()
@@ -295,13 +262,12 @@ test.describe('surveys - core display logic', () => {
         await page
             .locator('.PostHogSurvey-12345')
             .locator('input[type=text]#surveyQuestion0Choice3Open')
-            .type('Product engineer')
+            .fill('Product engineer')
 
         await page.locator('.PostHogSurvey-12345').locator('.form-submit').click()
 
-        await pollUntilEventCaptured(page, 'survey sent')
-        const captures = await page.capturedEvents()
-        expect(captures.map((c) => c.event)).toEqual([
+        await events.waitForEvent('survey sent')
+        events.expectMatchList([
             '$pageview',
             'survey shown',
             '$autocapture',
@@ -309,7 +275,7 @@ test.describe('surveys - core display logic', () => {
             '$autocapture',
             'survey sent',
         ])
-        const surveySent = captures.find((c) => c.event === 'survey sent')
+        const surveySent = events.findByName('survey sent')
         expect(surveySent!.properties[getSurveyResponseKey('single_choice_1')]).toEqual('Product engineer')
         expect(surveySent!.properties['$survey_questions']).toEqual([
             {
@@ -322,31 +288,32 @@ test.describe('surveys - core display logic', () => {
 })
 
 test.describe('surveys - skipSubmitButton functionality', () => {
-    test('handles questions with skipSubmitButton correctly and sends event', async ({ page, context }) => {
+    test.use({ flagsOverrides: { surveys: true }, url: './playground/cypress/index.html' })
+    test('handles questions with skipSubmitButton correctly and sends event', async ({
+        page,
+        posthog,
+        network,
+        events,
+    }) => {
         const surveyId = 'skip_button_survey_123'
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: surveyId,
-                            name: 'Test Skip Submit Button Survey',
-                            type: 'popover',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [
-                                emojiRatingSkipButtonQuestion,
-                                numberRatingSkipButtonQuestion,
-                                singleChoiceSkipButtonQuestion,
-                            ],
-                            appearance: appearanceWithThanks,
-                        },
+        await initSurveys(
+            [
+                {
+                    id: surveyId,
+                    name: 'Test Skip Submit Button Survey',
+                    type: 'popover',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [
+                        emojiRatingSkipButtonQuestion,
+                        numberRatingSkipButtonQuestion,
+                        singleChoiceSkipButtonQuestion,
                     ],
+                    appearance: appearanceWithThanks,
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+            ],
+            posthog,
+            network
+        )
 
         const surveyLocator = page.locator(`.PostHogSurvey-${surveyId}`)
 
@@ -374,11 +341,8 @@ test.describe('surveys - skipSubmitButton functionality', () => {
         await expect(surveyLocator.locator('.thank-you-message')).not.toBeVisible()
 
         // Event validation
-        await pollUntilEventCaptured(page, 'survey sent')
-        const captures = await page.capturedEvents()
-        const surveySentEvent = captures.find(
-            (c) => c.event === 'survey sent' && c.properties['$survey_id'] === surveyId
-        )
+        await events.waitForEvent('survey sent')
+        const surveySentEvent = events.find((c) => c.event === 'survey sent' && c.properties['$survey_id'] === surveyId)
         expect(surveySentEvent).toBeDefined()
 
         expect(surveySentEvent!.properties[getSurveyResponseKey(emojiRatingSkipButtonQuestion.id)]).toBe(2)

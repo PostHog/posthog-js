@@ -1,13 +1,4 @@
-import { expect, test } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
-
-const startOptions = {
-    options: {},
-    flagsResponseOverrides: {
-        surveys: true,
-    },
-    url: './playground/cypress/index.html',
-}
+import { expect, test } from '../fixtures'
 
 const openTextQuestion = {
     type: 'open',
@@ -17,57 +8,48 @@ const openTextQuestion = {
 }
 
 test.describe('surveys - core display logic', () => {
-    test('shows the same to user if they do not dismiss or respond to it', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            description: 'description',
-                            type: 'popover',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [openTextQuestion],
-                        },
-                    ],
-                },
-            })
-        })
+    test.use({ flagsOverrides: { surveys: true }, url: './playground/cypress/index.html' })
+    test('shows the same to user if they do not dismiss or respond to it', async ({ page, posthog, network }) => {
+        await network.mockSurveys([
+            {
+                id: '123',
+                name: 'Test survey',
+                description: 'description',
+                type: 'popover',
+                start_date: '2021-01-01T00:00:00Z',
+                questions: [openTextQuestion],
+            },
+        ])
 
-        await start(startOptions, page, context)
-        await surveysAPICall
-
+        await posthog.init()
+        await network.waitForSurveys()
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
 
         await page.reload()
-
-        await start({ ...startOptions, type: 'reload' }, page, context)
-        await surveysAPICall
+        await posthog.init()
+        await network.waitForSurveys()
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
     })
 
-    test('does not show the same survey to user if they have dismissed it before', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            description: 'description',
-                            type: 'popover',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [openTextQuestion],
-                        },
-                    ],
-                },
-            })
-        })
+    test('does not show the same survey to user if they have dismissed it before', async ({
+        page,
+        posthog,
+        network,
+    }) => {
+        await network.mockSurveys([
+            {
+                id: '123',
+                name: 'Test survey',
+                description: 'description',
+                type: 'popover',
+                start_date: '2021-01-01T00:00:00Z',
+                questions: [openTextQuestion],
+            },
+        ])
 
-        await start(startOptions, page, context)
-        await surveysAPICall
+        await posthog.init()
+        await network.waitForSurveys()
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
         await page.locator('.PostHogSurvey-123').locator('.form-cancel').click()
@@ -80,33 +62,26 @@ test.describe('surveys - core display logic', () => {
         ).toBeTruthy()
 
         await page.reload()
-
-        await start({ ...startOptions, type: 'reload' }, page, context)
-        await surveysAPICall
+        await posthog.init()
+        await network.waitForSurveys()
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeInViewport()
     })
 
-    test('does not show the same survey to user if they responded to it before', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            description: 'description',
-                            type: 'popover',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [openTextQuestion],
-                        },
-                    ],
-                },
-            })
-        })
+    test('does not show the same survey to user if they responded to it before', async ({ page, posthog, network }) => {
+        await network.mockSurveys([
+            {
+                id: '123',
+                name: 'Test survey',
+                description: 'description',
+                type: 'popover',
+                start_date: '2021-01-01T00:00:00Z',
+                questions: [openTextQuestion],
+            },
+        ])
 
-        await start(startOptions, page, context)
-        await surveysAPICall
+        await posthog.init()
+        await network.waitForSurveys()
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
         await page.locator('.PostHogSurvey-123').locator('textarea').type('some feedback')
@@ -121,9 +96,8 @@ test.describe('surveys - core display logic', () => {
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeInViewport()
 
         await page.reload()
-
-        await start({ ...startOptions, type: 'reload' }, page, context)
-        await surveysAPICall
+        await posthog.init()
+        await network.waitForSurveys()
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeInViewport()
 
@@ -136,28 +110,23 @@ test.describe('surveys - core display logic', () => {
 
     test('does not show a survey to user if user has already seen any survey in the wait period', async ({
         page,
-        context,
+        posthog,
+        network,
     }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            description: 'description',
-                            type: 'popover',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [openTextQuestion],
-                            conditions: { seenSurveyWaitPeriodInDays: 10 },
-                        },
-                    ],
-                },
-            })
-        })
+        await network.mockSurveys([
+            {
+                id: '123',
+                name: 'Test survey',
+                description: 'description',
+                type: 'popover',
+                start_date: '2021-01-01T00:00:00Z',
+                questions: [openTextQuestion],
+                conditions: { seenSurveyWaitPeriodInDays: 10 },
+            },
+        ])
 
-        await start(startOptions, page, context)
-        await surveysAPICall
+        await posthog.init()
+        await network.waitForSurveys()
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
 
@@ -169,40 +138,35 @@ test.describe('surveys - core display logic', () => {
 
         await page.reload()
 
-        await start({ ...startOptions, type: 'reload' }, page, context)
-        await surveysAPICall
+        await posthog.init()
+        await network.waitForSurveys()
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeInViewport()
     })
 
     test('does not allow user to submit non optional survey questions if they have not responded to it', async ({
         page,
-        context,
+        posthog,
+        network,
     }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            description: 'description',
-                            type: 'popover',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [{ ...openTextQuestion, optional: false }],
-                            appearance: { submitButtonColor: 'pink' },
-                        },
-                    ],
-                },
-            })
-        })
+        await network.mockSurveys([
+            {
+                id: '123',
+                name: 'Test survey',
+                description: 'description',
+                type: 'popover',
+                start_date: '2021-01-01T00:00:00Z',
+                questions: [{ ...openTextQuestion, optional: false }],
+                appearance: { submitButtonColor: 'pink' },
+            },
+        ])
 
-        await start(startOptions, page, context)
-        await surveysAPICall
+        await posthog.init()
+        await network.waitForSurveys()
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
         await expect(page.locator('.PostHogSurvey-123').locator('.form-submit')).toHaveAttribute('disabled')
-        await page.locator('.PostHogSurvey-123').locator('textarea').type('some feedback')
+        await page.locator('.PostHogSurvey-123').locator('textarea').fill('some feedback')
         await expect(page.locator('.PostHogSurvey-123').locator('.form-submit')).not.toHaveAttribute('disabled')
     })
 })

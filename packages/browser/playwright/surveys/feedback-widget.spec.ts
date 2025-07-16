@@ -1,15 +1,6 @@
 import { SurveySchedule } from '../../src/posthog-surveys-types'
-import { pollUntilEventCaptured } from '../utils/event-capture-utils'
-import { expect, test } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
-
-const startOptions = {
-    options: {},
-    flagsResponseOverrides: {
-        surveys: true,
-    },
-    url: './playground/cypress/index.html',
-}
+import { expect, test } from '../fixtures'
+import { initSurveys } from './utils'
 
 const openTextQuestion = {
     type: 'open',
@@ -43,39 +34,41 @@ const black = 'rgb(2, 6, 23)'
 const white = 'rgb(255, 255, 255)'
 
 test.describe('surveys - feedback widget', () => {
-    test('displays feedback tab and submits responses ', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
+    test.use({
+        flagsOverrides: {
+            surveys: true,
+        },
+        url: './playground/cypress/index.html',
+    })
+
+    test('displays feedback tab and submits responses ', async ({ page, posthog, network, events }) => {
+        await initSurveys(
+            [
+                {
+                    id: '123',
+                    name: 'Test survey',
+                    type: 'widget',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [
                         {
-                            id: '123',
-                            name: 'Test survey',
-                            type: 'widget',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [
-                                {
-                                    type: 'open',
-                                    question: 'Feedback for us?',
-                                    description: 'tab feedback widget',
-                                    id: 'feedback_tab_1',
-                                },
-                            ],
-                            appearance: {
-                                widgetLabel: 'Feedback',
-                                widgetType: 'tab',
-                                displayThankYouMessage: true,
-                                thankyouMessageHeader: 'Thanks!',
-                                thankyouMessageBody: 'We appreciate your feedback.',
-                            },
+                            type: 'open',
+                            question: 'Feedback for us?',
+                            description: 'tab feedback widget',
+                            id: 'feedback_tab_1',
                         },
                     ],
+                    appearance: {
+                        widgetLabel: 'Feedback',
+                        widgetType: 'tab',
+                        displayThankYouMessage: true,
+                        thankyouMessageHeader: 'Thanks!',
+                        thankyouMessageBody: 'We appreciate your feedback.',
+                    },
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+            ],
+            posthog,
+            network
+        )
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeVisible()
         await page.locator('.PostHogSurvey-123').locator('.ph-survey-widget-tab').click()
@@ -87,37 +80,30 @@ test.describe('surveys - feedback widget', () => {
 
         await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('textarea').fill('hello posthog!')
         await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('.form-submit').click()
-        await pollUntilEventCaptured(page, 'survey sent')
+        await events.waitForEvent('survey sent')
     })
 
-    test('displays feedback tab in a responsive manner ', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            type: 'widget',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [
-                                { type: 'open', question: 'Feedback for us?', description: 'tab feedback widget' },
-                            ],
-                            appearance: {
-                                widgetLabel: 'Feedback',
-                                widgetType: 'tab',
-                                displayThankYouMessage: true,
-                                thankyouMessageHeader: 'Thanks!',
-                                thankyouMessageBody: 'We appreciate your feedback.',
-                            },
-                        },
-                    ],
+    test('displays feedback tab in a responsive manner ', async ({ page, posthog, network }) => {
+        await initSurveys(
+            [
+                {
+                    id: '123',
+                    name: 'Test survey',
+                    type: 'widget',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [{ type: 'open', question: 'Feedback for us?', description: 'tab feedback widget' }],
+                    appearance: {
+                        widgetLabel: 'Feedback',
+                        widgetType: 'tab',
+                        displayThankYouMessage: true,
+                        thankyouMessageHeader: 'Thanks!',
+                        thankyouMessageBody: 'We appreciate your feedback.',
+                    },
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+            ],
+            posthog,
+            network
+        )
 
         await page.locator('.PostHogSurvey-123').locator('.ph-survey-widget-tab').click()
         await page.setViewportSize({ width: 375, height: 667 })
@@ -125,39 +111,34 @@ test.describe('surveys - feedback widget', () => {
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeInViewport()
     })
 
-    test('widgetType is custom selector', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
+    test('widgetType is custom selector', async ({ page, posthog, network, events }) => {
+        await initSurveys(
+            [
+                {
+                    id: '123',
+                    name: 'Test survey',
+                    type: 'widget',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [
                         {
-                            id: '123',
-                            name: 'Test survey',
-                            type: 'widget',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [
-                                {
-                                    type: 'open',
-                                    question: 'Feedback for us?',
-                                    description: 'custom selector widget',
-                                    id: 'custom_selector_1',
-                                },
-                            ],
-                            appearance: {
-                                widgetType: 'selector',
-                                widgetSelector: '.test-surveys',
-                                displayThankYouMessage: true,
-                                thankyouMessageHeader: 'Thanks!',
-                                thankyouMessageBody: 'We appreciate your feedback.',
-                            },
+                            type: 'open',
+                            question: 'Feedback for us?',
+                            description: 'custom selector widget',
+                            id: 'custom_selector_1',
                         },
                     ],
+                    appearance: {
+                        widgetType: 'selector',
+                        widgetSelector: '.test-surveys',
+                        displayThankYouMessage: true,
+                        thankyouMessageHeader: 'Thanks!',
+                        thankyouMessageBody: 'We appreciate your feedback.',
+                    },
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+            ],
+            posthog,
+            network
+        )
 
         await expect(page.locator('.PostHogSurvey-123').locator('.ph-survey-widget-tab')).not.toBeVisible()
         await page.locator('.test-surveys').click()
@@ -171,33 +152,29 @@ test.describe('surveys - feedback widget', () => {
 
         await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('textarea').fill('hello posthog!')
         await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('.form-submit').click()
-        await pollUntilEventCaptured(page, 'survey sent')
+        await events.waitForEvent('survey sent')
     })
 
-    test('displays multiple question surveys and thank you confirmation if enabled', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            type: 'widget',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [
-                                multipleChoiceQuestion,
-                                openTextQuestion,
-                                { ...npsRatingQuestion, optional: true },
-                            ],
-                            appearance: { ...appearanceWithThanks, widgetType: 'tab', widgetLabel: 'Feedback :)' },
-                        },
-                    ],
+    test('displays multiple question surveys and thank you confirmation if enabled', async ({
+        page,
+        posthog,
+        network,
+        events,
+    }) => {
+        await initSurveys(
+            [
+                {
+                    id: '123',
+                    name: 'Test survey',
+                    type: 'widget',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [multipleChoiceQuestion, openTextQuestion, { ...npsRatingQuestion, optional: true }],
+                    appearance: { ...appearanceWithThanks, widgetType: 'tab', widgetLabel: 'Feedback :)' },
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+            ],
+            posthog,
+            network
+        )
 
         await page.locator('.PostHogSurvey-123').locator('.ph-survey-widget-tab').click()
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
@@ -209,37 +186,31 @@ test.describe('surveys - feedback widget', () => {
         await page.locator('.PostHogSurvey-123 .form-submit').click()
         await page.locator('.PostHogSurvey-123 .form-submit').click()
 
-        await pollUntilEventCaptured(page, 'survey shown')
-        await pollUntilEventCaptured(page, 'survey sent')
+        await events.waitForEvent('survey shown')
+        await events.waitForEvent('survey sent')
     })
 
-    test('auto contrasts text color for feedback tab', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            type: 'widget',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [openTextQuestion],
-                            appearance: {
-                                widgetLabel: 'white widget',
-                                widgetType: 'tab',
-                                widgetColor: 'white',
-                            },
-                        },
-                    ],
+    test('auto contrasts text color for feedback tab', async ({ page, posthog, network }) => {
+        await initSurveys(
+            [
+                {
+                    id: '123',
+                    name: 'Test survey',
+                    type: 'widget',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [openTextQuestion],
+                    appearance: {
+                        widgetLabel: 'white widget',
+                        widgetType: 'tab',
+                        widgetColor: 'white',
+                    },
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+            ],
+            posthog,
+            network
+        )
 
         await expect(page.locator('.PostHogSurvey-123').locator('.ph-survey-widget-tab')).toBeVisible()
-
         await expect(page.locator('.PostHogSurvey-123').locator('.ph-survey-widget-tab')).toHaveCSS('color', black)
         await expect(page.locator('.PostHogSurvey-123').locator('.ph-survey-widget-tab')).toHaveCSS(
             'background-color',
@@ -247,37 +218,37 @@ test.describe('surveys - feedback widget', () => {
         )
     })
 
-    test('renders survey with schedule always and allows multiple submissions', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            type: 'widget',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [openTextQuestion],
-                            appearance: {
-                                widgetLabel: 'Feedback',
-                                widgetType: 'tab',
-                                displayThankYouMessage: true,
-                                thankyouMessageHeader: 'Thank you!',
-                            },
-                            conditions: {
-                                url: null,
-                                selector: null,
-                                scrolled: null,
-                            },
-                            schedule: SurveySchedule.Always,
-                        },
-                    ],
+    test('renders survey with schedule always and allows multiple submissions', async ({
+        page,
+        posthog,
+        network,
+        events,
+    }) => {
+        await initSurveys(
+            [
+                {
+                    id: '123',
+                    name: 'Test survey',
+                    type: 'widget',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [openTextQuestion],
+                    appearance: {
+                        widgetLabel: 'Feedback',
+                        widgetType: 'tab',
+                        displayThankYouMessage: true,
+                        thankyouMessageHeader: 'Thank you!',
+                    },
+                    conditions: {
+                        url: null,
+                        selector: null,
+                        scrolled: null,
+                    },
+                    schedule: SurveySchedule.Always,
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+            ],
+            posthog,
+            network
+        )
 
         // 1. Check that the survey widget is rendered
         await expect(page.locator('.PostHogSurvey-123').locator('.ph-survey-widget-tab')).toBeVisible()
@@ -295,7 +266,7 @@ test.describe('surveys - feedback widget', () => {
         await expect(page.locator('.PostHogSurvey-123').locator('.thank-you-message-header')).toHaveText('Thank you!')
 
         // Verify the event was sent
-        await pollUntilEventCaptured(page, 'survey sent')
+        await events.waitForEvent('survey sent')
 
         // 5. Close the thank you message and click the survey tab again
         await page.locator('.PostHogSurvey-123').locator('.form-submit').click()
@@ -316,51 +287,48 @@ test.describe('surveys - feedback widget', () => {
         await expect(page.locator('.PostHogSurvey-123').locator('.thank-you-message-header')).toBeVisible()
 
         // Verify second event was sent
-        await pollUntilEventCaptured(page, 'survey sent')
+        await events.waitForEvent('survey sent')
     })
 
     test('if multiple surveys being shown, sending one of them does not close the other one', async ({
         page,
-        context,
+        posthog,
+        network,
+        events,
     }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            type: 'widget',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [openTextQuestion],
-                            appearance: {
-                                widgetLabel: 'Feedback',
-                                widgetType: 'tab',
-                                displayThankYouMessage: true,
-                                thankyouMessageHeader: 'Thank you!',
-                            },
-                        },
-                        {
-                            id: '456',
-                            name: 'Test survey 2',
-                            type: 'widget',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [openTextQuestion],
-                            appearance: {
-                                position: 'next_to_trigger',
-                                widgetSelector: '.test-surveys',
-                                widgetType: 'selector',
-                                displayThankYouMessage: true,
-                                thankyouMessageHeader: 'Thank you!',
-                            },
-                        },
-                    ],
+        await initSurveys(
+            [
+                {
+                    id: '123',
+                    name: 'Test survey',
+                    type: 'widget',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [openTextQuestion],
+                    appearance: {
+                        widgetLabel: 'Feedback',
+                        widgetType: 'tab',
+                        displayThankYouMessage: true,
+                        thankyouMessageHeader: 'Thank you!',
+                    },
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+                {
+                    id: '456',
+                    name: 'Test survey 2',
+                    type: 'widget',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [openTextQuestion],
+                    appearance: {
+                        position: 'next_to_trigger',
+                        widgetSelector: '.test-surveys',
+                        widgetType: 'selector',
+                        displayThankYouMessage: true,
+                        thankyouMessageHeader: 'Thank you!',
+                    },
+                },
+            ],
+            posthog,
+            network
+        )
 
         // click on the second survey trigger
         await page.locator('.test-surveys').click()
@@ -373,7 +341,7 @@ test.describe('surveys - feedback widget', () => {
         await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('textarea').fill('first submission')
         await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('.form-submit').click()
 
-        await pollUntilEventCaptured(page, 'survey sent')
+        await events.waitForEvent('survey sent')
 
         // click on the first survey confirmation message
         await page.locator('.PostHogSurvey-123').locator('.form-submit').click()
@@ -383,45 +351,45 @@ test.describe('surveys - feedback widget', () => {
         await expect(page.locator('.PostHogSurvey-456').locator('.survey-form')).toBeVisible()
     })
 
-    test('if multiple surveys being shown, closing one does not close the other', async ({ page, context }) => {
-        const surveysAPICall = page.route('**/surveys/**', async (route) => {
-            await route.fulfill({
-                json: {
-                    surveys: [
-                        {
-                            id: '123',
-                            name: 'Test survey',
-                            type: 'widget',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [openTextQuestion],
-                            appearance: {
-                                widgetLabel: 'Feedback',
-                                widgetType: 'tab',
-                                displayThankYouMessage: true,
-                                thankyouMessageHeader: 'Thank you!',
-                            },
-                        },
-                        {
-                            id: '456',
-                            name: 'Test survey 2',
-                            type: 'widget',
-                            start_date: '2021-01-01T00:00:00Z',
-                            questions: [openTextQuestion],
-                            appearance: {
-                                position: 'next_to_trigger',
-                                widgetSelector: '.test-surveys',
-                                widgetType: 'selector',
-                                displayThankYouMessage: true,
-                                thankyouMessageHeader: 'Thank you!',
-                            },
-                        },
-                    ],
+    test('if multiple surveys being shown, closing one does not close the other', async ({
+        page,
+        posthog,
+        network,
+        events,
+    }) => {
+        await initSurveys(
+            [
+                {
+                    id: '123',
+                    name: 'Test survey',
+                    type: 'widget',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [openTextQuestion],
+                    appearance: {
+                        widgetLabel: 'Feedback',
+                        widgetType: 'tab',
+                        displayThankYouMessage: true,
+                        thankyouMessageHeader: 'Thank you!',
+                    },
                 },
-            })
-        })
-
-        await start(startOptions, page, context)
-        await surveysAPICall
+                {
+                    id: '456',
+                    name: 'Test survey 2',
+                    type: 'widget',
+                    start_date: '2021-01-01T00:00:00Z',
+                    questions: [openTextQuestion],
+                    appearance: {
+                        position: 'next_to_trigger',
+                        widgetSelector: '.test-surveys',
+                        widgetType: 'selector',
+                        displayThankYouMessage: true,
+                        thankyouMessageHeader: 'Thank you!',
+                    },
+                },
+            ],
+            posthog,
+            network
+        )
 
         // click on the second survey trigger
         await page.locator('.test-surveys').click()
@@ -433,7 +401,7 @@ test.describe('surveys - feedback widget', () => {
         // close first survey
         await page.locator('.PostHogSurvey-123').locator('.survey-form').locator('.form-cancel').click()
 
-        await pollUntilEventCaptured(page, 'survey dismissed')
+        await events.waitForEvent('survey dismissed')
 
         // check if the second survey is still visible
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeVisible()
