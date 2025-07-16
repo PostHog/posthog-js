@@ -57,6 +57,13 @@ describe('posthog-surveys', () => {
             },
         }
 
+        const externalSurvey: Survey = {
+            ...survey,
+            id: 'external-survey',
+            name: 'external survey',
+            type: SurveyType.ExternalSurvey,
+        }
+
         const flagsResponse = {
             featureFlags: {
                 'linked-flag-key': true,
@@ -150,7 +157,12 @@ describe('posthog-surveys', () => {
         describe('checkSurveyEligibility', () => {
             beforeEach(() => {
                 // mock getSurveys response
-                mockPostHog.get_property.mockReturnValue([survey, repeatableSurvey, surveyWithWaitPeriod])
+                mockPostHog.get_property.mockReturnValue([
+                    survey,
+                    repeatableSurvey,
+                    surveyWithWaitPeriod,
+                    externalSurvey,
+                ])
                 surveys['_surveyManager'] = new SurveyManager(mockPostHog as PostHog)
             })
 
@@ -214,6 +226,16 @@ describe('posthog-surveys', () => {
                 )
                 const result = surveys['_checkSurveyEligibility'](survey.id)
                 expect(result.eligible).toBeTruthy()
+            })
+
+            it('cannot render external surveys', () => {
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+
+                const result = surveys['_checkSurveyEligibility'](externalSurvey.id)
+                expect(result.eligible).toBeFalsy()
+                expect(result.reason).toEqual('External survey are never eligible to be shown in the app')
             })
 
             describe('integration with wait period and survey seen checks', () => {
