@@ -1,16 +1,10 @@
-name: TestCafe
+name: Playwright Integration Tests
 on: [pull_request]
 env:
-  BROWSERSTACK_ACCESS_KEY: "${{ secrets.BROWSERSTACK_ACCESS_KEY }}"
-  BROWSERSTACK_USERNAME: "${{ secrets.BROWSERSTACK_USERNAME }}"
   POSTHOG_PROJECT_KEY: "${{ secrets.POSTHOG_PROJECT_KEY }}"
   POSTHOG_API_KEY: "${{ secrets.POSTHOG_API_KEY }}"
-  BROWSERSTACK_DEBUG: "true"
-  BROWSERSTACK_NETWORK_LOGS: "true"
-  BROWSERSTACK_CONSOLE: "info"
-  BROWSERSTACK_FORCE_PROXY: "true"
-  BROWSERSTACK_USE_AUTOMATE: "true"
-  BROWSERSTACK_PROJECT_NAME: "PostHog JS SDK"
+  POSTHOG_API_HOST: "${{ secrets.POSTHOG_API_HOST }}"
+  POSTHOG_API_PROJECT: "${{ secrets.POSTHOG_API_HOST }}"
 
 jobs:
   browsers:
@@ -20,18 +14,15 @@ jobs:
     strategy:
       matrix:
         browser:
-          - "chrome:headless"
-          - "firefox:headless"
-          - "browserstack:ie"
-          - "browserstack:safari"
+          - "chromium"
+          - "firefox"
+          - "webkit"
         include:
-          - browser: "chrome:headless"
+          - browser: "chromium"
             name: Chrome
-          - browser: "firefox:headless"
+          - browser: "firefox"
             name: Firefox
-          - browser: "browserstack:ie"
-            name: IE11
-          - browser: "browserstack:safari"
+          - browser: "webkit"
             name: Safari
 
     steps:
@@ -52,10 +43,5 @@ jobs:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
           RUN_ID: ${{ github.run_id }}
           BROWSER: ${{ matrix.browser }}
-        run: pnpm testcafe ${{ matrix.browser }} --stop-on-first-fail
-        working-directory: packages/browser
-
-      - name: Check ${{ matrix.name }} events
-        timeout-minutes: 10
-        run: pnpm check-testcafe-results
+        run: pnpm exec playwright test --config playwright.config.integration.ts --project ${{ matrix.browser }}
         working-directory: packages/browser
