@@ -31,7 +31,7 @@ export type WindowWithPostHog = typeof globalThis & {
 }
 
 export class PosthogPage {
-    sessionId: string
+    testSessionId: string
 
     constructor(
         private baseOptions: Partial<PostHogConfig>,
@@ -39,11 +39,15 @@ export class PosthogPage {
         private events: EventsPage,
         private testInfos: TestInfo
     ) {
-        this.sessionId = Math.random().toString(36).substring(2, 15)
+        this.testSessionId = Math.random().toString(36).substring(2, 15)
     }
 
-    getSessionId() {
-        return this.sessionId
+    getTestSessionId() {
+        return this.testSessionId
+    }
+
+    getTestTitle() {
+        return this.testInfos.title
     }
 
     private getHandle() {
@@ -72,7 +76,7 @@ export class PosthogPage {
         beforeSendHandles: string[] = []
     ) {
         const additionalProperties = {
-            testSessionId: this.getSessionId(),
+            testSessionId: this.getTestSessionId(),
             testName: this.testInfos.title,
             testBranchName: BRANCH_NAME,
             testRunId: RUN_ID,

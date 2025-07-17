@@ -14,6 +14,7 @@ if (fs.existsSync(path.resolve(__dirname, '.env'))) {
 
 export default {
     ...baseConfig,
+    retries: process.env.CI ? 4 : 0,
     testDir: './playwright/integration',
     testIgnore: undefined,
 }

@@ -1,5 +1,5 @@
 import { CaptureResult } from '@/types'
-import { testPostHog } from './posthog'
+import { PosthogPage, testPostHog } from './posthog'
 
 const INGESTION_TIMEOUT = 10 * 60 * 1000 // 10 min
 const currentEnv = process.env
@@ -29,15 +29,25 @@ export const testIngestion = testPostHog.extend<{}, { ingestion: IngestionPage }
 
 export class IngestionPage {
     sessionChecks: {
-        sessionId: string
+        testSessionId: string
+        testTitle: string
         eventsCount: number
         check: (events: CaptureResult[]) => Promise<void>
     }[] = []
 
     constructor() {}
 
-    addSessionCheck(sessionId: string, eventsCount: number, check: (events: CaptureResult[]) => Promise<void>): void {
-        this.sessionChecks.push({ sessionId, eventsCount, check })
+    addSessionCheck(
+        posthog: PosthogPage,
+        eventsCount: number,
+        check: (events: CaptureResult[]) => Promise<void>
+    ): void {
+        this.sessionChecks.push({
+            testSessionId: posthog.getTestSessionId(),
+            testTitle: posthog.getTestTitle(),
+            eventsCount,
+            check,
+        })
     }
 
     checkEnv() {
@@ -48,14 +58,14 @@ export class IngestionPage {
 
     async processSessionChecks(): Promise<void> {
         if (!this.sessionChecks) return
-        for (const { sessionId, eventsCount, check } of this.sessionChecks) {
-            const events = await this.retrieveSessionEvents(sessionId, eventsCount)
+        for (const { testSessionId, testTitle, eventsCount, check } of this.sessionChecks) {
+            const events = await this.retrieveSessionEvents(testSessionId, testTitle, eventsCount)
             await check(events)
         }
     }
 
-    private async retrieveSessionEvents(sessionId: string, count: number): Promise<CaptureResult[]> {
-        return await retryUntilResults(() => queryAPI(sessionId), count)
+    private async retrieveSessionEvents(sessionId: string, testTitle: string, count: number): Promise<CaptureResult[]> {
+        return await retryUntilResults(() => queryAPI(sessionId), count, sessionId, testTitle)
     }
 }
 
@@ -68,6 +78,8 @@ const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 export async function retryUntilResults(
     operation: () => Promise<any>,
     target_results: number,
+    testSessionId: string,
+    testTitle: string,
     {
         timeout = INGESTION_TIMEOUT,
         pollingIntervalSeconds = 30,
@@ -97,12 +109,14 @@ export async function retryUntilResults(
             if (results.length >= target_results) {
                 // eslint-disable-next-line no-console
                 console.log(
-                    `Got correct number of results (${target_results}) after ${elapsedSeconds} seconds (attempt ${attempts})`
+                    `Got correct number of results (${target_results}) after ${elapsedSeconds} seconds (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle})`
                 )
                 return results
             } else {
                 // eslint-disable-next-line no-console
-                console.log(`Expected ${target_results} results, got ${results.length} (attempt ${attempts})`)
+                console.log(
+                    `Expected ${target_results} results, got ${results.length} (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle})`
+                )
             }
         }
         await delay(pollingIntervalSeconds * 1000)
@@ -111,7 +125,9 @@ export async function retryUntilResults(
     if (api_errors >= maxAllowedApiErrors && last_api_error) {
         throw last_api_error
     }
-    throw new Error(`Timed out after ${elapsedSeconds} seconds (attempt ${attempts})`)
+    throw new Error(
+        `Timed out after ${elapsedSeconds} seconds (attempt: ${attempts}, testSessionId: ${testSessionId}, testTitle: ${testTitle})`
+    )
 }
 
 export async function queryAPI(testSessionId: string) {
