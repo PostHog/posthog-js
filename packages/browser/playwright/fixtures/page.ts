@@ -58,7 +58,6 @@ export const testPage = base.extend<{ page: BasePage; url: string | undefined }>
             await page.goto(url, { waitUntil: 'networkidle' })
         }
         await use(page)
-        await page.clock.install()
         await page.close()
     },
 })
