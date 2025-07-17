@@ -125,7 +125,7 @@ export class PosthogPage {
                 additionalProperties,
             } as Record<string, any>
         )
-        this.page.waitForLoadState('networkidle')
+        await this.page.waitForLoadState('networkidle')
     }
 
     async capture(eventName: string, properties?: Record<string, any>) {

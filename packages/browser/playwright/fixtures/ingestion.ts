@@ -57,7 +57,6 @@ export class IngestionPage {
     }
 
     async processSessionChecks(): Promise<void> {
-        if (!this.sessionChecks) return
         for (const { testSessionId, testTitle, eventsCount, check } of this.sessionChecks) {
             const events = await this.retrieveSessionEvents(testSessionId, testTitle, eventsCount)
             await check(events)
