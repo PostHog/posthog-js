@@ -30,11 +30,12 @@ jobs:
 
       - uses: ./.github/actions/setup
 
-      - name: Serve static files
-        run: python -m http.server 8080 &
-
       - name: Set up posthog-js
         run: pnpm build-rollup
+        working-directory: packages/browser
+
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install ${{ matrix.browser }} --with-deps
         working-directory: packages/browser
 
       - name: Run ${{ matrix.name }} test
