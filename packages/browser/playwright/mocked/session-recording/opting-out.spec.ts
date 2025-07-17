@@ -1,7 +1,7 @@
 import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
 import { BrowserContext, Page } from '@playwright/test'
-import { PostHogConfig } from '../../src/types'
+import { PostHogConfig } from '@/types'
 import { assertThatRecordingStarted, pollUntilEventCaptured } from '../utils/event-capture-utils'
 
 async function startWith(config: Partial<PostHogConfig>, page: Page, context: BrowserContext) {

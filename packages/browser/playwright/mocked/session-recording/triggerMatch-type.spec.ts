@@ -1,4 +1,4 @@
-import { RemoteConfig } from '../../src/types'
+import { RemoteConfig } from '@/types'
 import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
 

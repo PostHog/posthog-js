@@ -1,7 +1,7 @@
 import { expect, test } from './utils/posthog-playwright-test-base'
 import { Request } from '@playwright/test'
 import { start } from './utils/setup'
-import { PostHog } from '../src/posthog-core'
+import { PostHog } from '@/posthog-core'
 import { pollUntilCondition } from './utils/event-capture-utils'
 
 function getBase64EncodedPayloadFromBody(body: unknown): Record<string, any> {

@@ -1,7 +1,7 @@
 import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
 import { Page } from '@playwright/test'
-import { isUndefined } from '../../src/utils/type-utils'
+import { isUndefined } from '@/utils/type-utils'
 
 async function ensureRecordingIsStopped(page: Page) {
     await page.resetCapturedEvents()
