@@ -3,8 +3,8 @@ on: [pull_request]
 env:
   POSTHOG_PROJECT_KEY: "${{ secrets.POSTHOG_PROJECT_KEY }}"
   POSTHOG_API_KEY: "${{ secrets.POSTHOG_API_KEY }}"
-  POSTHOG_API_HOST: "${{ secrets.POSTHOG_API_HOST }}"
-  POSTHOG_API_PROJECT: "${{ secrets.POSTHOG_API_HOST }}"
+  POSTHOG_API_HOST: https://us.i.posthog.com
+  POSTHOG_API_PROJECT: 11213
 
 jobs:
   browsers:
