@@ -41,15 +41,36 @@ module.exports = {
             },
         },
         {
-            files: './playwright/**/*.ts',
+            files: './playwright/**/*',
             rules: {
                 'posthog-js/no-direct-array-check': 'off',
                 'posthog-js/no-direct-undefined-check': 'off',
                 'posthog-js/no-direct-null-check': 'off',
                 '@typescript-eslint/naming-convention': 'off',
+                'compat/compat': 'off',
+                '@typescript-eslint/no-unsafe-function-type': 'off',
+                'no-empty-pattern': 'off',
+                '@typescript-eslint/no-empty-object-type': 'off',
+            },
+            env: {
+                node: true,
             },
             parserOptions: {
-                project: null,
+                project: true,
+            },
+        },
+        {
+            files: './playwright/mock-server.mjs',
+            rules: {
+                'no-console': 'off',
+            },
+            env: {
+                node: true,
+            },
+            parserOptions: {
+                ecmaVersion: 2018,
+                sourceType: 'module',
+                project: true,
             },
         },
         {

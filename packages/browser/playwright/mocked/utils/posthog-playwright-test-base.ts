@@ -1,6 +1,6 @@
 import { test as base, Page, expect } from '@playwright/test'
-import { PostHog } from '../../src/posthog-core'
-import { CaptureResult } from '../../src/types'
+import { PostHog } from '@/posthog-core'
+import { CaptureResult } from '@/types'
 
 const lazyLoadedJSFiles = [
     'array',

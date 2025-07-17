@@ -1,7 +1,7 @@
 import { test, expect } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
 import { Page } from '@playwright/test'
-import { CaptureResult } from '../../src/types'
+import { CaptureResult } from '@/types'
 
 // Local config not set
 // flags comes back - says we shouldn't mask

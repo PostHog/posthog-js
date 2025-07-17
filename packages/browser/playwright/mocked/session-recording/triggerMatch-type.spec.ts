@@ -1,4 +1,4 @@
-import { RemoteConfig } from '../../src/types'
+import { RemoteConfig } from '@/types'
 import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
 import { start } from '../utils/setup'
 
@@ -13,7 +13,7 @@ const startOptions = {
         capturePerformance: true,
         autocapture_opt_out: true,
     },
-    url: 'http://localhost:8082/playground/cypress/index.html',
+    url: '/playground/cypress/index.html',
 }
 
 test.describe('Session recording - trigger match types 30% sampling + event trigger', () => {

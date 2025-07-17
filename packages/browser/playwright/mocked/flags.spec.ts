@@ -1,7 +1,7 @@
 import { expect, test } from './utils/posthog-playwright-test-base'
 import { Request } from '@playwright/test'
 import { start } from './utils/setup'
-import { PostHog } from '../src/posthog-core'
+import { PostHog } from '@/posthog-core'
 import { pollUntilCondition } from './utils/event-capture-utils'
 
 function getBase64EncodedPayloadFromBody(body: unknown): Record<string, any> {
@@ -70,7 +70,7 @@ test.describe('flags', () => {
             distinct_id: 'new-id',
             person_properties: {
                 $initial__kx: null,
-                $initial_current_url: 'http://localhost:8082/playground/cypress/index.html',
+                $initial_current_url: 'http://localhost:2345/playground/cypress/index.html',
                 $initial_dclid: null,
                 $initial_epik: null,
                 $initial_fbclid: null,
@@ -78,7 +78,7 @@ test.describe('flags', () => {
                 $initial_gbraid: null,
                 $initial_gclid: null,
                 $initial_gclsrc: null,
-                $initial_host: 'localhost:8082',
+                $initial_host: 'localhost:2345',
                 $initial_igshid: null,
                 $initial_irclid: null,
                 $initial_li_fat_id: null,
