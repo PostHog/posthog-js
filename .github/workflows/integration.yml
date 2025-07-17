@@ -6,6 +6,9 @@ env:
   POSTHOG_API_HOST: https://us.i.posthog.com
   POSTHOG_API_PROJECT: 11213
 
+permissions:
+  contents: read
+
 jobs:
   browsers:
     name: Test on ${{ matrix.name }}
