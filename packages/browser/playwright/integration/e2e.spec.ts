@@ -23,7 +23,7 @@ test.describe('ingestion', () => {
         await page.delay(1000)
         await page.click('[data-cy-custom-event-button]')
         await page.delay(1000)
-        await events.expectCountMap({
+        events.expectCountMap({
             $pageview: 1,
             $autocapture: 1,
             'custom-event': 1,
@@ -37,7 +37,7 @@ test.describe('ingestion', () => {
         await page.click('[data-cy-link-mask-text]')
         await page.click('[data-cy-button-sensitive-attributes]')
         await page.delay(5000)
-        await events.expectCountMap({
+        events.expectCountMap({
             $pageview: 1,
             $autocapture: 2,
         })
@@ -53,7 +53,7 @@ test.describe('ingestion', () => {
         await page.click('[data-cy-link-mask-text]')
         await page.click('[data-cy-button-sensitive-attributes]')
         await page.delay(5000)
-        await events.expectCountMap({
+        events.expectCountMap({
             $pageview: 1,
             $autocapture: 2,
         })
