@@ -1,4 +1,4 @@
-import { PostHogConfig } from '@/types'
+import { FlagsResponse, PostHogConfig } from '@/types'
 import { testIngestion } from './ingestion'
 export const test = testIngestion
 export { expect } from '@playwright/test'
@@ -11,6 +11,6 @@ export { IngestionPage } from './ingestion'
 
 export type StartOptions = {
     posthogOptions?: Partial<PostHogConfig>
-    flagsOverrides?: Record<string, any>
+    flagsOverrides?: Partial<FlagsResponse>
     url?: string
 }

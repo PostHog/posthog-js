@@ -131,9 +131,6 @@ export async function retryUntilResults(
 }
 
 export async function queryAPI(testSessionId: string) {
-    if (!POSTHOG_API_HOST || !POSTHOG_API_PROJECT || !POSTHOG_API_KEY) {
-        throw new Error('POSTHOG_API_HOST and POSTHOG_API_PROJECT must be set')
-    }
     const HEADERS = { Authorization: `Bearer ${POSTHOG_API_KEY}` }
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
     const url = `${POSTHOG_API_HOST}/api/projects/${POSTHOG_API_PROJECT}/events?properties=[{"key":"testSessionId","value":["${testSessionId}"],"operator":"exact","type":"event"}]&after=${yesterday}`

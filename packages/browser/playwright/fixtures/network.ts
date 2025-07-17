@@ -39,7 +39,7 @@ export class NetworkPage {
         })
     }
 
-    async mockFlags(flagsResponseOverrides: any) {
+    async mockFlags(flagsOverrides: Partial<FlagsResponse>) {
         // Prepare the mocked Flags API response
         const flagsResponse: FlagsResponse = {
             editorParams: {},
@@ -70,7 +70,7 @@ export class NetworkPage {
             siteApps: [],
             supportedCompression: [Compression.GZipJS],
             autocaptureExceptions: false,
-            ...flagsResponseOverrides,
+            ...flagsOverrides,
         }
 
         await this.page.route('**/flags/*', async (route) => {
@@ -82,7 +82,7 @@ export class NetworkPage {
         })
     }
 
-    async mockSurveys(surveysResponse: any) {
+    async mockSurveys(surveysResponse: any[]) {
         await this.page.route('**/surveys/**', async (route) => {
             await route.fulfill({
                 json: {
