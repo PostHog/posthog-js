@@ -13,6 +13,7 @@ import { defineConfig, devices } from '@playwright/test'
  */
 export default defineConfig({
     testDir: './playwright',
+    testIgnore: '**/playwright/integration/**',
     /* Run tests in files in parallel */
     fullyParallel: true,
     /* Fail the build on CI if you accidentally left test.only in the source code. */
@@ -48,26 +49,6 @@ export default defineConfig({
             name: 'webkit',
             use: { ...devices['Desktop Safari'] },
         },
-
-        /* Test against mobile viewports. */
-        // {
-        //   name: 'Mobile Chrome',
-        //   use: { ...devices['Pixel 5'] },
-        // },
-        // {
-        //   name: 'Mobile Safari',
-        //   use: { ...devices['iPhone 12'] },
-        // },
-
-        /* Test against branded browsers. */
-        // {
-        //   name: 'Microsoft Edge',
-        //   use: { ...devices['Desktop Edge'], channel: 'msedge' },
-        // },
-        // {
-        //   name: 'Google Chrome',
-        //   use: { ...devices['Desktop Chrome'], channel: 'chrome' },
-        // },
     ],
 
     /* Run your local dev server before starting the tests */

@@ -30,12 +30,10 @@ jobs:
         working-directory: packages/browser
         timeout-minutes: 10
         env:
+          WITH_INGESTION_CHECKS: true
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
           RUN_ID: ${{ github.run_id }}
           BROWSER: ${{ matrix.project }}
-      - name: Check ingested events
-        run: pnpm check-api-results
-        working-directory: packages/browser
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:

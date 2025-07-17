@@ -6,7 +6,6 @@ const currentEnv = process.env
 const {
     POSTHOG_API_KEY = 'private_key',
     POSTHOG_API_HOST = 'http://localhost:2345',
-    WITH_INGESTION_CHECKS = 'false',
     POSTHOG_API_PROJECT = '1',
 } = currentEnv
 
@@ -19,7 +18,7 @@ export const testIngestion = testPostHog.extend<{}, { ingestion: IngestionPage }
             // eslint-disable-next-line no-console
             console.log(`
             Waiting for events from tests to appear in PostHog.
-            You can manually confirm whether the events have shown up at ${POSTHOG_API_PROJECT}/project/${POSTHOG_API_PROJECT}/activity/explore
+            You can manually confirm whether the events have shown up at ${POSTHOG_API_HOST}/project/${POSTHOG_API_PROJECT}/activity/explore
             If they seem to be failing unexpectedly, check grafana for ingestion lag at https://grafana.prod-us.posthog.dev/d/homepage/homepage
             `)
             await ingestion.processSessionChecks()
@@ -38,14 +37,12 @@ export class IngestionPage {
     constructor() {}
 
     addSessionCheck(sessionId: string, eventsCount: number, check: (events: CaptureResult[]) => Promise<void>): void {
-        if (WITH_INGESTION_CHECKS === 'true') {
-            this.sessionChecks.push({ sessionId, eventsCount, check })
-        }
+        this.sessionChecks.push({ sessionId, eventsCount, check })
     }
 
     checkEnv() {
-        if (WITH_INGESTION_CHECKS == 'true' && (!POSTHOG_API_HOST || !POSTHOG_API_PROJECT || !POSTHOG_API_KEY)) {
-            throw new Error('POSTHOG_API_HOST and POSTHOG_API_PROJECT must be set')
+        if (!POSTHOG_API_HOST || !POSTHOG_API_PROJECT || !POSTHOG_API_KEY) {
+            throw new Error('POSTHOG_API_HOST, POSTHOG_API_PROJECT and POSTHOG_API_KEY env variables must be set')
         }
     }
 
