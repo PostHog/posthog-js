@@ -1,4 +1,4 @@
-import { expect, Page } from '@playwright/test'
+import { expect, Page, Response } from '@playwright/test'
 import fs from 'fs'
 import path from 'path'
 import { Compression, FlagsResponse } from '@/types'
@@ -34,7 +34,6 @@ export class NetworkPage {
     responses: Response[] = []
 
     constructor(private page: Page) {
-        // @ts-expect-error ts issue
         page.on('response', (res: Response) => {
             this.responses.push(res)
         })
