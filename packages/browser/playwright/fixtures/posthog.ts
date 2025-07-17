@@ -1,6 +1,6 @@
 import { TestInfo } from '@playwright/test'
-import { CaptureResult, PostHogConfig } from '../../src/types'
-import { PostHog } from '../../src/posthog-core'
+import { CaptureResult, PostHogConfig } from '@/types'
+import { PostHog } from '@/posthog-core'
 import { EventsPage, testEvents } from './events'
 import { BasePage } from './page'
 

@@ -1,7 +1,7 @@
 import { expect, Page } from '@playwright/test'
 import fs from 'fs'
 import path from 'path'
-import { Compression, FlagsResponse } from '../../src/types'
+import { Compression, FlagsResponse } from '@/types'
 import { testPage } from './page'
 
 // read directory ../../dist and get all files

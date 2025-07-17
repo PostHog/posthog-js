@@ -1,4 +1,4 @@
-import { CaptureResult } from '../../src/types'
+import { CaptureResult } from '@/types'
 import { testPostHog } from './posthog'
 
 const INGESTION_TIMEOUT = 10 * 60 * 1000 // 10 min

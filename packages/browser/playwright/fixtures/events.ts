@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test'
-import { CaptureResult } from '../../src/types'
+import { CaptureResult } from '@/types'
 import { BasePage, WaitOptions } from './page'
 import { testNetwork } from './network'
 

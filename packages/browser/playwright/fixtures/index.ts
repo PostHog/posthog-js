@@ -1,4 +1,4 @@
-import { PostHogConfig } from '../../src/types'
+import { PostHogConfig } from '@/types'
 import { testIngestion } from './ingestion'
 export const test = testIngestion
 export { expect } from '@playwright/test'
