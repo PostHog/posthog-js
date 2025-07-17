@@ -28,6 +28,7 @@ test.describe('ingestion', () => {
             $autocapture: 1,
             'custom-event': 1,
         })
+        await page.delay(1000)
         ingestion.addSessionCheck(posthog, 3, assertCustomEventsWorkAndAreAccessibleViaApi)
     })
 
@@ -36,11 +37,12 @@ test.describe('ingestion', () => {
         await page.delay(500)
         await page.click('[data-cy-link-mask-text]')
         await page.click('[data-cy-button-sensitive-attributes]')
-        await page.delay(5000)
+        await page.delay(1000)
         events.expectCountMap({
             $pageview: 1,
             $autocapture: 2,
         })
+        await page.delay(1000)
         ingestion.addSessionCheck(posthog, 3, assertAutocapturedEventsWorkAndAreAccessibleViaApi)
     })
 
@@ -52,11 +54,12 @@ test.describe('ingestion', () => {
         await page.delay(500)
         await page.click('[data-cy-link-mask-text]')
         await page.click('[data-cy-button-sensitive-attributes]')
-        await page.delay(5000)
+        await page.delay(1000)
         events.expectCountMap({
             $pageview: 1,
             $autocapture: 2,
         })
+        await page.delay(1000)
         ingestion.addSessionCheck(posthog, 3, assertConfigOptionsChangeAutocaptureBehaviourAccordingly)
     })
 })
