@@ -55,6 +55,9 @@ module.exports = {
             env: {
                 node: true,
             },
+            parserOptions: {
+                project: true,
+            },
         },
         {
             files: './playwright/mock-server.mjs',
