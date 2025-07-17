@@ -1,12 +1,13 @@
-import { test as base, expect, Page } from '@playwright/test'
+import { expect, Page } from '@playwright/test'
 import fs from 'fs'
 import path from 'path'
 import { Compression, FlagsResponse } from '../../src/types'
+import { testPage } from './page'
 
 // read directory ../../dist and get all files
 const files = fs.readdirSync(path.join(__dirname, '../../dist'))
 
-export const testNetwork = base.extend<{ network: NetworkPage; flagsOverrides: any }>({
+export const testNetwork = testPage.extend<{ network: NetworkPage; flagsOverrides: any }>({
     flagsOverrides: [
         {
             sessionRecording: undefined,

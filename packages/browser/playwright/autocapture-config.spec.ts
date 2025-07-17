@@ -33,6 +33,7 @@ test.describe('autocapture config', () => {
         await posthog.init({
             autocapture: { dom_event_allowlist: ['click'] },
         })
+        await events.waitForEvent('$pageview')
 
         await page.locator('[data-cy-custom-event-button]').click()
         events.expectMatchList(['$pageview', '$autocapture', 'custom-event'])
@@ -50,12 +51,13 @@ test.describe('autocapture config', () => {
         await page.click('[data-cy-custom-event-button]')
         events.expectMatchList(['$pageview', 'custom-event'])
 
-        await page.reload()
-        await posthog.init({ autocapture: { url_allowlist: ['.*cypress.*'] } })
+        await page.reloadIdle()
         events.clear()
+        await posthog.init({ autocapture: { url_allowlist: ['.*cypress.*'] } })
+        await events.waitForEvent('$pageview')
 
         await page.click('[data-cy-custom-event-button]')
-        events.expectMatchList(['$pageview', '$autocapture', 'custom-event'])
+        events.expectCountMap({ $pageview: 1, $autocapture: 1, 'custom-event': 1 })
     })
 
     test('obeys element allowlist', async ({ page, posthog, events }) => {
@@ -64,9 +66,10 @@ test.describe('autocapture config', () => {
         await page.click('[data-cy-custom-event-button]')
         events.expectMatchList(['$pageview', '$autocapture', 'custom-event'])
 
-        await page.reload()
-        await posthog.init({ autocapture: { element_allowlist: ['input'] } })
+        await page.reloadIdle()
         events.clear()
+        await posthog.init({ autocapture: { element_allowlist: ['input'] } })
+        await events.waitForEvent('$pageview')
 
         await page.click('[data-cy-custom-event-button]')
         events.expectMatchList(['$pageview', 'custom-event'])
@@ -78,9 +81,10 @@ test.describe('autocapture config', () => {
         await page.locator('[data-cy-custom-event-button]').click()
         events.expectMatchList(['$pageview', '$autocapture', 'custom-event'])
 
-        await page.reload()
-        await posthog.init({ autocapture: { css_selector_allowlist: ['[data-cy-input]'] } })
+        await page.reloadIdle()
         events.clear()
+        await posthog.init({ autocapture: { css_selector_allowlist: ['[data-cy-input]'] } })
+        await events.waitForEvent('$pageview')
 
         await page.locator('[data-cy-custom-event-button]').click()
         events.expectMatchList(['$pageview', 'custom-event'])

@@ -27,8 +27,9 @@ test.describe('event capture', () => {
 
     test('captures pageviews, autocapture, and custom events', async ({ page, events, posthog }) => {
         await posthog.init()
+        await events.waitForEvent('$pageview')
         await page.click('[data-cy-custom-event-button]')
-        await page.reload()
+        await page.reloadIdle()
         events.expectMatchList(['$pageview', '$autocapture', 'custom-event', '$pageleave'])
         events.clear()
         await posthog.init()
@@ -113,6 +114,7 @@ test.describe('event capture', () => {
             rageclick: true,
             autocapture: false,
         })
+        await events.waitForEvent('$pageview')
 
         const button = page.locator('[data-cy-custom-event-button]')
         await button.click()
@@ -128,6 +130,7 @@ test.describe('event capture', () => {
         await posthog.init({
             autocapture: false,
         })
+        await events.waitForEvent('$pageview')
         await page.click('[data-cy-custom-event-button]')
         events.expectMatchList(['$pageview', 'custom-event'])
     })

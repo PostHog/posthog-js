@@ -332,6 +332,7 @@ test.describe('surveys - feedback widget', () => {
 
         // click on the second survey trigger
         await page.locator('.test-surveys').click()
+        await events.waitForEvent('survey shown')
         await expect(page.locator('.PostHogSurvey-456').locator('.survey-form')).toBeVisible()
 
         await page.locator('.PostHogSurvey-123').locator('.ph-survey-widget-tab').click()
@@ -393,6 +394,8 @@ test.describe('surveys - feedback widget', () => {
 
         // click on the second survey trigger
         await page.locator('.test-surveys').click()
+        await events.waitForEvent('survey shown')
+
         await expect(page.locator('.PostHogSurvey-456').locator('.survey-form')).toBeVisible()
 
         await page.locator('.PostHogSurvey-123').locator('.ph-survey-widget-tab').click()

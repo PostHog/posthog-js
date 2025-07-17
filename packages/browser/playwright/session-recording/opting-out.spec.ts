@@ -1,60 +1,62 @@
-import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
-import { BrowserContext, Page } from '@playwright/test'
+import { expect, test, WindowWithPostHog } from '../fixtures'
+
 import { PostHogConfig } from '../../src/types'
-import { assertThatRecordingStarted, pollUntilEventCaptured } from '../utils/event-capture-utils'
+import { PosthogPage } from '../fixtures/posthog'
+import { NetworkPage } from '../fixtures/network'
 
-async function startWith(config: Partial<PostHogConfig>, page: Page, context: BrowserContext) {
+async function startWith(posthog: PosthogPage, config: Partial<PostHogConfig>, network: NetworkPage) {
     // there will be a flags call
-    const flagsResponse = page.waitForResponse('**/flags/*')
+    const flagsResponse = network.waitForFlags()
 
-    await start(
-        {
-            options: config,
-            flagsResponseOverrides: {
-                sessionRecording: {
-                    endpoint: '/ses/',
-                    networkPayloadCapture: { recordBody: true, recordHeaders: true },
-                },
-                capturePerformance: true,
-                autocapture_opt_out: true,
-            },
-            url: './playground/cypress/index.html',
-        },
-        page,
-        context
-    )
+    await posthog.init(config)
 
     // there will be a flags call
     await flagsResponse
 }
 
 test.describe('Session Recording - opting out', () => {
-    test('does not capture events when config opts out by default', async ({ page, context }) => {
+    test.use({
+        flagsOverrides: {
+            sessionRecording: {
+                endpoint: '/ses/',
+                networkPayloadCapture: { recordBody: true, recordHeaders: true },
+            },
+            capturePerformance: true,
+            autocapture_opt_out: true,
+        },
+        url: './playground/cypress/index.html',
+    })
+
+    test('does not capture events when config opts out by default', async ({ page, posthog, network, events }) => {
         // but no recorder or snapshot call, because we're opting out
         void expect(page.waitForResponse('**/recorder.js*', { timeout: 250 })).rejects.toThrowError('Timeout')
         void expect(page.waitForResponse('**/ses/*', { timeout: 250 })).rejects.toThrowError('Timeout')
-        await startWith({ opt_out_capturing_by_default: true }, page, context)
+        await startWith(posthog, { opt_out_capturing_by_default: true }, network)
 
-        await page.locator('[data-cy-input]').type('hello posthog!')
+        await page.locator('[data-cy-input]').pressSequentially('hello posthog!')
         await page.waitForTimeout(250) // short delay since there's no snapshot to wait for
-        await page.expectCapturedEventsToBe([])
+        events.expectMatchList([])
     })
 
-    test('does not capture recordings when config disables session recording', async ({ page, context }) => {
+    test('does not capture recordings when config disables session recording', async ({
+        page,
+        posthog,
+        network,
+        events,
+    }) => {
         // but no recorder or snapshot call, because we're opting out
         void expect(page.waitForResponse('**/recorder.js*', { timeout: 250 })).rejects.toThrowError('Timeout')
         void expect(page.waitForResponse('**/ses/*', { timeout: 250 })).rejects.toThrowError('Timeout')
 
-        await startWith({ disable_session_recording: true }, page, context)
+        await startWith(posthog, { disable_session_recording: true }, network)
 
-        await page.locator('[data-cy-input]').type('hello posthog!')
+        await page.locator('[data-cy-input]').pressSequentially('hello posthog!')
         await page.waitForTimeout(250) // short delay since there's no snapshot to wait for
-        await page.expectCapturedEventsToBe(['$pageview'])
+        events.expectMatchList(['$pageview'])
     })
 
-    test('can start recording after starting opted out', async ({ page, context }) => {
-        await startWith({ opt_out_capturing_by_default: true }, page, context)
+    test('can start recording after starting opted out', async ({ page, posthog, network, events }) => {
+        await startWith(posthog, { opt_out_capturing_by_default: true }, network)
 
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/recorder.js*'],
@@ -67,40 +69,35 @@ test.describe('Session Recording - opting out', () => {
             },
         })
 
-        await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
+        events.expectMatchList(['$opt_in', '$pageview'])
+        events.clear()
 
-        await page.resetCapturedEvents()
-
-        await page.locator('[data-cy-input]').type('hello posthog!')
-        await pollUntilEventCaptured(page, '$snapshot')
-        await assertThatRecordingStarted(page)
+        await page.locator('[data-cy-input]').fill('hello posthog!')
+        await events.waitForEvent('$snapshot')
+        events.expectRecordingStarted()
     })
 
-    test('can start recording when starting disabled', async ({ page, context }) => {
-        await startWith({ disable_session_recording: true }, page, context)
+    test('can start recording when starting disabled', async ({ page, posthog, network, events }) => {
+        await startWith(posthog, { disable_session_recording: true }, network)
 
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/recorder.js*'],
             action: async () => {
-                await page.resetCapturedEvents()
-                await page.evaluate(() => {
-                    const ph = (window as WindowWithPostHog).posthog
-                    ph?.startSessionRecording()
+                events.clear()
+                await posthog.evaluate((ph) => {
+                    ph.startSessionRecording()
                 })
             },
         })
 
-        await page.locator('[data-cy-input]').type('hello posthog!')
-        await pollUntilEventCaptured(page, '$snapshot')
-        await assertThatRecordingStarted(page)
+        await page.locator('[data-cy-input]').pressSequentially('hello posthog!')
+        await events.waitForEvent('$snapshot')
+        events.expectRecordingStarted()
     })
 
-    test('does not capture session recordings when flags is disabled', async ({ page, context }) => {
-        await start(
-            { options: { advanced_disable_flags: true, autocapture: false }, waitForFlags: false },
-            page,
-            context
-        )
+    test('does not capture session recordings when flags is disabled', async ({ page, posthog, events }) => {
+        await posthog.init({ advanced_disable_flags: true, autocapture: false })
+        await events.waitForEvent('$pageview')
 
         await page.locator('[data-cy-custom-event-button]').click()
 
@@ -110,7 +107,7 @@ test.describe('Session Recording - opting out', () => {
             return null
         })
 
-        await page.locator('[data-cy-input]').type('hello posthog!')
+        await page.locator('[data-cy-input]').pressSequentially('hello posthog!')
 
         void callsToSessionRecording.then((response) => {
             if (response) {
@@ -119,7 +116,7 @@ test.describe('Session Recording - opting out', () => {
         })
         await page.waitForTimeout(200)
 
-        const capturedEvents = await page.capturedEvents()
+        const capturedEvents = events.all()
         // no snapshot events sent
         expect(capturedEvents.map((x) => x.event)).toEqual(['$pageview', 'custom-event'])
     })

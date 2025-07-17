@@ -8,7 +8,11 @@ const openTextQuestion = {
 }
 
 test.describe('surveys - core display logic', () => {
-    test.use({ flagsOverrides: { surveys: true }, url: './playground/cypress/index.html' })
+    test.use({
+        flagsOverrides: { surveys: true },
+        url: './playground/cypress/index.html',
+    })
+
     test('shows the same to user if they do not dismiss or respond to it', async ({ page, posthog, network }) => {
         await network.mockSurveys([
             {
@@ -25,7 +29,7 @@ test.describe('surveys - core display logic', () => {
         await network.waitForSurveys()
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
 
-        await page.reload()
+        await page.reloadIdle()
         await posthog.init()
         await network.waitForSurveys()
 
@@ -35,6 +39,7 @@ test.describe('surveys - core display logic', () => {
     test('does not show the same survey to user if they have dismissed it before', async ({
         page,
         posthog,
+        events,
         network,
     }) => {
         await network.mockSurveys([
@@ -49,10 +54,10 @@ test.describe('surveys - core display logic', () => {
         ])
 
         await posthog.init()
-        await network.waitForSurveys()
-
+        await events.waitForEvent('survey shown')
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
         await page.locator('.PostHogSurvey-123').locator('.form-cancel').click()
+        await events.waitForEvent('survey dismissed')
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeInViewport()
 
         expect(
@@ -61,7 +66,7 @@ test.describe('surveys - core display logic', () => {
             })
         ).toBeTruthy()
 
-        await page.reload()
+        await page.reloadIdle()
         await posthog.init()
         await network.waitForSurveys()
 
@@ -84,7 +89,7 @@ test.describe('surveys - core display logic', () => {
         await network.waitForSurveys()
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
-        await page.locator('.PostHogSurvey-123').locator('textarea').type('some feedback')
+        await page.locator('.PostHogSurvey-123').locator('textarea').pressSequentially('some feedback')
         await page.locator('.PostHogSurvey-123').locator('.form-submit').click()
 
         expect(
@@ -95,9 +100,8 @@ test.describe('surveys - core display logic', () => {
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeInViewport()
 
-        await page.reload()
+        await page.reloadIdle()
         await posthog.init()
-        await network.waitForSurveys()
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).not.toBeInViewport()
 
@@ -129,14 +133,14 @@ test.describe('surveys - core display logic', () => {
         await network.waitForSurveys()
 
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
-
+        await page.waitForFunction(() => window.localStorage.getItem('lastSeenSurveyDate') !== undefined)
         const lastSeenDate = await page.evaluate(() => {
             return window.localStorage.getItem('lastSeenSurveyDate')
         })
 
         expect(lastSeenDate!.split('T')[0]).toEqual(new Date().toISOString().split('T')[0])
 
-        await page.reload()
+        await page.reloadIdle()
 
         await posthog.init()
         await network.waitForSurveys()

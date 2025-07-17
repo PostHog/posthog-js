@@ -2,8 +2,9 @@ import { expect, test } from './fixtures'
 
 test.describe('Exception capture', () => {
     test.use({ url: './playground/cypress/index.html' })
-    test.beforeEach(async ({ posthog }) => {
+    test.beforeEach(async ({ posthog, events }) => {
         await posthog.init()
+        await events.waitForEvent('$pageview')
     })
 
     test.describe('Exception autocapture disabled', () => {

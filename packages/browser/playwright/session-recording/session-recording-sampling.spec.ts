@@ -1,77 +1,60 @@
-import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
-
-const startOptions = {
-    options: {
-        session_recording: {},
-    },
-    flagsResponseOverrides: {
-        sessionRecording: {
-            endpoint: '/ses/',
-        },
-        capturePerformance: true,
-        autocapture_opt_out: true,
-    },
-    url: './playground/cypress/index.html',
-}
+import { expect, test } from '../fixtures'
 
 test.describe('Session recording - sampling', () => {
-    const sampleZeroStartOptions = {
-        ...startOptions,
-        flagsResponseOverrides: {
-            ...startOptions.flagsResponseOverrides,
+    test.use({
+        url: './playground/cypress/index.html',
+        posthogOptions: {
+            session_recording: {},
+        },
+        flagsOverrides: {
             sessionRecording: {
-                ...startOptions.flagsResponseOverrides.sessionRecording,
+                endpoint: '/ses/',
                 sampleRate: '0',
             },
+            capturePerformance: true,
+            autocapture_opt_out: true,
         },
-    }
-    test.beforeEach(async ({ page, context }) => {
+    })
+
+    test.beforeEach(async ({ page, posthog, events }) => {
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/recorder.js*'],
             action: async () => {
-                await start(startOptions, page, context)
+                await posthog.init()
+                await events.waitForEvent('$pageview')
             },
         })
 
-        await page.expectCapturedEventsToBe(['$pageview'])
-        await page.resetCapturedEvents()
+        events.expectMatchList(['$pageview'])
+        events.clear()
     })
 
-    test('does not capture events when sampling is set to 0', async ({ page }) => {
+    test('does not capture events when sampling is set to 0', async ({ page, events }) => {
         await page.locator('[data-cy-input]').fill('hello posthog!')
         // because it doesn't make sense to wait for a snapshot event that won't happen
         await page.waitForTimeout(250)
 
-        await page.expectCapturedEventsToBe([])
+        events.expectMatchList([])
     })
 
-    test('can override sampling when starting session recording', async ({ page, context }) => {
-        await page.evaluate(() => {
-            const ph = (window as WindowWithPostHog).posthog
-            ph?.startSessionRecording({ sampling: true })
-            ph?.capture('test_registered_property')
+    test('can override sampling when starting session recording', async ({ page, posthog, events }) => {
+        await posthog.evaluate((ph) => {
+            ph.startSessionRecording({ sampling: true })
+            ph.capture('test_registered_property')
         })
-        await page.expectCapturedEventsToBe(['test_registered_property'])
-        expect((await page.capturedEvents())[0]['properties']['$session_recording_start_reason']).toEqual(
-            'sampling_overridden'
-        )
+        events.expectMatchList(['test_registered_property'])
+        expect(events.first()!['properties']['$session_recording_start_reason']).toEqual('sampling_overridden')
 
         // sampling override survives a page refresh
-        await page.resetCapturedEvents()
-        await page.reload()
+        events.clear()
+        await page.reloadIdle()
 
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/recorder.js*'],
             action: async () => {
-                await start(
-                    {
-                        ...sampleZeroStartOptions,
-                        type: 'reload',
-                    },
-                    page,
-                    context
-                )
+                await page.reloadIdle()
+                await posthog.init()
+                await page.waitForLoadState('networkidle')
             },
         })
         await page.waitingForNetworkCausedBy({
@@ -81,7 +64,7 @@ test.describe('Session recording - sampling', () => {
             },
         })
 
-        const afterReloadCapturedEvents = await page.capturedEvents()
+        const afterReloadCapturedEvents = events.all()
         const lastCaptured = afterReloadCapturedEvents[afterReloadCapturedEvents.length - 1]
         expect(lastCaptured['event']).toEqual('$snapshot')
     })

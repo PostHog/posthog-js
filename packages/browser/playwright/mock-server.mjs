@@ -68,6 +68,13 @@ app.use(express.urlencoded({ extended: true }))
 
 app.use(/^\/e/, (req, res) => {
     if (req.body) {
+        let events
+        if (Array.isArray(req.body)) {
+            events = req.body.map((event) => event.event)
+        } else {
+            events = [req.body.event]
+        }
+        events.forEach((evt) => console.log(`[Event] ${evt}`))
         eventStore.push(req.body)
     } else {
         console.error('Received event request without body', req.url)

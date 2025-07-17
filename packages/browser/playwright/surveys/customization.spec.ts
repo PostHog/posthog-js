@@ -70,6 +70,7 @@ test.describe('surveys - customization', () => {
             network
         )
 
+        await events.waitForEvent('survey shown')
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-question')).toHaveText(
             'What feedback do you have for us?'
@@ -90,7 +91,7 @@ test.describe('surveys - customization', () => {
         await events.waitForEvent('survey sent')
     })
 
-    test('does not show posthog logo if whiteLabel exists', async ({ page, posthog, network }) => {
+    test('does not show posthog logo if whiteLabel exists', async ({ page, posthog, events, network }) => {
         await initSurveys(
             [
                 {
@@ -106,6 +107,7 @@ test.describe('surveys - customization', () => {
             network
         )
 
+        await events.waitForEvent('survey shown')
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
         await expect(page.locator('.PostHogSurvey-123').locator('.footer-branding')).not.toBeVisible()
     })
@@ -113,6 +115,7 @@ test.describe('surveys - customization', () => {
     test('allows html customization for question and thank you element description', async ({
         page,
         posthog,
+        events,
         network,
     }) => {
         await initSurveys(
@@ -129,6 +132,7 @@ test.describe('surveys - customization', () => {
             network
         )
 
+        await events.waitForEvent('survey shown')
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-question')).toHaveText(
             'Book an interview with us'
@@ -141,6 +145,7 @@ test.describe('surveys - customization', () => {
     test('allows html customization for question missing the descriptionContentType field (backfilling against surveys made before we introduced this field)', async ({
         page,
         network,
+        events,
         posthog,
     }) => {
         await initSurveys(
@@ -157,6 +162,7 @@ test.describe('surveys - customization', () => {
             network
         )
 
+        await events.waitForEvent('survey shown')
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-question')).toHaveText(
             'Book an interview with us'
@@ -186,6 +192,7 @@ test.describe('surveys - customization', () => {
             network
         )
 
+        await events.waitForEvent('survey shown')
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-question')).toHaveText(
             'What feedback do you have for us?'
@@ -204,6 +211,7 @@ test.describe('surveys - customization', () => {
     test('does not render html customization for question descriptions if the question.survey-question-descriptionContentType does not permit it', async ({
         page,
         posthog,
+        events,
         network,
     }) => {
         await initSurveys(
@@ -220,6 +228,7 @@ test.describe('surveys - customization', () => {
             network
         )
 
+        await events.waitForEvent('survey shown')
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-question')).toHaveText(
             'Book an interview with us'
@@ -255,6 +264,7 @@ test.describe('surveys - customization', () => {
             network
         )
 
+        await events.waitForEvent('survey shown')
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-question')).toHaveText(
             'What feedback do you have for us?'

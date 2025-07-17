@@ -1,5 +1,5 @@
-import { test as base } from '@playwright/test'
 import { CaptureResult } from '../../src/types'
+import { testPostHog } from './posthog'
 
 const INGESTION_TIMEOUT = 10 * 60 * 1000 // 10 min
 const currentEnv = process.env
@@ -10,10 +10,10 @@ const {
     POSTHOG_API_PROJECT = '1',
 } = currentEnv
 
-export const testIngestion = base.extend<{}, { ingestion: IngestionChecker }>({
+export const testIngestion = testPostHog.extend<{}, { ingestion: IngestionPage }>({
     ingestion: [
         async ({}, use) => {
-            const ingestion = new IngestionChecker()
+            const ingestion = new IngestionPage()
             ingestion.checkEnv()
             await use(ingestion)
             // eslint-disable-next-line no-console
@@ -28,7 +28,7 @@ export const testIngestion = base.extend<{}, { ingestion: IngestionChecker }>({
     ],
 })
 
-export class IngestionChecker {
+export class IngestionPage {
     sessionChecks: {
         sessionId: string
         eventsCount: number

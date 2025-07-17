@@ -86,6 +86,7 @@ test.describe('surveys - core display logic', () => {
             network
         )
 
+        await events.waitForEvent('survey shown')
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-question')).toHaveText(
             'What feedback do you have for us?'
@@ -99,7 +100,7 @@ test.describe('surveys - core display logic', () => {
         await events.waitForEvent('survey sent')
     })
 
-    test('rating questions that are on the 10 scale start at 0', async ({ page, posthog, network }) => {
+    test('rating questions that are on the 10 scale start at 0', async ({ page, posthog, events, network }) => {
         await initSurveys(
             [
                 {
@@ -115,6 +116,7 @@ test.describe('surveys - core display logic', () => {
             network
         )
 
+        await events.waitForEvent('survey shown')
         await expect(page.locator('.PostHogSurvey-123').locator('.survey-form')).toBeVisible()
         await expect(page.locator('.PostHogSurvey-123').locator('.ratings-number')).toHaveCount(11)
         let i = 0
@@ -144,8 +146,9 @@ test.describe('surveys - core display logic', () => {
             posthog,
             network
         )
-
+        await events.waitForEvent('survey shown')
         await expect(page.locator('.PostHogSurvey-12345').locator('.survey-form')).toBeVisible()
+
         await page.locator('.PostHogSurvey-12345').locator('#surveyQuestion0Choice1').click()
         await page.locator('.PostHogSurvey-12345').locator('#surveyQuestion0Choice2').click()
         await page.locator('.PostHogSurvey-12345').locator('.form-submit').click()
@@ -212,7 +215,7 @@ test.describe('surveys - core display logic', () => {
             posthog,
             network
         )
-
+        await events.waitForEvent('survey shown')
         await expect(page.locator('.PostHogSurvey-12345').locator('.survey-form')).toBeVisible()
         await page.locator('.PostHogSurvey-12345').locator('#surveyQuestion0Choice3').click()
         await page.locator('.PostHogSurvey-12345').locator('#surveyQuestion0Choice0').click()
@@ -255,6 +258,7 @@ test.describe('surveys - core display logic', () => {
             network
         )
 
+        await events.waitForEvent('survey shown')
         await expect(page.locator('.PostHogSurvey-12345').locator('.survey-form')).toBeVisible()
         await page.locator('.PostHogSurvey-12345').locator('#surveyQuestion0Choice3').click()
         // TODO: you have to click on the input to activate it, really clicking on the parent should select the input

@@ -1,13 +1,11 @@
-import { test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
-import { assertThatRecordingStarted, pollUntilEventCaptured } from '../utils/event-capture-utils'
+import { test, WindowWithPostHog } from '../fixtures'
 
 const startOptions = {
-    options: {
+    posthogOptions: {
         session_recording: {},
         opt_out_capturing_by_default: true,
     },
-    flagsResponseOverrides: {
+    flagsOverrides: {
         sessionRecording: {
             endpoint: '/ses/',
             // a flag that doesn't exist, can never be recorded
@@ -22,13 +20,16 @@ const startOptions = {
 }
 
 test.describe('Session recording - multiple ingestion controls', () => {
-    test.beforeEach(async ({ page, context }) => {
-        await start(startOptions, page, context)
-        await page.expectCapturedEventsToBe([])
-        await page.resetCapturedEvents()
+    test.use(startOptions)
+
+    test.beforeEach(async ({ posthog, events }) => {
+        await posthog.init()
+        await posthog.waitForLoaded()
+        events.expectMatchList([])
+        events.clear()
     })
 
-    test('respects sampling when overriding linked flag', async ({ page }) => {
+    test('respects sampling when overriding linked flag', async ({ page, posthog, events }) => {
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/recorder.js*'],
             action: async () => {
@@ -41,26 +42,23 @@ test.describe('Session recording - multiple ingestion controls', () => {
             },
         })
 
-        await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
+        events.expectMatchList(['$opt_in', '$pageview'])
 
-        await page.evaluate(() => {
-            const ph = (window as WindowWithPostHog).posthog
-            ph?.startSessionRecording({ linked_flag: true })
+        await posthog.evaluate((ph) => {
+            ph.startSessionRecording({ linked_flag: true })
         })
-        await page.locator('[data-cy-input]').type('hello posthog!')
+        await page.locator('[data-cy-input]').fill('hello posthog!')
         // there's nothing to wait for... so, just wait a bit
         await page.waitForTimeout(250)
         // no new events
-        await page.expectCapturedEventsToBe(['$opt_in', '$pageview'])
-        await page.resetCapturedEvents()
+        events.expectMatchList(['$opt_in', '$pageview'])
+        events.clear()
 
-        await page.evaluate(() => {
-            const ph = (window as WindowWithPostHog).posthog
-            // override all controls
-            ph?.startSessionRecording(true)
+        await posthog.evaluate((ph) => {
+            ph.startSessionRecording(true)
         })
-        await page.locator('[data-cy-input]').type('hello posthog!')
-        await pollUntilEventCaptured(page, '$snapshot')
-        await assertThatRecordingStarted(page)
+        await page.locator('[data-cy-input]').fill('hello posthog!')
+        await events.waitForEvent('$snapshot')
+        events.expectRecordingStarted()
     })
 })

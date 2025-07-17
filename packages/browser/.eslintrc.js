@@ -41,7 +41,7 @@ module.exports = {
             },
         },
         {
-            files: './playwright/**/*.ts',
+            files: './playwright/**/*',
             rules: {
                 'posthog-js/no-direct-array-check': 'off',
                 'posthog-js/no-direct-undefined-check': 'off',

@@ -42,8 +42,11 @@ test.describe('before_send', () => {
         })
 
         await posthog.init({}, ['before_send'])
+        await events.waitForEvent('$pageview')
         await page.locator('[data-cy-custom-event-button]').click()
+        await events.waitForEvent('redacted')
         await page.locator('[data-cy-custom-event-button]').click()
+        await events.waitForEvent('custom-event')
         events.expectMatchList([
             // before adding the new before sendfn
             '$pageview',

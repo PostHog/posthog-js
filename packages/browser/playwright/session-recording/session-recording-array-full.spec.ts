@@ -1,52 +1,59 @@
-import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
+import { expect, StartOptions, test } from '../fixtures'
 
-const startOptions = {
-    options: {
+const startOptions: StartOptions = {
+    posthogOptions: {
         session_recording: {},
+        autocapture: false,
     },
-    flagsResponseOverrides: {
+    flagsOverrides: {
         sessionRecording: {
             endpoint: '/ses/',
         },
         capturePerformance: true,
         autocapture_opt_out: true,
     },
-    url: './playground/cypress-full/index.html',
+    url: '/playground/cypress-full/index.html',
 }
 
 test.describe('session recording in array.full.js', () => {
-    test('captures session events', async ({ page, context }) => {
-        await start(startOptions, page, context)
+    test.use(startOptions)
 
+    test('captures session events', async ({ page, posthog, events }) => {
+        await posthog.init()
+
+        await events.waitForEvent('$pageview')
         await page.waitingForNetworkCausedBy({
             urlPatternsToWaitFor: ['**/ses/*'],
             action: async () => {
-                await page.locator('[data-cy-input]').fill('hello posthog!')
+                await page.locator('[data-cy-input]').pressSequentially('hello posthog!')
             },
         })
+        await events.waitForEvent('$snapshot')
 
-        await page.evaluate(() => {
-            const ph = (window as WindowWithPostHog).posthog
-            ph?.capture('test_registered_property')
-        })
+        await posthog.capture('test_registered_property')
 
-        await page.expectCapturedEventsToBe(['$pageview', '$snapshot', 'test_registered_property'])
-        const capturedEvents = await page.capturedEvents()
+        await events.waitForEvent('test_registered_property')
+
+        events.expectMatchList(['$pageview', '$snapshot', 'test_registered_property'])
+
+        const snapshotEvent = events.findByName('$snapshot')!
 
         // don't care about network payloads here
-        const snapshotData = capturedEvents[1]['properties']['$snapshot_data'].filter((s: any) => s.type !== 6)
+        const snapshotData = snapshotEvent['properties']['$snapshot_data'].filter((s: any) => s.type !== 6)
+
+        // we filter $pageview event as it might be added anywhere in the snapshot data
+        const snapshotWithoutPageview = snapshotData.filter((s: any) => s.data.tag !== '$pageview')
 
         // a meta and then a full snapshot
-        expect(snapshotData[0].type).toEqual(4) // meta
-        expect(snapshotData[1].type).toEqual(2) // full_snapshot
-        expect(snapshotData[2].type).toEqual(5) // custom event with remote config
-        expect(snapshotData[3].type).toEqual(5) // custom event with options
-        expect(snapshotData[4].type).toEqual(5) // custom event with posthog config
+        expect(snapshotWithoutPageview[0].type).toEqual(4) // meta
+        expect(snapshotWithoutPageview[1].type).toEqual(2) // full_snapshot
+        expect(snapshotWithoutPageview[2].type).toEqual(5) // custom event with remote config
+        expect(snapshotWithoutPageview[3].type).toEqual(5) // custom event with options
+        expect(snapshotWithoutPageview[4].type).toEqual(5) // custom event with posthog config
         // Making a set from the rest should all be 3 - incremental snapshots
-        const incrementalSnapshots = snapshotData.slice(5)
+        const incrementalSnapshots = snapshotWithoutPageview.slice(5)
         expect(Array.from(new Set(incrementalSnapshots.map((s: any) => s.type)))).toStrictEqual([3])
-
-        expect(capturedEvents[2]['properties']['$session_recording_start_reason']).toEqual('recording_initialized')
+        const customEvent = events.findByName('test_registered_property')!
+        expect(customEvent['properties']['$session_recording_start_reason']).toEqual('recording_initialized')
     })
 })

@@ -1,28 +1,31 @@
 import { RemoteConfig } from '../../src/types'
-import { expect, test, WindowWithPostHog } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
+import { expect, StartOptions, test } from '../fixtures'
 
-const startOptions = {
-    options: {
+const startOptions: StartOptions = {
+    posthogOptions: {
         session_recording: {},
+        autocapture: false,
     },
-    flagsResponseOverrides: {
+    flagsOverrides: {
         sessionRecording: {
             endpoint: '/ses/',
         },
         capturePerformance: true,
         autocapture_opt_out: true,
     },
-    url: 'http://localhost:8082/playground/cypress/index.html',
 }
 
+const url = '/playground/cypress/index.html'
+
 test.describe('Session recording - trigger match types 30% sampling + event trigger', () => {
+    test.use({ url })
+
     const sampleThirtyWithTriggerOptions = {
         ...startOptions,
-        flagsResponseOverrides: {
-            ...startOptions.flagsResponseOverrides,
+        flagsOverrides: {
+            ...startOptions.flagsOverrides,
             sessionRecording: {
-                ...startOptions.flagsResponseOverrides.sessionRecording,
+                ...startOptions.flagsOverrides!.sessionRecording,
                 sampleRate: '0.3',
                 eventTriggers: ['example'],
             } satisfies RemoteConfig['sessionRecording'],
@@ -32,82 +35,87 @@ test.describe('Session recording - trigger match types 30% sampling + event trig
     test.describe('ANY match type', () => {
         const anyMatchOptions = {
             ...sampleThirtyWithTriggerOptions,
-            flagsResponseOverrides: {
-                ...sampleThirtyWithTriggerOptions.flagsResponseOverrides,
+            flagsOverrides: {
+                ...sampleThirtyWithTriggerOptions.flagsOverrides,
                 sessionRecording: {
-                    ...sampleThirtyWithTriggerOptions.flagsResponseOverrides.sessionRecording,
+                    ...sampleThirtyWithTriggerOptions.flagsOverrides.sessionRecording,
                     triggerMatchType: 'any',
                 } satisfies RemoteConfig['sessionRecording'],
             },
         }
 
-        test.beforeEach(async ({ page, context }) => {
+        test.beforeEach(async ({ page, posthog, events, network }) => {
+            await network.mockFlags(anyMatchOptions.flagsOverrides)
             await page.waitingForNetworkCausedBy({
                 urlPatternsToWaitFor: ['**/recorder.js*'],
                 action: async () => {
-                    await start(anyMatchOptions, page, context)
+                    await posthog.init(anyMatchOptions.posthogOptions)
                 },
             })
-            await page.expectCapturedEventsToBe(['$pageview'])
-            await page.resetCapturedEvents()
+            events.expectMatchList(['$pageview'])
+            events.clear()
         })
 
-        test('starts recording when example event is captured regardless of sampling', async ({ page }) => {
-            await page.evaluate(() => {
-                const ph = (window as WindowWithPostHog).posthog
-                ph?.capture('example')
-            })
+        test('starts recording when example event is captured regardless of sampling', async ({
+            page,
+            events,
+            posthog,
+        }) => {
+            await posthog.capture('example')
 
             await page.waitingForNetworkCausedBy({
                 urlPatternsToWaitFor: ['**/ses/*'],
                 action: async () => {
-                    await page.locator('[data-cy-input]').fill('hello posthog!')
+                    await page.locator('[data-cy-input]').pressSequentially('hello posthog!')
                 },
             })
 
-            const events = await page.capturedEvents()
             expect(events.some((e) => e.event === '$snapshot')).toBeTruthy()
             expect(events.find((e) => e.event === 'example')).toBeTruthy()
         })
     })
 
+    // There is a 30% chance that the test will fail due to the sampling rate.
+    // 99% chance of success with 4 retries
+    test.describe.configure({ retries: 4 })
+
     test.describe('ALL match type', () => {
         const allMatchOptions = {
             ...sampleThirtyWithTriggerOptions,
-            flagsResponseOverrides: {
-                ...sampleThirtyWithTriggerOptions.flagsResponseOverrides,
+            flagsOverrides: {
+                ...sampleThirtyWithTriggerOptions.flagsOverrides,
                 sessionRecording: {
-                    ...sampleThirtyWithTriggerOptions.flagsResponseOverrides.sessionRecording,
+                    ...sampleThirtyWithTriggerOptions.flagsOverrides.sessionRecording,
                     triggerMatchType: 'all',
                 } satisfies RemoteConfig['sessionRecording'],
             },
         }
 
-        test.beforeEach(async ({ page, context }) => {
+        test.beforeEach(async ({ page, posthog, events, network }) => {
+            await network.mockFlags(allMatchOptions.flagsOverrides)
             await page.waitingForNetworkCausedBy({
                 urlPatternsToWaitFor: ['**/recorder.js*'],
                 action: async () => {
-                    await start(allMatchOptions, page, context)
+                    await posthog.init(allMatchOptions.posthogOptions)
                 },
             })
-            await page.expectCapturedEventsToBe(['$pageview'])
-            await page.resetCapturedEvents()
+            await events.waitForEvent('$pageview')
+            events.expectMatchList(['$pageview'])
+            events.clear()
         })
 
-        test('only starts recording for sampled sessions that see the example event', async ({ page }) => {
+        test('only starts recording for sampled sessions that see the example event', async ({
+            page,
+            posthog,
+            events,
+        }) => {
             // First, capture the example event
-            await page.evaluate(() => {
-                const ph = (window as WindowWithPostHog).posthog
-                ph?.capture('example')
-            })
+            await posthog.capture('example')
 
             // Try to trigger a recording by interacting
-            await page.locator('[data-cy-input]').fill('hello posthog!')
+            await page.locator('[data-cy-input]').pressSequentially('hello posthog!')
 
             await page.waitForTimeout(1000)
-
-            // Get all events
-            const events = await page.capturedEvents()
 
             // Note: We can't deterministically test the 30% sampling here,
             // but we can verify that after a delay there was an event but no snapshot
@@ -122,9 +130,9 @@ test.describe('Session recording - trigger match types 0% sampling + event trigg
     const sampleZeroWithTriggerOptions = {
         ...startOptions,
         flagsResponseOverrides: {
-            ...startOptions.flagsResponseOverrides,
+            ...startOptions.flagsOverrides,
             sessionRecording: {
-                ...startOptions.flagsResponseOverrides.sessionRecording,
+                ...startOptions.flagsOverrides!.sessionRecording,
                 sampleRate: '0',
                 eventTriggers: ['example'],
                 urlTriggers: [
@@ -136,49 +144,52 @@ test.describe('Session recording - trigger match types 0% sampling + event trigg
             } satisfies RemoteConfig['sessionRecording'],
         },
     }
+    test.use({ url })
 
     test.describe('ANY match type', () => {
         const anyMatchOptions = {
             ...sampleZeroWithTriggerOptions,
-            flagsResponseOverrides: {
-                ...sampleZeroWithTriggerOptions.flagsResponseOverrides,
+            flagsOverrides: {
+                ...sampleZeroWithTriggerOptions.flagsOverrides,
                 sessionRecording: {
-                    ...sampleZeroWithTriggerOptions.flagsResponseOverrides.sessionRecording,
+                    ...sampleZeroWithTriggerOptions.flagsOverrides!.sessionRecording,
                     triggerMatchType: 'any',
                 } satisfies RemoteConfig['sessionRecording'],
             },
         }
 
-        test.beforeEach(async ({ page, context }) => {
+        test.beforeEach(async ({ page, posthog, events, network }) => {
+            await network.mockFlags(anyMatchOptions.flagsOverrides)
             await page.waitingForNetworkCausedBy({
                 urlPatternsToWaitFor: ['**/recorder.js*'],
                 action: async () => {
-                    await start(anyMatchOptions, page, context)
+                    await posthog.init(anyMatchOptions.posthogOptions)
                 },
             })
-            await page.expectCapturedEventsToBe(['$pageview'])
-            await page.resetCapturedEvents()
+            await events.waitForEvent('$pageview')
+            events.expectMatchList(['$pageview'])
+            events.clear()
         })
 
-        test('starts recording when example event is captured regardless of other triggers', async ({ page }) => {
-            await page.evaluate(() => {
-                const ph = (window as WindowWithPostHog).posthog
-                ph?.capture('example')
-            })
+        test('starts recording when example event is captured regardless of other triggers', async ({
+            page,
+            posthog,
+            events,
+        }) => {
+            await posthog.capture('example')
 
             await page.waitingForNetworkCausedBy({
                 urlPatternsToWaitFor: ['**/ses/*'],
                 action: async () => {
-                    await page.locator('[data-cy-input]').fill('hello posthog!')
+                    await page.locator('[data-cy-input]').pressSequentially('hello posthog!')
                 },
             })
 
-            const events = await page.capturedEvents()
             expect(events.some((e) => e.event === '$snapshot')).toBeTruthy()
             expect(events.find((e) => e.event === 'example')).toBeTruthy()
         })
 
-        test('starts recording when URL triggers regardless of other triggers', async ({ page }) => {
+        test('starts recording when URL triggers regardless of other triggers', async ({ page, events }) => {
             await page.waitingForNetworkCausedBy({
                 urlPatternsToWaitFor: ['**/ses/*'],
                 action: async () => {
@@ -186,11 +197,10 @@ test.describe('Session recording - trigger match types 0% sampling + event trigg
                     await page.evaluate(() => {
                         window.history.pushState({}, '', '/example-path')
                     })
-                    await page.locator('[data-cy-input]').fill('hello posthog!')
+                    await page.locator('[data-cy-input]').pressSequentially('hello posthog!')
                 },
             })
 
-            const events = await page.capturedEvents()
             expect(events.some((e) => e.event === '$snapshot')).toBeTruthy()
         })
     })
@@ -198,39 +208,36 @@ test.describe('Session recording - trigger match types 0% sampling + event trigg
     test.describe('ALL match type', () => {
         const allMatchOptions = {
             ...sampleZeroWithTriggerOptions,
-            flagsResponseOverrides: {
-                ...sampleZeroWithTriggerOptions.flagsResponseOverrides,
+            flagsOverrides: {
+                ...sampleZeroWithTriggerOptions.flagsOverrides,
                 sessionRecording: {
-                    ...sampleZeroWithTriggerOptions.flagsResponseOverrides.sessionRecording,
+                    ...sampleZeroWithTriggerOptions.flagsOverrides!.sessionRecording,
                     triggerMatchType: 'all',
                 } satisfies RemoteConfig['sessionRecording'],
             },
         }
 
-        test.beforeEach(async ({ page, context }) => {
+        test.beforeEach(async ({ page, posthog, network, events }) => {
+            await network.mockFlags(allMatchOptions.flagsOverrides)
             await page.waitingForNetworkCausedBy({
                 urlPatternsToWaitFor: ['**/recorder.js*'],
                 action: async () => {
-                    await start(allMatchOptions, page, context)
+                    await posthog.init(allMatchOptions.posthogOptions)
                 },
             })
-            await page.expectCapturedEventsToBe(['$pageview'])
-            await page.resetCapturedEvents()
+            events.expectMatchList(['$pageview'])
+            events.clear()
         })
 
-        test('will not start recording regardless of triggers', async ({ page }) => {
-            await page.evaluate(async () => {
-                const ph = (window as WindowWithPostHog).posthog
-                ph?.capture('example')
+        test('will not start recording regardless of triggers', async ({ page, posthog, events }) => {
+            await posthog.evaluate(async (ph) => {
+                ph.capture('example')
                 // change  the URL without navigating
                 window.history.pushState({}, '', '/example-path')
             })
 
-            await page.locator('[data-cy-input]').fill('hello posthog!')
+            await page.locator('[data-cy-input]').pressSequentially('hello posthog!')
             await page.waitForTimeout(1000)
-
-            // Get all events
-            const events = await page.capturedEvents()
 
             // Note: We can't deterministically test the 30% sampling here,
             // but we can verify that after a delay there was an event but no snapshot

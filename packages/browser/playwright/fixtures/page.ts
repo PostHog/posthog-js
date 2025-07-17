@@ -10,11 +10,17 @@ export interface BasePage extends Page {
     delay(ms: number): Promise<void>
     createFunctionHandle(fn: Function): Promise<string>
     waitForCondition(condition: () => boolean | Promise<boolean>, options?: Partial<WaitOptions>): Promise<void>
+    waitingForNetworkCausedBy(options: {
+        urlPatternsToWaitFor: (string | RegExp)[]
+        action: () => Promise<void>
+    }): Promise<void>
+    reloadIdle: () => Promise<void>
 }
 
 export const testPage = base.extend<{ page: BasePage; url: string | undefined }>({
     url: [undefined, { option: true }],
     page: async ({ page, url }, use) => {
+        await page.clock.install()
         page.delay = async (ms: number) => {
             await new Promise((resolve) => setTimeout(resolve, ms))
         }
@@ -32,10 +38,25 @@ export const testPage = base.extend<{ page: BasePage; url: string | undefined }>
             await page.delay(pollInterval)
             await page.waitForCondition(condition, { pollInterval, attempts: attempts + 1, maxAttempts })
         }
+        page.waitingForNetworkCausedBy = async function (options: {
+            urlPatternsToWaitFor: (string | RegExp)[]
+            action: () => Promise<void>
+        }) {
+            const responsePromises = options.urlPatternsToWaitFor.map((urlPattern) => {
+                return this.waitForResponse(urlPattern)
+            })
+            await options.action()
+            // eslint-disable-next-line compat/compat
+            await Promise.allSettled(responsePromises)
+        }
+        page.reloadIdle = async () => {
+            await page.reload({ waitUntil: 'networkidle' })
+        }
         if (url) {
             await page.goto(url, { waitUntil: 'networkidle' })
         }
         await use(page)
+        await page.clock.install()
         await page.close()
     },
 })

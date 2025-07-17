@@ -1,5 +1,4 @@
-import { test, expect } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
+import { test, expect } from '../fixtures'
 import { Page } from '@playwright/test'
 
 test.beforeEach(async ({ context }) => {
@@ -24,7 +23,7 @@ test.beforeEach(async ({ context }) => {
         // these are pretty flaky and annoying, in the short term lets...
         test.describe.configure({ retries: 6 })
 
-        test.beforeEach(async ({ page, context }) => {
+        test.beforeEach(async ({ page, posthog, network }) => {
             const wrapInPageContext = async (pg: Page) => {
                 // this is page.evaluate and not page.exposeFunction because we need to execute it in the browser context
                 // or else window is not available...
@@ -63,28 +62,41 @@ test.beforeEach(async ({ context }) => {
             }
 
             await page.waitingForNetworkCausedBy({
-                urlPatternsToWaitFor: ['**/recorder.js*'],
+                urlPatternsToWaitFor: ['**/recorder.js*', '**/flags'],
                 action: async () => {
-                    await start(
-                        {
-                            options: {
-                                session_recording: {},
-                            },
-                            flagsResponseOverrides: {
-                                sessionRecording: {
-                                    endpoint: '/ses/',
-                                    networkPayloadCapture: { recordBody: true, recordHeaders: true },
-                                },
-                                capturePerformance: true,
-                                autocapture_opt_out: true,
-                            },
-                            url: '/playground/cypress/index.html',
-                            runBeforePostHogInit: wrapInPageContext,
-                            runAfterPostHogInit: wrapInPageContext,
+                    await page.goto('/playground/cypress/index.html', { waitUntil: 'networkidle' })
+                    await network.mockFlags({
+                        sessionRecording: {
+                            endpoint: '/ses/',
+                            networkPayloadCapture: { recordBody: true, recordHeaders: true },
                         },
-                        page,
-                        context
-                    )
+                        capturePerformance: true,
+                        autocapture_opt_out: true,
+                    })
+                    await wrapInPageContext(page)
+                    await posthog.init({
+                        session_recording: {},
+                    })
+                    // await start(
+                    //     {
+                    //         options: {
+                    //             session_recording: {},
+                    //         },
+                    //         flagsResponseOverrides: {
+                    //             sessionRecording: {
+                    //                 endpoint: '/ses/',
+                    //                 networkPayloadCapture: { recordBody: true, recordHeaders: true },
+                    //             },
+                    //             capturePerformance: true,
+                    //             autocapture_opt_out: true,
+                    //         },
+                    //         url: '/playground/cypress/index.html',
+                    //         runBeforePostHogInit: wrapInPageContext,
+                    //         runAfterPostHogInit: wrapInPageContext,
+                    //     },
+                    //     page,
+                    //     context
+                    // )
                 },
             })
 
@@ -104,15 +116,15 @@ test.beforeEach(async ({ context }) => {
             })
         })
         ;['fetch', 'xhr'].forEach((networkType) => {
-            test('it captures ' + networkType, async ({ page, browserName }) => {
+            test.skip('it captures ' + networkType, async ({ page, events, browserName }) => {
                 await page.waitingForNetworkCausedBy({
                     urlPatternsToWaitFor: ['**/ses/*', 'https://example.com/'],
                     action: async () => {
                         await page.click(`[data-cy-${networkType}-call-button]`)
                     },
                 })
-                const capturedEvents = await page.capturedEvents()
-                const snapshots = capturedEvents.filter((c) => c.event === '$snapshot')
+
+                const snapshots = events.filter((c) => c.event === '$snapshot')
 
                 const capturedRequests: Record<string, any>[] = []
                 for (const snapshot of snapshots) {

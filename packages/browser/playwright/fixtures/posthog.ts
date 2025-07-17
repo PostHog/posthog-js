@@ -121,13 +121,13 @@ export class PosthogPage {
                 additionalProperties,
             } as Record<string, any>
         )
+        this.page.waitForLoadState('networkidle')
     }
 
     async capture(eventName: string, properties?: Record<string, any>) {
-        await this.page.evaluate(
-            (args: { eventName: string; properties?: Record<string, any> }) => {
-                const windowPosthog = (window as WindowWithPostHog).posthog
-                windowPosthog?.capture(args.eventName, args.properties)
+        await this.evaluate(
+            (ph, args: { eventName: string; properties?: Record<string, any> }) => {
+                ph.capture(args.eventName, args.properties)
             },
             { eventName, properties }
         )

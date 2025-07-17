@@ -1,5 +1,4 @@
-import { test, expect } from '../utils/posthog-playwright-test-base'
-import { start } from '../utils/setup'
+import { test, expect, PosthogPage, EventsPage, NetworkPage } from '../fixtures'
 import { Page } from '@playwright/test'
 import { CaptureResult } from '../../src/types'
 
@@ -8,31 +7,27 @@ import { CaptureResult } from '../../src/types'
 
 const remoteMaskingTextSelector = '*'
 
-const startOptions = (masking: Record<string, any>) => ({
-    options: {
-        session_recording: {
-            compress_events: false,
-        },
-    },
-    flagsResponseOverrides: {
+async function startWith(posthog: PosthogPage, network: NetworkPage, masking: Record<string, any>) {
+    await network.mockFlags({
         sessionRecording: {
             endpoint: '/ses/',
             masking,
         },
         capturePerformance: true,
         autocapture_opt_out: true,
-    },
-    url: './playground/cypress/index.html',
-})
+    })
+    const flagsPromise = network.waitForFlags()
+    await posthog.init()
+    await flagsPromise
+}
 
-async function interactWithThePage(page: Page) {
-    await page.locator('[data-cy-input]').type('hello posthog!')
+async function interactWithThePage(page: Page, events: EventsPage) {
+    await page.locator('[data-cy-input]').fill('hello posthog!')
 
     await expect(page.locator(remoteMaskingTextSelector).first()).toBeVisible()
     // there's nothing to wait for... so, just wait a bit
     await page.waitForTimeout(2500)
     // no new events
-    const events = await page.capturedEvents()
     const snapshotEvents = events.filter((e) => e.event === '$snapshot')
     expect(snapshotEvents.length).toBeGreaterThan(0)
     return snapshotEvents
@@ -54,26 +49,31 @@ function assertTheConfigIsAsExpected(snapshotEvents: CaptureResult[], expectedMa
 }
 
 test.describe('Session recording - masking', () => {
-    test('masks text', async ({ page, context }) => {
-        await start(
-            startOptions({
-                maskAllInputs: true,
-                maskTextSelector: remoteMaskingTextSelector,
-            }),
-            page,
-            context
-        )
+    test.use({
+        url: './playground/cypress/index.html',
+        posthogOptions: {
+            session_recording: {
+                compress_events: false,
+            },
+        },
+    })
 
-        const snapshotEvents = await interactWithThePage(page)
+    test('masks text', async ({ page, posthog, events, network }) => {
+        await startWith(posthog, network, {
+            maskAllInputs: true,
+            maskTextSelector: remoteMaskingTextSelector,
+        })
+
+        const snapshotEvents = await interactWithThePage(page, events)
 
         assertTheConfigIsAsExpected(snapshotEvents, {
             maskAllInputs: true,
             maskTextSelector: remoteMaskingTextSelector,
         })
 
-        const snapshotData = snapshotEvents.map((e) => JSON.stringify(e.properties?.['$snapshot_data']))
+        const snapshotData = snapshotEvents.map((e: any) => JSON.stringify(e.properties?.['$snapshot_data']))
 
-        const snapshotsThatIncludeMaskedContent = snapshotData.filter((data) => {
+        const snapshotsThatIncludeMaskedContent = snapshotData.filter((data: any) => {
             const includesMaskedInput = !!data?.includes('hello posthog!')
 
             const includesMaskedText = !!data?.includes('just some text')
@@ -84,30 +84,24 @@ test.describe('Session recording - masking', () => {
         expect(snapshotsThatIncludeMaskedContent.length).toBe(0)
     })
 
-    test('unmasks inputs', async ({ page, context }) => {
-        await start(
-            startOptions({
-                maskAllInputs: false,
-                maskTextSelector: remoteMaskingTextSelector,
-            }),
-            page,
-            context
-        )
+    test('unmasks inputs', async ({ page, posthog, events, network }) => {
+        await startWith(posthog, network, {
+            maskAllInputs: false,
+            maskTextSelector: remoteMaskingTextSelector,
+        })
 
-        const snapshotEvents = await interactWithThePage(page)
+        const snapshotEvents = await interactWithThePage(page, events)
 
         assertTheConfigIsAsExpected(snapshotEvents, {
             maskAllInputs: false,
             maskTextSelector: remoteMaskingTextSelector,
         })
 
-        const snapshotData = snapshotEvents.map((e) => JSON.stringify(e.properties?.['$snapshot_data']))
+        const snapshotData = snapshotEvents.map((e: any) => JSON.stringify(e.properties?.['$snapshot_data']))
 
-        const snapshotsThatIncludeMaskedContent = snapshotData.filter((data) => {
+        const snapshotsThatIncludeMaskedContent = snapshotData.filter((data: any) => {
             const includesMaskedInput = !!data?.includes('hello posthog!')
-
             const includesMaskedText = !!data?.includes('just some text')
-
             return includesMaskedInput || includesMaskedText
         })
 

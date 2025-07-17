@@ -1,8 +1,9 @@
 import { expect } from '@playwright/test'
 import { CaptureResult } from '../../src/types'
-import { BasePage, testPage, WaitOptions } from './page'
+import { BasePage, WaitOptions } from './page'
+import { testNetwork } from './network'
 
-export const testEvents = testPage.extend<{ events: EventsPage }>({
+export const testEvents = testNetwork.extend<{ events: EventsPage }>({
     events: async ({ page }, use) => {
         const eventsPage = new EventsPage(page)
         await use(eventsPage)
@@ -27,6 +28,18 @@ export class EventsPage {
             if (!b.timestamp) return -1
             return a.timestamp.getTime() - b.timestamp.getTime()
         })
+    }
+
+    some(predicate: (event: CaptureResult) => boolean): boolean {
+        return this.eventStore.some(predicate)
+    }
+
+    get(index: number): CaptureResult | null {
+        return this.eventStore[index] ?? null
+    }
+
+    first(): CaptureResult | null {
+        return this.eventStore[0] ?? null
     }
 
     find(predicate: (event: CaptureResult) => boolean): CaptureResult | null {
@@ -89,5 +102,16 @@ export class EventsPage {
     expectMatchList(expectedEvents: string[]) {
         const capturedEvents = this.all()
         expect(capturedEvents.map((x) => x.event)).toMatchObject(expectedEvents)
+    }
+
+    expectRecordingStarted(count: number = 1) {
+        const snapshotCount = this.countByName('$snapshot')
+        expect(snapshotCount).toBe(count)
+        const snapshotEvent = this.findByName('$snapshot')
+        expect(snapshotEvent).toBeDefined()
+        expect(snapshotEvent!['properties']['$snapshot_data'].length).toBeGreaterThan(2)
+        // a meta and then a full snapshot
+        expect(snapshotEvent!['properties']['$snapshot_data'][0].type).toEqual(4) // meta
+        expect(snapshotEvent!['properties']['$snapshot_data'][1].type).toEqual(2) // full_snapshot
     }
 }

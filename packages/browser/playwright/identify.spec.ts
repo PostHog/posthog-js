@@ -2,6 +2,7 @@ import { expect, test } from './fixtures'
 
 test.describe('Identify', () => {
     test.use({ url: '/playground/cypress/index.html' })
+
     test.beforeEach(async ({ posthog }) => {
         await posthog.init()
     })
@@ -17,6 +18,7 @@ test.describe('Identify', () => {
     })
 
     test('opt out capturing does not fail after identify', async ({ posthog }) => {
+        await posthog.waitForLoaded()
         await posthog.evaluate((ph) => {
             ph.identify('some-id')
             ph.opt_out_capturing()
