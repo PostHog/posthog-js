@@ -17,17 +17,7 @@ export class EventsPage {
     constructor(private page: BasePage) {}
 
     addEvent(event: CaptureResult) {
-        event.timestamp = event.timestamp ? new Date(event.timestamp) : undefined
         this.eventStore.push(event)
-    }
-
-    sort() {
-        this.eventStore.sort((a, b) => {
-            if (!a.timestamp && !b.timestamp) return 0
-            if (!a.timestamp) return 1
-            if (!b.timestamp) return -1
-            return a.timestamp.getTime() - b.timestamp.getTime()
-        })
     }
 
     some(predicate: (event: CaptureResult) => boolean): boolean {
