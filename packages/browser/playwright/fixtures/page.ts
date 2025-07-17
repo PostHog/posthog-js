@@ -2,8 +2,7 @@ import { test as base, Page } from '@playwright/test'
 
 export type WaitOptions = {
     pollInterval: number
-    attempts: number
-    maxAttempts: number
+    maxRetries: number
 }
 
 export interface BasePage extends Page {
@@ -31,12 +30,15 @@ export const testPage = base.extend<{ page: BasePage; url: string | undefined }>
         }
         page.waitForCondition = async (
             condition: () => boolean | Promise<boolean>,
-            { pollInterval = 100, attempts = 0, maxAttempts = 100 } = {}
+            { pollInterval = 100, maxRetries = 100 } = {}
         ) => {
-            if (await condition()) return
-            if (attempts >= maxAttempts) throw new Error('Max attempts reached')
-            await page.delay(pollInterval)
-            await page.waitForCondition(condition, { pollInterval, attempts: attempts + 1, maxAttempts })
+            let currentRetries = 0
+            while (currentRetries < maxRetries) {
+                if (await condition()) return
+                await page.delay(pollInterval)
+                currentRetries++
+            }
+            throw new Error('Max attempts reached')
         }
         page.waitingForNetworkCausedBy = async function (options: {
             urlPatternsToWaitFor: (string | RegExp)[]
