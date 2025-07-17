@@ -12,5 +12,6 @@ export { IngestionPage } from './ingestion'
 export type StartOptions = {
     posthogOptions?: Partial<PostHogConfig>
     flagsOverrides?: Partial<FlagsResponse>
+    staticOverrides?: Record<string, string>
     url?: string
 }

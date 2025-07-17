@@ -7,7 +7,12 @@ import { testPage } from './page'
 // read directory ../../dist and get all files
 const files = fs.readdirSync(path.join(__dirname, '../../dist'))
 
-export const testNetwork = testPage.extend<{ network: NetworkPage; flagsOverrides: any }>({
+export const testNetwork = testPage.extend<{
+    network: NetworkPage
+    flagsOverrides: Partial<FlagsResponse>
+    staticOverrides: Record<string, string>
+}>({
+    staticOverrides: [{}, { option: true }],
     flagsOverrides: [
         {
             sessionRecording: undefined,
@@ -17,9 +22,9 @@ export const testNetwork = testPage.extend<{ network: NetworkPage; flagsOverride
         { option: true },
     ],
     network: [
-        async ({ page, flagsOverrides }, use) => {
+        async ({ page, flagsOverrides, staticOverrides }, use) => {
             const networkPage = new NetworkPage(page)
-            await networkPage.mockStatic()
+            await networkPage.mockStatic(staticOverrides)
             if (flagsOverrides) {
                 await networkPage.mockFlags(flagsOverrides)
             }
@@ -96,13 +101,14 @@ export class NetworkPage {
         await this.page.waitForResponse('**/surveys/**')
     }
 
-    async mockStatic() {
+    async mockStatic(staticOverrides: Record<string, string | undefined>) {
         await Promise.all(
             files.map((file) => {
                 return this.page.route(`**/static/${file}`, async (route) => {
+                    const source = staticOverrides[file] ?? file
                     await route.fulfill({
-                        headers: { loaded: 'using relative path by playwright' },
-                        path: `./dist/${file}`,
+                        headers: { loaded: 'using relative path by playwright', source: source },
+                        path: `./dist/${source}`,
                     })
                 })
             })

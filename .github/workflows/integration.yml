@@ -20,6 +20,7 @@ jobs:
           - "chromium"
           - "firefox"
           - "webkit"
+          - "msedge"
         include:
           - browser: "chromium"
             name: Chrome
@@ -27,6 +28,8 @@ jobs:
             name: Firefox
           - browser: "webkit"
             name: Safari
+          - browser: "msedge"
+            name: Edge
 
     steps:
       - uses: actions/checkout@v4
