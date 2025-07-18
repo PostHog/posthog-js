@@ -8,6 +8,7 @@ import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import {
     doesSurveyActivateByAction,
     doesSurveyActivateByEvent,
+    IN_APP_SURVEY_TYPES,
     isSurveyRunning,
     SURVEY_LOGGER as logger,
     SURVEY_IN_PROGRESS_PREFIX,
@@ -325,6 +326,10 @@ export class PostHogSurveys {
         const elem = document?.querySelector(selector)
         if (!survey) {
             logger.warn('Survey not found')
+            return
+        }
+        if (!IN_APP_SURVEY_TYPES.includes(survey.type)) {
+            logger.warn(`Surveys of type ${survey.type} are cannot be rendered in the app`)
             return
         }
         if (!elem) {
