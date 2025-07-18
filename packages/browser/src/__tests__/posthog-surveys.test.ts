@@ -235,7 +235,9 @@ describe('posthog-surveys', () => {
 
                 const result = surveys['_checkSurveyEligibility'](externalSurvey.id)
                 expect(result.eligible).toBeFalsy()
-                expect(result.reason).toEqual('External surveys are never eligible to be shown in the app')
+                expect(result.reason).toEqual(
+                    'Surveys of type external_survey are never eligible to be shown in the app'
+                )
             })
 
             describe('integration with wait period and survey seen checks', () => {
