@@ -172,6 +172,10 @@ export function getNextSurveyStep(
     return nextQuestionIndex
 }
 
+// These surveys are relevant for the getActiveMatchingSurveys method. They are used to
+// display surveys in our customer's application. Any new in-app survey type should be added here.
+const IN_APP_SURVEY_TYPES = [SurveyType.Popover, SurveyType.Widget, SurveyType.API]
+
 const SURVEY_NEXT_TO_TRIGGER_PARAMS = {
     ESTIMATED_MIN_HEIGHT: 250,
     HORIZONTAL_PADDING: 20,
@@ -418,9 +422,9 @@ export class SurveyManager {
             return eligibility
         }
 
-        if (survey.type === SurveyType.ExternalSurvey) {
+        if (!IN_APP_SURVEY_TYPES.includes(survey.type)) {
             eligibility.eligible = false
-            eligibility.reason = `External surveys are never eligible to be shown in the app`
+            eligibility.reason = `Surveys of type ${survey.type} are never eligible to be shown in the app`
             return eligibility
         }
 
