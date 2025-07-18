@@ -20,6 +20,7 @@ import { document as _document, window as _window } from '../utils/globals'
 import {
     doesSurveyActivateByAction,
     doesSurveyActivateByEvent,
+    IN_APP_SURVEY_TYPES,
     isSurveyRunning,
     SURVEY_LOGGER as logger,
 } from '../utils/survey-utils'
@@ -171,10 +172,6 @@ export function getNextSurveyStep(
     logger.warn('Falling back to next question index due to unexpected branching type')
     return nextQuestionIndex
 }
-
-// These surveys are relevant for the getActiveMatchingSurveys method. They are used to
-// display surveys in our customer's application. Any new in-app survey type should be added here.
-const IN_APP_SURVEY_TYPES = [SurveyType.Popover, SurveyType.Widget, SurveyType.API]
 
 const SURVEY_NEXT_TO_TRIGGER_PARAMS = {
     ESTIMATED_MIN_HEIGHT: 250,
