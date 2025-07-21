@@ -1,6 +1,6 @@
 import { expect, test, WindowWithPostHog } from './utils/posthog-playwright-test-base'
 import { start } from './utils/setup'
-import { BeforeSendFn } from '../src/types'
+import { BeforeSendFn } from '@/types'
 
 const startOptions = {
     options: {
