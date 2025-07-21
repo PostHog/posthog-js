@@ -10,7 +10,9 @@ This will watch for file changes across all workspace members and export package
 
 Note: It takes dependencies into account, if you change @posthog/core, it will reexport all packages that depend on it.
 
-Open a new terminal, go to the example folder and run the following command:
+### Install dependencies
+
+Open a new terminal, go to the specific example folder and run the following command:
 ```
 pnpm install
 ```
