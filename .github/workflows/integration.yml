@@ -1,0 +1,56 @@
+name: Playwright Integration Tests
+on: [pull_request]
+env:
+  POSTHOG_PROJECT_KEY: "${{ secrets.POSTHOG_PROJECT_KEY }}"
+  POSTHOG_API_KEY: "${{ secrets.POSTHOG_API_KEY }}"
+  POSTHOG_API_HOST: https://us.i.posthog.com
+  POSTHOG_API_PROJECT: 11213
+
+permissions:
+  contents: read
+
+jobs:
+  browsers:
+    name: Test on ${{ matrix.tests.name }}
+    runs-on: ubuntu-22.04
+
+    strategy:
+      matrix:
+        tests:
+          - name: Chromium
+            project: "chromium"
+            install: "chromium"
+
+          - name: Firefox
+            project: "firefox"
+            install: "firefox"
+
+          - name: Safari
+            project: "webkit"
+            install: "webkit"
+
+          - name: Edge
+            project: "msedge"
+            install: "chromium"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+
+      - name: Set up posthog-js
+        run: pnpm build-rollup
+        working-directory: packages/browser
+
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install ${{ matrix.tests.install }} --with-deps --only-shell
+        working-directory: packages/browser
+
+      - name: Run ${{ matrix.tests.name }} test
+        timeout-minutes: 10
+        env:
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+          RUN_ID: ${{ github.run_id }}
+          BROWSER: ${{ matrix.tests.project }}
+        run: pnpm exec playwright test --config playwright.config.integration.ts --project ${{ matrix.tests.project }}
+        working-directory: packages/browser

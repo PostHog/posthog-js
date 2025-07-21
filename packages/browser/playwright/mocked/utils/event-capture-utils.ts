@@ -1,5 +1,5 @@
 import { Page } from '@playwright/test'
-import { EventName } from '../../src/types'
+import { EventName } from '@/types'
 import { expect } from './posthog-playwright-test-base'
 
 export async function pollUntilEventCaptured(
