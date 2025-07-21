@@ -6,7 +6,6 @@ export async function assertCustomEventsWorkAndAreAccessibleViaApi(events: any[]
     expect(events.filter(({ event }) => event === 'custom-event').length).toEqual(1)
     expect(events.filter(({ event }) => event === '$pageview').length).toEqual(1)
     expect(events.filter(({ event }) => event === '$autocapture').length).toEqual(1)
-    expect(events.filter(({ event }) => event === '$pageleave').length).toBeGreaterThanOrEqual(0)
 }
 
 export async function assertAutocapturedEventsWorkAndAreAccessibleViaApi(events: any[]) {
