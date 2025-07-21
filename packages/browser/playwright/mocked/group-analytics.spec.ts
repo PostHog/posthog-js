@@ -1,6 +1,6 @@
 import { expect, test } from './utils/posthog-playwright-test-base'
 import { start } from './utils/setup'
-import { PostHog } from '../src/posthog-core'
+import { PostHog } from '@/posthog-core'
 
 test.describe('group analytics', () => {
     test('includes group information in all event payloads', async ({ page, context }) => {
