@@ -2,7 +2,6 @@
     "name": "example-nextjs",
     "version": "0.1.0",
     "private": true,
-    "packageManager": "yarn@4.0.0",
     "scripts": {
         "dev": "next dev",
         "build": "next build",
@@ -25,10 +24,5 @@
         "eslint": "^9",
         "eslint-config-next": "15.3.4",
         "typescript": "^5"
-    },
-    "resolutions": {
-        "posthog-js": "file:../../target/posthog-js.tgz",
-        "@posthog/nextjs-config": "file:../../target/posthog-nextjs-config.tgz",
-        "@posthog/react": "file:../../target/posthog-react.tgz"
     }
 }

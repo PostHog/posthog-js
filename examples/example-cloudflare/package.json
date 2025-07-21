@@ -2,7 +2,6 @@
 	"name": "example-cloudflare",
 	"version": "0.0.0",
 	"private": true,
-	"packageManager": "yarn@4.0.0",
 	"scripts": {
 		"start": "wrangler dev"
 	},
@@ -13,9 +12,5 @@
 	},
 	"dependencies": {
 		"posthog-node": "*"
-	},
-	"resolutions": {
-		"posthog-react-native": "file:../../target/posthog-react-native.tgz",
-		"@posthog/core": "file:../../target/posthog-core.tgz"
 	}
 }

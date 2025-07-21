@@ -3,7 +3,6 @@
     "version": "1.0.0",
     "description": "",
     "main": "index.js",
-    "packageManager": "yarn@4.0.0",
     "scripts": {
         "start": "functions-framework --target=helloWorld"
     },
@@ -12,9 +11,5 @@
     "dependencies": {
         "@google-cloud/functions-framework": "^3.4.0",
         "posthog-node": "*"
-    },
-    "resolutions": {
-        "posthog-react-native": "file:../../target/posthog-react-native.tgz",
-        "@posthog/core": "file:../../target/posthog-core.tgz"
     }
 }

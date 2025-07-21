@@ -3,7 +3,7 @@
     "version": "1.0.0",
     "main": "server.ts",
     "license": "MIT",
-    "packageManager": "yarn@4.0.0",
+    "packageManager": "pnpm@10.12.4",
     "scripts": {
         "start": "ts-node server.ts",
         "example": "ts-node example.ts"
@@ -21,9 +21,5 @@
         "ts-node": "^10.8.2",
         "typescript": "^4.7.4",
         "wtfnode": "^0.9.1"
-    },
-    "resolutions": {
-        "posthog-node": "file:../../target/posthog-node.tgz",
-        "@posthog/core": "file:../../target/posthog-core.tgz"
     }
 }

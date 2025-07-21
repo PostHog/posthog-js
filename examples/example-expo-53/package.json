@@ -2,7 +2,6 @@
     "name": "example-expo-53",
     "main": "expo-router/entry",
     "version": "1.0.0",
-    "packageManager": "yarn@4.0.0",
     "scripts": {
         "start": "expo start",
         "reset-project": "node ./scripts/reset-project.js",
@@ -54,9 +53,5 @@
         "eslint-config-expo": "~9.2.0",
         "typescript": "~5.8.3"
     },
-    "private": true,
-    "resolutions": {
-        "posthog-react-native": "file:../../target/posthog-react-native.tgz",
-        "@posthog/core": "file:../../target/posthog-core.tgz"
-    }
+    "private": true
 }

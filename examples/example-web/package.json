@@ -2,7 +2,7 @@
     "name": "example-web",
     "version": "0.1.0",
     "private": true,
-    "packageManager": "yarn@4.0.0",
+    "packageManager": "pnpm@10.12.4",
     "dependencies": {
         "@testing-library/jest-dom": "^5.14.1",
         "@testing-library/react": "^13.0.0",
@@ -41,9 +41,5 @@
             "last 1 firefox version",
             "last 1 safari version"
         ]
-    },
-    "resolutions": {
-        "posthog-js-lite": "file:../../target/posthog-js-lite.tgz",
-        "@posthog/core": "file:../../target/posthog-core.tgz"
     }
 }

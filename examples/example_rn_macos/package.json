@@ -2,7 +2,6 @@
   "name": "example_rn_macos",
   "version": "0.0.1",
   "private": true,
-  "packageManager": "yarn@4.0.0",
   "scripts": {
     "macos": "react-native run-macos",
     "lint": "eslint . --fix",
@@ -35,9 +34,5 @@
   },
   "jest": {
     "preset": "react-native"
-  },
-  "resolutions": {
-    "posthog-react-native": "../../target/posthog-react-native.tgz",
-    "@posthog/core": "../../target/posthog-core.tgz"
   }
 }
