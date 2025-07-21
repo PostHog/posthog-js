@@ -1,3 +1,4 @@
 pnpmfile: ../.pnpmfile.cjs
+nodeLinker: hoisted # needed for react-native
 packages:
   - "."
