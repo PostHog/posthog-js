@@ -6,16 +6,11 @@
     "macos": "react-native run-macos",
     "lint": "eslint . --fix",
     "start": "react-native start",
-    "test": "jest",
-    "preinstall": "yarn build:posthog",
-    "prestart": "yarn build:posthog",
-    "build:posthog": "yarn build:posthog:publish && yarn build:posthog:link",
-    "build:posthog:publish": "cd ../../posthog-react-native && yalc publish --replace",
-    "build:posthog:link": "yalc add posthog-react-native"
+    "test": "jest"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^1.21.0",
-    "posthog-react-native": "file:.yalc/posthog-react-native",
+    "posthog-react-native": "*",
     "react": "18.2.0",
     "react-native": "0.71.15",
     "react-native-macos": "^0.71.0-0"

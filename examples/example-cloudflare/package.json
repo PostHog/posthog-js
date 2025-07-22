@@ -3,11 +3,6 @@
 	"version": "0.0.0",
 	"private": true,
 	"scripts": {
-		"preinstall": "yarn build:posthog",
-		"prestart": "yarn build:posthog",
-		"build:posthog": "yarn build:posthog:publish && yarn build:posthog:link",
-		"build:posthog:publish": "cd ../../posthog-node && yalc publish --replace",
-		"build:posthog:link": "yalc add posthog-node",
 		"start": "wrangler dev"
 	},
 	"devDependencies": {
@@ -16,6 +11,6 @@
 		"wrangler": "^3.0.0"
 	},
 	"dependencies": {
-		"posthog-node": "file:.yalc/posthog-node"
+		"posthog-node": "*"
 	}
 }
