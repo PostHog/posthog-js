@@ -6,6 +6,10 @@
 
 # 4.0.0 - 2025-06-10
 
+## Breaking changes
+
+1. PostHog Web now compresses messages with GZip before sending them to our servers when the runtime supports compression. This reduces network bandwidth and improves performance. Network traffic interceptors and test assertions on payloads must handle GZip decompression to inspect the data. Alternatively, you can disable compression by setting `disableCompression: true` in the client configuration during tests.
+
 ## Removed
 
 1. Remove `captureMode` in favor of `json` capture mode only
