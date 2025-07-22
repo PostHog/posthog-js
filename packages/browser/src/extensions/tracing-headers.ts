@@ -39,12 +39,14 @@ export class TracingHeaders {
     private _startCapturing = () => {
         if (isUndefined(this._restoreXHRPatch)) {
             assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchXHR(
+                this._instance.config.__add_tracing_headers || [],
                 this._instance.get_distinct_id(),
-                this._instance.sessionManager
+                this._instance.sessionManager,
             )
         }
         if (isUndefined(this._restoreFetchPatch)) {
             assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchFetch(
+                this._instance.config.__add_tracing_headers || [],
                 this._instance.get_distinct_id(),
                 this._instance.sessionManager
             )

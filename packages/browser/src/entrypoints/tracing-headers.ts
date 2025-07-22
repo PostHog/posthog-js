@@ -2,7 +2,20 @@ import { SessionIdManager } from '../sessionid'
 import { patch } from '../extensions/replay/rrweb-plugins/patch'
 import { assignableWindow, window } from '../utils/globals'
 
-const addTracingHeaders = (distinctId: string, sessionManager: SessionIdManager | undefined, req: Request) => {
+const addTracingHeaders = (hostnames: string[], distinctId: string, sessionManager: SessionIdManager | undefined, req: Request) => {
+    let reqHostname: string
+    try {
+        reqHostname = new URL(req.url).hostname
+    } catch (e) {
+        // If the URL is invalid, we skip adding tracing headers
+        return
+    }
+    if (Array.isArray(hostnames) && !hostnames.includes(reqHostname)) {
+        // Skip if the hostname is not in the list (also skip if hostnames is not an array,
+        // because in the earliest version of this __add_tracing_headers was a bool)
+        return
+    }
+
     if (sessionManager) {
         const { sessionId, windowId } = sessionManager.checkAndGetSessionAndWindowId(true)
         req.headers.set('X-POSTHOG-SESSION-ID', sessionId)
@@ -11,7 +24,7 @@ const addTracingHeaders = (distinctId: string, sessionManager: SessionIdManager 
     req.headers.set('X-POSTHOG-DISTINCT-ID', distinctId)
 }
 
-const patchFetch = (distinctId: string, sessionManager?: SessionIdManager): (() => void) => {
+const patchFetch = (hostnames: string[], distinctId: string, sessionManager?: SessionIdManager): (() => void) => {
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     return patch(window, 'fetch', (originalFetch: typeof fetch) => {
@@ -20,14 +33,14 @@ const patchFetch = (distinctId: string, sessionManager?: SessionIdManager): (() 
             // eslint-disable-next-line compat/compat
             const req = new Request(url, init)
 
-            addTracingHeaders(distinctId, sessionManager, req)
+            addTracingHeaders(hostnames, distinctId, sessionManager, req)
 
             return originalFetch(req)
         }
     })
 }
 
-const patchXHR = (distinctId: string, sessionManager?: SessionIdManager): (() => void) => {
+const patchXHR = (hostnames: string[], distinctId: string, sessionManager?: SessionIdManager): (() => void) => {
     return patch(
         // we can assert this is present because we've checked previously
         window!.XMLHttpRequest.prototype,
@@ -51,7 +64,7 @@ const patchXHR = (distinctId: string, sessionManager?: SessionIdManager): (() =>
                 // eslint-disable-next-line compat/compat
                 const req = new Request(url)
 
-                addTracingHeaders(distinctId, sessionManager, req)
+                addTracingHeaders(hostnames, distinctId, sessionManager, req)
 
                 return originalOpen.call(xhr, method, req.url, async, username, password)
             }
