@@ -325,6 +325,7 @@ export enum SurveyType {
   Popover = 'popover',
   API = 'api',
   Widget = 'widget',
+  ExternalSurvey = 'external_survey',
 }
 
 export type SurveyQuestion = BasicSurveyQuestion | LinkSurveyQuestion | RatingSurveyQuestion | MultipleSurveyQuestion
