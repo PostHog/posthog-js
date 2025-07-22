@@ -1,6 +1,6 @@
 {
   "name": "posthog-node",
-  "version": "5.1.1",
+  "version": "5.6.0",
   "description": "PostHog Node.js integration",
   "repository": {
     "type": "git",
@@ -18,7 +18,7 @@
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "files": [
     "dist"
@@ -36,6 +36,7 @@
     "@posthog/core": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^20.0.0",
     "commander": "^9.3.0",
     "mitata": "^1.0.21",
     "@posthog-tooling/tsconfig-base": "workspace:*",

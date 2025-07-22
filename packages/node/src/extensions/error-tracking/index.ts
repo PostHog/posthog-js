@@ -14,13 +14,12 @@ export default class ErrorTracking {
   static stackParser: StackParser
   static frameModifiers: StackFrameModifierFn[]
 
-  static async captureException(
-    client: PostHogBackendClient,
+  static async buildEventMessage(
     error: unknown,
     hint: EventHint,
     distinctId?: string,
     additionalProperties?: Record<string | number, any>
-  ): Promise<void> {
+  ): Promise<EventMessage> {
     const properties: EventMessage['properties'] = { ...additionalProperties }
 
     // Given stateless nature of Node SDK we capture exceptions using personless processing when no
@@ -31,14 +30,14 @@ export default class ErrorTracking {
 
     const exceptionProperties = await propertiesFromUnknownInput(this.stackParser, this.frameModifiers, error, hint)
 
-    client.capture({
+    return {
       event: '$exception',
       distinctId: distinctId || uuidv7(),
       properties: {
         ...exceptionProperties,
         ...properties,
       },
-    })
+    }
   }
 
   constructor(client: PostHogBackendClient, options: PostHogOptions) {
@@ -56,7 +55,9 @@ export default class ErrorTracking {
   }
 
   private onException(exception: unknown, hint: EventHint): void {
-    ErrorTracking.captureException(this.client, exception, hint)
+    void ErrorTracking.buildEventMessage(exception, hint).then((msg) => {
+      this.client.capture(msg)
+    })
   }
 
   private async onFatalError(): Promise<void> {

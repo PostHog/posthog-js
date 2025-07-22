@@ -116,12 +116,7 @@ class FeatureFlagsPoller {
       return response
     }
 
-    for (const flag of this.featureFlags) {
-      if (key === flag.key) {
-        featureFlag = flag
-        break
-      }
-    }
+    featureFlag = this.featureFlagsByKey[key]
 
     if (featureFlag !== undefined) {
       try {
@@ -170,7 +165,8 @@ class FeatureFlagsPoller {
     distinctId: string,
     groups: Record<string, string> = {},
     personProperties: Record<string, string> = {},
-    groupProperties: Record<string, Record<string, string>> = {}
+    groupProperties: Record<string, Record<string, string>> = {},
+    flagKeysToExplicitlyEvaluate?: string[]
   ): Promise<{
     response: Record<string, FeatureFlagValue>
     payloads: Record<string, JsonType>
@@ -182,8 +178,12 @@ class FeatureFlagsPoller {
     const payloads: Record<string, JsonType> = {}
     let fallbackToFlags = this.featureFlags.length == 0
 
+    const flagsToEvaluate = flagKeysToExplicitlyEvaluate
+      ? flagKeysToExplicitlyEvaluate.map((key) => this.featureFlagsByKey[key]).filter(Boolean)
+      : this.featureFlags
+
     await Promise.all(
-      this.featureFlags.map(async (flag) => {
+      flagsToEvaluate.map(async (flag) => {
         try {
           const matchValue = await this.computeFlagLocally(flag, distinctId, groups, personProperties, groupProperties)
           response[flag.key] = matchValue
@@ -193,7 +193,9 @@ class FeatureFlagsPoller {
           }
         } catch (e) {
           if (e instanceof InconclusiveMatchError) {
-            // do nothing
+            this.logMsgIfDebug(() =>
+              console.debug(`InconclusiveMatchError when computing flag locally: ${flag.key}: ${e}`)
+            )
           } else if (e instanceof Error) {
             this.onError?.(new Error(`Error computing flag locally: ${flag.key}: ${e}`))
           }
@@ -324,6 +326,14 @@ class FeatureFlagsPoller {
 
         if (propertyType === 'cohort') {
           matches = matchCohort(prop, properties, this.cohorts, this.debugMode)
+        } else if (propertyType === 'flag') {
+          this.logMsgIfDebug(() =>
+            console.warn(
+              `[FEATURE FLAGS] Flag dependency filters are not supported in local evaluation. ` +
+                `Skipping condition for flag '${flag.key}' with dependency on flag '${prop.key || 'unknown'}'`
+            )
+          )
+          continue
         } else {
           matches = matchProperty(prop, properties, warnFunction)
         }
@@ -537,26 +547,6 @@ class FeatureFlagsPoller {
   stopPoller(): void {
     clearTimeout(this.poller)
   }
-
-  _requestRemoteConfigPayload(flagKey: string): Promise<PostHogFetchResponse> {
-    const url = `${this.host}/api/projects/@current/feature_flags/${flagKey}/remote_config/`
-
-    const options = this.getPersonalApiKeyRequestOptions()
-
-    let abortTimeout = null
-    if (this.timeout && typeof this.timeout === 'number') {
-      const controller = new AbortController()
-      abortTimeout = safeSetTimeout(() => {
-        controller.abort()
-      }, this.timeout)
-      options.signal = controller.signal
-    }
-    try {
-      return this.fetch(url, options)
-    } finally {
-      clearTimeout(abortTimeout)
-    }
-  }
 }
 
 // # This function takes a distinct_id and a feature flag key and returns a float between 0 and 1.
@@ -751,6 +741,14 @@ function matchPropertyGroup(
         let matches: boolean
         if (prop.type === 'cohort') {
           matches = matchCohort(prop, propertyValues, cohortProperties, debugMode)
+        } else if (prop.type === 'flag') {
+          if (debugMode) {
+            console.warn(
+              `[FEATURE FLAGS] Flag dependency filters are not supported in local evaluation. ` +
+                `Skipping condition with dependency on flag '${prop.key || 'unknown'}'`
+            )
+          }
+          continue
         } else {
           matches = matchProperty(prop, propertyValues)
         }
