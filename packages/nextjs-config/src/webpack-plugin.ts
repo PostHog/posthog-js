@@ -1,6 +1,7 @@
 import { PostHogNextConfigComplete } from './config'
 import { spawn } from 'child_process'
 import path from 'path'
+import { resolveBinaryPath } from './utils'
 
 type NextRuntime = 'edge' | 'nodejs' | undefined
 
@@ -10,9 +11,21 @@ export class SourcemapWebpackPlugin {
   constructor(
     private posthogOptions: PostHogNextConfigComplete,
     private isServer: boolean,
-    private nextRuntime: NextRuntime
+    private nextRuntime: NextRuntime,
+    distDir?: string
   ) {
-    this.directory = this.isServer ? `./.next/server` : `./.next/static/chunks`
+    const resolvedDistDir = path.resolve(distDir ?? '.next')
+    if (!this.posthogOptions.personalApiKey) {
+      throw new Error(
+        `Personal API key not provided. If you are using turbo, make sure to add env variables to your turbo config`
+      )
+    }
+    if (!this.posthogOptions.envId) {
+      throw new Error(
+        `Environment ID not provided. If you are using turbo, make sure to add env variables to your turbo config`
+      )
+    }
+    this.directory = this.isServer ? path.join(resolvedDistDir, 'server') : path.join(resolvedDistDir, 'static/chunks')
   }
 
   apply(compiler: any): void {
@@ -74,10 +87,21 @@ export class SourcemapWebpackPlugin {
 }
 
 async function callPosthogCli(args: string[], env: NodeJS.ProcessEnv, verbose: boolean): Promise<void> {
-  const cwd = path.resolve('.')
-  const child = spawn('posthog-cli', [...args], {
+  let binaryLocation
+  try {
+    binaryLocation = resolveBinaryPath(process.env.PATH ?? '', __dirname, 'posthog-cli')
+  } catch (e) {
+    throw new Error(`Binary ${e} not found. Make sure postinstall script has been allowed for @posthog/cli`)
+  }
+
+  if (verbose) {
+    console.log('running posthog-cli from ', binaryLocation)
+  }
+
+  const child = spawn(binaryLocation, [...args], {
     stdio: verbose ? 'inherit' : 'ignore',
-    env: addLocalPath(env ?? process.env, cwd),
+    env,
+    cwd: process.cwd(),
   })
 
   await new Promise<void>((resolve, reject) => {
@@ -94,16 +118,3 @@ async function callPosthogCli(args: string[], env: NodeJS.ProcessEnv, verbose: b
     })
   })
 }
-
-const addLocalPath = ({ Path = '', PATH = Path, ...env }: NodeJS.ProcessEnv, cwd: string): NodeJS.ProcessEnv => {
-  const pathParts = PATH.split(path.delimiter)
-  const localPaths = getLocalPaths([], path.resolve(cwd))
-    .map((localPath: string) => path.join(localPath, 'node_modules/.bin'))
-    .filter((localPath: string) => !pathParts.includes(localPath))
-  return { ...env, PATH: [...localPaths, PATH].filter(Boolean).join(path.delimiter) }
-}
-
-const getLocalPaths = (localPaths: string[], localPath: string): string[] =>
-  localPaths.at(-1) === localPath
-    ? localPaths
-    : getLocalPaths([...localPaths, localPath], path.resolve(localPath, '..'))
