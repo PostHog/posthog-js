@@ -894,7 +894,7 @@ export class PostHogFeatureFlags {
         return () => this.removeFeatureFlagsHandler(callback)
     }
 
-    updateEarlyAccessFeatureEnrollment(key: string, isEnrolled: boolean): void {
+    updateEarlyAccessFeatureEnrollment(key: string, isEnrolled: boolean, stage?: string): void {
         const existing_early_access_features: EarlyAccessFeature[] =
             this._instance.get_property(PERSISTENCE_EARLY_ACCESS_FEATURES) || []
         const feature = existing_early_access_features.find((f) => f.flagKey === key)
@@ -911,6 +911,10 @@ export class PostHogFeatureFlags {
 
         if (feature) {
             properties['$early_access_feature_name'] = feature.name
+        }
+
+        if (stage) {
+            properties['$feature_enrollment_state'] = stage
         }
 
         this._instance.capture('$feature_enrollment_update', properties)

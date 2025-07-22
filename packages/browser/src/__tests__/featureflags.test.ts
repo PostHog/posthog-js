@@ -990,6 +990,47 @@ describe('featureflags', () => {
             })
         })
 
+        it('update enrollment with stage should include stage in event', () => {
+            featureFlags.updateEarlyAccessFeatureEnrollment('stage-flag', true, 'beta')
+
+            expect(instance.capture).toHaveBeenCalledTimes(1)
+            expect(instance.capture).toHaveBeenCalledWith('$feature_enrollment_update', {
+                $feature_enrollment: true,
+                $feature_flag: 'stage-flag',
+                $feature_enrollment_state: 'beta',
+                $set: {
+                    '$feature_enrollment/stage-flag': true,
+                },
+            })
+
+            // Test with different stage
+            featureFlags.updateEarlyAccessFeatureEnrollment('concept-flag', false, 'concept')
+
+            expect(instance.capture).toHaveBeenCalledTimes(2)
+            expect(instance.capture).toHaveBeenLastCalledWith('$feature_enrollment_update', {
+                $feature_enrollment: false,
+                $feature_flag: 'concept-flag',
+                $feature_enrollment_state: 'concept',
+                $set: {
+                    '$feature_enrollment/concept-flag': false,
+                },
+            })
+
+            // Test without stage (backward compatibility)
+            featureFlags.updateEarlyAccessFeatureEnrollment('no-stage-flag', true)
+
+            expect(instance.capture).toHaveBeenCalledTimes(3)
+            expect(instance.capture).toHaveBeenLastCalledWith('$feature_enrollment_update', {
+                $feature_enrollment: true,
+                $feature_flag: 'no-stage-flag',
+                $set: {
+                    '$feature_enrollment/no-stage-flag': true,
+                },
+            })
+            // Should not have stage property when not provided
+            expect(instance.capture.mock.calls[2][1]).not.toHaveProperty('$feature_enrollment_state')
+        })
+
         it('reloading flags after update enrollment should send properties', () => {
             featureFlags.updateEarlyAccessFeatureEnrollment('x-flag', true)
 
