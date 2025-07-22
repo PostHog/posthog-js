@@ -1,5 +1,5 @@
 import { Page, BrowserContext } from '@playwright/test'
-import { Compression, FlagsResponse, PostHogConfig } from '../../src/types'
+import { Compression, FlagsResponse, PostHogConfig } from '@/types'
 import path from 'path'
 import { WindowWithPostHog } from './posthog-playwright-test-base'
 

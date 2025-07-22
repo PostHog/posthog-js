@@ -1,7 +1,7 @@
 import { ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS, ERROR_TRACKING_SUPPRESSION_RULES } from './constants'
 import { Exception } from './extensions/exception-autocapture/error-conversion'
 import { PostHog } from './posthog-core'
-import { ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
+import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
 import { propertyComparisons } from './utils/property-utils'
 import { isArray, isString } from './utils/type-utils'
@@ -38,7 +38,7 @@ export class PostHogExceptions {
         return enabled_client_side ?? enabled_server_side ?? false
     }
 
-    sendExceptionEvent(properties: Properties) {
+    sendExceptionEvent(properties: Properties): CaptureResult | undefined {
         if (this._matchesSuppressionRule(properties)) {
             logger.info('Skipping exception capture because a suppression rule matched')
             return
@@ -49,7 +49,7 @@ export class PostHogExceptions {
             return
         }
 
-        this._instance.capture('$exception', properties, {
+        return this._instance.capture('$exception', properties, {
             _noTruncate: true,
             _batchKey: 'exceptionEvent',
         })
