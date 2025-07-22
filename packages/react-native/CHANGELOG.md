@@ -1,5 +1,23 @@
 # Next
 
+# 4.2.1 - 2025-07-21
+
+## Fixed
+
+1. Solve outdated JSX transform warning
+
+# 4.2.0 - 2025-07-15
+
+## Changed
+
+1. Add more documentation for the `captureScreens` option and its usage with expo-router, @react-navigation/native and react-native-navigation
+
+# 4.1.5 - 2025-07-14
+
+## Fixed
+
+1. read the navigation ref from the current property if it exists for expo-router and @react-navigation/native
+
 # 4.1.4 - 2025-07-01
 
 ## Fixed

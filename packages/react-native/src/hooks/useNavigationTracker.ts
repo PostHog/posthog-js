@@ -52,13 +52,19 @@ function _useNavigationTracker(
       return
     }
 
+    // if you create a navigation ref with createNavigationContainerRef, you need to use the current property to get the navigation object
+    let currentNavigation = navigation
+    if (navigation.current) {
+      currentNavigation = navigation.current
+    }
+
     let currentRoute = undefined
 
     // NOTE: This method is not typed correctly but is available and takes care of parsing the router state correctly
     try {
       let isReady = false
       try {
-        isReady = (navigation as any).isReady()
+        isReady = (currentNavigation as any).isReady()
       } catch (error) {
         // keep compatibility with older versions of react-navigation
         isReady = true
@@ -68,9 +74,9 @@ function _useNavigationTracker(
         return
       }
 
-      currentRoute = (navigation as any).getCurrentRoute()
+      currentRoute = (currentNavigation as any).getCurrentRoute()
     } catch (error) {
-      console.error('getCurrentRoute error', error)
+      // if this happens, we're not in a navigation context, so we can't track the route
       return
     }
 
