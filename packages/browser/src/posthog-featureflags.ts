@@ -914,7 +914,7 @@ export class PostHogFeatureFlags {
         }
 
         if (stage) {
-            properties['$feature_enrollment_state'] = stage
+            properties['$feature_enrollment_stage'] = stage
         }
 
         this._instance.capture('$feature_enrollment_update', properties)

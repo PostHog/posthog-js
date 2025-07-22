@@ -997,7 +997,7 @@ describe('featureflags', () => {
             expect(instance.capture).toHaveBeenCalledWith('$feature_enrollment_update', {
                 $feature_enrollment: true,
                 $feature_flag: 'stage-flag',
-                $feature_enrollment_state: 'beta',
+                $feature_enrollment_stage: 'beta',
                 $set: {
                     '$feature_enrollment/stage-flag': true,
                 },
@@ -1010,7 +1010,7 @@ describe('featureflags', () => {
             expect(instance.capture).toHaveBeenLastCalledWith('$feature_enrollment_update', {
                 $feature_enrollment: false,
                 $feature_flag: 'concept-flag',
-                $feature_enrollment_state: 'concept',
+                $feature_enrollment_stage: 'concept',
                 $set: {
                     '$feature_enrollment/concept-flag': false,
                 },
@@ -1028,7 +1028,7 @@ describe('featureflags', () => {
                 },
             })
             // Should not have stage property when not provided
-            expect(instance.capture.mock.calls[2][1]).not.toHaveProperty('$feature_enrollment_state')
+            expect(instance.capture.mock.calls[2][1]).not.toHaveProperty('$feature_enrollment_stage')
         })
 
         it('reloading flags after update enrollment should send properties', () => {
