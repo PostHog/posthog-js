@@ -20,7 +20,32 @@ posthog.capture({
   event: 'test-event',
   properties: { foo: 'bar' },
   groups: { org: 123 },
-  sendFeatureFlags: true,
+  sendFeatureFlags: true, // Simple boolean - works as before
+})
+
+// Enhanced API examples
+posthog.capture({
+  distinctId: '123344',
+  event: 'test-event-with-enhanced-flags',
+  properties: { foo: 'bar' },
+  groups: { org: 123 },
+  sendFeatureFlags: {
+    onlyEvaluateLocally: true,
+    personProperties: { plan: 'premium' },
+    groupProperties: { org: { tier: 'enterprise' } },
+  },
+})
+
+// Example with flagKeys - only evaluate specific flags
+posthog.capture({
+  distinctId: '123344',
+  event: 'test-event-with-specific-flags',
+  properties: { foo: 'bar' },
+  sendFeatureFlags: {
+    onlyEvaluateLocally: true,
+    flagKeys: ['my-important-flag', 'another-flag'], // Only evaluate these two flags
+    personProperties: { plan: 'premium' },
+  },
 })
 posthog.capture({
   distinctId: '123344',
