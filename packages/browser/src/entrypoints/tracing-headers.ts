@@ -1,16 +1,24 @@
 import { SessionIdManager } from '../sessionid'
 import { patch } from '../extensions/replay/rrweb-plugins/patch'
 import { assignableWindow, window } from '../utils/globals'
+import { isArray } from '../utils/type-utils'
 
-const addTracingHeaders = (hostnames: string[], distinctId: string, sessionManager: SessionIdManager | undefined, req: Request) => {
+const addTracingHeaders = (
+    hostnames: string[],
+    distinctId: string,
+    sessionManager: SessionIdManager | undefined,
+    req: Request
+) => {
     let reqHostname: string
     try {
+        // we don't need to support IE11 here
+        // eslint-disable-next-line compat/compat
         reqHostname = new URL(req.url).hostname
-    } catch (e) {
+    } catch {
         // If the URL is invalid, we skip adding tracing headers
         return
     }
-    if (Array.isArray(hostnames) && !hostnames.includes(reqHostname)) {
+    if (isArray(hostnames) && !hostnames.includes(reqHostname)) {
         // Skip if the hostname is not in the list (also skip if hostnames is not an array,
         // because in the earliest version of this __add_tracing_headers was a bool)
         return
