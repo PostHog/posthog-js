@@ -41,7 +41,7 @@ export class TracingHeaders {
             assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchXHR(
                 this._instance.config.__add_tracing_headers || [],
                 this._instance.get_distinct_id(),
-                this._instance.sessionManager,
+                this._instance.sessionManager
             )
         }
         if (isUndefined(this._restoreFetchPatch)) {
