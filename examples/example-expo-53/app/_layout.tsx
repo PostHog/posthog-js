@@ -1,11 +1,4 @@
-import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
-  createNavigationContainerRef,
-  // NavigationContainer,
-  // NavigationIndependentTree,
-} from '@react-navigation/native'
+import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native'
 import { useFonts } from 'expo-font'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
@@ -15,8 +8,6 @@ import { PostHogProvider, PostHogSurveyProvider } from 'posthog-react-native'
 
 import { useColorScheme } from '@/hooks/useColorScheme'
 import { posthog } from './posthog'
-
-export const navigationRef = createNavigationContainerRef()
 
 export default function RootLayout() {
   const colorScheme = useColorScheme()
@@ -33,16 +24,15 @@ export default function RootLayout() {
     <PostHogProvider
       client={posthog}
       autocapture={{
-        captureScreens: true, // TODO: not working with Expo 53/@react-navigation/native
+        captureScreens: false, // expo-router requires this to be false and capture screens manually
         captureTouches: true,
         customLabelProp: 'ph-my-label',
-        navigationRef: navigationRef,
       }}
       debug={true}
     >
       <PostHogSurveyProvider client={posthog}>
         <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack ref={navigationRef}>
+          <Stack>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="+not-found" />
           </Stack>

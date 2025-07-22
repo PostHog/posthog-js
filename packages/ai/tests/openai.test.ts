@@ -369,4 +369,35 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(properties['foo']).toBe('bar')
     expect(typeof properties['$ai_latency']).toBe('number')
   })
+
+  conditionalTest('anonymous user - $process_person_profile set to false', async () => {
+    await client.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Hello' }],
+      posthogTraceId: 'trace-123',
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { distinctId, properties } = captureArgs[0]
+
+    expect(distinctId).toBe('trace-123')
+    expect(properties['$process_person_profile']).toBe(false)
+  })
+
+  conditionalTest('identified user - $process_person_profile not set', async () => {
+    await client.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Hello' }],
+      posthogDistinctId: 'user-456',
+      posthogTraceId: 'trace-123',
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { distinctId, properties } = captureArgs[0]
+
+    expect(distinctId).toBe('user-456')
+    expect(properties['$process_person_profile']).toBeUndefined()
+  })
 })

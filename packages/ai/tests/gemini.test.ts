@@ -310,4 +310,35 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(vertexClient).toBeInstanceOf(PostHogGemini)
     expect(vertexClient.models).toBeDefined()
   })
+
+  conditionalTest('anonymous user - $process_person_profile set to false', async () => {
+    await client.models.generateContent({
+      model: 'gemini-2.0-flash-001',
+      contents: 'Hello',
+      posthogTraceId: 'trace-123',
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { distinctId, properties } = captureArgs[0]
+
+    expect(distinctId).toBe('trace-123')
+    expect(properties['$process_person_profile']).toBe(false)
+  })
+
+  conditionalTest('identified user - $process_person_profile not set', async () => {
+    await client.models.generateContent({
+      model: 'gemini-2.0-flash-001',
+      contents: 'Hello',
+      posthogDistinctId: 'user-456',
+      posthogTraceId: 'trace-123',
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { distinctId, properties } = captureArgs[0]
+
+    expect(distinctId).toBe('user-456')
+    expect(properties['$process_person_profile']).toBeUndefined()
+  })
 })

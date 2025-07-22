@@ -124,7 +124,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
               const latency = (Date.now() - startTime) / 1000
               await sendEventToPosthog({
                 client: this.phClient,
-                distinctId: posthogDistinctId ?? traceId,
+                distinctId: posthogDistinctId,
                 traceId,
                 model: openAIParams.model,
                 provider: 'azure',
@@ -140,7 +140,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
             } catch (error: any) {
               await sendEventToPosthog({
                 client: this.phClient,
-                distinctId: posthogDistinctId ?? traceId,
+                distinctId: posthogDistinctId,
                 traceId,
                 model: openAIParams.model,
                 provider: 'azure',
@@ -170,7 +170,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
             const latency = (Date.now() - startTime) / 1000
             await sendEventToPosthog({
               client: this.phClient,
-              distinctId: posthogDistinctId ?? traceId,
+              distinctId: posthogDistinctId,
               traceId,
               model: openAIParams.model,
               provider: 'azure',
@@ -194,7 +194,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
         async (error: any) => {
           await sendEventToPosthog({
             client: this.phClient,
-            distinctId: posthogDistinctId ?? traceId,
+            distinctId: posthogDistinctId,
             traceId,
             model: openAIParams.model,
             provider: 'azure',
@@ -307,7 +307,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
               const latency = (Date.now() - startTime) / 1000
               await sendEventToPosthog({
                 client: this.phClient,
-                distinctId: posthogDistinctId ?? traceId,
+                distinctId: posthogDistinctId,
                 traceId,
                 //@ts-expect-error
                 model: openAIParams.model,
@@ -324,7 +324,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
             } catch (error: any) {
               await sendEventToPosthog({
                 client: this.phClient,
-                distinctId: posthogDistinctId ?? traceId,
+                distinctId: posthogDistinctId,
                 traceId,
                 //@ts-expect-error
                 model: openAIParams.model,
@@ -354,7 +354,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
             const latency = (Date.now() - startTime) / 1000
             await sendEventToPosthog({
               client: this.phClient,
-              distinctId: posthogDistinctId ?? traceId,
+              distinctId: posthogDistinctId,
               traceId,
               //@ts-expect-error
               model: openAIParams.model,
@@ -379,7 +379,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
         async (error: any) => {
           await sendEventToPosthog({
             client: this.phClient,
-            distinctId: posthogDistinctId ?? traceId,
+            distinctId: posthogDistinctId,
             traceId,
             //@ts-expect-error
             model: openAIParams.model,
@@ -431,7 +431,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
         const latency = (Date.now() - startTime) / 1000
         await sendEventToPosthog({
           client: this.phClient,
-          distinctId: posthogDistinctId ?? traceId,
+          distinctId: posthogDistinctId,
           traceId,
           //@ts-expect-error
           model: openAIParams.model,
@@ -455,7 +455,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
       async (error: any) => {
         await sendEventToPosthog({
           client: this.phClient,
-          distinctId: posthogDistinctId ?? traceId,
+          distinctId: posthogDistinctId,
           traceId,
           //@ts-expect-error
           model: openAIParams.model,

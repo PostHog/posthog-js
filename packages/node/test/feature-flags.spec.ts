@@ -4647,6 +4647,163 @@ describe('consistency tests', () => {
   })
 })
 
+describe('flag dependency filters', () => {
+  it('should skip flag type filters with warning in debug mode', async () => {
+    const consoleSpy = jest.spyOn(console, 'warn')
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Dependent Feature',
+          key: 'dependent-flag',
+          active: true,
+          filters: {
+            groups: [
+              {
+                properties: [
+                  {
+                    key: 'parent-flag',
+                    type: 'flag',
+                    value: true,
+                    operator: 'exact',
+                  },
+                ],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+    }
+
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    // Enable debug mode to see the warning
+    posthog.debug(true)
+
+    // Should return true since the flag dependency is skipped and rollout is 100%
+    const result = await posthog.getFeatureFlag('dependent-flag', 'some-distinct-id')
+    expect(result).toBe(true)
+
+    // Check that the warning was logged
+    expect(consoleSpy).toHaveBeenCalledWith(
+      '[FEATURE FLAGS] Flag dependency filters are not supported in local evaluation. ' +
+        "Skipping condition for flag 'dependent-flag' with dependency on flag 'parent-flag'"
+    )
+
+    consoleSpy.mockRestore()
+  })
+
+  it('should skip flag type filters in property groups', async () => {
+    const consoleSpy = jest.spyOn(console, 'warn')
+    const flags = {
+      flags: [
+        {
+          id: 1,
+          name: 'Complex Flag',
+          key: 'complex-flag',
+          active: true,
+          filters: {
+            groups: [
+              {
+                properties: [
+                  {
+                    key: 'email',
+                    type: 'person',
+                    value: 'test@example.com',
+                    operator: 'exact',
+                  },
+                ],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+      cohorts: {
+        '1': {
+          type: 'AND',
+          values: [
+            {
+              key: 'another-flag',
+              type: 'flag',
+              value: true,
+              operator: 'exact',
+            },
+            {
+              key: 'country',
+              type: 'person',
+              value: 'US',
+              operator: 'exact',
+            },
+          ],
+        },
+      },
+    }
+
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+
+    const posthog = new PostHog('TEST_API_KEY', {
+      host: 'http://example.com',
+      personalApiKey: 'TEST_PERSONAL_API_KEY',
+      ...posthogImmediateResolveOptions,
+    })
+
+    // Enable debug mode to see the warning
+    posthog.debug(true)
+
+    // Test cohort matching with flag dependency
+    const cohortFlags = {
+      flags: [
+        {
+          id: 2,
+          name: 'Cohort Flag',
+          key: 'cohort-flag',
+          active: true,
+          filters: {
+            groups: [
+              {
+                properties: [
+                  {
+                    key: '1',
+                    type: 'cohort',
+                    value: '1',
+                    operator: 'exact',
+                  },
+                ],
+                rollout_percentage: 100,
+              },
+            ],
+          },
+        },
+      ],
+      cohorts: flags.cohorts,
+    }
+
+    mockedFetch.mockImplementation(apiImplementation({ localFlags: cohortFlags }))
+    await posthog.reloadFeatureFlags()
+
+    // Should return true because the flag dependency is skipped but country matches
+    const result = await posthog.getFeatureFlag('cohort-flag', 'some-distinct-id', {
+      personProperties: { country: 'US' },
+    })
+    expect(result).toBe(true)
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      '[FEATURE FLAGS] Flag dependency filters are not supported in local evaluation. ' +
+        "Skipping condition with dependency on flag 'another-flag'"
+    )
+
+    consoleSpy.mockRestore()
+  })
+})
+
 describe('quota limiting', () => {
   it('should clear local flags when quota limited', async () => {
     const consoleSpy = jest.spyOn(console, 'warn')

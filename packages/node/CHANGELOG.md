@@ -1,5 +1,72 @@
 # Next
 
+# 5.6.0 – 2025-07-15
+
+1. Added support for filtering feature flags with flagKeys parameter in sendFeatureFlags options
+
+# 5.5.1 – 2025-07-15
+
+1. wrap `InconclusiveMatchError`s in `logMsgIfDebug` for local flag evaluations on `sendFeatureFlags`
+
+# 5.5.0 – 2025-07-10
+
+1. feat: make the `sendFeatureFlags` parameter more declarative and ergonomic.  Implementation notes below:
+
+Modified `sendFeatureFlags` to be type `boolean | SendFeatureFlagsOptions`, (which is defined thusly)
+
+```ts
+export interface SendFeatureFlagsOptions {
+  onlyEvaluateLocally?: boolean
+  personProperties?: Record<string, any>
+  groupProperties?: Record<string, Record<string, any>>
+}
+```
+
+This lets users declare (1) whether to use local evaluation, and (2) which properties to supply explicitly for that evaluation, every time they want to send feature flags.  It also supports the old boolean behavior if folks don't care and would rather the SDK infer it.
+
+Now, you can make calls like this
+
+```ts
+posthog.captureImmediate({
+  distinctId: "user123",
+  event: "test event",
+  sendFeatureFlags: {
+    onlyEvaluateLocally: true,
+    personProperties: {
+      plan: "premium",
+    },
+  },
+  properties: {
+    foo: "bar",
+  },
+});
+```
+
+or simply
+
+```
+posthog.captureImmediate({
+  distinctId: "user123",
+  event: "test event",
+  sendFeatureFlags: true // this will still infer local evaluation if it appears to be configured, but it won't try to pull properties from the event message
+  properties: {
+    foo: "bar",
+  },
+});
+```
+
+# 5.4.0 – 2025-07-09
+
+feat: respect local evaluation preferences with `sendFeatureFlags`; add property overrides from the event to those local computations so that the locally evaluated flags can be more accuratee.  NB: this change chagnes the default behavior of `capture` and `captureImmediately` – we will now only send feature flag data along with those events if `sendFeatureFlags` is explicitly specified, instead of optimistically sending along locally evaluated flags by default.
+
+# 5.3.1 - 2025-07-07
+
+1. feat: decouple feature flag local evaluation from personal API keys; support decrypting remote config payloads without relying on the feature flags poller
+
+# 5.2.1 - 2025-07-07
+
+1. feat: add captureExceptionImmediate method on posthog client
+
 # 5.1.1 - 2025-06-16
 
 1. fix: Handle double-encoded JSON payloads from the remote config endpoint
@@ -19,6 +86,7 @@
 ## Breaking changes
 
 1. feat: migrate to native fetch, Node 20+ required
+2. PostHog Node now compresses messages with GZip before sending them to our servers when the runtime supports compression. This reduces network bandwidth and improves performance. Network traffic interceptors and test assertions on payloads must handle GZip decompression to inspect the data. Alternatively, you can disable compression by setting `disableCompression: true` in the client configuration during tests.
 
 # 5.0.0-alpha.1 - 2025-04-29
 

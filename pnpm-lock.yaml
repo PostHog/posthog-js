@@ -406,7 +406,7 @@ importers:
   packages/nextjs-config:
     dependencies:
       '@posthog/cli':
-        specifier: ^0.3.1
+        specifier: ^0.3.5
         version: 0.3.5
     devDependencies:
       '@posthog-tooling/rollup-utils':
@@ -437,12 +437,15 @@ importers:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.9
       commander:
         specifier: ^9.3.0
         version: 9.5.0
       jest:
         specifier: 'catalog:'
-        version: 29.7.0(@types/node@22.16.5)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.16.5)(typescript@5.8.2))
+        version: 29.7.0(@types/node@20.19.9)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@20.19.9)(typescript@5.8.2))
       mitata:
         specifier: ^1.0.21
         version: 1.0.34
@@ -12774,7 +12777,6 @@ snapshots:
       - babel-plugin-macros
       - supports-color
       - ts-node
-    optional: true
 
   '@jest/core@29.7.0(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.16.5)(typescript@5.8.2))':
     dependencies:
@@ -15990,7 +15992,6 @@ snapshots:
       - babel-plugin-macros
       - supports-color
       - ts-node
-    optional: true
 
   create-jest@29.7.0(@types/node@22.16.5)(ts-node@10.9.2(@types/node@22.16.5)(typescript@5.8.2)):
     dependencies:
@@ -18608,7 +18609,6 @@ snapshots:
       - babel-plugin-macros
       - supports-color
       - ts-node
-    optional: true
 
   jest-cli@29.7.0(@types/node@22.16.5)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.16.5)(typescript@5.8.2)):
     dependencies:
@@ -18695,7 +18695,6 @@ snapshots:
     transitivePeerDependencies:
       - babel-plugin-macros
       - supports-color
-    optional: true
 
   jest-config@29.7.0(@types/node@22.16.5)(ts-node@10.9.2(@types/node@20.19.9)(typescript@5.8.2)):
     dependencies:
@@ -18727,7 +18726,6 @@ snapshots:
     transitivePeerDependencies:
       - babel-plugin-macros
       - supports-color
-    optional: true
 
   jest-config@29.7.0(@types/node@22.16.5)(ts-node@10.9.2(@types/node@22.16.5)(typescript@5.8.2)):
     dependencies:
@@ -19403,7 +19401,6 @@ snapshots:
       - babel-plugin-macros
       - supports-color
       - ts-node
-    optional: true
 
   jest@29.7.0(@types/node@22.16.5)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.16.5)(typescript@5.8.2)):
     dependencies:

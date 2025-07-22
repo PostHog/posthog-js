@@ -34,11 +34,16 @@ export type PostHogNextConfigComplete = {
 export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogConfig: PostHogNextConfig): NextConfig {
   const posthogNextConfigComplete = resolvePostHogConfig(posthogConfig)
   return async (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => {
-    const { webpack: userWebPackConfig, ...userConfig } = await resolveUserConfig(userNextConfig, phase, defaultConfig)
+    const {
+      webpack: userWebPackConfig,
+      distDir,
+      ...userConfig
+    } = await resolveUserConfig(userNextConfig, phase, defaultConfig)
     const defaultWebpackConfig = userWebPackConfig || ((config: any) => config)
     const sourceMapEnabled = posthogNextConfigComplete.sourcemaps.enabled
     return {
       ...userConfig,
+      distDir,
       productionBrowserSourceMaps: sourceMapEnabled,
       webpack: (config: any, options: any) => {
         const webpackConfig = defaultWebpackConfig(config, options)
@@ -48,7 +53,7 @@ export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogCon
         if (sourceMapEnabled) {
           webpackConfig.plugins = webpackConfig.plugins || []
           webpackConfig.plugins.push(
-            new SourcemapWebpackPlugin(posthogNextConfigComplete, options.isServer, options.nextRuntime)
+            new SourcemapWebpackPlugin(posthogNextConfigComplete, options.isServer, options.nextRuntime, distDir)
           )
         }
         return webpackConfig

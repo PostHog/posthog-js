@@ -33,10 +33,6 @@ jobs:
       - name: Serve static files
         run: python -m http.server 8080 &
 
-      - name: Set up posthog-js
-        run: pnpm build-rollup
-        working-directory: packages/browser
-
       - name: Run ${{ matrix.name }} test
         timeout-minutes: 10
         env:

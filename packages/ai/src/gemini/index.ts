@@ -72,7 +72,7 @@ export class WrappedModels {
 
       await sendEventToPosthog({
         client: this.phClient,
-        distinctId: posthogDistinctId ?? traceId,
+        distinctId: posthogDistinctId,
         traceId,
         model: geminiParams.model,
         provider: 'gemini',
@@ -94,7 +94,7 @@ export class WrappedModels {
       const latency = (Date.now() - startTime) / 1000
       await sendEventToPosthog({
         client: this.phClient,
-        distinctId: posthogDistinctId ?? traceId,
+        distinctId: posthogDistinctId,
         traceId,
         model: geminiParams.model,
         provider: 'gemini',
@@ -155,7 +155,7 @@ export class WrappedModels {
       const latency = (Date.now() - startTime) / 1000
       await sendEventToPosthog({
         client: this.phClient,
-        distinctId: posthogDistinctId ?? traceId,
+        distinctId: posthogDistinctId,
         traceId,
         model: geminiParams.model,
         provider: 'gemini',
@@ -172,7 +172,7 @@ export class WrappedModels {
       const latency = (Date.now() - startTime) / 1000
       await sendEventToPosthog({
         client: this.phClient,
-        distinctId: posthogDistinctId ?? traceId,
+        distinctId: posthogDistinctId,
         traceId,
         model: geminiParams.model,
         provider: 'gemini',
