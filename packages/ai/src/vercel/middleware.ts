@@ -18,8 +18,8 @@ interface ClientOptions {
 }
 
 interface CreateInstrumentationMiddlewareOptions {
-  posthogDistinctId: string
-  posthogTraceId: string
+  posthogDistinctId?: string
+  posthogTraceId?: string
   posthogProperties?: Record<string, any>
   posthogPrivacyMode?: boolean
   posthogGroups?: Record<string, any>
@@ -229,7 +229,7 @@ export const createInstrumentationMiddleware = (
         await sendEventToPosthog({
           client: phClient,
           distinctId: options.posthogDistinctId,
-          traceId: options.posthogTraceId,
+          traceId: options.posthogTraceId ?? uuidv4(),
           model: modelId,
           provider: provider,
           input: options.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt),
@@ -252,7 +252,7 @@ export const createInstrumentationMiddleware = (
         await sendEventToPosthog({
           client: phClient,
           distinctId: options.posthogDistinctId,
-          traceId: options.posthogTraceId,
+          traceId: options.posthogTraceId ?? uuidv4(),
           model: modelId,
           provider: model.provider,
           input: options.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt),
@@ -324,7 +324,7 @@ export const createInstrumentationMiddleware = (
             await sendEventToPosthog({
               client: phClient,
               distinctId: options.posthogDistinctId,
-              traceId: options.posthogTraceId,
+              traceId: options.posthogTraceId ?? uuidv4(),
               model: modelId,
               provider: provider,
               input: options.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt),
@@ -347,7 +347,7 @@ export const createInstrumentationMiddleware = (
         await sendEventToPosthog({
           client: phClient,
           distinctId: options.posthogDistinctId,
-          traceId: options.posthogTraceId,
+          traceId: options.posthogTraceId ?? uuidv4(),
           model: modelId,
           provider: provider,
           input: options.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt),
@@ -381,7 +381,7 @@ export const wrapVercelLanguageModel = (
   const middleware = createInstrumentationMiddleware(phClient, model, {
     ...options,
     posthogTraceId: traceId,
-    posthogDistinctId: options.posthogDistinctId ?? traceId,
+    posthogDistinctId: options.posthogDistinctId,
   })
 
   const wrappedModel = wrapLanguageModel({

@@ -105,7 +105,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
               const latency = (Date.now() - startTime) / 1000
               await sendEventToPosthog({
                 client: this.phClient,
-                distinctId: posthogDistinctId ?? traceId,
+                distinctId: posthogDistinctId,
                 traceId,
                 model: anthropicParams.model,
                 provider: 'anthropic',
@@ -122,7 +122,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
               // error handling
               await sendEventToPosthog({
                 client: this.phClient,
-                distinctId: posthogDistinctId ?? traceId,
+                distinctId: posthogDistinctId,
                 traceId,
                 model: anthropicParams.model,
                 provider: 'anthropic',
@@ -155,7 +155,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
             const latency = (Date.now() - startTime) / 1000
             await sendEventToPosthog({
               client: this.phClient,
-              distinctId: posthogDistinctId ?? traceId,
+              distinctId: posthogDistinctId,
               traceId,
               model: anthropicParams.model,
               provider: 'anthropic',
@@ -179,7 +179,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
         async (error: any) => {
           await sendEventToPosthog({
             client: this.phClient,
-            distinctId: posthogDistinctId ?? traceId,
+            distinctId: posthogDistinctId,
             traceId,
             model: anthropicParams.model,
             provider: 'anthropic',
