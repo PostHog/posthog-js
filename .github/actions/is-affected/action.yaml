@@ -21,7 +21,7 @@ runs:
     - name: Check if package is affected
       id: check-affected
       run: |
-        AFFECTED=$(turbo run build '--filter=...${{ inputs.package-name }}[${{inputs.base-branch}}...HEAD]' --dry=json)
+        AFFECTED=$(pnpx turbo run build '--filter=...${{ inputs.package-name }}[${{inputs.base-branch}}...HEAD]' --dry=json)
         IS_AFFECTED=$(echo "$AFFECTED" | jq '.tasks | length > 0')
         echo "is-affected=$IS_AFFECTED" >> $GITHUB_OUTPUT
       shell: bash
