@@ -1,0 +1,79 @@
+{
+  "name": "posthog-node",
+  "version": "5.6.0",
+  "description": "PostHog Node.js integration",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PostHog/posthog-js.git",
+    "directory": "packages/node"
+  },
+  "scripts": {
+    "clean": "rimraf dist coverage",
+    "lint": "eslint src test",
+    "lint:fix": "eslint src test --fix",
+    "test:unit": "jest",
+    "build": "rollup -c",
+    "dev": "rollup -cw",
+    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "PostHog",
+    "email": "hey@posthog.com",
+    "url": "https://posthog.com"
+  },
+  "main": "dist/node/index.cjs",
+  "module": "dist/node/index.mjs",
+  "types": "dist/index.d.ts",
+  "dependencies": {
+    "@posthog/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "commander": "^9.3.0",
+    "mitata": "^1.0.21",
+    "@posthog-tooling/tsconfig-base": "workspace:*",
+    "@posthog-tooling/rollup-utils": "workspace:*",
+    "jest": "catalog:"
+  },
+  "keywords": [
+    "posthog",
+    "stats",
+    "analysis",
+    "funnels"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "edge": {
+        "import": "./dist/edge/index.mjs",
+        "require": "./dist/edge/index.cjs",
+        "default": "./dist/edge/index.mjs"
+      },
+      "node": {
+        "import": "./dist/node/index.mjs",
+        "require": "./dist/node/index.cjs",
+        "default": "./dist/node/index.mjs"
+      },
+      "edge-light": {
+        "import": "./dist/edge/index.mjs",
+        "require": "./dist/edge/index.cjs",
+        "default": "./dist/edge/index.mjs"
+      },
+      "workerd": {
+        "import": "./dist/edge/index.mjs",
+        "require": "./dist/edge/index.cjs",
+        "default": "./dist/edge/index.mjs"
+      },
+      "import": "./dist/node/index.mjs",
+      "require": "./dist/node/index.cjs"
+    }
+  }
+}
