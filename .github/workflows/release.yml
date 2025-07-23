@@ -25,6 +25,12 @@ jobs:
       - name: Checkout the repository
         uses: actions/checkout@v4
 
+      - name: Setup environment
+        uses: ./.github/actions/setup
+        with:
+          install: false
+          build: false
+
       - name: Get package path
         id: get-package-path
         run: |
