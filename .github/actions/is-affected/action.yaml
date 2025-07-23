@@ -18,10 +18,15 @@ outputs:
 runs:
   using: "composite"
   steps:
+    - name: Fetch base branch
+      shell: bash
+      run: |
+        git fetch origin ${{ inputs.base-branch }}
+
     - name: Check if package is affected
       id: check-affected
+      shell: bash
       run: |
         AFFECTED=$(pnpx turbo run build '--filter=...${{ inputs.package-name }}[${{inputs.base-branch}}...HEAD]' --dry=json)
         IS_AFFECTED=$(echo "$AFFECTED" | jq '.tasks | length > 0')
         echo "is-affected=$IS_AFFECTED" >> $GITHUB_OUTPUT
-      shell: bash
