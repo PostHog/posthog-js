@@ -21,7 +21,7 @@ runs:
     - name: Fetch base branch
       shell: bash
       run: |
-        git fetch origin ${{ inputs.base-branch }}
+        git fetch origin ${{ inputs.base-branch }}:${{ inputs.base-branch }}
 
     - name: Check if package is affected
       id: check-affected
