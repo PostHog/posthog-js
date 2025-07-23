@@ -180,8 +180,8 @@ interface PostHogExtensions {
         onINP: (metric: any) => void
     }
     tracingHeadersPatchFns?: {
-        _patchFetch: (distinctId: string, sessionManager?: SessionIdManager) => () => void
-        _patchXHR: (distinctId: string, sessionManager?: SessionIdManager) => () => void
+        _patchFetch: (hostnames: string[], distinctId: string, sessionManager?: SessionIdManager) => () => void
+        _patchXHR: (hostnames: string[], distinctId: string, sessionManager?: SessionIdManager) => () => void
     }
     initDeadClicksAutocapture?: (
         ph: PostHog,

@@ -524,8 +524,7 @@ exports[`config snapshot for PostHogConfig 1`] = `
   ],
   \\"__add_tracing_headers\\": [
     \\"undefined\\",
-    \\"false\\",
-    \\"true\\"
+    \\"string[]\\"
   ],
   \\"__preview_remote_config\\": [
     \\"undefined\\",

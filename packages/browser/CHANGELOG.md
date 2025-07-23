@@ -1,3 +1,7 @@
+## 1.257.2 - 2025-07-22
+
+- chore: Safer iteration of experimental `__add_tracing_headers` (#2100)
+
 ## 1.257.1 - 2025-07-21
 
 - return capture results from captureException (#2081)
