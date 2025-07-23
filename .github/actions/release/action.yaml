@@ -18,13 +18,13 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Checkout the repository
-      uses: actions/checkout@v4
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
 
-    - name: Setup workspace
-      uses: ./.github/actions/setup
-      with:
-        build: true
+    - name: Build package
+      shell: bash
+      run: pnpm build
 
     - name: Tag repository with package_name and package_version
       shell: bash
@@ -33,12 +33,11 @@ runs:
 
     - name: Publish package to NPM
       shell: bash
+      working-directory: ${{ inputs.package_path }}
       run: |
         pnpm publish --access public
       env:
-        DATABASE_URL: "postgres://postgres:postgres@localhost:${{ job.services.postgres.ports[5432] }}/postgres"
-        REDIS_URL: "redis://localhost"
-        NODE_AUTH_TOKEN: ${{ inputs.npm_token }}
+        NPM_TOKEN: ${{ inputs.npm_token }}
 
     - name: Push tag to GitHub
       shell: bash

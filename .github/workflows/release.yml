@@ -27,6 +27,9 @@ jobs:
 
       - name: Setup environment
         uses: ./.github/actions/setup
+        with:
+          install: false
+          build: false
 
       - name: Get package path
         id: get-package-path
