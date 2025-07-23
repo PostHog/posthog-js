@@ -14,6 +14,9 @@ inputs:
   npm_token:
     description: "NPM token to publish package"
     required: true
+  github_token:
+    description: "GitHub token to create release"
+    required: true
 
 runs:
   using: "composite"
@@ -47,7 +50,7 @@ runs:
       working-directory: ${{ inputs.package_path }}
       shell: bash
       env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GH_TOKEN: ${{ inputs.github_token }}
       run: |
         # read from the first until the second header in the changelog file
         # this assumes the formatting of the file
