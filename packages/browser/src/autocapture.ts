@@ -14,6 +14,7 @@ import {
     shouldCaptureValue,
     splitClassString,
 } from './autocapture-utils'
+
 import RageClick from './extensions/rageclick'
 import { AutocaptureConfig, COPY_AUTOCAPTURE_EVENT, EventName, Properties, RemoteConfig } from './types'
 import { PostHog } from './posthog-core'
