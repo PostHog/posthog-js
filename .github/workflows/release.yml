@@ -1,0 +1,65 @@
+name: "Release"
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    name: Publish
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package:
+          - name: posthog-react-native
+          - name: posthog-node
+          - name: posthog-js-lite
+          - name: posthog-js
+          - name: "@posthog/core"
+          - name: "@posthog/react"
+          - name: "@posthog/ai"
+          - name: "@posthog/nextjs-config"
+
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v4
+
+      - name: Get package path
+        id: get-package-path
+        run: |
+          PACKAGE_PATH=$(pnpm list --filter=${{ matrix.package.name }} --json | jq -r '.[0].path')
+          echo "path=$PACKAGE_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Check package version and detect an update
+        id: check-package-version
+        uses: PostHog/check-package-version@v2.1.0
+        with:
+          path: ${{ steps.get-package-path.outputs.path }}
+
+      - name: Release package ${{ matrix.package.name }}
+        uses: ./.github/actions/release
+        if: steps.check-package-version.outputs.is-new-version == 'true'
+        with:
+          package_path: ${{ steps.get-package-path.outputs.path }}
+          package_name: ${{ matrix.package.name }}
+          package_version: ${{ steps.check-package-version.outputs.committed-version }}
+          npm_token: ${{ secrets.NPM_TOKEN }}
+
+      - name: PostHog Upgrade ${{ matrix.package.name }}
+        uses: ./.github/actions/posthog-upgrade
+        if: matrix.package.name == 'posthog-js' && steps.check-package-version.outputs.is-new-version == 'true'
+        with:
+          package_name: ${{ matrix.package.name }}
+          package_version: ${{ steps.check-package-version.outputs.committed-version }}
+          deployer_app_id: ${{ secrets.DEPLOYER_APP_ID }}
+          deployer_app_private_key: ${{ secrets.DEPLOYER_APP_PRIVATE_KEY }}
+          github_bot_token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+
+      - name: PostHog.com Upgrade ${{ matrix.package.name }}
+        uses: ./.github/actions/posthog-com-upgrade
+        if: matrix.package.name == 'posthog-js' && steps.check-package-version.outputs.is-new-version == 'true'
+        with:
+          package_name: ${{ matrix.package.name }}
+          package_version: ${{ steps.check-package-version.outputs.committed-version }}
+          github_bot_token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
