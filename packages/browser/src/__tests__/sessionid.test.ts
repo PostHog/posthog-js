@@ -392,23 +392,5 @@ describe('Session ID manager', () => {
             expect(sessionIdManager['_enforceIdleTimeout']).toBeDefined()
             expect(sessionIdManager['_enforceIdleTimeout']).toEqual(originalTimer)
         })
-
-        /** timer doesn't advance and fire this? */
-        it.skip('resets session id despite no activity after timeout', () => {
-            ;(uuidv7 as jest.Mock).mockImplementationOnce(() => 'originalUUID')
-
-            const sessionIdManager = sessionIdMgr(persistence)
-            const { sessionId: originalSessionId } = sessionIdManager.checkAndGetSessionAndWindowId(
-                undefined,
-                timestamp
-            )
-            expect(originalSessionId).toBeDefined()
-
-            jest.advanceTimersByTime(DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS * 1.1 + 1)
-
-            const { sessionId: finalSessionId } = sessionIdManager.checkAndGetSessionAndWindowId(undefined, timestamp)
-            expect(finalSessionId).toBeDefined()
-            expect(finalSessionId).not.toEqual(originalSessionId)
-        })
     })
 })

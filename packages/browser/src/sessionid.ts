@@ -247,7 +247,7 @@ export class SessionIdManager {
 
         let valuesChanged = false
         const noSessionId = !sessionId
-        const activityTimeout = !readOnly && Math.abs(timestamp - lastActivityTimestamp) > this.sessionTimeoutMs
+        const activityTimeout = this._sessionHasBeenIdleTooLong(readOnly, timestamp, lastActivityTimestamp)
         if (noSessionId || activityTimeout || sessionPastMaximumLength) {
             sessionId = this._sessionIdGenerator()
             windowId = this._windowIdGenerator()
@@ -293,11 +293,21 @@ export class SessionIdManager {
         }
     }
 
+    private _sessionHasBeenIdleTooLong = (readOnly: boolean, timestamp: number, lastActivityTimestamp: number) => {
+        return !readOnly && Math.abs(timestamp - lastActivityTimestamp) > this.sessionTimeoutMs
+    }
+
     private _resetIdleTimer() {
         clearTimeout(this._enforceIdleTimeout)
         this._enforceIdleTimeout = setTimeout(() => {
             // enforce idle timeout a little after the session timeout to ensure the session is reset even without activity
-            this.resetSessionId()
+            // we need to check session activity first in case a different window has kept the session active
+            // while this window has been idle - and the timer has not progressed - e.g. window memory frozen while hidden
+            const timestamp = new Date().getTime()
+            const [lastActivityTimestamp] = this._getSessionId()
+            if (this._sessionHasBeenIdleTooLong(false, timestamp, lastActivityTimestamp)) {
+                this.resetSessionId()
+            }
         }, this.sessionTimeoutMs * 1.1)
     }
 }
