@@ -18,6 +18,12 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Set up Git
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+      shell: bash
+
     - name: Install dependencies
       shell: bash
       run: pnpm install --frozen-lockfile
