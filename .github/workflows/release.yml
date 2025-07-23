@@ -51,6 +51,7 @@ jobs:
           package_name: ${{ matrix.package.name }}
           package_version: ${{ steps.check-package-version.outputs.committed-version }}
           npm_token: ${{ secrets.NPM_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: PostHog Upgrade ${{ matrix.package.name }}
         uses: ./.github/actions/posthog-upgrade
