@@ -1,0 +1,8 @@
+{
+  "extends": "@posthog-tooling/tsconfig-base",
+  "compilerOptions": {
+    "incremental": false,
+    "rootDir": ".",
+    "target": "ES6"
+  }
+}

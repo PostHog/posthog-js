@@ -1,0 +1,22 @@
+{
+    "compilerOptions": {
+        "module": "esnext",
+        "moduleResolution": "bundler",
+        "isolatedModules": true,
+        "esModuleInterop": true,
+        "declaration": false,
+        "noEmitOnError": true,
+        "removeComments": false,
+        "emitDecoratorMetadata": true,
+        "experimentalDecorators": true,
+        "resolveJsonModule": true,
+        "target": "es2020",
+        "sourceMap": true,
+        "noEmit": false,
+        "incremental": false,
+        "strict": true,
+        "rootDir": ".",
+        "lib": ["es2022"],
+        "types": ["node", "jest"]
+    }
+}
