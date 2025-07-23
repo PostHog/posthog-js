@@ -212,6 +212,10 @@ export class SessionIdManager {
         )
     }
 
+    private _sessionHasBeenIdleTooLong = (timestamp: number, lastActivityTimestamp: number) => {
+        return Math.abs(timestamp - lastActivityTimestamp) > this.sessionTimeoutMs
+    }
+
     /*
      * This function returns the current sessionId and windowId. It should be used to
      * access these values over directly calling `._sessionId` or `._windowId`.
@@ -247,7 +251,7 @@ export class SessionIdManager {
 
         let valuesChanged = false
         const noSessionId = !sessionId
-        const activityTimeout = this._sessionHasBeenIdleTooLong(readOnly, timestamp, lastActivityTimestamp)
+        const activityTimeout = !readOnly && this._sessionHasBeenIdleTooLong(timestamp, lastActivityTimestamp)
         if (noSessionId || activityTimeout || sessionPastMaximumLength) {
             sessionId = this._sessionIdGenerator()
             windowId = this._windowIdGenerator()
@@ -293,19 +297,14 @@ export class SessionIdManager {
         }
     }
 
-    private _sessionHasBeenIdleTooLong = (readOnly: boolean, timestamp: number, lastActivityTimestamp: number) => {
-        return !readOnly && Math.abs(timestamp - lastActivityTimestamp) > this.sessionTimeoutMs
-    }
-
     private _resetIdleTimer() {
         clearTimeout(this._enforceIdleTimeout)
         this._enforceIdleTimeout = setTimeout(() => {
             // enforce idle timeout a little after the session timeout to ensure the session is reset even without activity
             // we need to check session activity first in case a different window has kept the session active
             // while this window has been idle - and the timer has not progressed - e.g. window memory frozen while hidden
-            const timestamp = new Date().getTime()
             const [lastActivityTimestamp] = this._getSessionId()
-            if (this._sessionHasBeenIdleTooLong(false, timestamp, lastActivityTimestamp)) {
+            if (this._sessionHasBeenIdleTooLong(new Date().getTime(), lastActivityTimestamp)) {
                 this.resetSessionId()
             }
         }, this.sessionTimeoutMs * 1.1)
