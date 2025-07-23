@@ -1,0 +1,31 @@
+name: "Check affected packages"
+description: "Checks which packages are affected by a change"
+
+inputs:
+  base-branch:
+    description: "The base branch to compare against"
+    required: false
+    default: "main"
+  package-name:
+    description: "The name of the package to check"
+    required: true
+
+outputs:
+  is-affected:
+    description: "Whether the package is affected"
+    value: ${{ steps.check-affected.outputs.is-affected }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Check if package is affected
+      id: check-affected
+      run: |
+        AFFECTED=$(turbo run build --filter=${{ inputs.package-name }} --filter=[${{inputs.base-branch}}...HEAD] --dry=json 2>/dev/null || true)
+        if [ -z "$AFFECTED" ]; then
+          echo "is-affected=false" >> $GITHUB_OUTPUT
+        else
+          IS_AFFECTED=$(echo "$AFFECTED" | jq '.tasks | length > 0')
+          echo "is-affected=$IS_AFFECTED" >> $GITHUB_OUTPUT
+        fi
+      shell: bash

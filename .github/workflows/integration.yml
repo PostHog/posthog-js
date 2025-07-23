@@ -38,12 +38,24 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: ./.github/actions/setup
+        with:
+          build: false
+
+      - uses: ./.github/actions/is-affected
+        with:
+          package-name: posthog-js
+
+      - name: Build packages
+        if: ${{ steps.is-affected.outputs.is-affected == 'true' }}
+        run: pnpm build
 
       - name: Install Playwright Browsers
+        if: ${{ steps.is-affected.outputs.is-affected == 'true' }}
         run: pnpm exec playwright install ${{ matrix.tests.install }} --with-deps --only-shell
         working-directory: packages/browser
 
       - name: Run ${{ matrix.tests.name }} test
+        if: ${{ steps.is-affected.outputs.is-affected == 'true' }}
         timeout-minutes: 10
         env:
           BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
