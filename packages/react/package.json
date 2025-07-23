@@ -1,7 +1,7 @@
 {
     "name": "@posthog/react",
     "version": "1.0.0",
-    "description": "Provides components and hooks for React integrations of PostHog. It is not published to NPM, but is used in the main posthog-js package.",
+    "description": "Provides components and hooks for React integrations of PostHog.",
     "repository": {
         "type": "git",
         "url": "https://github.com/PostHog/posthog-js",
