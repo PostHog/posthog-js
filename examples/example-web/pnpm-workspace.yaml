@@ -1,0 +1,9 @@
+packages:
+  - .
+
+onlyBuiltDependencies:
+  - core-js
+  - core-js-pure
+
+nodeLinker: hoisted
+pnpmfile: ../.pnpmfile.cjs

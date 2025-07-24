@@ -39,10 +39,6 @@ jobs:
 
       - uses: ./.github/actions/setup
 
-      - name: Set up posthog-js
-        run: pnpm build-rollup
-        working-directory: packages/browser
-
       - name: Install Playwright Browsers
         run: pnpm exec playwright install ${{ matrix.tests.install }} --with-deps --only-shell
         working-directory: packages/browser

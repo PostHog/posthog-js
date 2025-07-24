@@ -1,3 +1,15 @@
+## 1.257.2 - 2025-07-22
+
+- chore: Safer iteration of experimental `__add_tracing_headers` (#2100)
+
+## 1.257.1 - 2025-07-21
+
+- return capture results from captureException (#2081)
+- update posthog-js at workspace level (#2096)
+- chore(tests): use playwright for integration tests (#2093)
+- fix: Sync consent with persistence immediately (#2082)
+- Use posthog consent in next playground (#2083)
+
 ## 1.257.0 - 2025-07-08
 
 - one for flags and flags for all (#2079)

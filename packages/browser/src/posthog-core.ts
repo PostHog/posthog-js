@@ -1465,8 +1465,8 @@ export class PostHog {
     }
 
     /** Opt the user in or out of an early access feature. */
-    updateEarlyAccessFeatureEnrollment(key: string, isEnrolled: boolean): void {
-        this.featureFlags.updateEarlyAccessFeatureEnrollment(key, isEnrolled)
+    updateEarlyAccessFeatureEnrollment(key: string, isEnrolled: boolean, stage?: string): void {
+        this.featureFlags.updateEarlyAccessFeatureEnrollment(key, isEnrolled, stage)
     }
 
     /** Get the list of early access features. To check enrollment status, use `isFeatureEnabled`. */
@@ -2188,9 +2188,9 @@ export class PostHog {
     }
 
     /** Capture a caught exception manually */
-    captureException(error: unknown, additionalProperties?: Properties): void {
+    captureException(error: unknown, additionalProperties?: Properties): CaptureResult | undefined {
         const syntheticException = new Error('PostHog syntheticException')
-        this.exceptions.sendExceptionEvent({
+        return this.exceptions.sendExceptionEvent({
             ...errorToProperties(
                 isError(error) ? { error, event: error.message } : { event: error as Event | string },
                 // create synthetic error to get stack in cases where user input does not contain one
