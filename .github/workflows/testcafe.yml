@@ -35,6 +35,7 @@ jobs:
           build: false
 
       - uses: ./.github/actions/is-affected
+        id: is-affected
         with:
           package-name: posthog-js
 
