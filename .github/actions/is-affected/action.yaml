@@ -2,8 +2,8 @@ name: "Check affected packages"
 description: "Checks which packages are affected by a change"
 
 inputs:
-  base-branch:
-    description: "The base branch to compare against"
+  branch:
+    description: "The branch to compare against"
     required: false
     default: "main"
   package-name:
@@ -21,12 +21,15 @@ runs:
     - name: Fetch base branch
       shell: bash
       run: |
-        git fetch origin ${{ inputs.base-branch }}
+        # Fetch branch history
+        git fetch --unshallow origin HEAD
+        # Fetch base branch history
+        git fetch origin ${{ inputs.branch }}
 
     - name: Check if package is affected
       id: check-affected
       shell: bash
       run: |
-        AFFECTED=$(pnpx turbo run build '--filter=...${{ inputs.package-name }}[origin/${{inputs.base-branch}}...HEAD]' --dry=json)
+        AFFECTED=$(pnpx turbo run build '--filter=${{ inputs.package-name }}...[origin/${{inputs.branch}}...HEAD]' --dry=json)
         IS_AFFECTED=$(echo "$AFFECTED" | jq '.tasks | length > 0')
         echo "is-affected=$IS_AFFECTED" >> $GITHUB_OUTPUT
