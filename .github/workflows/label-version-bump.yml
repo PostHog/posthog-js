@@ -22,7 +22,6 @@ jobs:
 
       - uses: ./.github/actions/setup
         with:
-          install: false
           build: false
 
       - name: Update versions and changelogs
