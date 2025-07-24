@@ -53,13 +53,20 @@ runs:
         RETRY_TIMES: 20
         RETRY_WAIT_SECONDS: 5
 
+    - name: Generate branch name
+      id: generate-branch-name
+      shell: bash
+      run: |
+        PACKAGE_NAME_SANITIZED=$(echo "${{ inputs.package_name }}" | sed 's/@//g' | sed 's/\//-/g')
+        echo "branch_name=${PACKAGE_NAME_SANITIZED}-${{ inputs.package_version }}" >> "$GITHUB_OUTPUT"
+
     - name: Create main repo pull request
       id: main-repo-pr
       uses: peter-evans/create-pull-request@v3
       with:
         token: ${{ inputs.github_bot_token }}
         commit-message: "chore(deps): Update ${{ inputs.package_name }} to ${{ inputs.package_version }}"
-        branch: ${{ replace(replace(inputs.package_name, '@', ''), '/', '-') }}-${{ inputs.package_version }}
+        branch: ${{ steps.generate-branch-name.outputs.branch_name }}
         delete-branch: true
         labels: automerge
         title: "chore(deps): Update ${{ inputs.package_name }} to ${{ inputs.package_version }}"
