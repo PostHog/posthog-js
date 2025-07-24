@@ -1,3 +1,8 @@
+## 1.258.0
+
+### Minor Changes
+
+- [#2089](https://github.com/PostHog/posthog-js/pull/2089) [`0a19df2`](https://github.com/PostHog/posthog-js/commit/0a19df28d6a62b97949f0e99bfadf33b7aadcb45) Thanks [@daibhin](https://github.com/daibhin)! - feat: exclude exceptions autocaptured by extensions
 
 ## 1.257.2 - 2025-07-22
 
@@ -76,8 +81,6 @@
 
 ## 1.253.1 - 2025-06-16
 
-
-
 ## 1.253.0 - 2025-06-16
 
 - chore: update readme instructions (#2017)
@@ -88,8 +91,6 @@
 - Fix crash when config has circular references (#2015)
 
 ## 1.252.0 - 2025-06-12
-
-
 
 ## 1.251.1 - 2025-06-12
 
@@ -105,11 +106,7 @@
 
 ## 1.250.1 - 2025-06-10
 
-
-
 ## 1.250.0 - 2025-06-09
-
-
 
 ## 1.249.5 - 2025-06-05
 
