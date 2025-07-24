@@ -227,6 +227,7 @@
         "_removeSurveyFromDom",
         "_removeSurveyFromFocus",
         "_removeWidgetSelectorListener",
+        "_renderAnySurvey",
         "_reportStarted",
         "_requestInFlight",
         "_requestQueue",
