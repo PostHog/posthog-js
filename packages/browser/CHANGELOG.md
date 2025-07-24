@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.258.2
+
+### Patch Changes
+
+- [#2111](https://github.com/PostHog/posthog-js/pull/2111) [`7114593`](https://github.com/PostHog/posthog-js/commit/711459317bf807fa1d21be2f7067182952ea2a5e) Thanks [@pauldambra](https://github.com/pauldambra)! - checks for session activity in other windows when timing out in any particular window, avoids a race condition when proactively marking a session as idle
+
 ## 1.258.1
 
 ### Patch Changes
