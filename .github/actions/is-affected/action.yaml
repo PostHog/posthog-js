@@ -22,7 +22,11 @@ runs:
       id: check-affected
       shell: bash
       run: |
-        AFFECTED=$(pnpx turbo run build '--filter=${{ inputs.package-name }}...[origin/${{inputs.branch}}...HEAD]' --dry=json)
-        echo $AFFECTED | jq '.tasks'
+        AFFECTED=$(pnpm exec turbo run build '--filter=${{ inputs.package-name }}...[origin/${{inputs.branch}}...HEAD]' --dry=json)
         IS_AFFECTED=$(echo "$AFFECTED" | jq '.tasks | length > 0')
+        if [ "$IS_AFFECTED" = "true" ]; then
+          echo "The package ${{ inputs.package-name }} is affected by changes"
+        else
+          echo "The package ${{ inputs.package-name }} is not affected by changes"
+        fi
         echo "is-affected=$IS_AFFECTED" >> $GITHUB_OUTPUT
