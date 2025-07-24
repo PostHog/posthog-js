@@ -392,5 +392,56 @@ describe('Session ID manager', () => {
             expect(sessionIdManager['_enforceIdleTimeout']).toBeDefined()
             expect(sessionIdManager['_enforceIdleTimeout']).toEqual(originalTimer)
         })
+
+        it('resets session when idle timeout is exceeded', async () => {
+            jest.useFakeTimers()
+
+            const sessionIdManager = sessionIdMgr(persistence)
+
+            // Set up initial session with an older timestamp to simulate inactivity
+            const oldTimestamp = timestamp - (sessionIdManager.sessionTimeoutMs + 1000)
+            persistence.props[SESSION_ID] = [oldTimestamp, 'oldSessionID', oldTimestamp]
+
+            // Fast-forward time to trigger the idle timeout timer
+            const idleTimeoutMs = sessionIdManager.sessionTimeoutMs * 1.1
+            jest.advanceTimersByTime(idleTimeoutMs + 1000)
+
+            // Timer should have fired and reset the session
+            // Next call should generate a new session due to activity timeout or no session
+            const newSessionData = sessionIdManager.checkAndGetSessionAndWindowId(false)
+            expect(newSessionData.sessionId).not.toEqual('oldSessionID')
+            expect(newSessionData.changeReason?.noSessionId || newSessionData.changeReason?.activityTimeout).toBe(true)
+
+            jest.useRealTimers()
+        })
+
+        it('timer checks current session activity before resetting', async () => {
+            jest.useFakeTimers()
+
+            // Mock the resetSessionId method to track if it's called
+            const sessionIdManager = sessionIdMgr(persistence)
+            const resetSpy = jest.spyOn(sessionIdManager, 'resetSessionId')
+
+            // Set up a session that would normally be considered idle
+            const oldTimestamp = timestamp - (sessionIdManager.sessionTimeoutMs + 1000)
+            persistence.props[SESSION_ID] = [oldTimestamp, 'oldSessionID', oldTimestamp]
+
+            // Fast-forward time to make the timer fire
+            const idleTimeoutMs = sessionIdManager.sessionTimeoutMs * 1.1
+            jest.advanceTimersByTime(idleTimeoutMs - 100)
+
+            // Before timer fires, simulate another window updating the session to be recent
+            const currentTime = new Date().getTime()
+            const recentTimestamp = currentTime - 1000 // 1 second ago - definitely not idle
+            persistence.props[SESSION_ID] = [recentTimestamp, 'oldSessionID', oldTimestamp]
+
+            // Let the timer fire
+            jest.advanceTimersByTime(200)
+
+            // The timer should NOT have reset the session because it found recent activity
+            expect(resetSpy).not.toHaveBeenCalled()
+
+            jest.useRealTimers()
+        })
     })
 })
