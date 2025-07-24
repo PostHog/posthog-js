@@ -1,10 +1,12 @@
-## 1.258.0
+# posthog-js
 
 ## 1.258.1
 
 ### Patch Changes
 
 - [#2120](https://github.com/PostHog/posthog-js/pull/2120) [`c7b03cd`](https://github.com/PostHog/posthog-js/commit/c7b03cddb621988323238b22acdf8faefd93742e) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Updates the renderSurvey and getActiveMatchingSurveys methods to not take any external surveys into consideration
+
+## 1.258.0
 
 ### Minor Changes
 
