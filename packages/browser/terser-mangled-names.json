@@ -251,6 +251,7 @@
         "_send_request",
         "_send_retriable_request",
         "_sessionDuration",
+        "_sessionHasBeenIdleTooLong",
         "_sessionId",
         "_sessionIdChangedHandlers",
         "_sessionIdGenerator",
