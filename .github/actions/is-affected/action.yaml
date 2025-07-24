@@ -27,6 +27,6 @@ runs:
       id: check-affected
       shell: bash
       run: |
-        AFFECTED=$(pnpx turbo run build '--filter=${{ inputs.package-name }}...[origin/${{inputs.branch}}...HEAD]' --dry=json)
+        AFFECTED=$(pnpx turbo run build '--filter=${{ inputs.package-name }}...[${{inputs.branch}}...HEAD]' --dry=json)
         IS_AFFECTED=$(echo "$AFFECTED" | jq '.tasks | length > 0')
         echo "is-affected=$IS_AFFECTED" >> $GITHUB_OUTPUT
