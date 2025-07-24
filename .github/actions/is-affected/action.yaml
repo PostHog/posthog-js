@@ -1,0 +1,32 @@
+name: "Check affected packages"
+description: "Checks which packages are affected by a change"
+
+inputs:
+  branch:
+    description: "The branch to compare against"
+    required: false
+    default: "main"
+  package-name:
+    description: "The name of the package to check"
+    required: true
+
+outputs:
+  is-affected:
+    description: "Whether the package is affected"
+    value: ${{ steps.check-affected.outputs.is-affected }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Check if package is affected
+      id: check-affected
+      shell: bash
+      run: |
+        AFFECTED=$(pnpm exec turbo run build '--filter=${{ inputs.package-name }}...[origin/${{inputs.branch}}...HEAD]' --dry=json)
+        IS_AFFECTED=$(echo "$AFFECTED" | jq '.tasks | length > 0')
+        if [ "$IS_AFFECTED" = "true" ]; then
+          echo "The package ${{ inputs.package-name }} is affected by changes"
+        else
+          echo "The package ${{ inputs.package-name }} is not affected by changes"
+        fi
+        echo "is-affected=$IS_AFFECTED" >> $GITHUB_OUTPUT
