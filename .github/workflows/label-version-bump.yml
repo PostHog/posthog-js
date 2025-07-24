@@ -22,12 +22,13 @@ jobs:
 
       - uses: ./.github/actions/setup
         with:
-          install: false
           build: false
 
       - name: Update versions and changelogs
         id: versions
         run: pnpm changeset version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update lockfile
         run: pnpm install

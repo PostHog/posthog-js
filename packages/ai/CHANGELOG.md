@@ -1,3 +1,7 @@
+# 5.2.2
+
+- Add support for parsing tool calls from reasoning models in LangChain by converting the tool call format to the expected shape
+
 # 5.2.1
 
 - Fix crash when importing @posthog/ai with OpenAI SDK v5.x by deferring access to Chat, Completions, and Responses classes until runtime

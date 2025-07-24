@@ -99,7 +99,9 @@ const returnPropertyIfNotUnknown = (value: string | null): string | null => {
 }
 
 export const buildOptimisiticAsyncStorage = (): PostHogCustomStorage => {
-  if (OptionalExpoFileSystem) {
+  // expo-filesystem is not supported on web and macos, so we need to use the react-native-async-storage package instead
+  // see https://github.com/PostHog/posthog-js-lite/blob/5fb7bee96f739b243dfea5589e2027f16629e8cd/posthog-react-native/src/optional/OptionalExpoFileSystem.ts#L7-L11
+  if (OptionalExpoFileSystem && Platform.OS !== 'web' && Platform.OS !== 'macos') {
     const filesystem = OptionalExpoFileSystem
     return {
       async getItem(key: string) {

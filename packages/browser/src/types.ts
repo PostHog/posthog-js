@@ -1011,6 +1011,12 @@ export interface PostHogConfig {
 
 export interface ErrorTrackingOptions {
     /**
+     * Decide whether exceptions thrown by browser extensions should be captured
+     *
+     * @default false
+     */
+    captureExtensionExceptions?: boolean
+    /**
      * ADVANCED: alters the refill rate for the token bucket mutation throttling
      * Normally only altered alongside posthog support guidance.
      * Accepts values between 0 and 100
@@ -1385,6 +1391,7 @@ export interface RemoteConfig {
      */
     errorTracking?: {
         autocaptureExceptions?: boolean
+        captureExtensionExceptions?: boolean
         suppressionRules?: ErrorTrackingSuppressionRule[]
     }
 

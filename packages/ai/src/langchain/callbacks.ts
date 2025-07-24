@@ -3,10 +3,11 @@ import { withPrivacyMode, getModelParams } from '../utils'
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base'
 import type { Serialized } from '@langchain/core/load/serializable'
 import type { ChainValues } from '@langchain/core/utils/types'
-import type { BaseMessage } from '@langchain/core/messages'
 import type { LLMResult } from '@langchain/core/outputs'
 import type { AgentAction, AgentFinish } from '@langchain/core/agents'
 import type { DocumentInterface } from '@langchain/core/documents'
+import { ToolCall } from '@langchain/core/messages/tool'
+import { BaseMessage } from '@langchain/core/messages'
 
 interface SpanMetadata {
   /** Name of the trace/span (e.g. chain name) */
@@ -498,11 +499,21 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     return undefined
   }
 
+  private _convertLcToolCallsToOai(toolCalls: ToolCall[]): Record<string, any>[] {
+    return toolCalls.map((toolCall: ToolCall) => ({
+      type: 'function',
+      id: toolCall.id,
+      function: {
+        name: toolCall.name,
+        arguments: JSON.stringify(toolCall.args),
+      },
+    }))
+  }
+
   private _convertMessageToDict(message: any): Record<string, any> {
     let messageDict: Record<string, any> = {}
 
-    // Check the _getType() method or type property instead of instanceof
-    const messageType = message._getType?.() || message.type
+    const messageType: string = message.getType()
 
     switch (messageType) {
       case 'human':
@@ -510,6 +521,11 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
         break
       case 'ai':
         messageDict = { role: 'assistant', content: message.content }
+
+        if (message.tool_calls) {
+          messageDict.tool_calls = this._convertLcToolCallsToOai(message.tool_calls)
+        }
+
         break
       case 'system':
         messageDict = { role: 'system', content: message.content }
@@ -521,12 +537,14 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
         messageDict = { role: 'function', content: message.content }
         break
       default:
-        messageDict = { role: messageType || 'unknown', content: String(message.content) }
+        messageDict = { role: messageType, content: String(message.content) }
+        break
     }
 
     if (message.additional_kwargs) {
       messageDict = { ...messageDict, ...message.additional_kwargs }
     }
+
     return messageDict
   }
 
