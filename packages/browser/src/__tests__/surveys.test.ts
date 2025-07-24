@@ -25,6 +25,7 @@ import * as globals from '../utils/globals'
 import { assignableWindow, window } from '../utils/globals'
 import { RequestRouter } from '../utils/request-router'
 import { SurveyEventReceiver } from '../utils/survey-event-receiver'
+import { SURVEY_LOGGER as logger } from '../utils/survey-utils'
 
 describe('surveys', () => {
     let config: PostHogConfig
@@ -791,6 +792,198 @@ describe('surveys', () => {
                 expect(data.map((s) => s.id)).toContain('survey-without-flags')
                 expect(data.map((s) => s.id)).not.toContain('survey-with-disabled-flags')
             })
+        })
+    })
+
+    describe('renderSurvey', () => {
+        const inAppSurvey: Survey = {
+            id: 'in-app-survey',
+            name: 'In-app survey',
+            description: 'Survey that can be rendered in app',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'What do you think?' }],
+            start_date: new Date().toISOString(),
+            end_date: null,
+        } as Survey
+
+        const externalSurvey: Survey = {
+            id: 'external-survey',
+            name: 'External survey',
+            description: 'Survey that should be rendered externally',
+            type: SurveyType.ExternalSurvey,
+            questions: [{ type: SurveyQuestionType.Open, question: 'What do you think?' }],
+            start_date: new Date().toISOString(),
+            end_date: null,
+        } as Survey
+
+        beforeEach(() => {
+            // Create a div element to render surveys into
+            const testDiv = document.createElement('div')
+            testDiv.id = 'test-survey-container'
+            document.body.appendChild(testDiv)
+        })
+
+        afterEach(() => {
+            // Clean up the test div
+            const testDiv = document.getElementById('test-survey-container')
+            if (testDiv) {
+                document.body.removeChild(testDiv)
+            }
+        })
+
+        it('should render in-app surveys (popover, widget, api)', () => {
+            surveysResponse = { surveys: [inAppSurvey] }
+            const mockRenderSurvey = jest.fn()
+            ;(surveys as any)._surveyManager = { renderSurvey: mockRenderSurvey }
+            const loggerWarnSpy = jest.spyOn(logger, 'warn')
+
+            surveys.renderSurvey('in-app-survey', '#test-survey-container')
+
+            expect(mockRenderSurvey).toHaveBeenCalledWith(inAppSurvey, document.querySelector('#test-survey-container'))
+            expect(loggerWarnSpy).not.toHaveBeenCalledWith(expect.stringContaining('cannot be rendered in the app'))
+        })
+
+        it('should not render external surveys and show warning', () => {
+            surveysResponse = { surveys: [externalSurvey] }
+            const mockRenderSurvey = jest.fn()
+            ;(surveys as any)._surveyManager = { renderSurvey: mockRenderSurvey }
+            const loggerWarnSpy = jest.spyOn(logger, 'warn')
+
+            surveys.renderSurvey('external-survey', '#test-survey-container')
+
+            expect(mockRenderSurvey).not.toHaveBeenCalled()
+            expect(loggerWarnSpy).toHaveBeenCalledWith(
+                'Surveys of type external_survey are cannot be rendered in the app'
+            )
+        })
+
+        it('should warn when survey manager is not initialized', () => {
+            ;(surveys as any)._surveyManager = null
+            const loggerWarnSpy = jest.spyOn(logger, 'warn')
+
+            surveys.renderSurvey('test-survey', '#test-survey-container')
+
+            expect(loggerWarnSpy).toHaveBeenCalledWith('init was not called')
+        })
+
+        it('should warn when survey is not found', () => {
+            surveysResponse = { surveys: [] }
+            ;(surveys as any)._surveyManager = { renderSurvey: jest.fn() }
+            const loggerWarnSpy = jest.spyOn(logger, 'warn')
+
+            surveys.renderSurvey('non-existent-survey', '#test-survey-container')
+
+            expect(loggerWarnSpy).toHaveBeenCalledWith('Survey not found')
+        })
+
+        it('should warn when target element is not found', () => {
+            surveysResponse = { surveys: [inAppSurvey] }
+            ;(surveys as any)._surveyManager = { renderSurvey: jest.fn() }
+            const loggerWarnSpy = jest.spyOn(logger, 'warn')
+
+            surveys.renderSurvey('in-app-survey', '#non-existent-element')
+
+            expect(loggerWarnSpy).toHaveBeenCalledWith('Survey element not found')
+        })
+    })
+
+    describe('_renderExternalSurvey', () => {
+        const inAppSurvey: Survey = {
+            id: 'in-app-survey',
+            name: 'In-app survey',
+            description: 'Survey that can be rendered in app',
+            type: SurveyType.Popover,
+            questions: [{ type: SurveyQuestionType.Open, question: 'What do you think?' }],
+            start_date: new Date().toISOString(),
+            end_date: null,
+        } as Survey
+
+        const externalSurvey: Survey = {
+            id: 'external-survey',
+            name: 'External survey',
+            description: 'Survey that should be rendered externally',
+            type: SurveyType.ExternalSurvey,
+            questions: [{ type: SurveyQuestionType.Open, question: 'What do you think?' }],
+            start_date: new Date().toISOString(),
+            end_date: null,
+        } as Survey
+
+        beforeEach(() => {
+            // Create a div element to render surveys into
+            const testDiv = document.createElement('div')
+            testDiv.id = 'test-external-survey-container'
+            document.body.appendChild(testDiv)
+        })
+
+        afterEach(() => {
+            // Clean up the test div
+            const testDiv = document.getElementById('test-external-survey-container')
+            if (testDiv) {
+                document.body.removeChild(testDiv)
+            }
+        })
+
+        it('should render external surveys only', () => {
+            surveysResponse = { surveys: [externalSurvey] }
+            const mockRenderSurvey = jest.fn()
+            ;(surveys as any)._surveyManager = { renderSurvey: mockRenderSurvey }
+            const loggerWarnSpy = jest.spyOn(logger, 'warn')
+
+            // Access the private method using type assertion
+            ;(surveys as any)._renderExternalSurvey('external-survey', '#test-external-survey-container')
+
+            expect(mockRenderSurvey).toHaveBeenCalledWith(
+                externalSurvey,
+                document.querySelector('#test-external-survey-container')
+            )
+            expect(loggerWarnSpy).not.toHaveBeenCalledWith(
+                expect.stringContaining('only for rendering external surveys')
+            )
+        })
+
+        it('should not render non-external surveys and show warning', () => {
+            surveysResponse = { surveys: [inAppSurvey] }
+            const mockRenderSurvey = jest.fn()
+            ;(surveys as any)._surveyManager = { renderSurvey: mockRenderSurvey }
+            const loggerWarnSpy = jest.spyOn(logger, 'warn')
+
+            // Access the private method using type assertion
+            ;(surveys as any)._renderExternalSurvey('in-app-survey', '#test-external-survey-container')
+
+            expect(mockRenderSurvey).not.toHaveBeenCalled()
+            expect(loggerWarnSpy).toHaveBeenCalledWith('This method is only for rendering external surveys')
+        })
+
+        it('should warn when survey manager is not initialized', () => {
+            ;(surveys as any)._surveyManager = null
+            const loggerWarnSpy = jest.spyOn(logger, 'warn')
+
+            // Access the private method using type assertion
+            ;(surveys as any)._renderExternalSurvey('test-survey', '#test-external-survey-container')
+
+            expect(loggerWarnSpy).toHaveBeenCalledWith('init was not called')
+        })
+
+        it('should warn when survey is not found', () => {
+            surveysResponse = { surveys: [] }
+            ;(surveys as any)._surveyManager = { renderSurvey: jest.fn() }
+            const loggerWarnSpy = jest.spyOn(logger, 'warn')
+
+            // Access the private method using type assertion
+            ;(surveys as any)._renderExternalSurvey('non-existent-survey', '#test-external-survey-container')
+
+            expect(loggerWarnSpy).toHaveBeenCalledWith('Survey not found')
+        })
+
+        it('should warn when target element is not found', () => {
+            surveysResponse = { surveys: [externalSurvey] }
+            ;(surveys as any)._surveyManager = { renderSurvey: jest.fn() }
+            const loggerWarnSpy = jest.spyOn(logger, 'warn')
+
+            // Access the private method using type assertion
+            ;(surveys as any)._renderExternalSurvey('external-survey', '#non-existent-element')
+
+            expect(loggerWarnSpy).toHaveBeenCalledWith('Survey element not found')
         })
     })
 
