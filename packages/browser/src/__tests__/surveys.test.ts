@@ -951,7 +951,7 @@ describe('surveys', () => {
             ;(surveys as any)._renderExternalSurvey('in-app-survey', '#test-external-survey-container')
 
             expect(mockRenderSurvey).not.toHaveBeenCalled()
-            expect(loggerWarnSpy).toHaveBeenCalledWith('This method is only for rendering external surveys')
+            expect(loggerWarnSpy).toHaveBeenCalledWith('Surveys of type popover are cannot be rendered in the app')
         })
 
         it('should warn when survey manager is not initialized', () => {
