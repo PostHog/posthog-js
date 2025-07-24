@@ -21,10 +21,7 @@ runs:
     - name: Fetch base branch
       shell: bash
       run: |
-        # Fetch branch history
-        git fetch --unshallow origin HEAD
-        # Fetch base branch history
-        git fetch origin ${{ inputs.branch }}
+        git fetch --unshallow
 
     - name: Check if package is affected
       id: check-affected
