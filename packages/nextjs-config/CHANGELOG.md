@@ -1,11 +1,13 @@
-# 1.0.2
+# @posthog/nextjs-config
+
+## 1.0.2
 
 - fix: search for posthog-cli binary from the @posthog/nextjs-config package
 - chore: add error messages
 - chore: bump @posthog/cli dependency to 0.3.5
 - feat: take distDir into account when looking for sources
 
-# 1.0.1
+## 1.0.1
 
 - Fix build issues on vercel deployment (xz system library missing)
 
