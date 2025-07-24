@@ -1,5 +1,11 @@
 ## 1.258.0
 
+## 1.258.1
+
+### Patch Changes
+
+- [#2120](https://github.com/PostHog/posthog-js/pull/2120) [`c7b03cd`](https://github.com/PostHog/posthog-js/commit/c7b03cddb621988323238b22acdf8faefd93742e) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Updates the renderSurvey and getActiveMatchingSurveys methods to not take any external surveys into consideration
+
 ### Minor Changes
 
 - [#2089](https://github.com/PostHog/posthog-js/pull/2089) [`0a19df2`](https://github.com/PostHog/posthog-js/commit/0a19df28d6a62b97949f0e99bfadf33b7aadcb45) Thanks [@daibhin](https://github.com/daibhin)! - feat: exclude exceptions autocaptured by extensions
