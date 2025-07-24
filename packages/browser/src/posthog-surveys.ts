@@ -1,13 +1,14 @@
 import { SURVEYS } from './constants'
 import { SurveyManager } from './extensions/surveys'
 import { PostHog } from './posthog-core'
-import { Survey, SurveyCallback, SurveyRenderReason } from './posthog-surveys-types'
+import { Survey, SurveyCallback, SurveyRenderReason, SurveyType } from './posthog-surveys-types'
 import { RemoteConfig } from './types'
 import { assignableWindow, document } from './utils/globals'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import {
     doesSurveyActivateByAction,
     doesSurveyActivateByEvent,
+    IN_APP_SURVEY_TYPES,
     isSurveyRunning,
     SURVEY_LOGGER as logger,
     SURVEY_IN_PROGRESS_PREFIX,
@@ -316,21 +317,33 @@ export class PostHogSurveys {
         })
     }
 
-    renderSurvey(surveyId: string, selector: string) {
+    private _renderAnySurvey(surveyId: string, selector: string, supportedTypes: SurveyType[]) {
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return
         }
         const survey = this._getSurveyById(surveyId)
-        const elem = document?.querySelector(selector)
         if (!survey) {
             logger.warn('Survey not found')
             return
         }
+        if (!supportedTypes.includes(survey.type)) {
+            logger.warn(`Surveys of type ${survey.type} are cannot be rendered in the app`)
+            return
+        }
+        const elem = document?.querySelector(selector)
         if (!elem) {
             logger.warn('Survey element not found')
             return
         }
         this._surveyManager.renderSurvey(survey, elem)
+    }
+
+    renderSurvey(surveyId: string, selector: string) {
+        this._renderAnySurvey(surveyId, selector, IN_APP_SURVEY_TYPES)
+    }
+
+    private _renderExternalSurvey(surveyId: string, selector: string) {
+        this._renderAnySurvey(surveyId, selector, [SurveyType.ExternalSurvey])
     }
 }
