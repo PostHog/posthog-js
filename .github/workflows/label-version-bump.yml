@@ -36,7 +36,7 @@ jobs:
       - name: Commit updated lockfile
         uses: EndBug/add-and-commit@v7
         with:
-          add: "pnpm-lock.yaml"
+          add: "."
           branch: ${{ github.event.pull_request.base.ref }}
           message: "chore: update versions and lockfile"
           github_token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}

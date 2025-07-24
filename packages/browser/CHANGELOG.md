@@ -1,3 +1,9 @@
+## 1.258.0
+
+### Minor Changes
+
+- [#2089](https://github.com/PostHog/posthog-js/pull/2089) [`0a19df2`](https://github.com/PostHog/posthog-js/commit/0a19df28d6a62b97949f0e99bfadf33b7aadcb45) Thanks [@daibhin](https://github.com/daibhin)! - feat: exclude exceptions autocaptured by extensions
+
 ## 1.257.2 - 2025-07-22
 
 - chore: Safer iteration of experimental `__add_tracing_headers` (#2100)
@@ -75,8 +81,6 @@
 
 ## 1.253.1 - 2025-06-16
 
-
-
 ## 1.253.0 - 2025-06-16
 
 - chore: update readme instructions (#2017)
@@ -87,8 +91,6 @@
 - Fix crash when config has circular references (#2015)
 
 ## 1.252.0 - 2025-06-12
-
-
 
 ## 1.251.1 - 2025-06-12
 
@@ -104,11 +106,7 @@
 
 ## 1.250.1 - 2025-06-10
 
-
-
 ## 1.250.0 - 2025-06-09
-
-
 
 ## 1.249.5 - 2025-06-05
 
@@ -2762,7 +2760,7 @@ Manual addition of version 1.66.0 because CI failed to automatically bump the ve
 
 ## 1.52.0 - 2023-04-05
 
-- fix: Track referrer/search params per browser session (#496)  
+- fix: Track referrer/search params per browser session (#496)
   _**Note:** This change improves the accuracy of properties `$referrer` and `$referring_domain` in a major way. Previously, the values of these properties often represented pure backlinks in non-SPAs (non-single-page applications). Now those values will represent the true referrer for the current browser-level session (effectively: for the tab). Due to this, referrer data after this update \_may_ look different. It will be significantly more accurate though.\_
 - ci: Point out and close stale issues/PRs (#602)
 - docs(testcafe): update docs removing posthog server requirements (#594)
