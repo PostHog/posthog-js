@@ -27,6 +27,8 @@ jobs:
       - name: Update versions and changelogs
         id: versions
         run: pnpm changeset version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update lockfile
         run: pnpm install
