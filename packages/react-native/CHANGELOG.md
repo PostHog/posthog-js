@@ -1,5 +1,11 @@
 # posthog-react-native
 
+## 4.3.0
+
+### Minor Changes
+
+- [#2129](https://github.com/PostHog/posthog-js/pull/2129) [`a3d1267`](https://github.com/PostHog/posthog-js/commit/a3d1267b7904171ee132ce8d0d2a59a0936e1a4e) Thanks [@marandaneto](https://github.com/marandaneto)! - Remove legacy migration code, left over from the V1 to V2 migration
+
 ## 4.2.2 - 2025-07-23
 
 ### Fixed
