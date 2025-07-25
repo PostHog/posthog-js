@@ -1,5 +1,9 @@
 # Next
 
+## Removed
+
+1. Remove legacy migration code, left over from the V1 to V2 migration
+
 # 4.2.2 - 2025-07-23
 
 ## Fixed
