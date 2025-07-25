@@ -1,5 +1,11 @@
 # @posthog/nextjs-config
 
+## 1.1.0
+
+### Minor Changes
+
+- [#2123](https://github.com/PostHog/posthog-js/pull/2123) [`6f3390e`](https://github.com/PostHog/posthog-js/commit/6f3390e8eda844d3ff2ace0f57bedb3230c72319) Thanks [@hpouillot](https://github.com/hpouillot)! - upgrade @posthog/cli to fix a vulnerability with axios < 1.8.2
+
 ## 1.0.2
 
 - fix: search for posthog-cli binary from the @posthog/nextjs-config package
@@ -12,6 +18,7 @@
 - Fix build issues on vercel deployment (xz system library missing)
 
 ## 1.0.0
+
 - generate nextjs configuration for sourcemap generation
 - inject chunk ids into emitted assets
 - automatically upload sourcemaps to PostHog
