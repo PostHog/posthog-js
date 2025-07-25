@@ -14,7 +14,6 @@ import {
   maybeAdd,
   FeatureFlagValue,
 } from '@posthog/core'
-import { getLegacyValues } from './legacy'
 import { PostHogRNStorage, PostHogRNSyncMemoryStorage } from './storage'
 import { version } from './version'
 import { buildOptimisiticAsyncStorage, getAppProperties } from './native-deps'
@@ -119,17 +118,8 @@ export class PostHog extends PostHogCore {
     }
 
     if (storagePromise) {
-      storagePromise.then(() => {
-        // This code is for migrating from V1 to V2 and tries its best to keep the existing anon/distinctIds
-        // It only applies for async storage
-        if (!this._storage.getItem(PostHogPersistedProperty.AnonymousId)) {
-          void getLegacyValues().then((legacyValues) => {
-            if (legacyValues?.distinctId) {
-              this._storage?.setItem(PostHogPersistedProperty.DistinctId, legacyValues.distinctId)
-              this._storage?.setItem(PostHogPersistedProperty.AnonymousId, legacyValues.anonymousId)
-            }
-          })
-        }
+      storagePromise.catch((error) => {
+        console.error('PostHog storage initialization failed:', error)
       })
     }
 
