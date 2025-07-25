@@ -45,7 +45,7 @@ This will build all packages, by taking dependencies into account.
 
 ## Examples
 
-Check out the [`examples`]("/examples/README.md") directory for usage examples.
+Check out the [`examples`](examples/README.md) directory for usage examples.
 
 ## Releases
 
