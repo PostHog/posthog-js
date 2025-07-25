@@ -15,6 +15,14 @@ pnpm install
 ```
 This will install all the workspace dependencies.
 
+## Building
+
+From the root folder, run:
+```shell
+pnpm build
+```
+This will build all packages, by taking dependencies into account.
+
 ## Development
 
 Go to the `packages` directory and run:
@@ -35,14 +43,6 @@ or from the root of the project, run:
 pnpm --filter=<package-name> test
 ```
 
-## Building
-
-From the root folder, run:
-```shell
-pnpm build
-```
-This will build all packages, by taking dependencies into account.
-
 ## Examples
 
-Check out the [`examples`]("./examples/README.md") directory for usage examples.
+Check out the [`examples`](examples/README.md) directory for usage examples.
