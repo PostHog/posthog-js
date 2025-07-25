@@ -420,7 +420,7 @@ importers:
         version: 22.16.5
       next:
         specifier: ^12.1.0
-        version: 12.3.7(react-dom@17.0.2(react@18.2.0))(react@18.2.0)
+        version: 12.3.7(@babel/core@7.27.1)(react-dom@17.0.2(react@18.2.0))(react@18.2.0)
       tsup:
         specifier: 'catalog:'
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@22.16.5))(jiti@2.4.2)(postcss@8.5.3)(typescript@5.8.2)(yaml@2.8.0)
@@ -1855,7 +1855,7 @@ packages:
 
   '@expo/bunyan@4.0.1':
     resolution: {integrity: sha512-+Lla7nYSiHZirgK+U/uYzsLv/X+HaJienbD5AKX1UQZHYfWaP+9uuQluRB4GrEVWF0GZ7vEVp/jzaOT9k/SQlg==}
-    engines: {'0': node >=0.10.0}
+    engines: {node: '>=0.10.0'}
 
   '@expo/cli@0.1.7':
     resolution: {integrity: sha512-F81fPthpT7QtVu1P7QeZMezGn0tCcalCh3ANIzWBaQZNG4vly7mo2dp3PMGzNdmXq6yt93bJ4HbfS+0/NpKl7g==}
@@ -7760,6 +7760,11 @@ packages:
 
   mz@2.7.0:
     resolution: {integrity: sha512-z81GNO7nnYMEhrGh9LeymoE4+Yr0Wn5McHIZMK5cfQCl+NDX08sCZgUc9/6MHni9IWuFLm1Z3HTCXu2z9fN62Q==}
+
+  nanoid@3.3.11:
+    resolution: {integrity: sha512-N8SpfPUnUp1bK+PMYW8qSWdl9U+wwNWI4QKxOYDy9JAro3WMX7p2OeVRF9v+347pnakNevPmiHhNmZ2HbFA76w==}
+    engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
+    hasBin: true
 
   nanoid@3.3.8:
     resolution: {integrity: sha512-WNLf5Sd8oZxOm+TzppcYk8gVOgP+l58xNy58D0nbUnOxOWRWvlcCV4kUF7ltmI6PsrLl/BgKEyS4mqsGChFN0w==}
@@ -20469,6 +20474,8 @@ snapshots:
       object-assign: 4.1.1
       thenify-all: 1.6.0
 
+  nanoid@3.3.11: {}
+
   nanoid@3.3.8: {}
 
   nanomatch@1.2.13:
@@ -20505,7 +20512,7 @@ snapshots:
       fp-ts: 2.16.2
       monocle-ts: 2.3.13(fp-ts@2.16.2)
 
-  next@12.3.7(react-dom@17.0.2(react@18.2.0))(react@18.2.0):
+  next@12.3.7(@babel/core@7.27.1)(react-dom@17.0.2(react@18.2.0))(react@18.2.0):
     dependencies:
       '@next/env': 12.3.7
       '@swc/helpers': 0.4.11
@@ -20513,7 +20520,7 @@ snapshots:
       postcss: 8.4.14
       react: 18.2.0
       react-dom: 17.0.2(react@18.2.0)
-      styled-jsx: 5.0.7(react@18.2.0)
+      styled-jsx: 5.0.7(@babel/core@7.27.1)(react@18.2.0)
       use-sync-external-store: 1.2.0(react@18.2.0)
     optionalDependencies:
       '@next/swc-android-arm-eabi': 12.3.4
@@ -21405,13 +21412,13 @@ snapshots:
 
   postcss@8.4.14:
     dependencies:
-      nanoid: 3.3.8
+      nanoid: 3.3.11
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
   postcss@8.5.3:
     dependencies:
-      nanoid: 3.3.8
+      nanoid: 3.3.11
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
@@ -22695,9 +22702,11 @@ snapshots:
 
   style-inject@0.3.0: {}
 
-  styled-jsx@5.0.7(react@18.2.0):
+  styled-jsx@5.0.7(@babel/core@7.27.1)(react@18.2.0):
     dependencies:
       react: 18.2.0
+    optionalDependencies:
+      '@babel/core': 7.27.1
 
   stylehacks@5.1.1(postcss@8.5.3):
     dependencies:
