@@ -76,7 +76,7 @@
 
 ## 3.2.0 - 2024-12-12
 
-## Changed
+### Changed
 
 1. Add new debugging property `$feature_flag_bootstrapped_response`, `$feature_flag_bootstrapped_payload` and `$used_bootstrap_value` to `$feature_flag_called` event
 
