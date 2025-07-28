@@ -70,7 +70,7 @@
 
 ## 3.2.1 - 2025-01-17
 
-## Fixed
+### Fixed
 
 1. fix: check if window and fetch are available before using on web env
 
