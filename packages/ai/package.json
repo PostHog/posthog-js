@@ -4,8 +4,8 @@
   "description": "PostHog Node.js AI integrations",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/PostHog/posthog-js-lite.git",
-    "directory": "posthog-ai"
+    "url": "git+https://github.com/PostHog/posthog-js.git",
+    "directory": "packages/ai"
   },
   "main": "dist/index.cjs",
   "module": "dist/index.mjs",

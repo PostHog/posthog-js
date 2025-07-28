@@ -4,7 +4,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/PostHog/posthog-js.git",
+    "url": "git+https://github.com/PostHog/posthog-js.git",
     "directory": "packages/web"
   },
   "main": "dist/index.cjs",
