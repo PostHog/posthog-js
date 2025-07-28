@@ -90,7 +90,7 @@
 
 ## 3.0.2 - 2024-06-15
 
-## Fixed
+### Fixed
 
 1. Fixed and error that prevented localstorage from ever being used and instead falling back to sessionstorage for persistence
 
