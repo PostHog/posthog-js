@@ -791,6 +791,9 @@ export class PostHogFeatureFlags {
                         return
                     }
                     const earlyAccessFeatures = (response.json as EarlyAccessFeatureResponse).earlyAccessFeatures
+                    // Unregister first to ensure complete replacement, not merge
+                    // This prevents accumulation of stale features in persistence
+                    this._instance.persistence?.unregister(PERSISTENCE_EARLY_ACCESS_FEATURES)
                     this._instance.persistence?.register({ [PERSISTENCE_EARLY_ACCESS_FEATURES]: earlyAccessFeatures })
                     return callback(earlyAccessFeatures)
                 },
