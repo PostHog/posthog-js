@@ -951,7 +951,7 @@ describe('featureflags', () => {
             // Set up initial features in persistence
             instance.persistence.props.$early_access_features = [
                 EARLY_ACCESS_FEATURE_FIRST,
-                { ...EARLY_ACCESS_FEATURE_SECOND, flagKey: 'old-feature' }
+                { ...EARLY_ACCESS_FEATURE_SECOND, flagKey: 'old-feature' },
             ]
 
             // Mock unregister to track calls
@@ -977,7 +977,7 @@ describe('featureflags', () => {
 
             // Verify register was called with new data
             expect(registerSpy).toHaveBeenCalledWith({
-                $early_access_features: [EARLY_ACCESS_FEATURE_FIRST]
+                $early_access_features: [EARLY_ACCESS_FEATURE_FIRST],
             })
 
             // Verify persistence only contains new features, not old ones
@@ -990,7 +990,7 @@ describe('featureflags', () => {
         it('getEarlyAccessFeatures handles persistence absence gracefully', () => {
             // Save original get_property function
             const originalGetProperty = instance.get_property
-            
+
             // Remove persistence and update get_property to handle undefined persistence
             instance.persistence = undefined
             instance.get_property = (key) => {
@@ -1008,13 +1008,13 @@ describe('featureflags', () => {
             }).not.toThrow()
 
             expect(instance._send_request).toHaveBeenCalled()
-            
+
             // Restore persistence for afterEach cleanup
             instance.persistence = {
                 props: {},
                 register: jest.fn(),
                 unregister: jest.fn(),
-                clear: jest.fn()
+                clear: jest.fn(),
             }
         })
 
