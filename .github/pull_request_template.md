@@ -1,13 +1,29 @@
+## Problem
+
+<!-- Who are we building for, what are their needs, why is this important? -->
+
 ## Changes
 
-...
+<!-- What is changed and what information would be useful to a reviewer? -->
 
-<!-- Does this fix an issue? Uncomment the line below with the issue ID to automatically close it when merged -->
-<!-- Closes #ISSUE_ID -->
+## Release info Sub-libraries affected
+
+### Libraries affected
+
+<!-- Please mark which libraries will require a version bump. -->
+
+- [ ] All of them
+- [ ] posthog-js (web)
+- [ ] posthog-js-lite (web lite)
+- [ ] posthog-node
+- [ ] posthog-react-native
+- [ ] @posthog/react
+- [ ] @posthog/ai
+- [ ] @posthog/nextjs-config
 
 ## Checklist
-- [ ] Tests for new code (see [advice on the tests we use](https://github.com/PostHog/posthog-js#tiers-of-testing))
-- [ ] Accounted for the impact of any changes across different browsers
-- [ ] Accounted for backwards compatibility of any changes (no breaking changes in posthog-js!)
-- [ ] Took care not to unnecessarily increase the bundle size
 
+- [ ] Tests for new code
+- [ ] Accounted for the impact of any changes across different platforms
+- [ ] Accounted for backwards compatibility of any changes (no breaking changes!)
+- [ ] Took care not to unnecessarily increase the bundle size
