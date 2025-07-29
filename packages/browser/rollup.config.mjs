@@ -143,7 +143,7 @@ const plugins = (es5, noExternal) => [
                               '_instance',
                               '_surveyEventReceiver',
                               // this one is needed - we use it to render external surveys. but we want to keep it private for our usage only
-                              '_renderExternalSurvey',
+                              '_surveyManager',
 
                               // part of setup/teardown code, preserve these out of caution
                               '_init',
