@@ -328,6 +328,9 @@ export class PostHogSurveys {
             return
         }
         if (!IN_APP_SURVEY_TYPES.includes(survey.type)) {
+            logger.warn(`Surveys of type ${survey.type} cannot be rendered in the app`)
+            return
+        }
             logger.warn(`Surveys of type ${survey.type} are cannot be rendered in the app`)
             return
         }
