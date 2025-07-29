@@ -1,5 +1,13 @@
 # posthog-js
 
+## 1.258.3
+
+### Patch Changes
+
+- [#2171](https://github.com/PostHog/posthog-js/pull/2171) [`14adc01`](https://github.com/PostHog/posthog-js/commit/14adc01875c87f6be10e70204307003d9d0f941c) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Fix early access features accumulation in persistence
+
+- [#2170](https://github.com/PostHog/posthog-js/pull/2170) [`262cc5c`](https://github.com/PostHog/posthog-js/commit/262cc5cc9364605e31788e5370b0663507e4c832) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Removes the `_renderExternalSurvey` method which is not needed anymore
+
 ## 1.258.2
 
 ### Patch Changes
