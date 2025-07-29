@@ -947,6 +947,77 @@ describe('featureflags', () => {
             })
         })
 
+        it('getEarlyAccessFeatures replaces existing features completely instead of merging', () => {
+            // Set up initial features in persistence
+            instance.persistence.props.$early_access_features = [
+                EARLY_ACCESS_FEATURE_FIRST,
+                { ...EARLY_ACCESS_FEATURE_SECOND, flagKey: 'old-feature' },
+            ]
+
+            // Mock unregister to track calls
+            const unregisterSpy = jest.spyOn(instance.persistence, 'unregister')
+            const registerSpy = jest.spyOn(instance.persistence, 'register')
+
+            // Force reload to trigger API call
+            featureFlags.getEarlyAccessFeatures((data) => {
+                expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
+            }, true)
+
+            // Verify unregister was called first to clear old data
+            expect(unregisterSpy).toHaveBeenCalledWith('$early_access_features')
+
+            // Verify both methods were called
+            expect(unregisterSpy).toHaveBeenCalled()
+            expect(registerSpy).toHaveBeenCalled()
+
+            // Verify the order by checking call order
+            const unregisterCallOrder = unregisterSpy.mock.invocationCallOrder[0]
+            const registerCallOrder = registerSpy.mock.invocationCallOrder[0]
+            expect(unregisterCallOrder).toBeLessThan(registerCallOrder)
+
+            // Verify register was called with new data
+            expect(registerSpy).toHaveBeenCalledWith({
+                $early_access_features: [EARLY_ACCESS_FEATURE_FIRST],
+            })
+
+            // Verify persistence only contains new features, not old ones
+            expect(instance.persistence.props.$early_access_features).toEqual([EARLY_ACCESS_FEATURE_FIRST])
+            expect(instance.persistence.props.$early_access_features).not.toContainEqual(
+                expect.objectContaining({ flagKey: 'old-feature' })
+            )
+        })
+
+        it('getEarlyAccessFeatures handles persistence absence gracefully', () => {
+            // Save original get_property function
+            const originalGetProperty = instance.get_property
+
+            // Remove persistence and update get_property to handle undefined persistence
+            instance.persistence = undefined
+            instance.get_property = (key) => {
+                if (!instance.persistence) {
+                    return undefined
+                }
+                return originalGetProperty.call(instance, key)
+            }
+
+            // Should not throw error
+            expect(() => {
+                featureFlags.getEarlyAccessFeatures((data) => {
+                    expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
+                }, true)
+            }).not.toThrow()
+
+            expect(instance._send_request).toHaveBeenCalled()
+
+            // Restore persistence for afterEach cleanup
+            instance.persistence = {
+                props: {},
+                register: jest.fn(),
+                unregister: jest.fn(),
+                clear: jest.fn(),
+            }
+        })
+
         it('update enrollment should update the early access feature enrollment', () => {
             featureFlags.updateEarlyAccessFeatureEnrollment('first-flag', true)
 
