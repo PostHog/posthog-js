@@ -27,3 +27,10 @@
 - [ ] Accounted for the impact of any changes across different platforms
 - [ ] Accounted for backwards compatibility of any changes (no breaking changes!)
 - [ ] Took care not to unnecessarily increase the bundle size
+
+### If releasing new changes
+
+- [ ] Ran `pnpm changeset` to generate a changeset file
+- [ ] Added the "release" label to the PR to indicate we're publishing new versions for the affected packages
+
+<!-- For more details check RELEASING.md -->
