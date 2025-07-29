@@ -38,3 +38,5 @@ dist
 tsconfig.tsbuildinfo
 .turbo
 target
+
+.cursor/mcp.json
