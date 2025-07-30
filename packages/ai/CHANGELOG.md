@@ -1,5 +1,11 @@
 # posthog-ai
 
+## 5.2.3
+
+### Patch Changes
+
+- [#2173](https://github.com/PostHog/posthog-js/pull/2173) [`d4204f4`](https://github.com/PostHog/posthog-js/commit/d4204f473ebaee42c696523306ea8e6fe97f0dfd) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Fix bug where tool calls were not sent in LangChain
+
 ## 5.2.2
 
 - Add support for parsing tool calls from reasoning models in LangChain by converting the tool call format to the expected shape
