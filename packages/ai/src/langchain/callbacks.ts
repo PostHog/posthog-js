@@ -288,6 +288,10 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     }
     if (extraParams) {
       generation.modelParams = getModelParams(extraParams.invocation_params)
+
+      if (extraParams.invocation_params.tools) {
+        generation.tools = extraParams.invocation_params.tools
+      }
     }
     if (metadata) {
       if (metadata.ls_model_name) {
