@@ -245,10 +245,9 @@ export class PostHogSurveys {
         for (const callback of this._surveyCallbacks) {
             try {
                 if (!context.isLoaded) {
-                    callback([], context)
-                } else {
-                    this.getSurveys(callback)
+                    return callback([], context)
                 }
+                this.getSurveys(callback)
             } catch (error) {
                 logger.error('Error in survey callback', error)
             }
