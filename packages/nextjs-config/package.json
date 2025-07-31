@@ -22,6 +22,7 @@
     "lint:fix": "eslint src --fix",
     "build": "tsup src/index.ts --format cjs,esm --dts --out-dir dist",
     "dev": "tsup src/index.ts --format cjs,esm --dts --out-dir dist --watch",
+    "test:unit": "jest",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "exports": {
@@ -48,10 +49,12 @@
     "nextjs"
   ],
   "devDependencies": {
-    "@types/node": "^22.15.23",
-    "next": "^12.1.0",
-    "@posthog-tooling/tsconfig-base": "workspace:*",
     "@posthog-tooling/rollup-utils": "workspace:*",
+    "@posthog-tooling/tsconfig-base": "workspace:*",
+    "@types/node": "^22.15.23",
+    "babel-plugin-transform-import-meta": "^2.3.3",
+    "jest": "catalog:",
+    "next": "^12.1.0",
     "tsup": "catalog:"
   },
   "peerDependencies": {
