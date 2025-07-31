@@ -79,12 +79,12 @@ export class PostHogSurveys {
             return
         }
 
-        const isSurveysEnabled = this._isSurveysEnabled || this._instance.config.advanced_enable_surveys
-
         // waiting for remote config to load
-        if (isUndefined(isSurveysEnabled)) {
+        if (isUndefined(this._isSurveysEnabled)) {
             return
         }
+
+        const isSurveysEnabled = this._isSurveysEnabled || this._instance.config.advanced_enable_surveys
 
         this._isInitializingSurveys = true
 
