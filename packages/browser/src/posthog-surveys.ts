@@ -79,12 +79,12 @@ export class PostHogSurveys {
             return
         }
 
-        const isSurveysEnabled = this._isSurveysEnabled
-
         // waiting for remote config to load
-        if (isUndefined(isSurveysEnabled)) {
+        if (isUndefined(this._isSurveysEnabled)) {
             return
         }
+
+        const isSurveysEnabled = this._isSurveysEnabled || this._instance.config.advanced_enable_surveys
 
         this._isInitializingSurveys = true
 
@@ -245,10 +245,9 @@ export class PostHogSurveys {
         for (const callback of this._surveyCallbacks) {
             try {
                 if (!context.isLoaded) {
-                    callback([], context)
-                } else {
-                    this.getSurveys(callback)
+                    return callback([], context)
                 }
+                this.getSurveys(callback)
             } catch (error) {
                 logger.error('Error in survey callback', error)
             }
