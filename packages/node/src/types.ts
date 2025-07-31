@@ -255,6 +255,15 @@ export interface IPostHog {
   groupIdentify({ groupType, groupKey, properties }: GroupIdentifyMessage): void
 
   /**
+   * @description Sets a groups properties immediately. Useful for edge environments where the usual queue-based sending is not preferable. Do not mix immediate and non-immediate calls.
+   *
+   * @param groupType Type of group (ex: 'company'). Limited to 5 per project
+   * @param groupKey Unique identifier for that type of group (ex: 'id:5')
+   * @param properties OPTIONAL | which can be a object with any information you'd like to add
+   */
+  groupIdentifyImmediate({ groupType, groupKey, properties }: GroupIdentifyMessage): void
+
+  /**
    * @description Force an immediate reload of the polled feature flags. Please note that they are
    * already polled automatically at a regular interval.
    */
