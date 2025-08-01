@@ -80,7 +80,8 @@ export class PostHogSurveys {
         }
 
         // waiting for remote config to load
-        if (isUndefined(this._isSurveysEnabled)) {
+        // if surveys is forced enable (like external surveys), ignore the remote config and load surveys
+        if (isUndefined(this._isSurveysEnabled) && !this._instance.config.advanced_enable_surveys) {
             return
         }
 
