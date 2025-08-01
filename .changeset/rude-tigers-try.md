@@ -2,4 +2,4 @@
 'posthog-react-native': patch
 ---
 
-fix emoji rating row wrappign
+fix emoji rating row wrap
