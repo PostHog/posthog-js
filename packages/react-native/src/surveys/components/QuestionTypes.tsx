@@ -306,11 +306,12 @@ const styles = StyleSheet.create({
   },
   ratingOptionsEmoji: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap', // Allows items to wrap to a new line
+    justifyContent: 'space-around',
+    flexWrap: 'nowrap',
+    flex: 1,
   },
   ratingsEmoji: {
-    padding: 10,
+    padding: 4,
   },
   ratingOptionsNumber: {
     margin: 10,
