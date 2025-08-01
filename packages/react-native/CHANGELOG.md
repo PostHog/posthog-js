@@ -1,5 +1,11 @@
 # posthog-react-native
 
+## 4.3.1
+
+### Patch Changes
+
+- [#2180](https://github.com/PostHog/posthog-js/pull/2180) [`7c849d5`](https://github.com/PostHog/posthog-js/commit/7c849d5482e537c17b6fa2a1eb8e5d70e8c830bb) Thanks [@ioannisj](https://github.com/ioannisj)! - fix emoji rating row wrap
+
 ## 4.3.0
 
 ### Minor Changes
