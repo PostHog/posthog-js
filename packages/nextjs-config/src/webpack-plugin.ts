@@ -1,7 +1,6 @@
 import { PostHogNextConfigComplete } from './config'
-import { spawn } from 'child_process'
 import path from 'path'
-import { resolveBinaryPath } from './utils'
+import { callPosthogCli } from './utils'
 
 type NextRuntime = 'edge' | 'nodejs' | undefined
 
@@ -84,37 +83,4 @@ export class SourcemapWebpackPlugin {
     }
     await callPosthogCli(cliOptions, envVars, this.posthogOptions.verbose)
   }
-}
-
-async function callPosthogCli(args: string[], env: NodeJS.ProcessEnv, verbose: boolean): Promise<void> {
-  let binaryLocation
-  try {
-    binaryLocation = resolveBinaryPath(process.env.PATH ?? '', __dirname, 'posthog-cli')
-  } catch (e) {
-    throw new Error(`Binary ${e} not found. Make sure postinstall script has been allowed for @posthog/cli`)
-  }
-
-  if (verbose) {
-    console.log('running posthog-cli from ', binaryLocation)
-  }
-
-  const child = spawn(binaryLocation, [...args], {
-    stdio: verbose ? 'inherit' : 'ignore',
-    env,
-    cwd: process.cwd(),
-  })
-
-  await new Promise<void>((resolve, reject) => {
-    child.on('close', (code) => {
-      if (code === 0) {
-        resolve()
-      } else {
-        reject(new Error(`Command failed with code ${code}`))
-      }
-    })
-
-    child.on('error', (error) => {
-      reject(error)
-    })
-  })
 }

@@ -2,7 +2,9 @@
   "extends": "@posthog-tooling/tsconfig-base",
   "compilerOptions": {
     "incremental": false,
-    "rootDir": ".",
-    "target": "ES6"
+    "rootDir": "./src",
+    "baseUrl": "./src",
+    "target": "ES6",
+    "lib": ["DOM"]
   }
 }
