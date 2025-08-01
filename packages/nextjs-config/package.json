@@ -54,6 +54,7 @@
     "@rslib/core": "catalog:",
     "@types/node": "^22.15.23",
     "next": "^12.1.0",
+    "jest": "catalog:",
     "ts-jest": "catalog:"
   },
   "peerDependencies": {

@@ -418,6 +418,9 @@ importers:
       '@types/node':
         specifier: ^22.15.23
         version: 22.16.5
+      jest:
+        specifier: 'catalog:'
+        version: 29.7.0(@types/node@22.16.5)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@22.16.5)(typescript@5.8.2))
       next:
         specifier: ^12.1.0
         version: 12.3.7(@babel/core@7.27.1)(react-dom@17.0.2(react@18.2.0))(react@18.2.0)
@@ -1699,7 +1702,7 @@ packages:
 
   '@expo/bunyan@4.0.1':
     resolution: {integrity: sha512-+Lla7nYSiHZirgK+U/uYzsLv/X+HaJienbD5AKX1UQZHYfWaP+9uuQluRB4GrEVWF0GZ7vEVp/jzaOT9k/SQlg==}
-    engines: {node: '>=0.10.0'}
+    engines: {'0': node >=0.10.0}
 
   '@expo/cli@0.1.7':
     resolution: {integrity: sha512-F81fPthpT7QtVu1P7QeZMezGn0tCcalCh3ANIzWBaQZNG4vly7mo2dp3PMGzNdmXq6yt93bJ4HbfS+0/NpKl7g==}
@@ -12403,7 +12406,7 @@ snapshots:
       '@types/node': 22.17.0
       ansi-escapes: 4.3.2
       chalk: 4.1.2
-      ci-info: 3.3.0
+      ci-info: 3.9.0
       exit: 0.1.2
       graceful-fs: 4.2.9
       jest-changed-files: 29.7.0
@@ -12440,7 +12443,7 @@ snapshots:
       '@types/node': 22.17.0
       ansi-escapes: 4.3.2
       chalk: 4.1.2
-      ci-info: 3.3.0
+      ci-info: 3.9.0
       exit: 0.1.2
       graceful-fs: 4.2.9
       jest-changed-files: 29.7.0
@@ -12477,7 +12480,7 @@ snapshots:
       '@types/node': 22.17.0
       ansi-escapes: 4.3.2
       chalk: 4.1.2
-      ci-info: 3.3.0
+      ci-info: 3.9.0
       exit: 0.1.2
       graceful-fs: 4.2.9
       jest-changed-files: 29.7.0
@@ -12609,7 +12612,7 @@ snapshots:
       '@jest/test-result': 29.7.0
       '@jest/transform': 29.7.0
       '@jest/types': 29.6.3
-      '@jridgewell/trace-mapping': 0.3.25
+      '@jridgewell/trace-mapping': 0.3.29
       '@types/node': 22.17.0
       chalk: 4.1.2
       collect-v8-coverage: 1.0.1
@@ -12649,7 +12652,7 @@ snapshots:
 
   '@jest/source-map@29.6.3':
     dependencies:
-      '@jridgewell/trace-mapping': 0.3.25
+      '@jridgewell/trace-mapping': 0.3.29
       callsites: 3.1.0
       graceful-fs: 4.2.9
 
@@ -12727,7 +12730,7 @@ snapshots:
     dependencies:
       '@babel/core': 7.27.1
       '@jest/types': 29.6.3
-      '@jridgewell/trace-mapping': 0.3.25
+      '@jridgewell/trace-mapping': 0.3.29
       babel-plugin-istanbul: 6.1.1
       chalk: 4.1.2
       convert-source-map: 2.0.0
@@ -12737,7 +12740,7 @@ snapshots:
       jest-regex-util: 29.6.3
       jest-util: 29.7.0
       micromatch: 4.0.8
-      pirates: 4.0.5
+      pirates: 4.0.7
       slash: 3.0.0
       write-file-atomic: 4.0.2
     transitivePeerDependencies:
@@ -18414,7 +18417,7 @@ snapshots:
       '@jest/types': 29.6.3
       babel-jest: 29.7.0(@babel/core@7.27.1)
       chalk: 4.1.2
-      ci-info: 3.3.0
+      ci-info: 3.9.0
       deepmerge: 4.2.2
       glob: 7.2.3
       graceful-fs: 4.2.9
@@ -18445,7 +18448,7 @@ snapshots:
       '@jest/types': 29.6.3
       babel-jest: 29.7.0(@babel/core@7.27.1)
       chalk: 4.1.2
-      ci-info: 3.3.0
+      ci-info: 3.9.0
       deepmerge: 4.2.2
       glob: 7.2.3
       graceful-fs: 4.2.9
@@ -18476,7 +18479,7 @@ snapshots:
       '@jest/types': 29.6.3
       babel-jest: 29.7.0(@babel/core@7.27.1)
       chalk: 4.1.2
-      ci-info: 3.3.0
+      ci-info: 3.9.0
       deepmerge: 4.2.2
       glob: 7.2.3
       graceful-fs: 4.2.9
@@ -18507,7 +18510,7 @@ snapshots:
       '@jest/types': 29.6.3
       babel-jest: 29.7.0(@babel/core@7.27.1)
       chalk: 4.1.2
-      ci-info: 3.3.0
+      ci-info: 3.9.0
       deepmerge: 4.2.2
       glob: 7.2.3
       graceful-fs: 4.2.9
@@ -18538,7 +18541,7 @@ snapshots:
       '@jest/types': 29.6.3
       babel-jest: 29.7.0(@babel/core@7.27.1)
       chalk: 4.1.2
-      ci-info: 3.3.0
+      ci-info: 3.9.0
       deepmerge: 4.2.2
       glob: 7.2.3
       graceful-fs: 4.2.9
@@ -18883,7 +18886,7 @@ snapshots:
       jest-pnp-resolver: 1.2.2(jest-resolve@29.7.0)
       jest-util: 29.7.0
       jest-validate: 29.7.0
-      resolve: 1.22.8
+      resolve: 1.22.10
       resolve.exports: 2.0.3
       slash: 3.0.0
 
@@ -23400,7 +23403,7 @@ snapshots:
 
   v8-to-istanbul@9.3.0:
     dependencies:
-      '@jridgewell/trace-mapping': 0.3.25
+      '@jridgewell/trace-mapping': 0.3.29
       '@types/istanbul-lib-coverage': 2.0.3
       convert-source-map: 2.0.0
 
