@@ -1,8 +1,14 @@
 import { defineConfig } from '@rslib/core'
 
 export default defineConfig({
-  lib: [
-    { format: 'esm', syntax: 'es6', dts: true, bundle: false, shims: { esm: { __dirname: true } } },
-    { format: 'cjs', syntax: 'es6', dts: true, bundle: false },
-  ],
+  source: {
+    root: 'src',
+    include: ['**/*'],
+    exclude: ['**/*.spec.ts'],
+  },
+  dts: true,
+  bundle: false,
+  shims: { esm: { __dirname: true } },
+  syntax: 'es6',
+  lib: [{ format: 'esm' }, { format: 'cjs' }],
 })
