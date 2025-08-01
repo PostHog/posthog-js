@@ -91,7 +91,7 @@ export async function logFlushError(err: any): Promise<void> {
     let text = ''
     try {
       text = await err.text
-    } catch {}
+    } catch { }
 
     console.error(`Error while flushing PostHog: message=${err.message}, response body=${text}`, err)
   } else {
@@ -272,7 +272,7 @@ export abstract class PostHogCoreStateless {
     const promiseUUID = uuidv7()
     this.pendingPromises[promiseUUID] = promise
     promise
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => {
         delete this.pendingPromises[promiseUUID]
       })
@@ -417,17 +417,17 @@ export abstract class PostHogCoreStateless {
     distinctId?: string,
     eventProperties?: PostHogEventProperties
   ): Promise<void> {
-      const payload = this.buildPayload({
-        distinct_id: distinctId || `$${groupType}_${groupKey}`,
-        event: '$groupidentify',
-        properties: {
-          $group_type: groupType,
-          $group_key: groupKey,
-          $group_set: groupProperties || {},
-          ...(eventProperties || {}),
-        },
-      })
-      await this.sendImmediate('capture', payload, options)
+    const payload = this.buildPayload({
+      distinct_id: distinctId || `$${groupType}_${groupKey}`,
+      event: '$groupidentify',
+      properties: {
+        $group_type: groupType,
+        $group_key: groupKey,
+        $group_set: groupProperties || {},
+        ...(eventProperties || {}),
+      },
+    })
+    await this.sendImmediate('capture', payload, options)
   }
 
   protected async getRemoteConfig(): Promise<PostHogRemoteConfig | undefined> {
@@ -548,9 +548,9 @@ export abstract class PostHogCoreStateless {
     disableGeoip?: boolean
   ): Promise<
     | {
-        response: FeatureFlagDetail | undefined
-        requestId: string | undefined
-      }
+      response: FeatureFlagDetail | undefined
+      requestId: string | undefined
+    }
     | undefined
   > {
     await this._initPromise
@@ -1104,7 +1104,7 @@ export abstract class PostHogCoreStateless {
     retryOptions?: Partial<RetriableOptions>,
     requestTimeout?: number
   ): Promise<PostHogFetchResponse> {
-    ;(AbortSignal as any).timeout ??= function timeout(ms: number) {
+    ; (AbortSignal as any).timeout ??= function timeout(ms: number) {
       const ctrl = new AbortController()
       setTimeout(() => ctrl.abort(), ms)
       return ctrl.signal
