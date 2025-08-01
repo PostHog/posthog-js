@@ -1036,8 +1036,6 @@ export class PostHog {
     }
 
     /**
-     * calculateEventProperties
-     *
      * This method is used internally to calculate the event properties before sending it to PostHog. It can also be
      * used by integrations (e.g. Segment) to enrich events with PostHog properties before sending them to Segment,
      * which is required for some PostHog products to work correctly. (e.g. to have a correct $session_id property).
@@ -1047,7 +1045,8 @@ export class PostHog {
      * @param {Date} [timestamp] The timestamp of the event, e.g. for calculating time on page. If not set, it'll automatically be set to the current time.
      * @param {String} [uuid] The uuid of the event, e.g. for storing the $pageview ID.
      * @param {Boolean} [readOnly] Set this if you do not intend to actually send the event, and therefore do not want to update internal state e.g. session timeout
-
+     * 
+     * @internal
      */
     public calculateEventProperties(
         eventName: string,
