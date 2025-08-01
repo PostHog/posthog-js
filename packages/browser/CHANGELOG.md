@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.258.5
+
+### Patch Changes
+
+- [#2178](https://github.com/PostHog/posthog-js/pull/2178) [`db569fa`](https://github.com/PostHog/posthog-js/commit/db569fa952b4536280602db87bc12a0fa51923fa) Thanks [@lucasheriques](https://github.com/lucasheriques)! - - Fix surveys loading with advanced_enable_surveys config
+
 ## 1.258.4
 
 ### Patch Changes
