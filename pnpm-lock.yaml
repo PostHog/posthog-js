@@ -415,12 +415,15 @@ importers:
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
+      '@rslib/core':
+        specifier: 'catalog:'
+        version: 0.10.6(@microsoft/api-extractor@7.52.8(@types/node@22.16.5))(typescript@5.8.2)
       '@types/node':
         specifier: ^22.15.23
         version: 22.16.5
       next:
         specifier: ^12.1.0
-        version: 12.3.7(@babel/core@7.27.1)(react-dom@17.0.2(react@18.2.0))(react@18.2.0)
+        version: 12.3.7(react-dom@17.0.2(react@18.2.0))(react@18.2.0)
       tsup:
         specifier: 'catalog:'
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@22.16.5))(jiti@2.4.2)(postcss@8.5.3)(typescript@5.8.2)(yaml@2.8.0)
@@ -12205,17 +12208,17 @@ snapshots:
   '@emnapi/core@1.4.5':
     dependencies:
       '@emnapi/wasi-threads': 1.0.4
-      tslib: 2.7.0
+      tslib: 2.8.1
     optional: true
 
   '@emnapi/runtime@1.4.5':
     dependencies:
-      tslib: 2.7.0
+      tslib: 2.8.1
     optional: true
 
   '@emnapi/wasi-threads@1.0.4':
     dependencies:
-      tslib: 2.7.0
+      tslib: 2.8.1
     optional: true
 
   '@esbuild/aix-ppc64@0.25.8':
@@ -14235,6 +14238,15 @@ snapshots:
       core-js: 3.44.0
       jiti: 2.4.2
 
+  '@rslib/core@0.10.6(@microsoft/api-extractor@7.52.8(@types/node@22.16.5))(typescript@5.8.2)':
+    dependencies:
+      '@rsbuild/core': 1.4.8
+      rsbuild-plugin-dts: 0.10.6(@microsoft/api-extractor@7.52.8(@types/node@22.16.5))(@rsbuild/core@1.4.8)(typescript@5.8.2)
+      tinyglobby: 0.2.14
+    optionalDependencies:
+      '@microsoft/api-extractor': 7.52.8(@types/node@22.16.5)
+      typescript: 5.8.2
+
   '@rslib/core@0.10.6(@microsoft/api-extractor@7.52.8(@types/node@22.17.0))(typescript@5.8.2)':
     dependencies:
       '@rsbuild/core': 1.4.8
@@ -14547,7 +14559,7 @@ snapshots:
 
   '@tybys/wasm-util@0.10.0':
     dependencies:
-      tslib: 2.7.0
+      tslib: 2.8.1
     optional: true
 
   '@types/argparse@1.0.38': {}
@@ -15169,7 +15181,7 @@ snapshots:
 
   ast-types@0.14.2:
     dependencies:
-      tslib: 2.7.0
+      tslib: 2.8.1
 
   astral-regex@1.0.0: {}
 
@@ -20572,7 +20584,7 @@ snapshots:
       fp-ts: 2.16.2
       monocle-ts: 2.3.13(fp-ts@2.16.2)
 
-  next@12.3.7(@babel/core@7.27.1)(react-dom@17.0.2(react@18.2.0))(react@18.2.0):
+  next@12.3.7(react-dom@17.0.2(react@18.2.0))(react@18.2.0):
     dependencies:
       '@next/env': 12.3.7
       '@swc/helpers': 0.4.11
@@ -20580,7 +20592,7 @@ snapshots:
       postcss: 8.4.14
       react: 18.2.0
       react-dom: 17.0.2(react@18.2.0)
-      styled-jsx: 5.0.7(@babel/core@7.27.1)(react@18.2.0)
+      styled-jsx: 5.0.7(react@18.2.0)
       use-sync-external-store: 1.2.0(react@18.2.0)
     optionalDependencies:
       '@next/swc-android-arm-eabi': 12.3.4
@@ -21833,7 +21845,7 @@ snapshots:
       ast-types: 0.14.2
       esprima: 4.0.1
       source-map: 0.6.1
-      tslib: 2.7.0
+      tslib: 2.8.1
 
   redent@3.0.0:
     dependencies:
@@ -22188,6 +22200,18 @@ snapshots:
       mitt: 3.0.0
       rrdom: 2.0.0-alpha.17
       rrweb-snapshot: 2.0.0-alpha.17
+
+  rsbuild-plugin-dts@0.10.6(@microsoft/api-extractor@7.52.8(@types/node@22.16.5))(@rsbuild/core@1.4.8)(typescript@5.8.2):
+    dependencies:
+      '@ast-grep/napi': 0.37.0
+      '@rsbuild/core': 1.4.8
+      magic-string: 0.30.17
+      picocolors: 1.1.1
+      tinyglobby: 0.2.14
+      tsconfig-paths: 4.2.0
+    optionalDependencies:
+      '@microsoft/api-extractor': 7.52.8(@types/node@22.16.5)
+      typescript: 5.8.2
 
   rsbuild-plugin-dts@0.10.6(@microsoft/api-extractor@7.52.8(@types/node@22.17.0))(@rsbuild/core@1.4.8)(typescript@5.8.2):
     dependencies:
@@ -22762,11 +22786,9 @@ snapshots:
 
   style-inject@0.3.0: {}
 
-  styled-jsx@5.0.7(@babel/core@7.27.1)(react@18.2.0):
+  styled-jsx@5.0.7(react@18.2.0):
     dependencies:
       react: 18.2.0
-    optionalDependencies:
-      '@babel/core': 7.27.1
 
   stylehacks@5.1.1(postcss@8.5.3):
     dependencies:

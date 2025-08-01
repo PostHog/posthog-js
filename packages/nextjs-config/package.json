@@ -20,8 +20,8 @@
     "clean": "rimraf dist",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
-    "build": "tsup src/index.ts --format cjs,esm --dts --out-dir dist",
-    "dev": "tsup src/index.ts --format cjs,esm --dts --out-dir dist --watch",
+    "build": "rslib build",
+    "dev": "rslib build --watch",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "exports": {
@@ -52,7 +52,7 @@
     "next": "^12.1.0",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@posthog-tooling/rollup-utils": "workspace:*",
-    "tsup": "catalog:"
+    "@rslib/core": "catalog:"
   },
   "peerDependencies": {
     "next": ">12.1.0"
