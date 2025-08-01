@@ -1,5 +1,5 @@
 ---
-'posthog-react-native': minor
+'posthog-react-native': patch
 ---
 
 fix emoji rating row wrappign
