@@ -1,5 +1,11 @@
 # @posthog/nextjs-config
 
+## 1.1.1
+
+### Patch Changes
+
+- [#2182](https://github.com/PostHog/posthog-js/pull/2182) [`970e3fd`](https://github.com/PostHog/posthog-js/commit/970e3fda0aa6e21403079fe65791c466525081dc) Thanks [@hpouillot](https://github.com/hpouillot)! - add support for esm next config
+
 ## 1.1.0
 
 ### Minor Changes
