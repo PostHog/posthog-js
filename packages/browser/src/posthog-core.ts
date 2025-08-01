@@ -1045,7 +1045,7 @@ export class PostHog {
      * @param {Date} [timestamp] The timestamp of the event, e.g. for calculating time on page. If not set, it'll automatically be set to the current time.
      * @param {String} [uuid] The uuid of the event, e.g. for storing the $pageview ID.
      * @param {Boolean} [readOnly] Set this if you do not intend to actually send the event, and therefore do not want to update internal state e.g. session timeout
-     * 
+     *
      * @internal
      */
     public calculateEventProperties(
