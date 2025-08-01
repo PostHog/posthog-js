@@ -610,7 +610,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     distinctId,
     disableGeoip,
   }: GroupIdentifyMessage): Promise<void> {
-    super.groupIdentifyStatelessImmediate(groupType, groupKey, properties, { disableGeoip }, distinctId)
+    await super.groupIdentifyStatelessImmediate(groupType, groupKey, properties, { disableGeoip }, distinctId)
   }
   /**
    * Reloads the feature flag definitions from the server for local evaluation.
