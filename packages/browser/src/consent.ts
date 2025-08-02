@@ -35,7 +35,7 @@ export class ConsentManager {
 
     public isOptedOut() {
         if (this._config.cookieless_mode === 'always') {
-            return false
+            return true
         }
         // we are opted out if:
         // * consent is explicitly denied

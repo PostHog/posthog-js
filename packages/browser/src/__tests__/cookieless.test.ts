@@ -75,6 +75,7 @@ describe('cookieless', () => {
             const { posthog, beforeSendMock } = await setup({
                 cookieless_mode: 'always',
             })
+            expect(posthog.has_opted_in_capturing()).toBe(false)
             posthog.capture(eventName, eventProperties)
 
             expect(beforeSendMock).toBeCalledTimes(1)

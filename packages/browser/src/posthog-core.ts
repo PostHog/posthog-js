@@ -2531,6 +2531,9 @@ export class PostHog {
      * @returns {boolean} whether the posthog library is capturing events
      */
     is_capturing(): boolean {
+        if (this.config.cookieless_mode === 'always') {
+            return true
+        }
         if (this.config.cookieless_mode === 'on_reject') {
             return this.consent.isExplicitlyOptedOut() || this.consent.isOptedIn()
         } else {
