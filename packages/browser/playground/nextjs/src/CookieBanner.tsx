@@ -1,5 +1,5 @@
 /* eslint-disable posthog-js/no-direct-null-check */
-import { useEffect, useState } from 'react'
+import { useEffect, useState, ReactElement } from 'react'
 import { cookieConsentGiven, posthog, updatePostHogConsent } from './posthog'
 
 export function useCookieConsent(): [boolean | null, (consentGiven: boolean) => void] {
@@ -20,11 +20,11 @@ export function useCookieConsent(): [boolean | null, (consentGiven: boolean) => 
     return [consentGiven, setConsentGiven]
 }
 
-export function CookieBanner() {
+export function CookieBanner(): ReactElement | null {
     const [consentGiven, setConsentGiven] = useCookieConsent()
 
     if (consentGiven === null || posthog.config.cookieless_mode === 'always') {
-        return
+        return null
     }
 
     return (
