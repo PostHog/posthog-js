@@ -73,6 +73,7 @@ export class PostHogSurveys {
             return
         }
         if (this._instance.config.cookieless_mode) {
+            logger.info('Not loading surveys in cookieless mode.')
             return
         }
 
