@@ -72,6 +72,9 @@ export class PostHogSurveys {
             logger.info('Disabled. Not loading surveys.')
             return
         }
+        if (this._instance.config.cookieless_mode) {
+            return
+        }
 
         const phExtensions = assignableWindow?.__PosthogExtensions__
         if (!phExtensions) {

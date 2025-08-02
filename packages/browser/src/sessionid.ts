@@ -41,8 +41,8 @@ export class SessionIdManager {
         if (!instance.persistence) {
             throw new Error('SessionIdManager requires a PostHogPersistence instance')
         }
-        if (instance.config.__preview_experimental_cookieless_mode) {
-            throw new Error('SessionIdManager cannot be used with __preview_experimental_cookieless_mode')
+        if (instance.config.cookieless_mode === 'always') {
+            throw new Error('SessionIdManager cannot be used with cookieless_mode="always"')
         }
 
         this._config = instance.config
@@ -233,10 +233,8 @@ export class SessionIdManager {
      * @param {Number} timestamp (optional) Defaults to the current time. The timestamp to be stored with the sessionId (used when determining if a new sessionId should be generated)
      */
     checkAndGetSessionAndWindowId(readOnly = false, _timestamp: number | null = null) {
-        if (this._config.__preview_experimental_cookieless_mode) {
-            throw new Error(
-                'checkAndGetSessionAndWindowId should not be called in __preview_experimental_cookieless_mode'
-            )
+        if (this._config.cookieless_mode === 'always') {
+            throw new Error('checkAndGetSessionAndWindowId should not be called with cookieless_mode="always"')
         }
         const timestamp = _timestamp || new Date().getTime()
 

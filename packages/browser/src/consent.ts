@@ -34,14 +34,26 @@ export class ConsentManager {
     }
 
     public isOptedOut() {
+        if (this._config.cookieless_mode === 'always') {
+            return false
+        }
+        // we are opted out if:
+        // * consent is explicitly denied
+        // * consent is pending, and we are configured to opt out by default
+        // * consent is pending, and we are in cookieless mode "on_reject"
         return (
             this.consent === ConsentStatus.DENIED ||
-            (this.consent === ConsentStatus.PENDING && this._config.opt_out_capturing_by_default)
+            (this.consent === ConsentStatus.PENDING &&
+                (this._config.opt_out_capturing_by_default || this._config.cookieless_mode === 'on_reject'))
         )
     }
 
     public isOptedIn() {
         return !this.isOptedOut()
+    }
+
+    public isExplicitlyOptedOut() {
+        return this.consent === ConsentStatus.DENIED
     }
 
     public optInOut(isOptedIn: boolean) {
@@ -59,8 +71,17 @@ export class ConsentManager {
     }
 
     private get _storageKey() {
-        const { token, opt_out_capturing_cookie_prefix } = this._instance.config
-        return (opt_out_capturing_cookie_prefix || OPT_OUT_PREFIX) + token
+        const { token, opt_out_capturing_cookie_prefix, consent_persistence_name } = this._instance.config
+        if (consent_persistence_name) {
+            return consent_persistence_name
+        } else if (opt_out_capturing_cookie_prefix) {
+            // Deprecated, but we still support it for backwards compatibility.
+            // This was deprecated because it differed in behaviour from storage.ts, and appends the token.
+            // This meant it was not possible to share the same consent state across multiple PostHog instances.
+            return opt_out_capturing_cookie_prefix + token
+        } else {
+            return OPT_OUT_PREFIX + token
+        }
     }
 
     private get _storedConsent(): ConsentStatus {
