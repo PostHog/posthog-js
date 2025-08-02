@@ -2496,6 +2496,21 @@ export class PostHog {
         return this.consent.isOptedOut()
     }
 
+    /**
+     * Checks whether the PostHog library is currently capturing events.
+     *
+     * Usually this means that the user has not opted out of capturing, but the exact behaviour can be controlled by
+     * some config options.
+     *
+     * Additionally, if the cookieless_mode is set to 'on_reject', we will capture events in cookieless mode if the
+     * user has explicitly opted out.
+     *
+     * @see {PostHogConfig.cookieless_mode}
+     * @see {PostHogConfig.opt_out_persistence_by_default}
+     * @see {PostHogConfig.respect_dnt}
+     *
+     * @returns {boolean} whether the posthog library is capturing events
+     */
     is_capturing(): boolean {
         if (this.config.cookieless_mode === 'on_reject') {
             return this.consent.isExplicitlyOptedOut() || this.consent.isOptedIn()
