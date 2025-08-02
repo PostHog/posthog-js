@@ -108,14 +108,14 @@ describe('cookieless', () => {
             const optInEvent = beforeSendMock.mock.calls[0][0]
             expect(optInEvent.event).toBe('$opt_in')
 
-            const eventBeforeOptIn = beforeSendMock.mock.calls[1][0]
-            expect(eventBeforeOptIn.event).toBe('$pageview') // initial pageview
-            expect(eventBeforeOptIn.properties.distinct_id).toMatch(uuidV7Pattern)
-            expect(eventBeforeOptIn.properties.$anon_distinct_id).toBe(undefined)
-            expect(eventBeforeOptIn.properties.$device_id).toMatch(uuidV7Pattern)
-            expect(eventBeforeOptIn.properties.$session_id).toMatch(uuidV7Pattern)
-            expect(eventBeforeOptIn.properties.$window_id).toMatch(uuidV7Pattern)
-            expect(eventBeforeOptIn.properties.$cookieless_mode).toEqual(undefined)
+            const initialPageview = beforeSendMock.mock.calls[1][0]
+            expect(initialPageview.event).toBe('$pageview') // initial pageview
+            expect(initialPageview.properties.distinct_id).toMatch(uuidV7Pattern)
+            expect(initialPageview.properties.$anon_distinct_id).toBe(undefined)
+            expect(initialPageview.properties.$device_id).toMatch(uuidV7Pattern)
+            expect(initialPageview.properties.$session_id).toMatch(uuidV7Pattern)
+            expect(initialPageview.properties.$window_id).toMatch(uuidV7Pattern)
+            expect(initialPageview.properties.$cookieless_mode).toEqual(undefined)
             expect(document.cookie).toContain('distinct_id')
         })
 
@@ -137,14 +137,14 @@ describe('cookieless', () => {
             const pageview = beforeSendMock.mock.calls[0][0]
             expect(pageview.event).toBe('$pageview') // initial pageview
 
-            const eventBeforeOptIn = beforeSendMock.mock.calls[1][0]
-            expect(eventBeforeOptIn.event).toBe('eventAfterOptOut')
-            expect(eventBeforeOptIn.properties.distinct_id).toEqual('$posthog_cookieless')
-            expect(eventBeforeOptIn.properties.$anon_distinct_id).toEqual(undefined)
-            expect(eventBeforeOptIn.properties.$device_id).toBe(null)
-            expect(eventBeforeOptIn.properties.$session_id).toBe(undefined)
-            expect(eventBeforeOptIn.properties.$window_id).toBe(undefined)
-            expect(eventBeforeOptIn.properties.$cookieless_mode).toEqual(true)
+            const event = beforeSendMock.mock.calls[1][0]
+            expect(event.event).toBe('eventAfterOptOut')
+            expect(event.properties.distinct_id).toEqual('$posthog_cookieless')
+            expect(event.properties.$anon_distinct_id).toEqual(undefined)
+            expect(event.properties.$device_id).toBe(null)
+            expect(event.properties.$session_id).toBe(undefined)
+            expect(event.properties.$window_id).toBe(undefined)
+            expect(event.properties.$cookieless_mode).toEqual(true)
             expect(document.cookie).toEqual('') // Q: why isn't consent set here? A: it's stored in localStorage
         })
 
@@ -169,14 +169,14 @@ describe('cookieless', () => {
             )
             posthog.capture('eventWithStoredCookieConsentConfirm')
             expect(beforeSendMock).toBeCalledTimes(1)
-            const pageview = beforeSendMock.mock.calls[0][0]
-            expect(pageview.event).toBe('eventWithStoredCookieConsentConfirm')
-            expect(pageview.properties.distinct_id).toMatch(uuidV7Pattern)
-            expect(pageview.properties.$anon_distinct_id).toBe(undefined)
-            expect(pageview.properties.$device_id).toMatch(uuidV7Pattern)
-            expect(pageview.properties.$session_id).toMatch(uuidV7Pattern)
-            expect(pageview.properties.$window_id).toMatch(uuidV7Pattern)
-            expect(pageview.properties.$cookieless_mode).toEqual(undefined)
+            const event = beforeSendMock.mock.calls[0][0]
+            expect(event.event).toBe('eventWithStoredCookieConsentConfirm')
+            expect(event.properties.distinct_id).toMatch(uuidV7Pattern)
+            expect(event.properties.$anon_distinct_id).toBe(undefined)
+            expect(event.properties.$device_id).toMatch(uuidV7Pattern)
+            expect(event.properties.$session_id).toMatch(uuidV7Pattern)
+            expect(event.properties.$window_id).toMatch(uuidV7Pattern)
+            expect(event.properties.$cookieless_mode).toEqual(undefined)
         })
 
         it('should pick up negative cookie consent on startup and start sending cookieless events', async () => {
@@ -200,14 +200,14 @@ describe('cookieless', () => {
             )
             posthog.capture('eventWithStoredCookieConsentConfirm')
             expect(beforeSendMock).toBeCalledTimes(1)
-            const pageview = beforeSendMock.mock.calls[0][0]
-            expect(pageview.event).toBe('eventWithStoredCookieConsentConfirm')
-            expect(pageview.properties.distinct_id).toEqual('$posthog_cookieless')
-            expect(pageview.properties.$anon_distinct_id).toEqual(undefined)
-            expect(pageview.properties.$device_id).toBe(null)
-            expect(pageview.properties.$session_id).toBe(undefined)
-            expect(pageview.properties.$window_id).toBe(undefined)
-            expect(pageview.properties.$cookieless_mode).toEqual(true)
+            const event = beforeSendMock.mock.calls[0][0]
+            expect(event.event).toBe('eventWithStoredCookieConsentConfirm')
+            expect(event.properties.distinct_id).toEqual('$posthog_cookieless')
+            expect(event.properties.$anon_distinct_id).toEqual(undefined)
+            expect(event.properties.$device_id).toBe(null)
+            expect(event.properties.$session_id).toBe(undefined)
+            expect(event.properties.$window_id).toBe(undefined)
+            expect(event.properties.$cookieless_mode).toEqual(true)
         })
     })
 })
