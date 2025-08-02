@@ -311,8 +311,8 @@ function generateTypeExample(signature) {
         return 'string';
     }
     if (signature.includes('|')) {
-        const parts = signature.split('|').map(p => p.trim()).slice(0, 3);
-        return parts.length < 3 ? parts.join(' | ') : parts.concat('...').join(' | ');
+        const parts = signature.split('|').map(p => p.trim());
+        return parts.join(' | ');
     }
     return signature;
 }

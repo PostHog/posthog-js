@@ -1,26 +1,4 @@
-const NO_DOCS_TYPES = [
-    'string',
-    'number',
-    'boolean',
-    'integer',
-    'object',
-    'array',
-    'null',
-    'undefined',
-    'any',
-    'unknown',
-    'void',
-    'Date',
-    'RegExp',
-    'Error',
-    'Symbol',
-    'BigInt',
-    'Map',
-    'Set',
-    'PostHog' // The entire ref is the posthog class lol
-];
-
-const HOG_REF = '0.1';
+const HOG_REF = '0.2';
 
 const SPEC_INFO = {
     id: 'posthog-js',
@@ -89,7 +67,6 @@ const PROPERTY_EXAMPLE = `// It can be a string
 }
 `
 module.exports = {
-    NO_DOCS_TYPES,
     HOG_REF,
     SPEC_INFO,
     OUTPUT_FILE_PATH,
