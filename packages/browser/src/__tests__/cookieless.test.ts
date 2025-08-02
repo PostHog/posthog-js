@@ -148,7 +148,7 @@ describe('cookieless', () => {
             expect(document.cookie).toEqual('') // Q: why isn't consent set here? A: it's stored in localStorage
         })
 
-        it('it should pick up positive cookie consent on startup and start sending non-cookieless events', async () => {
+        it('should pick up positive cookie consent on startup and start sending non-cookieless events', async () => {
             const persistenceName = uuidv7()
             const { posthog: previousPosthog } = await setup(
                 {
