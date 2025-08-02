@@ -47,18 +47,10 @@
         "typescript": "catalog:"
     },
     "lint-staged": {
-        "*.{ts,tsx,js,json}": "prettier --write",
-        "*.js": "eslint --cache --fix",
-        "*.{ts,tsx}": [
-            "eslint packages/browser/src --fix",
-            "eslint packages/core/src --fix",
-            "eslint packages/web/src --fix",
-            "eslint packages/react/src --fix",
-            "eslint packages/react-native/src --fix",
-            "eslint packages/nextjs-config/src --fix",
-            "eslint packages/ai/src --fix",
-            "eslint packages/browser/playwright --fix",
+        "*.{ts,tsx,js,jsx,mjs,cjs}": [
+            "eslint --cache --fix",
             "prettier --write"
-        ]
+        ],
+        "*.{json,md}": "prettier --write"
     }
 }
