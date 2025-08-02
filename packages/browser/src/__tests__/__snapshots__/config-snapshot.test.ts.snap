@@ -176,6 +176,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"null\\",
     \\"string\\"
   ],
+  \\"consent_persistence_name\\": [
+    \\"null\\",
+    \\"string\\"
+  ],
   \\"opt_in_site_apps\\": [
     \\"false\\",
     \\"true\\"
@@ -526,16 +530,16 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"undefined\\",
     \\"Record<ExternalIntegrationKind, boolean>\\"
   ],
+  \\"cookieless_mode\\": [
+    \\"undefined\\",
+    \\"\\\\\\"always\\\\\\"\\",
+    \\"\\\\\\"on_reject\\\\\\"\\"
+  ],
   \\"__add_tracing_headers\\": [
     \\"undefined\\",
     \\"string[]\\"
   ],
   \\"__preview_remote_config\\": [
-    \\"undefined\\",
-    \\"false\\",
-    \\"true\\"
-  ],
-  \\"__preview_experimental_cookieless_mode\\": [
     \\"undefined\\",
     \\"false\\",
     \\"true\\"
