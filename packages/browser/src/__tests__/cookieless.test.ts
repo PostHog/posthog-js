@@ -87,6 +87,7 @@ describe('cookieless', () => {
             expect(event.properties.$window_id).toBe(undefined)
             expect(event.properties.$cookieless_mode).toEqual(true)
             expect(document.cookie).toBe('')
+            expect(posthog.sessionRecording).toBeFalsy()
 
             // should ignore cookie consent, and throw in test code due to logging an error
             expect(() => posthog.opt_in_capturing()).toThrow()
@@ -100,6 +101,7 @@ describe('cookieless', () => {
             })
             posthog.capture('eventBeforeOptIn') // will be dropped
             expect(beforeSendMock).toBeCalledTimes(0)
+            expect(posthog.has_opted_out_capturing()).toEqual(true)
 
             // opt in
             posthog.opt_in_capturing()
@@ -117,6 +119,7 @@ describe('cookieless', () => {
             expect(initialPageview.properties.$window_id).toMatch(uuidV7Pattern)
             expect(initialPageview.properties.$cookieless_mode).toEqual(undefined)
             expect(document.cookie).toContain('distinct_id')
+            expect(posthog.sessionRecording).toBeTruthy()
         })
 
         it('should not send any events before opt out, then send cookieless events', async () => {
@@ -127,6 +130,7 @@ describe('cookieless', () => {
             })
             posthog.capture('eventBeforeOptOut') // will be dropped
             expect(beforeSendMock).toBeCalledTimes(0)
+            expect(posthog.has_opted_out_capturing()).toEqual(true)
 
             // opt out
             posthog.opt_out_capturing()
@@ -146,6 +150,7 @@ describe('cookieless', () => {
             expect(event.properties.$window_id).toBe(undefined)
             expect(event.properties.$cookieless_mode).toEqual(true)
             expect(document.cookie).toEqual('') // Q: why isn't consent set here? A: it's stored in localStorage
+            expect(posthog.sessionRecording).toBeFalsy()
         })
 
         it('should pick up positive cookie consent on startup and start sending non-cookieless events', async () => {
@@ -177,6 +182,7 @@ describe('cookieless', () => {
             expect(event.properties.$session_id).toMatch(uuidV7Pattern)
             expect(event.properties.$window_id).toMatch(uuidV7Pattern)
             expect(event.properties.$cookieless_mode).toEqual(undefined)
+            expect(posthog.sessionRecording).toBeTruthy()
         })
 
         it('should pick up negative cookie consent on startup and start sending cookieless events', async () => {
@@ -208,6 +214,60 @@ describe('cookieless', () => {
             expect(event.properties.$session_id).toBe(undefined)
             expect(event.properties.$window_id).toBe(undefined)
             expect(event.properties.$cookieless_mode).toEqual(true)
+            expect(posthog.sessionRecording).toBeFalsy()
+        })
+
+        it('should reset when switching consent mode from opt out to opt in', async () => {
+            const { posthog, beforeSendMock } = await setup({
+                cookieless_mode: 'on_reject',
+            })
+            posthog.opt_out_capturing()
+            posthog.register({ test: 'test' })
+            posthog.capture(eventName, eventProperties)
+            expect(beforeSendMock).toBeCalledTimes(2)
+            expect(beforeSendMock.mock.calls[1][0].properties.test).toBe('test')
+
+            posthog.opt_in_capturing()
+            posthog.capture(eventName, eventProperties)
+
+            expect(beforeSendMock).toBeCalledTimes(4)
+            expect(beforeSendMock.mock.calls[2][0].event).toBe('$opt_in')
+            expect(beforeSendMock.mock.calls[2][0].properties.test).toBe(undefined)
+            expect(beforeSendMock.mock.calls[3][0].event).toBe(eventName)
+            expect(beforeSendMock.mock.calls[3][0].properties.test).toBe(undefined)
+            expect(beforeSendMock.mock.calls[3][0].properties.distinct_id).toMatch(uuidV7Pattern)
+            expect(beforeSendMock.mock.calls[3][0].properties.$anon_distinct_id).toBe(undefined)
+            expect(beforeSendMock.mock.calls[3][0].properties.$device_id).toMatch(uuidV7Pattern)
+            expect(beforeSendMock.mock.calls[3][0].properties.$session_id).toMatch(uuidV7Pattern)
+            expect(beforeSendMock.mock.calls[3][0].properties.$window_id).toMatch(uuidV7Pattern)
+            expect(beforeSendMock.mock.calls[3][0].properties.$cookieless_mode).toEqual(undefined)
+            expect(posthog.sessionRecording).toBeTruthy()
+        })
+
+        it('should reset when switching consent mode from opt in to opt out', async () => {
+            const { posthog, beforeSendMock } = await setup({
+                cookieless_mode: 'on_reject',
+            })
+            posthog.opt_in_capturing()
+            posthog.register({ test: 'test' })
+            posthog.capture(eventName, eventProperties)
+
+            expect(beforeSendMock).toBeCalledTimes(3)
+            expect(beforeSendMock.mock.calls[2][0].properties.test).toBe('test')
+
+            posthog.opt_out_capturing()
+            posthog.capture(eventName, eventProperties)
+
+            expect(beforeSendMock).toBeCalledTimes(4)
+            expect(beforeSendMock.mock.calls[3][0].event).toBe(eventName)
+            expect(beforeSendMock.mock.calls[3][0].properties.test).toBe(undefined)
+            expect(beforeSendMock.mock.calls[3][0].properties.distinct_id).toEqual('$posthog_cookieless')
+            expect(beforeSendMock.mock.calls[3][0].properties.$anon_distinct_id).toEqual(undefined)
+            expect(beforeSendMock.mock.calls[3][0].properties.$device_id).toBe(null)
+            expect(beforeSendMock.mock.calls[3][0].properties.$session_id).toBe(undefined)
+            expect(beforeSendMock.mock.calls[3][0].properties.$window_id).toBe(undefined)
+            expect(beforeSendMock.mock.calls[3][0].properties.$cookieless_mode).toEqual(true)
+            expect(posthog.sessionRecording).toBeFalsy()
         })
     })
 })

@@ -2405,6 +2405,17 @@ export class PostHog {
             logger.warn('Consent opt in/out is not valid with cookieless_mode="always" and will be ignored')
             return
         }
+        if (this.config.cookieless_mode === 'on_reject' && this.consent.isExplicitlyOptedOut()) {
+            // If the user has explicitly opted out on_reject mode, then before we can start sending regular non-cookieless events
+            // we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
+            this.reset(true)
+            this.sessionManager = new SessionIdManager(this)
+            if (this.persistence) {
+                this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
+            }
+            this.sessionRecording = new SessionRecording(this)
+            this.sessionRecording.startIfEnabledOrStop()
+        }
 
         this.consent.optInOut(true)
         this._sync_opt_out_with_persistence()
@@ -2440,6 +2451,11 @@ export class PostHog {
             return
         }
 
+        if (this.config.cookieless_mode === 'on_reject' && this.consent.isOptedIn()) {
+            // If the user has opted in, we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
+            this.reset(true)
+        }
+
         this.consent.optInOut(false)
         this._sync_opt_out_with_persistence()
 
@@ -2450,6 +2466,9 @@ export class PostHog {
                 $device_id: null,
             })
             this.sessionManager = undefined
+            this.sessionPropsManager = undefined
+            this.sessionRecording?.stopRecording()
+            this.sessionRecording = undefined
             this._captureInitialPageview()
         }
     }
