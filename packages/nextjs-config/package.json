@@ -23,7 +23,8 @@
     "build": "rslib build",
     "test:unit": "jest",
     "dev": "rslib build --watch",
-    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
+    "prepare": "pnpm build"
   },
   "exports": {
     ".": {
