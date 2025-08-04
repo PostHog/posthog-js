@@ -11,7 +11,7 @@ export async function processTurbopackSourcemaps(
   posthogOptions: PostHogNextConfigComplete,
   distDir?: string
 ): Promise<void> {
-  const resolvedDistDir = path.resolve(distDir ?? '.next')
+  const resolvedDistDir = path.resolve(process.cwd(), distDir ?? '.next')
 
   // Process both server and client sourcemaps
   const serverDir = path.join(resolvedDistDir, 'server')
