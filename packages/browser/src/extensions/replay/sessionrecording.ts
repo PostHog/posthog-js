@@ -1369,7 +1369,10 @@ export class SessionRecording {
             $session_recording_start_reason: startReason,
         })
         logger.info(startReason.replace('_', ' '), tagPayload)
-        if (!includes(['recording_initialized', 'session_id_changed'], startReason)) {
+        if (
+            !includes(['recording_initialized', 'session_id_changed'], startReason) ||
+            startReason.includes('trigger_matched')
+        ) {
             this._tryAddCustomEvent(startReason, tagPayload)
         }
     }
