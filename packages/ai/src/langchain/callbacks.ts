@@ -423,7 +423,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     }
 
     if (run.tools) {
-      eventProperties['$ai_tools'] = withPrivacyMode(this.client, this.privacyMode, run.tools)
+      eventProperties['$ai_tools'] = run.tools
     }
 
     if (output instanceof Error) {
@@ -449,8 +449,48 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       if (output.generations && Array.isArray(output.generations)) {
         const lastGeneration = output.generations[output.generations.length - 1]
         if (Array.isArray(lastGeneration)) {
-          completions = lastGeneration.map((gen) => {
-            return { role: 'assistant', content: gen.text }
+          completions = lastGeneration.map((gen: any) => {
+            const content: any[] = []
+
+            // Add text content if present
+            if (gen.text) {
+              content.push({ type: 'text', text: gen.text })
+            }
+
+            // Check if this is a ChatGeneration with a message property
+            // For ChatModels, the generation will have a message property with tool calls
+            if ('message' in gen && gen.message) {
+              const message = gen.message
+              
+              // Handle tool calls if present
+              if (message.additional_kwargs && message.additional_kwargs.tool_calls) {
+                for (const toolCall of message.additional_kwargs.tool_calls) {
+                  content.push({
+                    type: 'function',
+                    id: toolCall.id,
+                    function: {
+                      name: toolCall.function.name,
+                      arguments: toolCall.function.arguments,
+                    },
+                  })
+                }
+              }
+
+              // Handle function calls for older format
+              if (message.additional_kwargs && message.additional_kwargs.function_call) {
+                const funcCall = message.additional_kwargs.function_call
+                content.push({
+                  type: 'function',
+                  function: {
+                    name: funcCall.name,
+                    arguments: funcCall.arguments,
+                  },
+                })
+              }
+            }
+
+            // Return content array if we have structured content, otherwise just text
+            return { role: 'assistant', content: content.length > 0 ? content : gen.text }
           })
         }
       }

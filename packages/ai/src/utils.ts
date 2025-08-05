@@ -59,7 +59,7 @@ export const getModelParams = (
 /**
  * Helper to format responses (non-streaming) for consumption, mirroring Python's openai vs. anthropic approach.
  */
-export const formatResponse = (response: any, provider: string): Array<{ role: string; content: string }> => {
+export const formatResponse = (response: any, provider: string): Array<{ role: string; content: any }> => {
   if (!response) {
     return []
   }
@@ -73,59 +73,163 @@ export const formatResponse = (response: any, provider: string): Array<{ role: s
   return []
 }
 
-export const formatResponseAnthropic = (response: any): Array<{ role: string; content: string }> => {
-  // Example approach if "response.content" holds array of text segments, etc.
-  const output: Array<{ role: string; content: string }> = []
+export const formatResponseAnthropic = (response: any): Array<{ role: string; content: any }> => {
+  const output: Array<{ role: string; content: any }> = []
+  const content: any[] = []
+
   for (const choice of response.content ?? []) {
-    if (choice?.text) {
-      output.push({
-        role: 'assistant',
-        content: choice.text,
+    if (choice?.type === 'text' && choice?.text) {
+      content.push({ type: 'text', text: choice.text })
+    } else if (choice?.type === 'tool_use' && choice?.name && choice?.id) {
+      content.push({
+        type: 'function',
+        id: choice.id,
+        function: {
+          name: choice.name,
+          arguments: choice.input || {},
+        },
       })
     }
   }
-  return output
-}
 
-export const formatResponseOpenAI = (response: any): Array<{ role: string; content: string }> => {
-  const output: Array<{ role: string; content: string }> = []
-  for (const choice of response.choices ?? []) {
-    if (choice.message?.content) {
-      output.push({
-        role: choice.message.role,
-        content: choice.message.content,
-      })
-    }
-  }
-  return output
-}
-
-export const formatResponseGemini = (response: any): Array<{ role: string; content: string }> => {
-  const output: Array<{ role: string; content: string }> = []
-
-  if (response.text) {
+  if (content.length > 0) {
     output.push({
       role: 'assistant',
-      content: response.text,
+      content,
     })
-    return output
   }
+
+  return output
+}
+
+export const formatResponseOpenAI = (response: any): Array<{ role: string; content: any }> => {
+  const output: Array<{ role: string; content: any }> = []
+
+  if (response.choices) {
+    for (const choice of response.choices) {
+      const content: any[] = []
+      let role = 'assistant'
+
+      if (choice.message) {
+        if (choice.message.role) {
+          role = choice.message.role
+        }
+
+        if (choice.message.content) {
+          content.push({ type: 'text', text: choice.message.content })
+        }
+
+        if (choice.message.tool_calls) {
+          for (const toolCall of choice.message.tool_calls) {
+            content.push({
+              type: 'function',
+              id: toolCall.id,
+              function: {
+                name: toolCall.function.name,
+                arguments: toolCall.function.arguments,
+              },
+            })
+          }
+        }
+      }
+
+      if (content.length > 0) {
+        output.push({
+          role,
+          content,
+        })
+      }
+    }
+  }
+
+  // Handle Responses API format
+  if (response.output) {
+    const content: any[] = []
+    let role = 'assistant'
+
+    for (const item of response.output) {
+      if (item.type === 'message') {
+        role = item.role
+
+        if (item.content && Array.isArray(item.content)) {
+          for (const contentItem of item.content) {
+            if (contentItem.type === 'output_text' && contentItem.text) {
+              content.push({ type: 'text', text: contentItem.text })
+            } else if (contentItem.text) {
+              content.push({ type: 'text', text: contentItem.text })
+            } else if (contentItem.type === 'input_image' && contentItem.image_url) {
+              content.push({
+                type: 'image',
+                image: contentItem.image_url,
+              })
+            }
+          }
+        } else if (item.content) {
+          content.push({ type: 'text', text: String(item.content) })
+        }
+      } else if (item.type === 'function_call') {
+        content.push({
+          type: 'function',
+          id: item.call_id || item.id || '',
+          function: {
+            name: item.name,
+            arguments: item.arguments || {},
+          },
+        })
+      }
+    }
+
+    if (content.length > 0) {
+      output.push({
+        role,
+        content,
+      })
+    }
+  }
+
+  return output
+}
+
+export const formatResponseGemini = (response: any): Array<{ role: string; content: any }> => {
+  const output: Array<{ role: string; content: any }> = []
 
   if (response.candidates && Array.isArray(response.candidates)) {
     for (const candidate of response.candidates) {
       if (candidate.content && candidate.content.parts) {
-        const text = candidate.content.parts
-          .filter((part: any) => part.text)
-          .map((part: any) => part.text)
-          .join('')
-        if (text) {
+        const content: any[] = []
+
+        for (const part of candidate.content.parts) {
+          if (part.text) {
+            content.push({ type: 'text', text: part.text })
+          } else if (part.functionCall) {
+            content.push({
+              type: 'function',
+              function: {
+                name: part.functionCall.name,
+                arguments: part.functionCall.args,
+              },
+            })
+          }
+        }
+
+        if (content.length > 0) {
           output.push({
             role: 'assistant',
-            content: text,
+            content,
           })
         }
+      } else if (candidate.text) {
+        output.push({
+          role: 'assistant',
+          content: [{ type: 'text', text: candidate.text }],
+        })
       }
     }
+  } else if (response.text) {
+    output.push({
+      role: 'assistant',
+      content: [{ type: 'text', text: response.text }],
+    })
   }
 
   return output
@@ -159,6 +263,30 @@ export const truncate = (str: string): string => {
     console.error('Error truncating, likely not a string')
     return str
   }
+}
+
+/**
+ * Extract available tool calls from the request parameters.
+ * These are the tools provided to the LLM, not the tool calls in the response.
+ */
+export const extractAvailableToolCalls = (provider: string, params: any): any => {
+  if (provider === 'anthropic') {
+    if (params.tools) {
+      return params.tools
+    }
+    return null
+  } else if (provider === 'gemini') {
+    if (params.config && params.config.tools) {
+      return params.config.tools
+    }
+    return null
+  } else if (provider === 'openai') {
+    if (params.tools) {
+      return params.tools
+    }
+    return null
+  }
+  return null
 }
 
 export type SendEventToPosthogParams = {
