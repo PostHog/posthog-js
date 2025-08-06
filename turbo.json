@@ -27,6 +27,7 @@
             "dependsOn": []
         },
         "test:unit": {
+            "dependsOn": ["build"],
             "cache": false
         },
         "test:functional": {},
