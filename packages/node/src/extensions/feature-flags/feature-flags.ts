@@ -272,7 +272,7 @@ class FeatureFlagsPoller {
   private getFeatureFlagPayload(key: string, flagValue: FeatureFlagValue): JsonType | null {
     let payload: JsonType | null = null
 
-    if (flagValue !== false) {
+    if (flagValue !== false && flagValue !== null && flagValue !== undefined) {
       if (typeof flagValue == 'boolean') {
         payload = this.featureFlagsByKey?.[key]?.filters?.payloads?.[flagValue.toString()] || null
       } else if (typeof flagValue == 'string') {
