@@ -182,8 +182,11 @@ export interface Survey {
               value?: string
           }[]
         | null
+    // the linked flag key is the flag key that is used to link the survey to a flag
     linked_flag_key: string | null
     targeting_flag_key: string | null
+    // the internal targeting flag key is the flag key that is used to target users who have seen the survey
+    // eg survey-targeting-<survey-id>
     internal_targeting_flag_key: string | null
     questions: SurveyQuestion[]
     appearance: SurveyAppearance | null
@@ -203,13 +206,14 @@ export interface Survey {
         } | null
         deviceTypes?: string[]
         deviceTypesMatchType?: PropertyMatchType
+        linkedFlagVariant: string | null
     } | null
     start_date: string | null
     end_date: string | null
     current_iteration: number | null
     current_iteration_start_date: string | null
     schedule?: SurveySchedule | null
-    enable_partial_responses?: boolean | null
+    enable_partial_responses: boolean | null
 }
 
 export type SurveyWithTypeAndAppearance = Pick<Survey, 'id' | 'type' | 'appearance'>

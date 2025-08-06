@@ -98,6 +98,13 @@ export function getActiveMatchingSurveys(
     }
 
     const linkedFlagCheck = survey.linked_flag_key ? flags[survey.linked_flag_key] === true : true
+
+    const linkedFlagVariant = survey.conditions?.linkedFlagVariant
+    let linkedFlagVariantCheck = true
+    if (linkedFlagVariant) {
+      linkedFlagVariantCheck = flags[survey.linked_flag_key] === (linkedFlagVariant || 'any')
+    }
+
     const targetingFlagCheck = survey.targeting_flag_key ? flags[survey.targeting_flag_key] === true : true
 
     const eventBasedTargetingFlagCheck = hasEvents(survey) ? activatedSurveys.has(survey.id) : true
@@ -113,7 +120,12 @@ export function getActiveMatchingSurveys(
       : true
 
     return (
-      linkedFlagCheck && targetingFlagCheck && internalTargetingFlagCheck && eventBasedTargetingFlagCheck && flagsCheck
+      linkedFlagCheck &&
+      linkedFlagVariantCheck &&
+      targetingFlagCheck &&
+      internalTargetingFlagCheck &&
+      eventBasedTargetingFlagCheck &&
+      flagsCheck
     )
   })
 }
