@@ -107,17 +107,17 @@ export function getActiveMatchingSurveys(
         : true
     }
 
-    const targetingFlagCheck = survey.targeting_flag_key ? flags[survey.targeting_flag_key] === true : true
+    const targetingFlagCheck = survey.targeting_flag_key ? !!flags[survey.targeting_flag_key] === true : true
 
     const eventBasedTargetingFlagCheck = hasEvents(survey) ? activatedSurveys.has(survey.id) : true
 
     const internalTargetingFlagCheck =
       survey.internal_targeting_flag_key && !canActivateRepeatedly(survey)
-        ? flags[survey.internal_targeting_flag_key] === true
+        ? !!flags[survey.internal_targeting_flag_key] === true
         : true
     const flagsCheck = survey.feature_flag_keys?.length
       ? survey.feature_flag_keys.every(({ key, value }: { key: string; value?: string }) => {
-          return !key || !value || flags[value] === true
+          return !key || !value || !!flags[value] === true
         })
       : true
 

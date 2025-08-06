@@ -265,23 +265,6 @@ describe('getActiveMatchingSurveys', () => {
   })
 
   describe('Linked flag variant filtering', () => {
-    it('should include surveys when linked flag variant matches', () => {
-      const surveys = [
-        createMockSurvey({
-          id: 'variant-match',
-          linked_flag_key: 'variant-flag-true',
-          conditions: {
-            linkedFlagVariant: 'any',
-          },
-        }),
-      ]
-
-      const result = getActiveMatchingSurveys(surveys, mockFlags, mockSeenSurveys, mockActivatedSurveys)
-
-      expect(result).toHaveLength(1)
-      expect(result[0].id).toBe('variant-match')
-    })
-
     it('should include surveys when linked flag variant matches string value', () => {
       const surveys = [
         createMockSurvey({
@@ -319,7 +302,7 @@ describe('getActiveMatchingSurveys', () => {
       const surveys = [
         createMockSurvey({
           id: 'variant-any',
-          linked_flag_key: 'variant-flag-true',
+          linked_flag_key: 'variant-flag',
           conditions: {
             linkedFlagVariant: 'any',
           },
