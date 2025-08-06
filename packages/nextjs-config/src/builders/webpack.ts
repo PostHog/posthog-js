@@ -13,10 +13,7 @@ export function buildWebpackConfig(
   return {
     ...configWithoutWebpack,
     productionBrowserSourceMaps: true,
-    webpack: (
-      config: Configuration,
-      options: Parameters<NonNullable<NextConfig['webpack']>>[1]
-    ): Configuration => {
+    webpack: (config: Configuration, options: Parameters<NonNullable<NextConfig['webpack']>>[1]): Configuration => {
       // Call user's webpack config if they have one, otherwise just pass through
       const webpackConfig = userWebpackConfig ? userWebpackConfig(config, options) : config
 
