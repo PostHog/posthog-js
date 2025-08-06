@@ -22,11 +22,11 @@
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "devDependencies": {
-    "node-fetch": "^3.3.2",
     "@posthog-tooling/rollup-utils": "workspace:*",
     "@posthog-tooling/tsconfig-base": "workspace:*",
-    "posthog-node": "workspace:*",
-    "jest": "catalog:"
+    "jest": "catalog:",
+    "node-fetch": "^3.3.2",
+    "posthog-node": "workspace:*"
   },
   "keywords": [
     "posthog",
@@ -41,10 +41,11 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@ai-sdk/provider": "^2.0.0",
     "@anthropic-ai/sdk": "^0.36.3",
     "@google/genai": "^1.1.0",
     "@langchain/core": "^0.3.37",
-    "ai": "^4.1.0",
+    "ai": "^5.0.2",
     "langchain": "^0.3.15",
     "openai": "^5.0.0",
     "uuid": "^11.0.5",
