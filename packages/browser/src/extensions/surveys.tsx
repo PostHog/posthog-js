@@ -386,7 +386,7 @@ export class SurveyManager {
         )
     }
 
-    private _isSurveyFeatureFlagEnabled(flagKey: string | null, flagVariant: string | null = null) {
+    private _isSurveyFeatureFlagEnabled(flagKey: string | null, flagVariant: string | undefined = undefined) {
         if (!flagKey) {
             return true
         }
