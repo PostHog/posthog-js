@@ -2,6 +2,7 @@ import { FeatureFlagCondition, FlagProperty, PostHogFeatureFlag, PropertyGroup }
 import type { FeatureFlagValue, JsonType, PostHogFetchOptions, PostHogFetchResponse } from '@posthog/core'
 import { safeSetTimeout } from '@posthog/core'
 import { hashSHA1 } from './crypto'
+import { DependencyGraph, buildDependencyGraph, matchFlagDependency, CyclicDependencyError } from './dependency-graph'
 
 const SIXTY_SECONDS = 60 * 1000
 
@@ -51,6 +52,8 @@ class FeatureFlagsPoller {
   featureFlagsByKey: Record<string, PostHogFeatureFlag>
   groupTypeMapping: Record<string, string>
   cohorts: Record<string, PropertyGroup>
+  dependencyGraph?: DependencyGraph
+  idToKeyMapping: Map<string, string>
   loadedSuccessfullyOnce: boolean
   timeout?: number
   host: FeatureFlagsPollerOptions['host']
@@ -78,6 +81,8 @@ class FeatureFlagsPoller {
     this.featureFlagsByKey = {}
     this.groupTypeMapping = {}
     this.cohorts = {}
+    this.dependencyGraph = undefined
+    this.idToKeyMapping = new Map()
     this.loadedSuccessfullyOnce = false
     this.timeout = timeout
     this.projectApiKey = projectApiKey
@@ -92,6 +97,35 @@ class FeatureFlagsPoller {
 
   debug(enabled: boolean = true): void {
     this.debugMode = enabled
+  }
+
+  private buildDependencyGraph(): void {
+    try {
+      const { graph, idToKeyMapping, removedFlags } = buildDependencyGraph(this.featureFlags)
+      this.dependencyGraph = graph
+      this.idToKeyMapping = idToKeyMapping
+
+      // Remove cyclic flags from main flag collections as well
+      if (removedFlags.length > 0) {
+        const removedFlagSet = new Set(removedFlags)
+        this.featureFlags = this.featureFlags.filter((flag) => !removedFlagSet.has(flag.key))
+        for (const flagKey of removedFlags) {
+          delete this.featureFlagsByKey[flagKey]
+        }
+
+        this.logMsgIfDebug(() =>
+          console.warn(
+            `[FEATURE FLAGS] Removed flags due to cyclic dependencies: ${removedFlags.join(', ')}. These flags will not be evaluated with local evaluation.`
+          )
+        )
+      }
+    } catch (error) {
+      this.logMsgIfDebug(() =>
+        console.warn(`[FEATURE FLAGS] Error building dependency graph: ${error}. Flag dependencies will be disabled.`)
+      )
+      this.dependencyGraph = undefined
+      this.idToKeyMapping = new Map()
+    }
   }
 
   private logMsgIfDebug(fn: () => void): void {
@@ -119,23 +153,15 @@ class FeatureFlagsPoller {
     featureFlag = this.featureFlagsByKey[key]
 
     if (featureFlag !== undefined) {
-      try {
-        const result = await this.computeFlagAndPayloadLocally(
-          featureFlag,
-          distinctId,
-          groups,
-          personProperties,
-          groupProperties
-        )
-        response = result.value
-        this.logMsgIfDebug(() => console.debug(`Successfully computed flag locally: ${key} -> ${response}`))
-      } catch (e) {
-        if (e instanceof InconclusiveMatchError) {
-          this.logMsgIfDebug(() => console.debug(`InconclusiveMatchError when computing flag locally: ${key}: ${e}`))
-        } else if (e instanceof Error) {
-          this.onError?.(new Error(`Error computing flag locally: ${key}: ${e}`))
-        }
-      }
+      const result = await this.evaluateFlagsWithDependencies(
+        [key],
+        distinctId,
+        groups,
+        personProperties,
+        groupProperties
+      )
+      response = result.flags[key]
+      this.logMsgIfDebug(() => console.debug(`Successfully computed flag locally: ${key} -> ${response}`))
     }
 
     return response
@@ -154,42 +180,117 @@ class FeatureFlagsPoller {
   }> {
     await this.loadFeatureFlags()
 
-    const response: Record<string, FeatureFlagValue> = {}
-    const payloads: Record<string, JsonType> = {}
-    let fallbackToFlags = this.featureFlags.length == 0
-
-    const flagsToEvaluate = flagKeysToExplicitlyEvaluate
-      ? flagKeysToExplicitlyEvaluate.map((key) => this.featureFlagsByKey[key]).filter(Boolean)
-      : this.featureFlags
-
-    await Promise.all(
-      flagsToEvaluate.map(async (flag) => {
-        try {
-          const { value: matchValue, payload: matchPayload } = await this.computeFlagAndPayloadLocally(
-            flag,
-            distinctId,
-            groups,
-            personProperties,
-            groupProperties
-          )
-          response[flag.key] = matchValue
-          if (matchPayload) {
-            payloads[flag.key] = matchPayload
-          }
-        } catch (e) {
-          if (e instanceof InconclusiveMatchError) {
-            this.logMsgIfDebug(() =>
-              console.debug(`InconclusiveMatchError when computing flag locally: ${flag.key}: ${e}`)
-            )
-          } else if (e instanceof Error) {
-            this.onError?.(new Error(`Error computing flag locally: ${flag.key}: ${e}`))
-          }
-          fallbackToFlags = true
-        }
-      })
+    const flagKeys = flagKeysToExplicitlyEvaluate || this.featureFlags.map((flag) => flag.key)
+    const result = await this.evaluateFlagsWithDependencies(
+      flagKeys,
+      distinctId,
+      groups,
+      personProperties,
+      groupProperties
     )
 
-    return { response, payloads, fallbackToFlags }
+    return {
+      response: result.flags,
+      payloads: result.payloads,
+      fallbackToFlags: result.fallbackToFlags,
+    }
+  }
+
+  private async evaluateFlagsWithDependencies(
+    flagKeys: string[],
+    distinctId: string,
+    groups: Record<string, string> = {},
+    personProperties: Record<string, string> = {},
+    groupProperties: Record<string, Record<string, string>> = {}
+  ): Promise<{
+    flags: Record<string, FeatureFlagValue>
+    payloads: Record<string, JsonType>
+    fallbackToFlags: boolean
+  }> {
+    const flags: Record<string, FeatureFlagValue> = {}
+    const payloads: Record<string, JsonType> = {}
+    let fallbackToFlags = this.featureFlags.length === 0
+
+    // Use dependency-aware evaluation if dependency graph is available
+    if (this.dependencyGraph && flagKeys.length > 0) {
+      try {
+        const requestedKeys = new Set(flagKeys)
+        const filteredGraph = this.dependencyGraph.filterByKeys(requestedKeys)
+        const evaluationOrder = filteredGraph.topologicalSort()
+
+        for (const flagKey of evaluationOrder) {
+          const flag = this.featureFlagsByKey[flagKey]
+          if (flag) {
+            try {
+              const { value: matchValue, payload: matchPayload } = await this.computeFlagAndPayloadLocally(
+                flag,
+                distinctId,
+                groups,
+                personProperties,
+                groupProperties,
+                undefined, // matchValue - let it evaluate
+                filteredGraph
+              )
+              flags[flag.key] = matchValue
+              filteredGraph.cacheResult(flag.key, matchValue)
+
+              if (matchPayload) {
+                payloads[flag.key] = matchPayload
+              }
+            } catch (e) {
+              if (e instanceof InconclusiveMatchError) {
+                this.logMsgIfDebug(() =>
+                  console.debug(`InconclusiveMatchError when computing flag locally: ${flag.key}: ${e}`)
+                )
+              } else if (e instanceof Error) {
+                this.onError?.(new Error(`Error computing flag locally: ${flag.key}: ${e}`))
+              }
+              fallbackToFlags = true
+            }
+          }
+        }
+      } catch (e) {
+        this.logMsgIfDebug(() => console.warn(`Error in dependency evaluation: ${e}`))
+        fallbackToFlags = true
+      }
+    }
+
+    // Fallback to original evaluation logic for flags not yet evaluated or if dependency evaluation failed
+    const flagsToEvaluate = flagKeys
+      .filter((key) => !(key in flags)) // Only evaluate flags not already computed
+      .map((key) => this.featureFlagsByKey[key])
+      .filter(Boolean)
+
+    if (flagsToEvaluate.length > 0) {
+      await Promise.all(
+        flagsToEvaluate.map(async (flag) => {
+          try {
+            const { value: matchValue, payload: matchPayload } = await this.computeFlagAndPayloadLocally(
+              flag,
+              distinctId,
+              groups,
+              personProperties,
+              groupProperties
+            )
+            flags[flag.key] = matchValue
+            if (matchPayload) {
+              payloads[flag.key] = matchPayload
+            }
+          } catch (e) {
+            if (e instanceof InconclusiveMatchError) {
+              this.logMsgIfDebug(() =>
+                console.debug(`InconclusiveMatchError when computing flag locally: ${flag.key}: ${e}`)
+              )
+            } else if (e instanceof Error) {
+              this.onError?.(new Error(`Error computing flag locally: ${flag.key}: ${e}`))
+            }
+            fallbackToFlags = true
+          }
+        })
+      )
+    }
+
+    return { flags, payloads, fallbackToFlags }
   }
 
   async computeFlagAndPayloadLocally(
@@ -198,7 +299,8 @@ class FeatureFlagsPoller {
     groups: Record<string, string> = {},
     personProperties: Record<string, string> = {},
     groupProperties: Record<string, Record<string, string>> = {},
-    matchValue?: FeatureFlagValue
+    matchValue?: FeatureFlagValue,
+    dependencyGraph?: DependencyGraph
   ): Promise<{
     value: FeatureFlagValue
     payload: JsonType | null
@@ -216,7 +318,14 @@ class FeatureFlagsPoller {
     if (matchValue !== undefined) {
       flagValue = matchValue
     } else {
-      flagValue = await this.computeFlagValueLocally(flag, distinctId, groups, personProperties, groupProperties)
+      flagValue = await this.computeFlagValueLocally(
+        flag,
+        distinctId,
+        groups,
+        personProperties,
+        groupProperties,
+        dependencyGraph
+      )
     }
 
     // Always compute payload based on the final flagValue (whether provided or computed)
@@ -230,7 +339,8 @@ class FeatureFlagsPoller {
     distinctId: string,
     groups: Record<string, string> = {},
     personProperties: Record<string, string> = {},
-    groupProperties: Record<string, Record<string, string>> = {}
+    groupProperties: Record<string, Record<string, string>> = {},
+    dependencyGraph?: DependencyGraph
   ): Promise<FeatureFlagValue> {
     if (flag.ensure_experience_continuity) {
       throw new InconclusiveMatchError('Flag has experience continuity enabled')
@@ -263,9 +373,9 @@ class FeatureFlagsPoller {
       }
 
       const focusedGroupProperties = groupProperties[groupName]
-      return await this.matchFeatureFlagProperties(flag, groups[groupName], focusedGroupProperties)
+      return await this.matchFeatureFlagProperties(flag, groups[groupName], focusedGroupProperties, dependencyGraph)
     } else {
-      return await this.matchFeatureFlagProperties(flag, distinctId, personProperties)
+      return await this.matchFeatureFlagProperties(flag, distinctId, personProperties, dependencyGraph)
     }
   }
 
@@ -303,7 +413,8 @@ class FeatureFlagsPoller {
   async matchFeatureFlagProperties(
     flag: PostHogFeatureFlag,
     distinctId: string,
-    properties: Record<string, string>
+    properties: Record<string, string>,
+    dependencyGraph?: DependencyGraph
   ): Promise<FeatureFlagValue> {
     const flagFilters = flag.filters || {}
     const flagConditions = flagFilters.groups || []
@@ -329,7 +440,7 @@ class FeatureFlagsPoller {
 
     for (const condition of sortedFlagConditions) {
       try {
-        if (await this.isConditionMatch(flag, distinctId, condition, properties)) {
+        if (await this.isConditionMatch(flag, distinctId, condition, properties, dependencyGraph)) {
           const variantOverride = condition.variant
           const flagVariants = flagFilters.multivariate?.variants || []
           if (variantOverride && flagVariants.some((variant) => variant.key === variantOverride)) {
@@ -362,7 +473,8 @@ class FeatureFlagsPoller {
     flag: PostHogFeatureFlag,
     distinctId: string,
     condition: FeatureFlagCondition,
-    properties: Record<string, string>
+    properties: Record<string, string>,
+    dependencyGraph?: DependencyGraph
   ): Promise<boolean> {
     const rolloutPercentage = condition.rollout_percentage
     const warnFunction = (msg: string): void => {
@@ -376,13 +488,17 @@ class FeatureFlagsPoller {
         if (propertyType === 'cohort') {
           matches = matchCohort(prop, properties, this.cohorts, this.debugMode)
         } else if (propertyType === 'flag') {
-          this.logMsgIfDebug(() =>
-            console.warn(
-              `[FEATURE FLAGS] Flag dependency filters are not supported in local evaluation. ` +
-                `Skipping condition for flag '${flag.key}' with dependency on flag '${prop.key || 'unknown'}'`
+          if (dependencyGraph) {
+            matches = await this.matchFlagProperty(prop, dependencyGraph)
+          } else {
+            this.logMsgIfDebug(() =>
+              console.warn(
+                `[FEATURE FLAGS] Flag dependency filters are not supported in local evaluation. ` +
+                  `Skipping condition for flag '${flag.key}' with dependency on flag '${prop.key || 'unknown'}'`
+              )
             )
-          )
-          continue
+            continue
+          }
         } else {
           matches = matchProperty(prop, properties, warnFunction)
         }
@@ -402,6 +518,33 @@ class FeatureFlagsPoller {
     }
 
     return true
+  }
+
+  async matchFlagProperty(
+    prop: FeatureFlagCondition['properties'][number],
+    dependencyGraph: DependencyGraph
+  ): Promise<boolean> {
+    const dependencyKey = prop.key
+    if (!dependencyKey) {
+      this.logMsgIfDebug(() => console.warn('[FEATURE FLAGS] Flag dependency property missing key'))
+      return false // Condition fails
+    }
+
+    // Convert dependency ID to key if needed
+    const flagKey = this.idToKeyMapping.get(String(dependencyKey)) || String(dependencyKey)
+
+    // Get cached result from dependency graph
+    const flagResult = dependencyGraph.getCachedResult(flagKey)
+    if (flagResult === undefined) {
+      // Dependency not available - condition fails
+      this.logMsgIfDebug(() =>
+        console.warn(`[FEATURE FLAGS] Flag dependency '${flagKey}' not found in evaluation cache`)
+      )
+      return false // Condition fails
+    }
+
+    // Match the flag result against the expected value
+    return matchFlagDependency(prop.value, flagResult)
   }
 
   async getMatchingVariant(flag: PostHogFeatureFlag, distinctId: string): Promise<FeatureFlagValue | undefined> {
@@ -508,6 +651,8 @@ class FeatureFlagsPoller {
           this.featureFlagsByKey = {}
           this.groupTypeMapping = {}
           this.cohorts = {}
+          this.dependencyGraph = undefined
+          this.idToKeyMapping = new Map()
           return
 
         case 403:
@@ -541,6 +686,7 @@ class FeatureFlagsPoller {
           )
           this.groupTypeMapping = (responseJson.group_type_mapping as Record<string, string>) || {}
           this.cohorts = (responseJson.cohorts as Record<string, PropertyGroup>) || {}
+          this.buildDependencyGraph()
           this.loadedSuccessfullyOnce = true
           this.shouldBeginExponentialBackoff = false
           this.backOffCount = 0
@@ -793,7 +939,7 @@ function matchPropertyGroup(
         } else if (prop.type === 'flag') {
           if (debugMode) {
             console.warn(
-              `[FEATURE FLAGS] Flag dependency filters are not supported in local evaluation. ` +
+              `[FEATURE FLAGS] Flag dependency filters in cohorts are not fully supported in local evaluation. ` +
                 `Skipping condition with dependency on flag '${prop.key || 'unknown'}'`
             )
           }
