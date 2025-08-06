@@ -1,4 +1,4 @@
-import { PostHogNextConfigComplete } from './config'
+import type { PostHogNextConfigComplete } from './types'
 import * as path from 'path'
 import * as fs from 'fs'
 import { processSourcemaps } from './sourcemap-processor'

@@ -1,4 +1,4 @@
-import { PostHogNextConfigComplete } from './config'
+import type { PostHogNextConfigComplete } from './types'
 import { callPosthogCli } from './utils'
 
 /**

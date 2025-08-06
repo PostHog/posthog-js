@@ -5,6 +5,7 @@
     "rootDir": "./src",
     "baseUrl": "./src",
     "target": "ES6",
-    "lib": ["DOM"]
+    "lib": ["DOM"],
+    "skipLibCheck": true
   }
 }
