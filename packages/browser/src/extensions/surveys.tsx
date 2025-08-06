@@ -431,9 +431,14 @@ export class SurveyManager {
             return eligibility
         }
 
-        if (!this._isSurveyFeatureFlagEnabled(survey.linked_flag_key, survey.conditions?.linkedFlagVariant)) {
+        const linkedFlagVariant = survey.conditions?.linkedFlagVariant
+        if (!this._isSurveyFeatureFlagEnabled(survey.linked_flag_key, linkedFlagVariant)) {
             eligibility.eligible = false
-            eligibility.reason = `Survey linked feature flag is not enabled`
+            if (!linkedFlagVariant) {
+                eligibility.reason = `Survey linked feature flag is not enabled`
+            } else {
+                eligibility.reason = `Survey linked feature flag is not enabled for variant ${linkedFlagVariant}`
+            }
             return eligibility
         }
 

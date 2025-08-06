@@ -36,6 +36,7 @@ describe('posthog-surveys', () => {
             targeting_flag_key: 'targeting-flag-key',
             internal_targeting_flag_key: 'internal_targeting_flag_key',
             start_date: new Date('10/10/2022').toISOString(),
+            conditions: {},
         } as unknown as Survey
 
         const repeatableSurvey: Survey = {
@@ -204,6 +205,27 @@ describe('posthog-surveys', () => {
                 expect(result.reason).toEqual(
                     'Survey internal targeting flag is not enabled and survey cannot activate repeatedly and survey is not in progress'
                 )
+            })
+
+            it('cannot render survey if linkedFlagVariant is not the same as the linked flag', () => {
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = 'cost'
+                survey.conditions.linkedFlagVariant = 'control'
+                const result = surveys['_checkSurveyEligibility'](survey.id)
+                expect(result.eligible).toBeFalsy()
+                expect(result.reason).toEqual('Survey linked feature flag is not enabled for variant control')
+                survey.conditions.linkedFlagVariant = undefined
+            })
+
+            it('can render survey if linkedFlagVariant is the same as the linked flag', () => {
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = 'variant'
+                survey.conditions.linkedFlagVariant = 'variant'
+                const result = surveys['_checkSurveyEligibility'](survey.id)
+                expect(result.eligible).toBeTruthy()
+                survey.conditions.linkedFlagVariant = undefined
             })
 
             it('can render if survey can activate repeatedly', () => {
