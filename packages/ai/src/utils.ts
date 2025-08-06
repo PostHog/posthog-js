@@ -2,10 +2,14 @@ import { PostHog } from 'posthog-node'
 import { Buffer } from 'buffer'
 import OpenAIOrignal from 'openai'
 import AnthropicOriginal from '@anthropic-ai/sdk'
+import type { ChatCompletionTool } from 'openai/resources/chat/completions'
+import type { Tool as GeminiTool } from '@google/genai'
+import type { FormattedMessage, FormattedContent, TokenUsage } from './types'
 
 type ChatCompletionCreateParamsBase = OpenAIOrignal.Chat.Completions.ChatCompletionCreateParams
 type MessageCreateParams = AnthropicOriginal.Messages.MessageCreateParams
 type ResponseCreateParams = OpenAIOrignal.Responses.ResponseCreateParams
+type AnthropicTool = AnthropicOriginal.Tool
 
 // limit large outputs by truncating to 200kb (approx 200k bytes)
 export const MAX_OUTPUT_SIZE = 200000
@@ -59,7 +63,7 @@ export const getModelParams = (
 /**
  * Helper to format responses (non-streaming) for consumption, mirroring Python's openai vs. anthropic approach.
  */
-export const formatResponse = (response: any, provider: string): Array<{ role: string; content: any }> => {
+export const formatResponse = (response: any, provider: string): FormattedMessage[] => {
   if (!response) {
     return []
   }
@@ -73,9 +77,9 @@ export const formatResponse = (response: any, provider: string): Array<{ role: s
   return []
 }
 
-export const formatResponseAnthropic = (response: any): Array<{ role: string; content: any }> => {
-  const output: Array<{ role: string; content: any }> = []
-  const content: any[] = []
+export const formatResponseAnthropic = (response: any): FormattedMessage[] => {
+  const output: FormattedMessage[] = []
+  const content: FormattedContent = []
 
   for (const choice of response.content ?? []) {
     if (choice?.type === 'text' && choice?.text) {
@@ -102,12 +106,12 @@ export const formatResponseAnthropic = (response: any): Array<{ role: string; co
   return output
 }
 
-export const formatResponseOpenAI = (response: any): Array<{ role: string; content: any }> => {
-  const output: Array<{ role: string; content: any }> = []
+export const formatResponseOpenAI = (response: any): FormattedMessage[] => {
+  const output: FormattedMessage[] = []
 
   if (response.choices) {
     for (const choice of response.choices) {
-      const content: any[] = []
+      const content: FormattedContent = []
       let role = 'assistant'
 
       if (choice.message) {
@@ -144,7 +148,7 @@ export const formatResponseOpenAI = (response: any): Array<{ role: string; conte
 
   // Handle Responses API format
   if (response.output) {
-    const content: any[] = []
+    const content: FormattedContent = []
     let role = 'assistant'
 
     for (const item of response.output) {
@@ -190,13 +194,13 @@ export const formatResponseOpenAI = (response: any): Array<{ role: string; conte
   return output
 }
 
-export const formatResponseGemini = (response: any): Array<{ role: string; content: any }> => {
-  const output: Array<{ role: string; content: any }> = []
+export const formatResponseGemini = (response: any): FormattedMessage[] => {
+  const output: FormattedMessage[] = []
 
   if (response.candidates && Array.isArray(response.candidates)) {
     for (const candidate of response.candidates) {
       if (candidate.content && candidate.content.parts) {
-        const content: any[] = []
+        const content: FormattedContent = []
 
         for (const part of candidate.content.parts) {
           if (part.text) {
@@ -269,7 +273,10 @@ export const truncate = (str: string): string => {
  * Extract available tool calls from the request parameters.
  * These are the tools provided to the LLM, not the tool calls in the response.
  */
-export const extractAvailableToolCalls = (provider: string, params: any): any => {
+export const extractAvailableToolCalls = (
+  provider: string,
+  params: any
+): ChatCompletionTool[] | AnthropicTool[] | GeminiTool[] | null => {
   if (provider === 'anthropic') {
     if (params.tools) {
       return params.tools
@@ -304,17 +311,11 @@ export type SendEventToPosthogParams = {
   latency: number
   baseURL: string
   httpStatus: number
-  usage?: {
-    inputTokens?: number
-    outputTokens?: number
-    reasoningTokens?: any
-    cacheReadInputTokens?: any
-    cacheCreationInputTokens?: any
-  }
+  usage?: TokenUsage
   params: (ChatCompletionCreateParamsBase | MessageCreateParams | ResponseCreateParams) & MonitoringParams
   isError?: boolean
   error?: string
-  tools?: any
+  tools?: ChatCompletionTool[] | AnthropicTool[] | GeminiTool[] | null
   captureImmediate?: boolean
 }
 
