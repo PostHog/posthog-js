@@ -473,7 +473,7 @@ export type Survey = {
     }
     deviceTypes?: string[]
     deviceTypesMatchType?: SurveyMatchType
-    linkedFlagVariant?: string | null
+    linkedFlagVariant: string | null
   }
   start_date?: string
   end_date?: string
