@@ -1,7 +1,3 @@
-import { PostHog } from 'posthog-node'
-import { PostHogOpenAI } from '../src/openai'
-import { PostHogAnthropic } from '../src/anthropic'
-import { PostHogGoogleGenAI } from '../src/gemini'
 import {
   extractAvailableToolCalls,
   formatResponseOpenAI,
@@ -86,10 +82,72 @@ describe('Tool Handling Tests', () => {
       expect(tools).toEqual(params.config.tools)
     })
 
+    it('should extract tools from Vercel AI SDK params', () => {
+      const params = {
+        mode: {
+          type: 'regular',
+          tools: [
+            {
+              name: 'get_weather',
+              description: 'Get the weather for a location',
+              parameters: {
+                type: 'object',
+                properties: {
+                  location: { type: 'string' },
+                },
+                required: ['location'],
+              },
+            },
+            {
+              name: 'search',
+              description: 'Search for information',
+              parameters: {
+                type: 'object',
+                properties: {
+                  query: { type: 'string' },
+                },
+                required: ['query'],
+              },
+            },
+          ],
+        },
+        prompt: [],
+        inputFormat: 'messages',
+      }
+
+      const tools = extractAvailableToolCalls('vercel', params)
+      expect(tools).toEqual(params.mode.tools)
+    })
+
+    it('should return null for Vercel AI SDK when mode is not regular', () => {
+      const params = {
+        mode: {
+          type: 'object-json',
+          schema: { type: 'object' },
+        },
+        prompt: [],
+        inputFormat: 'messages',
+      }
+
+      const tools = extractAvailableToolCalls('vercel', params)
+      expect(tools).toBeNull()
+    })
+
+    it('should return null for Vercel AI SDK when no mode is present', () => {
+      const params = {
+        prompt: [],
+        inputFormat: 'messages',
+      }
+
+      const tools = extractAvailableToolCalls('vercel', params)
+      expect(tools).toBeNull()
+    })
+
     it('should return null when no tools are present', () => {
       expect(extractAvailableToolCalls('openai', {})).toBeNull()
       expect(extractAvailableToolCalls('anthropic', {})).toBeNull()
       expect(extractAvailableToolCalls('gemini', {})).toBeNull()
+      expect(extractAvailableToolCalls('vercel', {})).toBeNull()
     })
   })
 
