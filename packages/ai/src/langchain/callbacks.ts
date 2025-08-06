@@ -455,7 +455,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
         if (Array.isArray(lastGeneration) && lastGeneration.length > 0) {
           // Check if this is a ChatGeneration by looking at the first item
           const isChatGeneration = 'message' in lastGeneration[0] && lastGeneration[0].message
-          
+
           if (isChatGeneration) {
             // For ChatGeneration, convert messages to dict format
             completions = lastGeneration.map((gen: any) => {

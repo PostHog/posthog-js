@@ -112,10 +112,12 @@ const mapVercelPrompt = (prompt: LanguageModelV1Prompt): PostHogInput[] => {
       })
     } else {
       // For non-array content, format as a single text item
-      content = [{
-        type: 'text',
-        text: truncate(p.content),
-      }]
+      content = [
+        {
+          type: 'text',
+          text: truncate(p.content),
+        },
+      ]
     }
     return {
       role: p.role,
@@ -149,11 +151,11 @@ const mapVercelPrompt = (prompt: LanguageModelV1Prompt): PostHogInput[] => {
 
 const mapVercelOutput = (result: any): PostHogInput[] => {
   const content: any[] = []
-  
+
   if (result.text) {
     content.push({ type: 'text', text: truncate(result.text) })
   }
-  
+
   if (result.toolCalls && Array.isArray(result.toolCalls)) {
     for (const toolCall of result.toolCalls) {
       content.push({
@@ -161,19 +163,21 @@ const mapVercelOutput = (result: any): PostHogInput[] => {
         id: toolCall.toolCallId,
         function: {
           name: toolCall.toolName,
-          arguments: typeof toolCall.args === 'string' ? toolCall.args : JSON.stringify(toolCall.args)
-        }
+          arguments: typeof toolCall.args === 'string' ? toolCall.args : JSON.stringify(toolCall.args),
+        },
       })
     }
   }
-  
+
   if (content.length > 0) {
-    return [{
-      role: 'assistant',
-      content: content.length === 1 && content[0].type === 'text' ? content[0].text : content
-    }]
+    return [
+      {
+        role: 'assistant',
+        content: content.length === 1 && content[0].type === 'text' ? content[0].text : content,
+      },
+    ]
   }
-  
+
   // Fallback to original behavior for other result types
   const normalizedResult = typeof result === 'string' ? { text: result } : result
   const output = {
@@ -194,11 +198,11 @@ const mapVercelOutput = (result: any): PostHogInput[] => {
         }
       : {}),
   }
-  
+
   if (output.text && !output.object && !output.reasoning) {
     return [{ content: truncate(output.text as string), role: 'assistant' }]
   }
-  
+
   // otherwise stringify and truncate
   try {
     const jsonOutput = JSON.stringify(output)
@@ -235,9 +239,9 @@ export const createInstrumentationMiddleware = (
         const provider = options.posthogProviderOverride ?? extractProvider(model)
         const baseURL = '' // cannot currently get baseURL from vercel
         const content = mapVercelOutput(result)
-        
+
         const availableTools = extractAvailableToolCalls('vercel', params)
-        
+
         const providerMetadata = result.providerMetadata
         const additionalTokenValues = {
           ...(providerMetadata?.openai?.reasoningTokens
@@ -319,9 +323,9 @@ export const createInstrumentationMiddleware = (
       const modelId = options.posthogModelOverride ?? model.modelId
       const provider = options.posthogProviderOverride ?? extractProvider(model)
       const baseURL = '' // cannot currently get baseURL from vercel
-      
+
       const availableTools = extractAvailableToolCalls('vercel', params)
-      
+
       try {
         const { stream, ...rest } = await doStream()
         const transformStream = new TransformStream<LanguageModelV1StreamPart, LanguageModelV1StreamPart>({
