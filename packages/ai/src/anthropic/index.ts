@@ -108,8 +108,11 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                   usage.outputTokens = chunk.usage.output_tokens ?? 0
                 }
               }
+
               const latency = (Date.now() - startTime) / 1000
+
               const availableTools = extractAvailableToolCalls('anthropic', anthropicParams)
+
               await sendEventToPosthog({
                 client: this.phClient,
                 distinctId: posthogDistinctId,
@@ -161,7 +164,9 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
         async (result) => {
           if ('content' in result) {
             const latency = (Date.now() - startTime) / 1000
+
             const availableTools = extractAvailableToolCalls('anthropic', anthropicParams)
+
             await sendEventToPosthog({
               client: this.phClient,
               distinctId: posthogDistinctId,

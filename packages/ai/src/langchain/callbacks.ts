@@ -448,50 +448,21 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       let completions
       if (output.generations && Array.isArray(output.generations)) {
         const lastGeneration = output.generations[output.generations.length - 1]
-        if (Array.isArray(lastGeneration)) {
-          completions = lastGeneration.map((gen: any) => {
-            const content: any[] = []
-
-            // Add text content if present
-            if (gen.text) {
-              content.push({ type: 'text', text: gen.text })
-            }
-
-            // Check if this is a ChatGeneration with a message property
-            // For ChatModels, the generation will have a message property with tool calls
-            if ('message' in gen && gen.message) {
-              const message = gen.message
-              
-              // Handle tool calls if present
-              if (message.additional_kwargs && message.additional_kwargs.tool_calls) {
-                for (const toolCall of message.additional_kwargs.tool_calls) {
-                  content.push({
-                    type: 'function',
-                    id: toolCall.id,
-                    function: {
-                      name: toolCall.function.name,
-                      arguments: toolCall.function.arguments,
-                    },
-                  })
-                }
-              }
-
-              // Handle function calls for older format
-              if (message.additional_kwargs && message.additional_kwargs.function_call) {
-                const funcCall = message.additional_kwargs.function_call
-                content.push({
-                  type: 'function',
-                  function: {
-                    name: funcCall.name,
-                    arguments: funcCall.arguments,
-                  },
-                })
-              }
-            }
-
-            // Return content array if we have structured content, otherwise just text
-            return { role: 'assistant', content: content.length > 0 ? content : gen.text }
-          })
+        if (Array.isArray(lastGeneration) && lastGeneration.length > 0) {
+          // Check if this is a ChatGeneration by looking at the first item
+          const isChatGeneration = 'message' in lastGeneration[0] && lastGeneration[0].message
+          
+          if (isChatGeneration) {
+            // For ChatGeneration, convert messages to dict format
+            completions = lastGeneration.map((gen: any) => {
+              return this._convertMessageToDict(gen.message)
+            })
+          } else {
+            // For non-ChatGeneration, extract raw response
+            completions = lastGeneration.map((gen: any) => {
+              return this._extractRawResponse(gen)
+            })
+          }
         }
       }
 
@@ -548,6 +519,20 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
         arguments: JSON.stringify(toolCall.args),
       },
     }))
+  }
+
+  private _extractRawResponse(generation: any): any {
+    // Extract the response from the last response of the LLM call
+    // We return the text of the response if not empty
+    if (generation.text != null && generation.text.trim() !== '') {
+      return generation.text.trim()
+    } else if (generation.message) {
+      // Additional kwargs contains the response in case of tool usage
+      return generation.message.additional_kwargs || generation.message.additionalKwargs || {}
+    } else {
+      // Not tool usage, some LLM responses can be simply empty
+      return ''
+    }
   }
 
   private _convertMessageToDict(message: any): Record<string, any> {

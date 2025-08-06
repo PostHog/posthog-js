@@ -274,18 +274,22 @@ export const extractAvailableToolCalls = (provider: string, params: any): any =>
     if (params.tools) {
       return params.tools
     }
+
     return null
   } else if (provider === 'gemini') {
     if (params.config && params.config.tools) {
       return params.config.tools
     }
+
     return null
   } else if (provider === 'openai') {
     if (params.tools) {
       return params.tools
     }
+
     return null
   }
+
   return null
 }
 

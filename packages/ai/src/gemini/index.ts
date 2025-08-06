@@ -71,6 +71,7 @@ export class WrappedModels {
       const latency = (Date.now() - startTime) / 1000
 
       const availableTools = extractAvailableToolCalls('gemini', geminiParams)
+
       await sendEventToPosthog({
         client: this.phClient,
         distinctId: posthogDistinctId,
@@ -155,7 +156,9 @@ export class WrappedModels {
       }
 
       const latency = (Date.now() - startTime) / 1000
+
       const availableTools = extractAvailableToolCalls('gemini', geminiParams)
+
       await sendEventToPosthog({
         client: this.phClient,
         distinctId: posthogDistinctId,
