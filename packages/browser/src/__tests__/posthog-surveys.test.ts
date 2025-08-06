@@ -228,6 +228,16 @@ describe('posthog-surveys', () => {
                 survey.conditions.linkedFlagVariant = undefined
             })
 
+            it('can render survey if linkedFlagVariant is any', () => {
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = 'variant'
+                survey.conditions.linkedFlagVariant = 'any'
+                const result = surveys['_checkSurveyEligibility'](survey.id)
+                expect(result.eligible).toBeTruthy()
+                survey.conditions.linkedFlagVariant = undefined
+            })
+
             it('can render if survey can activate repeatedly', () => {
                 flagsResponse.featureFlags[survey.targeting_flag_key] = true
                 flagsResponse.featureFlags[survey.linked_flag_key] = true

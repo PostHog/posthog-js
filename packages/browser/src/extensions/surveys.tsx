@@ -395,8 +395,8 @@ export class SurveyManager {
         })
         let flagVariantCheck = true
         if (flagVariant) {
-            flagVariantCheck =
-                this._posthog.featureFlags.getFeatureFlag(flagKey, { send_event: false }) === (flagVariant || 'any')
+            const flagVariantValue = this._posthog.featureFlags.getFeatureFlag(flagKey, { send_event: false })
+            flagVariantCheck = flagVariantValue === flagVariant || flagVariant === 'any'
         }
         return isFeatureEnabled && flagVariantCheck
     }
