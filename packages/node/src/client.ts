@@ -428,20 +428,25 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     const localEvaluationEnabled = this.featureFlagsPoller !== undefined
     if (localEvaluationEnabled) {
-      // Try to get match value locally if not provided
-      if (!matchValue) {
-        matchValue = await this.getFeatureFlag(key, distinctId, {
-          ...options,
-          onlyEvaluateLocally: true,
-          sendFeatureFlagEvents: false,
-        })
-      }
+      // Ensure flags are loaded before checking for the specific flag
+      await this.featureFlagsPoller?.loadFeatureFlags()
 
-      if (matchValue) {
-        response = await this.featureFlagsPoller?.computeFeatureFlagPayloadLocally(key, matchValue)
+      const flag = this.featureFlagsPoller?.featureFlagsByKey[key]
+      if (flag) {
+        const result = await this.featureFlagsPoller?.computeFlagAndPayloadLocally(
+          flag,
+          distinctId,
+          groups,
+          personProperties,
+          groupProperties,
+          matchValue
+        )
+        if (result) {
+          matchValue = result.value
+          response = result.payload
+        }
       }
     }
-    //}
 
     // set defaults
     if (onlyEvaluateLocally == undefined) {
@@ -449,11 +454,6 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
     if (sendFeatureFlagEvents == undefined) {
       sendFeatureFlagEvents = true
-    }
-
-    // set defaults
-    if (onlyEvaluateLocally == undefined) {
-      onlyEvaluateLocally = false
     }
 
     const payloadWasLocallyEvaluated = response !== undefined
