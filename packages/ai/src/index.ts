@@ -1,7 +1,6 @@
 import PostHogOpenAI from './openai'
 import PostHogAzureOpenAI from './openai/azure'
 import { wrapVercelLanguageModel } from './vercel/middleware'
-import { wrapVercelLanguageModel as wrapVercelLanguageModelV5 } from './vercel/middleware'
 import PostHogAnthropic from './anthropic'
 import PostHogGoogleGenAI from './gemini'
 import { LangChainCallbackHandler } from './langchain/callbacks'

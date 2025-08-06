@@ -42,7 +42,7 @@ interface PostHogInput {
 const mapVercelParams = (params: any): Record<string, any> => {
   return {
     temperature: params.temperature,
-    max_output_tokens: params.maxOutputTokens, // Updated for v5
+    max_output_tokens: params.maxOutputTokens,
     top_p: params.topP,
     frequency_penalty: params.frequencyPenalty,
     presence_penalty: params.presencePenalty,
@@ -180,8 +180,8 @@ const mapVercelOutput = (result: any): PostHogInput[] => {
   const output = {
     ...(normalizedResult.text ? { text: normalizedResult.text } : {}),
     ...(normalizedResult.object ? { object: normalizedResult.object } : {}),
-    ...(normalizedResult.reasoningText ? { reasoning: normalizedResult.reasoningText } : {}), // Updated for v5
-    ...(normalizedResult.response ? { response: normalizedResult.response } : {}), // Updated for v5
+    ...(normalizedResult.reasoningText ? { reasoning: normalizedResult.reasoningText } : {}),
+    ...(normalizedResult.response ? { response: normalizedResult.response } : {}),
     ...(normalizedResult.finishReason ? { finishReason: normalizedResult.finishReason } : {}),
     ...(normalizedResult.usage ? { usage: normalizedResult.usage } : {}),
     ...(normalizedResult.warnings ? { warnings: normalizedResult.warnings } : {}),
@@ -266,8 +266,8 @@ export const createInstrumentationMiddleware = (
           params: mergedParams as any,
           httpStatus: 200,
           usage: {
-            inputTokens: result.usage.inputTokens, // Updated for v5
-            outputTokens: result.usage.outputTokens, // Updated for v5
+            inputTokens: result.usage.inputTokens,
+            outputTokens: result.usage.outputTokens,
             ...additionalTokenValues,
           },
           tools: availableTools,
@@ -329,15 +329,15 @@ export const createInstrumentationMiddleware = (
           transform(chunk, controller) {
             // Handle new v5 streaming patterns
             if (chunk.type === 'text-delta') {
-              generatedText += chunk.delta // Updated for v5
+              generatedText += chunk.delta
             }
             if (chunk.type === 'reasoning-delta') {
               reasoningText += chunk.delta // New in v5
             }
             if (chunk.type === 'finish') {
               usage = {
-                inputTokens: chunk.usage?.inputTokens, // Updated for v5
-                outputTokens: chunk.usage?.outputTokens, // Updated for v5
+                inputTokens: chunk.usage?.inputTokens,
+                outputTokens: chunk.usage?.outputTokens,
               }
               if (chunk.providerMetadata?.openai?.reasoningTokens) {
                 usage.reasoningTokens = chunk.providerMetadata.openai.reasoningTokens
