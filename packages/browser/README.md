@@ -3,7 +3,7 @@
 [![npm package](https://img.shields.io/npm/v/posthog-js?style=flat-square)](https://www.npmjs.com/package/posthog-js)
 [![MIT License](https://img.shields.io/badge/License-MIT-red.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
-For information on using this library in your app, [see PostHog Docs](https://posthog.com/docs/libraries/js).  
+For information on using this library in your app, [see PostHog Docs](https://posthog.com/docs/libraries/js).
 This README is intended for developing the library itself.
 
 ## Dependencies
@@ -93,36 +93,3 @@ Then, once this link has been created, any time you need to make a change to `po
 - In the `posthog-js` directory: `pnpm link --global`
 - (for `posthog` this means: `pnpm link --global posthog-js && pnpm i && pnpm copy-scripts`)
 - You can then remove the link by, e.g., running `pnpm link --global posthog-js` from within `posthog`
-
-## Releasing a new version
-
-Just put a `bump patch/minor/major` label on your PR! Once the PR is merged, a new version with the appropriate version bump will be released, and the dependency will be updated in [posthog/PostHog](https://github.com/posthog/PostHog) – automatically.
-
-If you forget to add the label, don't try to update the version locally as you won't be able to push that commit to the main branch. Instead, just make a new PR.
-
-### Prereleases
-
-To release an alpha or beta version, you'll need to use the CLI locally:
-
-#### CLI
-
-Only one person is set as a collaborator on NPM, so they're the only person that can manually publish alphas
-
-1. Make sure you're a collaborator on `posthog-js` in npm ([check here](https://www.npmjs.com/package/posthog-js)).
-2. Make sure you're logged into the npm CLI (`npm login`).
-3. Check out your work-in-progress branch (do not release an alpha/beta from `main`).
-4. Run the following commands, using the same bump level (major/minor/patch) as your PR:
-
-    ```bash
-    npm version [premajor | preminor | prepatch] --preid=beta
-    npm publish --tag beta
-    git push --tags
-    ```
-
-5. Enjoy the new prerelease version. You can now use it locally, in a dummy app, or in the [main repo](https://github.com/posthog/PostHog).
-
-#### Automagically
-
-Use the "release alpha" label on your PR to have an alpha version published automatically. This automation currently doesn't check whether an alpha exists for the version it will try to publish. If you need to publish two alphas from one PR you'll need to fix that
-
-Remember that these versions are public and folk might use them, so make sure they're not _too_ alpha 🙈
