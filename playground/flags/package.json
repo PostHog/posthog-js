@@ -1,14 +1,29 @@
 {
-    "name": "flags",
+
+    "name": "posthog-flags-demo",
     "version": "1.0.0",
-    "description": "PostHog Node.js flags playground",
-    "main": "index.js",
+    "description": "Demo playground for PostHog Node.js flags features",
+    "main": "flag-dependencies-demo.js",
+    "private": true,
     "scripts": {
         "start": "node index.js",
-        "remote-config": "node remote-config-example.js"
+        "remote-config": "node remote-config-example.js",
+        "demo": "node flag-dependencies-demo.js",
+        "build": "cd ../../packages/node && pnpm build",
+        "test": "pnpm build && pnpm demo"
     },
-    "license": "ISC",
     "dependencies": {
-        "express": "^5.1.0"
-    }
+        "posthog-node": "file:../../packages/node"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "keywords": [
+        "posthog",
+        "feature-flags",
+        "dependencies",
+        "demo"
+    ],
+    "author": "PostHog",
+    "license": "MIT"
 }
