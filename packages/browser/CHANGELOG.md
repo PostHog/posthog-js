@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.258.6
+
+### Patch Changes
+
+- [#2194](https://github.com/PostHog/posthog-js/pull/2194) [`faa2f28`](https://github.com/PostHog/posthog-js/commit/faa2f2868762c527148d9a59098d4eae7f0b3ffb) Thanks [@realguse](https://github.com/realguse)! - block vercel screenshot bot
+
 ## 1.258.5
 
 ### Patch Changes
