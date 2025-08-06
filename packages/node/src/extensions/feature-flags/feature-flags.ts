@@ -120,7 +120,14 @@ class FeatureFlagsPoller {
 
     if (featureFlag !== undefined) {
       try {
-        response = await this.computeFlagLocally(featureFlag, distinctId, groups, personProperties, groupProperties)
+        const result = await this.computeFlagAndPayloadLocally(
+          featureFlag,
+          distinctId,
+          groups,
+          personProperties,
+          groupProperties
+        )
+        response = result.value
         this.logMsgIfDebug(() => console.debug(`Successfully computed flag locally: ${key} -> ${response}`))
       } catch (e) {
         if (e instanceof InconclusiveMatchError) {
@@ -132,33 +139,6 @@ class FeatureFlagsPoller {
     }
 
     return response
-  }
-
-  async computeFeatureFlagPayloadLocally(key: string, matchValue: FeatureFlagValue): Promise<JsonType | undefined> {
-    await this.loadFeatureFlags()
-
-    let response = undefined
-
-    if (!this.loadedSuccessfullyOnce) {
-      return undefined
-    }
-
-    if (typeof matchValue == 'boolean') {
-      response = this.featureFlagsByKey?.[key]?.filters?.payloads?.[matchValue.toString()]
-    } else if (typeof matchValue == 'string') {
-      response = this.featureFlagsByKey?.[key]?.filters?.payloads?.[matchValue]
-    }
-
-    // Undefined means a loading or missing data issue. Null means evaluation happened and there was no match
-    if (response === undefined || response === null) {
-      return null
-    }
-
-    try {
-      return JSON.parse(response)
-    } catch {
-      return response
-    }
   }
 
   async getAllFlagsAndPayloads(
@@ -185,9 +165,14 @@ class FeatureFlagsPoller {
     await Promise.all(
       flagsToEvaluate.map(async (flag) => {
         try {
-          const matchValue = await this.computeFlagLocally(flag, distinctId, groups, personProperties, groupProperties)
+          const { value: matchValue, payload: matchPayload } = await this.computeFlagAndPayloadLocally(
+            flag,
+            distinctId,
+            groups,
+            personProperties,
+            groupProperties
+          )
           response[flag.key] = matchValue
-          const matchPayload = await this.computeFeatureFlagPayloadLocally(flag.key, matchValue)
           if (matchPayload) {
             payloads[flag.key] = matchPayload
           }
@@ -207,7 +192,40 @@ class FeatureFlagsPoller {
     return { response, payloads, fallbackToFlags }
   }
 
-  async computeFlagLocally(
+  async computeFlagAndPayloadLocally(
+    flag: PostHogFeatureFlag,
+    distinctId: string,
+    groups: Record<string, string> = {},
+    personProperties: Record<string, string> = {},
+    groupProperties: Record<string, Record<string, string>> = {},
+    matchValue?: FeatureFlagValue
+  ): Promise<{
+    value: FeatureFlagValue
+    payload: JsonType | null
+  }> {
+    // Always ensure flags are loaded for payload computation
+    await this.loadFeatureFlags()
+
+    if (!this.loadedSuccessfullyOnce) {
+      return { value: false, payload: null }
+    }
+
+    let flagValue: FeatureFlagValue
+
+    // If matchValue is provided, use it directly; otherwise evaluate the flag
+    if (matchValue !== undefined) {
+      flagValue = matchValue
+    } else {
+      flagValue = await this.computeFlagValueLocally(flag, distinctId, groups, personProperties, groupProperties)
+    }
+
+    // Always compute payload based on the final flagValue (whether provided or computed)
+    const payload = this.getFeatureFlagPayload(flag.key, flagValue)
+
+    return { value: flagValue, payload }
+  }
+
+  private async computeFlagValueLocally(
     flag: PostHogFeatureFlag,
     distinctId: string,
     groups: Record<string, string> = {},
@@ -249,6 +267,37 @@ class FeatureFlagsPoller {
     } else {
       return await this.matchFeatureFlagProperties(flag, distinctId, personProperties)
     }
+  }
+
+  private getFeatureFlagPayload(key: string, flagValue: FeatureFlagValue): JsonType | null {
+    let payload: JsonType | null = null
+
+    if (flagValue !== false) {
+      if (typeof flagValue == 'boolean') {
+        payload = this.featureFlagsByKey?.[key]?.filters?.payloads?.[flagValue.toString()] || null
+      } else if (typeof flagValue == 'string') {
+        payload = this.featureFlagsByKey?.[key]?.filters?.payloads?.[flagValue] || null
+      }
+
+      if (payload !== null && payload !== undefined) {
+        // If payload is already an object, return it directly
+        if (typeof payload === 'object') {
+          return payload
+        }
+        // If payload is a string, try to parse it as JSON
+        if (typeof payload === 'string') {
+          try {
+            return JSON.parse(payload)
+          } catch {
+            // If parsing fails, return the string as is
+            return payload
+          }
+        }
+        // For other types, return as is
+        return payload
+      }
+    }
+    return null
   }
 
   async matchFeatureFlagProperties(
