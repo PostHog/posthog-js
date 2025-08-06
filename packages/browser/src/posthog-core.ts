@@ -862,8 +862,10 @@ export class PostHog {
      * do not wish to rely on our convenience methods
      * (created in the snippet).
      *
-     * ### Usage:
-     *     posthog.push(['register', { a: 'b' }]);
+     * @example
+     * ```js
+     * posthog.push(['register', { a: 'b' }]);
+     * ```
      *
      * @param {Array} item A [function_name, args...] array to be executed
      */
