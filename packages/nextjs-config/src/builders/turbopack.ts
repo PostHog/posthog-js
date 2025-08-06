@@ -18,22 +18,20 @@ export function buildTurbopackConfig(
     productionBrowserSourceMaps: true,
     ...(process.env.NODE_ENV === 'production'
       ? {
-          compiler: {
-            runAfterProductionCompile: async () => {
-              try {
-                // Call user's hook first if it exists
-                if (resolvedUserConfig.runAfterProductionCompile) {
-                  await resolvedUserConfig.runAfterProductionCompile()
-                }
-                // Then process sourcemaps
-                await processTurbopackSourcemaps(posthogNextConfigComplete, resolvedUserConfig.distDir)
-              } catch (error) {
-                console.error('PostHog: Failed to process sourcemaps after production build:', error)
-                if (posthogNextConfigComplete.sourcemaps.failOnError) {
-                  throw error
-                }
+          runAfterProductionCompile: async () => {
+            try {
+              // Call user's hook first if it exists
+              if (resolvedUserConfig.runAfterProductionCompile) {
+                await resolvedUserConfig.runAfterProductionCompile()
               }
-            },
+              // Then process sourcemaps
+              await processTurbopackSourcemaps(posthogNextConfigComplete, resolvedUserConfig.distDir)
+            } catch (error) {
+              console.error('PostHog: Failed to process sourcemaps after production build:', error)
+              if (posthogNextConfigComplete.sourcemaps.failOnError) {
+                throw error
+              }
+            }
           },
         }
       : {}),

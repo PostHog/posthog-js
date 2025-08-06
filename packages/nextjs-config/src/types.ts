@@ -1,5 +1,12 @@
 import type { NextConfig } from 'next'
 
+// Extend Next.js types to include runAfterProductionCompile
+declare module 'next' {
+  interface NextConfig {
+    runAfterProductionCompile?: () => void | Promise<void>
+  }
+}
+
 export type NextFuncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => NextConfig
 export type NextAsyncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => Promise<NextConfig>
 export type UserProvidedConfig = NextConfig | NextFuncConfig | NextAsyncConfig
