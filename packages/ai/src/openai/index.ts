@@ -1,7 +1,7 @@
 import { OpenAI as OpenAIOrignal, ClientOptions } from 'openai'
 import { PostHog } from 'posthog-node'
 import { v4 as uuidv4 } from 'uuid'
-import { formatResponseOpenAI, MonitoringParams, sendEventToPosthog } from '../utils'
+import { formatResponseOpenAI, MonitoringParams, sendEventToPosthog, extractAvailableToolCalls } from '../utils'
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
@@ -128,6 +128,7 @@ export class WrappedCompletions extends Completions {
               }
 
               const latency = (Date.now() - startTime) / 1000
+              const availableTools = extractAvailableToolCalls('openai', openAIParams)
               await sendEventToPosthog({
                 client: this.phClient,
                 distinctId: posthogDistinctId,
@@ -141,6 +142,7 @@ export class WrappedCompletions extends Completions {
                 params: body,
                 httpStatus: 200,
                 usage,
+                tools: availableTools,
                 captureImmediate: posthogCaptureImmediate,
               })
             } catch (error: any) {
@@ -174,6 +176,7 @@ export class WrappedCompletions extends Completions {
         async (result) => {
           if ('choices' in result) {
             const latency = (Date.now() - startTime) / 1000
+            const availableTools = extractAvailableToolCalls('openai', openAIParams)
             await sendEventToPosthog({
               client: this.phClient,
               distinctId: posthogDistinctId,
@@ -192,6 +195,7 @@ export class WrappedCompletions extends Completions {
                 reasoningTokens: result.usage?.completion_tokens_details?.reasoning_tokens ?? 0,
                 cacheReadInputTokens: result.usage?.prompt_tokens_details?.cached_tokens ?? 0,
               },
+              tools: availableTools,
               captureImmediate: posthogCaptureImmediate,
             })
           }
@@ -311,6 +315,7 @@ export class WrappedResponses extends Responses {
               }
 
               const latency = (Date.now() - startTime) / 1000
+              const availableTools = extractAvailableToolCalls('openai', openAIParams)
               await sendEventToPosthog({
                 client: this.phClient,
                 distinctId: posthogDistinctId,
@@ -325,6 +330,7 @@ export class WrappedResponses extends Responses {
                 params: body,
                 httpStatus: 200,
                 usage,
+                tools: availableTools,
                 captureImmediate: posthogCaptureImmediate,
               })
             } catch (error: any) {
@@ -358,6 +364,7 @@ export class WrappedResponses extends Responses {
         async (result) => {
           if ('output' in result) {
             const latency = (Date.now() - startTime) / 1000
+            const availableTools = extractAvailableToolCalls('openai', openAIParams)
             await sendEventToPosthog({
               client: this.phClient,
               distinctId: posthogDistinctId,
@@ -366,7 +373,7 @@ export class WrappedResponses extends Responses {
               model: openAIParams.model,
               provider: 'openai',
               input: openAIParams.input,
-              output: result.output,
+              output: formatResponseOpenAI({ output: result.output }),
               latency,
               baseURL: (this as any).baseURL ?? '',
               params: body,
@@ -377,6 +384,7 @@ export class WrappedResponses extends Responses {
                 reasoningTokens: result.usage?.output_tokens_details?.reasoning_tokens ?? 0,
                 cacheReadInputTokens: result.usage?.input_tokens_details?.cached_tokens ?? 0,
               },
+              tools: availableTools,
               captureImmediate: posthogCaptureImmediate,
             })
           }

@@ -2,7 +2,7 @@ import { experimental_wrapLanguageModel as wrapLanguageModel } from 'ai'
 import type { LanguageModelV1, LanguageModelV1Middleware, LanguageModelV1Prompt, LanguageModelV1StreamPart } from 'ai'
 import { v4 as uuidv4 } from 'uuid'
 import { PostHog } from 'posthog-node'
-import { CostOverride, sendEventToPosthog, truncate, MAX_OUTPUT_SIZE } from '../utils'
+import { CostOverride, sendEventToPosthog, truncate, MAX_OUTPUT_SIZE, extractAvailableToolCalls } from '../utils'
 import { Buffer } from 'buffer'
 
 interface ClientOptions {
@@ -62,24 +62,20 @@ const mapVercelPrompt = (prompt: LanguageModelV1Prompt): PostHogInput[] => {
     promptsArray = prompt
   }
 
-  // Map and truncate individual content
+  // Map and truncate individual content using FormattedContentItem format
   const inputs: PostHogInput[] = promptsArray.map((p) => {
-    let content = {}
+    let content: any
     if (Array.isArray(p.content)) {
       content = p.content.map((c: any) => {
         if (c.type === 'text') {
           return {
             type: 'text',
-            content: truncate(c.text),
+            text: truncate(c.text),
           }
         } else if (c.type === 'image') {
           return {
             type: 'image',
-            content: {
-              // if image is a url use it, or use "none supported"
-              image: c.image instanceof URL ? c.image.toString() : 'raw images not supported',
-              mimeType: c.mimeType,
-            },
+            image: c.image instanceof URL ? c.image.toString() : 'raw images not supported',
           }
         } else if (c.type === 'file') {
           return {
@@ -110,14 +106,18 @@ const mapVercelPrompt = (prompt: LanguageModelV1Prompt): PostHogInput[] => {
           }
         }
         return {
-          content: '',
+          type: 'text',
+          text: '',
         }
       })
     } else {
-      content = {
-        type: 'text',
-        text: truncate(p.content),
-      }
+      // For non-array content, format as a single text item
+      content = [
+        {
+          type: 'text',
+          text: truncate(p.content),
+        },
+      ]
     }
     return {
       role: p.role,
@@ -150,7 +150,35 @@ const mapVercelPrompt = (prompt: LanguageModelV1Prompt): PostHogInput[] => {
 }
 
 const mapVercelOutput = (result: any): PostHogInput[] => {
-  // normalize string results to object
+  const content: any[] = []
+
+  if (result.text) {
+    content.push({ type: 'text', text: truncate(result.text) })
+  }
+
+  if (result.toolCalls && Array.isArray(result.toolCalls)) {
+    for (const toolCall of result.toolCalls) {
+      content.push({
+        type: 'function',
+        id: toolCall.toolCallId,
+        function: {
+          name: toolCall.toolName,
+          arguments: typeof toolCall.args === 'string' ? toolCall.args : JSON.stringify(toolCall.args),
+        },
+      })
+    }
+  }
+
+  if (content.length > 0) {
+    return [
+      {
+        role: 'assistant',
+        content: content.length === 1 && content[0].type === 'text' ? content[0].text : content,
+      },
+    ]
+  }
+
+  // Fallback to original behavior for other result types
   const normalizedResult = typeof result === 'string' ? { text: result } : result
   const output = {
     ...(normalizedResult.text ? { text: normalizedResult.text } : {}),
@@ -160,7 +188,6 @@ const mapVercelOutput = (result: any): PostHogInput[] => {
     ...(normalizedResult.finishReason ? { finishReason: normalizedResult.finishReason } : {}),
     ...(normalizedResult.usage ? { usage: normalizedResult.usage } : {}),
     ...(normalizedResult.warnings ? { warnings: normalizedResult.warnings } : {}),
-    ...(normalizedResult.providerMetadata ? { toolCalls: normalizedResult.providerMetadata } : {}),
     ...(normalizedResult.files
       ? {
           files: normalizedResult.files.map((file: any) => ({
@@ -171,9 +198,11 @@ const mapVercelOutput = (result: any): PostHogInput[] => {
         }
       : {}),
   }
+
   if (output.text && !output.object && !output.reasoning) {
     return [{ content: truncate(output.text as string), role: 'assistant' }]
   }
+
   // otherwise stringify and truncate
   try {
     const jsonOutput = JSON.stringify(output)
@@ -210,7 +239,9 @@ export const createInstrumentationMiddleware = (
         const provider = options.posthogProviderOverride ?? extractProvider(model)
         const baseURL = '' // cannot currently get baseURL from vercel
         const content = mapVercelOutput(result)
-        // let tools = result.toolCalls
+
+        const availableTools = extractAvailableToolCalls('vercel', params)
+
         const providerMetadata = result.providerMetadata
         const additionalTokenValues = {
           ...(providerMetadata?.openai?.reasoningTokens
@@ -233,7 +264,7 @@ export const createInstrumentationMiddleware = (
           model: modelId,
           provider: provider,
           input: options.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt),
-          output: [{ content, role: 'assistant' }],
+          output: content,
           latency,
           baseURL,
           params: mergedParams as any,
@@ -243,6 +274,7 @@ export const createInstrumentationMiddleware = (
             outputTokens: result.usage.completionTokens,
             ...additionalTokenValues,
           },
+          tools: availableTools,
           captureImmediate: options.posthogCaptureImmediate,
         })
 
@@ -291,6 +323,9 @@ export const createInstrumentationMiddleware = (
       const modelId = options.posthogModelOverride ?? model.modelId
       const provider = options.posthogProviderOverride ?? extractProvider(model)
       const baseURL = '' // cannot currently get baseURL from vercel
+
+      const availableTools = extractAvailableToolCalls('vercel', params)
+
       try {
         const { stream, ...rest } = await doStream()
         const transformStream = new TransformStream<LanguageModelV1StreamPart, LanguageModelV1StreamPart>({
@@ -334,6 +369,7 @@ export const createInstrumentationMiddleware = (
               params: mergedParams as any,
               httpStatus: 200,
               usage,
+              tools: availableTools,
               captureImmediate: options.posthogCaptureImmediate,
             })
           },
