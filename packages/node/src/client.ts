@@ -456,11 +456,6 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       sendFeatureFlagEvents = true
     }
 
-    // set defaults
-    if (onlyEvaluateLocally == undefined) {
-      onlyEvaluateLocally = false
-    }
-
     const payloadWasLocallyEvaluated = response !== undefined
 
     if (!payloadWasLocallyEvaluated && !onlyEvaluateLocally) {
