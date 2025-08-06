@@ -206,14 +206,14 @@ export interface Survey {
         } | null
         deviceTypes?: string[]
         deviceTypesMatchType?: PropertyMatchType
-        linkedFlagVariant: string | null
+        linkedFlagVariant?: string
     } | null
     start_date: string | null
     end_date: string | null
     current_iteration: number | null
     current_iteration_start_date: string | null
     schedule?: SurveySchedule | null
-    enable_partial_responses: boolean | null
+    enable_partial_responses?: boolean | null
 }
 
 export type SurveyWithTypeAndAppearance = Pick<Survey, 'id' | 'type' | 'appearance'>
