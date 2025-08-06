@@ -97,13 +97,13 @@ export function getActiveMatchingSurveys(
       return true
     }
 
-    const linkedFlagCheck = survey.linked_flag_key ? flags[survey.linked_flag_key] === true : true
+    const linkedFlagCheck = survey.linked_flag_key ? !!flags[survey.linked_flag_key] === true : true
 
     const linkedFlagVariant = survey.conditions?.linkedFlagVariant
     let linkedFlagVariantCheck = true
     if (linkedFlagVariant) {
       linkedFlagVariantCheck = survey.linked_flag_key
-        ? flags[survey.linked_flag_key] === (linkedFlagVariant || 'any')
+        ? flags[survey.linked_flag_key] === linkedFlagVariant || linkedFlagVariant === 'any'
         : true
     }
 
