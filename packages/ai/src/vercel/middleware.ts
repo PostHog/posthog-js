@@ -1,6 +1,7 @@
 import { wrapLanguageModel } from 'ai'
 import type {
   LanguageModelV2,
+  LanguageModelV2Content,
   LanguageModelV2Middleware,
   LanguageModelV2Prompt,
   LanguageModelV2StreamPart,
@@ -152,25 +153,59 @@ const mapVercelPrompt = (messages: LanguageModelV2Prompt): PostHogInput[] => {
   return inputs
 }
 
-const mapVercelOutput = (result: any): PostHogInput[] => {
-  const content: any[] = []
-
-  if (result.text) {
-    content.push({ type: 'text', text: truncate(result.text) })
-  }
-
-  if (result.toolCalls && Array.isArray(result.toolCalls)) {
-    for (const toolCall of result.toolCalls) {
-      content.push({
-        type: 'function',
-        id: toolCall.toolCallId,
-        function: {
-          name: toolCall.toolName,
-          arguments: typeof toolCall.args === 'string' ? toolCall.args : JSON.stringify(toolCall.args),
-        },
-      })
+const mapVercelOutput = (result: LanguageModelV2Content[]): PostHogInput[] => {
+  const content: any[] = result.map((item) => {
+    if (item.type === 'text') {
+      return { type: 'text', text: truncate(item.text) }
     }
-  }
+    if (item.type === 'tool-call') {
+      return {
+        type: 'tool-call',
+        id: item.toolCallId,
+        function: {
+          name: item.toolName,
+          arguments: (item as any).args || JSON.stringify((item as any).arguments || {}),
+        },
+      }
+    }
+    if (item.type === 'reasoning') {
+      return { type: 'reasoning', text: truncate(item.text) }
+    }
+    if (item.type === 'file') {
+      // Handle files similar to input mapping - avoid large base64 data
+      let fileData: string
+      if (item.data instanceof URL) {
+        fileData = item.data.toString()
+      } else if (typeof item.data === 'string') {
+        // Check if it's base64 data and potentially large
+        if (item.data.startsWith('data:') || item.data.length > 1000) {
+          fileData = `[${item.mediaType} file - ${item.data.length} bytes]`
+        } else {
+          fileData = item.data
+        }
+      } else {
+        fileData = `[binary ${item.mediaType} file]`
+      }
+
+      return {
+        type: 'file',
+        name: 'generated_file',
+        mediaType: item.mediaType,
+        data: fileData,
+      }
+    }
+    if (item.type === 'source') {
+      return {
+        type: 'source',
+        sourceType: item.sourceType,
+        id: item.id,
+        url: (item as any).url || '',
+        title: item.title || '',
+      }
+    }
+    // Fallback for unknown types - try to extract text if possible
+    return { type: 'text', text: truncate(JSON.stringify(item)) }
+  })
 
   if (content.length > 0) {
     return [
@@ -180,33 +215,9 @@ const mapVercelOutput = (result: any): PostHogInput[] => {
       },
     ]
   }
-  // Fallback to original behavior for other result types TODO: check if we can remove this
-  const normalizedResult = typeof result === 'string' ? { text: result } : result
-  const output = {
-    ...(normalizedResult.text ? { text: normalizedResult.text } : {}),
-    ...(normalizedResult.object ? { object: normalizedResult.object } : {}),
-    ...(normalizedResult.reasoningText ? { reasoning: normalizedResult.reasoningText } : {}),
-    ...(normalizedResult.response ? { response: normalizedResult.response } : {}),
-    ...(normalizedResult.finishReason ? { finishReason: normalizedResult.finishReason } : {}),
-    ...(normalizedResult.usage ? { usage: normalizedResult.usage } : {}),
-    ...(normalizedResult.warnings ? { warnings: normalizedResult.warnings } : {}),
-    ...(normalizedResult.providerMetadata ? { toolCalls: normalizedResult.providerMetadata } : {}),
-    ...(normalizedResult.files
-      ? {
-          files: normalizedResult.files.map((file: any) => ({
-            name: file.name,
-            size: file.size,
-            type: file.type,
-          })),
-        }
-      : {}),
-  }
-  if (output.text && !output.object && !output.reasoning) {
-    return [{ content: truncate(output.text as string), role: 'assistant' }]
-  }
   // otherwise stringify and truncate
   try {
-    const jsonOutput = JSON.stringify(output)
+    const jsonOutput = JSON.stringify(result)
     return [{ content: truncate(jsonOutput), role: 'assistant' }]
   } catch (error) {
     console.error('Error stringifying output')
@@ -240,7 +251,7 @@ export const createInstrumentationMiddleware = (
           options.posthogModelOverride ?? (result.response?.modelId ? result.response.modelId : model.modelId)
         const provider = options.posthogProviderOverride ?? extractProvider(model)
         const baseURL = '' // cannot currently get baseURL from vercel
-        const content = mapVercelOutput(result)
+        const content = mapVercelOutput(result.content)
         const latency = (Date.now() - startTime) / 1000
         const providerMetadata = result.providerMetadata
         const additionalTokenValues = {
@@ -361,7 +372,26 @@ export const createInstrumentationMiddleware = (
 
           flush: async () => {
             const latency = (Date.now() - startTime) / 1000
-            const outputContent = reasoningText ? `${reasoningText}\n\n${generatedText}` : generatedText
+            // Build content array similar to mapVercelOutput structure
+            const content = []
+            if (reasoningText) {
+              content.push({ type: 'reasoning', text: truncate(reasoningText) })
+            }
+            if (generatedText) {
+              content.push({ type: 'text', text: truncate(generatedText) })
+            }
+
+            // Structure output like mapVercelOutput does
+            const output =
+              content.length > 0
+                ? [
+                    {
+                      role: 'assistant',
+                      content: content.length === 1 && content[0].type === 'text' ? content[0].text : content,
+                    },
+                  ]
+                : []
+
             await sendEventToPosthog({
               client: phClient,
               distinctId: options.posthogDistinctId,
@@ -369,7 +399,7 @@ export const createInstrumentationMiddleware = (
               model: modelId,
               provider: provider,
               input: options.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt),
-              output: [{ content: outputContent, role: 'assistant' }],
+              output: output,
               latency,
               baseURL,
               params: mergedParams as any,
