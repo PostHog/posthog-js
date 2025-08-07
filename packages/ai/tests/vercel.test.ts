@@ -19,14 +19,34 @@ jest.mock('posthog-node', () => {
 jest.mock('../src/utils', () => ({
   sendEventToPosthog: jest.fn(),
   truncate: jest.fn((str: string) => str),
+  extractAvailableToolCalls: jest.fn(() => []),
   MAX_OUTPUT_SIZE: 1000000,
 }))
 
-// Mock the AI SDK functions
+// Mock the AI SDK functions but let generateText call through to the model
 jest.mock('ai', () => ({
-  generateText: jest.fn(),
+  generateText: jest.fn().mockImplementation(async ({ model, prompt }) => {
+    // Simulate what generateText does - call the model's doGenerate
+    const result = await model.doGenerate({
+      prompt: [{ role: 'user', content: prompt }]
+    })
+    return { text: result.text, usage: result.usage }
+  }),
   streamText: jest.fn(),
-  wrapLanguageModel: jest.fn((config) => config.model),
+  wrapLanguageModel: jest.fn().mockImplementation((config) => {
+    // Actually apply the middleware instead of bypassing it
+    return config.middleware.wrapGenerate ? 
+      {
+        ...config.model,
+        doGenerate: async (params: any) => {
+          return config.middleware.wrapGenerate({
+            doGenerate: config.model.doGenerate,
+            params,
+            model: config.model
+          })
+        }
+      } : config.model
+  }),
 }))
 
 // Create a mock openai function
@@ -35,7 +55,12 @@ const mockOpenai = jest.fn((modelId: string) => ({
   provider: 'openai',
   modelId: modelId,
   supportedUrls: {},
-  doGenerate: jest.fn(),
+  doGenerate: jest.fn().mockResolvedValue({
+    text: '19',
+    usage: { inputTokens: 10, outputTokens: 2 },
+    response: { modelId: modelId },
+    providerMetadata: {},
+  }),
   doStream: jest.fn(),
 }))
 
@@ -138,12 +163,6 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
           company: 'test-vercel',
         },
       })
-
-      const mockResult = {
-        text: '19',
-        usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 },
-      }
-      ;(generateText as jest.Mock).mockResolvedValue(mockResult)
 
       await generateText({
         model: model,
