@@ -153,11 +153,8 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
     })
 
     it('should track PostHog events with properties and groups', async () => {
-      // Test the middleware directly instead of through complex mocking
-      const { createInstrumentationMiddleware } = await import('../src/vercel/middleware')
-
       const baseModel = mockOpenai('gpt-4')
-      const middleware = createInstrumentationMiddleware(mockPostHogClient, baseModel, {
+      const model = withTracing(baseModel, mockPostHogClient, {
         posthogDistinctId: 'test-user',
         posthogTraceId: 'test123',
         posthogProperties: {
@@ -168,17 +165,12 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         },
       })
 
-      // Directly call the middleware's wrapGenerate function
-      await middleware.wrapGenerate({
-        doGenerate: baseModel.doGenerate,
-        params: {
-          prompt: [{ role: 'user', content: 'What is 9 + 10?' }],
-        },
-        model: baseModel,
+      const { text } = await generateText({
+        model: model,
+        prompt: 'What is 9 + 10?',
       })
 
-      // Verify PostHog event was sent with correct properties
-      expect(mockSendEventToPosthog).toHaveBeenCalledTimes(1)
+      expect(text).toBe('19')
       expect(mockSendEventToPosthog).toHaveBeenCalledWith(
         expect.objectContaining({
           distinctId: 'test-user',
