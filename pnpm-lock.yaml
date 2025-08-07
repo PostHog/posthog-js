@@ -119,7 +119,7 @@ importers:
   packages/ai:
     dependencies:
       '@ai-sdk/provider':
-        specifier: ^2.0.0-beta
+        specifier: ^2.0.0
         version: 2.0.0
       '@anthropic-ai/sdk':
         specifier: ^0.36.3
@@ -131,7 +131,7 @@ importers:
         specifier: ^0.3.37
         version: 0.3.66(@opentelemetry/api@1.9.0)(openai@5.10.1(ws@8.18.3)(zod@3.25.76))
       ai:
-        specifier: ^5.0.0-beta
+        specifier: ^5.0.4
         version: 5.0.4(zod@3.25.76)
       langchain:
         specifier: ^0.3.15
