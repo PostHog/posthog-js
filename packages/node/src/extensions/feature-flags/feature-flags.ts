@@ -468,8 +468,6 @@ class FeatureFlagsPoller {
       this.poller = undefined
     }
 
-    this.poller = setTimeout(() => this._loadFeatureFlags(), this.getPollingInterval())
-
     try {
       const res = await this._requestFeatureFlagDefinitions()
 
@@ -556,6 +554,10 @@ class FeatureFlagsPoller {
     } catch (err) {
       if (err instanceof ClientError) {
         this.onError?.(err)
+      }
+    } finally {
+      if (!this.poller) {
+        this.poller = setTimeout(() => this._loadFeatureFlags(), this.getPollingInterval())
       }
     }
   }
