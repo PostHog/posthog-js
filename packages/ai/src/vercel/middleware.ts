@@ -372,7 +372,26 @@ export const createInstrumentationMiddleware = (
 
           flush: async () => {
             const latency = (Date.now() - startTime) / 1000
-            const outputContent = reasoningText ? `${reasoningText}\n\n${generatedText}` : generatedText
+            // Build content array similar to mapVercelOutput structure
+            const content = []
+            if (reasoningText) {
+              content.push({ type: 'reasoning', text: truncate(reasoningText) })
+            }
+            if (generatedText) {
+              content.push({ type: 'text', text: truncate(generatedText) })
+            }
+
+            // Structure output like mapVercelOutput does
+            const output =
+              content.length > 0
+                ? [
+                    {
+                      role: 'assistant',
+                      content: content.length === 1 && content[0].type === 'text' ? content[0].text : content,
+                    },
+                  ]
+                : []
+
             await sendEventToPosthog({
               client: phClient,
               distinctId: options.posthogDistinctId,
@@ -380,7 +399,7 @@ export const createInstrumentationMiddleware = (
               model: modelId,
               provider: provider,
               input: options.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt),
-              output: [{ content: outputContent, role: 'assistant' }],
+              output: output,
               latency,
               baseURL,
               params: mergedParams as any,
