@@ -1,5 +1,11 @@
 # posthog-ai
 
+## 6.0.1
+
+### Patch Changes
+
+- [#2199](https://github.com/PostHog/posthog-js/pull/2199) [`d887947`](https://github.com/PostHog/posthog-js/commit/d887947317fed0da3737b752c1f5e680fddd44eb) Thanks [@k11kirky](https://github.com/k11kirky)! - Fix bug with vercel output mapping
+
 ## 6.0.0
 
 ### Major Changes
