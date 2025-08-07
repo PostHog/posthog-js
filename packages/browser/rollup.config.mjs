@@ -142,6 +142,8 @@ const plugins = (es5, noExternal) => [
                               '_posthog',
                               '_instance',
                               '_surveyEventReceiver',
+                              // we don't mangle _surveyManager as it's used by external surveys to paint them on the dom directly
+                              '_surveyManager',
 
                               // part of setup/teardown code, preserve these out of caution
                               '_init',

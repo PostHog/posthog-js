@@ -20,6 +20,7 @@ import { document as _document, window as _window } from '../utils/globals'
 import {
     doesSurveyActivateByAction,
     doesSurveyActivateByEvent,
+    IN_APP_SURVEY_TYPES,
     isSurveyRunning,
     SURVEY_LOGGER as logger,
 } from '../utils/survey-utils'
@@ -418,6 +419,12 @@ export class SurveyManager {
             return eligibility
         }
 
+        if (!IN_APP_SURVEY_TYPES.includes(survey.type)) {
+            eligibility.eligible = false
+            eligibility.reason = `Surveys of type ${survey.type} are never eligible to be shown in the app`
+            return eligibility
+        }
+
         if (!this._isSurveyFeatureFlagEnabled(survey.linked_flag_key)) {
             eligibility.eligible = false
             eligibility.reason = `Survey linked feature flag is not enabled`
@@ -498,16 +505,18 @@ export class SurveyManager {
 
     public callSurveysAndEvaluateDisplayLogic = (forceReload: boolean = false): void => {
         this.getActiveMatchingSurveys((surveys) => {
-            const nonAPISurveys = surveys.filter((survey) => survey.type !== SurveyType.API)
+            const inAppSurveysWithDisplayLogic = surveys.filter(
+                (survey) => survey.type === SurveyType.Popover || survey.type === SurveyType.Widget
+            )
 
             // Create a queue of surveys sorted by their appearance delay.  We will evaluate the display logic
             // for each survey in the queue in order, and only display one survey at a time.
-            const nonAPISurveyQueue = this._sortSurveysByAppearanceDelay(nonAPISurveys)
+            const inAppSurveysQueue = this._sortSurveysByAppearanceDelay(inAppSurveysWithDisplayLogic)
 
             // Keep track of surveys processed this cycle to remove listeners for inactive ones
             const activeSelectorSurveys = new Set<string>()
 
-            nonAPISurveyQueue.forEach((survey) => {
+            inAppSurveysQueue.forEach((survey) => {
                 // Widget Type Logic
                 if (survey.type === SurveyType.Widget) {
                     if (survey.appearance?.widgetType === SurveyWidgetType.Tab) {

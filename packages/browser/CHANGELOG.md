@@ -1,3 +1,49 @@
+# posthog-js
+
+## 1.258.6
+
+### Patch Changes
+
+- [#2194](https://github.com/PostHog/posthog-js/pull/2194) [`faa2f28`](https://github.com/PostHog/posthog-js/commit/faa2f2868762c527148d9a59098d4eae7f0b3ffb) Thanks [@realguse](https://github.com/realguse)! - block vercel screenshot bot
+
+## 1.258.5
+
+### Patch Changes
+
+- [#2178](https://github.com/PostHog/posthog-js/pull/2178) [`db569fa`](https://github.com/PostHog/posthog-js/commit/db569fa952b4536280602db87bc12a0fa51923fa) Thanks [@lucasheriques](https://github.com/lucasheriques)! - - Fix surveys loading with advanced_enable_surveys config
+
+## 1.258.4
+
+### Patch Changes
+
+- [#2172](https://github.com/PostHog/posthog-js/pull/2172) [`ac254d9`](https://github.com/PostHog/posthog-js/commit/ac254d945be598314c365310ed7c13047edc9ead) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Adds a new config, `advanced_enable_surveys`, to always enable surveys funcionality in the SDK
+
+## 1.258.3
+
+### Patch Changes
+
+- [#2171](https://github.com/PostHog/posthog-js/pull/2171) [`14adc01`](https://github.com/PostHog/posthog-js/commit/14adc01875c87f6be10e70204307003d9d0f941c) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Fix early access features accumulation in persistence
+
+- [#2170](https://github.com/PostHog/posthog-js/pull/2170) [`262cc5c`](https://github.com/PostHog/posthog-js/commit/262cc5cc9364605e31788e5370b0663507e4c832) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Removes the `_renderExternalSurvey` method which is not needed anymore
+
+## 1.258.2
+
+### Patch Changes
+
+- [#2111](https://github.com/PostHog/posthog-js/pull/2111) [`7114593`](https://github.com/PostHog/posthog-js/commit/711459317bf807fa1d21be2f7067182952ea2a5e) Thanks [@pauldambra](https://github.com/pauldambra)! - checks for session activity in other windows when timing out in any particular window, avoids a race condition when proactively marking a session as idle
+
+## 1.258.1
+
+### Patch Changes
+
+- [#2120](https://github.com/PostHog/posthog-js/pull/2120) [`c7b03cd`](https://github.com/PostHog/posthog-js/commit/c7b03cddb621988323238b22acdf8faefd93742e) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Updates the renderSurvey and getActiveMatchingSurveys methods to not take any external surveys into consideration
+
+## 1.258.0
+
+### Minor Changes
+
+- [#2089](https://github.com/PostHog/posthog-js/pull/2089) [`0a19df2`](https://github.com/PostHog/posthog-js/commit/0a19df28d6a62b97949f0e99bfadf33b7aadcb45) Thanks [@daibhin](https://github.com/daibhin)! - feat: exclude exceptions autocaptured by extensions
+
 ## 1.257.2 - 2025-07-22
 
 - chore: Safer iteration of experimental `__add_tracing_headers` (#2100)
@@ -75,8 +121,6 @@
 
 ## 1.253.1 - 2025-06-16
 
-
-
 ## 1.253.0 - 2025-06-16
 
 - chore: update readme instructions (#2017)
@@ -87,8 +131,6 @@
 - Fix crash when config has circular references (#2015)
 
 ## 1.252.0 - 2025-06-12
-
-
 
 ## 1.251.1 - 2025-06-12
 
@@ -104,11 +146,7 @@
 
 ## 1.250.1 - 2025-06-10
 
-
-
 ## 1.250.0 - 2025-06-09
-
-
 
 ## 1.249.5 - 2025-06-05
 
@@ -2762,7 +2800,7 @@ Manual addition of version 1.66.0 because CI failed to automatically bump the ve
 
 ## 1.52.0 - 2023-04-05
 
-- fix: Track referrer/search params per browser session (#496)  
+- fix: Track referrer/search params per browser session (#496)
   _**Note:** This change improves the accuracy of properties `$referrer` and `$referring_domain` in a major way. Previously, the values of these properties often represented pure backlinks in non-SPAs (non-single-page applications). Now those values will represent the true referrer for the current browser-level session (effectively: for the tab). Due to this, referrer data after this update \_may_ look different. It will be significantly more accurate though.\_
 - ci: Point out and close stale issues/PRs (#602)
 - docs(testcafe): update docs removing posthog server requirements (#594)

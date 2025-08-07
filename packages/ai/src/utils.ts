@@ -2,10 +2,14 @@ import { PostHog } from 'posthog-node'
 import { Buffer } from 'buffer'
 import OpenAIOrignal from 'openai'
 import AnthropicOriginal from '@anthropic-ai/sdk'
+import type { ChatCompletionTool } from 'openai/resources/chat/completions'
+import type { Tool as GeminiTool } from '@google/genai'
+import type { FormattedMessage, FormattedContent, TokenUsage } from './types'
 
 type ChatCompletionCreateParamsBase = OpenAIOrignal.Chat.Completions.ChatCompletionCreateParams
 type MessageCreateParams = AnthropicOriginal.Messages.MessageCreateParams
 type ResponseCreateParams = OpenAIOrignal.Responses.ResponseCreateParams
+type AnthropicTool = AnthropicOriginal.Tool
 
 // limit large outputs by truncating to 200kb (approx 200k bytes)
 export const MAX_OUTPUT_SIZE = 200000
@@ -59,7 +63,7 @@ export const getModelParams = (
 /**
  * Helper to format responses (non-streaming) for consumption, mirroring Python's openai vs. anthropic approach.
  */
-export const formatResponse = (response: any, provider: string): Array<{ role: string; content: string }> => {
+export const formatResponse = (response: any, provider: string): FormattedMessage[] => {
   if (!response) {
     return []
   }
@@ -73,59 +77,163 @@ export const formatResponse = (response: any, provider: string): Array<{ role: s
   return []
 }
 
-export const formatResponseAnthropic = (response: any): Array<{ role: string; content: string }> => {
-  // Example approach if "response.content" holds array of text segments, etc.
-  const output: Array<{ role: string; content: string }> = []
+export const formatResponseAnthropic = (response: any): FormattedMessage[] => {
+  const output: FormattedMessage[] = []
+  const content: FormattedContent = []
+
   for (const choice of response.content ?? []) {
-    if (choice?.text) {
-      output.push({
-        role: 'assistant',
-        content: choice.text,
+    if (choice?.type === 'text' && choice?.text) {
+      content.push({ type: 'text', text: choice.text })
+    } else if (choice?.type === 'tool_use' && choice?.name && choice?.id) {
+      content.push({
+        type: 'function',
+        id: choice.id,
+        function: {
+          name: choice.name,
+          arguments: choice.input || {},
+        },
       })
     }
   }
-  return output
-}
 
-export const formatResponseOpenAI = (response: any): Array<{ role: string; content: string }> => {
-  const output: Array<{ role: string; content: string }> = []
-  for (const choice of response.choices ?? []) {
-    if (choice.message?.content) {
-      output.push({
-        role: choice.message.role,
-        content: choice.message.content,
-      })
-    }
-  }
-  return output
-}
-
-export const formatResponseGemini = (response: any): Array<{ role: string; content: string }> => {
-  const output: Array<{ role: string; content: string }> = []
-
-  if (response.text) {
+  if (content.length > 0) {
     output.push({
       role: 'assistant',
-      content: response.text,
+      content,
     })
-    return output
   }
+
+  return output
+}
+
+export const formatResponseOpenAI = (response: any): FormattedMessage[] => {
+  const output: FormattedMessage[] = []
+
+  if (response.choices) {
+    for (const choice of response.choices) {
+      const content: FormattedContent = []
+      let role = 'assistant'
+
+      if (choice.message) {
+        if (choice.message.role) {
+          role = choice.message.role
+        }
+
+        if (choice.message.content) {
+          content.push({ type: 'text', text: choice.message.content })
+        }
+
+        if (choice.message.tool_calls) {
+          for (const toolCall of choice.message.tool_calls) {
+            content.push({
+              type: 'function',
+              id: toolCall.id,
+              function: {
+                name: toolCall.function.name,
+                arguments: toolCall.function.arguments,
+              },
+            })
+          }
+        }
+      }
+
+      if (content.length > 0) {
+        output.push({
+          role,
+          content,
+        })
+      }
+    }
+  }
+
+  // Handle Responses API format
+  if (response.output) {
+    const content: FormattedContent = []
+    let role = 'assistant'
+
+    for (const item of response.output) {
+      if (item.type === 'message') {
+        role = item.role
+
+        if (item.content && Array.isArray(item.content)) {
+          for (const contentItem of item.content) {
+            if (contentItem.type === 'output_text' && contentItem.text) {
+              content.push({ type: 'text', text: contentItem.text })
+            } else if (contentItem.text) {
+              content.push({ type: 'text', text: contentItem.text })
+            } else if (contentItem.type === 'input_image' && contentItem.image_url) {
+              content.push({
+                type: 'image',
+                image: contentItem.image_url,
+              })
+            }
+          }
+        } else if (item.content) {
+          content.push({ type: 'text', text: String(item.content) })
+        }
+      } else if (item.type === 'function_call') {
+        content.push({
+          type: 'function',
+          id: item.call_id || item.id || '',
+          function: {
+            name: item.name,
+            arguments: item.arguments || {},
+          },
+        })
+      }
+    }
+
+    if (content.length > 0) {
+      output.push({
+        role,
+        content,
+      })
+    }
+  }
+
+  return output
+}
+
+export const formatResponseGemini = (response: any): FormattedMessage[] => {
+  const output: FormattedMessage[] = []
 
   if (response.candidates && Array.isArray(response.candidates)) {
     for (const candidate of response.candidates) {
       if (candidate.content && candidate.content.parts) {
-        const text = candidate.content.parts
-          .filter((part: any) => part.text)
-          .map((part: any) => part.text)
-          .join('')
-        if (text) {
+        const content: FormattedContent = []
+
+        for (const part of candidate.content.parts) {
+          if (part.text) {
+            content.push({ type: 'text', text: part.text })
+          } else if (part.functionCall) {
+            content.push({
+              type: 'function',
+              function: {
+                name: part.functionCall.name,
+                arguments: part.functionCall.args,
+              },
+            })
+          }
+        }
+
+        if (content.length > 0) {
           output.push({
             role: 'assistant',
-            content: text,
+            content,
           })
         }
+      } else if (candidate.text) {
+        output.push({
+          role: 'assistant',
+          content: [{ type: 'text', text: candidate.text }],
+        })
       }
     }
+  } else if (response.text) {
+    output.push({
+      role: 'assistant',
+      content: [{ type: 'text', text: response.text }],
+    })
   }
 
   return output
@@ -161,6 +269,44 @@ export const truncate = (str: string): string => {
   }
 }
 
+/**
+ * Extract available tool calls from the request parameters.
+ * These are the tools provided to the LLM, not the tool calls in the response.
+ */
+export const extractAvailableToolCalls = (
+  provider: string,
+  params: any
+): ChatCompletionTool[] | AnthropicTool[] | GeminiTool[] | null => {
+  if (provider === 'anthropic') {
+    if (params.tools) {
+      return params.tools
+    }
+
+    return null
+  } else if (provider === 'gemini') {
+    if (params.config && params.config.tools) {
+      return params.config.tools
+    }
+
+    return null
+  } else if (provider === 'openai') {
+    if (params.tools) {
+      return params.tools
+    }
+
+    return null
+  } else if (provider === 'vercel') {
+    // Vercel AI SDK stores tools in params.mode.tools when mode type is 'regular'
+    if (params.mode?.type === 'regular' && params.mode.tools) {
+      return params.mode.tools
+    }
+
+    return null
+  }
+
+  return null
+}
+
 export type SendEventToPosthogParams = {
   client: PostHog
   distinctId?: string
@@ -172,17 +318,11 @@ export type SendEventToPosthogParams = {
   latency: number
   baseURL: string
   httpStatus: number
-  usage?: {
-    inputTokens?: number
-    outputTokens?: number
-    reasoningTokens?: any
-    cacheReadInputTokens?: any
-    cacheCreationInputTokens?: any
-  }
+  usage?: TokenUsage
   params: (ChatCompletionCreateParamsBase | MessageCreateParams | ResponseCreateParams) & MonitoringParams
   isError?: boolean
   error?: string
-  tools?: any
+  tools?: ChatCompletionTool[] | AnthropicTool[] | GeminiTool[] | null
   captureImmediate?: boolean
 }
 

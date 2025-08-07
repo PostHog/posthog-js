@@ -11,10 +11,6 @@ jobs:
 
       - uses: ./.github/actions/setup
 
-      - name: Build library
-        run: pnpm build-rollup
-        working-directory: packages/browser
-
       - name: Upload bundle size visualization
         uses: actions/upload-artifact@v4
         id: viz-upload
@@ -41,5 +37,4 @@ jobs:
 
       - uses: preactjs/compressed-size-action@v2
         with:
-          build-script: "build-rollup"
           compression: "none"

@@ -1,7 +1,13 @@
 import AnthropicOriginal from '@anthropic-ai/sdk'
 import { PostHog } from 'posthog-node'
 import { v4 as uuidv4 } from 'uuid'
-import { formatResponseAnthropic, mergeSystemPrompt, MonitoringParams, sendEventToPosthog } from '../utils'
+import {
+  formatResponseAnthropic,
+  mergeSystemPrompt,
+  MonitoringParams,
+  sendEventToPosthog,
+  extractAvailableToolCalls,
+} from '../utils'
 
 type MessageCreateParamsNonStreaming = AnthropicOriginal.Messages.MessageCreateParamsNonStreaming
 type MessageCreateParamsStreaming = AnthropicOriginal.Messages.MessageCreateParamsStreaming
@@ -102,7 +108,11 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                   usage.outputTokens = chunk.usage.output_tokens ?? 0
                 }
               }
+
               const latency = (Date.now() - startTime) / 1000
+
+              const availableTools = extractAvailableToolCalls('anthropic', anthropicParams)
+
               await sendEventToPosthog({
                 client: this.phClient,
                 distinctId: posthogDistinctId,
@@ -116,6 +126,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 params: body,
                 httpStatus: 200,
                 usage,
+                tools: availableTools,
                 captureImmediate: posthogCaptureImmediate,
               })
             } catch (error: any) {
@@ -153,6 +164,9 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
         async (result) => {
           if ('content' in result) {
             const latency = (Date.now() - startTime) / 1000
+
+            const availableTools = extractAvailableToolCalls('anthropic', anthropicParams)
+
             await sendEventToPosthog({
               client: this.phClient,
               distinctId: posthogDistinctId,
@@ -171,6 +185,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 cacheCreationInputTokens: result.usage.cache_creation_input_tokens ?? 0,
                 cacheReadInputTokens: result.usage.cache_read_input_tokens ?? 0,
               },
+              tools: availableTools,
               captureImmediate: posthogCaptureImmediate,
             })
           }

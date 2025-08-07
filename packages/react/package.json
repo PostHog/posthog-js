@@ -4,7 +4,7 @@
     "description": "Provides components and hooks for React integrations of PostHog.",
     "repository": {
         "type": "git",
-        "url": "https://github.com/PostHog/posthog-js",
+        "url": "git+https://github.com/PostHog/posthog-js.git",
         "directory": "packages/react"
     },
     "author": "hey@posthog.com",
@@ -30,7 +30,7 @@
     ],
     "peerDependencies": {
         "@types/react": ">=16.8.0",
-        "posthog-js": "workspace:*",
+        "posthog-js": ">=1.257.2",
         "react": ">=16.8.0"
     },
     "peerDependenciesMeta": {

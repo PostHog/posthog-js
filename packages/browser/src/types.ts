@@ -781,6 +781,14 @@ export interface PostHogConfig {
      * @default false
      */
     advanced_only_evaluate_survey_feature_flags: boolean
+    /**
+     * When this is enabled, surveys will always be initialized, regardless of the /flags response or remote config settings.
+     * This is useful if you want to use surveys but disable all other flag-dependent functionality.
+     * Used internally for displaying external surveys without making a /flags request.
+     *
+     * @default false
+     */
+    advanced_enable_surveys: boolean
 
     /**
      * Sets timeout for fetching feature flags

@@ -8,6 +8,7 @@ import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import {
     doesSurveyActivateByAction,
     doesSurveyActivateByEvent,
+    IN_APP_SURVEY_TYPES,
     isSurveyRunning,
     SURVEY_LOGGER as logger,
     SURVEY_IN_PROGRESS_PREFIX,
@@ -78,12 +79,13 @@ export class PostHogSurveys {
             return
         }
 
-        const isSurveysEnabled = this._isSurveysEnabled
-
         // waiting for remote config to load
-        if (isUndefined(isSurveysEnabled)) {
+        // if surveys is forced enable (like external surveys), ignore the remote config and load surveys
+        if (isUndefined(this._isSurveysEnabled) && !this._instance.config.advanced_enable_surveys) {
             return
         }
+
+        const isSurveysEnabled = this._isSurveysEnabled || this._instance.config.advanced_enable_surveys
 
         this._isInitializingSurveys = true
 
@@ -244,10 +246,9 @@ export class PostHogSurveys {
         for (const callback of this._surveyCallbacks) {
             try {
                 if (!context.isLoaded) {
-                    callback([], context)
-                } else {
-                    this.getSurveys(callback)
+                    return callback([], context)
                 }
+                this.getSurveys(callback)
             } catch (error) {
                 logger.error('Error in survey callback', error)
             }
@@ -322,11 +323,16 @@ export class PostHogSurveys {
             return
         }
         const survey = this._getSurveyById(surveyId)
-        const elem = document?.querySelector(selector)
         if (!survey) {
             logger.warn('Survey not found')
             return
         }
+        if (!IN_APP_SURVEY_TYPES.includes(survey.type)) {
+            logger.warn(`Surveys of type ${survey.type} cannot be rendered in the app`)
+            return
+            return
+        }
+        const elem = document?.querySelector(selector)
         if (!elem) {
             logger.warn('Survey element not found')
             return
