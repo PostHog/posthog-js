@@ -35,19 +35,7 @@ node remote-config-example.js
 
 ### Expected Output
 
-```
+```bash
 Testing remote config endpoint...
 ✅ Success! Remote config payload for 'your-flag-key': { "setting": "value", "config": {...} }
 ```
-
-### Implementation Notes
-
-This example demonstrates the changes made in this PR where the project API key is now included in remote config requests for deterministic project routing when using personal API keys that have access to multiple projects.
-
-The remote config URL now includes the project API key as a query parameter:
-
-```
-/api/projects/@current/feature_flags/{flagKey}/remote_config?token={projectApiKey}
-```
-
-This matches the implementation in PostHog Python SDK: https://github.com/PostHog/posthog-python/pull/303
