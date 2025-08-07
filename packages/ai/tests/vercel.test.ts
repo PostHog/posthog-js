@@ -74,7 +74,9 @@ const createMockModel = (modelId: string): LanguageModelV2 => {
       }
 
       return {
-        ...response,
+        text: response.text,
+        usage: response.usage,
+        content: [{ type: 'text', text: response.text }],
         response: { modelId: modelId },
         providerMetadata: {},
         finishReason: 'stop',
