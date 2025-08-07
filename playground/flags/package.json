@@ -1,0 +1,14 @@
+{
+    "name": "flags",
+    "version": "1.0.0",
+    "description": "PostHog Node.js flags playground",
+    "main": "index.js",
+    "scripts": {
+        "start": "node index.js",
+        "remote-config": "node remote-config-example.js"
+    },
+    "license": "ISC",
+    "dependencies": {
+        "express": "^5.1.0"
+    }
+}
