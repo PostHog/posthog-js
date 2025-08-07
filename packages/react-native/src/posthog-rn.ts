@@ -68,6 +68,13 @@ export type PostHogOptions = PostHogCoreOptions & {
    * Defaults to false
    */
   enablePersistSessionIdAcrossRestart?: boolean
+
+  /**
+   * A list of headers that should be sent with requests to the PostHog API.
+   *
+   * @default {}
+   */
+  request_headers?: { [header_name: string]: string }
 }
 
 export class PostHog extends PostHogCore {
@@ -78,6 +85,7 @@ export class PostHog extends PostHogCore {
   private _enableSessionReplay?: boolean
   private _disableSurveys: boolean
   private _disableRemoteConfig: boolean
+  private _requestHeaders: { [header_name: string]: string }
 
   constructor(apiKey: string, options?: PostHogOptions) {
     super(apiKey, options)
@@ -85,6 +93,7 @@ export class PostHog extends PostHogCore {
     this._persistence = options?.persistence ?? 'file'
     this._disableSurveys = options?.disableSurveys ?? false
     this._disableRemoteConfig = options?.disableRemoteConfig ?? false
+    this._requestHeaders = options?.request_headers ?? {}
 
     // Either build the app properties from the existing ones
     this._appProperties =
@@ -181,7 +190,14 @@ export class PostHog extends PostHogCore {
   }
 
   fetch(url: string, options: PostHogFetchOptions): Promise<PostHogFetchResponse> {
-    return fetch(url, options)
+    const updatedOptions = {
+      ...options,
+      headers: {
+        ...this._requestHeaders,
+        ...options.headers,
+      },
+    }
+    return fetch(url, updatedOptions)
   }
 
   getLibraryId(): string {
