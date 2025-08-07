@@ -1,5 +1,4 @@
 {
-
     "name": "posthog-flags-demo",
     "version": "1.0.0",
     "description": "Demo playground for PostHog Node.js flags features",
@@ -7,10 +6,10 @@
     "private": true,
     "scripts": {
         "start": "node index.js",
-        "remote-config": "node remote-config-example.js",
-        "demo": "node flag-dependencies-demo.js",
+        "remote-config": "node remote-config-demo.js",
+        "dependencies": "node flag-dependencies-demo.js",
         "build": "cd ../../packages/node && pnpm build",
-        "test": "pnpm build && pnpm demo"
+        "test": "pnpm build && pnpm dependencies"
     },
     "dependencies": {
         "posthog-node": "file:../../packages/node"

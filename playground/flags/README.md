@@ -1,76 +1,55 @@
 # PostHog Node.js Flags Playground
 
-This directory contains examples for using PostHog feature flags and remote config with the Node.js SDK.
+This directory contains interactive demos for using PostHog feature flags and remote config with the Node.js SDK.
 
-## Remote Config Example
+## Quick Start
 
-The `remote-config-example.js` demonstrates how to use the remote config endpoint to retrieve encrypted configuration data.
-
-### Setup
-
-1. Update the API keys in `remote-config-example.js`:
-
-    - `phc_YOUR_PROJECT_API_KEY_HERE` - Your PostHog project API key
-    - `phx_YOUR_SECURE_FLAGS_API_KEY_HERE` - Your PostHog secure flags API key (or personal API key)
-
-2. Update the host if needed:
-
-    - For PostHog Cloud US: `https://us.posthog.com`
-    - For PostHog Cloud EU: `https://eu.posthog.com`
-    - For self-hosted: `http://your-posthog-instance.com`
-
-3. Update the feature flag key to match an actual flag in your project that has remote config enabled.
-
-### Running the Example
+### 1. Setup Environment
 
 ```bash
-# Install dependencies
+# Copy example environment file
+cp .env.example .env
+
+# Edit .env with your PostHog credentials
+# POSTHOG_PROJECT_KEY=phc_your_actual_project_key
+# POSTHOG_PERSONAL_TOKEN=phx_your_actual_personal_token
+# POSTHOG_HOST=http://localhost:8000
+```
+
+### 2. Install Dependencies
+
+```bash
 npm install
-
-# Run the remote config example
-npm run remote-config
-# or
-node remote-config-example.js
 ```
 
-### Expected Output
+### 3. Run Interactive Demo
 
 ```bash
-Testing remote config endpoint...
-✅ Success! Remote config payload for 'your-flag-key': { "setting": "value", "config": {...} }
+npm start
 ```
 
-## PostHog Flag Dependencies Demo
+This will show you a menu to choose between available demos:
 
-This playground demonstrates the flag dependencies feature in posthog-node.
+```
+🎯 PostHog Flags Playground
+============================
 
-### Quick Start
+Available demos:
 
-1. **Set up environment variables:**
+1. Flag Dependencies Demo
+   Test flag dependencies with local evaluation
 
-    ```bash
-    cp .env.example .env
-    ```
+2. Remote Config Demo
+   Test PostHog remote config endpoint
 
-2. **Edit `.env` with your actual credentials:**
+Select a demo (1-2) or press Ctrl+C to exit:
+```
 
-    ```bash
-    POSTHOG_PROJECT_KEY=phc_your_actual_project_key
-    POSTHOG_PERSONAL_TOKEN=phx_your_actual_personal_token
-    POSTHOG_HOST=http://localhost:8010
-    FLAG_KEY=test-dependent-flag
-    ```
+## Available Demos
 
-3. **Run the demo:**
-    ```bash
-    pnpm test
-    # or manually:
-    pnpm build && node flag-dependencies-demo.js
-    ```
+### 1. Flag Dependencies Demo (`flag-dependencies-demo.js`)
 
-### What the Test Does
-
-The script will:
+Tests the flag dependencies feature with local evaluation. This demo will:
 
 - ✅ Connect to your local PostHog instance
 - ✅ Load feature flags with local evaluation enabled
@@ -116,7 +95,36 @@ The script will:
 🎉 Test completed!
 ```
 
-### Troubleshooting
+### 2. Remote Config Demo (`remote-config-demo.js`)
+
+Tests the PostHog remote config endpoint to retrieve encrypted configuration data. This demo will:
+
+- Connect to your PostHog instance
+- Fetch remote config payload for a specified flag
+- Display the configuration data
+
+#### Environment Variables
+
+- `REMOTE_CONFIG_FLAG_KEY` - Flag key with remote config enabled (defaults to `unencrypted-remote-config-setting`)
+
+## Manual Execution
+
+You can also run individual demos directly:
+
+```bash
+# Build the package first
+npm run build
+
+# Run flag dependencies demo
+npm run dependencies
+# or directly: node flag-dependencies-demo.js
+
+# Run remote config demo
+npm run remote-config
+# or directly: node remote-config-demo.js
+```
+
+## Troubleshooting
 
 ### Build Issues
 
