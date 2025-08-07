@@ -215,7 +215,6 @@ const mapVercelOutput = (result: LanguageModelV2Content[]): PostHogInput[] => {
       },
     ]
   }
-
   // otherwise stringify and truncate
   try {
     const jsonOutput = JSON.stringify(result)
