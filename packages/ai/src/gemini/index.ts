@@ -1,7 +1,7 @@
 import { GoogleGenAI } from '@google/genai'
 import { PostHog } from 'posthog-node'
 import { v4 as uuidv4 } from 'uuid'
-import { MonitoringParams, sendEventToPosthog } from '../utils'
+import { MonitoringParams, sendEventToPosthog, extractAvailableToolCalls, formatResponseGemini } from '../utils'
 
 // Types from @google/genai
 type GenerateContentRequest = {
@@ -70,6 +70,8 @@ export class WrappedModels {
       const response = await this.client.models.generateContent(geminiParams)
       const latency = (Date.now() - startTime) / 1000
 
+      const availableTools = extractAvailableToolCalls('gemini', geminiParams)
+
       await sendEventToPosthog({
         client: this.phClient,
         distinctId: posthogDistinctId,
@@ -77,7 +79,7 @@ export class WrappedModels {
         model: geminiParams.model,
         provider: 'gemini',
         input: this.formatInput(geminiParams.contents),
-        output: this.formatOutput(response),
+        output: formatResponseGemini(response),
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
         params: params as any,
@@ -86,6 +88,7 @@ export class WrappedModels {
           inputTokens: response.usageMetadata?.promptTokenCount ?? 0,
           outputTokens: response.usageMetadata?.candidatesTokenCount ?? 0,
         },
+        tools: availableTools,
         captureImmediate: posthogCaptureImmediate,
       })
 
@@ -153,6 +156,9 @@ export class WrappedModels {
       }
 
       const latency = (Date.now() - startTime) / 1000
+
+      const availableTools = extractAvailableToolCalls('gemini', geminiParams)
+
       await sendEventToPosthog({
         client: this.phClient,
         distinctId: posthogDistinctId,
@@ -166,6 +172,7 @@ export class WrappedModels {
         params: params as any,
         httpStatus: 200,
         usage,
+        tools: availableTools,
         captureImmediate: posthogCaptureImmediate,
       })
     } catch (error: any) {
@@ -226,27 +233,6 @@ export class WrappedModels {
     }
 
     return [{ role: 'user', content: String(contents) }]
-  }
-
-  private formatOutput(response: GenerateContentResponse): Array<{ role: string; content: string }> {
-    if (response.text) {
-      return [{ role: 'assistant', content: response.text }]
-    }
-
-    if (response.candidates && Array.isArray(response.candidates)) {
-      return response.candidates.map((candidate) => {
-        if (candidate.content && candidate.content.parts) {
-          const text = candidate.content.parts
-            .filter((part: any) => part.text)
-            .map((part: any) => part.text)
-            .join('')
-          return { role: 'assistant', content: text }
-        }
-        return { role: 'assistant', content: String(candidate) }
-      })
-    }
-
-    return []
   }
 }
 

@@ -289,7 +289,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     if (extraParams) {
       generation.modelParams = getModelParams(extraParams.invocation_params)
 
-      if (extraParams.invocation_params.tools) {
+      if (extraParams.invocation_params && extraParams.invocation_params.tools) {
         generation.tools = extraParams.invocation_params.tools
       }
     }
@@ -427,7 +427,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     }
 
     if (run.tools) {
-      eventProperties['$ai_tools'] = withPrivacyMode(this.client, this.privacyMode, run.tools)
+      eventProperties['$ai_tools'] = run.tools
     }
 
     if (output instanceof Error) {
@@ -452,10 +452,21 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       let completions
       if (output.generations && Array.isArray(output.generations)) {
         const lastGeneration = output.generations[output.generations.length - 1]
-        if (Array.isArray(lastGeneration)) {
-          completions = lastGeneration.map((gen) => {
-            return { role: 'assistant', content: gen.text }
-          })
+        if (Array.isArray(lastGeneration) && lastGeneration.length > 0) {
+          // Check if this is a ChatGeneration by looking at the first item
+          const isChatGeneration = 'message' in lastGeneration[0] && lastGeneration[0].message
+
+          if (isChatGeneration) {
+            // For ChatGeneration, convert messages to dict format
+            completions = lastGeneration.map((gen: any) => {
+              return this._convertMessageToDict(gen.message)
+            })
+          } else {
+            // For non-ChatGeneration, extract raw response
+            completions = lastGeneration.map((gen: any) => {
+              return this._extractRawResponse(gen)
+            })
+          }
         }
       }
 
@@ -512,6 +523,20 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
         arguments: JSON.stringify(toolCall.args),
       },
     }))
+  }
+
+  private _extractRawResponse(generation: any): any {
+    // Extract the response from the last response of the LLM call
+    // We return the text of the response if not empty
+    if (generation.text != null && generation.text.trim() !== '') {
+      return generation.text.trim()
+    } else if (generation.message) {
+      // Additional kwargs contains the response in case of tool usage
+      return generation.message.additional_kwargs || generation.message.additionalKwargs || {}
+    } else {
+      // Not tool usage, some LLM responses can be simply empty
+      return ''
+    }
   }
 
   private _convertMessageToDict(message: any): Record<string, any> {

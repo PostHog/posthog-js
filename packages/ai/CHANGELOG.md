@@ -1,5 +1,21 @@
 # posthog-ai
 
+## 6.0.1
+
+### Patch Changes
+
+- [#2199](https://github.com/PostHog/posthog-js/pull/2199) [`d887947`](https://github.com/PostHog/posthog-js/commit/d887947317fed0da3737b752c1f5e680fddd44eb) Thanks [@k11kirky](https://github.com/k11kirky)! - Fix bug with vercel output mapping
+
+## 6.0.0
+
+### Major Changes
+
+- [#2191](https://github.com/PostHog/posthog-js/pull/2191) [`65d72b4`](https://github.com/PostHog/posthog-js/commit/65d72b4f1495b3a932936d87ca53b518f0a7b9da) Thanks [@k11kirky](https://github.com/k11kirky)! - Updated Vercel AI SDK to v5
+
+### Patch Changes
+
+- [#2195](https://github.com/PostHog/posthog-js/pull/2195) [`f6fdd8e`](https://github.com/PostHog/posthog-js/commit/f6fdd8ecd8b011162e34263f7096e190b4b9c453) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Fix tool calls for all non-streaming providers
+
 ## 5.2.3
 
 ### Patch Changes
