@@ -57,11 +57,11 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         posthogDistinctId: 'test-user',
         posthogTraceId: 'test123',
         posthogProperties: {
-          test: 'test'
+          test: 'test',
         },
         posthogGroups: {
-          company: 'test-company'
-        }
+          company: 'test-company',
+        },
       })
 
       // Mock generateText to simulate successful generation
@@ -77,13 +77,13 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
 
       const result = await generateText({
         model: model,
-        prompt: 'What is 9 + 10?'
+        prompt: 'What is 9 + 10?',
       })
 
       expect(result).toEqual(mockResult)
       expect(generateText).toHaveBeenCalledWith({
         model: model,
-        prompt: 'What is 9 + 10?'
+        prompt: 'What is 9 + 10?',
       })
     })
 
@@ -99,7 +99,7 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         { text: '21', usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 } },
         { text: '25', usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 } },
       ]
-      
+
       ;(generateText as jest.Mock)
         .mockResolvedValueOnce(mockResults[0])
         .mockResolvedValueOnce(mockResults[1])
@@ -107,17 +107,17 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
 
       const { text: text1 } = await generateText({
         model: model,
-        prompt: 'What is 9 + 10?'
+        prompt: 'What is 9 + 10?',
       })
-      
+
       const { text: text2 } = await generateText({
         model: model,
-        prompt: 'What is 10 + 11?'
+        prompt: 'What is 10 + 11?',
       })
-      
+
       const { text: text3 } = await generateText({
         model: model,
-        prompt: 'What is 12 + 13?'
+        prompt: 'What is 12 + 13?',
       })
 
       expect(text1).toBe('19')
@@ -132,11 +132,11 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         posthogDistinctId: 'test-user',
         posthogTraceId: 'test123',
         posthogProperties: {
-          test: 'test'
+          test: 'test',
         },
         posthogGroups: {
-          company: 'test-vercel'
-        }
+          company: 'test-vercel',
+        },
       })
 
       const mockResult = {
@@ -147,7 +147,7 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
 
       await generateText({
         model: model,
-        prompt: 'What is 9 + 10?'
+        prompt: 'What is 9 + 10?',
       })
 
       // Verify PostHog event was sent with correct properties
@@ -159,12 +159,10 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
           provider: 'openai',
           usage: expect.objectContaining({
             inputTokens: 10,
-            outputTokens: 2
-          })
+            outputTokens: 2,
+          }),
         })
       )
     })
-
   })
-
 })

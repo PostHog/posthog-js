@@ -1,5 +1,10 @@
 import { wrapLanguageModel } from 'ai'
-import type { LanguageModelV2, LanguageModelV2Middleware, LanguageModelV2Prompt, LanguageModelV2StreamPart } from '@ai-sdk/provider'
+import type {
+  LanguageModelV2,
+  LanguageModelV2Middleware,
+  LanguageModelV2Prompt,
+  LanguageModelV2StreamPart,
+} from '@ai-sdk/provider'
 import { v4 as uuidv4 } from 'uuid'
 import { PostHog } from 'posthog-node'
 import { CostOverride, sendEventToPosthog, truncate, MAX_OUTPUT_SIZE, extractAvailableToolCalls } from '../utils'
@@ -33,10 +38,10 @@ interface PostHogInput {
   role: string
   type?: string
   content?:
-  | string
-  | {
-    [key: string]: any
-  }
+    | string
+    | {
+        [key: string]: any
+      }
 }
 
 const mapVercelParams = (params: any): Record<string, any> => {
@@ -188,12 +193,12 @@ const mapVercelOutput = (result: any): PostHogInput[] => {
     ...(normalizedResult.providerMetadata ? { toolCalls: normalizedResult.providerMetadata } : {}),
     ...(normalizedResult.files
       ? {
-        files: normalizedResult.files.map((file: any) => ({
-          name: file.name,
-          size: file.size,
-          type: file.type,
-        })),
-      }
+          files: normalizedResult.files.map((file: any) => ({
+            name: file.name,
+            size: file.size,
+            type: file.type,
+          })),
+        }
       : {}),
   }
   if (output.text && !output.object && !output.reasoning) {
@@ -228,8 +233,8 @@ export const createInstrumentationMiddleware = (
         ...mapVercelParams(params),
       }
 
-      const latency = (Date.now() - startTime) / 1000;
-      const availableTools = extractAvailableToolCalls('vercel', params);
+      const latency = (Date.now() - startTime) / 1000
+      const availableTools = extractAvailableToolCalls('vercel', params)
 
       try {
         const result = await doGenerate()
@@ -248,9 +253,9 @@ export const createInstrumentationMiddleware = (
             : {}),
           ...(providerMetadata?.anthropic
             ? {
-              cacheReadInputTokens: providerMetadata.anthropic.cacheReadInputTokens,
-              cacheCreationInputTokens: providerMetadata.anthropic.cacheCreationInputTokens,
-            }
+                cacheReadInputTokens: providerMetadata.anthropic.cacheReadInputTokens,
+                cacheCreationInputTokens: providerMetadata.anthropic.cacheCreationInputTokens,
+              }
             : {}),
         }
         await sendEventToPosthog({
