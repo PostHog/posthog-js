@@ -28,24 +28,25 @@ jest.mock('ai', () => ({
   generateText: jest.fn().mockImplementation(async ({ model, prompt }) => {
     // Simulate what generateText does - call the model's doGenerate
     const result = await model.doGenerate({
-      prompt: [{ role: 'user', content: prompt }]
+      prompt: [{ role: 'user', content: prompt }],
     })
     return { text: result.text, usage: result.usage }
   }),
   streamText: jest.fn(),
   wrapLanguageModel: jest.fn().mockImplementation((config) => {
     // Actually apply the middleware instead of bypassing it
-    return config.middleware.wrapGenerate ? 
-      {
-        ...config.model,
-        doGenerate: async (params: any) => {
-          return config.middleware.wrapGenerate({
-            doGenerate: config.model.doGenerate,
-            params,
-            model: config.model
-          })
+    return config.middleware.wrapGenerate
+      ? {
+          ...config.model,
+          doGenerate: async (params: any) => {
+            return config.middleware.wrapGenerate({
+              doGenerate: config.model.doGenerate,
+              params,
+              model: config.model,
+            })
+          },
         }
-      } : config.model
+      : config.model
   }),
 }))
 
