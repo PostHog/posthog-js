@@ -1,6 +1,7 @@
 import { PostHog } from 'posthog-node'
 import { withTracing } from '../src/index'
 import { generateText, streamText } from 'ai'
+import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider'
 
 // Mock PostHog
 jest.mock('posthog-node', () => {
@@ -15,70 +16,88 @@ jest.mock('posthog-node', () => {
   }
 })
 
-// Mock sendEventToPosthog
-jest.mock('../src/utils', () => ({
-  sendEventToPosthog: jest.fn(),
-  truncate: jest.fn((str: string) => str),
-  extractAvailableToolCalls: jest.fn(() => []),
-  MAX_OUTPUT_SIZE: 1000000,
-}))
-
-// Mock the AI SDK functions but let generateText call through to the model
+// Mock AI SDK's generateText to simulate its behavior
 jest.mock('ai', () => ({
-  generateText: jest.fn().mockImplementation(async ({ model, prompt }) => {
-    // Simulate what generateText does - call the model's doGenerate
-    const result = await model.doGenerate({
-      prompt: [{ role: 'user', content: prompt }],
-    })
-    return { text: result.text, usage: result.usage }
+  generateText: jest.fn(async ({ model, prompt }) => {
+    // Simulate what generateText does - convert prompt and call model
+    const messages = typeof prompt === 'string' ? [{ role: 'user', content: prompt }] : prompt
+
+    const result = await model.doGenerate({ prompt: messages })
+
+    return {
+      text: result.text,
+      usage: {
+        promptTokens: result.usage.inputTokens,
+        completionTokens: result.usage.outputTokens,
+        totalTokens: result.usage.inputTokens + result.usage.outputTokens,
+      },
+    }
   }),
   streamText: jest.fn(),
-  wrapLanguageModel: jest.fn().mockImplementation((config) => {
-    // Actually apply the middleware instead of bypassing it
-    return config.middleware.wrapGenerate
-      ? {
-          ...config.model,
-          doGenerate: async (params: any) => {
-            return config.middleware.wrapGenerate({
-              doGenerate: config.model.doGenerate,
-              params,
-              model: config.model,
-            })
-          },
-        }
-      : config.model
+  wrapLanguageModel: jest.fn(({ model, middleware }) => {
+    // Apply the middleware to the model
+    const wrappedModel = {
+      ...model,
+      doGenerate: async (params: any) => {
+        return middleware.wrapGenerate({
+          doGenerate: async () => model.doGenerate(params),
+          params,
+          model,
+        })
+      },
+      doStream: model.doStream,
+    }
+    return wrappedModel
   }),
 }))
 
-// Create a mock openai function
-const mockOpenai = jest.fn((modelId: string) => ({
-  specificationVersion: 'v2' as const,
-  provider: 'openai',
-  modelId: modelId,
-  supportedUrls: {},
-  doGenerate: jest.fn().mockResolvedValue({
-    text: '19',
-    usage: { inputTokens: 10, outputTokens: 2 },
-    response: { modelId: modelId },
-    providerMetadata: {},
-  }),
-  doStream: jest.fn(),
-}))
+// Create a mock openai function that returns a properly structured model
+const createMockModel = (modelId: string): LanguageModelV2 => {
+  const mockResponses = {
+    'What is 9 + 10?': { text: '19', usage: { inputTokens: 10, outputTokens: 2 } },
+    'What is 10 + 11?': { text: '21', usage: { inputTokens: 10, outputTokens: 2 } },
+    'What is 12 + 13?': { text: '25', usage: { inputTokens: 10, outputTokens: 2 } },
+  }
+
+  return {
+    specificationVersion: 'v2' as const,
+    provider: 'openai',
+    modelId: modelId,
+    defaultOptions: {},
+    supportedUrls: {},
+    doGenerate: jest.fn().mockImplementation(async (params: LanguageModelV2CallOptions) => {
+      // Extract the prompt text from the params
+      const userMessage = params.prompt.find((m: any) => m.role === 'user')
+      const promptText = userMessage?.content as string
+      const response = mockResponses[promptText as keyof typeof mockResponses] || {
+        text: 'Unknown',
+        usage: { inputTokens: 5, outputTokens: 1 },
+      }
+
+      return {
+        ...response,
+        response: { modelId: modelId },
+        providerMetadata: {},
+        finishReason: 'stop',
+        logprobs: undefined,
+        warnings: [],
+      }
+    }),
+    doStream: jest.fn(),
+  }
+}
 
 describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
   let mockPostHogClient: PostHog
-  let mockSendEventToPosthog: jest.Mock
 
   beforeEach(async () => {
     jest.clearAllMocks()
     mockPostHogClient = new (PostHog as any)()
-    const utils = await import('../src/utils')
-    mockSendEventToPosthog = utils.sendEventToPosthog as jest.Mock
   })
 
   describe('generateText with withTracing (real usage)', () => {
     it('should wrap a model and track simple prompt generation', async () => {
-      const baseModel = mockOpenai('gpt-4')
+      const baseModel = createMockModel('gpt-4')
       const model = withTracing(baseModel, mockPostHogClient, {
         posthogDistinctId: 'test-user',
         posthogTraceId: 'test123',
@@ -90,46 +109,59 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         },
       })
 
-      // Mock generateText to simulate successful generation
-      const mockResult = {
-        text: '19',
-        usage: {
-          inputTokens: 10,
-          outputTokens: 2,
-          totalTokens: 12,
-        },
-      }
-      ;(generateText as jest.Mock).mockResolvedValue(mockResult)
-
       const result = await generateText({
         model: model,
         prompt: 'What is 9 + 10?',
       })
 
-      expect(result).toEqual(mockResult)
-      expect(generateText).toHaveBeenCalledWith({
-        model: model,
-        prompt: 'What is 9 + 10?',
+      expect(result.text).toBe('19')
+      expect(result.usage).toEqual({
+        promptTokens: 10,
+        completionTokens: 2,
+        totalTokens: 12,
+      })
+
+      // Verify PostHog was called
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      expect(captureCall[0]).toEqual({
+        distinctId: 'test-user',
+        event: '$ai_generation',
+        properties: expect.objectContaining({
+          $ai_model: 'gpt-4',
+          $ai_provider: 'openai',
+          $ai_trace_id: 'test123',
+          test: 'test',
+          $ai_input_tokens: 10,
+          $ai_output_tokens: 2,
+          $ai_input: expect.arrayContaining([
+            expect.objectContaining({
+              role: 'user',
+              content: expect.arrayContaining([
+                expect.objectContaining({
+                  type: 'text',
+                  text: 'What is 9 + 10?',
+                }),
+              ]),
+            }),
+          ]),
+          $ai_output_choices: expect.arrayContaining([
+            expect.objectContaining({
+              role: 'assistant',
+              content: '19',
+            }),
+          ]),
+        }),
+        groups: { company: 'test-company' },
       })
     })
 
     it('should handle multiple sequential calls', async () => {
-      const baseModel = mockOpenai('gpt-4.1')
+      const baseModel = createMockModel('gpt-4.1')
       const model = withTracing(baseModel, mockPostHogClient, {
         posthogDistinctId: 'test-user',
         posthogTraceId: 'test123',
       })
-
-      const mockResults = [
-        { text: '19', usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 } },
-        { text: '21', usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 } },
-        { text: '25', usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 } },
-      ]
-
-      ;(generateText as jest.Mock)
-        .mockResolvedValueOnce(mockResults[0])
-        .mockResolvedValueOnce(mockResults[1])
-        .mockResolvedValueOnce(mockResults[2])
 
       const { text: text1 } = await generateText({
         model: model,
@@ -149,11 +181,19 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
       expect(text1).toBe('19')
       expect(text2).toBe('21')
       expect(text3).toBe('25')
-      expect(generateText).toHaveBeenCalledTimes(3)
+
+      // Verify PostHog was called 3 times
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(3)
+
+      // Verify each call had the correct trace ID
+      const calls = (mockPostHogClient.capture as jest.Mock).mock.calls
+      calls.forEach((call) => {
+        expect(call[0].properties.$ai_trace_id).toBe('test123')
+      })
     })
 
     it('should track PostHog events with properties and groups', async () => {
-      const baseModel = mockOpenai('gpt-4')
+      const baseModel = createMockModel('gpt-4')
       const model = withTracing(baseModel, mockPostHogClient, {
         posthogDistinctId: 'test-user',
         posthogTraceId: 'test123',
@@ -165,22 +205,79 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         },
       })
 
-      const { text } = await generateText({
+      const result = await generateText({
         model: model,
         prompt: 'What is 9 + 10?',
       })
 
-      expect(text).toBe('19')
-      expect(mockSendEventToPosthog).toHaveBeenCalledWith(
+      expect(result.text).toBe('19')
+
+      // Check that PostHog capture was called
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+      expect(captureCall[0]).toEqual({
+        distinctId: 'test-user',
+        event: '$ai_generation',
+        properties: expect.objectContaining({
+          $ai_model: 'gpt-4',
+          $ai_provider: 'openai',
+          $ai_trace_id: 'test123',
+          test: 'test', // Custom properties
+          $ai_input_tokens: 10,
+          $ai_output_tokens: 2,
+          $ai_input: expect.arrayContaining([
+            expect.objectContaining({
+              role: 'user',
+              content: expect.arrayContaining([
+                expect.objectContaining({
+                  type: 'text',
+                  text: 'What is 9 + 10?',
+                }),
+              ]),
+            }),
+          ]),
+          $ai_output_choices: expect.arrayContaining([
+            expect.objectContaining({
+              role: 'assistant',
+              content: '19',
+            }),
+          ]),
+        }),
+        groups: { company: 'test-vercel' },
+      })
+    })
+
+    it('should handle error cases', async () => {
+      const baseModel = createMockModel('gpt-4')
+      // Override doGenerate to throw an error
+      baseModel.doGenerate = jest.fn().mockRejectedValue(new Error('API Error'))
+
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-error',
+      })
+
+      await expect(
+        generateText({
+          model: model,
+          prompt: 'What is 9 + 10?',
+        })
+      ).rejects.toThrow('API Error')
+
+      // Verify error was tracked
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+      expect(captureCall[0].properties).toEqual(
         expect.objectContaining({
-          distinctId: 'test-user',
-          traceId: 'test123',
-          model: 'gpt-4',
-          provider: 'openai',
-          usage: expect.objectContaining({
-            inputTokens: 10,
-            outputTokens: 2,
-          }),
+          $ai_trace_id: 'test-error',
+          $ai_error: expect.any(String), // Error is serialized to JSON
+          $ai_is_error: true,
+          $ai_model: 'gpt-4',
+          $ai_provider: 'openai',
+          $ai_input_tokens: 0,
+          $ai_output_tokens: 0,
         })
       )
     })
