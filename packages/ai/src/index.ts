@@ -10,5 +10,4 @@ export { PostHogAzureOpenAI as AzureOpenAI }
 export { PostHogAnthropic as Anthropic }
 export { PostHogGoogleGenAI as GoogleGenAI }
 export { wrapVercelLanguageModel as withTracing }
-export { wrapVercelLanguageModelV5 as withTracingV5 }
 export { LangChainCallbackHandler }
