@@ -232,8 +232,6 @@ export const createInstrumentationMiddleware = (
         ...options,
         ...mapVercelParams(params),
       }
-
-      const latency = (Date.now() - startTime) / 1000
       const availableTools = extractAvailableToolCalls('vercel', params)
 
       try {
@@ -243,6 +241,7 @@ export const createInstrumentationMiddleware = (
         const provider = options.posthogProviderOverride ?? extractProvider(model)
         const baseURL = '' // cannot currently get baseURL from vercel
         const content = mapVercelOutput(result)
+        const latency = (Date.now() - startTime) / 1000
         const providerMetadata = result.providerMetadata
         const additionalTokenValues = {
           ...(providerMetadata?.openai?.reasoningTokens
@@ -290,7 +289,7 @@ export const createInstrumentationMiddleware = (
           provider: model.provider,
           input: options.posthogPrivacyMode ? '' : mapVercelPrompt(params.prompt),
           output: [],
-          latency,
+          latency: 0,
           baseURL: '',
           params: mergedParams as any,
           httpStatus: error?.status ? error.status : 500,
