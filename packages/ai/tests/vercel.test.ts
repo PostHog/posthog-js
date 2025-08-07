@@ -63,8 +63,6 @@ const createMockModel = (modelId: string): LanguageModelV2 => {
     specificationVersion: 'v2' as const,
     provider: 'openai',
     modelId: modelId,
-    defaultOptions: {},
-    supportedUrls: {},
     doGenerate: jest.fn().mockImplementation(async (params: LanguageModelV2CallOptions) => {
       // Extract the prompt text from the params
       const userMessage = params.prompt.find((m: any) => m.role === 'user')
@@ -84,7 +82,7 @@ const createMockModel = (modelId: string): LanguageModelV2 => {
       }
     }),
     doStream: jest.fn(),
-  }
+  } as LanguageModelV2
 }
 
 describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
