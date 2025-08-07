@@ -273,7 +273,7 @@ function buildDependencyGraph(featureFlags: PostHogFeatureFlag[]): {
   return { graph, idToKeyMapping, removedFlags }
 }
 
-function matchFlagDependency(filterValue: any, flagResult: FeatureFlagValue): boolean {
+function matchFlagDependency(filterValue: FeatureFlagValue, flagResult: FeatureFlagValue): boolean {
   if (filterValue === true) {
     // True matches any enabled state (not false)
     return flagResult !== false
