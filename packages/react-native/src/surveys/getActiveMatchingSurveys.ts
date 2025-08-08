@@ -2,6 +2,8 @@ import { canActivateRepeatedly, hasEvents } from './surveys-utils'
 import { currentDeviceType } from '../native-deps'
 import { FeatureFlagValue, Survey, SurveyMatchType } from '@posthog/core'
 
+const ANY_FLAG_VARIANT = 'any'
+
 const isMatchingRegex = function (value: string, pattern: string): boolean {
   if (!isValidRegex(pattern)) {
     return false
@@ -53,6 +55,10 @@ function doesSurveyDeviceTypesMatch(survey: Survey): boolean {
   )
 }
 
+function isSurveyFlagEnabled(flagKey: string | undefined, flags: Record<string, FeatureFlagValue>): boolean {
+  return flagKey ? !!flags[flagKey] === true : true
+}
+
 export function getActiveMatchingSurveys(
   surveys: Survey[],
   flags: Record<string, FeatureFlagValue>,
@@ -97,23 +103,37 @@ export function getActiveMatchingSurveys(
       return true
     }
 
-    const linkedFlagCheck = survey.linked_flag_key ? flags[survey.linked_flag_key] === true : true
-    const targetingFlagCheck = survey.targeting_flag_key ? flags[survey.targeting_flag_key] === true : true
+    const linkedFlagCheck = isSurveyFlagEnabled(survey.linked_flag_key, flags)
+
+    const linkedFlagVariant = survey.conditions?.linkedFlagVariant
+    let linkedFlagVariantCheck = true
+    if (linkedFlagVariant) {
+      linkedFlagVariantCheck = survey.linked_flag_key
+        ? flags[survey.linked_flag_key] === linkedFlagVariant || linkedFlagVariant === ANY_FLAG_VARIANT
+        : true
+    }
+
+    const targetingFlagCheck = isSurveyFlagEnabled(survey.targeting_flag_key, flags)
 
     const eventBasedTargetingFlagCheck = hasEvents(survey) ? activatedSurveys.has(survey.id) : true
 
     const internalTargetingFlagCheck =
       survey.internal_targeting_flag_key && !canActivateRepeatedly(survey)
-        ? flags[survey.internal_targeting_flag_key] === true
+        ? isSurveyFlagEnabled(survey.internal_targeting_flag_key, flags)
         : true
     const flagsCheck = survey.feature_flag_keys?.length
       ? survey.feature_flag_keys.every(({ key, value }: { key: string; value?: string }) => {
-          return !key || !value || flags[value] === true
+          return !key || !value || isSurveyFlagEnabled(value, flags)
         })
       : true
 
     return (
-      linkedFlagCheck && targetingFlagCheck && internalTargetingFlagCheck && eventBasedTargetingFlagCheck && flagsCheck
+      linkedFlagCheck &&
+      linkedFlagVariantCheck &&
+      targetingFlagCheck &&
+      internalTargetingFlagCheck &&
+      eventBasedTargetingFlagCheck &&
+      flagsCheck
     )
   })
 }

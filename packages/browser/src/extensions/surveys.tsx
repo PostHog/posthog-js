@@ -386,13 +386,19 @@ export class SurveyManager {
         )
     }
 
-    private _isSurveyFeatureFlagEnabled(flagKey: string | null) {
+    private _isSurveyFeatureFlagEnabled(flagKey: string | null, flagVariant: string | undefined = undefined) {
         if (!flagKey) {
             return true
         }
-        return !!this._posthog.featureFlags.isFeatureEnabled(flagKey, {
+        const isFeatureEnabled = !!this._posthog.featureFlags.isFeatureEnabled(flagKey, {
             send_event: !flagKey.startsWith(SURVEY_TARGETING_FLAG_PREFIX),
         })
+        let flagVariantCheck = true
+        if (flagVariant) {
+            const flagVariantValue = this._posthog.featureFlags.getFeatureFlag(flagKey, { send_event: false })
+            flagVariantCheck = flagVariantValue === flagVariant || flagVariant === 'any'
+        }
+        return isFeatureEnabled && flagVariantCheck
     }
 
     private _isSurveyConditionMatched(survey: Survey): boolean {
@@ -425,9 +431,14 @@ export class SurveyManager {
             return eligibility
         }
 
-        if (!this._isSurveyFeatureFlagEnabled(survey.linked_flag_key)) {
+        const linkedFlagVariant = survey.conditions?.linkedFlagVariant
+        if (!this._isSurveyFeatureFlagEnabled(survey.linked_flag_key, linkedFlagVariant)) {
             eligibility.eligible = false
-            eligibility.reason = `Survey linked feature flag is not enabled`
+            if (!linkedFlagVariant) {
+                eligibility.reason = `Survey linked feature flag is not enabled`
+            } else {
+                eligibility.reason = `Survey linked feature flag is not enabled for variant ${linkedFlagVariant}`
+            }
             return eligibility
         }
 
