@@ -364,6 +364,71 @@ describe('PostHog React Native', () => {
     })
   })
 
+  describe('request headers', () => {
+    it('should include custom headers in requests', async () => {
+      const fetchSpy = jest.spyOn(global as any, 'fetch')
+
+      posthog = new PostHog('test-token', {
+        persistence: 'memory',
+        request_headers: {
+          Authorization: 'Bearer test-token',
+          'X-Custom-Header': 'custom-value',
+        },
+      })
+
+      posthog.capture('test-event')
+      await posthog.flush()
+
+      expect(fetchSpy).toHaveBeenCalled()
+      const fetchCall = fetchSpy.mock.calls.find(
+        (call: any[]) =>
+          typeof call[0] === 'string' &&
+          (call[0].includes('batch') || call[0].includes('capture') || call[0].includes('e'))
+      ) as [string, any] | undefined
+
+      if (fetchCall) {
+        const options = fetchCall[1]
+        expect(options.headers).toMatchObject({
+          Authorization: 'Bearer test-token',
+          'X-Custom-Header': 'custom-value',
+        })
+      }
+
+      fetchSpy.mockRestore()
+    })
+
+    it('should merge custom headers with existing headers', async () => {
+      const fetchSpy = jest.spyOn(global as any, 'fetch')
+
+      posthog = new PostHog('test-token', {
+        persistence: 'memory',
+        request_headers: {
+          Authorization: 'Bearer test-token',
+        },
+      })
+
+      posthog.capture('test-event')
+      await posthog.flush()
+
+      expect(fetchSpy).toHaveBeenCalled()
+      const fetchCall = fetchSpy.mock.calls.find(
+        (call: any[]) =>
+          typeof call[0] === 'string' &&
+          (call[0].includes('batch') || call[0].includes('capture') || call[0].includes('e'))
+      ) as [string, any] | undefined
+
+      if (fetchCall) {
+        const options = fetchCall[1]
+        expect(options.headers).toMatchObject({
+          Authorization: 'Bearer test-token',
+        })
+        expect(options.headers['Content-Type']).toBeDefined()
+      }
+
+      fetchSpy.mockRestore()
+    })
+  })
+
   describe('sync initialization', () => {
     let storage: PostHogCustomStorage
     let cache: { [key: string]: any | undefined }
