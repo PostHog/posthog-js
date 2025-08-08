@@ -36,7 +36,16 @@ try {
     }
 }
 
-const { PostHog } = require('../../packages/node/dist/node/index.cjs')
+// Try to load PostHog from built version, with helpful error if not built yet
+let PostHog
+try {
+    PostHog = require('../../packages/node/dist/node/index.cjs').PostHog
+} catch (err) {
+    console.error('❌ PostHog Node.js package not built yet.')
+    console.error('   Please run: pnpm build')
+    console.error('   Or from the packages/node directory: pnpm build')
+    process.exit(1)
+}
 
 // Configuration
 const config = {
