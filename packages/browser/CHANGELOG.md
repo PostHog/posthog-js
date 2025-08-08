@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.259.0
+
+### Minor Changes
+
+- [#2192](https://github.com/PostHog/posthog-js/pull/2192) [`dec3f44`](https://github.com/PostHog/posthog-js/commit/dec3f443465787216ee3015aa254c5312659ad3f) Thanks [@marandaneto](https://github.com/marandaneto)! - survey support for feature flag variants
+
 ## 1.258.6
 
 ### Patch Changes
