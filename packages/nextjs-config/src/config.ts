@@ -1,98 +1,26 @@
 import type { NextConfig } from 'next'
-import { SourcemapWebpackPlugin } from './webpack-plugin'
-
-type NextFuncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => NextConfig
-type NextAsyncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => Promise<NextConfig>
-type UserProvidedConfig = NextConfig | NextFuncConfig | NextAsyncConfig
-
-export type PostHogNextConfig = {
-  personalApiKey: string
-  envId: string
-  host?: string
-  verbose?: boolean
-  sourcemaps?: {
-    enabled?: boolean
-    project?: string
-    version?: string
-    deleteAfterUpload?: boolean
-  }
-}
-
-export type PostHogNextConfigComplete = {
-  personalApiKey: string
-  envId: string
-  host: string
-  verbose: boolean
-  sourcemaps: {
-    enabled: boolean
-    project?: string
-    version?: string
-    deleteAfterUpload: boolean
-  }
-}
+import type { PostHogNextConfig, UserProvidedConfig } from './types'
+import { buildTurbopackConfig } from './builders/turbopack'
+import { buildWebpackConfig } from './builders/webpack'
+import { isTurbopackEnabled } from './utils/bundler-detection'
+import { resolveUserConfig, resolvePostHogConfig } from './utils/config-resolution'
 
 export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogConfig: PostHogNextConfig): NextConfig {
   const posthogNextConfigComplete = resolvePostHogConfig(posthogConfig)
   return async (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => {
-    const {
-      webpack: userWebPackConfig,
-      distDir,
-      ...userConfig
-    } = await resolveUserConfig(userNextConfig, phase, defaultConfig)
-    const defaultWebpackConfig = userWebPackConfig || ((config: any) => config)
+    const resolvedUserConfig = await resolveUserConfig(userNextConfig, phase, defaultConfig)
     const sourceMapEnabled = posthogNextConfigComplete.sourcemaps.enabled
-    return {
-      ...userConfig,
-      distDir,
-      productionBrowserSourceMaps: sourceMapEnabled,
-      webpack: (config: any, options: any) => {
-        const webpackConfig = defaultWebpackConfig(config, options)
-        if (webpackConfig && options.isServer && sourceMapEnabled) {
-          webpackConfig.devtool = 'source-map'
-        }
-        if (sourceMapEnabled) {
-          webpackConfig.plugins = webpackConfig.plugins || []
-          webpackConfig.plugins.push(
-            new SourcemapWebpackPlugin(posthogNextConfigComplete, options.isServer, options.nextRuntime, distDir)
-          )
-        }
-        return webpackConfig
-      },
-    }
-  }
-}
 
-function resolveUserConfig(
-  userNextConfig: UserProvidedConfig,
-  phase: string,
-  defaultConfig: NextConfig
-): Promise<NextConfig> {
-  if (typeof userNextConfig === 'function') {
-    const maybePromise = userNextConfig(phase, { defaultConfig })
-    if (maybePromise instanceof Promise) {
-      return maybePromise
-    } else {
-      return Promise.resolve(maybePromise)
+    // Early return if sourcemaps are not enabled
+    if (!sourceMapEnabled) {
+      return resolvedUserConfig
     }
-  } else if (typeof userNextConfig === 'object') {
-    return Promise.resolve(userNextConfig)
-  } else {
-    throw new Error('Invalid user config')
-  }
-}
 
-function resolvePostHogConfig(posthogProvidedConfig: PostHogNextConfig): PostHogNextConfigComplete {
-  const { personalApiKey, envId, host, verbose, sourcemaps = {} } = posthogProvidedConfig
-  return {
-    personalApiKey,
-    envId,
-    host: host ?? 'https://us.posthog.com',
-    verbose: verbose ?? true,
-    sourcemaps: {
-      enabled: sourcemaps.enabled ?? process.env.NODE_ENV == 'production',
-      project: sourcemaps.project,
-      version: sourcemaps.version,
-      deleteAfterUpload: sourcemaps.deleteAfterUpload ?? true,
-    },
+    // Determine bundler and return appropriate config
+    const isTurbopack = isTurbopackEnabled(resolvedUserConfig)
+
+    return isTurbopack
+      ? buildTurbopackConfig(resolvedUserConfig, posthogNextConfigComplete)
+      : buildWebpackConfig(resolvedUserConfig, posthogNextConfigComplete)
   }
 }

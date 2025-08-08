@@ -23,6 +23,7 @@ export default withPostHogConfig(nextConfig, {
     project: "my-application", // (optional) Project name, defaults to repository name
     version: "1.0.0", // (optional) Release version, defaults to current git commit
     deleteAfterUpload: true, // (optional) Delete sourcemaps after upload, defaults to true
+    failOnError: false, // (optional) Fail on error, defaults to false
   },
 });
 ```
