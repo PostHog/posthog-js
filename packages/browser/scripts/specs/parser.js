@@ -5,7 +5,7 @@ const methods = require('./methods');
 const types = require('./types');
 const { writeFileSync, readFileSync } = require('fs');
 const path = require('path');
-const { NO_DOCS_TYPES, HOG_REF, SPEC_INFO, OUTPUT_FILE_PATH, PROPERTIES_EXAMPLE, PROPERTY_EXAMPLE } = require('./constants');
+const { HOG_REF, SPEC_INFO, OUTPUT_FILE_PATH, PROPERTIES_EXAMPLE, PROPERTY_EXAMPLE } = require('./constants');
 
 const loadPackageInfo = (dirPath) => 
     JSON.parse(readFileSync(path.resolve(dirPath, '../../package.json'), 'utf8'));
@@ -82,7 +82,6 @@ const composeOutput = (packageJson, posthogClass, functions, types) => ({
         version: packageJson.version,
         ...SPEC_INFO
     },
-    noDocsTypes: NO_DOCS_TYPES,
     classes: [createClassDefinition(posthogClass, functions)],
     types
 });
