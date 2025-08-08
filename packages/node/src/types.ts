@@ -48,6 +48,14 @@ export type FlagProperty = {
   negation?: boolean
 }
 
+export type FlagDependencyProperty = {
+  key: string
+  type: 'flag'
+  value: FeatureFlagValue
+  operator?: string
+  negation?: boolean
+}
+
 export type FeatureFlagCondition = {
   properties: FlagProperty[]
   rollout_percentage?: number

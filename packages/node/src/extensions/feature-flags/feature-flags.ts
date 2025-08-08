@@ -524,6 +524,14 @@ class FeatureFlagsPoller {
     prop: FeatureFlagCondition['properties'][number],
     dependencyGraph: DependencyGraph
   ): Promise<boolean> {
+    // Type guard: this function should only be called for flag dependency properties
+    if (prop.type !== 'flag') {
+      this.logMsgIfDebug(() =>
+        console.warn(`[FEATURE FLAGS] matchFlagProperty called with non-flag property type: ${prop.type}`)
+      )
+      return false
+    }
+
     const dependencyKey = prop.key
     if (!dependencyKey) {
       this.logMsgIfDebug(() => console.warn('[FEATURE FLAGS] Flag dependency property missing key'))
@@ -543,8 +551,23 @@ class FeatureFlagsPoller {
       return false // Condition fails
     }
 
+    // For flag dependencies, prop.value should be FeatureFlagValue (string | boolean)
+    // If it's not, this indicates a data inconsistency that we should handle gracefully
+    let filterValue: FeatureFlagValue
+    if (typeof prop.value === 'boolean' || typeof prop.value === 'string') {
+      filterValue = prop.value as FeatureFlagValue
+    } else {
+      // This should not happen for flag dependencies, but handle gracefully
+      this.logMsgIfDebug(() =>
+        console.warn(
+          `[FEATURE FLAGS] Flag dependency has unexpected value type: ${typeof prop.value}. Converting to string.`
+        )
+      )
+      filterValue = String(Array.isArray(prop.value) ? prop.value[0] : prop.value)
+    }
+
     // Match the flag result against the expected value
-    return matchFlagDependency(prop.value, flagResult)
+    return matchFlagDependency(filterValue, flagResult)
   }
 
   async getMatchingVariant(flag: PostHogFeatureFlag, distinctId: string): Promise<FeatureFlagValue | undefined> {
