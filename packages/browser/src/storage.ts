@@ -170,6 +170,9 @@ export const cookieStore: PersistentStore = {
     },
 
     _remove: function (name, cross_subdomain) {
+        if (!document?.cookie) {
+            return
+        }
         try {
             cookieStore._set(name, '', -1, cross_subdomain)
         } catch {

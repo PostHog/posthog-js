@@ -575,13 +575,17 @@ export interface PostHogConfig {
      */
     opt_out_useragent_filter: boolean
 
+    /** @deprecated Use `consent_persistence_name` instead. This will be removed in a future major version. **/
+    opt_out_capturing_cookie_prefix: string | null
+
     /**
-     * Determines the prefix for the cookie used to store the information about whether users are opted out of capturing.
-     * When `null`, it falls back to the default prefix found in `consent.ts`.
+     * Determines the key for the cookie / local storage used to store the information about whether users are opted in/out of capturing.
+     * When `null`, we used a key based on your token.
      *
      * @default null
+     * @see `ConsentManager._storageKey`
      */
-    opt_out_capturing_cookie_prefix: string | null
+    consent_persistence_name: string | null
 
     /**
      * Determines if users should be opted in to site apps.
@@ -972,6 +976,16 @@ export interface PostHogConfig {
      */
     integrations?: Record<ExternalIntegrationKind, boolean>
 
+    /**
+     * Enables cookieless mode. In this mode, PostHog will not set any cookies, or use session or local storage. User
+     * identity is handled by generating a privacy-preserving hash on PostHog's servers.
+     * - 'always' - enable cookieless mode immediately on startup, use this if you do not intend to show a cookie banner
+     * - 'on_reject' - enable cookieless mode only if the user rejects cookies, use this if you want to show a cookie banner. If the user accepts cookies, cookieless mode will not be used, and PostHog will use cookies and local storage as usual.
+     *
+     * Note that you MUST enable cookieless mode in your PostHog project's settings, otherwise all your cookieless events will be ignored. We plan to remove this requirement in the future.
+     * */
+    cookieless_mode?: 'always' | 'on_reject'
+
     // ------- PREVIEW CONFIGS -------
 
     /**
@@ -986,12 +1000,6 @@ export interface PostHogConfig {
      * Enables the new RemoteConfig approach to loading config instead of /flags?v=2&config=true
      * */
     __preview_remote_config?: boolean
-
-    /**
-     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * Whether to send a sentinel value for distinct id, device id, and session id, which will be replaced server-side by a cookieless hash
-     * */
-    __preview_experimental_cookieless_mode?: boolean
 
     /**
      * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
