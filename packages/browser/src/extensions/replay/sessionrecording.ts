@@ -454,8 +454,8 @@ export class SessionRecording {
             logger.error('started without valid sessionManager')
             throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
         }
-        if (this._instance.config.__preview_experimental_cookieless_mode) {
-            throw new Error(LOGGER_PREFIX + ' cannot be used with __preview_experimental_cookieless_mode.')
+        if (this._instance.config.cookieless_mode === 'always') {
+            throw new Error(LOGGER_PREFIX + ' cannot be used with cookieless_mode="always"')
         }
 
         this._linkedFlagMatching = new LinkedFlagMatching(this._instance)
