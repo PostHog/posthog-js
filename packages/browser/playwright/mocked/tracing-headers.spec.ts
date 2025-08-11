@@ -10,6 +10,7 @@ const startOptions = {
 }
 
 test.describe('tracing headers', () => {
+    // Test fails on WebKit (success on Chromium and Firefox)
     test.skip('adds PostHog tracing headers to fetch requests', async ({ page, context }) => {
         const fetchRequests: Request[] = []
 
