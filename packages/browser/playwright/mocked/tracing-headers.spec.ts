@@ -46,9 +46,11 @@ test.describe('tracing headers', () => {
         const request = fetchRequests[0]
         const headers = request.headers()
 
-        expect(headers['x-posthog-distinct-id']).toBeTruthy()
-        expect(headers['x-posthog-session-id']).toBeTruthy()
-        expect(headers['x-posthog-window-id']).toBeTruthy()
+        expect(headers).toMatchObject({
+            'x-posthog-distinct-id': expect.any(String),
+            'x-posthog-session-id': expect.any(String),
+            'x-posthog-window-id': expect.any(String),
+        })
     })
 
     // XHR test fails... needs more testing
@@ -143,7 +145,9 @@ test.describe('tracing headers', () => {
         const request = fetchRequests[0]
         const headers = request.headers()
 
-        expect(headers['x-posthog-distinct-id']).toBeTruthy()
+        expect(headers).toMatchObject({
+            'x-posthog-distinct-id': expect.any(String),
+        })
     })
 
     test('does NOT add tracing headers to unlisted domains', async ({ page, context }) => {
