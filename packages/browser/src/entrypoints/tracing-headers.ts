@@ -2,6 +2,7 @@ import { SessionIdManager } from '../sessionid'
 import { patch } from '../extensions/replay/rrweb-plugins/patch'
 import { assignableWindow, window } from '../utils/globals'
 import { isArray } from '../utils/type-utils'
+import { COOKIELESS_SENTINEL_VALUE } from '../constants'
 
 const addTracingHeaders = (
     hostnames: string[],
@@ -29,7 +30,9 @@ const addTracingHeaders = (
         req.headers.set('X-POSTHOG-SESSION-ID', sessionId)
         req.headers.set('X-POSTHOG-WINDOW-ID', windowId)
     }
-    req.headers.set('X-POSTHOG-DISTINCT-ID', distinctId)
+    if (distinctId !== COOKIELESS_SENTINEL_VALUE) {
+        req.headers.set('X-POSTHOG-DISTINCT-ID', distinctId)
+    }
 }
 
 const patchFetch = (hostnames: string[], distinctId: string, sessionManager?: SessionIdManager): (() => void) => {
