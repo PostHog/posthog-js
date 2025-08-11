@@ -105,6 +105,11 @@ test.beforeEach(async ({ context }) => {
         })
         ;['fetch', 'xhr'].forEach((networkType) => {
             test('it captures ' + networkType, async ({ page, browserName }) => {
+                test.skip(
+                    browserName === 'firefox',
+                    'We are trying to misbehave in order to test things, but it looks like Firefox does not let us... good firefox'
+                )
+
                 await page.waitingForNetworkCausedBy({
                     urlPatternsToWaitFor: ['**/ses/*', 'https://example.com/'],
                     action: async () => {
