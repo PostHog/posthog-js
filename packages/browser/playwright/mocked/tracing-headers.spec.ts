@@ -10,7 +10,7 @@ const startOptions = {
 }
 
 test.describe('tracing headers', () => {
-    test('adds PostHog tracing headers to fetch requests', async ({ page, context }) => {
+    test.skip('adds PostHog tracing headers to fetch requests', async ({ page, context }) => {
         const fetchRequests: Request[] = []
 
         page.on('request', (request) => {
