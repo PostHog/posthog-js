@@ -7,6 +7,6 @@ const nextConfig: NextConfig = {
 
 export default withPostHogConfig(nextConfig, {
     personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY!,
-    envId: '1',
-    host: 'http://localhost:8010',
+    envId: process.env.POSTHOG_API_PROJECT!,
+    host: process.env.NEXT_PUBLIC_POSTHOG_API_HOST!,
 })
