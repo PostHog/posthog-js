@@ -503,9 +503,9 @@ export abstract class PostHogCoreStateless {
     groupProperties: Record<string, Record<string, string>> = {},
     disableGeoip?: boolean
   ): Promise<{
-      response: FeatureFlagValue | undefined
-      requestId: string | undefined
-    }> {
+    response: FeatureFlagValue | undefined
+    requestId: string | undefined
+  }> {
     await this._initPromise
 
     const flagDetailResponse = await this.getFeatureFlagDetailStateless(
