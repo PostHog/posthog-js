@@ -194,7 +194,7 @@ const mapVercelOutput = (result: LanguageModelV2Content[]): PostHogInput[] => {
         fileData = item.data.toString()
       } else if (typeof item.data === 'string') {
         fileData = redactBase64DataUrl(item.data)
-        
+
         // If not redacted and still large, replace with size indicator
         if (fileData === item.data && item.data.length > 1000) {
           fileData = `[${item.mediaType} file - ${item.data.length} bytes]`

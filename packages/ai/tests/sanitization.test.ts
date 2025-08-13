@@ -1,10 +1,10 @@
-import { 
+import {
   redactBase64DataUrl,
   sanitizeOpenAI,
   sanitizeOpenAIResponse,
   sanitizeAnthropic,
   sanitizeGemini,
-  sanitizeLangChain
+  sanitizeLangChain,
 } from '../src/sanitization'
 
 const sanitize = (data: unknown, provider: string): unknown => {

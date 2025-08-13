@@ -25,7 +25,7 @@ const isRawBase64 = (str: string): boolean => {
   if (isValidUrl(str)) {
     return false
   }
-  
+
   // Check if it's a valid base64 string
   // Base64 images are typically at least a few hundred chars, but we'll be conservative
   return str.length > 20 && /^[A-Za-z0-9+/]+=*$/.test(str)
@@ -35,17 +35,17 @@ export function redactBase64DataUrl(str: string): string
 export function redactBase64DataUrl(str: unknown): unknown
 export function redactBase64DataUrl(str: unknown): unknown {
   if (!isString(str)) return str
-  
+
   // Check for data URL format
   if (isBase64DataUrl(str)) {
     return REDACTED_IMAGE_PLACEHOLDER
   }
-  
+
   // Check for raw base64 (Vercel sends raw base64 for inline images)
   if (isRawBase64(str)) {
     return REDACTED_IMAGE_PLACEHOLDER
   }
-  
+
   return str
 }
 
@@ -123,8 +123,13 @@ const sanitizeAnthropicImage = (item: unknown): unknown => {
   if (!isObject(item)) return item
 
   // Handle Anthropic's image format
-  if (item.type === 'image' && 'source' in item && isObject(item.source) && 
-      item.source.type === 'base64' && 'data' in item.source) {
+  if (
+    item.type === 'image' &&
+    'source' in item &&
+    isObject(item.source) &&
+    item.source.type === 'base64' &&
+    'data' in item.source
+  ) {
     return {
       ...item,
       source: {
@@ -156,19 +161,16 @@ const sanitizeGeminiPart = (part: unknown): unknown => {
 
 const processGeminiItem = (item: unknown): unknown => {
   if (!isObject(item)) return item
-  
+
   // If it has parts, process them
   if ('parts' in item && item.parts) {
-    const parts = Array.isArray(item.parts)
-      ? item.parts.map(sanitizeGeminiPart)
-      : sanitizeGeminiPart(item.parts)
-    
+    const parts = Array.isArray(item.parts) ? item.parts.map(sanitizeGeminiPart) : sanitizeGeminiPart(item.parts)
+
     return { ...item, parts }
   }
-  
+
   return item
 }
-
 
 const sanitizeLangChainImage = (item: unknown): unknown => {
   if (!isObject(item)) return item
@@ -236,4 +238,3 @@ export const sanitizeGemini = (data: unknown): unknown => {
 export const sanitizeLangChain = (data: unknown): unknown => {
   return processMessages(data, sanitizeLangChainImage)
 }
-
