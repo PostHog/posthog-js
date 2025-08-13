@@ -2,6 +2,7 @@ import { GoogleGenAI } from '@google/genai'
 import { PostHog } from 'posthog-node'
 import { v4 as uuidv4 } from 'uuid'
 import { MonitoringParams, sendEventToPosthog, extractAvailableToolCalls, formatResponseGemini } from '../utils'
+import type { TokenUsage } from '../types'
 
 // Types from @google/genai
 type GenerateContentRequest = {
@@ -18,6 +19,8 @@ type GenerateContentResponse = {
     promptTokenCount?: number
     candidatesTokenCount?: number
     totalTokenCount?: number
+    thoughtsTokenCount?: number
+    cachedContentTokenCount?: number
   }
   [key: string]: any
 }
@@ -87,6 +90,8 @@ export class WrappedModels {
         usage: {
           inputTokens: response.usageMetadata?.promptTokenCount ?? 0,
           outputTokens: response.usageMetadata?.candidatesTokenCount ?? 0,
+          reasoningTokens: response.usageMetadata?.thoughtsTokenCount ?? 0,
+          cacheReadInputTokens: response.usageMetadata?.cachedContentTokenCount ?? 0,
         },
         tools: availableTools,
         captureImmediate: posthogCaptureImmediate,
@@ -134,7 +139,7 @@ export class WrappedModels {
     const traceId = posthogTraceId ?? uuidv4()
     const startTime = Date.now()
     let accumulatedContent = ''
-    let usage = {
+    let usage: TokenUsage = {
       inputTokens: 0,
       outputTokens: 0,
     }
@@ -150,6 +155,8 @@ export class WrappedModels {
           usage = {
             inputTokens: chunk.usageMetadata.promptTokenCount ?? 0,
             outputTokens: chunk.usageMetadata.candidatesTokenCount ?? 0,
+            reasoningTokens: chunk.usageMetadata.thoughtsTokenCount ?? 0,
+            cacheReadInputTokens: chunk.usageMetadata.cachedContentTokenCount ?? 0,
           }
         }
         yield chunk
