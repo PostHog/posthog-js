@@ -1,6 +1,6 @@
 {
     "name": "posthog-js",
-    "version": "1.258.6",
+    "version": "1.260.1",
     "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
     "repository": "https://github.com/PostHog/posthog-js",
     "author": "hey@posthog.com",
@@ -116,7 +116,6 @@
         "postcss-nesting": "^13.0.1",
         "posthog-js": "link:",
         "preact-render-to-string": "^6.3.1",
-        "prettier": "^3.4.2",
         "rollup": "^4.28.1",
         "rollup-plugin-dts": "^6.1.1",
         "rollup-plugin-postcss": "^4.0.2",

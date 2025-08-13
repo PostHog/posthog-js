@@ -65,14 +65,12 @@ if (typeof window !== 'undefined') {
         person_profiles: PERSON_PROCESSING_MODE === 'never' ? 'identified_only' : PERSON_PROCESSING_MODE,
         persistence_name: `${process.env.NEXT_PUBLIC_POSTHOG_KEY}_nextjs`,
         opt_in_site_apps: true,
-        opt_out_capturing_by_default: true,
-        opt_out_persistence_by_default: true,
         integrations: {
             intercom: true,
             crispChat: true,
         },
         __preview_remote_config: true,
-        __preview_experimental_cookieless_mode: false,
+        cookieless_mode: 'on_reject',
         __preview_flags_v2: true,
         ...configForConsent(),
     })

@@ -1,4 +1,4 @@
-import { defineNuxtPlugin, useRuntimeConfig, useRouter, nextTick } from '#imports'
+import { defineNuxtPlugin, useRuntimeConfig } from '#imports'
 
 import posthog from 'posthog-js'
 export default defineNuxtPlugin((nuxtApp) => {

@@ -271,18 +271,18 @@ export const createInstrumentationMiddleware = (
         const latency = (Date.now() - startTime) / 1000
         const providerMetadata = result.providerMetadata
         const additionalTokenValues = {
-          ...(providerMetadata?.openai?.reasoningTokens
-            ? { reasoningTokens: providerMetadata.openai.reasoningTokens }
-            : {}),
-          ...(providerMetadata?.openai?.cachedPromptTokens
-            ? { cacheReadInputTokens: providerMetadata.openai.cachedPromptTokens }
-            : {}),
           ...(providerMetadata?.anthropic
             ? {
-                cacheReadInputTokens: providerMetadata.anthropic.cacheReadInputTokens,
                 cacheCreationInputTokens: providerMetadata.anthropic.cacheCreationInputTokens,
               }
             : {}),
+        }
+        const usage = {
+          inputTokens: result.usage.inputTokens,
+          outputTokens: result.usage.outputTokens,
+          reasoningTokens: result.usage.reasoningTokens,
+          cacheReadInputTokens: result.usage.cachedInputTokens,
+          ...additionalTokenValues,
         }
         await sendEventToPosthog({
           client: phClient,
@@ -296,11 +296,7 @@ export const createInstrumentationMiddleware = (
           baseURL,
           params: mergedParams as any,
           httpStatus: 200,
-          usage: {
-            inputTokens: result.usage.inputTokens,
-            outputTokens: result.usage.outputTokens,
-            ...additionalTokenValues,
-          },
+          usage,
           tools: availableTools,
           captureImmediate: options.posthogCaptureImmediate,
         })
@@ -366,21 +362,20 @@ export const createInstrumentationMiddleware = (
               reasoningText += chunk.delta // New in v5
             }
             if (chunk.type === 'finish') {
+              const providerMetadata = chunk.providerMetadata
+              const additionalTokenValues = {
+                ...(providerMetadata?.anthropic
+                  ? {
+                      cacheCreationInputTokens: providerMetadata.anthropic.cacheCreationInputTokens,
+                    }
+                  : {}),
+              }
               usage = {
                 inputTokens: chunk.usage?.inputTokens,
                 outputTokens: chunk.usage?.outputTokens,
-              }
-              if (chunk.providerMetadata?.openai?.reasoningTokens) {
-                usage.reasoningTokens = chunk.providerMetadata.openai.reasoningTokens
-              }
-              if (chunk.providerMetadata?.openai?.cachedPromptTokens) {
-                usage.cacheReadInputTokens = chunk.providerMetadata.openai.cachedPromptTokens
-              }
-              if (chunk.providerMetadata?.anthropic?.cacheReadInputTokens) {
-                usage.cacheReadInputTokens = chunk.providerMetadata.anthropic.cacheReadInputTokens
-              }
-              if (chunk.providerMetadata?.anthropic?.cacheCreationInputTokens) {
-                usage.cacheCreationInputTokens = chunk.providerMetadata.anthropic.cacheCreationInputTokens
+                reasoningTokens: chunk.usage?.reasoningTokens,
+                cacheReadInputTokens: chunk.usage?.cachedInputTokens,
+                ...additionalTokenValues,
               }
             }
             controller.enqueue(chunk)

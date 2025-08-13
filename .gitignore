@@ -3,6 +3,7 @@ env
 *.pyc
 staticfiles
 .env
+.envrc
 .cache
 settings.yml
 .DS_Store

@@ -621,7 +621,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       return undefined
     }
 
-    const url = `${this.host}/api/projects/@current/feature_flags/${flagKey}/remote_config/`
+    const url = `${this.host}/api/projects/@current/feature_flags/${flagKey}/remote_config?token=${encodeURIComponent(this.apiKey)}`
 
     const options: PostHogFetchOptions = {
       method: 'GET',

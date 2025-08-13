@@ -2342,5 +2342,25 @@ describe('PostHog Node.js', () => {
       // Verify that no poller was created
       expect(posthogWithoutLocalEval['featureFlagsPoller']).toBeUndefined()
     })
+
+    it('should include project API key in the remote config URL', async () => {
+      mockedFetch.mockResolvedValue({
+        status: 200,
+        json: () => Promise.resolve({ test: 'payload' }),
+      } as any)
+
+      await posthog.getRemoteConfigPayload('test-flag')
+
+      expect(mockedFetch).toHaveBeenCalledWith(
+        'http://example.com/api/projects/@current/feature_flags/test-flag/remote_config?token=TEST_API_KEY',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer TEST_PERSONAL_API_KEY',
+          }),
+        })
+      )
+    })
   })
 })

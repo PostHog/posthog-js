@@ -39,6 +39,16 @@ export const getSurveySeenKey = (survey: Pick<Survey, 'id' | 'current_iteration'
     return surveySeenKey
 }
 
+export const setSurveySeenOnLocalStorage = (survey: Pick<Survey, 'id' | 'current_iteration'>) => {
+    const isSurveySeen = localStorage.getItem(getSurveySeenKey(survey))
+    // if survey is already seen, no need to set it again
+    if (isSurveySeen) {
+        return
+    }
+
+    localStorage.setItem(getSurveySeenKey(survey), 'true')
+}
+
 // These surveys are relevant for the getActiveMatchingSurveys method. They are used to
 // display surveys in our customer's application. Any new in-app survey type should be added here.
 export const IN_APP_SURVEY_TYPES = [SurveyType.Popover, SurveyType.Widget, SurveyType.API]

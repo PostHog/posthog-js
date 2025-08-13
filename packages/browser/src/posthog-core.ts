@@ -76,7 +76,7 @@ import { getPersonPropertiesHash } from './utils/property-utils'
 import { RequestRouter, RequestRouterRegion } from './utils/request-router'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
 import { includes, isDistinctIdStringLike } from './utils/string-utils'
-import { getSurveyInteractionProperty, getSurveySeenKey } from './utils/survey-utils'
+import { getSurveyInteractionProperty, setSurveySeenOnLocalStorage } from './utils/survey-utils'
 import {
     isArray,
     isEmptyObject,
@@ -170,6 +170,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     opt_out_persistence_by_default: false,
     opt_out_useragent_filter: false,
     opt_out_capturing_persistence_type: 'localStorage',
+    consent_persistence_name: null,
     opt_out_capturing_cookie_prefix: null,
     opt_in_site_apps: false,
     property_denylist: [],
@@ -508,7 +509,11 @@ export class PostHog {
         this._retryQueue = new RetryQueue(this)
         this.__request_queue = []
 
-        if (!this.config.__preview_experimental_cookieless_mode) {
+        const startInCookielessMode =
+            this.config.cookieless_mode === 'always' ||
+            (this.config.cookieless_mode === 'on_reject' && this.consent.isExplicitlyOptedOut())
+
+        if (!startInCookielessMode) {
             this.sessionManager = new SessionIdManager(this)
             this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
         }
@@ -518,7 +523,7 @@ export class PostHog {
         this.siteApps = new SiteApps(this)
         this.siteApps?.init()
 
-        if (!this.config.__preview_experimental_cookieless_mode) {
+        if (!startInCookielessMode) {
             this.sessionRecording = new SessionRecording(this)
             this.sessionRecording.startIfEnabledOrStop()
         }
@@ -591,7 +596,7 @@ export class PostHog {
             this.featureFlags.receivedFeatureFlags({ featureFlags: activeFlags, featureFlagPayloads })
         }
 
-        if (this.config.__preview_experimental_cookieless_mode) {
+        if (startInCookielessMode) {
             this.register_once(
                 {
                     distinct_id: COOKIELESS_SENTINEL_VALUE,
@@ -708,7 +713,7 @@ export class PostHog {
     }
 
     _start_queue_if_opted_in(): void {
-        if (!this.has_opted_out_capturing()) {
+        if (this.is_capturing()) {
             if (this.config.request_batching) {
                 this._requestQueue?.enable()
             }
@@ -716,7 +721,7 @@ export class PostHog {
     }
 
     _dom_loaded(): void {
-        if (!this.has_opted_out_capturing()) {
+        if (this.is_capturing()) {
             eachArray(this.__request_queue, (item) => this._send_retriable_request(item))
         }
 
@@ -863,8 +868,10 @@ export class PostHog {
      * do not wish to rely on our convenience methods
      * (created in the snippet).
      *
-     * ### Usage:
-     *     posthog.push(['register', { a: 'b' }]);
+     * @example
+     * ```js
+     * posthog.push(['register', { a: 'b' }]);
+     * ```
      *
      * @param {Array} item A [function_name, args...] array to be executed
      */
@@ -907,7 +914,7 @@ export class PostHog {
             return
         }
 
-        if (this.consent.isOptedOut()) {
+        if (!this.is_capturing()) {
             return
         }
 
@@ -987,7 +994,7 @@ export class PostHog {
         if (event_name === SurveyEventName.DISMISSED || event_name === SurveyEventName.SENT) {
             const surveyId = properties?.[SurveyEventProperties.SURVEY_ID]
             const surveyIteration = properties?.[SurveyEventProperties.SURVEY_ITERATION]
-            localStorage.setItem(getSurveySeenKey({ id: surveyId, current_iteration: surveyIteration }), 'true')
+            setSurveySeenOnLocalStorage({ id: surveyId, current_iteration: surveyIteration })
             data.$set = {
                 ...data.$set,
                 [getSurveyInteractionProperty(
@@ -1037,8 +1044,6 @@ export class PostHog {
     }
 
     /**
-     * calculateEventProperties
-     *
      * This method is used internally to calculate the event properties before sending it to PostHog. It can also be
      * used by integrations (e.g. Segment) to enrich events with PostHog properties before sending them to Segment,
      * which is required for some PostHog products to work correctly. (e.g. to have a correct $session_id property).
@@ -1048,7 +1053,8 @@ export class PostHog {
      * @param {Date} [timestamp] The timestamp of the event, e.g. for calculating time on page. If not set, it'll automatically be set to the current time.
      * @param {String} [uuid] The uuid of the event, e.g. for storing the $pageview ID.
      * @param {Boolean} [readOnly] Set this if you do not intend to actually send the event, and therefore do not want to update internal state e.g. session timeout
-
+     *
+     * @internal
      */
     public calculateEventProperties(
         eventName: string,
@@ -1068,7 +1074,10 @@ export class PostHog {
         properties['token'] = this.config.token
         properties['$config_defaults'] = this.config.defaults
 
-        if (this.config.__preview_experimental_cookieless_mode) {
+        if (
+            this.config.cookieless_mode == 'always' ||
+            (this.config.cookieless_mode == 'on_reject' && this.consent.isExplicitlyOptedOut())
+        ) {
             // Set a flag to tell the plugin server to use cookieless server hash mode
             properties[COOKIELESS_MODE_FLAG_PROPERTY] = true
         }
@@ -1932,7 +1941,7 @@ export class PostHog {
         this.persistence?.set_property(USER_STATE, 'anonymous')
         this.sessionManager?.resetSessionId()
         this._cachedPersonProperties = null
-        if (this.config.__preview_experimental_cookieless_mode) {
+        if (this.config.cookieless_mode === 'always') {
             this.register_once(
                 {
                     distinct_id: COOKIELESS_SENTINEL_VALUE,
@@ -2329,8 +2338,12 @@ export class PostHog {
     }
 
     private _is_persistence_disabled(): boolean {
+        if (this.config.cookieless_mode === 'always') {
+            return true
+        }
         const isOptedOut = this.consent.isOptedOut()
-        const defaultPersistenceDisabled = this.config.opt_out_persistence_by_default
+        const defaultPersistenceDisabled =
+            this.config.opt_out_persistence_by_default || this.config.cookieless_mode === 'on_reject'
 
         // TRICKY: We want a deterministic state for persistence so that a new pageload has the same persistence
         return this.config.disable_persistence || (isOptedOut && !!defaultPersistenceDisabled)
@@ -2388,6 +2401,22 @@ export class PostHog {
         captureEventName?: EventName | null | false /** event name to be used for capturing the opt-in action */
         captureProperties?: Properties /** set of properties to be captured along with the opt-in action */
     }): void {
+        if (this.config.cookieless_mode === 'always') {
+            logger.warn('Consent opt in/out is not valid with cookieless_mode="always" and will be ignored')
+            return
+        }
+        if (this.config.cookieless_mode === 'on_reject' && this.consent.isExplicitlyOptedOut()) {
+            // If the user has explicitly opted out on_reject mode, then before we can start sending regular non-cookieless events
+            // we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
+            this.reset(true)
+            this.sessionManager = new SessionIdManager(this)
+            if (this.persistence) {
+                this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
+            }
+            this.sessionRecording = new SessionRecording(this)
+            this.sessionRecording.startIfEnabledOrStop()
+        }
+
         this.consent.optInOut(true)
         this._sync_opt_out_with_persistence()
 
@@ -2417,8 +2446,31 @@ export class PostHog {
      * @public
      */
     opt_out_capturing(): void {
+        if (this.config.cookieless_mode === 'always') {
+            logger.warn('Consent opt in/out is not valid with cookieless_mode="always" and will be ignored')
+            return
+        }
+
+        if (this.config.cookieless_mode === 'on_reject' && this.consent.isOptedIn()) {
+            // If the user has opted in, we need to reset the instance to ensure that there is no leaking of state or data between the cookieless and regular events
+            this.reset(true)
+        }
+
         this.consent.optInOut(false)
         this._sync_opt_out_with_persistence()
+
+        if (this.config.cookieless_mode === 'on_reject') {
+            // If cookieless_mode is 'on_reject', we start capturing events in cookieless mode
+            this.register({
+                distinct_id: COOKIELESS_SENTINEL_VALUE,
+                $device_id: null,
+            })
+            this.sessionManager = undefined
+            this.sessionPropsManager = undefined
+            this.sessionRecording?.stopRecording()
+            this.sessionRecording = undefined
+            this._captureInitialPageview()
+        }
     }
 
     /**
@@ -2461,6 +2513,32 @@ export class PostHog {
      */
     has_opted_out_capturing(): boolean {
         return this.consent.isOptedOut()
+    }
+
+    /**
+     * Checks whether the PostHog library is currently capturing events.
+     *
+     * Usually this means that the user has not opted out of capturing, but the exact behaviour can be controlled by
+     * some config options.
+     *
+     * Additionally, if the cookieless_mode is set to 'on_reject', we will capture events in cookieless mode if the
+     * user has explicitly opted out.
+     *
+     * @see {PostHogConfig.cookieless_mode}
+     * @see {PostHogConfig.opt_out_persistence_by_default}
+     * @see {PostHogConfig.respect_dnt}
+     *
+     * @returns {boolean} whether the posthog library is capturing events
+     */
+    is_capturing(): boolean {
+        if (this.config.cookieless_mode === 'always') {
+            return true
+        }
+        if (this.config.cookieless_mode === 'on_reject') {
+            return this.consent.isExplicitlyOptedOut() || this.consent.isOptedIn()
+        } else {
+            return !this.has_opted_out_capturing()
+        }
     }
 
     /**
