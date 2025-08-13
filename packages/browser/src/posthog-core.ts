@@ -76,7 +76,7 @@ import { getPersonPropertiesHash } from './utils/property-utils'
 import { RequestRouter, RequestRouterRegion } from './utils/request-router'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
 import { includes, isDistinctIdStringLike } from './utils/string-utils'
-import { getSurveyInteractionProperty, getSurveySeenKey } from './utils/survey-utils'
+import { getSurveyInteractionProperty, setSurveySeenOnLocalStorage } from './utils/survey-utils'
 import {
     isArray,
     isEmptyObject,
@@ -994,7 +994,7 @@ export class PostHog {
         if (event_name === SurveyEventName.DISMISSED || event_name === SurveyEventName.SENT) {
             const surveyId = properties?.[SurveyEventProperties.SURVEY_ID]
             const surveyIteration = properties?.[SurveyEventProperties.SURVEY_ITERATION]
-            localStorage.setItem(getSurveySeenKey({ id: surveyId, current_iteration: surveyIteration }), 'true')
+            setSurveySeenOnLocalStorage({ id: surveyId, current_iteration: surveyIteration })
             data.$set = {
                 ...data.$set,
                 [getSurveyInteractionProperty(
