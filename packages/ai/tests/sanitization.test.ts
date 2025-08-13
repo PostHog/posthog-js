@@ -1,7 +1,4 @@
-import {
-  redactBase64DataUrl,
-  sanitize,
-} from '../src/sanitization'
+import { redactBase64DataUrl, sanitize } from '../src/sanitization'
 
 describe('Base64 image redaction', () => {
   const sampleBase64Image = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...'
@@ -28,24 +25,24 @@ describe('Base64 image redaction', () => {
       // Exactly 20 characters - should not be redacted (at boundary)
       const exactly20Chars = 'A'.repeat(20)
       expect(redactBase64DataUrl(exactly20Chars)).toBe(exactly20Chars)
-      
+
       // 21 characters of valid base64 - should be redacted
       const twentyOneChars = 'A'.repeat(21)
       expect(redactBase64DataUrl(twentyOneChars)).toBe('[base64 image redacted]')
-      
+
       // Raw base64 with padding - longer than 20 chars
       const rawBase64WithPadding = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUl=='
       expect(redactBase64DataUrl(rawBase64WithPadding)).toBe('[base64 image redacted]')
-      
+
       // Short base64-like string - should not be redacted (under 20 chars)
       const shortBase64 = 'SGVsbG8='
       expect(redactBase64DataUrl(shortBase64)).toBe(shortBase64)
-      
+
       // URL with protocol should not be redacted
       const urlWithProtocol = 'https://example.com/' + 'A'.repeat(30)
       expect(redactBase64DataUrl(urlWithProtocol)).toBe(urlWithProtocol)
-      
-      // Path-like base64 should not be redacted  
+
+      // Path-like base64 should not be redacted
       const pathLikeBase64 = '/path/to/' + 'A'.repeat(30)
       expect(redactBase64DataUrl(pathLikeBase64)).toBe(pathLikeBase64)
     })
@@ -54,27 +51,27 @@ describe('Base64 image redaction', () => {
       // String with invalid base64 characters - should not be redacted
       const invalidChars = 'A'.repeat(21) + '!@#$%'
       expect(redactBase64DataUrl(invalidChars)).toBe(invalidChars)
-      
+
       // URL that starts with http but contains base64-like content - should not be redacted
       const httpWithBase64 = 'http://example.com/' + 'A'.repeat(60)
       expect(redactBase64DataUrl(httpWithBase64)).toBe(httpWithBase64)
-      
+
       // Mixed content with spaces - should not be redacted
       const withSpaces = 'AAAA BBBB CCCC DDDD'.repeat(5)
       expect(redactBase64DataUrl(withSpaces)).toBe(withSpaces)
-      
+
       // Data URL with non-base64 encoding - should not be redacted
       const nonBase64DataUrl = 'data:text/plain;charset=utf-8,Hello%20World'
       expect(redactBase64DataUrl(nonBase64DataUrl)).toBe(nonBase64DataUrl)
-      
+
       // Domain-like patterns without protocol won't be caught by URL constructor
       // but also won't match base64 pattern due to the dot
       const domainLike = 'AAA.com/AAAAAAAAAAAAAAAAAAA'
       expect(redactBase64DataUrl(domainLike)).toBe(domainLike)
-      
+
       const relativeUrl = './files/' + 'A'.repeat(30)
       expect(redactBase64DataUrl(relativeUrl)).toBe(relativeUrl)
-      
+
       const fileUrl = 'file:///Users/' + 'A'.repeat(30)
       expect(redactBase64DataUrl(fileUrl)).toBe(fileUrl)
     })
@@ -636,7 +633,7 @@ describe('Base64 image redaction', () => {
   describe('sanitize unknown provider', () => {
     it('should throw error for unknown provider', () => {
       const input = { role: 'user', content: 'test' }
-      
+
       expect(() => sanitize(input, 'unknown-provider')).toThrow('Unknown provider: unknown-provider')
       expect(() => sanitize(input, 'invalid')).toThrow('Unknown provider: invalid')
     })
