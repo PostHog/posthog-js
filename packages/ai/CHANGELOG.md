@@ -1,5 +1,11 @@
 # posthog-ai
 
+## 6.1.0
+
+### Minor Changes
+
+- [#2216](https://github.com/PostHog/posthog-js/pull/2216) [`57752f4`](https://github.com/PostHog/posthog-js/commit/57752f4163ec3a52fd378a6e6a4473d26e7f3c2c) Thanks [@k11kirky](https://github.com/k11kirky)! - Add support for reasoning and cache tokens in gemini + fix token calc in vercel
+
 ## 6.0.1
 
 ### Patch Changes

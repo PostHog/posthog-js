@@ -1,5 +1,15 @@
 # posthog-js
 
+## 1.260.0
+
+### Minor Changes
+
+- [#2185](https://github.com/PostHog/posthog-js/pull/2185) [`fda2932`](https://github.com/PostHog/posthog-js/commit/fda2932d0c4835d205fe0e0d0efb724b964f9f9b) Thanks [@robbie-c](https://github.com/robbie-c)! - Support 2 cookieless modes - 'always' and 'on_reject'
+
+### Patch Changes
+
+- [#2200](https://github.com/PostHog/posthog-js/pull/2200) [`4387da4`](https://github.com/PostHog/posthog-js/commit/4387da42148a6b96c7bf1f9f5a2c529a3eb4dd8a) Thanks [@daibhin](https://github.com/daibhin)! - expose captured exception to React error boundary fallback
+
 ## 1.259.0
 
 ### Minor Changes
