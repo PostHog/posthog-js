@@ -1,5 +1,11 @@
 # posthog-ai
 
+## 6.1.1
+
+### Patch Changes
+
+- [#2217](https://github.com/PostHog/posthog-js/pull/2217) [`fdfceeb`](https://github.com/PostHog/posthog-js/commit/fdfceebf349242e47bb4e444d60f8fc546663581) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - add base64 inline image sanitization
+
 ## 6.1.0
 
 ### Minor Changes
