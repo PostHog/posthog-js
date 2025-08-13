@@ -2,14 +2,16 @@
 import { usePostHog } from 'posthog-js/react'
 
 export default function Home() {
-  const posthog = usePostHog()
-  return (
-    <div>
-      <main>
+    const posthog = usePostHog()
+    return (
         <div>
-          <button onClick={() => posthog.captureException(new Error('exception captured'))}>Send exception!</button>
+            <main>
+                <div>
+                    <button onClick={() => posthog.captureException(new Error('exception captured'))}>
+                        Send exception!
+                    </button>
+                </div>
+            </main>
         </div>
-      </main>
-    </div>
-  )
+    )
 }

@@ -13,13 +13,16 @@ export default defineNuxtConfig({
     },
     hooks: {
         'nitro:build:public-assets': async () => {
+            // eslint-disable-next-line no-console
             console.log('Running PostHog sourcemap injection...')
             try {
                 execSync("posthog-cli sourcemap inject --directory '.output/public'", {
                     stdio: 'inherit',
                 })
+                // eslint-disable-next-line no-console
                 console.log('PostHog sourcemap injection completed successfully')
             } catch (error) {
+                // eslint-disable-next-line no-console
                 console.error('PostHog sourcemap injection failed:', error)
             }
         },

@@ -1,7 +1,7 @@
 'use client'
 
 import { PostHogConfig } from 'posthog-js'
-import { PostHogProvider } from '@posthog/react'
+import { PostHogProvider } from 'posthog-js/react'
 
 const posthogConfig: Partial<PostHogConfig> = {
     api_host: 'http://localhost:8010',
