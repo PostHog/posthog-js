@@ -16,6 +16,7 @@ import {
   IPostHog,
   PostHogOptions,
   SendFeatureFlagsOptions,
+  BeforeSendFn,
 } from './types'
 import { FeatureFlagDetail, FeatureFlagValue } from '@posthog/core'
 import { FeatureFlagsPoller } from './extensions/feature-flags/feature-flags'
@@ -123,8 +124,28 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     }
     const { distinctId, event, properties, groups, sendFeatureFlags, timestamp, disableGeoip, uuid }: EventMessage =
       props
+
+    // Run before_send if configured
+    const eventMessage = this._runBeforeSend({
+      distinctId,
+      event,
+      properties,
+      groups,
+      sendFeatureFlags,
+      timestamp,
+      disableGeoip,
+      uuid,
+    })
+    if (!eventMessage) {
+      return
+    }
+
     const _capture = (props: EventMessage['properties']): void => {
-      super.captureStateless(distinctId, event, props, { timestamp, disableGeoip, uuid })
+      super.captureStateless(eventMessage.distinctId, eventMessage.event, props, {
+        timestamp: eventMessage.timestamp,
+        disableGeoip: eventMessage.disableGeoip,
+        uuid: eventMessage.uuid,
+      })
     }
 
     // :TRICKY: If we flush, or need to shut down, to not lose events we want this promise to resolve before we flush
@@ -165,7 +186,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       })
       .then((additionalProperties) => {
         // No matter what - capture the event
-        _capture({ ...additionalProperties, ...properties, $groups: groups })
+        _capture({
+          ...additionalProperties,
+          ...(eventMessage.properties || {}),
+          $groups: eventMessage.groups || groups,
+        })
       })
 
     this.addPendingPromise(capturePromise)
@@ -180,8 +205,27 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     const { distinctId, event, properties, groups, sendFeatureFlags, timestamp, disableGeoip, uuid }: EventMessage =
       props
 
+    // Run before_send if configured
+    const eventMessage = this._runBeforeSend({
+      distinctId,
+      event,
+      properties,
+      groups,
+      sendFeatureFlags,
+      timestamp,
+      disableGeoip,
+      uuid,
+    })
+    if (!eventMessage) {
+      return
+    }
+
     const _capture = (props: EventMessage['properties']): Promise<void> => {
-      return super.captureStatelessImmediate(distinctId, event, props, { timestamp, disableGeoip, uuid })
+      return super.captureStatelessImmediate(eventMessage.distinctId, eventMessage.event, props, {
+        timestamp: eventMessage.timestamp,
+        disableGeoip: eventMessage.disableGeoip,
+        uuid: eventMessage.uuid,
+      })
     }
 
     const capturePromise = Promise.resolve()
@@ -221,7 +265,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       })
       .then((additionalProperties) => {
         // No matter what - capture the event
-        _capture({ ...additionalProperties, ...properties, $groups: groups })
+        _capture({
+          ...additionalProperties,
+          ...(eventMessage.properties || {}),
+          $groups: eventMessage.groups || groups,
+        })
       })
 
     await capturePromise
@@ -790,5 +838,29 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       additionalProperties
     )
     return await this.captureImmediate(evtMsg)
+  }
+
+  private _runBeforeSend(eventMessage: EventMessage): EventMessage | null {
+    const beforeSend = this.options.before_send
+    if (!beforeSend) {
+      return eventMessage
+    }
+
+    const fns = Array.isArray(beforeSend) ? beforeSend : [beforeSend]
+    let result: EventMessage | null = eventMessage
+
+    for (const fn of fns) {
+      result = fn(result)
+      if (!result) {
+        this.logMsgIfDebug(() => console.info(`Event '${eventMessage.event}' was rejected in beforeSend function`))
+        return null
+      }
+      if (!result.properties || Object.keys(result.properties).length === 0) {
+        const message = `Event '${result.event}' has no properties after beforeSend function, this is likely an error.`
+        this.logMsgIfDebug(() => console.warn(message))
+      }
+    }
+
+    return result
   }
 }

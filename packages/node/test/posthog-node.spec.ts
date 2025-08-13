@@ -341,6 +341,143 @@ describe('PostHog Node.js', () => {
     })
   })
 
+  describe('before_send', () => {
+    it('should allow events through when before_send returns the event', async () => {
+      const beforeSendFn = jest.fn((event) => event)
+      const ph = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        disableCompression: true,
+        before_send: beforeSendFn,
+      })
+
+      ph.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } })
+      await waitForFlushTimer()
+
+      expect(beforeSendFn).toHaveBeenCalledTimes(1)
+      expect(beforeSendFn).toHaveBeenCalledWith({
+        distinctId: '123',
+        event: 'test-event',
+        properties: { foo: 'bar' },
+        groups: undefined,
+        sendFeatureFlags: undefined,
+        timestamp: undefined,
+        disableGeoip: undefined,
+        uuid: undefined,
+      })
+
+      const batchEvents = getLastBatchEvents()
+      expect(batchEvents).toHaveLength(1)
+      expect(batchEvents[0]).toMatchObject({
+        distinct_id: '123',
+        event: 'test-event',
+        properties: expect.objectContaining({ foo: 'bar' }),
+      })
+    })
+
+    it('should drop events when before_send returns null', async () => {
+      const beforeSendFn = jest.fn(() => null)
+      const ph = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        disableCompression: true,
+        before_send: beforeSendFn,
+      })
+
+      ph.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } })
+      await waitForFlushTimer()
+
+      expect(beforeSendFn).toHaveBeenCalledTimes(1)
+      expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
+    })
+
+    it('should support array of before_send functions', async () => {
+      const beforeSend1 = jest.fn((event) => ({ ...event, properties: { ...event.properties, added1: true } }))
+      const beforeSend2 = jest.fn((event) => ({ ...event, properties: { ...event.properties, added2: true } }))
+
+      const ph = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        disableCompression: true,
+        before_send: [beforeSend1, beforeSend2],
+      })
+
+      ph.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } })
+      await waitForFlushTimer()
+
+      expect(beforeSend1).toHaveBeenCalledTimes(1)
+      expect(beforeSend2).toHaveBeenCalledTimes(1)
+
+      const batchEvents = getLastBatchEvents()
+      expect(batchEvents).toHaveLength(1)
+      expect(batchEvents[0]).toMatchObject({
+        distinct_id: '123',
+        event: 'test-event',
+        properties: expect.objectContaining({ foo: 'bar', added1: true, added2: true }),
+      })
+    })
+
+    it('should stop processing if any before_send returns null', async () => {
+      const beforeSend1 = jest.fn((event) => event)
+      const beforeSend2 = jest.fn(() => null)
+      const beforeSend3 = jest.fn((event) => event)
+
+      const ph = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        disableCompression: true,
+        before_send: [beforeSend1, beforeSend2, beforeSend3],
+      })
+
+      ph.capture({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } })
+      await waitForFlushTimer()
+
+      expect(beforeSend1).toHaveBeenCalledTimes(1)
+      expect(beforeSend2).toHaveBeenCalledTimes(1)
+      expect(beforeSend3).not.toHaveBeenCalled()
+      expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
+    })
+
+    it('should work with captureImmediate', async () => {
+      const beforeSendFn = jest.fn((event) => ({ ...event, event: 'modified-event' }))
+      const ph = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        disableCompression: true,
+        before_send: beforeSendFn,
+      })
+
+      await ph.captureImmediate({ distinctId: '123', event: 'test-event', properties: { foo: 'bar' } })
+
+      expect(beforeSendFn).toHaveBeenCalledTimes(1)
+      const batchEvents = getLastBatchEvents()
+      expect(batchEvents).toHaveLength(1)
+      expect(batchEvents[0]).toMatchObject({
+        distinct_id: '123',
+        event: 'modified-event',
+        properties: expect.objectContaining({ foo: 'bar' }),
+      })
+    })
+
+    it('should log when event is dropped in debug mode', async () => {
+      const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {})
+      const beforeSendFn = jest.fn(() => null)
+      const ph = new PostHog('TEST_API_KEY', {
+        host: 'http://example.com',
+        fetchRetryCount: 0,
+        disableCompression: true,
+        before_send: beforeSendFn,
+      })
+      ph.debug(true)
+
+      ph.capture({ distinctId: '123', event: 'test-event' })
+      await waitForFlushTimer()
+
+      expect(infoSpy).toHaveBeenCalledWith("Event 'test-event' was rejected in beforeSend function")
+      infoSpy.mockRestore()
+    })
+  })
+
   describe('shutdown', () => {
     let warnSpy: jest.SpyInstance, logSpy: jest.SpyInstance
     beforeEach(() => {
