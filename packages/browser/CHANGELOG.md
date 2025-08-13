@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.260.1
+
+### Patch Changes
+
+- [#2215](https://github.com/PostHog/posthog-js/pull/2215) [`1e95d47`](https://github.com/PostHog/posthog-js/commit/1e95d47669af8c5824c4105906f0727bd67610c1) Thanks [@lucasheriques](https://github.com/lucasheriques)! - fix: always set surveySeen on local storage for old posthog-js versions
+
 ## 1.260.0
 
 ### Minor Changes
