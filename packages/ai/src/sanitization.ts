@@ -25,7 +25,7 @@ const isRawBase64 = (str: string): boolean => {
   if (isValidUrl(str)) {
     return false
   }
-
+  
   // Check if it's a valid base64 string
   // Base64 images are typically at least a few hundred chars, but we'll be conservative
   return str.length > 20 && /^[A-Za-z0-9+/]+=*$/.test(str)
@@ -35,17 +35,17 @@ export function redactBase64DataUrl(str: string): string
 export function redactBase64DataUrl(str: unknown): unknown
 export function redactBase64DataUrl(str: unknown): unknown {
   if (!isString(str)) return str
-
+  
   // Check for data URL format
   if (isBase64DataUrl(str)) {
     return REDACTED_IMAGE_PLACEHOLDER
   }
-
+  
   // Check for raw base64 (Vercel sends raw base64 for inline images)
   if (isRawBase64(str)) {
     return REDACTED_IMAGE_PLACEHOLDER
   }
-
+  
   return str
 }
 
@@ -123,13 +123,8 @@ const sanitizeAnthropicImage = (item: unknown): unknown => {
   if (!isObject(item)) return item
 
   // Handle Anthropic's image format
-  if (
-    item.type === 'image' &&
-    'source' in item &&
-    isObject(item.source) &&
-    item.source.type === 'base64' &&
-    'data' in item.source
-  ) {
+  if (item.type === 'image' && 'source' in item && isObject(item.source) && 
+      item.source.type === 'base64' && 'data' in item.source) {
     return {
       ...item,
       source: {
@@ -161,27 +156,19 @@ const sanitizeGeminiPart = (part: unknown): unknown => {
 
 const processGeminiItem = (item: unknown): unknown => {
   if (!isObject(item)) return item
-
+  
   // If it has parts, process them
   if ('parts' in item && item.parts) {
-    const parts = Array.isArray(item.parts) ? item.parts.map(sanitizeGeminiPart) : sanitizeGeminiPart(item.parts)
-
+    const parts = Array.isArray(item.parts)
+      ? item.parts.map(sanitizeGeminiPart)
+      : sanitizeGeminiPart(item.parts)
+    
     return { ...item, parts }
   }
-
+  
   return item
 }
 
-const sanitizeVercelFile = (item: unknown): unknown => {
-  if (!isObject(item)) return item
-
-  // Handle Vercel's file format
-  if (item.type === 'file' && 'file' in item) {
-    return { ...item, file: redactBase64DataUrl(item.file) }
-  }
-
-  return item
-}
 
 const sanitizeLangChainImage = (item: unknown): unknown => {
   if (!isObject(item)) return item
@@ -221,41 +208,32 @@ const sanitizeLangChainImage = (item: unknown): unknown => {
   return item
 }
 
-/**
- * Sanitizes messages/contents for a specific provider by redacting base64 images
- * @param data - The messages or contents to sanitize
- * @param provider - The provider type (e.g., 'openai-chat-completions', 'anthropic', 'gemini', etc.)
- * @returns Sanitized data with base64 images redacted
- */
-export const sanitize = (data: unknown, provider: string): unknown => {
-  switch (provider) {
-    case 'openai-chat-completions':
-      return processMessages(data, sanitizeOpenAIImage)
-
-    case 'openai-response':
-      return processMessages(data, sanitizeOpenAIResponseImage)
-
-    case 'anthropic':
-      return processMessages(data, sanitizeAnthropicImage)
-
-    case 'gemini':
-      // Gemini has a different structure with 'parts' directly on items instead of 'content'
-      // So we need custom processing instead of using processMessages
-      if (!data) return data
-
-      if (Array.isArray(data)) {
-        return data.map(processGeminiItem)
-      }
-
-      return processGeminiItem(data)
-
-    case 'vercel':
-      return processMessages(data, sanitizeVercelFile)
-
-    case 'langchain':
-      return processMessages(data, sanitizeLangChainImage)
-
-    default:
-      throw new Error(`Unknown provider: ${provider}`)
-  }
+// Export individual sanitizers for tree-shaking
+export const sanitizeOpenAI = (data: unknown): unknown => {
+  return processMessages(data, sanitizeOpenAIImage)
 }
+
+export const sanitizeOpenAIResponse = (data: unknown): unknown => {
+  return processMessages(data, sanitizeOpenAIResponseImage)
+}
+
+export const sanitizeAnthropic = (data: unknown): unknown => {
+  return processMessages(data, sanitizeAnthropicImage)
+}
+
+export const sanitizeGemini = (data: unknown): unknown => {
+  // Gemini has a different structure with 'parts' directly on items instead of 'content'
+  // So we need custom processing instead of using processMessages
+  if (!data) return data
+
+  if (Array.isArray(data)) {
+    return data.map(processGeminiItem)
+  }
+
+  return processGeminiItem(data)
+}
+
+export const sanitizeLangChain = (data: unknown): unknown => {
+  return processMessages(data, sanitizeLangChainImage)
+}
+

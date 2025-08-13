@@ -10,7 +10,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { PostHog } from 'posthog-node'
 import { CostOverride, sendEventToPosthog, truncate, MAX_OUTPUT_SIZE, extractAvailableToolCalls } from '../utils'
 import { Buffer } from 'buffer'
-import { redactBase64DataUrl, sanitize } from '../sanitization'
+import { redactBase64DataUrl } from '../sanitization'
 import { isString } from '../typeGuards'
 
 interface ClientOptions {
@@ -194,7 +194,7 @@ const mapVercelOutput = (result: LanguageModelV2Content[]): PostHogInput[] => {
         fileData = item.data.toString()
       } else if (typeof item.data === 'string') {
         fileData = redactBase64DataUrl(item.data)
-
+        
         // If not redacted and still large, replace with size indicator
         if (fileData === item.data && item.data.length > 1000) {
           fileData = `[${item.mediaType} file - ${item.data.length} bytes]`

@@ -1,4 +1,26 @@
-import { redactBase64DataUrl, sanitize } from '../src/sanitization'
+import { 
+  redactBase64DataUrl,
+  sanitizeOpenAI,
+  sanitizeOpenAIResponse,
+  sanitizeAnthropic,
+  sanitizeGemini,
+  sanitizeLangChain
+} from '../src/sanitization'
+
+const sanitize = (data: unknown, provider: string): unknown => {
+  switch (provider) {
+    case 'openai-chat-completions':
+      return sanitizeOpenAI(data)
+    case 'openai-response':
+      return sanitizeOpenAIResponse(data)
+    case 'anthropic':
+      return sanitizeAnthropic(data)
+    case 'gemini':
+      return sanitizeGemini(data)
+    case 'langchain':
+      return sanitizeLangChain(data)
+  }
+}
 
 describe('Base64 image redaction', () => {
   const sampleBase64Image = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ...'
@@ -403,97 +425,6 @@ describe('Base64 image redaction', () => {
     })
   })
 
-  describe('sanitize vercel', () => {
-    const sampleRawBase64 =
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=='
-
-    it('should redact raw base64 in Vercel file format', () => {
-      const input = [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: 'Analyze this image',
-            },
-            {
-              type: 'file',
-              file: sampleRawBase64,
-              mediaType: 'image/png',
-            },
-          ],
-        },
-      ]
-
-      const result = sanitize(input, 'vercel') as any
-      expect(result[0].content[0].text).toBe('Analyze this image')
-      expect(result[0].content[1].file).toBe('[base64 image redacted]')
-      expect(result[0].content[1].mediaType).toBe('image/png')
-    })
-
-    it('should not redact URLs in file field', () => {
-      const input = [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'file',
-              file: 'https://example.com/image.png',
-              mediaType: 'image/png',
-            },
-          ],
-        },
-      ]
-
-      const result = sanitize(input, 'vercel') as any
-      expect(result[0].content[0].file).toBe('https://example.com/image.png')
-    })
-
-    it('should handle single message object', () => {
-      const input = {
-        role: 'user',
-        content: [
-          {
-            type: 'file',
-            file: sampleRawBase64,
-            mediaType: 'image/jpeg',
-          },
-        ],
-      }
-
-      const result = sanitize(input, 'vercel') as any
-      expect(result.content[0].file).toBe('[base64 image redacted]')
-    })
-
-    it('should handle content as single object', () => {
-      const input = {
-        role: 'user',
-        content: {
-          type: 'file',
-          file: sampleRawBase64,
-          mediaType: 'image/png',
-        },
-      }
-
-      const result = sanitize(input, 'vercel') as any
-      expect(result.content.file).toBe('[base64 image redacted]')
-    })
-
-    it('should not affect short strings', () => {
-      const input = {
-        role: 'user',
-        content: {
-          type: 'file',
-          file: 'shortstring',
-          mediaType: 'text/plain',
-        },
-      }
-
-      const result = sanitize(input, 'vercel') as any
-      expect(result.content.file).toBe('shortstring')
-    })
-  })
-
   describe('sanitize langchain', () => {
     it('should redact base64 images in OpenAI image_url format', () => {
       const input = {
@@ -627,15 +558,6 @@ describe('Base64 image redaction', () => {
 
       const result = sanitize(input, 'langchain') as any
       expect(result.content[0].image_url.url).toBe('https://example.com/image.jpg')
-    })
-  })
-
-  describe('sanitize unknown provider', () => {
-    it('should throw error for unknown provider', () => {
-      const input = { role: 'user', content: 'test' }
-
-      expect(() => sanitize(input, 'unknown-provider')).toThrow('Unknown provider: unknown-provider')
-      expect(() => sanitize(input, 'invalid')).toThrow('Unknown provider: invalid')
     })
   })
 })

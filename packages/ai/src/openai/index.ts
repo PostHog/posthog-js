@@ -5,7 +5,7 @@ import { formatResponseOpenAI, MonitoringParams, sendEventToPosthog, extractAvai
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
-import { sanitize } from '../sanitization'
+import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
 
 const Chat = OpenAIOrignal.Chat
 const Completions = Chat.Completions
@@ -136,7 +136,7 @@ export class WrappedCompletions extends Completions {
                 traceId,
                 model: openAIParams.model,
                 provider: 'openai',
-                input: sanitize(openAIParams.messages, 'openai-chat-completions'),
+                input: sanitizeOpenAI(openAIParams.messages),
                 output: [{ content: accumulatedContent, role: 'assistant' }],
                 latency,
                 baseURL: (this as any).baseURL ?? '',
@@ -153,7 +153,7 @@ export class WrappedCompletions extends Completions {
                 traceId,
                 model: openAIParams.model,
                 provider: 'openai',
-                input: sanitize(openAIParams.messages, 'openai-chat-completions'),
+                input: sanitizeOpenAI(openAIParams.messages),
                 output: [],
                 latency: 0,
                 baseURL: (this as any).baseURL ?? '',
@@ -184,7 +184,7 @@ export class WrappedCompletions extends Completions {
               traceId,
               model: openAIParams.model,
               provider: 'openai',
-              input: sanitize(openAIParams.messages, 'openai-chat-completions'),
+              input: sanitizeOpenAI(openAIParams.messages),
               output: formatResponseOpenAI(result),
               latency,
               baseURL: (this as any).baseURL ?? '',
@@ -209,7 +209,7 @@ export class WrappedCompletions extends Completions {
             traceId,
             model: openAIParams.model,
             provider: 'openai',
-            input: sanitize(openAIParams.messages, 'openai-chat-completions'),
+            input: sanitizeOpenAI(openAIParams.messages),
             output: [],
             latency: 0,
             baseURL: (this as any).baseURL ?? '',
@@ -324,7 +324,7 @@ export class WrappedResponses extends Responses {
                 //@ts-expect-error
                 model: openAIParams.model,
                 provider: 'openai',
-                input: sanitize(openAIParams.input, 'openai-response'),
+                input: sanitizeOpenAIResponse(openAIParams.input),
                 output: finalContent,
                 latency,
                 baseURL: (this as any).baseURL ?? '',
@@ -342,7 +342,7 @@ export class WrappedResponses extends Responses {
                 //@ts-expect-error
                 model: openAIParams.model,
                 provider: 'openai',
-                input: sanitize(openAIParams.input, 'openai-response'),
+                input: sanitizeOpenAIResponse(openAIParams.input),
                 output: [],
                 latency: 0,
                 baseURL: (this as any).baseURL ?? '',
@@ -373,7 +373,7 @@ export class WrappedResponses extends Responses {
               //@ts-expect-error
               model: openAIParams.model,
               provider: 'openai',
-              input: sanitize(openAIParams.input, 'openai-response'),
+              input: sanitizeOpenAIResponse(openAIParams.input),
               output: formatResponseOpenAI({ output: result.output }),
               latency,
               baseURL: (this as any).baseURL ?? '',
@@ -399,7 +399,7 @@ export class WrappedResponses extends Responses {
             //@ts-expect-error
             model: openAIParams.model,
             provider: 'openai',
-            input: sanitize(openAIParams.input, 'openai-response'),
+            input: sanitizeOpenAIResponse(openAIParams.input),
             output: [],
             latency: 0,
             baseURL: (this as any).baseURL ?? '',
@@ -458,7 +458,7 @@ export class WrappedResponses extends Responses {
             //@ts-expect-error
             model: openAIParams.model,
             provider: 'openai',
-            input: sanitize(openAIParams.input, 'openai-response'),
+            input: sanitizeOpenAIResponse(openAIParams.input),
             output: result.output,
             latency,
             baseURL: (this as any).baseURL ?? '',
@@ -482,7 +482,7 @@ export class WrappedResponses extends Responses {
             //@ts-expect-error
             model: openAIParams.model,
             provider: 'openai',
-            input: sanitize(openAIParams.input, 'openai-response'),
+            input: sanitizeOpenAIResponse(openAIParams.input),
             output: [],
             latency: 0,
             baseURL: (this as any).baseURL ?? '',

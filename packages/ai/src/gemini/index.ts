@@ -2,7 +2,7 @@ import { GoogleGenAI } from '@google/genai'
 import { PostHog } from 'posthog-node'
 import { v4 as uuidv4 } from 'uuid'
 import { MonitoringParams, sendEventToPosthog, extractAvailableToolCalls, formatResponseGemini } from '../utils'
-import { sanitize } from '../sanitization'
+import { sanitizeGemini } from '../sanitization'
 import type { TokenUsage } from '../types'
 
 // Types from @google/genai
@@ -255,7 +255,7 @@ export class WrappedModels {
   }
 
   private formatInputForPostHog(contents: any): any {
-    const sanitized = sanitize(contents, 'gemini')
+    const sanitized = sanitizeGemini(contents)
     return this.formatInput(sanitized)
   }
 }

@@ -18,7 +18,7 @@ type MessageCreateParamsBase = AnthropicOriginal.Messages.MessageCreateParams
 
 import type { APIPromise, RequestOptions } from '@anthropic-ai/sdk/core'
 import type { Stream } from '@anthropic-ai/sdk/streaming'
-import { sanitize } from '../sanitization'
+import { sanitizeAnthropic } from '../sanitization'
 
 interface MonitoringAnthropicConfig {
   apiKey: string
@@ -120,7 +120,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 traceId,
                 model: anthropicParams.model,
                 provider: 'anthropic',
-                input: sanitize(mergeSystemPrompt(anthropicParams, 'anthropic'), 'anthropic'),
+                input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic')),
                 output: [{ content: accumulatedContent, role: 'assistant' }],
                 latency,
                 baseURL: (this as any).baseURL ?? '',
@@ -138,7 +138,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 traceId,
                 model: anthropicParams.model,
                 provider: 'anthropic',
-                input: sanitize(mergeSystemPrompt(anthropicParams, 'anthropic'), 'anthropic'),
+                input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic')),
                 output: [],
                 latency: 0,
                 baseURL: (this as any).baseURL ?? '',
@@ -174,7 +174,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
               traceId,
               model: anthropicParams.model,
               provider: 'anthropic',
-              input: sanitize(mergeSystemPrompt(anthropicParams, 'anthropic'), 'anthropic'),
+              input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic')),
               output: formatResponseAnthropic(result),
               latency,
               baseURL: (this as any).baseURL ?? '',
@@ -199,7 +199,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
             traceId,
             model: anthropicParams.model,
             provider: 'anthropic',
-            input: sanitize(mergeSystemPrompt(anthropicParams, 'anthropic'), 'anthropic'),
+            input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic')),
             output: [],
             latency: 0,
             baseURL: (this as any).baseURL ?? '',
