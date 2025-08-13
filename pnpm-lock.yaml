@@ -100,6 +100,9 @@ importers:
       lint-staged:
         specifier: ^10.2.11
         version: 10.2.11
+      prettier:
+        specifier: ^3.4.2
+        version: 3.4.2
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
