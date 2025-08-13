@@ -79,7 +79,7 @@ describe('LangChainCallbackHandler', () => {
     // Verify run metadata includes tool information
     const runMetadata = (handler as any).runs[runId]
     expect(runMetadata.name).toBe(runName)
-    expect(runMetadata.input).toBe(prompts)
+    expect(runMetadata.input).toEqual(prompts)
     expect(runMetadata.tools).toEqual(tools)
     expect(runMetadata.model).toBe('gpt-4')
     expect(runMetadata.provider).toBe('openai')

@@ -1,13 +1,13 @@
 # PostHog Node AI
 
-Initial Typescript SDK for LLM Observability
+TypeScript SDK for LLM Observability
 
-[SEE FULL DOCS](https://posthog.com/docs/ai-engineering/observability)
+[SEE FULL DOCS](https://posthog.com/docs/llm-observability)
 
 ## Installation
 
 ```bash
-npm install @posthog/ai
+npm install @posthog/ai posthog-node
 ```
 
 ## Usage
@@ -16,30 +16,33 @@ npm install @posthog/ai
 import { OpenAI } from '@posthog/ai'
 import { PostHog } from 'posthog-node'
 
-const phClient = new PostHog('<YOUR_PROJECT_API_KEY>', { host: 'https://us.i.posthog.com' })
+const phClient = new PostHog(
+  '<ph_project_api_key>',
+  { host: '<ph_client_api_host>' }
+);
 
-const client = new OpenAI({
-  apiKey: '<YOUR_OPENAI_API_KEY>',
+const openai = new OpenAI({
+  apiKey: 'your_openai_api_key',
   posthog: phClient,
-})
+});
 
-const completion = await client.chat.completions.create({
-  model: 'gpt-3.5-turbo',
-  messages: [{ role: 'user', content: 'Tell me a fun fact about hedgehogs' }],
+const completion = await openai.responses.create({
+  model: 'gpt-4o-mini',
+  input: [{ role: 'user', content: 'Tell me a fun fact about hedgehogs' }],
   posthogDistinctId: 'user_123', // optional
   posthogTraceId: 'trace_123', // optional
-  posthogProperties: { conversation_id: 'abc123', paid: true }, //optional
+  posthogProperties: { conversation_id: 'abc123', paid: true }, // optional
   posthogGroups: { company: 'company_id_in_your_db' }, // optional
-  posthogPrivacyMode: false, // optional
-})
+  posthogPrivacyMode: false // optional
+});
 
 console.log(completion.choices[0].message.content)
 
-// YOU HAVE TO HAVE THIS OR THE CLIENT MAY NOT SEND EVENTS
+// IMPORTANT: Shutdown the client when you're done to ensure all events are sent
 await phClient.shutdown()
 ```
 
-LLM Observability [docs](https://posthog.com/docs/ai-engineering/observability)
+LLM Observability [docs](https://posthog.com/docs/llm-observability)
 
 Please see the main [PostHog docs](https://www.posthog.com/docs).
 

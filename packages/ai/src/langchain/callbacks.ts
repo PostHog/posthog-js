@@ -8,6 +8,7 @@ import type { AgentAction, AgentFinish } from '@langchain/core/agents'
 import type { DocumentInterface } from '@langchain/core/documents'
 import { ToolCall } from '@langchain/core/messages/tool'
 import { BaseMessage } from '@langchain/core/messages'
+import { sanitize } from '../sanitization'
 
 interface SpanMetadata {
   /** Name of the trace/span (e.g. chain name) */
@@ -283,7 +284,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     const runNameFound = this._getLangchainRunName(serialized, { extraParams, runName }) || 'generation'
     const generation: GenerationMetadata = {
       name: runNameFound,
-      input: messages,
+      input: sanitize(messages, 'langchain'),
       startTime: Date.now(),
     }
     if (extraParams) {
@@ -574,7 +575,8 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
       messageDict = { ...messageDict, ...message.additional_kwargs }
     }
 
-    return messageDict
+    // Sanitize the message content to redact base64 images
+    return sanitize(messageDict, 'langchain') as Record<string, any>
   }
 
   private _parseUsageModel(usage: any): [number, number, Record<string, any>] {

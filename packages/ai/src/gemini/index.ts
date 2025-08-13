@@ -2,6 +2,7 @@ import { GoogleGenAI } from '@google/genai'
 import { PostHog } from 'posthog-node'
 import { v4 as uuidv4 } from 'uuid'
 import { MonitoringParams, sendEventToPosthog, extractAvailableToolCalls, formatResponseGemini } from '../utils'
+import { sanitize } from '../sanitization'
 
 // Types from @google/genai
 type GenerateContentRequest = {
@@ -78,7 +79,7 @@ export class WrappedModels {
         traceId,
         model: geminiParams.model,
         provider: 'gemini',
-        input: this.formatInput(geminiParams.contents),
+        input: this.formatInputForPostHog(geminiParams.contents),
         output: formatResponseGemini(response),
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -101,7 +102,7 @@ export class WrappedModels {
         traceId,
         model: geminiParams.model,
         provider: 'gemini',
-        input: this.formatInput(geminiParams.contents),
+        input: this.formatInputForPostHog(geminiParams.contents),
         output: [],
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -165,7 +166,7 @@ export class WrappedModels {
         traceId,
         model: geminiParams.model,
         provider: 'gemini',
-        input: this.formatInput(geminiParams.contents),
+        input: this.formatInputForPostHog(geminiParams.contents),
         output: [{ content: accumulatedContent, role: 'assistant' }],
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -183,7 +184,7 @@ export class WrappedModels {
         traceId,
         model: geminiParams.model,
         provider: 'gemini',
-        input: this.formatInput(geminiParams.contents),
+        input: this.formatInputForPostHog(geminiParams.contents),
         output: [],
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -211,14 +212,24 @@ export class WrappedModels {
         if (typeof item === 'string') {
           return { role: 'user', content: item }
         }
+
         if (item && typeof item === 'object') {
           if (item.text) {
             return { role: item.role || 'user', content: item.text }
           }
+
           if (item.content) {
             return { role: item.role || 'user', content: item.content }
           }
+
+          if (item.parts) {
+            return {
+              role: item.role || 'user',
+              content: item.parts.map((part: any) => (part.text ? part.text : part)),
+            }
+          }
         }
+
         return { role: 'user', content: String(item) }
       })
     }
@@ -227,12 +238,18 @@ export class WrappedModels {
       if (contents.text) {
         return [{ role: 'user', content: contents.text }]
       }
+
       if (contents.content) {
         return [{ role: 'user', content: contents.content }]
       }
     }
 
     return [{ role: 'user', content: String(contents) }]
+  }
+
+  private formatInputForPostHog(contents: any): any {
+    const sanitized = sanitize(contents, 'gemini')
+    return this.formatInput(sanitized)
   }
 }
 
