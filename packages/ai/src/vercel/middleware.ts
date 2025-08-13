@@ -10,6 +10,8 @@ import { v4 as uuidv4 } from 'uuid'
 import { PostHog } from 'posthog-node'
 import { CostOverride, sendEventToPosthog, truncate, MAX_OUTPUT_SIZE, extractAvailableToolCalls } from '../utils'
 import { Buffer } from 'buffer'
+import { redactBase64DataUrl } from '../sanitization'
+import { isString } from '../typeGuards'
 
 interface ClientOptions {
   posthogDistinctId?: string
@@ -80,9 +82,23 @@ const mapVercelPrompt = (messages: LanguageModelV2Prompt): PostHogInput[] => {
               text: truncate(c.text),
             }
           } else if (c.type === 'file') {
+            // For file type, check if it's a data URL and redact if needed
+            let fileData: string
+
+            const contentData: unknown = c.data
+
+            if (contentData instanceof URL) {
+              fileData = contentData.toString()
+            } else if (isString(contentData)) {
+              // Redact base64 data URLs and raw base64 to prevent oversized events
+              fileData = redactBase64DataUrl(contentData)
+            } else {
+              fileData = 'raw files not supported'
+            }
+
             return {
               type: 'file',
-              file: c.data instanceof URL ? c.data.toString() : 'raw files not supported',
+              file: fileData,
               mediaType: c.mediaType,
             }
           } else if (c.type === 'reasoning') {
@@ -177,11 +193,11 @@ const mapVercelOutput = (result: LanguageModelV2Content[]): PostHogInput[] => {
       if (item.data instanceof URL) {
         fileData = item.data.toString()
       } else if (typeof item.data === 'string') {
-        // Check if it's base64 data and potentially large
-        if (item.data.startsWith('data:') || item.data.length > 1000) {
+        fileData = redactBase64DataUrl(item.data)
+
+        // If not redacted and still large, replace with size indicator
+        if (fileData === item.data && item.data.length > 1000) {
           fileData = `[${item.mediaType} file - ${item.data.length} bytes]`
-        } else {
-          fileData = item.data
         }
       } else {
         fileData = `[binary ${item.mediaType} file]`
