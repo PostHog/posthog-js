@@ -1,3 +1,4 @@
+import { Logger } from 'types'
 import { clampToRange } from './number-utils'
 
 export class BucketedRateLimiter<T extends string | number> {
@@ -13,22 +14,23 @@ export class BucketedRateLimiter<T extends string | number> {
       bucketSize: number
       refillRate: number
       refillInterval: number
+      _logger: Logger
       _onBucketRateLimited?: (key: T) => void
     }
   ) {
     this._onBucketRateLimited = this._options._onBucketRateLimited
-    this._bucketSize = clampToRange(this._options.bucketSize, 0, 100, 'rate limiter bucket size')
+    this._bucketSize = clampToRange(this._options.bucketSize, 0, 100, this._options._logger)
     this._refillRate = clampToRange(
       this._options.refillRate,
       0,
       this._bucketSize, // never refill more than bucket size
-      'rate limiter refill rate'
+      this._options._logger
     )
     this._refillInterval = clampToRange(
       this._options.refillInterval,
       0,
       86400000, // one day in milliseconds
-      'rate limiter refill interval'
+      this._options._logger
     )
     setInterval(() => {
       this._refillBuckets()

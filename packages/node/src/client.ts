@@ -8,6 +8,7 @@ import {
   PostHogFetchResponse,
   PostHogFlagsAndPayloadsResponse,
   PostHogPersistedProperty,
+  Logger,
 } from '@posthog/core'
 import {
   EventMessage,
@@ -16,7 +17,6 @@ import {
   IPostHog,
   PostHogOptions,
   SendFeatureFlagsOptions,
-  BeforeSendFn,
 } from './types'
 import { FeatureFlagDetail, FeatureFlagValue } from '@posthog/core'
 import { FeatureFlagsPoller } from './extensions/feature-flags/feature-flags'
@@ -24,6 +24,7 @@ import ErrorTracking from './extensions/error-tracking'
 import { isPlainObject } from './extensions/error-tracking/type-checking'
 import { getFeatureFlagValue, safeSetTimeout } from '@posthog/core'
 import { PostHogMemoryStorage } from './storage-memory'
+import { createLogger } from './utils/logger'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -38,6 +39,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private featureFlagsPoller?: FeatureFlagsPoller
   protected errorTracking: ErrorTracking
   private maxCacheSize: number
+  private logger: Logger
   public readonly options: PostHogOptions
 
   distinctIdHasSentFlagCalls: Record<string, string[]>
@@ -46,6 +48,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     super(apiKey, options)
 
     this.options = options
+
+    this.logger = createLogger(this.logMsgIfDebug.bind(this))
 
     this.options.featureFlagsPollingInterval =
       typeof options.featureFlagsPollingInterval === 'number'
@@ -80,7 +84,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         })
       }
     }
-    this.errorTracking = new ErrorTracking(this, options, this.logMsgIfDebug)
+
+    this.errorTracking = new ErrorTracking(this, options, this.logger)
     this.distinctIdHasSentFlagCalls = {}
     this.maxCacheSize = options.maxCacheSize || MAX_CACHE_SIZE
   }

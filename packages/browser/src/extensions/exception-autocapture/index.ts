@@ -30,7 +30,8 @@ export class ExceptionObserver {
         this._rateLimiter = new BucketedRateLimiter({
             refillRate: this._instance.config.error_tracking.__exceptionRateLimiterRefillRate ?? 1,
             bucketSize: this._instance.config.error_tracking.__exceptionRateLimiterBucketSize ?? 10,
-            refillInterval: 10000, // ten seconds in milliseconds
+            refillInterval: 10000, // ten seconds in milliseconds,
+            _logger: logger,
         })
 
         this.startIfEnabled()

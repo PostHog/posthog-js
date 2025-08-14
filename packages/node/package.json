@@ -11,7 +11,7 @@
     "clean": "rimraf dist coverage",
     "lint": "eslint src test",
     "lint:fix": "eslint src test --fix",
-    "test:unit": "jest exception-autocapture.spec.ts --silent=false",
+    "test:unit": "jest",
     "build": "rollup -c",
     "dev": "rollup -cw",
     "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",

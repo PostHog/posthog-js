@@ -10,6 +10,7 @@ describe('BucketedRateLimiter', () => {
       bucketSize: 10,
       refillRate: 1,
       refillInterval: 1000,
+      _logger: {},
     })
   })
 

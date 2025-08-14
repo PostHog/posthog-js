@@ -4,7 +4,7 @@ import { PostHogBackendClient } from '../../client'
 import { uuidv7 } from '@posthog/core/vendor/uuidv7'
 import { propertiesFromUnknownInput } from './error-conversion'
 import { EventMessage, PostHogOptions } from '../../types'
-import { BucketedRateLimiter } from '@posthog/core'
+import { BucketedRateLimiter, Logger } from '@posthog/core'
 
 const SHUTDOWN_TIMEOUT = 2000
 
@@ -12,7 +12,7 @@ export default class ErrorTracking {
   private client: PostHogBackendClient
   private _exceptionAutocaptureEnabled: boolean
   private _rateLimiter: BucketedRateLimiter<string>
-  private _logMsgIfDebug: (fn: () => void) => void
+  private _logger: Logger
 
   static stackParser: StackParser
   static frameModifiers: StackFrameModifierFn[]
@@ -43,10 +43,10 @@ export default class ErrorTracking {
     }
   }
 
-  constructor(client: PostHogBackendClient, options: PostHogOptions, logMsgIfDebug) {
+  constructor(client: PostHogBackendClient, options: PostHogOptions, _logger: Logger) {
     this.client = client
     this._exceptionAutocaptureEnabled = options.enableExceptionAutocapture || false
-    this._logMsgIfDebug = logMsgIfDebug
+    this._logger = _logger
 
     // by default captures ten exceptions before rate limiting by exception type
     // refills at a rate of one token / 10 second period
@@ -55,6 +55,7 @@ export default class ErrorTracking {
       refillRate: 1,
       bucketSize: 10,
       refillInterval: 10000, // ten seconds in milliseconds
+      _logger: this._logger,
     })
 
     this.startAutocaptureIfEnabled()
@@ -74,11 +75,9 @@ export default class ErrorTracking {
       const isRateLimited = this._rateLimiter.consumeRateLimit(exceptionType)
 
       if (isRateLimited) {
-        this._logMsgIfDebug(() =>
-          console.info('Skipping exception capture because of client rate limiting.', {
-            exception: exceptionType,
-          })
-        )
+        this._logger.info('Skipping exception capture because of client rate limiting.', {
+          exception: exceptionType,
+        })
         return
       }
 
