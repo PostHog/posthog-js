@@ -167,6 +167,9 @@ importers:
 
   packages/browser:
     dependencies:
+      '@posthog/core':
+        specifier: workspace:*
+        version: link:../core
       core-js:
         specifier: ^3.38.1
         version: 3.38.1

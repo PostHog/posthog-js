@@ -80,7 +80,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         })
       }
     }
-    this.errorTracking = new ErrorTracking(this, options)
+    this.errorTracking = new ErrorTracking(this, options, this.logMsgIfDebug)
     this.distinctIdHasSentFlagCalls = {}
     this.maxCacheSize = options.maxCacheSize || MAX_CACHE_SIZE
   }

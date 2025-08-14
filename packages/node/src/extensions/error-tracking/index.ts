@@ -4,12 +4,15 @@ import { PostHogBackendClient } from '../../client'
 import { uuidv7 } from '@posthog/core/vendor/uuidv7'
 import { propertiesFromUnknownInput } from './error-conversion'
 import { EventMessage, PostHogOptions } from '../../types'
+import { BucketedRateLimiter } from '@posthog/core'
 
 const SHUTDOWN_TIMEOUT = 2000
 
 export default class ErrorTracking {
   private client: PostHogBackendClient
   private _exceptionAutocaptureEnabled: boolean
+  private _rateLimiter: BucketedRateLimiter<string>
+  private _logMsgIfDebug: (fn: () => void) => void
 
   static stackParser: StackParser
   static frameModifiers: StackFrameModifierFn[]
@@ -40,9 +43,19 @@ export default class ErrorTracking {
     }
   }
 
-  constructor(client: PostHogBackendClient, options: PostHogOptions) {
+  constructor(client: PostHogBackendClient, options: PostHogOptions, logMsgIfDebug) {
     this.client = client
     this._exceptionAutocaptureEnabled = options.enableExceptionAutocapture || false
+    this._logMsgIfDebug = logMsgIfDebug
+
+    // by default captures ten exceptions before rate limiting by exception type
+    // refills at a rate of one token / 10 second period
+    // e.g. will capture 1 exception rate limited exception every 10 seconds until burst ends
+    this._rateLimiter = new BucketedRateLimiter({
+      refillRate: 1,
+      bucketSize: 10,
+      refillInterval: 10000, // ten seconds in milliseconds
+    })
 
     this.startAutocaptureIfEnabled()
   }
@@ -54,8 +67,21 @@ export default class ErrorTracking {
     }
   }
 
-  private onException(exception: unknown, hint: EventHint): void {
-    void ErrorTracking.buildEventMessage(exception, hint).then((msg) => {
+  private onException(exception: unknown, hint: EventHint): Promise<void> {
+    return ErrorTracking.buildEventMessage(exception, hint).then((msg) => {
+      const exceptionProperties = msg.properties
+      const exceptionType = exceptionProperties?.$exception_list[0].type ?? 'Exception'
+      const isRateLimited = this._rateLimiter.consumeRateLimit(exceptionType)
+
+      if (isRateLimited) {
+        this._logMsgIfDebug(() =>
+          console.info('Skipping exception capture because of client rate limiting.', {
+            exception: exceptionType,
+          })
+        )
+        return
+      }
+
       this.client.capture(msg)
     })
   }

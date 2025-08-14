@@ -6,7 +6,7 @@ import { createLogger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
 import { isObject, isUndefined } from '../../utils/type-utils'
 import { ErrorProperties } from './error-conversion'
-import { BucketedRateLimiter } from '../../utils/bucketed-rate-limiter'
+import { BucketedRateLimiter } from '@posthog/core'
 
 const logger = createLogger('[ExceptionAutocapture]')
 

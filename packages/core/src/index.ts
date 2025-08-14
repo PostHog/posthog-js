@@ -48,6 +48,8 @@ export { safeSetTimeout } from './utils'
 export { getFetch } from './utils'
 export { getFeatureFlagValue } from './featureFlagUtils'
 export * as utils from './utils'
+export * as numberUtils from './utils/number-utils'
+export { BucketedRateLimiter } from './utils/bucketed-rate-limiter'
 
 class PostHogFetchHttpError extends Error {
   name = 'PostHogFetchHttpError'
