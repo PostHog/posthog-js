@@ -54,6 +54,8 @@ export type FeatureFlagCondition = {
   variant?: string
 }
 
+export type BeforeSendFn = (event: EventMessage | null) => EventMessage | null
+
 export type PostHogOptions = PostHogCoreOptions & {
   persistence?: 'memory'
   personalApiKey?: string
@@ -67,6 +69,12 @@ export type PostHogOptions = PostHogCoreOptions & {
   // Whether to enable feature flag polling for local evaluation by default. Defaults to true when personalApiKey is provided.
   // We recommend setting this to false if you are only using the personalApiKey for evaluating remote config payloads via `getRemoteConfigPayload` and not using local evaluation.
   enableLocalEvaluation?: boolean
+  /**
+   * Allows modification or dropping of events before they're sent to PostHog.
+   * If an array is provided, the functions are run in order.
+   * If a function returns null, the event will be dropped.
+   */
+  before_send?: BeforeSendFn | BeforeSendFn[]
 }
 
 export type PostHogFeatureFlag = {
