@@ -20,6 +20,7 @@ test.describe('ingestion', () => {
 
     test('Custom events work and are accessible via /api/event', async ({ page, events, posthog, ingestion }) => {
         await posthog.init()
+        await posthog.waitForLoaded()
         await events.waitForEvent('$pageview')
         await page.click('[data-cy-custom-event-button]')
         await events.waitForEvent('custom-event')
