@@ -651,6 +651,15 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     super.groupIdentifyStateless(groupType, groupKey, properties, { disableGeoip }, distinctId)
   }
 
+  async groupIdentifyImmediate({
+    groupType,
+    groupKey,
+    properties,
+    distinctId,
+    disableGeoip,
+  }: GroupIdentifyMessage): Promise<void> {
+    await super.groupIdentifyStatelessImmediate(groupType, groupKey, properties, { disableGeoip }, distinctId)
+  }
   /**
    * Reloads the feature flag definitions from the server for local evaluation.
    * This is useful to call if you want to ensure that the feature flags are up to date before calling getFeatureFlag.
