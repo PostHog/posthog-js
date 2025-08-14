@@ -1,5 +1,11 @@
 # posthog-node
 
+## 5.7.0
+
+### Minor Changes
+
+- [#2218](https://github.com/PostHog/posthog-js/pull/2218) [`cfe1e94`](https://github.com/PostHog/posthog-js/commit/cfe1e9416a26919b096b0bf8a4e363f1fa448e7c) Thanks [@oliverb123](https://github.com/oliverb123)! - Added before_send function
+
 ## 5.6.0 – 2025-07-15
 
 1. Added support for filtering feature flags with flagKeys parameter in sendFeatureFlags options
@@ -10,7 +16,7 @@
 
 ## 5.5.0 – 2025-07-10
 
-1. feat: make the `sendFeatureFlags` parameter more declarative and ergonomic.  Implementation notes below:
+1. feat: make the `sendFeatureFlags` parameter more declarative and ergonomic. Implementation notes below:
 
 Modified `sendFeatureFlags` to be type `boolean | SendFeatureFlagsOptions`, (which is defined thusly)
 
@@ -22,24 +28,24 @@ export interface SendFeatureFlagsOptions {
 }
 ```
 
-This lets users declare (1) whether to use local evaluation, and (2) which properties to supply explicitly for that evaluation, every time they want to send feature flags.  It also supports the old boolean behavior if folks don't care and would rather the SDK infer it.
+This lets users declare (1) whether to use local evaluation, and (2) which properties to supply explicitly for that evaluation, every time they want to send feature flags. It also supports the old boolean behavior if folks don't care and would rather the SDK infer it.
 
 Now, you can make calls like this
 
 ```ts
 posthog.captureImmediate({
-  distinctId: "user123",
-  event: "test event",
+  distinctId: 'user123',
+  event: 'test event',
   sendFeatureFlags: {
     onlyEvaluateLocally: true,
     personProperties: {
-      plan: "premium",
+      plan: 'premium',
     },
   },
   properties: {
-    foo: "bar",
+    foo: 'bar',
   },
-});
+})
 ```
 
 or simply
@@ -57,7 +63,7 @@ posthog.captureImmediate({
 
 ## 5.4.0 – 2025-07-09
 
-feat: respect local evaluation preferences with `sendFeatureFlags`; add property overrides from the event to those local computations so that the locally evaluated flags can be more accuratee.  NB: this change chagnes the default behavior of `capture` and `captureImmediately` – we will now only send feature flag data along with those events if `sendFeatureFlags` is explicitly specified, instead of optimistically sending along locally evaluated flags by default.
+feat: respect local evaluation preferences with `sendFeatureFlags`; add property overrides from the event to those local computations so that the locally evaluated flags can be more accuratee. NB: this change chagnes the default behavior of `capture` and `captureImmediately` – we will now only send feature flag data along with those events if `sendFeatureFlags` is explicitly specified, instead of optimistically sending along locally evaluated flags by default.
 
 ## 5.3.1 - 2025-07-07
 
