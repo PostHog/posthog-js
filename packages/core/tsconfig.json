@@ -11,6 +11,6 @@
     "declarationMap": true,
     "target": "ES2015"
   },
-  "include": ["src/**/*", "test/**/*", "../browser/src/__tests__/helpers/mock-logger.ts"],
+  "include": ["src/**/*", "test/**/*"],
   "exclude": ["node_modules", "test/**/*"]
 }

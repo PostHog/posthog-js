@@ -1,4 +1,15 @@
 import { clampToRange } from '../utils/number-utils'
+import { Logger } from '../types'
+
+const mockLogger: Logger = {
+  _log: jest.fn(),
+  critical: jest.fn(),
+  uninitializedWarning: jest.fn(),
+  info: jest.fn(),
+  warn: jest.fn(),
+  error: jest.fn(),
+  createLogger: () => mockLogger,
+}
 
 describe('number-utils', () => {
   describe('clampToRange', () => {
