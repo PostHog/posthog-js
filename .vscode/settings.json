@@ -4,6 +4,5 @@
     "jest.jestCommandLine": "pnpm test:unit",
     "editor.codeActionsOnSave": {
         "source.organizeImports": "never"
-    },
-    "biome.enabled": false
+    }
 }
