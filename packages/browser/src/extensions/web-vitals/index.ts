@@ -1,7 +1,7 @@
 import { PostHog } from '../../posthog-core'
 import { RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
 import { createLogger } from '../../utils/logger'
-import { isBoolean, isNullish, isNumber, isObject, isUndefined } from '../../utils/type-utils'
+import { isBoolean, isNullish, isNumber, isObject, isUndefined } from '@posthog/core'
 import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { assignableWindow, window, location } from '../../utils/globals'
 

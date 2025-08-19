@@ -48,7 +48,27 @@ export { safeSetTimeout } from './utils'
 export { getFetch } from './utils'
 export { getFeatureFlagValue } from './featureFlagUtils'
 export * as utils from './utils'
-export * as numberUtils from './utils/number-utils'
+export {
+  hasOwnProperty,
+  isArray,
+  isFormData,
+  isNull,
+  isNullish,
+  isNumber,
+  isString,
+  isUndefined,
+  isFunction,
+  isBoolean,
+  isEmptyObject,
+  isFile,
+  isNativeFunction,
+  isObject,
+  isEmptyString,
+  isKnownUnsafeEditableEvent,
+  isError,
+} from './utils/type-utils'
+export { clampToRange } from './utils/number-utils'
+export { includes, stripLeadingDollar, trim, isDistinctIdStringLike } from './utils/string-utils'
 export { BucketedRateLimiter } from './utils/bucketed-rate-limiter'
 
 class PostHogFetchHttpError extends Error {

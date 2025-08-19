@@ -5,7 +5,7 @@ import { _getHashParam } from '../utils/request-utils'
 import { createLogger } from '../utils/logger'
 import { window, document, assignableWindow } from '../utils/globals'
 import { TOOLBAR_ID } from '../constants'
-import { isFunction, isNullish } from '../utils/type-utils'
+import { isFunction, isNullish } from '@posthog/core'
 
 // TRICKY: Many web frameworks will modify the route on load, potentially before posthog is initialized.
 // To get ahead of this we grab it as soon as the posthog-js is parsed

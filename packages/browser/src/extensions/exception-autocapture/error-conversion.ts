@@ -13,7 +13,7 @@ import {
 } from './type-checking'
 import { defaultStackParser, StackFrame, StackParser } from './stack-trace'
 
-import { isEmptyString, isString, isUndefined } from '../../utils/type-utils'
+import { isEmptyString, isString, isUndefined } from '@posthog/core'
 import { SeverityLevel, severityLevels } from '../../types'
 import { getFilenameToChunkIdMap } from './chunk-ids'
 

@@ -1,11 +1,11 @@
 import { AutocaptureConfig, Properties } from './types'
 import { each, entries } from './utils'
 
-import { isArray, isNullish, isString, isUndefined } from './utils/type-utils'
+import { isArray, isNullish, isString, isUndefined } from '@posthog/core'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
 import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
-import { includes, trim } from './utils/string-utils'
+import { includes, trim } from '@posthog/core'
 
 export function splitClassString(s: string): string[] {
     return s ? trim(s).split(/\s+/) : []

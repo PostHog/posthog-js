@@ -1,7 +1,7 @@
 import { SessionIdManager } from '../sessionid'
 import { patch } from '../extensions/replay/rrweb-plugins/patch'
 import { assignableWindow, window } from '../utils/globals'
-import { isArray } from '../utils/type-utils'
+import { isArray } from '@posthog/core'
 import { COOKIELESS_SENTINEL_VALUE } from '../constants'
 
 const addTracingHeaders = (

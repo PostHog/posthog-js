@@ -1,7 +1,7 @@
-import { clampToRange } from '../utils/number-utils'
 import { BeforeSendFn, CaptureResult, KnownEventName } from '../types'
-import { includes } from '../utils/string-utils'
+import { includes, clampToRange } from '@posthog/core'
 import { appendArray, sampleOnProperty, updateThreshold } from '../extensions/sampling'
+import { logger } from '../utils/logger'
 
 /**
  * Provides an implementation of sampling that samples based on the distinct ID.
@@ -80,7 +80,7 @@ export function sampleByEvent(eventNames: KnownEventName[], percent: number): Be
         }
 
         const number = Math.random()
-        return number * 100 < clampToRange(percent * 100, 0, 100)
+        return number * 100 < clampToRange(percent * 100, 0, 100, logger)
             ? {
                   ...captureResult,
                   properties: {

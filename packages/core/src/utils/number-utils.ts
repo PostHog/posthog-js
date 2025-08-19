@@ -1,4 +1,5 @@
 import { Logger } from 'types'
+import { isNumber } from './type-utils'
 
 /**
  * Clamps a value to a range.
@@ -26,13 +27,4 @@ export function clampToRange(value: unknown, min: number, max: number, logger: L
   } else {
     return value
   }
-}
-
-const ObjProto = Object.prototype
-export const hasOwnProperty = ObjProto.hasOwnProperty
-const toString = ObjProto.toString
-
-export const isNumber = (x: unknown): x is number => {
-  // eslint-disable-next-line posthog-js/no-direct-number-check
-  return toString.call(x) == '[object Number]'
 }

@@ -1,5 +1,5 @@
 import { CapturedNetworkRequest, NetworkRecordOptions, PostHogConfig } from '../../types'
-import { isFunction, isNullish, isString, isUndefined } from '../../utils/type-utils'
+import { isFunction, isNullish, isString, isUndefined } from '@posthog/core'
 import { convertToURL } from '../../utils/request-utils'
 import { logger } from '../../utils/logger'
 import { shouldCaptureValue } from '../../autocapture-utils'

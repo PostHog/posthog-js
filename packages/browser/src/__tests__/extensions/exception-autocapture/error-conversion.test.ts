@@ -6,7 +6,7 @@ import {
     unhandledRejectionToProperties,
 } from '../../../extensions/exception-autocapture/error-conversion'
 
-import { isNull } from '../../../utils/type-utils'
+import { isNull } from '@posthog/core'
 import { expect } from '@jest/globals'
 
 // ugh, jest

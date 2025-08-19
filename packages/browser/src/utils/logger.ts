@@ -1,5 +1,5 @@
 import Config from '../config'
-import { isUndefined } from './type-utils'
+import { isUndefined } from '@posthog/core'
 import { assignableWindow, window } from './globals'
 import { Logger } from '@posthog/core'
 

@@ -1,6 +1,6 @@
 import { window } from './utils/globals'
 import { PostHog } from './posthog-core'
-import { isArray } from './utils/type-utils'
+import { isArray } from '@posthog/core'
 import { addEventListener } from './utils'
 
 export interface ScrollContext {
