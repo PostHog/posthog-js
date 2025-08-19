@@ -85,7 +85,7 @@ describe('number-utils', () => {
         },
       ],
     ])('%s', (_description, { value, min, max, expected, fallback }) => {
-      const result = clampToRange(value, min, max, mockLogger, fallback)
+      const result = clampToRange(value, min, max, mockLogger, fallback as any)
       expect(result).toBe(expected)
     })
 
