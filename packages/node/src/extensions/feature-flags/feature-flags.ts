@@ -1,4 +1,4 @@
-import { FeatureFlagCondition, FlagProperty, PostHogFeatureFlag, PropertyGroup } from '../../types'
+import { FeatureFlagCondition, FlagProperty, FlagPropertyValue, PostHogFeatureFlag, PropertyGroup } from '../../types'
 import type { FeatureFlagValue, JsonType, PostHogFetchOptions, PostHogFetchResponse } from '@posthog/core'
 import { safeSetTimeout } from '@posthog/core'
 import { hashSHA1 } from './crypto'
@@ -300,10 +300,102 @@ class FeatureFlagsPoller {
     return null
   }
 
+  private async evaluateFlagDependency(
+    property: FlagProperty,
+    distinctId: string,
+    properties: Record<string, string>,
+    evaluationCache: Record<string, FeatureFlagValue>
+  ): Promise<boolean> {
+    const targetFlagKey = property.key
+
+    if (!this.featureFlagsByKey) {
+      throw new InconclusiveMatchError('Feature flags not available for dependency evaluation')
+    }
+
+    // Check if dependency_chain is present - it should always be provided for flag dependencies
+    if (!('dependency_chain' in property)) {
+      throw new InconclusiveMatchError(
+        `Flag dependency property for '${targetFlagKey}' is missing required 'dependency_chain' field`
+      )
+    }
+
+    const dependencyChain = property.dependency_chain
+
+    // Check for missing or invalid dependency chain (This should never happen, but being defensive)
+    if (!Array.isArray(dependencyChain)) {
+      throw new InconclusiveMatchError(
+        `Flag dependency property for '${targetFlagKey}' has an invalid 'dependency_chain' (expected array, got ${typeof dependencyChain})`
+      )
+    }
+
+    // Handle circular dependency (empty chain means circular)  (This should never happen, but being defensive)
+    if (dependencyChain.length === 0) {
+      throw new InconclusiveMatchError(
+        `Circular dependency detected for flag '${targetFlagKey}' (empty dependency chain)`
+      )
+    }
+
+    // Evaluate all dependencies in the chain order
+    for (const depFlagKey of dependencyChain) {
+      if (!(depFlagKey in evaluationCache)) {
+        // Need to evaluate this dependency first
+        const depFlag = this.featureFlagsByKey[depFlagKey]
+        if (!depFlag) {
+          // Missing flag dependency - cannot evaluate locally
+          throw new InconclusiveMatchError(`Missing flag dependency '${depFlagKey}' for flag '${targetFlagKey}'`)
+        } else if (!depFlag.active) {
+          // Inactive flag evaluates to false
+          evaluationCache[depFlagKey] = false
+        } else {
+          // Recursively evaluate the dependency
+          try {
+            const depResult = await this.matchFeatureFlagProperties(depFlag, distinctId, properties, evaluationCache)
+            evaluationCache[depFlagKey] = depResult
+          } catch (error) {
+            // If we can't evaluate a dependency, store throw InconclusiveMatchError(`Missing flag dependency '${depFlagKey}' for flag '${targetFlagKey}'`)
+            throw new InconclusiveMatchError(
+              `Error evaluating flag dependency '${depFlagKey}' for flag '${targetFlagKey}': ${error}`
+            )
+          }
+        }
+      }
+
+      // Check if dependency evaluation was inconclusive
+      const cachedResult = evaluationCache[depFlagKey]
+      if (cachedResult === null || cachedResult === undefined) {
+        throw new InconclusiveMatchError(`Dependency '${depFlagKey}' could not be evaluated`)
+      }
+    }
+
+    // The target flag is specified in property.key (This should match the last element in the dependency chain)
+    const targetFlagValue = evaluationCache[targetFlagKey]
+
+    return this.flagEvaluatesToExpectedValue(property.value, targetFlagValue)
+  }
+
+  private flagEvaluatesToExpectedValue(expectedValue: FlagPropertyValue, flagValue: FeatureFlagValue): boolean {
+    // If the expected value is a boolean, then return true if the flag evaluated to true (or any string variant)
+    // If the expected value is false, then only return true if the flag evaluated to false.
+    if (typeof expectedValue === 'boolean') {
+      return (
+        expectedValue === flagValue || (typeof flagValue === 'string' && flagValue !== '' && expectedValue === true)
+      )
+    }
+
+    // If the expected value is a string, then return true if and only if the flag evaluated to the expected value.
+    if (typeof expectedValue === 'string') {
+      return flagValue === expectedValue
+    }
+
+    // The `flag_evaluates_to` operator is not supported for numbers and arrays.
+    return false
+  }
+
   async matchFeatureFlagProperties(
     flag: PostHogFeatureFlag,
     distinctId: string,
-    properties: Record<string, string>
+    properties: Record<string, string>,
+    evaluationCache: Record<string, FeatureFlagValue> = {}
   ): Promise<FeatureFlagValue> {
     const flagFilters = flag.filters || {}
     const flagConditions = flagFilters.groups || []
@@ -329,7 +421,7 @@ class FeatureFlagsPoller {
 
     for (const condition of sortedFlagConditions) {
       try {
-        if (await this.isConditionMatch(flag, distinctId, condition, properties)) {
+        if (await this.isConditionMatch(flag, distinctId, condition, properties, evaluationCache)) {
           const variantOverride = condition.variant
           const flagVariants = flagFilters.multivariate?.variants || []
           if (variantOverride && flagVariants.some((variant) => variant.key === variantOverride)) {
@@ -362,7 +454,8 @@ class FeatureFlagsPoller {
     flag: PostHogFeatureFlag,
     distinctId: string,
     condition: FeatureFlagCondition,
-    properties: Record<string, string>
+    properties: Record<string, string>,
+    evaluationCache: Record<string, FeatureFlagValue> = {}
   ): Promise<boolean> {
     const rolloutPercentage = condition.rollout_percentage
     const warnFunction = (msg: string): void => {
@@ -376,13 +469,7 @@ class FeatureFlagsPoller {
         if (propertyType === 'cohort') {
           matches = matchCohort(prop, properties, this.cohorts, this.debugMode)
         } else if (propertyType === 'flag') {
-          this.logMsgIfDebug(() =>
-            console.warn(
-              `[FEATURE FLAGS] Flag dependency filters are not supported in local evaluation. ` +
-                `Skipping condition for flag '${flag.key}' with dependency on flag '${prop.key || 'unknown'}'`
-            )
-          )
-          continue
+          matches = await this.evaluateFlagDependency(prop, distinctId, properties, evaluationCache)
         } else {
           matches = matchProperty(prop, properties, warnFunction)
         }
@@ -698,6 +785,11 @@ function matchProperty(
     }
     case 'is_date_after':
     case 'is_date_before': {
+      // Boolean values should never be used with date operations
+      if (typeof value === 'boolean') {
+        throw new InconclusiveMatchError(`Date operations cannot be performed on boolean values`)
+      }
+
       let parsedDate = relativeDateParseForFeatureFlagMatching(String(value))
       if (parsedDate == null) {
         parsedDate = convertToDateTime(value)
@@ -851,7 +943,7 @@ function isValidRegex(regex: string): boolean {
   }
 }
 
-function convertToDateTime(value: string | number | (string | number)[] | Date): Date {
+function convertToDateTime(value: FlagPropertyValue | Date): Date {
   if (value instanceof Date) {
     return value
   } else if (typeof value === 'string' || typeof value === 'number') {
