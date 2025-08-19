@@ -11,7 +11,7 @@
     "dependencies": {
         "@sentry/node": "^8.53.0",
         "express": "^4.18.1",
-        "posthog-node": "*",
+        "posthog-node": "link:../../packages/node",
         "undici": "^5.8.0"
     },
     "devDependencies": {
