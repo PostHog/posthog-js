@@ -1,5 +1,11 @@
 # posthog-ai
 
+## 6.1.2
+
+### Patch Changes
+
+- [#2230](https://github.com/PostHog/posthog-js/pull/2230) [`8ed50be`](https://github.com/PostHog/posthog-js/commit/8ed50be767028eaaa8b3ce4f299d6878c35c4ced) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - Fixes tool calls for streaming providers
+
 ## 6.1.1
 
 ### Patch Changes
