@@ -1,9 +1,8 @@
 import { QueuedRequestWithOptions, RequestQueueConfig } from './types'
 import { each } from './utils'
 
-import { isUndefined, clampToRange } from '@posthog/core'
+import { isArray, isUndefined, clampToRange } from '@posthog/core'
 import { logger } from './utils/logger'
-import { isArray } from './utils/type-utils'
 
 export const DEFAULT_FLUSH_INTERVAL_MS = 3000
 

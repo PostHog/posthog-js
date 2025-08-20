@@ -62,6 +62,10 @@ export {
   isEmptyString,
   isKnownUnsafeEditableEvent,
   isError,
+  isArray,
+  isObject,
+  isEmptyObject,
+  hasOwnProperty,
 } from './utils/type-utils'
 export { clampToRange } from './utils/number-utils'
 export { includes, stripLeadingDollar, trim, isDistinctIdStringLike } from './utils/string-utils'

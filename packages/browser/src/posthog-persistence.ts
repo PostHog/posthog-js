@@ -21,8 +21,7 @@ import {
     getSearchInfo,
 } from './utils/event-utils'
 import { logger } from './utils/logger'
-import { stripLeadingDollar } from '@posthog/core'
-import { isEmptyObject, isObject } from './utils/type-utils'
+import { stripLeadingDollar, isEmptyObject, isObject } from '@posthog/core'
 
 const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['persistence']>[] = [
     'cookie',

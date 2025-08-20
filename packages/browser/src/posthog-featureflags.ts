@@ -24,10 +24,9 @@ import {
     FLAG_CALL_REPORTED,
 } from './constants'
 
-import { isUndefined } from '@posthog/core'
+import { isUndefined, isArray } from '@posthog/core'
 import { createLogger } from './utils/logger'
 import { getTimezone } from './utils/event-utils'
-import { isArray } from './utils/type-utils'
 
 const logger = createLogger('[FeatureFlags]')
 

@@ -1,10 +1,9 @@
 import { PostHog } from '../../posthog-core'
 import { RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
 import { createLogger } from '../../utils/logger'
-import { isBoolean, isNullish, isNumber, isUndefined } from '@posthog/core'
+import { isBoolean, isNullish, isNumber, isUndefined, isObject } from '@posthog/core'
 import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { assignableWindow, window, location } from '../../utils/globals'
-import { isObject } from '../../utils/type-utils'
 
 const logger = createLogger('[Web Vitals]')
 

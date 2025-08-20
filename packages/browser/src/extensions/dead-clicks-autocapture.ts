@@ -1,10 +1,9 @@
 import { PostHog } from '../posthog-core'
 import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../constants'
-import { isBoolean } from '@posthog/core'
+import { isBoolean, isObject } from '@posthog/core'
 import { assignableWindow, document, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { createLogger } from '../utils/logger'
 import { DeadClicksAutoCaptureConfig, RemoteConfig } from '../types'
-import { isObject } from '../utils/type-utils'
 
 const logger = createLogger('[Dead Clicks]')
 

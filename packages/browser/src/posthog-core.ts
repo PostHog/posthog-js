@@ -87,11 +87,13 @@ import {
     isUndefined,
     includes,
     isDistinctIdStringLike,
+    isArray,
+    isEmptyObject,
+    isObject,
 } from '@posthog/core'
 import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
-import { isArray, isEmptyObject, isObject } from './utils/type-utils'
 
 /*
 SIMPLE STYLE GUIDE:

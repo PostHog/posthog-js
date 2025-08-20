@@ -42,7 +42,16 @@ import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
 import { MutationThrottler } from './mutation-throttler'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
-import { clampToRange, isBoolean, isFunction, isNullish, isNumber, isUndefined, includes } from '@posthog/core'
+import {
+    clampToRange,
+    isBoolean,
+    isFunction,
+    isNullish,
+    isNumber,
+    isUndefined,
+    isObject,
+    includes,
+} from '@posthog/core'
 import Config from '../../config'
 import { addEventListener } from '../../utils'
 import { sampleOnProperty } from '../sampling'
@@ -66,7 +75,6 @@ import {
 } from './triggerMatching'
 import { EventTriggerMatching, ACTIVE } from './triggerMatching'
 import { URLTriggerMatching } from './triggerMatching'
-import { isObject } from '../../utils/type-utils'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)

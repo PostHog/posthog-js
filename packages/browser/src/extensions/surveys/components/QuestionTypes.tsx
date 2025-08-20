@@ -8,12 +8,11 @@ import {
     SurveyAppearance,
     SurveyQuestionType,
 } from '../../../posthog-surveys-types'
-import { isNull, isNumber, isString } from '@posthog/core'
+import { isArray, isNull, isNumber, isString } from '@posthog/core'
 import { dissatisfiedEmoji, neutralEmoji, satisfiedEmoji, veryDissatisfiedEmoji, verySatisfiedEmoji } from '../icons'
 import { getDisplayOrderChoices, useSurveyContext } from '../surveys-extension-utils'
 import { BottomSection } from './BottomSection'
 import { QuestionHeader } from './QuestionHeader'
-import { isArray } from '../../../utils/type-utils'
 
 export interface CommonQuestionProps {
     forceDisableHtml: boolean

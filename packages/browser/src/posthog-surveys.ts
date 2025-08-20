@@ -14,8 +14,7 @@ import {
     SURVEY_IN_PROGRESS_PREFIX,
     SURVEY_SEEN_PREFIX,
 } from './utils/survey-utils'
-import { isNullish, isUndefined } from '@posthog/core'
-import { isArray } from './utils/type-utils'
+import { isNullish, isUndefined, isArray } from '@posthog/core'
 
 export class PostHogSurveys {
     // this is set to undefined until the remote config is loaded
