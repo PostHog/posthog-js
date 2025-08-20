@@ -1,30 +1,15 @@
-import { GoogleGenAI } from '@google/genai'
+import {
+  GoogleGenAI,
+  GenerateContentResponse as GeminiResponse,
+  GenerateContentParameters,
+  Part,
+  GenerateContentResponseUsageMetadata,
+} from '@google/genai'
 import { PostHog } from 'posthog-node'
 import { v4 as uuidv4 } from 'uuid'
 import { MonitoringParams, sendEventToPosthog, extractAvailableToolCalls, formatResponseGemini } from '../utils'
 import { sanitizeGemini } from '../sanitization'
-import type { TokenUsage } from '../types'
-
-// Types from @google/genai
-type GenerateContentRequest = {
-  model: string
-  contents: any
-  config?: any
-  [key: string]: any
-}
-
-type GenerateContentResponse = {
-  text?: string
-  candidates?: any[]
-  usageMetadata?: {
-    promptTokenCount?: number
-    candidatesTokenCount?: number
-    totalTokenCount?: number
-    thoughtsTokenCount?: number
-    cachedContentTokenCount?: number
-  }
-  [key: string]: any
-}
+import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessage } from '../types'
 
 interface MonitoringGeminiConfig {
   apiKey?: string
@@ -57,7 +42,7 @@ export class WrappedModels {
     this.phClient = phClient
   }
 
-  public async generateContent(params: GenerateContentRequest & MonitoringParams): Promise<GenerateContentResponse> {
+  public async generateContent(params: GenerateContentParameters & MonitoringParams): Promise<GeminiResponse> {
     const {
       posthogDistinctId,
       posthogTraceId,
@@ -71,11 +56,12 @@ export class WrappedModels {
     const startTime = Date.now()
 
     try {
-      const response = await this.client.models.generateContent(geminiParams)
+      const response = await this.client.models.generateContent(geminiParams as GenerateContentParameters)
       const latency = (Date.now() - startTime) / 1000
 
       const availableTools = extractAvailableToolCalls('gemini', geminiParams)
 
+      const metadata = response.usageMetadata
       await sendEventToPosthog({
         client: this.phClient,
         distinctId: posthogDistinctId,
@@ -86,20 +72,22 @@ export class WrappedModels {
         output: formatResponseGemini(response),
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
-        params: params as any,
+        params: params as GenerateContentParameters & MonitoringParams,
         httpStatus: 200,
         usage: {
-          inputTokens: response.usageMetadata?.promptTokenCount ?? 0,
-          outputTokens: response.usageMetadata?.candidatesTokenCount ?? 0,
-          reasoningTokens: response.usageMetadata?.thoughtsTokenCount ?? 0,
-          cacheReadInputTokens: response.usageMetadata?.cachedContentTokenCount ?? 0,
+          inputTokens: metadata?.promptTokenCount ?? 0,
+          outputTokens: metadata?.candidatesTokenCount ?? 0,
+          reasoningTokens:
+            (metadata as GenerateContentResponseUsageMetadata & { thoughtsTokenCount?: number })?.thoughtsTokenCount ??
+            0,
+          cacheReadInputTokens: metadata?.cachedContentTokenCount ?? 0,
         },
         tools: availableTools,
         captureImmediate: posthogCaptureImmediate,
       })
 
       return response
-    } catch (error: any) {
+    } catch (error: unknown) {
       const latency = (Date.now() - startTime) / 1000
       await sendEventToPosthog({
         client: this.phClient,
@@ -111,8 +99,8 @@ export class WrappedModels {
         output: [],
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
-        params: params as any,
-        httpStatus: error?.status ?? 500,
+        params: params as GenerateContentParameters & MonitoringParams,
+        httpStatus: (error as { status?: number })?.status ?? 500,
         usage: {
           inputTokens: 0,
           outputTokens: 0,
@@ -126,8 +114,8 @@ export class WrappedModels {
   }
 
   public async *generateContentStream(
-    params: GenerateContentRequest & MonitoringParams
-  ): AsyncGenerator<any, void, unknown> {
+    params: GenerateContentParameters & MonitoringParams
+  ): AsyncGenerator<GeminiResponse, void, unknown> {
     const {
       posthogDistinctId,
       posthogTraceId,
@@ -139,25 +127,67 @@ export class WrappedModels {
 
     const traceId = posthogTraceId ?? uuidv4()
     const startTime = Date.now()
-    let accumulatedContent = ''
+    const accumulatedContent: FormattedContent = []
     let usage: TokenUsage = {
       inputTokens: 0,
       outputTokens: 0,
     }
 
     try {
-      const stream = await this.client.models.generateContentStream(geminiParams)
+      const stream = await this.client.models.generateContentStream(geminiParams as GenerateContentParameters)
 
       for await (const chunk of stream) {
+        // Handle text content
         if (chunk.text) {
-          accumulatedContent += chunk.text
+          // Find if we already have a text item to append to
+          let lastTextItem: FormattedContentItem | undefined
+          for (let i = accumulatedContent.length - 1; i >= 0; i--) {
+            if (accumulatedContent[i].type === 'text') {
+              lastTextItem = accumulatedContent[i]
+              break
+            }
+          }
+
+          if (lastTextItem && lastTextItem.type === 'text') {
+            lastTextItem.text += chunk.text
+          } else {
+            accumulatedContent.push({ type: 'text', text: chunk.text })
+          }
         }
+
+        // Handle function calls from candidates
+        if (chunk.candidates && Array.isArray(chunk.candidates)) {
+          for (const candidate of chunk.candidates) {
+            if (candidate.content && candidate.content.parts) {
+              for (const part of candidate.content.parts) {
+                // Type-safe check for functionCall
+                if ('functionCall' in part) {
+                  const funcCall = (part as Part & { functionCall?: { name?: string; args?: unknown } }).functionCall
+                  if (funcCall?.name) {
+                    accumulatedContent.push({
+                      type: 'function',
+                      function: {
+                        name: funcCall.name,
+                        arguments: funcCall.args || {},
+                      },
+                    })
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // Update usage metadata - handle both old and new field names
         if (chunk.usageMetadata) {
+          const metadata = chunk.usageMetadata as GenerateContentResponseUsageMetadata
           usage = {
-            inputTokens: chunk.usageMetadata.promptTokenCount ?? 0,
-            outputTokens: chunk.usageMetadata.candidatesTokenCount ?? 0,
-            reasoningTokens: chunk.usageMetadata.thoughtsTokenCount ?? 0,
-            cacheReadInputTokens: chunk.usageMetadata.cachedContentTokenCount ?? 0,
+            inputTokens: metadata.promptTokenCount ?? 0,
+            outputTokens: metadata.candidatesTokenCount ?? 0,
+            reasoningTokens:
+              (metadata as GenerateContentResponseUsageMetadata & { thoughtsTokenCount?: number }).thoughtsTokenCount ??
+              0,
+            cacheReadInputTokens: metadata.cachedContentTokenCount ?? 0,
           }
         }
         yield chunk
@@ -167,6 +197,9 @@ export class WrappedModels {
 
       const availableTools = extractAvailableToolCalls('gemini', geminiParams)
 
+      // Format output similar to formatResponseGemini
+      const output = accumulatedContent.length > 0 ? [{ role: 'assistant', content: accumulatedContent }] : []
+
       await sendEventToPosthog({
         client: this.phClient,
         distinctId: posthogDistinctId,
@@ -174,16 +207,16 @@ export class WrappedModels {
         model: geminiParams.model,
         provider: 'gemini',
         input: this.formatInputForPostHog(geminiParams.contents),
-        output: [{ content: accumulatedContent, role: 'assistant' }],
+        output,
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
-        params: params as any,
+        params: params as GenerateContentParameters & MonitoringParams,
         httpStatus: 200,
         usage,
         tools: availableTools,
         captureImmediate: posthogCaptureImmediate,
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       const latency = (Date.now() - startTime) / 1000
       await sendEventToPosthog({
         client: this.phClient,
@@ -195,8 +228,8 @@ export class WrappedModels {
         output: [],
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
-        params: params as any,
-        httpStatus: error?.status ?? 500,
+        params: params as GenerateContentParameters & MonitoringParams,
+        httpStatus: (error as { status?: number })?.status ?? 500,
         usage: {
           inputTokens: 0,
           outputTokens: 0,
@@ -209,7 +242,7 @@ export class WrappedModels {
     }
   }
 
-  private formatInput(contents: any): Array<{ role: string; content: string }> {
+  private formatInput(contents: unknown): FormattedMessage[] {
     if (typeof contents === 'string') {
       return [{ role: 'user', content: contents }]
     }
@@ -221,18 +254,24 @@ export class WrappedModels {
         }
 
         if (item && typeof item === 'object') {
-          if (item.text) {
-            return { role: item.role || 'user', content: item.text }
+          const obj = item as Record<string, unknown>
+          if ('text' in obj && obj.text) {
+            return { role: (obj.role as string) || 'user', content: obj.text }
           }
 
-          if (item.content) {
-            return { role: item.role || 'user', content: item.content }
+          if ('content' in obj && obj.content) {
+            return { role: (obj.role as string) || 'user', content: obj.content }
           }
 
-          if (item.parts) {
+          if ('parts' in obj && Array.isArray(obj.parts)) {
             return {
-              role: item.role || 'user',
-              content: item.parts.map((part: any) => (part.text ? part.text : part)),
+              role: (obj.role as string) || 'user',
+              content: obj.parts.map((part: unknown) => {
+                if (part && typeof part === 'object' && 'text' in part) {
+                  return (part as { text: unknown }).text
+                }
+                return part
+              }),
             }
           }
         }
@@ -242,19 +281,20 @@ export class WrappedModels {
     }
 
     if (contents && typeof contents === 'object') {
-      if (contents.text) {
-        return [{ role: 'user', content: contents.text }]
+      const obj = contents as Record<string, unknown>
+      if ('text' in obj && obj.text) {
+        return [{ role: 'user', content: obj.text }]
       }
 
-      if (contents.content) {
-        return [{ role: 'user', content: contents.content }]
+      if ('content' in obj && obj.content) {
+        return [{ role: 'user', content: obj.content }]
       }
     }
 
     return [{ role: 'user', content: String(contents) }]
   }
 
-  private formatInputForPostHog(contents: any): any {
+  private formatInputForPostHog(contents: unknown): unknown {
     const sanitized = sanitizeGemini(contents)
     return this.formatInput(sanitized)
   }

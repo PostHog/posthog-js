@@ -47,6 +47,14 @@ interface PostHogInput {
       }
 }
 
+// Content types for the output array
+type OutputContentItem =
+  | { type: 'text'; text: string }
+  | { type: 'reasoning'; text: string }
+  | { type: 'tool-call'; id: string; function: { name: string; arguments: string } }
+  | { type: 'file'; name: string; mediaType: string; data: string }
+  | { type: 'source'; sourceType: string; id: string; url: string; title: string }
+
 const mapVercelParams = (params: any): Record<string, any> => {
   return {
     temperature: params.temperature,
@@ -170,7 +178,7 @@ const mapVercelPrompt = (messages: LanguageModelV2Prompt): PostHogInput[] => {
 }
 
 const mapVercelOutput = (result: LanguageModelV2Content[]): PostHogInput[] => {
-  const content: any[] = result.map((item) => {
+  const content: OutputContentItem[] = result.map((item) => {
     if (item.type === 'text') {
       return { type: 'text', text: truncate(item.text) }
     }
@@ -350,6 +358,16 @@ export const createInstrumentationMiddleware = (
       const availableTools = extractAvailableToolCalls('vercel', params)
       const baseURL = '' // cannot currently get baseURL from vercel
 
+      // Map to track in-progress tool calls
+      const toolCallsInProgress = new Map<
+        string,
+        {
+          toolCallId: string
+          toolName: string
+          input: string
+        }
+      >()
+
       try {
         const { stream, ...rest } = await doStream()
         const transformStream = new TransformStream<LanguageModelV2StreamPart, LanguageModelV2StreamPart>({
@@ -361,6 +379,36 @@ export const createInstrumentationMiddleware = (
             if (chunk.type === 'reasoning-delta') {
               reasoningText += chunk.delta // New in v5
             }
+
+            // Handle tool call chunks
+            if (chunk.type === 'tool-input-start') {
+              // Initialize a new tool call
+              toolCallsInProgress.set(chunk.id, {
+                toolCallId: chunk.id,
+                toolName: chunk.toolName,
+                input: '',
+              })
+            }
+            if (chunk.type === 'tool-input-delta') {
+              // Accumulate tool call arguments
+              const toolCall = toolCallsInProgress.get(chunk.id)
+              if (toolCall) {
+                toolCall.input += chunk.delta
+              }
+            }
+            if (chunk.type === 'tool-input-end') {
+              // Tool call is complete, keep it in the map for final processing
+              // Nothing specific to do here, the tool call is already complete
+            }
+            if (chunk.type === 'tool-call') {
+              // Direct tool call chunk (complete tool call)
+              toolCallsInProgress.set(chunk.toolCallId, {
+                toolCallId: chunk.toolCallId,
+                toolName: chunk.toolName,
+                input: chunk.input,
+              })
+            }
+
             if (chunk.type === 'finish') {
               const providerMetadata = chunk.providerMetadata
               const additionalTokenValues = {
@@ -384,12 +432,26 @@ export const createInstrumentationMiddleware = (
           flush: async () => {
             const latency = (Date.now() - startTime) / 1000
             // Build content array similar to mapVercelOutput structure
-            const content = []
+            const content: OutputContentItem[] = []
             if (reasoningText) {
               content.push({ type: 'reasoning', text: truncate(reasoningText) })
             }
             if (generatedText) {
               content.push({ type: 'text', text: truncate(generatedText) })
+            }
+
+            // Add completed tool calls to content
+            for (const toolCall of toolCallsInProgress.values()) {
+              if (toolCall.toolName) {
+                content.push({
+                  type: 'tool-call',
+                  id: toolCall.toolCallId,
+                  function: {
+                    name: toolCall.toolName,
+                    arguments: toolCall.input,
+                  },
+                })
+              }
             }
 
             // Structure output like mapVercelOutput does
