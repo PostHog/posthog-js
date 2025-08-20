@@ -1,6 +1,6 @@
 import type { NextConfig } from 'next'
 import { SourcemapWebpackPlugin } from './webpack-plugin'
-import { hasCompilerHook, processSourceMaps } from 'utils'
+import { hasCompilerHook, isTurbopackEnabled, processSourceMaps } from 'utils'
 
 type NextFuncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => NextConfig
 type NextAsyncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => Promise<NextConfig>
@@ -36,6 +36,10 @@ export function withPostHogConfig(userNextConfig: UserProvidedConfig, posthogCon
   const posthogNextConfigComplete = resolvePostHogConfig(posthogConfig)
   const sourceMapEnabled = posthogNextConfigComplete.sourcemaps.enabled
   const isCompilerHookSupported = hasCompilerHook()
+  const turbopackEnabled = isTurbopackEnabled()
+  if (turbopackEnabled && !isCompilerHookSupported) {
+    console.warn('[@posthog/nextjs-config] Turbopack support is only available with next version >= 15.4.1')
+  }
   return async (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => {
     const {
       webpack: userWebPackConfig,

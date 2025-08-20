@@ -406,8 +406,8 @@ importers:
   packages/nextjs-config:
     dependencies:
       '@posthog/cli':
-        specifier: ^0.3.6
-        version: 0.3.6
+        specifier: ^0.4.2
+        version: 0.4.2
       semver:
         specifier: ^7.7.2
         version: 7.7.2
@@ -2475,8 +2475,8 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  '@posthog/cli@0.3.6':
-    resolution: {integrity: sha512-payGtX2olnNfghGlIjP0C9gLq1/LuupiqPKIl9ioEP3SsH5HBbNiVv85bd2g/q9WFvpTG9uHo4OocZvA1mZC5Q==}
+  '@posthog/cli@0.4.2':
+    resolution: {integrity: sha512-5I8YnjObWc55tU1ICNzg2Uc3s6IArXSyfWR8EdnjLt2MLhdFdp1U9byamUnxOHk3MKGF3Gb/DU3jrI/BduHbDg==}
     engines: {node: '>=14', npm: '>=6'}
     hasBin: true
 
@@ -9150,10 +9150,6 @@ packages:
     deprecated: Rimraf versions prior to v4 are no longer supported
     hasBin: true
 
-  rimraf@5.0.10:
-    resolution: {integrity: sha512-l0OE8wL34P4nJH/H2ffoaniAokM2qSmrtXHmlpvYr5AVVX8msAyW0l8NVJFDxlSK4u3Uh/f41cQheDVdnYijwQ==}
-    hasBin: true
-
   rimraf@6.0.1:
     resolution: {integrity: sha512-9dkvaxAsk/xNXSJzMgFqqMCuFgt2+KsOFek3TMLfo8NCPfWpBmqwyNn5Y+NX56QUYfCtsyhF3ayiboEoUmJk/A==}
     engines: {node: 20 || >=22}
@@ -13468,13 +13464,13 @@ snapshots:
     dependencies:
       playwright: 1.52.0
 
-  '@posthog/cli@0.3.6':
+  '@posthog/cli@0.4.2':
     dependencies:
       axios: 1.10.0
       axios-proxy-builder: 0.1.2
       console.table: 0.10.0
       detect-libc: 2.0.4
-      rimraf: 5.0.10
+      rimraf: 6.0.1
     transitivePeerDependencies:
       - debug
 
@@ -21917,10 +21913,6 @@ snapshots:
   rimraf@3.0.2:
     dependencies:
       glob: 7.2.3
-
-  rimraf@5.0.10:
-    dependencies:
-      glob: 10.4.5
 
   rimraf@6.0.1:
     dependencies:

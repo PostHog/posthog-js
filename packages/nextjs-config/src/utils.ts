@@ -1,7 +1,7 @@
 import path from 'path'
 import fs from 'fs'
 import { spawn } from 'child_process'
-import nextPackage from 'next/package.json'
+import nextPackage from 'next/package.json' with { type: 'json' }
 import semver from 'semver'
 import { PostHogNextConfigComplete } from './config'
 
@@ -113,4 +113,10 @@ async function callPosthogCli(args: string[], env: NodeJS.ProcessEnv, verbose: b
       reject(error)
     })
   })
+}
+
+// Helper to detect if Turbopack is enabled
+export function isTurbopackEnabled(): boolean {
+  // CLI flag (--turbo/--turbopack) injects TURBOPACK=1 at runtime
+  return process.env.TURBOPACK === '1'
 }
