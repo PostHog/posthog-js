@@ -50,47 +50,26 @@ const extractRemarksContent = (apiItem) =>
 const getRemarks = (apiItem) => 
   hasRemarks(apiItem) ? extractRemarksContent(apiItem) : null;
 
-// for category extraction
-const findLabelTag = (inlineTags) => 
-  inlineTags.find(tag => tag.tagName === '@label');
-
-const extractCategoryFromTags = (inlineTags) => 
-  findLabelTag(inlineTags)?.tagContent || '';
 
 /**
  * to extract category tags
  * @param {any} apiMethod - API method to extract from
  * @returns {string} - Category or empty string
  */
-const extractCategoryTags = (apiMethod) => {
-  const inlineTags = extractInlineTags(apiMethod.tsdocComment);
-  return extractCategoryFromTags(inlineTags);
-};
-
-// for inline tag extraction
-const isInlineOrLinkTag = (node) => 
-  node.kind === 'LinkTag' || node.kind === 'InlineTag';
-
-/**
- * to extract inline tags from doc node
- * @param {any} docNode - Documentation node
- * @returns {any[]} - Array of inline tags
- */
-const extractInlineTags = (docNode) => {
-  if (!docNode) return [];
-  
-  const inlineTags = [];
-  
-  const traverse = (node) => {
-    if (!node) return;
-    if (isInlineOrLinkTag(node)) {
-      inlineTags.push(node);
+const extractCategoryTags = (tsdocComment) => {
+  if (tsdocComment.tagName === '@label') {
+    return tsdocComment.tagContent;
+  }
+  const children = tsdocComment.getChildNodes?.();
+  if (children) {
+    for (const child of children) {
+      const result = extractCategoryTags(child);
+      if (result) {
+        return result;
+      }
     }
-    node.getChildNodes?.()?.forEach(traverse);
-  };
-  
-  traverse(docNode);
-  return inlineTags;
+  }
+  return null;
 };
 
 module.exports = {
@@ -98,5 +77,4 @@ module.exports = {
   getParamDescription,
   getRemarks,
   extractCategoryTags,
-  extractInlineTags,
 };

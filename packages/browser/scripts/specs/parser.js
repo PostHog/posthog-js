@@ -49,7 +49,7 @@ const transformMethod = (posthogClass) => (method) => {
     const returnType = method.returnTypeExcerpt?.text || 'any';
     
     return {
-        category: documentation.extractCategoryTags(method) || '',
+        category: documentation.extractCategoryTags(method.tsdocComment) || '',
         description: documentation.getDocComment(method),
         details: documentation.getRemarks(method),
         id: method.name,
@@ -83,7 +83,8 @@ const composeOutput = (packageJson, posthogClass, functions, types) => ({
         ...SPEC_INFO
     },
     classes: [createClassDefinition(posthogClass, functions)],
-    types
+    types,
+    categories: [...new Set(functions.map(f => f.category))]
 });
 
 const ApiToSpecs = () => {
