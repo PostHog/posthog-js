@@ -5,6 +5,7 @@ import { formatResponseOpenAI, MonitoringParams, sendEventToPosthog, extractAvai
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
+import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
 import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
 
 const Chat = OpenAIOrignal.Chat
@@ -104,6 +105,7 @@ export class WrappedCompletions extends Completions {
           const [stream1, stream2] = value.tee()
           ;(async () => {
             try {
+              const contentBlocks: FormattedContent = []
               let accumulatedContent = ''
               let usage: {
                 inputTokens?: number
@@ -115,9 +117,56 @@ export class WrappedCompletions extends Completions {
                 outputTokens: 0,
               }
 
+              // Map to track in-progress tool calls
+              const toolCallsInProgress = new Map<number, {
+                id: string
+                name: string
+                arguments: string
+              }>()
+
               for await (const chunk of stream1) {
-                const delta = chunk?.choices?.[0]?.delta?.content ?? ''
-                accumulatedContent += delta
+                const choice = chunk?.choices?.[0]
+                
+                // Handle text content
+                const deltaContent = choice?.delta?.content
+                if (deltaContent) {
+                  accumulatedContent += deltaContent
+                }
+
+                // Handle tool calls
+                const deltaToolCalls = choice?.delta?.tool_calls
+                if (deltaToolCalls && Array.isArray(deltaToolCalls)) {
+                  for (const toolCall of deltaToolCalls) {
+                    const index = toolCall.index
+                    
+                    if (index !== undefined) {
+                      if (!toolCallsInProgress.has(index)) {
+                        // New tool call
+                        toolCallsInProgress.set(index, {
+                          id: toolCall.id || '',
+                          name: toolCall.function?.name || '',
+                          arguments: ''
+                        })
+                      }
+                      
+                      const inProgressCall = toolCallsInProgress.get(index)
+                      if (inProgressCall) {
+                        // Update tool call data
+                        if (toolCall.id) {
+                          inProgressCall.id = toolCall.id
+                        }
+                        if (toolCall.function?.name) {
+                          inProgressCall.name = toolCall.function.name
+                        }
+                        if (toolCall.function?.arguments) {
+                          inProgressCall.arguments += toolCall.function.arguments
+                        }
+                      }
+                    }
+                  }
+                }
+
+                // Handle usage information
                 if (chunk.usage) {
                   usage = {
                     inputTokens: chunk.usage.prompt_tokens ?? 0,
@@ -128,6 +177,36 @@ export class WrappedCompletions extends Completions {
                 }
               }
 
+              // Build final content blocks
+              if (accumulatedContent) {
+                contentBlocks.push({ type: 'text', text: accumulatedContent })
+              }
+
+              // Add completed tool calls to content blocks
+              for (const toolCall of toolCallsInProgress.values()) {
+                if (toolCall.name) {
+                  contentBlocks.push({
+                    type: 'function',
+                    id: toolCall.id,
+                    function: {
+                      name: toolCall.name,
+                      arguments: toolCall.arguments
+                    }
+                  } as FormattedFunctionCall)
+                }
+              }
+
+              // Format output to match non-streaming version
+              const formattedOutput: FormattedMessage[] = contentBlocks.length > 0
+                ? [{
+                    role: 'assistant',
+                    content: contentBlocks
+                  }]
+                : [{
+                    role: 'assistant',
+                    content: [{ type: 'text', text: '' }]
+                  }]
+
               const latency = (Date.now() - startTime) / 1000
               const availableTools = extractAvailableToolCalls('openai', openAIParams)
               await sendEventToPosthog({
@@ -137,7 +216,7 @@ export class WrappedCompletions extends Completions {
                 model: openAIParams.model,
                 provider: 'openai',
                 input: sanitizeOpenAI(openAIParams.messages),
-                output: [{ content: accumulatedContent, role: 'assistant' }],
+                output: formattedOutput,
                 latency,
                 baseURL: (this as any).baseURL ?? '',
                 params: body,
@@ -146,7 +225,11 @@ export class WrappedCompletions extends Completions {
                 tools: availableTools,
                 captureImmediate: posthogCaptureImmediate,
               })
-            } catch (error: any) {
+            } catch (error: unknown) {
+              const httpStatus = error && typeof error === 'object' && 'status' in error 
+                ? (error as { status?: number }).status ?? 500 
+                : 500
+              
               await sendEventToPosthog({
                 client: this.phClient,
                 distinctId: posthogDistinctId,
@@ -158,7 +241,7 @@ export class WrappedCompletions extends Completions {
                 latency: 0,
                 baseURL: (this as any).baseURL ?? '',
                 params: body,
-                httpStatus: error?.status ? error.status : 500,
+                httpStatus,
                 usage: { inputTokens: 0, outputTokens: 0 },
                 isError: true,
                 error: JSON.stringify(error),
@@ -202,7 +285,11 @@ export class WrappedCompletions extends Completions {
           }
           return result
         },
-        async (error: any) => {
+        async (error: unknown) => {
+          const httpStatus = error && typeof error === 'object' && 'status' in error 
+            ? (error as { status?: number }).status ?? 500 
+            : 500
+          
           await sendEventToPosthog({
             client: this.phClient,
             distinctId: posthogDistinctId,
@@ -214,7 +301,7 @@ export class WrappedCompletions extends Completions {
             latency: 0,
             baseURL: (this as any).baseURL ?? '',
             params: body,
-            httpStatus: error?.status ? error.status : 500,
+            httpStatus,
             usage: {
               inputTokens: 0,
               outputTokens: 0,
@@ -334,7 +421,11 @@ export class WrappedResponses extends Responses {
                 tools: availableTools,
                 captureImmediate: posthogCaptureImmediate,
               })
-            } catch (error: any) {
+            } catch (error: unknown) {
+              const httpStatus = error && typeof error === 'object' && 'status' in error 
+                ? (error as { status?: number }).status ?? 500 
+                : 500
+              
               await sendEventToPosthog({
                 client: this.phClient,
                 distinctId: posthogDistinctId,
@@ -347,7 +438,7 @@ export class WrappedResponses extends Responses {
                 latency: 0,
                 baseURL: (this as any).baseURL ?? '',
                 params: body,
-                httpStatus: error?.status ? error.status : 500,
+                httpStatus,
                 usage: { inputTokens: 0, outputTokens: 0 },
                 isError: true,
                 error: JSON.stringify(error),
@@ -391,7 +482,11 @@ export class WrappedResponses extends Responses {
           }
           return result
         },
-        async (error: any) => {
+        async (error: unknown) => {
+          const httpStatus = error && typeof error === 'object' && 'status' in error 
+            ? (error as { status?: number }).status ?? 500 
+            : 500
+          
           await sendEventToPosthog({
             client: this.phClient,
             distinctId: posthogDistinctId,
@@ -404,7 +499,7 @@ export class WrappedResponses extends Responses {
             latency: 0,
             baseURL: (this as any).baseURL ?? '',
             params: body,
-            httpStatus: error?.status ? error.status : 500,
+            httpStatus,
             usage: {
               inputTokens: 0,
               outputTokens: 0,
@@ -474,7 +569,11 @@ export class WrappedResponses extends Responses {
           })
           return result
         },
-        async (error: any) => {
+        async (error: unknown) => {
+          const httpStatus = error && typeof error === 'object' && 'status' in error 
+            ? (error as { status?: number }).status ?? 500 
+            : 500
+          
           await sendEventToPosthog({
             client: this.phClient,
             distinctId: posthogDistinctId,
@@ -487,7 +586,7 @@ export class WrappedResponses extends Responses {
             latency: 0,
             baseURL: (this as any).baseURL ?? '',
             params: body,
-            httpStatus: error?.status ? error.status : 500,
+            httpStatus,
             usage: {
               inputTokens: 0,
               outputTokens: 0,
