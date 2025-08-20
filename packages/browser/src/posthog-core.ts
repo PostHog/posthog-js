@@ -1621,7 +1621,7 @@ export class PostHog {
      * listener is registered, the first callback will be the next event
      * _after_ registering a listener
      *
-     * {@label Events}
+     * {@label Capture}
      *
      * @example
      * ```js

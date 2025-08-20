@@ -84,7 +84,8 @@ const composeOutput = (packageJson, posthogClass, functions, types) => ({
     },
     classes: [createClassDefinition(posthogClass, functions)],
     types,
-    categories: [...new Set(functions.map(f => f.category))]
+    // Set with most important categories first
+    categories: [...new Set(['Initialization', 'Identification', 'Capturing', ...functions.map(f => f.category)])]
 });
 
 const ApiToSpecs = () => {
