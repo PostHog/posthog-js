@@ -1,8 +1,9 @@
 import { each } from './'
 
-import { isArray, isFile, isUndefined } from '@posthog/core'
+import { isFile, isUndefined } from '@posthog/core'
 import { logger } from './logger'
 import { document } from './globals'
+import { isArray } from './type-utils'
 
 const localDomains = ['localhost', '127.0.0.1']
 

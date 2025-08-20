@@ -77,15 +77,12 @@ import { RequestRouter, RequestRouterRegion } from './utils/request-router'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
 import { getSurveyInteractionProperty, setSurveySeenOnLocalStorage } from './utils/survey-utils'
 import {
-    isArray,
-    isEmptyObject,
     isEmptyString,
     isError,
     isFunction,
     isKnownUnsafeEditableEvent,
     isNullish,
     isNumber,
-    isObject,
     isString,
     isUndefined,
     includes,
@@ -94,6 +91,7 @@ import {
 import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
+import { isArray, isEmptyObject, isObject } from './utils/type-utils'
 
 /*
 SIMPLE STYLE GUIDE:

@@ -1,17 +1,8 @@
 import { knownUnsafeEditableEvent, KnownUnsafeEditableEvent } from '../types'
 import { includes } from './string-utils'
 
-// eslint-disable-next-line posthog-js/no-direct-array-check
-const nativeIsArray = Array.isArray
 const ObjProto = Object.prototype
-export const hasOwnProperty = ObjProto.hasOwnProperty
 const toString = ObjProto.toString
-
-export const isArray =
-  nativeIsArray ||
-  function (obj: any): obj is any[] {
-    return toString.call(obj) === '[object Array]'
-  }
 
 // from a comment on http://dbj.org/dbj/?p=286
 // fails on only one very rare and deliberate custom object:
@@ -25,21 +16,6 @@ export const isNativeFunction = (x: unknown): x is (...args: any[]) => any =>
   isFunction(x) && x.toString().indexOf('[native code]') !== -1
 
 // Underscore Addons
-export const isObject = (x: unknown): x is Record<string, any> => {
-  // eslint-disable-next-line posthog-js/no-direct-object-check
-  return x === Object(x) && !isArray(x)
-}
-export const isEmptyObject = (x: unknown) => {
-  if (isObject(x)) {
-    for (const key in x) {
-      if (hasOwnProperty.call(x, key)) {
-        return false
-      }
-    }
-    return true
-  }
-  return false
-}
 export const isUndefined = (x: unknown): x is undefined => x === void 0
 
 export const isString = (x: unknown): x is string => {

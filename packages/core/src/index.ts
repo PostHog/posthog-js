@@ -49,8 +49,6 @@ export { getFetch } from './utils'
 export { getFeatureFlagValue } from './featureFlagUtils'
 export * as utils from './utils'
 export {
-  hasOwnProperty,
-  isArray,
   isFormData,
   isNull,
   isNullish,
@@ -59,10 +57,8 @@ export {
   isUndefined,
   isFunction,
   isBoolean,
-  isEmptyObject,
   isFile,
   isNativeFunction,
-  isObject,
   isEmptyString,
   isKnownUnsafeEditableEvent,
   isError,

@@ -20,12 +20,13 @@ import { AutocaptureConfig, COPY_AUTOCAPTURE_EVENT, EventName, Properties, Remot
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
-import { isBoolean, isFunction, isNull, isObject } from '@posthog/core'
+import { isBoolean, isFunction, isNull } from '@posthog/core'
 import { createLogger } from './utils/logger'
 import { document, window } from './utils/globals'
 import { convertToURL } from './utils/request-utils'
 import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
 import { includes } from '@posthog/core'
+import { isObject } from './utils/type-utils'
 
 const logger = createLogger('[AutoCapture]')
 

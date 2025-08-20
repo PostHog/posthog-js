@@ -1,7 +1,8 @@
 // Portions of this file are derived from getsentry/sentry-javascript by Software, Inc. dba Sentry
 // Licensed under the MIT License
 
-import { isFunction, isNull, isObject, isUndefined } from '@posthog/core'
+import { isFunction, isNull, isUndefined } from '@posthog/core'
+import { isObject } from '../../utils/type-utils'
 
 export function isEvent(candidate: unknown): candidate is Event {
     return !isUndefined(Event) && isInstanceOf(candidate, Event)

@@ -4,8 +4,9 @@ import {
 } from '../../constants'
 import { PostHog } from '../../posthog-core'
 import { FlagVariant, RemoteConfig, SessionRecordingUrlTrigger } from '../../types'
-import { isNullish, isBoolean, isObject, isString } from '@posthog/core'
+import { isNullish, isBoolean, isString } from '@posthog/core'
 import { window } from '../../utils/globals'
+import { isObject } from '../../utils/type-utils'
 
 export const DISABLED = 'disabled'
 export const SAMPLED = 'sampled'

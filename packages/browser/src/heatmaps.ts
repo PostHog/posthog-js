@@ -5,12 +5,13 @@ import { PostHog } from './posthog-core'
 import { document, window } from './utils/globals'
 import { getEventTarget, getParentElement } from './autocapture-utils'
 import { HEATMAPS_ENABLED_SERVER_SIDE } from './constants'
-import { isEmptyObject, isNumber, isObject, isUndefined } from '@posthog/core'
+import { isNumber, isUndefined } from '@posthog/core'
 import { createLogger } from './utils/logger'
 import { isElementInToolbar, isElementNode, isTag } from './utils/element-utils'
 import { DeadClicksAutocapture, isDeadClicksEnabledForHeatmaps } from './extensions/dead-clicks-autocapture'
 import { includes } from '@posthog/core'
 import { addEventListener } from './utils'
+import { isEmptyObject, isObject } from './utils/type-utils'
 
 const DEFAULT_FLUSH_INTERVAL = 5000
 

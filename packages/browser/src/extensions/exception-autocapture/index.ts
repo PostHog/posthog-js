@@ -4,9 +4,10 @@ import { ExceptionAutoCaptureConfig, RemoteConfig } from '../../types'
 
 import { createLogger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
-import { isObject, isUndefined } from '@posthog/core'
+import { isUndefined } from '@posthog/core'
 import { ErrorProperties } from './error-conversion'
 import { BucketedRateLimiter } from '@posthog/core'
+import { isObject } from '../../utils/type-utils'
 
 const logger = createLogger('[ExceptionAutocapture]')
 

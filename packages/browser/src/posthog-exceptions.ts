@@ -4,7 +4,8 @@ import { PostHog } from './posthog-core'
 import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
 import { propertyComparisons } from './utils/property-utils'
-import { isArray, isString } from '@posthog/core'
+import { isString } from '@posthog/core'
+import { isArray } from './utils/type-utils'
 
 const logger = createLogger('[Error tracking]')
 

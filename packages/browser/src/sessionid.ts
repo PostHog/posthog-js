@@ -7,9 +7,10 @@ import { window } from './utils/globals'
 
 import { createLogger } from './utils/logger'
 
-import { isArray, isNumber, isUndefined, clampToRange } from '@posthog/core'
+import { isNumber, isUndefined, clampToRange } from '@posthog/core'
 import { PostHog } from './posthog-core'
 import { addEventListener } from './utils'
+import { isArray } from './utils/type-utils'
 
 const logger = createLogger('[SessionId]')
 

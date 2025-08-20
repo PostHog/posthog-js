@@ -10,8 +10,8 @@
 // copying here so that we can use it before rrweb adopt it
 import type { IWindow, listenerHandler, RecordPlugin } from '@rrweb/types'
 import { CapturedNetworkRequest, Headers, InitiatorType, NetworkRecordOptions } from '../../../types'
-import { isArray, isBoolean, isFormData, isNull, isNullish, isObject, isString, isUndefined } from '@posthog/core'
-import { isDocument } from '../../../utils/type-utils'
+import { isBoolean, isFormData, isNull, isNullish, isString, isUndefined } from '@posthog/core'
+import { isArray, isDocument, isObject } from '../../../utils/type-utils'
 import { createLogger } from '../../../utils/logger'
 import { formDataToQuery } from '../../../utils/request-utils'
 import { patch } from '../rrweb-plugins/patch'

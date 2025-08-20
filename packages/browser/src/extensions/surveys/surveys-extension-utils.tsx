@@ -19,7 +19,7 @@ import {
     setSurveySeenOnLocalStorage,
     SURVEY_IN_PROGRESS_PREFIX,
 } from '../../utils/survey-utils'
-import { isNullish, isArray } from '@posthog/core'
+import { isNullish } from '@posthog/core'
 
 import { detectDeviceType } from '../../utils/user-agent-utils'
 import { propertyComparisons } from '../../utils/property-utils'
@@ -30,6 +30,7 @@ const window = _window as Window & typeof globalThis
 const document = _document as Document
 import surveyStyles from './survey.css'
 import { useContext } from 'preact/hooks'
+import { isArray } from '../../utils/type-utils'
 
 export function getFontFamily(fontFamily?: string): string {
     if (fontFamily === 'inherit') {
