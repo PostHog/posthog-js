@@ -895,7 +895,7 @@ export class PostHog {
      * ```
      *
      * {@label Capture}
-     * 
+     *
      * @public
      *
      * @param event_name - The name of the event (e.g., 'Sign Up', 'Button Click', 'Purchase')
@@ -1519,7 +1519,7 @@ export class PostHog {
      *     beta => beta.flagKey === betaKey
      *   )) {
      *     posthog.updateEarlyAccessFeatureEnrollment(
-     *       betaKey, 
+     *       betaKey,
      *       false
      *     )
      *     setActiveBetas(
@@ -1529,7 +1529,7 @@ export class PostHog {
      *     );
      *     return
      *   }
-     * 
+     *
      *   posthog.updateEarlyAccessFeatureEnrollment(
      *     betaKey,
      *     true
@@ -1540,7 +1540,7 @@ export class PostHog {
      *     )
      *   );
      * }
-     * 
+     *
      * const registerInterest = (featureKey) => {
      *   posthog.updateEarlyAccessFeatureEnrollment(
      *     featureKey,
@@ -1549,7 +1549,7 @@ export class PostHog {
      *   // Update UI to show user has registered
      * }
      * ```
-     * 
+     *
      * @public
      *
      * @param {String} key The key of the feature flag to update.
@@ -1569,24 +1569,24 @@ export class PostHog {
      * ```js
      * const posthog = usePostHog()
      * const activeFlags = useActiveFeatureFlags()
-     * 
+     *
      * const [activeBetas, setActiveBetas] = useState([])
      * const [inactiveBetas, setInactiveBetas] = useState([])
      * const [comingSoonFeatures, setComingSoonFeatures] = useState([])
-     * 
+     *
      * useEffect(() => {
      *   posthog.getEarlyAccessFeatures((features) => {
      *     // Filter features by stage
      *     const betaFeatures = features.filter(feature => feature.stage === 'beta')
      *     const conceptFeatures = features.filter(feature => feature.stage === 'concept')
-     *     
+     *
      *     setComingSoonFeatures(conceptFeatures)
-     * 
+     *
      *     if (!activeFlags || activeFlags.length === 0) {
      *       setInactiveBetas(betaFeatures)
      *       return
      *     }
-     * 
+     *
      *     const activeBetas = betaFeatures.filter(
      *             beta => activeFlags.includes(beta.flagKey)
      *         );
@@ -1649,8 +1649,8 @@ export class PostHog {
      *
      * @example
      * ```js
-     * posthog.onFeatureFlags(function(featureFlags, featureFlagsVariants, { errorsLoading }) { 
-     *     // do something 
+     * posthog.onFeatureFlags(function(featureFlags, featureFlagsVariants, { errorsLoading }) {
+     *     // do something
      * })
      * ```
      *
@@ -1665,7 +1665,7 @@ export class PostHog {
 
     /**
      * Register an event listener that runs when surveys are loaded.
-     * 
+     *
      * Callback parameters:
      * - surveys: Survey[]: An array containing all survey objects fetched from PostHog using the getSurveys method
      * - context: { isLoaded: boolean, error?: string }: An object indicating if the surveys were loaded successfully
@@ -1715,7 +1715,7 @@ export class PostHog {
      * function callback(surveys, context) {
      *   // do something
      * }
-     * 
+     *
      * posthog.getSurveys(callback, false)
      * ```
      *
@@ -1750,11 +1750,11 @@ export class PostHog {
     }
 
     /**
-     * Although we recommend using popover surveys and display conditions, 
-     * if you want to show surveys programmatically without setting up all 
-     * the extra logic needed for API surveys, you can render surveys 
-     * programmatically with the renderSurvey method. 
-     * 
+     * Although we recommend using popover surveys and display conditions,
+     * if you want to show surveys programmatically without setting up all
+     * the extra logic needed for API surveys, you can render surveys
+     * programmatically with the renderSurvey method.
+     *
      * This takes a survey ID and an HTML selector to render an unstyled survey.
      *
      * {@label Surveys}
@@ -1774,15 +1774,15 @@ export class PostHog {
     }
 
     /**
-     * Checks the feature flags associated with this Survey to see if the survey can be rendered. 
-     * This method is deprecated because it's synchronous and won't return the correct result if surveys are not loaded. 
+     * Checks the feature flags associated with this Survey to see if the survey can be rendered.
+     * This method is deprecated because it's synchronous and won't return the correct result if surveys are not loaded.
      * Use `canRenderSurveyAsync` instead.
      *
      * {@label Surveys}
-     * 
-     * 
+     *
+     *
      * @deprecated
-     * 
+     *
      * @param surveyId The ID of the survey to check.
      * @returns A SurveyRenderReason object indicating if the survey can be rendered.
      */
@@ -1792,7 +1792,7 @@ export class PostHog {
 
     /**
      * Checks the feature flags associated with this Survey to see if the survey can be rendered.
-     * 
+     *
      * {@label Surveys}
      *
      * @example
@@ -1819,9 +1819,9 @@ export class PostHog {
     }
 
     /**
-     * Associates a user with a unique identifier instead of an auto-generated ID. 
+     * Associates a user with a unique identifier instead of an auto-generated ID.
      * Learn more about [identifying users](/docs/product-analytics/identify)
-     * 
+     *
      * {@label Identification}
      *
      * @remarks
@@ -1963,7 +1963,7 @@ export class PostHog {
     }
 
     /**
-     * Sets properties on the person profile associated with the current `distinct_id`. 
+     * Sets properties on the person profile associated with the current `distinct_id`.
      * Learn more about [identifying users](/docs/product-analytics/identify)
      *
      * {@label Identification}
@@ -2022,7 +2022,7 @@ export class PostHog {
     }
 
     /**
-     * Associates the user with a group for group-based analytics. 
+     * Associates the user with a group for group-based analytics.
      * Learn more about [groups](/docs/product-analytics/group-analytics)
      *
      * {@label Identification}
@@ -2110,9 +2110,9 @@ export class PostHog {
     }
 
     /**
-     * Sometimes, you might want to evaluate feature flags using properties that haven't been ingested yet, 
+     * Sometimes, you might want to evaluate feature flags using properties that haven't been ingested yet,
      * or were set incorrectly earlier. You can do so by setting properties the flag depends on with these calls:
-     * 
+     *
      * {@label Feature flags}
      *
      * @example
@@ -2120,15 +2120,15 @@ export class PostHog {
      * // Set properties
      * posthog.setPersonPropertiesForFlags({'property1': 'value', property2: 'value2'})
      * ```
-     * 
+     *
      * @example
      * ```js
      * // Set properties without reloading
      * posthog.setPersonPropertiesForFlags({'property1': 'value', property2: 'value2'}, false)
      * ```
-     * 
+     *
      * @public
-     * 
+     *
      * @param {Object} properties The properties to override.
      * @param {Boolean} [reloadFeatureFlags] Whether to reload feature flags.
      */
@@ -2138,11 +2138,11 @@ export class PostHog {
 
     /**
      * Resets the person properties for feature flags.
-     * 
+     *
      * {@label Feature flags}
-     * 
+     *
      * @public
-     * 
+     *
      * @example
      * ```js
      * posthog.resetPersonPropertiesForFlags()
@@ -2157,23 +2157,23 @@ export class PostHog {
      * This is used when dealing with new groups / where you don't want to wait for ingestion
      * to update properties.
      * Takes in an object, the key of which is the group type.
-     * 
+     *
      * {@label Feature flags}
-     * 
+     *
      * @public
-     * 
+     *
      * @example
      * ```js
      * // Set properties with reload
      * posthog.setGroupPropertiesForFlags({'organization': { name: 'CYZ', employees: '11' } })
      * ```
-     * 
+     *
      * @example
      * ```js
      * // Set properties without reload
      * posthog.setGroupPropertiesForFlags({'organization': { name: 'CYZ', employees: '11' } }, false)
      * ```
-     * 
+     *
      * @param {Object} properties The properties to override, the key of which is the group type.
      * @param {Boolean} [reloadFeatureFlags] Whether to reload feature flags.
      */
@@ -2186,11 +2186,11 @@ export class PostHog {
 
     /**
      * Resets the group properties for feature flags.
-     * 
+     *
      * {@label Feature flags}
-     * 
+     *
      * @public
-     * 
+     *
      * @example
      * ```js
      * posthog.resetGroupPropertiesForFlags()
@@ -2277,7 +2277,7 @@ export class PostHog {
      * The distinct ID is used to associate events with users in PostHog.
      *
      * {@label Identification}
-     * 
+     *
      * @example
      * ```js
      * // get the current user ID
@@ -2306,11 +2306,11 @@ export class PostHog {
 
     /**
      * Returns the current groups.
-     * 
+     *
      * {@label Identification}
-     * 
+     *
      * @public
-     * 
+     *
      * @returns The current groups
      */
     getGroups(): Record<string, any> {
@@ -2325,9 +2325,9 @@ export class PostHog {
      * Any actual internal use case for the session_id should be handled by the sessionManager.
      *
      * {@label Session replay}
-     * 
+     *
      * @public
-     * 
+     *
      * @returns The current session_id
      */
     get_session_id(): string {
@@ -2338,29 +2338,29 @@ export class PostHog {
      * Returns the Replay url for the current session.
      *
      * {@label Session replay}
-     * 
+     *
      * @public
-     * 
+     *
      * @example
      * ```js
      * // basic usage
      * posthog.get_session_replay_url()
-     * 
+     *
      * @example
      * ```js
-     * // timestamp 
+     * // timestamp
      * posthog.get_session_replay_url({ withTimestamp: true })
      * ```
-     * 
+     *
      * @example
      * ```js
      * // timestamp and lookback
-     * posthog.get_session_replay_url({ 
+     * posthog.get_session_replay_url({
      *   withTimestamp: true,
      *   timestampLookBack: 30 // look back 30 seconds
      * })
      * ```
-     * 
+     *
      * @param options Options for the url
      * @param options.withTimestamp Whether to include the timestamp in the url (defaults to false)
      * @param options.timestampLookBack How many seconds to look back for the timestamp (defaults to 10)
@@ -2388,7 +2388,7 @@ export class PostHog {
 
     /**
      * Creates an alias linking two distinct user identifiers. Learn more about [identifying users](/docs/product-analytics/identify)
-     * 
+     *
      * {@label Identification}
      *
      * @remarks
@@ -2440,7 +2440,7 @@ export class PostHog {
 
     /**
      * Updates the configuration of the PostHog instance.
-     * 
+     *
      * {@label Initialization}
      *
      * @public
@@ -2482,17 +2482,17 @@ export class PostHog {
 
     /**
      * turns session recording on, and updates the config option `disable_session_recording` to false
-     * 
+     *
      * {@label Session replay}
-     * 
+     *
      * @public
-     * 
+     *
      * @example
      * ```js
      * // Start and ignore controls
      * posthog.startSessionRecording(true)
      * ```
-     * 
+     *
      * @example
      * ```js
      * // Start and override controls
@@ -2504,7 +2504,7 @@ export class PostHog {
      *   event_trigger: true || false
      * })
      * ```
-     * 
+     *
      * @param override.sampling - optional boolean to override the default sampling behavior - ensures the next session recording to start will not be skipped by sampling config.
      * @param override.linked_flag - optional boolean to override the default linked_flag behavior - ensures the next session recording to start will not be skipped by linked_flag config.
      * @param override.url_trigger - optional boolean to override the default url_trigger behavior - ensures the next session recording to start will not be skipped by url_trigger config.
@@ -2549,11 +2549,11 @@ export class PostHog {
     /**
      * turns session recording off, and updates the config option
      * disable_session_recording to true
-     * 
+     *
      * {@label Session replay}
-     * 
+     *
      * @public
-     * 
+     *
      * @example
      * ```js
      * // Stop session recording
@@ -2567,11 +2567,11 @@ export class PostHog {
     /**
      * returns a boolean indicating whether session recording
      * is currently running
-     * 
+     *
      * {@label Session replay}
-     * 
+     *
      * @public
-     * 
+     *
      * @example
      * ```js
      * // Stop session recording if it's running
@@ -2586,11 +2586,11 @@ export class PostHog {
 
     /**
      * Capture a caught exception manually
-     * 
+     *
      * {@label Error tracking}
-     * 
+     *
      * @public
-     * 
+     *
      * @example
      * ```js
      * // Capture a caught exception
@@ -2600,17 +2600,17 @@ export class PostHog {
      *   posthog.captureException(error)
      * }
      * ```
-     * 
+     *
      * @example
      * ```js
      * // With additional properties
-     * posthog.captureException(error, { 
+     * posthog.captureException(error, {
      *   customProperty: 'value',
      *   anotherProperty: ['I', 'can be a list'],
      *   ...
      * })
      * ```
-     * 
+     *
      * @param {Error} error The error to capture
      * @param {Object} [additionalProperties] Any additional properties to add to the error event
      * @returns {CaptureResult} The result of the capture
@@ -2631,11 +2631,11 @@ export class PostHog {
 
     /**
      * returns a boolean indicating whether the [toolbar](/docs/toolbar) loaded
-     * 
+     *
      * {@label Toolbar}
-     * 
+     *
      * @public
-     * 
+     *
      * @param toolbarParams
      * @returns {boolean} Whether the toolbar loaded
      */
@@ -2648,7 +2648,7 @@ export class PostHog {
      * Returns the value of a super property. Returns undefined if the property doesn't exist.
      *
      * {@label Identification}
-     * 
+     *
      * @remarks
      * get_property() can only be called after the PostHog library has finished loading.
      * init() has a loaded function available to handle this automatically.
@@ -2675,7 +2675,7 @@ export class PostHog {
      * property is set, getSessionProperty() will return the undefined value.
      *
      * {@label Identification}
-     * 
+     *
      * @remarks
      * This is based on browser-level `sessionStorage`, NOT the PostHog session.
      * getSessionProperty() can only be called after the PostHog library has finished loading.
@@ -2699,9 +2699,9 @@ export class PostHog {
 
     /**
      * Returns a string representation of the PostHog instance.
-     * 
+     *
      * {@label Initialization}
-     * 
+     *
      * @internal
      */
     toString(): string {
@@ -2742,11 +2742,11 @@ export class PostHog {
      *  Creates a person profile for the current user, if they don't already have one and config.person_profiles is set
      *  to 'identified_only'. Produces a warning and does not create a profile if config.person_profiles is set to
      *  'never'. Learn more about [person profiles](/docs/product-analytics/identify)
-     * 
+     *
      * {@label Identification}
-     * 
+     *
      * @public
-     * 
+     *
      * @example
      * ```js
      * posthog.createPersonProfile()
@@ -2806,7 +2806,7 @@ export class PostHog {
 
     /**
      * Opts the user into data capturing and persistence.
-     * 
+     *
      * {@label Privacy}
      *
      * @remarks
@@ -2877,7 +2877,7 @@ export class PostHog {
 
     /**
      * Opts the user out of data capturing and persistence.
-     * 
+     *
      * {@label Privacy}
      *
      * @remarks
@@ -2922,7 +2922,7 @@ export class PostHog {
 
     /**
      * Checks if the user has opted into data capturing.
-     * 
+     *
      * {@label Privacy}
      *
      * @remarks
@@ -2945,7 +2945,7 @@ export class PostHog {
 
     /**
      * Checks if the user has opted out of data capturing.
-     * 
+     *
      * {@label Privacy}
      *
      * @remarks
@@ -2974,7 +2974,7 @@ export class PostHog {
      *
      * Additionally, if the cookieless_mode is set to 'on_reject', we will capture events in cookieless mode if the
      * user has explicitly opted out.
-     * 
+     *
      * {@label Privacy}
      *
      * @see {PostHogConfig.cookieless_mode}
@@ -2996,11 +2996,11 @@ export class PostHog {
 
     /**
      * Clear the user's opt in/out status of data capturing and cookies/localstorage for this PostHog instance
-     * 
+     *
      * {@label Privacy}
-     * 
+     *
      * @public
-     * 
+     *
      */
     clear_opt_in_out_capturing(): void {
         this.consent.reset()
@@ -3053,7 +3053,7 @@ export class PostHog {
      * @remarks
      * Debug mode logs all PostHog calls to the browser console for troubleshooting.
      * Can also be enabled by adding `?__posthog_debug=true` to the URL.
-     * 
+     *
      * {@label Initialization}
      *
      * @example
@@ -3144,11 +3144,11 @@ export class PostHog {
 
     /**
      * Returns the current page view ID.
-     * 
+     *
      * {@label Initialization}
-     * 
+     *
      * @public
-     * 
+     *
      * @returns {string} The current page view ID
      */
     public getPageViewId(): string | undefined {
@@ -3157,11 +3157,11 @@ export class PostHog {
 
     /**
      * Capture written user feedback for a LLM trace. Numeric values are converted to strings.
-     * 
+     *
      * {@label LLM analytics}
-     * 
+     *
      * @public
-     * 
+     *
      * @param traceId The trace ID to capture feedback for.
      * @param userFeedback The feedback to capture.
      */
@@ -3174,11 +3174,11 @@ export class PostHog {
 
     /**
      * Capture a metric for a LLM trace. Numeric values are converted to strings.
-     * 
+     *
      * {@label LLM analytics}
-     * 
+     *
      * @public
-     * 
+     *
      * @param traceId The trace ID to capture the metric for.
      * @param metricName The name of the metric to capture.
      * @param metricValue The value of the metric to capture.
