@@ -374,9 +374,7 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
 
   describe('streamText with tool calls', () => {
     // Helper function to create a mock streaming model
-    const createMockStreamingModel = (
-      streamParts: LanguageModelV2StreamPart[]
-    ): LanguageModelV2 => {
+    const createMockStreamingModel = (streamParts: LanguageModelV2StreamPart[]): LanguageModelV2 => {
       return {
         specificationVersion: 'v2' as const,
         provider: 'test-provider',
@@ -410,10 +408,10 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         { type: 'tool-input-delta', id: 'tc-1', delta: 'San Francisco"}' },
         { type: 'tool-input-end', id: 'tc-1' },
         { type: 'text-delta', id: 'text-2', delta: 'for you.' },
-        { 
-          type: 'finish', 
+        {
+          type: 'finish',
           usage: { inputTokens: 20, outputTokens: 15, totalTokens: 35 },
-          finishReason: 'stop'
+          finishReason: 'stop',
         },
       ]
 
@@ -433,10 +431,10 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         })
       }
 
-      const result = await model.doStream({ 
-        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'What is the weather?' }] }] 
+      const result = await model.doStream({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'What is the weather?' }] }],
       })
-      
+
       // Read through the stream to trigger the transform and flush
       const reader = result.stream.getReader()
       while (!(await reader.read()).done) {
@@ -444,7 +442,7 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
       }
 
       // Wait for any async operations to complete
-      await new Promise(resolve => setTimeout(resolve, 10))
+      await new Promise((resolve) => setTimeout(resolve, 10))
 
       // Verify PostHog was called
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
@@ -475,15 +473,15 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         { type: 'tool-input-start', id: 'tc-1', toolName: 'get_weather' },
         { type: 'tool-input-delta', id: 'tc-1', delta: '{"location":"NYC"}' },
         { type: 'tool-input-end', id: 'tc-1' },
-        // Second tool call  
+        // Second tool call
         { type: 'tool-input-start', id: 'tc-2', toolName: 'web_search' },
         { type: 'tool-input-delta', id: 'tc-2', delta: '{"query":"' },
         { type: 'tool-input-delta', id: 'tc-2', delta: 'latest news"}' },
         { type: 'tool-input-end', id: 'tc-2' },
-        { 
-          type: 'finish', 
+        {
+          type: 'finish',
           usage: { inputTokens: 30, outputTokens: 25, totalTokens: 55 },
-          finishReason: 'stop'
+          finishReason: 'stop',
         },
       ]
 
@@ -503,16 +501,16 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         })
       }
 
-      const result = await model.doStream({ 
-        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Check weather and news' }] }] 
+      const result = await model.doStream({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Check weather and news' }] }],
       })
-      
+
       const reader = result.stream.getReader()
       while (!(await reader.read()).done) {
         // Continue reading
       }
 
-      await new Promise(resolve => setTimeout(resolve, 10))
+      await new Promise((resolve) => setTimeout(resolve, 10))
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
       const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
@@ -547,16 +545,16 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
       const streamParts: LanguageModelV2StreamPart[] = [
         { type: 'text-delta', id: 'text-1', delta: 'Processing your request. ' },
         // Direct tool-call chunk (complete tool call in one chunk)
-        { 
-          type: 'tool-call', 
+        {
+          type: 'tool-call',
           toolCallId: 'tc-direct',
           toolName: 'calculate',
-          input: '{"operation":"add","a":5,"b":3}'
+          input: '{"operation":"add","a":5,"b":3}',
         },
-        { 
-          type: 'finish', 
+        {
+          type: 'finish',
           usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
-          finishReason: 'stop'
+          finishReason: 'stop',
         },
       ]
 
@@ -576,16 +574,16 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         })
       }
 
-      const result = await model.doStream({ 
-        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Calculate 5 + 3' }] }] 
+      const result = await model.doStream({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Calculate 5 + 3' }] }],
       })
-      
+
       const reader = result.stream.getReader()
       while (!(await reader.read()).done) {
         // Continue reading
       }
 
-      await new Promise(resolve => setTimeout(resolve, 10))
+      await new Promise((resolve) => setTimeout(resolve, 10))
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
       const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
@@ -616,15 +614,15 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         { type: 'tool-input-start', id: 'tc-1', toolName: 'get_weather' },
         { type: 'tool-input-delta', id: 'tc-1', delta: '{"location":"London","units":"celsius"}' },
         { type: 'tool-input-end', id: 'tc-1' },
-        { 
-          type: 'finish', 
-          usage: { 
-            inputTokens: 25, 
+        {
+          type: 'finish',
+          usage: {
+            inputTokens: 25,
             outputTokens: 20,
             totalTokens: 45,
-            reasoningTokens: 10
+            reasoningTokens: 10,
           },
-          finishReason: 'stop'
+          finishReason: 'stop',
         },
       ]
 
@@ -644,16 +642,18 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         })
       }
 
-      const result = await model.doStream({ 
-        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'What is the weather in London?' }] }] 
+      const result = await model.doStream({
+        prompt: [
+          { role: 'user' as const, content: [{ type: 'text' as const, text: 'What is the weather in London?' }] },
+        ],
       })
-      
+
       const reader = result.stream.getReader()
       while (!(await reader.read()).done) {
         // Continue reading
       }
 
-      await new Promise(resolve => setTimeout(resolve, 10))
+      await new Promise((resolve) => setTimeout(resolve, 10))
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
       const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
@@ -687,16 +687,16 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         { type: 'tool-input-start', id: 'tc-1', toolName: 'empty_tool' },
         { type: 'tool-input-end', id: 'tc-1' },
         // Tool call with incomplete data (no name)
-        { 
-          type: 'tool-call', 
+        {
+          type: 'tool-call',
           toolCallId: 'tc-incomplete',
           toolName: '',
-          input: '{"data":"test"}'
+          input: '{"data":"test"}',
         },
-        { 
-          type: 'finish', 
+        {
+          type: 'finish',
           usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-          finishReason: 'stop'
+          finishReason: 'stop',
         },
       ]
 
@@ -716,16 +716,16 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         })
       }
 
-      const result = await model.doStream({ 
-        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Test empty tools' }] }] 
+      const result = await model.doStream({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Test empty tools' }] }],
       })
-      
+
       const reader = result.stream.getReader()
       while (!(await reader.read()).done) {
         // Continue reading
       }
 
-      await new Promise(resolve => setTimeout(resolve, 10))
+      await new Promise((resolve) => setTimeout(resolve, 10))
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
       const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
@@ -754,16 +754,16 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         { type: 'tool-input-start', id: 'tc-1', toolName: 'function_a' },
         { type: 'tool-input-delta', id: 'tc-1', delta: '{"param":"value"}' },
         { type: 'tool-input-end', id: 'tc-1' },
-        { 
-          type: 'tool-call', 
+        {
+          type: 'tool-call',
           toolCallId: 'tc-2',
           toolName: 'function_b',
-          input: '{"x":10}'
+          input: '{"x":10}',
         },
-        { 
-          type: 'finish', 
+        {
+          type: 'finish',
           usage: { inputTokens: 8, outputTokens: 4, totalTokens: 12 },
-          finishReason: 'stop'
+          finishReason: 'stop',
         },
       ]
 
@@ -783,16 +783,16 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         })
       }
 
-      const result = await model.doStream({ 
-        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Execute functions' }] }] 
+      const result = await model.doStream({
+        prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Execute functions' }] }],
       })
-      
+
       const reader = result.stream.getReader()
       while (!(await reader.read()).done) {
         // Continue reading
       }
 
-      await new Promise(resolve => setTimeout(resolve, 10))
+      await new Promise((resolve) => setTimeout(resolve, 10))
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
       const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls

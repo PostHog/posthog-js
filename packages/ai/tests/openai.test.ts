@@ -904,7 +904,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
             },
           },
           {
-            [Symbol.asyncIterator]: async function* () {
+            [Symbol.asyncIterator]: async function () {
               const error = new Error('Stream interrupted') as Error & { status: number }
               error.status = 503
               throw error
