@@ -32,6 +32,17 @@ jest.mock('@google/genai', () => {
   }
 })
 
+// Helper function to mock generateContentStream with provided chunks
+const mockGenerateContentStream = (chunks: any[]) => {
+  return jest.fn().mockImplementation(() => {
+    return (async function* () {
+      for (const chunk of chunks) {
+        yield chunk
+      }
+    })()
+  })
+}
+
 describe('PostHogGemini - Jest test suite', () => {
   let mockPostHogClient: PostHog
   let client: PostHogGemini
@@ -129,13 +140,7 @@ describe('PostHogGemini - Jest test suite', () => {
     ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
 
     // Mock the generateContentStream method
-    ;(client as any).client.models.generateContentStream = jest.fn().mockImplementation(() => {
-      return (async function* () {
-        for (const chunk of mockGeminiStreamResponse) {
-          yield chunk
-        }
-      })()
-    })
+    ;(client as any).client.models.generateContentStream = mockGenerateContentStream(mockGeminiStreamResponse)
   })
 
   // Wrap each test with conditional skip
@@ -377,13 +382,7 @@ describe('PostHogGemini - Jest test suite', () => {
     ]
 
     // Update mock to use function call stream
-    ;(client as any).client.models.generateContentStream = jest.fn().mockImplementation(() => {
-      return (async function* () {
-        for (const chunk of mockStreamWithFunctions) {
-          yield chunk
-        }
-      })()
-    })
+    ;(client as any).client.models.generateContentStream = mockGenerateContentStream(mockStreamWithFunctions)
 
     const stream = client.models.generateContentStream({
       model: 'gemini-2.0-flash-001',
@@ -464,13 +463,7 @@ describe('PostHogGemini - Jest test suite', () => {
     ]
 
     // Update mock
-    ;(client as any).client.models.generateContentStream = jest.fn().mockImplementation(() => {
-      return (async function* () {
-        for (const chunk of mockMultipleTextChunks) {
-          yield chunk
-        }
-      })()
-    })
+    ;(client as any).client.models.generateContentStream = mockGenerateContentStream(mockMultipleTextChunks)
 
     const stream = client.models.generateContentStream({
       model: 'gemini-2.0-flash-001',

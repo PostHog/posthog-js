@@ -3,6 +3,7 @@ import PostHogOpenAI from '../src/openai'
 import openaiModule from 'openai'
 import type { ChatCompletion, ChatCompletionChunk } from 'openai/resources/chat/completions'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
+import { flushPromises } from './test-utils'
 
 // Test-specific helper interface for async iteration
 interface MockAsyncIterator<T> {
@@ -626,8 +627,8 @@ describe('PostHogOpenAI - Jest test suite', () => {
       // Verify we received all chunks
       expect(chunks.length).toBeGreaterThan(0)
 
-      // Wait a bit for async capture to complete
-      await new Promise((resolve) => setTimeout(resolve, 100))
+      // Wait for async capture to complete
+      await flushPromises()
 
       // Verify PostHog was called with correct data
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
@@ -697,7 +698,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       }
 
       // Wait for async capture
-      await new Promise((resolve) => setTimeout(resolve, 100))
+      await flushPromises()
 
       // Verify the capture includes tool calls in the formatted output
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
@@ -864,7 +865,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       }
 
       // Wait for async capture
-      await new Promise((resolve) => setTimeout(resolve, 100))
+      await flushPromises()
 
       const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
       const { properties } = captureArgs[0]
@@ -904,7 +905,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
             },
           },
           {
-            [Symbol.asyncIterator]: async function () {
+            [Symbol.asyncIterator]: async function* () {
               const error = new Error('Stream interrupted') as Error & { status: number }
               error.status = 503
               throw error
@@ -931,7 +932,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       }).rejects.toThrow('Stream interrupted')
 
       // Wait for error capture
-      await new Promise((resolve) => setTimeout(resolve, 100))
+      await flushPromises()
 
       // Verify error was captured
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
@@ -981,7 +982,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       }
 
       // Wait for capture
-      await new Promise((resolve) => setTimeout(resolve, 100))
+      await flushPromises()
 
       const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
       const { properties } = captureArgs[0]

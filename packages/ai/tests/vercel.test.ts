@@ -1,7 +1,8 @@
 import { PostHog } from 'posthog-node'
 import { withTracing } from '../src/index'
-import { generateText, streamText, wrapLanguageModel } from 'ai'
+import { generateText, wrapLanguageModel } from 'ai'
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider'
+import { flushPromises } from './test-utils'
 
 // Mock PostHog
 jest.mock('posthog-node', () => {
@@ -442,7 +443,7 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
       }
 
       // Wait for any async operations to complete
-      await new Promise((resolve) => setTimeout(resolve, 10))
+      await flushPromises()
 
       // Verify PostHog was called
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
@@ -510,7 +511,7 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         // Continue reading
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 10))
+      await flushPromises()
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
       const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
@@ -583,7 +584,7 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         // Continue reading
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 10))
+      await flushPromises()
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
       const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
@@ -653,7 +654,7 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         // Continue reading
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 10))
+      await flushPromises()
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
       const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
@@ -725,7 +726,7 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         // Continue reading
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 10))
+      await flushPromises()
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
       const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
@@ -792,7 +793,7 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         // Continue reading
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 10))
+      await flushPromises()
 
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
       const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
