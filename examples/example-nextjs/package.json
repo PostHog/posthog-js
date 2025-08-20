@@ -5,13 +5,14 @@
     "scripts": {
         "dev": "next dev",
         "build": "next build",
+        "build:turbo": "next build --turbo",
         "start": "next start",
         "lint": "next lint"
     },
     "dependencies": {
         "@posthog/nextjs-config": "*",
         "@posthog/react": "*",
-        "next": "15.3.4",
+        "next": "15.3.1",
         "posthog-js": "*",
         "react": "^19.0.0",
         "react-dom": "^19.0.0"
