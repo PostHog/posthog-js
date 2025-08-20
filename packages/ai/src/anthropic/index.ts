@@ -8,6 +8,7 @@ import {
   sendEventToPosthog,
   extractAvailableToolCalls,
 } from '../utils'
+import type { FormattedContentItem, FormattedTextContent, FormattedFunctionCall, FormattedMessage } from '../types'
 
 type MessageCreateParamsNonStreaming = AnthropicOriginal.Messages.MessageCreateParamsNonStreaming
 type MessageCreateParamsStreaming = AnthropicOriginal.Messages.MessageCreateParamsStreaming
@@ -19,6 +20,11 @@ type MessageCreateParamsBase = AnthropicOriginal.Messages.MessageCreateParams
 import type { APIPromise, RequestOptions } from '@anthropic-ai/sdk/core'
 import type { Stream } from '@anthropic-ai/sdk/streaming'
 import { sanitizeAnthropic } from '../sanitization'
+
+interface ToolInProgress {
+  block: FormattedFunctionCall
+  inputString: string
+}
 
 interface MonitoringAnthropicConfig {
   apiKey: string
@@ -78,6 +84,10 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
     if (anthropicParams.stream) {
       return parentPromise.then((value) => {
         let accumulatedContent = ''
+        const contentBlocks: FormattedContentItem[] = []
+        const toolsInProgress: Map<string, ToolInProgress> = new Map()
+        let currentTextBlock: FormattedTextContent | null = null
+
         const usage: {
           inputTokens: number
           outputTokens: number
@@ -94,12 +104,85 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
           ;(async () => {
             try {
               for await (const chunk of stream1) {
+                // Handle content block start events
+                if (chunk.type === 'content_block_start') {
+                  if (chunk.content_block?.type === 'text') {
+                    currentTextBlock = {
+                      type: 'text',
+                      text: '',
+                    }
+
+                    contentBlocks.push(currentTextBlock)
+                  } else if (chunk.content_block?.type === 'tool_use') {
+                    const toolBlock: FormattedFunctionCall = {
+                      type: 'function',
+                      id: chunk.content_block.id,
+                      function: {
+                        name: chunk.content_block.name,
+                        arguments: {},
+                      },
+                    }
+
+                    contentBlocks.push(toolBlock)
+
+                    toolsInProgress.set(chunk.content_block.id, {
+                      block: toolBlock,
+                      inputString: '',
+                    })
+
+                    currentTextBlock = null
+                  }
+                }
+
+                // Handle text delta events
                 if ('delta' in chunk) {
                   if ('text' in chunk.delta) {
                     const delta = chunk?.delta?.text ?? ''
+
                     accumulatedContent += delta
+
+                    if (currentTextBlock) {
+                      currentTextBlock.text += delta
+                    }
                   }
                 }
+
+                // Handle tool input delta events
+                if (chunk.type === 'content_block_delta' && chunk.delta?.type === 'input_json_delta') {
+                  const block = chunk.index !== undefined ? contentBlocks[chunk.index] : undefined
+                  const toolId = block?.type === 'function' ? block.id : undefined
+
+                  if (toolId && toolsInProgress.has(toolId)) {
+                    const tool = toolsInProgress.get(toolId)
+                    if (tool) {
+                      tool.inputString += chunk.delta.partial_json || ''
+                    }
+                  }
+                }
+
+                // Handle content block stop events
+                if (chunk.type === 'content_block_stop') {
+                  currentTextBlock = null
+
+                  // Parse accumulated tool input
+                  if (chunk.index !== undefined) {
+                    const block = contentBlocks[chunk.index]
+
+                    if (block?.type === 'function' && block.id && toolsInProgress.has(block.id)) {
+                      const tool = toolsInProgress.get(block.id)
+                      if (tool) {
+                        try {
+                          block.function.arguments = JSON.parse(tool.inputString)
+                        } catch (e) {
+                          // Keep empty object if parsing fails
+                          console.error('Error parsing tool input:', e)
+                        }
+                      }
+                      toolsInProgress.delete(block.id)
+                    }
+                  }
+                }
+
                 if (chunk.type == 'message_start') {
                   usage.inputTokens = chunk.message.usage.input_tokens ?? 0
                   usage.cacheCreationInputTokens = chunk.message.usage.cache_creation_input_tokens ?? 0
@@ -114,6 +197,22 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
 
               const availableTools = extractAvailableToolCalls('anthropic', anthropicParams)
 
+              // Format output to match non-streaming version
+              const formattedOutput: FormattedMessage[] =
+                contentBlocks.length > 0
+                  ? [
+                      {
+                        role: 'assistant',
+                        content: contentBlocks,
+                      },
+                    ]
+                  : [
+                      {
+                        role: 'assistant',
+                        content: [{ type: 'text', text: accumulatedContent }],
+                      },
+                    ]
+
               await sendEventToPosthog({
                 client: this.phClient,
                 distinctId: posthogDistinctId,
@@ -121,7 +220,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 model: anthropicParams.model,
                 provider: 'anthropic',
                 input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic')),
-                output: [{ content: accumulatedContent, role: 'assistant' }],
+                output: formattedOutput,
                 latency,
                 baseURL: (this as any).baseURL ?? '',
                 params: body,
