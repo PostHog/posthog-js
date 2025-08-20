@@ -107,12 +107,12 @@ const createMockResponse = (options: MockAnthropicResponseOptions = {}): Anthrop
     content.push(
       ...options.tools.map(
         (tool) =>
-        ({
-          type: 'tool_use',
-          id: tool.id,
-          name: tool.name,
-          input: tool.input,
-        } as AnthropicOriginal.Messages.ToolUseBlock)
+          ({
+            type: 'tool_use',
+            id: tool.id,
+            name: tool.name,
+            input: tool.input,
+          }) as AnthropicOriginal.Messages.ToolUseBlock
       )
     )
   }
@@ -149,7 +149,7 @@ const createMockStreamChunks = (options: MockAnthropicResponseOptions = {}): Moc
         input_tokens: options.usage?.input_tokens || 20,
         cache_creation_input_tokens: options.usage?.cache_creation_input_tokens || 0,
         cache_read_input_tokens: options.usage?.cache_read_input_tokens || 0,
-        output_tokens: 0
+        output_tokens: 0,
       },
     },
   })
@@ -157,7 +157,11 @@ const createMockStreamChunks = (options: MockAnthropicResponseOptions = {}): Moc
   // Add text content chunks
   if (options.content) {
     chunks.push(
-      { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } as AnthropicOriginal.Messages.TextBlock },
+      {
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'text', text: '' } as AnthropicOriginal.Messages.TextBlock,
+      },
       ...options.content.split(' ').map((word, i, arr) => ({
         type: 'content_block_delta' as const,
         index: 0,
@@ -320,18 +324,18 @@ describe('PostHogAnthropic', () => {
 
     // Mock the create method
     const MessagesMock = AnthropicOriginal.Messages as jest.MockedClass<typeof AnthropicOriginal.Messages>
-      ; (MessagesMock.prototype.create as jest.Mock) = jest.fn().mockImplementation((params: any) => {
-        if (params.stream) {
-          // Return a mock stream
-          const mockStream = {
-            tee: jest
-              .fn()
-              .mockReturnValue([createMockAsyncIterator(mockStreamChunks), createMockAsyncIterator(mockStreamChunks)]),
-          }
-          return Promise.resolve(mockStream)
+    ;(MessagesMock.prototype.create as jest.Mock) = jest.fn().mockImplementation((params: any) => {
+      if (params.stream) {
+        // Return a mock stream
+        const mockStream = {
+          tee: jest
+            .fn()
+            .mockReturnValue([createMockAsyncIterator(mockStreamChunks), createMockAsyncIterator(mockStreamChunks)]),
         }
-        return Promise.resolve(mockResponse)
-      })
+        return Promise.resolve(mockStream)
+      }
+      return Promise.resolve(mockResponse)
+    })
   })
 
   // Wrap each test with conditional skip
@@ -626,7 +630,7 @@ describe('PostHogAnthropic', () => {
 
     conditionalTest('should respect global privacy mode', async () => {
       // Set global privacy mode
-      ; (mockPostHogClient as any).privacy_mode = true
+      ;(mockPostHogClient as any).privacy_mode = true
 
       await client.messages.create({
         model: 'claude-3-opus-20240229',
@@ -734,7 +738,7 @@ describe('PostHogAnthropic', () => {
       apiError.status = 429
 
       const MessagesMock = AnthropicOriginal.Messages as jest.MockedClass<typeof AnthropicOriginal.Messages>
-        ; (MessagesMock.prototype.create as jest.Mock) = jest.fn().mockRejectedValue(apiError)
+      ;(MessagesMock.prototype.create as jest.Mock) = jest.fn().mockRejectedValue(apiError)
 
       await expect(
         client.messages.create({
@@ -779,7 +783,7 @@ describe('PostHogAnthropic', () => {
       }
 
       const MessagesMock = AnthropicOriginal.Messages as jest.MockedClass<typeof AnthropicOriginal.Messages>
-        ; (MessagesMock.prototype.create as jest.Mock) = jest.fn().mockResolvedValue(errorStream)
+      ;(MessagesMock.prototype.create as jest.Mock) = jest.fn().mockResolvedValue(errorStream)
 
       const stream = await client.messages.create({
         model: 'claude-3-opus-20240229',

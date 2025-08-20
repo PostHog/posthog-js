@@ -19,7 +19,7 @@ export interface FormattedFunctionCall {
   id?: string
   function: {
     name: string
-    arguments: string | Record<string, any>
+    arguments: string | Record<string, unknown>
   }
 }
 
@@ -46,7 +46,7 @@ export type FormattedContent = FormattedContentItem[]
  */
 export interface FormattedMessage {
   role: string
-  content: FormattedContent | any // Keep any for backward compatibility with raw content
+  content: FormattedContent | unknown // Use unknown for better type safety with raw content
 }
 
 /**
@@ -55,7 +55,7 @@ export interface FormattedMessage {
 export interface TokenUsage {
   inputTokens?: number
   outputTokens?: number
-  reasoningTokens?: any // Keep as any since various providers return different types
-  cacheReadInputTokens?: any // Keep as any for provider flexibility
-  cacheCreationInputTokens?: any // Keep as any for provider flexibility
+  reasoningTokens?: unknown // Use unknown since various providers return different types
+  cacheReadInputTokens?: unknown // Use unknown for provider flexibility
+  cacheCreationInputTokens?: unknown // Use unknown for provider flexibility
 }
