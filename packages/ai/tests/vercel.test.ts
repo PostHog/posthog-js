@@ -282,5 +282,93 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
         })
       )
     })
+
+    it('should track tools in PostHog event when tools are provided', async () => {
+      const baseModel = createMockModel('gpt-4')
+      const model = withTracing(baseModel, mockPostHogClient, {
+        posthogDistinctId: 'test-user',
+        posthogTraceId: 'test-tools',
+      })
+
+      // Mock doGenerate to handle tools
+      baseModel.doGenerate = jest.fn().mockImplementation(async (params: LanguageModelV2CallOptions) => {
+        return {
+          text: 'I will use the weather tool',
+          usage: { inputTokens: 15, outputTokens: 5 },
+          content: [{ type: 'text', text: 'I will use the weather tool' }],
+          response: { modelId: 'gpt-4' },
+          providerMetadata: {},
+          finishReason: 'stop',
+          logprobs: undefined,
+          warnings: [],
+        }
+      })
+
+      // Define tools for the request
+      const tools = [
+        {
+          name: 'get_weather',
+          description: 'Get the weather for a location',
+          parameters: {
+            type: 'object' as const,
+            properties: {
+              location: { type: 'string' as const },
+            },
+            required: ['location'],
+          },
+        },
+        {
+          name: 'search',
+          description: 'Search for information',
+          parameters: {
+            type: 'object' as const,
+            properties: {
+              query: { type: 'string' as const },
+            },
+            required: ['query'],
+          },
+        },
+      ]
+
+      // Mock generateText to pass tools to the model
+      const mockGenerateText = generateText as jest.Mock
+      mockGenerateText.mockImplementation(async ({ model, prompt, tools }) => {
+        // Pass tools to the model's doGenerate via params
+        const messages = typeof prompt === 'string' ? [{ role: 'user', content: prompt }] : prompt
+        const result = await model.doGenerate({ prompt: messages, tools })
+
+        return {
+          text: result.text,
+          usage: {
+            promptTokens: result.usage.inputTokens,
+            completionTokens: result.usage.outputTokens,
+            totalTokens: result.usage.inputTokens + result.usage.outputTokens,
+          },
+        }
+      })
+
+      const result = await generateText({
+        model: model,
+        prompt: 'What is the weather like?',
+        tools: tools as any,
+      })
+
+      expect(result.text).toBe('I will use the weather tool')
+
+      // Verify PostHog was called with tools
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
+
+      expect(captureCall[0].properties).toEqual(
+        expect.objectContaining({
+          $ai_trace_id: 'test-tools',
+          $ai_model: 'gpt-4',
+          $ai_provider: 'openai',
+          $ai_tools: tools, // Verify tools are included
+          $ai_input_tokens: 15,
+          $ai_output_tokens: 5,
+        })
+      )
+    })
   })
 })

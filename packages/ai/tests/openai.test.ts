@@ -171,7 +171,7 @@ const createMockStreamChunks = (options: {
     // Stream the arguments in parts
     const args = options.toolCallArguments || '{"location": "San Francisco", "unit": "celsius"}'
     const argChunks = [args.slice(0, 10), args.slice(10, 30), args.slice(30)]
-    
+
     for (const argChunk of argChunks) {
       chunks.push({
         ...baseChunk,
@@ -332,10 +332,9 @@ describe('PostHogOpenAI - Jest test suite', () => {
       if (params.stream) {
         // Return a mock stream with tee() method
         const mockStream = {
-          tee: jest.fn().mockReturnValue([
-            createMockAsyncIterator(mockStreamChunks),
-            createMockAsyncIterator(mockStreamChunks),
-          ]),
+          tee: jest
+            .fn()
+            .mockReturnValue([createMockAsyncIterator(mockStreamChunks), createMockAsyncIterator(mockStreamChunks)]),
         }
         return Promise.resolve(mockStream)
       }
@@ -639,7 +638,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(event).toBe('$ai_generation')
       expect(properties['$ai_provider']).toBe('openai')
       expect(properties['$ai_model']).toBe('gpt-4')
-      
+
       // Check the formatted output structure
       expect(properties['$ai_output_choices']).toEqual([
         {
@@ -652,7 +651,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
           ],
         },
       ])
-      
+
       expect(properties['$ai_input_tokens']).toBe(25)
       expect(properties['$ai_output_tokens']).toBe(15)
       expect(properties['streamTest']).toBe(true)

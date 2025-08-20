@@ -84,47 +84,40 @@ describe('Tool Handling Tests', () => {
 
     it('should extract tools from Vercel AI SDK params', () => {
       const params = {
-        mode: {
-          type: 'regular',
-          tools: [
-            {
-              name: 'get_weather',
-              description: 'Get the weather for a location',
-              parameters: {
-                type: 'object',
-                properties: {
-                  location: { type: 'string' },
-                },
-                required: ['location'],
+        tools: [
+          {
+            name: 'get_weather',
+            description: 'Get the weather for a location',
+            parameters: {
+              type: 'object',
+              properties: {
+                location: { type: 'string' },
               },
+              required: ['location'],
             },
-            {
-              name: 'search',
-              description: 'Search for information',
-              parameters: {
-                type: 'object',
-                properties: {
-                  query: { type: 'string' },
-                },
-                required: ['query'],
+          },
+          {
+            name: 'search',
+            description: 'Search for information',
+            parameters: {
+              type: 'object',
+              properties: {
+                query: { type: 'string' },
               },
+              required: ['query'],
             },
-          ],
-        },
+          },
+        ],
         prompt: [],
         inputFormat: 'messages',
       }
 
       const tools = extractAvailableToolCalls('vercel', params)
-      expect(tools).toEqual(params.mode.tools)
+      expect(tools).toEqual(params.tools)
     })
 
-    it('should return null for Vercel AI SDK when mode is not regular', () => {
+    it('should return null for Vercel AI SDK when no tools are present', () => {
       const params = {
-        mode: {
-          type: 'object-json',
-          schema: { type: 'object' },
-        },
         prompt: [],
         inputFormat: 'messages',
       }
@@ -133,10 +126,11 @@ describe('Tool Handling Tests', () => {
       expect(tools).toBeNull()
     })
 
-    it('should return null for Vercel AI SDK when no mode is present', () => {
+    it('should return null for Vercel AI SDK when tools is undefined', () => {
       const params = {
         prompt: [],
         inputFormat: 'messages',
+        tools: undefined,
       }
 
       const tools = extractAvailableToolCalls('vercel', params)

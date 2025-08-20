@@ -118,15 +118,18 @@ export class WrappedCompletions extends Completions {
               }
 
               // Map to track in-progress tool calls
-              const toolCallsInProgress = new Map<number, {
-                id: string
-                name: string
-                arguments: string
-              }>()
+              const toolCallsInProgress = new Map<
+                number,
+                {
+                  id: string
+                  name: string
+                  arguments: string
+                }
+              >()
 
               for await (const chunk of stream1) {
                 const choice = chunk?.choices?.[0]
-                
+
                 // Handle text content
                 const deltaContent = choice?.delta?.content
                 if (deltaContent) {
@@ -138,17 +141,17 @@ export class WrappedCompletions extends Completions {
                 if (deltaToolCalls && Array.isArray(deltaToolCalls)) {
                   for (const toolCall of deltaToolCalls) {
                     const index = toolCall.index
-                    
+
                     if (index !== undefined) {
                       if (!toolCallsInProgress.has(index)) {
                         // New tool call
                         toolCallsInProgress.set(index, {
                           id: toolCall.id || '',
                           name: toolCall.function?.name || '',
-                          arguments: ''
+                          arguments: '',
                         })
                       }
-                      
+
                       const inProgressCall = toolCallsInProgress.get(index)
                       if (inProgressCall) {
                         // Update tool call data
@@ -190,22 +193,27 @@ export class WrappedCompletions extends Completions {
                     id: toolCall.id,
                     function: {
                       name: toolCall.name,
-                      arguments: toolCall.arguments
-                    }
+                      arguments: toolCall.arguments,
+                    },
                   } as FormattedFunctionCall)
                 }
               }
 
               // Format output to match non-streaming version
-              const formattedOutput: FormattedMessage[] = contentBlocks.length > 0
-                ? [{
-                    role: 'assistant',
-                    content: contentBlocks
-                  }]
-                : [{
-                    role: 'assistant',
-                    content: [{ type: 'text', text: '' }]
-                  }]
+              const formattedOutput: FormattedMessage[] =
+                contentBlocks.length > 0
+                  ? [
+                      {
+                        role: 'assistant',
+                        content: contentBlocks,
+                      },
+                    ]
+                  : [
+                      {
+                        role: 'assistant',
+                        content: [{ type: 'text', text: '' }],
+                      },
+                    ]
 
               const latency = (Date.now() - startTime) / 1000
               const availableTools = extractAvailableToolCalls('openai', openAIParams)
@@ -226,10 +234,11 @@ export class WrappedCompletions extends Completions {
                 captureImmediate: posthogCaptureImmediate,
               })
             } catch (error: unknown) {
-              const httpStatus = error && typeof error === 'object' && 'status' in error 
-                ? (error as { status?: number }).status ?? 500 
-                : 500
-              
+              const httpStatus =
+                error && typeof error === 'object' && 'status' in error
+                  ? ((error as { status?: number }).status ?? 500)
+                  : 500
+
               await sendEventToPosthog({
                 client: this.phClient,
                 distinctId: posthogDistinctId,
@@ -286,10 +295,11 @@ export class WrappedCompletions extends Completions {
           return result
         },
         async (error: unknown) => {
-          const httpStatus = error && typeof error === 'object' && 'status' in error 
-            ? (error as { status?: number }).status ?? 500 
-            : 500
-          
+          const httpStatus =
+            error && typeof error === 'object' && 'status' in error
+              ? ((error as { status?: number }).status ?? 500)
+              : 500
+
           await sendEventToPosthog({
             client: this.phClient,
             distinctId: posthogDistinctId,
@@ -422,10 +432,11 @@ export class WrappedResponses extends Responses {
                 captureImmediate: posthogCaptureImmediate,
               })
             } catch (error: unknown) {
-              const httpStatus = error && typeof error === 'object' && 'status' in error 
-                ? (error as { status?: number }).status ?? 500 
-                : 500
-              
+              const httpStatus =
+                error && typeof error === 'object' && 'status' in error
+                  ? ((error as { status?: number }).status ?? 500)
+                  : 500
+
               await sendEventToPosthog({
                 client: this.phClient,
                 distinctId: posthogDistinctId,
@@ -483,10 +494,11 @@ export class WrappedResponses extends Responses {
           return result
         },
         async (error: unknown) => {
-          const httpStatus = error && typeof error === 'object' && 'status' in error 
-            ? (error as { status?: number }).status ?? 500 
-            : 500
-          
+          const httpStatus =
+            error && typeof error === 'object' && 'status' in error
+              ? ((error as { status?: number }).status ?? 500)
+              : 500
+
           await sendEventToPosthog({
             client: this.phClient,
             distinctId: posthogDistinctId,
@@ -570,10 +582,11 @@ export class WrappedResponses extends Responses {
           return result
         },
         async (error: unknown) => {
-          const httpStatus = error && typeof error === 'object' && 'status' in error 
-            ? (error as { status?: number }).status ?? 500 
-            : 500
-          
+          const httpStatus =
+            error && typeof error === 'object' && 'status' in error
+              ? ((error as { status?: number }).status ?? 500)
+              : 500
+
           await sendEventToPosthog({
             client: this.phClient,
             distinctId: posthogDistinctId,
