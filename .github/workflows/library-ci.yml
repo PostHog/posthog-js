@@ -90,7 +90,7 @@ jobs:
           build: false
 
       - name: Build posthog-js
-        run: turbo --filter=packages/browser build
+        run: pnpm exec turbo --filter=posthog-js build
         env:
           WRITE_MANGLED_PROPERTIES: 1
 
