@@ -14,6 +14,7 @@ import {
 } from '../../posthog-surveys-types'
 import { document as _document, window as _window, userAgent } from '../../utils/globals'
 import {
+    getSurveyInteractionProperty,
     getSurveySeenKey,
     SURVEY_LOGGER as logger,
     setSurveySeenOnLocalStorage,
@@ -417,6 +418,9 @@ export const sendSurveyEvent = ({
         [SurveyEventProperties.SURVEY_COMPLETED]: isSurveyCompleted,
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
         ...responses,
+        $set: {
+            [getSurveyInteractionProperty(survey, 'responded')]: true,
+        },
     })
     if (isSurveyCompleted) {
         // Only dispatch PHSurveySent if the survey is completed, as that removes the survey from focus
@@ -451,6 +455,9 @@ export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly
             question: question.question,
             response: getSurveyResponseValue(inProgressSurvey?.responses || {}, question.id),
         })),
+        $set: {
+            [getSurveyInteractionProperty(survey, 'dismissed')]: true,
+        },
     })
     // Clear in-progress state on dismissal
     clearInProgressSurveyState(survey)
