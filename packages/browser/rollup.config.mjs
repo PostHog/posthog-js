@@ -20,7 +20,7 @@ let nameCache = {}
 const plugins = (es5, noExternal) => [
     json(),
     resolve({ browser: true }),
-    typescript({ sourceMap: true, outDir: './dist' }),
+    typescript({ sourceMap: true, outDir: './dist', module: 'es2015' }),
     commonjs(),
     postcss({
         plugins: [
