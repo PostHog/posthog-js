@@ -1,17 +1,15 @@
-# To run the example, you need to have the following installed (with yarn works as well)
-
-- sudo gem install cocoapods
-- npm install --global yarn
-- npm install --global rollup
-
 # Run the example
 
 ```bash
-yarn install
-cd ios
-pod install
-cd ..
-yarn start
+# root folder
+pnpm build
+pnpm package
+pnpm package:watch
+# example folder
+pnpm install
+# you can also avoid lockfile changes
+pnpm install --no-lockfile
+npx expo start
 ```
 
 Press s │ switch to development build.
@@ -31,4 +29,12 @@ Or...
 ```bash
 npx expo run:ios
 npx expo run:android
+```
+
+If your RN SDK changes are not picked up:
+
+```bash
+# example folder
+rm -rf node_modules
+# repeat Run steps
 ```
