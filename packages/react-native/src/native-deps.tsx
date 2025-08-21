@@ -135,13 +135,14 @@ export const buildOptimisiticAsyncStorage = (): PostHogCustomStorage => {
     const filesystem = OptionalExpoFileSystem
 
     try {
-      const oldFileSystem = filesystem as any
-      // identify legacy APIs with older versions
-      if (oldFileSystem.readAsStringAsync) {
+      const expoFileSystemLegacy = filesystem as any
+      // identify legacy APIs with older versions (expo <= 53 and expo-file-system <= 18)
+      if (expoFileSystemLegacy.readAsStringAsync) {
         return buildLegacyStorage(filesystem)
       }
     } catch (e) {}
 
+    // expo >= 54 and expo-file-system >= 19
     return {
       async getItem(key: string) {
         try {
