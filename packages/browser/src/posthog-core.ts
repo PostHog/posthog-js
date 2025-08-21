@@ -1657,7 +1657,7 @@ export class PostHog {
      * @param callback - The callback function will be called once the feature flags are ready or when they are updated.
      *                   It'll return a list of feature flags enabled for the user, the variants,
      *                   and also a context object indicating whether we succeeded to fetch the flags or not.
-     * @returns A function that can be called to unsubscribe the listener. Used by useEffect when the component unmounts.
+     * @returns A function that can be called to unsubscribe the listener. Used by `useEffect` when the component unmounts.
      */
     onFeatureFlags(callback: FeatureFlagsCallback): () => void {
         return this.featureFlags.onFeatureFlags(callback)
@@ -1699,7 +1699,7 @@ export class PostHog {
      * ```
      *
      * @param {Function} [callback] The callback function will be called once a session id is present or when it or the window id are updated.
-     * @returns {Function} A function that can be called to unsubscribe the listener. E.g. Used by useEffect when the component unmounts.
+     * @returns {Function} A function that can be called to unsubscribe the listener. E.g. Used by `useEffect` when the component unmounts.
      */
     onSessionId(callback: SessionIdChangedCallback): () => void {
         return this.sessionManager?.onSessionId(callback) ?? (() => {})
