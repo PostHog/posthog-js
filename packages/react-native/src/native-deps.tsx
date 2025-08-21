@@ -143,7 +143,6 @@ export const buildOptimisiticAsyncStorage = (): PostHogCustomStorage => {
 
       async setItem(key: string, value: string) {
         const uri = ((filesystem as any).Paths?.document.info().uri || '') + key
-        console.log('PostHog Debug', `uri new version - write: ${uri}`)
         const file = new (filesystem as any).File(uri)
         file.write(value)
       },

@@ -565,8 +565,8 @@ importers:
         specifier: ^4.0.0
         version: 4.3.0(expo@45.0.8(@babel/core@7.27.1))
       expo-file-system:
-        specifier: ^13.0.0
-        version: 13.2.1(expo@45.0.8(@babel/core@7.27.1))
+        specifier: ^19.0.0
+        version: 19.0.4(expo@45.0.8(@babel/core@7.27.1))(react-native@0.69.12(@babel/core@7.27.1)(@babel/preset-env@7.27.2(@babel/core@7.27.1))(react@18.2.0))
       expo-localization:
         specifier: ^11.0.0
         version: 11.0.0
@@ -5152,15 +5152,16 @@ packages:
     peerDependencies:
       expo: '*'
 
-  expo-file-system@13.2.1:
-    resolution: {integrity: sha512-nEj4k2fRStRDEUm/PRJ7rOZi7Bx0wKKF4ys4zolJJi4EV2SZwZLU4DSZ/ExewJvDjnMLqOlZOPnsr306jx1kBw==}
-    peerDependencies:
-      expo: '*'
-
   expo-file-system@14.0.0:
     resolution: {integrity: sha512-Asva7ehLUq/PIem6Y+/OQvoIqhFqYDd7l4l49yDRDgLSbK2I7Fr8qGhDeDpnUXrMVamg2uwt9zRGhyrjFNRhVw==}
     peerDependencies:
       expo: '*'
+
+  expo-file-system@19.0.4:
+    resolution: {integrity: sha512-8+W/F8nKV02G/176e2shgI99MVXU1OyBQXXWxl67RLCVIJCHJPrmn6O0sDyiV/2nUfaaZ0qKFXEVIjJbnLfDdg==}
+    peerDependencies:
+      expo: '*'
+      react-native: '*'
 
   expo-font@10.1.0:
     resolution: {integrity: sha512-vmhzpE95Ym4iOj8IELof+C/3Weert2B3LyxV5rBjGosjzBdov+o+S6b5mN7Yc9kyEGykwB6k7npL45X3hFYDQA==}
@@ -16735,14 +16736,6 @@ snapshots:
       expo: 45.0.8(@babel/core@7.27.1)
     optional: true
 
-  expo-file-system@13.2.1(expo@45.0.8(@babel/core@7.27.1)):
-    dependencies:
-      '@expo/config-plugins': 4.1.5
-      expo: 45.0.8(@babel/core@7.27.1)
-      uuid: 3.4.0
-    transitivePeerDependencies:
-      - supports-color
-
   expo-file-system@14.0.0(expo@45.0.8(@babel/core@7.27.1)):
     dependencies:
       '@expo/config-plugins': 4.1.5
@@ -16750,6 +16743,11 @@ snapshots:
       uuid: 3.4.0
     transitivePeerDependencies:
       - supports-color
+
+  expo-file-system@19.0.4(expo@45.0.8(@babel/core@7.27.1))(react-native@0.69.12(@babel/core@7.27.1)(@babel/preset-env@7.27.2(@babel/core@7.27.1))(react@18.2.0)):
+    dependencies:
+      expo: 45.0.8(@babel/core@7.27.1)
+      react-native: 0.69.12(@babel/core@7.27.1)(@babel/preset-env@7.27.2(@babel/core@7.27.1))(react@18.2.0)
 
   expo-font@10.1.0(expo@45.0.8(@babel/core@7.27.1)):
     dependencies:
