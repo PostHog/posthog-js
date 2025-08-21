@@ -99,6 +99,25 @@ const returnPropertyIfNotUnknown = (value: string | null): string | null => {
   return null
 }
 
+const buildLegacyStorage = (filesystem: any): PostHogCustomStorage => {
+  return {
+    async getItem(key: string) {
+      try {
+        const uri = (filesystem.documentDirectory || '') + key
+        const stringContent = await filesystem.readAsStringAsync(uri)
+        return stringContent
+      } catch (e) {
+        return null
+      }
+    },
+
+    async setItem(key: string, value: string) {
+      const uri = (filesystem.documentDirectory || '') + key
+      await filesystem.writeAsStringAsync(uri, value)
+    },
+  }
+}
+
 export const buildOptimisiticAsyncStorage = (): PostHogCustomStorage => {
   // expo-filesystem is not supported on web and macos, so we need to use the react-native-async-storage package instead
   // see https://github.com/PostHog/posthog-js-lite/blob/5fb7bee96f739b243dfea5589e2027f16629e8cd/posthog-react-native/src/optional/OptionalExpoFileSystem.ts#L7-L11
@@ -108,27 +127,21 @@ export const buildOptimisiticAsyncStorage = (): PostHogCustomStorage => {
   // here we try to use the legacy package for back compatibility
   if (OptionalExpoFileSystemLegacy && supportedPlatform) {
     const filesystem = OptionalExpoFileSystemLegacy
-    return {
-      async getItem(key: string) {
-        try {
-          const uri = (filesystem.documentDirectory || '') + key
-          const stringContent = await filesystem.readAsStringAsync(uri)
-          return stringContent
-        } catch (e) {
-          return null
-        }
-      },
-
-      async setItem(key: string, value: string) {
-        const uri = (filesystem.documentDirectory || '') + key
-        await filesystem.writeAsStringAsync(uri, value)
-      },
-    }
+    return buildLegacyStorage(filesystem)
   }
 
   // expo-54 and expo-file-system v19 new APIs support
   if (OptionalExpoFileSystem && supportedPlatform) {
     const filesystem = OptionalExpoFileSystem
+
+    try {
+      const oldFileSystem = filesystem as any
+      // identify legacy APIs with older versions
+      if (oldFileSystem.readAsStringAsync) {
+        return buildLegacyStorage(filesystem)
+      }
+    } catch (e) {}
+
     return {
       async getItem(key: string) {
         try {
