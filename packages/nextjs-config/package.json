@@ -42,7 +42,8 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@posthog/cli": "^0.3.6"
+    "@posthog/cli": "^0.4.2",
+    "semver": "^7.7.2"
   },
   "keywords": [
     "posthog",
@@ -53,8 +54,9 @@
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@rslib/core": "catalog:",
     "@types/node": "^22.15.23",
-    "next": "^12.1.0",
+    "@types/semver": "^7.7.0",
     "jest": "catalog:",
+    "next": "^15.4.1",
     "ts-jest": "catalog:"
   },
   "peerDependencies": {
