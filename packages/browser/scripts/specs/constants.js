@@ -1,4 +1,4 @@
-const HOG_REF = '0.2';
+const HOG_REF = '0.3';
 
 const SPEC_INFO = {
     id: 'posthog-js',
