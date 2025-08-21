@@ -1,17 +1,11 @@
-# To run the example, you need to have the following installed (with yarn works as well)
-
-- sudo gem install cocoapods
-- npm install --global yarn
-- npm install --global rollup
-
 # Run the example
 
 ```bash
-yarn install
+pnpm install
 cd ios
 pod install
 cd ..
-yarn start
+pnpm start
 ```
 
 Press s │ switch to development build.

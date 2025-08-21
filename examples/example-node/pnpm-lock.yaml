@@ -4,7 +4,7 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-pnpmfileChecksum: sha256-1pwf/Vzv0x/XxfT/Ke/wtqP942P9t4kspzDGNKEAuAg=
+pnpmfileChecksum: sha256-cEvMMkfkheI3EBa4G37GQNElnmWChFh76TB33kbeS1E=
 
 importers:
 
@@ -330,8 +330,8 @@ packages:
       '@opentelemetry/api': ^1.1.0
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-HlBn6Ygb7S7shZQ1+50Fz0KG22CcGFnUf3VPCkY0wlPXXtpMOdbN6kkLhWPTvw5Dt73WfgQrcpEObwvV9Aqy0A==, tarball: file:../../target/posthog-core.tgz}
-    version: 2.2.0
+    resolution: {integrity: sha512-SEmf7ATAKNuDEtREr97sJMlHjzcmUM6g/CtD3XoByO0RsJI9gJ8AzmWBM6VXJ2tUB2gvS4m6ohfw5QoP+InXcw==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.0.0
 
   '@prisma/instrumentation@5.22.0':
     resolution: {integrity: sha512-LxccF392NN37ISGxIurUljZSh1YWnphO34V5a0+T7FVQG2u9bhAXRTJpgmQ3483woVhkraQZFF7cbRrpbw/F4Q==}
@@ -935,9 +935,9 @@ packages:
     engines: {node: '>=0.10.0'}
 
   posthog-node@file:../../target/posthog-node.tgz:
-    resolution: {integrity: sha512-P4NnRCF+umWb97qwksASHEaHunHTMsrBPHuhnX0CiEweNZfMzzRh2tu8y+W/H1eeKliv/X3GPvBedmcqNAg9qw==, tarball: file:../../target/posthog-node.tgz}
-    version: 5.1.1
-    engines: {node: '>=18'}
+    resolution: {integrity: sha512-It4jo/Vtg2Wl/xkIJI/DKyCH60lKL5x8KNEapo6nPbAj1WyHTu1duGVBfPMqueeCGDiI4wviO0qcyN0j6ZoEng==, tarball: file:../../target/posthog-node.tgz}
+    version: 5.7.0
+    engines: {node: '>=20'}
 
   prelude-ls@1.2.1:
     resolution: {integrity: sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g==}

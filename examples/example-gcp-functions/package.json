@@ -3,6 +3,7 @@
     "version": "1.0.0",
     "description": "",
     "main": "index.js",
+    "packageManager": "pnpm@10.15.0",
     "scripts": {
         "start": "functions-framework --target=helloWorld"
     },
