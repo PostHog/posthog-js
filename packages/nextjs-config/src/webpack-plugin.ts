@@ -38,7 +38,7 @@ export class SourcemapWebpackPlugin {
       callback = callback || (() => {})
       try {
         this.posthogOptions.verbose && console.log('Processing source maps from webpack plugin...')
-        await processSourceMaps(this.posthogOptions, this.directory, this.isServer)
+        await processSourceMaps(this.posthogOptions, this.directory)
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : error
         return console.error('Error running PostHog sourcemap plugin:', errorMessage)

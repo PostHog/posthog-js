@@ -1,6 +1,6 @@
 import type { NextConfig } from 'next'
 import { SourcemapWebpackPlugin } from './webpack-plugin'
-import { hasCompilerHook, isTurbopackEnabled, processSourceMaps } from 'utils'
+import { hasCompilerHook, isTurbopackEnabled, processSourceMaps } from './utils'
 
 type NextFuncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => NextConfig
 type NextAsyncConfig = (phase: string, { defaultConfig }: { defaultConfig: NextConfig }) => Promise<NextConfig>
@@ -131,10 +131,8 @@ function withCompilerConfig(
     const userCompilerHook = userCompilerConfig?.runAfterProductionCompile
     newConfig.runAfterProductionCompile = async (config: { distDir: string; projectDir: string }) => {
       await userCompilerHook?.(config)
-      if (sourceMapEnabled) {
-        posthogConfig.verbose && console.debug('Processing source maps from compilation hook...')
-        await processSourceMaps(posthogConfig, config.distDir, posthogConfig.sourcemaps.deleteAfterUpload)
-      }
+      posthogConfig.verbose && console.debug('Processing source maps from compilation hook...')
+      await processSourceMaps(posthogConfig, config.distDir)
     }
   }
   return newConfig

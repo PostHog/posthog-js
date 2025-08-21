@@ -53,11 +53,7 @@ export function hasCompilerHook(): boolean {
   return semver.gte(nextJsVersion, '15.4.1')
 }
 
-export async function processSourceMaps(
-  posthogOptions: PostHogNextConfigComplete,
-  directory: string,
-  deleteAfter: boolean
-) {
+export async function processSourceMaps(posthogOptions: PostHogNextConfigComplete, directory: string) {
   const cliOptions = []
   if (posthogOptions.host) {
     cliOptions.push('--host', posthogOptions.host)
@@ -70,7 +66,7 @@ export async function processSourceMaps(
   if (posthogOptions.sourcemaps.version) {
     cliOptions.push('--version', posthogOptions.sourcemaps.version)
   }
-  if (posthogOptions.sourcemaps.deleteAfterUpload && !deleteAfter) {
+  if (posthogOptions.sourcemaps.deleteAfterUpload) {
     cliOptions.push('--delete-after')
   }
   // Add env variables
