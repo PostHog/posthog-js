@@ -9,6 +9,9 @@ pnpm package:watch
 pnpm install
 # you can also avoid lockfile changes
 pnpm install --no-lockfile
+cd ios
+pod install
+cd ..
 pnpm start
 ```
 
