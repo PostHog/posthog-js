@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.260.2
+
+### Patch Changes
+
+- [#2236](https://github.com/PostHog/posthog-js/pull/2236) [`f3269f3`](https://github.com/PostHog/posthog-js/commit/f3269f3f26447ef7f032f925de7b1082b213867a) Thanks [@lucasheriques](https://github.com/lucasheriques)! - fix: set survey person properties on SDK <1.249.2
+
 ## 1.260.1
 
 ### Patch Changes
