@@ -1,4 +1,4 @@
-export default {
+module.exports = {
     presets: ['@babel/env', ['@babel/typescript', { jsxPragma: 'h' }]],
     plugins: [
         '@babel/plugin-transform-nullish-coalescing-operator',
