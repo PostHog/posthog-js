@@ -1,8 +1,7 @@
-import type { NextConfig } from 'next'
 import { withPostHogConfig } from '@posthog/nextjs-config'
-import { version } from './package.json'
+import packageJson from './package.json' with { type: 'json' }
 
-const nextConfig: NextConfig = {
+const nextConfig = {
     /* config options here */
 }
 
@@ -13,6 +12,6 @@ export default withPostHogConfig(nextConfig, {
     verbose: true,
     sourcemaps: {
         project: 'example-nextjs',
-        version,
+        version: packageJson.version,
     },
 })

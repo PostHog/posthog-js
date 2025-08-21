@@ -38,7 +38,15 @@ export class SourcemapWebpackPlugin {
       callback = callback || (() => {})
       try {
         this.posthogOptions.verbose && console.log('Processing source maps from webpack plugin...')
-        await processSourceMaps(this.posthogOptions, this.directory)
+        // vercel build expect server sourcemap to be present. We only delete sourcemaps for browser runtime
+        const posthogOptions = {
+          ...this.posthogOptions,
+          sourcemaps: {
+            ...this.posthogOptions.sourcemaps,
+            deleteAfterUpload: this.posthogOptions.sourcemaps.deleteAfterUpload && !this.isServer,
+          },
+        }
+        await processSourceMaps(posthogOptions, this.directory)
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : error
         return console.error('Error running PostHog sourcemap plugin:', errorMessage)
