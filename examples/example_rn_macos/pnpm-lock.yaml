@@ -4,7 +4,7 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-pnpmfileChecksum: sha256-F+aXKMutxuMYJto0VjM6L2Ua0uvsxXlYJsyynRwCBZI=
+pnpmfileChecksum: sha256-cEvMMkfkheI3EBa4G37GQNElnmWChFh76TB33kbeS1E=
 
 importers:
 
@@ -952,8 +952,8 @@ packages:
     engines: {node: '>= 8'}
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-HlBn6Ygb7S7shZQ1+50Fz0KG22CcGFnUf3VPCkY0wlPXXtpMOdbN6kkLhWPTvw5Dt73WfgQrcpEObwvV9Aqy0A==, tarball: file:../../target/posthog-core.tgz}
-    version: 2.2.0
+    resolution: {integrity: sha512-SEmf7ATAKNuDEtREr97sJMlHjzcmUM6g/CtD3XoByO0RsJI9gJ8AzmWBM6VXJ2tUB2gvS4m6ohfw5QoP+InXcw==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.0.0
 
   '@react-native-async-storage/async-storage@1.24.0':
     resolution: {integrity: sha512-W4/vbwUOYOjco0x3toB8QCr7EjIP6nE9G7o8PMguvvjYT5Awg09lyV4enACRx4s++PPulBiBSjL0KTFx2u0Z/g==}
@@ -3001,8 +3001,8 @@ packages:
     engines: {node: '>= 0.4'}
 
   posthog-react-native@file:../../target/posthog-react-native.tgz:
-    resolution: {integrity: sha512-CgSR6HAy+S37ArBs0GT9SJagF+Tgl1q8f/hWtOLRDDPzv3WULCuaoAN6bz3g/urUof76tASNc4zZg7iNpcvvgA==, tarball: file:../../target/posthog-react-native.tgz}
-    version: 4.1.4
+    resolution: {integrity: sha512-BbMDIU3ynMYi0/JHm8lFaw5w5/DmXiLycW+QTBP8jRp2TIytSnWi9hRsdjtBAR7nlCbfNnqSuJ5/CcAvTyPkpg==, tarball: file:../../target/posthog-react-native.tgz}
+    version: 4.4.0
     peerDependencies:
       '@react-native-async-storage/async-storage': '>=1.0.0'
       '@react-navigation/native': '>= 5.0.0'

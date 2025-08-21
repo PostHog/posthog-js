@@ -1,6 +1,9 @@
 import path from 'path'
 import fs from 'fs'
 import { spawn } from 'child_process'
+import nextPackage from 'next/package.json' with { type: 'json' }
+import semver from 'semver'
+import { PostHogNextConfigComplete } from './config'
 
 export function resolveBinaryPath(envPath: string, cwd: string, binName: string): string {
   const envLocations = envPath.split(path.delimiter)
@@ -41,7 +44,41 @@ const getLocalPaths = (startPath: string): string[] => {
   return paths
 }
 
-export async function callPosthogCli(args: string[], env: NodeJS.ProcessEnv, verbose: boolean): Promise<void> {
+export function getNextJsVersion(): string {
+  return nextPackage.version
+}
+
+export function hasCompilerHook(): boolean {
+  const nextJsVersion = getNextJsVersion()
+  return semver.gte(nextJsVersion, '15.4.1')
+}
+
+export async function processSourceMaps(posthogOptions: PostHogNextConfigComplete, directory: string) {
+  const cliOptions = []
+  if (posthogOptions.host) {
+    cliOptions.push('--host', posthogOptions.host)
+  }
+  cliOptions.push('sourcemap', 'process')
+  cliOptions.push('--directory', directory)
+  if (posthogOptions.sourcemaps.project) {
+    cliOptions.push('--project', posthogOptions.sourcemaps.project)
+  }
+  if (posthogOptions.sourcemaps.version) {
+    cliOptions.push('--version', posthogOptions.sourcemaps.version)
+  }
+  if (posthogOptions.sourcemaps.deleteAfterUpload) {
+    cliOptions.push('--delete-after')
+  }
+  // Add env variables
+  const envVars = {
+    ...process.env,
+    POSTHOG_CLI_TOKEN: posthogOptions.personalApiKey,
+    POSTHOG_CLI_ENV_ID: posthogOptions.envId,
+  }
+  await callPosthogCli(cliOptions, envVars, posthogOptions.verbose)
+}
+
+async function callPosthogCli(args: string[], env: NodeJS.ProcessEnv, verbose: boolean): Promise<void> {
   let binaryLocation
   try {
     binaryLocation = resolveBinaryPath(process.env.PATH ?? '', __dirname, 'posthog-cli')
@@ -72,4 +109,10 @@ export async function callPosthogCli(args: string[], env: NodeJS.ProcessEnv, ver
       reject(error)
     })
   })
+}
+
+// Helper to detect if Turbopack is enabled
+export function isTurbopackEnabled(): boolean {
+  // CLI flag (--turbo/--turbopack) injects TURBOPACK=1 at runtime
+  return process.env.TURBOPACK === '1'
 }

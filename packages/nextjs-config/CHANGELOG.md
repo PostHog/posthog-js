@@ -1,5 +1,11 @@
 # @posthog/nextjs-config
 
+## 1.2.0
+
+### Minor Changes
+
+- [#2227](https://github.com/PostHog/posthog-js/pull/2227) [`2bb53b3`](https://github.com/PostHog/posthog-js/commit/2bb53b3d1aeb1107ed5c123d3a862626c30c7657) Thanks [@jrhe](https://github.com/jrhe)! - add turbopack support
+
 ## 1.1.2
 
 ### Patch Changes

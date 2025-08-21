@@ -9,7 +9,7 @@ pnpm package:watch
 pnpm install
 # you can also avoid lockfile changes
 pnpm install --no-lockfile
-npx expo start
+pnpm start
 ```
 
 Press s │ switch to development build.

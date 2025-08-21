@@ -4,7 +4,7 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-pnpmfileChecksum: sha256-bj+78K+t8pS//PYXM7aZwdD3sMipYVKcMONGIVMXLMg=
+pnpmfileChecksum: sha256-yfpGjq0znENhKW1iI3G9Z2t5P3Tm3nxthj83jvlbMuk=
 
 importers:
 
@@ -3168,7 +3168,7 @@ packages:
       react-native: '*'
 
   posthog-react-native@file:../../target/posthog-react-native.tgz:
-    resolution: {integrity: sha512-kOfMR6grroefsAgHV8izu/1mE+c3bqfADQGPU024KnAhQ7HIyxwX0J3hR21FZf/J8VzoDc4IXveWsDEy7kuU8g==, tarball: file:../../target/posthog-react-native.tgz}
+    resolution: {integrity: sha512-3K7DP0Qse+4C1KiYZ3VSuwZ/gxJMMoEjTTzUzFNAcQaGMrVWBBtJWPnvtvL1TmuyTo9L3uTrW6ITkZnOzBGZRQ==, tarball: file:../../target/posthog-react-native.tgz}
     version: 4.4.0
     peerDependencies:
       '@react-native-async-storage/async-storage': '>=1.0.0'
