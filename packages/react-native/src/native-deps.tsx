@@ -7,6 +7,7 @@ import { OptionalExpoLocalization } from './optional/OptionalExpoLocalization'
 import { OptionalReactNativeDeviceInfo } from './optional/OptionalReactNativeDeviceInfo'
 import { PostHogCustomAppProperties, PostHogCustomStorage } from './types'
 import { OptionalReactNativeLocalize } from './optional/OptionalReactNativeLocalize'
+import { OptionalExpoFileSystemLegacy } from './optional/OptionalExpoFileSystemLegacy'
 
 const getDeviceType = (): string => {
   let deviceType = 'Mobile'
@@ -98,16 +99,56 @@ const returnPropertyIfNotUnknown = (value: string | null): string | null => {
   return null
 }
 
+const buildLegacyStorage = (filesystem: any): PostHogCustomStorage => {
+  return {
+    async getItem(key: string) {
+      try {
+        const uri = (filesystem.documentDirectory || '') + key
+        const stringContent = await filesystem.readAsStringAsync(uri)
+        return stringContent
+      } catch (e) {
+        return null
+      }
+    },
+
+    async setItem(key: string, value: string) {
+      const uri = (filesystem.documentDirectory || '') + key
+      await filesystem.writeAsStringAsync(uri, value)
+    },
+  }
+}
+
 export const buildOptimisiticAsyncStorage = (): PostHogCustomStorage => {
   // expo-filesystem is not supported on web and macos, so we need to use the react-native-async-storage package instead
   // see https://github.com/PostHog/posthog-js-lite/blob/5fb7bee96f739b243dfea5589e2027f16629e8cd/posthog-react-native/src/optional/OptionalExpoFileSystem.ts#L7-L11
-  if (OptionalExpoFileSystem && Platform.OS !== 'web' && Platform.OS !== 'macos') {
+  const supportedPlatform = Platform.OS !== 'web' && Platform.OS !== 'macos'
+
+  // expo-54 uses expo-file-system v19 which removed the async methods and added new APIs
+  // here we try to use the legacy package for back compatibility
+  if (OptionalExpoFileSystemLegacy && supportedPlatform) {
+    const filesystem = OptionalExpoFileSystemLegacy
+    return buildLegacyStorage(filesystem)
+  }
+
+  // expo-54 and expo-file-system v19 new APIs support
+  if (OptionalExpoFileSystem && supportedPlatform) {
     const filesystem = OptionalExpoFileSystem
+
+    try {
+      const expoFileSystemLegacy = filesystem as any
+      // identify legacy APIs with older versions (expo <= 53 and expo-file-system <= 18)
+      if (expoFileSystemLegacy.readAsStringAsync) {
+        return buildLegacyStorage(filesystem)
+      }
+    } catch (e) {}
+
+    // expo >= 54 and expo-file-system >= 19
     return {
       async getItem(key: string) {
-        const uri = (filesystem.documentDirectory || '') + key
         try {
-          const stringContent = await filesystem.readAsStringAsync(uri)
+          const uri = ((filesystem as any).Paths?.document.info().uri || '') + key
+          const file = new (filesystem as any).File(uri)
+          const stringContent = await file.text()
           return stringContent
         } catch (e) {
           return null
@@ -115,8 +156,9 @@ export const buildOptimisiticAsyncStorage = (): PostHogCustomStorage => {
       },
 
       async setItem(key: string, value: string) {
-        const uri = (filesystem.documentDirectory || '') + key
-        await filesystem.writeAsStringAsync(uri, value)
+        const uri = ((filesystem as any).Paths?.document.info().uri || '') + key
+        const file = new (filesystem as any).File(uri)
+        file.write(value)
       },
     }
   }

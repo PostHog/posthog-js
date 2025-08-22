@@ -1,7 +1,14 @@
 # Run the example
 
 ```bash
+# root folder
+pnpm build
+pnpm package
+pnpm package:watch
+# example folder
 pnpm install
+# you can also avoid lockfile changes
+pnpm install --no-lockfile
 cd ios
 pod install
 cd ..
@@ -25,4 +32,12 @@ Or...
 ```bash
 npx expo run:ios
 npx expo run:android
+```
+
+If your RN SDK changes are not picked up:
+
+```bash
+# example folder
+rm -rf node_modules
+# repeat Run steps
 ```
