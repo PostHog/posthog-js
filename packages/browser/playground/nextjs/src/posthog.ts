@@ -17,6 +17,10 @@ export const posthog: PostHog = POSTHOG_USE_SNIPPET
         ? (window as any).posthog
         : null
     : posthogJS
+
+// this is a bit gross, we use null to represent "not yet determined", and undefined for SSR
+export type ConsentState = boolean | null | undefined
+
 /**
  * Below is an example of a consent-driven config for PostHog
  * Lots of things start in a disabled state and posthog will not use cookies without consent
@@ -24,26 +28,30 @@ export const posthog: PostHog = POSTHOG_USE_SNIPPET
  * Once given, we enable autocapture, session recording, and use localStorage+cookie for persistence via set_config
  * This is only an example - data privacy requirements are different for every project
  */
-export function cookieConsentGiven(): null | boolean {
-    if (typeof window === 'undefined') return null
-    return posthog.has_opted_in_capturing()
+export function cookieConsentGiven(): ConsentState {
+    if (typeof window === 'undefined') return undefined
+    return posthog.get_explicit_consent_status()
 }
 
 export const configForConsent = (): Partial<PostHogConfig> => {
-    const consentGiven = posthog.has_opted_in_capturing()
+    const consentGiven = cookieConsentGiven()
 
     return {
         disable_surveys: !consentGiven,
-        autocapture: consentGiven,
+        autocapture: !!consentGiven,
         disable_session_recording: !consentGiven,
     }
 }
 
-export const updatePostHogConsent = (consentGiven: boolean) => {
-    if (consentGiven) {
-        posthog.opt_in_capturing()
-    } else {
-        posthog.opt_out_capturing()
+export const updatePostHogConsent = (consentGiven: ConsentState) => {
+    console.log(`PostHog consent given: ${consentGiven}`)
+    // eslint-disable-next-line posthog-js/no-direct-null-check
+    if (consentGiven !== null) {
+        if (consentGiven) {
+            posthog.opt_in_capturing()
+        } else {
+            posthog.opt_out_capturing()
+        }
     }
 
     posthog.set_config(configForConsent())

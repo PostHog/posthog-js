@@ -1,6 +1,6 @@
 import { Autocapture } from './autocapture'
 import Config from './config'
-import { ConsentManager } from './consent'
+import { ConsentManager, ConsentStatus } from './consent'
 import {
     ALIAS_ID_KEY,
     COOKIELESS_MODE_FLAG_PROPERTY,
@@ -2965,6 +2965,35 @@ export class PostHog {
      */
     has_opted_out_capturing(): boolean {
         return this.consent.isOptedOut()
+    }
+
+    /**
+     * Returns the explicit consent status of the user.
+     *
+     * @remarks
+     * This can be used to check if the user has explicitly opted in or out of data capturing, or neither. This does not
+     * take the default config options into account, only whether the user has made an explicit choice, so this can be
+     * used to determine whether to show an initial cookie banner or not.
+     *
+     * @example
+     * ```js
+     * const consentStatus = posthog.get_explicit_consent_status()
+     * if (consentStatus === true) {
+     *     // user has explicitly opted in
+     * } else if (consentStatus === false) {
+     *     // user has explicitly opted out
+     * } else {
+     *     // user has not made a choice, show consent banner
+     * }
+     * ```
+     *
+     * @public
+     *
+     * @returns {boolean | null} current explicit consent status
+     */
+    get_explicit_consent_status(): boolean | null {
+        const consent = this.consent.consent
+        return consent === ConsentStatus.GRANTED ? true : consent === ConsentStatus.DENIED ? false : null
     }
 
     /**
