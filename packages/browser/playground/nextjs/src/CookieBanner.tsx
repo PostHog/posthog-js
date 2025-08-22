@@ -78,6 +78,7 @@ export function CookieBanner(): ReactElement | null {
                     </button>
                     <button
                         onClick={() => {
+                            posthog.clear_opt_in_out_capturing()
                             posthog.reset()
                             setConsentGiven(null)
                         }}
