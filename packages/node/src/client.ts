@@ -18,11 +18,11 @@ import {
   PostHogOptions,
   SendFeatureFlagsOptions,
 } from './types'
-import { FeatureFlagDetail, FeatureFlagValue } from '@posthog/core'
+import { FeatureFlagDetail, FeatureFlagValue, getFeatureFlagValue } from '@posthog/core'
 import { FeatureFlagsPoller } from './extensions/feature-flags/feature-flags'
 import ErrorTracking from './extensions/error-tracking'
 import { isPlainObject } from './extensions/error-tracking/type-checking'
-import { getFeatureFlagValue, safeSetTimeout } from '@posthog/core'
+import { safeSetTimeout } from '@posthog/core/utils'
 import { PostHogMemoryStorage } from './storage-memory'
 import { createLogger } from './utils/logger'
 

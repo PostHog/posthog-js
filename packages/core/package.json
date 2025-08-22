@@ -39,9 +39,9 @@
       "import": "./dist/testing/index.mjs"
     },
     "./utils": {
-      "types": "./dist/utils.d.ts",
-      "require": "./dist/utils.js",
-      "import": "./dist/utils.mjs"
+      "types": "./dist/utils/index.d.ts",
+      "require": "./dist/utils/index.js",
+      "import": "./dist/utils/index.mjs"
     }
   },
   "devDependencies": {

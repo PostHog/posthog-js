@@ -4,7 +4,8 @@ import { PostHogBackendClient } from '../../client'
 import { uuidv7 } from '@posthog/core/vendor/uuidv7'
 import { propertiesFromUnknownInput } from './error-conversion'
 import { EventMessage, PostHogOptions } from '../../types'
-import { BucketedRateLimiter, Logger } from '@posthog/core'
+import type { Logger } from '@posthog/core'
+import { BucketedRateLimiter } from '@posthog/core/utils'
 
 const SHUTDOWN_TIMEOUT = 2000
 

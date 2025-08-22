@@ -1,7 +1,7 @@
 import Config from '../config'
 import { isUndefined } from '@posthog/core'
 import { assignableWindow, window } from './globals'
-import { Logger } from '@posthog/core'
+import type { Logger } from '@posthog/core'
 
 const _createLogger = (prefix: string): Logger => {
     const logger: Logger = {

@@ -21,6 +21,7 @@ import {
   PostHogGroupProperties,
   Compression,
 } from './types'
+
 import {
   createFlagsResponseFromFlagsAndPayloads,
   getFeatureFlagValue,
@@ -29,6 +30,7 @@ import {
   normalizeFlagsResponse,
   updateFlagValue,
 } from './featureFlagUtils'
+
 import {
   allSettled,
   assert,
@@ -40,36 +42,13 @@ import {
   safeSetTimeout,
   STRING_FORMAT,
 } from './utils'
+
 import { isGzipSupported, gzipCompress } from './gzip'
 import { SimpleEventEmitter } from './eventemitter'
 import { uuidv7 } from './vendor/uuidv7'
 
-export { safeSetTimeout } from './utils'
-export { getFetch } from './utils'
 export { getFeatureFlagValue } from './featureFlagUtils'
-export * as utils from './utils'
-export {
-  isFormData,
-  isNull,
-  isNullish,
-  isNumber,
-  isString,
-  isUndefined,
-  isFunction,
-  isBoolean,
-  isFile,
-  isNativeFunction,
-  isEmptyString,
-  isKnownUnsafeEditableEvent,
-  isError,
-  isArray,
-  isObject,
-  isEmptyObject,
-  hasOwnProperty,
-} from './utils/type-utils'
-export { clampToRange } from './utils/number-utils'
-export { includes, stripLeadingDollar, trim, isDistinctIdStringLike } from './utils/string-utils'
-export { BucketedRateLimiter } from './utils/bucketed-rate-limiter'
+export * from './utils'
 
 class PostHogFetchHttpError extends Error {
   name = 'PostHogFetchHttpError'
