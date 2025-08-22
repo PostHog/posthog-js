@@ -115,8 +115,8 @@ export default function Home() {
                     </div>
                     {!consentGiven && (
                         <p className="border border-red-900 bg-red-200 rounded p-2">
-                            <b>Consent not given!{posthog.consent.isExplicitlyOptedOut() ? '' : ' (yet).'}</b> Session
-                            recording, surveys, and autocapture are disabled.
+                            <b>Consent not given!{consentGiven == null ? ' (yet).' : ''}</b> Session recording, surveys,
+                            and autocapture are disabled.
                         </p>
                     )}
 
