@@ -1,5 +1,5 @@
-import { clampToRange } from '../utils/number-utils'
-import { Logger } from '../types'
+import { clampToRange } from '../../src/utils/number-utils'
+import { Logger } from '../../src/types'
 
 const mockLogger: Logger = {
   _log: jest.fn(),
