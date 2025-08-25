@@ -117,8 +117,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   }
 
   /**
-   * { @label Capture }
-   * @description Capture an event manually.
+   * Capture an event manually.
    *
    * @example
    * ```ts
@@ -129,6 +128,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *   properties: { button_color: 'red' }
    * })
    * ```
+   *
+   * {@label Capture}
    *
    * @param props - The event properties
    * @returns void
