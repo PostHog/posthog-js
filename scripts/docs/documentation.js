@@ -62,6 +62,8 @@ const getRemarks = (apiItem) =>
  * @returns {string} - Category or empty string
  */
 const extractCategoryTags = (tsdocComment) => {
+  if (!tsdocComment) return null;
+  
   if (tsdocComment.tagName === '@label') {
     return tsdocComment.tagContent;
   }

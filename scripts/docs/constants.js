@@ -1,15 +1,5 @@
 const HOG_REF = '0.3';
 
-const SPEC_INFO = {
-    id: 'posthog-js',
-    title: 'PostHog JavaScript Web SDK',
-    description: 'Posthog-js allows you to automatically capture usage and send events to PostHog.',
-    slugPrefix: 'posthog-js',
-    specUrl: 'https://github.com/PostHog/posthog-js'
-};
-
-const OUTPUT_FILE_PATH = 'docs/posthog-js-references.json';
-
 const PROPERTIES_EXAMPLE = `// Properties is a Record<string, Property> 
 // Below are PostHog's default properties, you can add your own properties during capture
 {
@@ -68,8 +58,6 @@ const PROPERTY_EXAMPLE = `// It can be a string
 `
 module.exports = {
     HOG_REF,
-    SPEC_INFO,
-    OUTPUT_FILE_PATH,
     PROPERTIES_EXAMPLE,
     PROPERTY_EXAMPLE
 }; 

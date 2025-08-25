@@ -45,7 +45,10 @@
         "rollup": "catalog:",
         "ts-node": "^10.9.1",
         "turbo": "^2.5.4",
-        "typescript": "catalog:"
+        "typescript": "catalog:",
+        "@microsoft/api-extractor": "^7.47.9",
+        "@microsoft/api-extractor-model": "^7.29.8",
+        "@microsoft/tsdoc": "^0.15.1"
     },
     "lint-staged": {
         "*.{ts,tsx,js,jsx,mjs,cjs}": [
