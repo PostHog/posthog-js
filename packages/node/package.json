@@ -43,10 +43,7 @@
     "mitata": "^1.0.21",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@posthog-tooling/rollup-utils": "workspace:*",
-    "jest": "catalog:",
-    "@microsoft/api-extractor": "^7.47.9",
-    "@microsoft/api-extractor-model": "^7.29.8",
-    "@microsoft/tsdoc": "^0.15.1"
+    "jest": "catalog:"
   },
   "keywords": [
     "posthog",
