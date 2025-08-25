@@ -15,7 +15,9 @@
     "build": "rollup -c",
     "dev": "rollup -cw",
     "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
-    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
+    "gen-specs": "pnpm exec tsc && pnpm exec api-extractor run --config ./api-extractor.json --local",
+    "parse-specs": "node scripts/specs/parser.js"
   },
   "engines": {
     "node": ">=20"
@@ -41,7 +43,10 @@
     "mitata": "^1.0.21",
     "@posthog-tooling/tsconfig-base": "workspace:*",
     "@posthog-tooling/rollup-utils": "workspace:*",
-    "jest": "catalog:"
+    "jest": "catalog:",
+    "@microsoft/api-extractor": "^7.47.9",
+    "@microsoft/api-extractor-model": "^7.29.8",
+    "@microsoft/tsdoc": "^0.15.1"
   },
   "keywords": [
     "posthog",

@@ -5,10 +5,9 @@ const methods = require('./methods');
 const types = require('./types');
 const { writeFileSync, readFileSync } = require('fs');
 const path = require('path');
-const { HOG_REF, SPEC_INFO, OUTPUT_FILE_PATH, PROPERTIES_EXAMPLE, PROPERTY_EXAMPLE } = require('./constants');
 
-const loadPackageInfo = (dirPath) => 
-    JSON.parse(readFileSync(path.resolve(dirPath, '../../package.json'), 'utf8'));
+const loadPackageInfo = (packageDir) => 
+    JSON.parse(readFileSync(path.resolve(packageDir, 'package.json'), 'utf8'));
 
 const loadApiPackage = (filePath) => 
     apiExtractor.ApiPackage.loadFromJsonFile(filePath);
@@ -19,14 +18,9 @@ const findPostHogClass = (apiPackage) =>
     );
 
 // Enhance types with examples
-const enhanceTypeWithExample = (type) => {
-    const examples = {
-        Properties: PROPERTIES_EXAMPLE,
-        Property: PROPERTY_EXAMPLE
-    };
-    
-    return examples[type.name] 
-        ? { ...type, example: examples[type.name] }
+const enhanceTypeWithExample = (type, config) => {
+    return config.typeExamples[type.name] 
+        ? { ...type, example: config.typeExamples[type.name] }
         : type;
 };
 
@@ -75,12 +69,12 @@ const createClassDefinition = (posthogClass, functions) => ({
 });
 
 // Compose final output
-const composeOutput = (packageJson, posthogClass, functions, types) => ({
-    id: SPEC_INFO.id,
-    hogRef: HOG_REF,
+const composeOutput = (packageJson, posthogClass, functions, types, config) => ({
+    id: config.id,
+    hogRef: config.hogRef,
     info: {
         version: packageJson.version,
-        ...SPEC_INFO
+        ...config.specInfo
     },
     classes: [createClassDefinition(posthogClass, functions)],
     types,
@@ -88,20 +82,25 @@ const composeOutput = (packageJson, posthogClass, functions, types) => ({
     categories: [...new Set(['Initialization', 'Identification', 'Capture', ...functions.map(f => f.category).filter(Boolean)])]
 });
 
-const ApiToSpecs = () => {
-    const packageJson = loadPackageInfo(__dirname);
-    const apiPackage = loadApiPackage('docs/posthog-js.api.json');
+const generateApiSpecs = (config) => {
+    const packageJson = loadPackageInfo(config.packageDir);
+    const apiPackage = loadApiPackage(config.apiJsonPath);
     const posthogClass = findPostHogClass(apiPackage);
     
     const resolvedTypes = types
         .resolveTypeDefinitions(apiPackage)
-        .map(enhanceTypeWithExample);
+        .map(type => enhanceTypeWithExample(type, config));
     
     const methods = filterPublicMethods(posthogClass);
     const functions = methods.map(transformMethod(posthogClass));
     
-    return composeOutput(packageJson, posthogClass, functions, resolvedTypes);
+    const output = composeOutput(packageJson, posthogClass, functions, resolvedTypes, config);
+    
+    writeFileSync(config.outputPath, JSON.stringify(output, null, 2));
+    
+    return output;
 };
 
-const output = ApiToSpecs();
-writeFileSync(OUTPUT_FILE_PATH, JSON.stringify(output, null, 2));
+module.exports = {
+    generateApiSpecs
+};
