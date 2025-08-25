@@ -2,6 +2,7 @@
     "name": "nuxt-app",
     "private": true,
     "type": "module",
+    "packageManager": "pnpm@10.15.0",
     "scripts": {
         "ci": "nuxt cleanup && pnpm build && pnpm upload",
         "build": "nuxt build",

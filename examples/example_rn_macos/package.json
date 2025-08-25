@@ -2,6 +2,7 @@
   "name": "example_rn_macos",
   "version": "0.0.1",
   "private": true,
+  "packageManager": "pnpm@10.15.0",
   "scripts": {
     "macos": "react-native run-macos",
     "lint": "eslint . --fix",

@@ -296,9 +296,8 @@ export const extractAvailableToolCalls = (
 
     return null
   } else if (provider === 'vercel') {
-    // Vercel AI SDK stores tools in params.mode.tools when mode type is 'regular'
-    if (params.mode?.type === 'regular' && params.mode.tools) {
-      return params.mode.tools
+    if (params.tools) {
+      return params.tools
     }
 
     return null

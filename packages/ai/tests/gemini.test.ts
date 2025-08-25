@@ -32,6 +32,17 @@ jest.mock('@google/genai', () => {
   }
 })
 
+// Helper function to mock generateContentStream with provided chunks
+const mockGenerateContentStream = (chunks: any[]) => {
+  return jest.fn().mockImplementation(() => {
+    return (async function* () {
+      for (const chunk of chunks) {
+        yield chunk
+      }
+    })()
+  })
+}
+
 describe('PostHogGemini - Jest test suite', () => {
   let mockPostHogClient: PostHog
   let client: PostHogGemini
@@ -129,11 +140,7 @@ describe('PostHogGemini - Jest test suite', () => {
     ;(client as any).client.models.generateContent = jest.fn().mockResolvedValue(mockGeminiResponse)
 
     // Mock the generateContentStream method
-    ;(client as any).client.models.generateContentStream = jest.fn().mockImplementation(async function* () {
-      for (const chunk of mockGeminiStreamResponse) {
-        yield chunk
-      }
-    })
+    ;(client as any).client.models.generateContentStream = mockGenerateContentStream(mockGeminiStreamResponse)
   })
 
   // Wrap each test with conditional skip
@@ -159,7 +166,12 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$ai_provider']).toBe('gemini')
     expect(properties['$ai_model']).toBe('gemini-2.0-flash-001')
     expect(properties['$ai_input']).toEqual([{ role: 'user', content: 'Hello' }])
-    expect(properties['$ai_output_choices']).toEqual([{ role: 'assistant', content: 'Hello from Gemini!' }])
+    expect(properties['$ai_output_choices']).toEqual([
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Hello from Gemini!' }],
+      },
+    ])
     expect(properties['$ai_input_tokens']).toBe(15)
     expect(properties['$ai_output_tokens']).toBe(8)
     expect(properties['$ai_http_status']).toBe(200)
@@ -194,7 +206,12 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$ai_provider']).toBe('gemini')
     expect(properties['$ai_model']).toBe('gemini-2.0-flash-001')
     expect(properties['$ai_input']).toEqual([{ role: 'user', content: 'Write a short poem' }])
-    expect(properties['$ai_output_choices']).toEqual([{ content: 'Hello from Gemini!', role: 'assistant' }])
+    expect(properties['$ai_output_choices']).toEqual([
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Hello from Gemini!' }],
+      },
+    ])
     expect(properties['$ai_input_tokens']).toBe(15)
     expect(properties['$ai_output_tokens']).toBe(8)
     expect(properties['$ai_http_status']).toBe(200)
@@ -309,6 +326,173 @@ describe('PostHogGemini - Jest test suite', () => {
 
     expect(vertexClient).toBeInstanceOf(PostHogGemini)
     expect(vertexClient.models).toBeDefined()
+  })
+
+  conditionalTest('streaming with function calls', async () => {
+    // Mock streaming response with function calls
+    const mockStreamWithFunctions = [
+      {
+        text: 'I can help with that. ',
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'I can help with that. ' }],
+            },
+          },
+        ],
+        usageMetadata: {
+          promptTokenCount: 20,
+          candidatesTokenCount: 5,
+        },
+      },
+      {
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  functionCall: {
+                    name: 'searchWeather',
+                    args: { location: 'New York', units: 'celsius' },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        usageMetadata: {
+          promptTokenCount: 20,
+          candidatesTokenCount: 10,
+        },
+      },
+      {
+        text: 'The weather is sunny.',
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'The weather is sunny.' }],
+            },
+          },
+        ],
+        usageMetadata: {
+          promptTokenCount: 20,
+          candidatesTokenCount: 15,
+        },
+      },
+    ]
+
+    // Update mock to use function call stream
+    ;(client as any).client.models.generateContentStream = mockGenerateContentStream(mockStreamWithFunctions)
+
+    const stream = client.models.generateContentStream({
+      model: 'gemini-2.0-flash-001',
+      contents: 'What is the weather?',
+      posthogDistinctId: 'test-id',
+    })
+
+    let accumulatedText = ''
+    const functionCalls: any[] = []
+
+    for await (const chunk of stream) {
+      if (chunk.text) {
+        accumulatedText += chunk.text
+      }
+      if (chunk.candidates) {
+        for (const candidate of chunk.candidates) {
+          if (candidate.content?.parts) {
+            for (const part of candidate.content.parts) {
+              if ('functionCall' in part) {
+                functionCalls.push(part.functionCall)
+              }
+            }
+          }
+        }
+      }
+    }
+
+    expect(accumulatedText).toBe('I can help with that. The weather is sunny.')
+    expect(functionCalls).toHaveLength(1)
+    expect(functionCalls[0]).toEqual({
+      name: 'searchWeather',
+      args: { location: 'New York', units: 'celsius' },
+    })
+
+    // Check PostHog capture
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { properties } = captureArgs[0]
+
+    expect(properties['$ai_output_choices']).toEqual([
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'I can help with that. The weather is sunny.' },
+          {
+            type: 'function',
+            function: {
+              name: 'searchWeather',
+              arguments: { location: 'New York', units: 'celsius' },
+            },
+          },
+        ],
+      },
+    ])
+    expect(properties['$ai_input_tokens']).toBe(20)
+    expect(properties['$ai_output_tokens']).toBe(15)
+  })
+
+  conditionalTest('streaming with multiple text chunks accumulation', async () => {
+    // Mock streaming response with multiple text chunks
+    const mockMultipleTextChunks = [
+      {
+        text: 'The ',
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 1 },
+      },
+      {
+        text: 'quick ',
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 2 },
+      },
+      {
+        text: 'brown ',
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 3 },
+      },
+      {
+        text: 'fox.',
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 4 },
+      },
+    ]
+
+    // Update mock
+    ;(client as any).client.models.generateContentStream = mockGenerateContentStream(mockMultipleTextChunks)
+
+    const stream = client.models.generateContentStream({
+      model: 'gemini-2.0-flash-001',
+      contents: 'Tell me a story',
+      posthogDistinctId: 'test-id',
+    })
+
+    let accumulatedText = ''
+    for await (const chunk of stream) {
+      if (chunk.text) {
+        accumulatedText += chunk.text
+      }
+    }
+
+    expect(accumulatedText).toBe('The quick brown fox.')
+
+    // Check PostHog capture for proper text accumulation
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { properties } = captureArgs[0]
+
+    // Should have a single text item with all accumulated text
+    expect(properties['$ai_output_choices']).toEqual([
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'The quick brown fox.' }],
+      },
+    ])
+    expect(properties['$ai_output_tokens']).toBe(4)
   })
 
   conditionalTest('anonymous user - $process_person_profile set to false', async () => {

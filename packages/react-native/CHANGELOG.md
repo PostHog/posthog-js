@@ -1,5 +1,11 @@
 # posthog-react-native
 
+## 4.4.1
+
+### Patch Changes
+
+- [#2234](https://github.com/PostHog/posthog-js/pull/2234) [`9ef2193`](https://github.com/PostHog/posthog-js/commit/9ef21939209a822a2f974dfb6604368ec2e44c49) Thanks [@marandaneto](https://github.com/marandaneto)! - expo-43 and new expo-file-system APIs with back compatibility support
+
 ## 4.4.0
 
 ### Minor Changes

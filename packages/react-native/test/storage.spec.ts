@@ -1,9 +1,21 @@
-import * as FileSystem from 'expo-file-system'
+// Mock OptionalExpoFileSystem with legacy APIs (readAsStringAsync)
+jest.mock('../src/optional/OptionalExpoFileSystem', () => ({
+  OptionalExpoFileSystem: {
+    readAsStringAsync: jest.fn(),
+    writeAsStringAsync: jest.fn(),
+    documentDirectory: '/mock-doc-dir/',
+  },
+}))
+
 import { PostHogRNStorage } from '../src/storage'
 import { buildOptimisiticAsyncStorage } from '../src/native-deps'
+import { OptionalExpoFileSystem } from '../src/optional/OptionalExpoFileSystem'
 
-jest.mock('expo-file-system')
-const mockedFileSystem = jest.mocked(FileSystem, true)
+const mockedOptionalFileSystem = jest.mocked(OptionalExpoFileSystem, true)
+
+jest.mock('react-native', () => ({
+  Platform: { OS: 'ios' },
+}))
 
 describe('PostHog React Native', () => {
   jest.useRealTimers()
@@ -11,7 +23,7 @@ describe('PostHog React Native', () => {
   describe('storage', () => {
     let storage: PostHogRNStorage
     beforeEach(() => {
-      mockedFileSystem.readAsStringAsync.mockImplementation(() => {
+      mockedOptionalFileSystem!.readAsStringAsync.mockImplementation(() => {
         const res = Promise.resolve(
           JSON.stringify({
             version: 'v1',
@@ -29,15 +41,15 @@ describe('PostHog React Native', () => {
     it('should load storage from the file system', async () => {
       expect(storage.getItem('foo')).toEqual(undefined)
       await storage.preloadPromise
-      expect(mockedFileSystem.readAsStringAsync).toHaveBeenCalledTimes(1)
+      expect(mockedOptionalFileSystem!.readAsStringAsync).toHaveBeenCalledTimes(1)
       expect(storage.getItem('foo')).toEqual('bar')
     })
 
     it('should save storage to the file system', async () => {
       storage.setItem('foo', 'bar2')
       expect(storage.getItem('foo')).toEqual('bar2')
-      expect(mockedFileSystem.writeAsStringAsync).toHaveBeenCalledWith(
-        '.posthog-rn.json',
+      expect(mockedOptionalFileSystem!.writeAsStringAsync).toHaveBeenCalledWith(
+        '/mock-doc-dir/.posthog-rn.json',
         JSON.stringify({
           version: 'v1',
           content: {
