@@ -7,7 +7,7 @@ type ErrorHandler = { _posthogErrorHandler: boolean } & ((error: Error) => void)
 
 function makeUncaughtExceptionHandler(
   captureFn: (exception: Error, hint: EventHint) => void,
-  onFatalFn: () => void
+  onFatalFn: (exception: Error) => void
 ): ErrorHandler {
   let calledFatalError: boolean = false
 
@@ -39,7 +39,7 @@ function makeUncaughtExceptionHandler(
 
       if (!calledFatalError && processWouldExit) {
         calledFatalError = true
-        onFatalFn()
+        onFatalFn(error)
       }
     },
     { _posthogErrorHandler: true }
@@ -48,14 +48,14 @@ function makeUncaughtExceptionHandler(
 
 export function addUncaughtExceptionListener(
   captureFn: (exception: Error, hint: EventHint) => void,
-  onFatalFn: () => void
+  onFatalFn: (exception: Error) => void
 ): void {
   global.process.on('uncaughtException', makeUncaughtExceptionHandler(captureFn, onFatalFn))
 }
 
 export function addUnhandledRejectionListener(captureFn: (exception: unknown, hint: EventHint) => void): void {
   global.process.on('unhandledRejection', (reason: unknown) => {
-    captureFn(reason, {
+    return captureFn(reason, {
       mechanism: {
         type: 'onunhandledrejection',
         handled: false,

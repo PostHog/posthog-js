@@ -54,14 +54,15 @@ export default class ErrorTracking {
     }
   }
 
-  private onException(exception: unknown, hint: EventHint): void {
-    void ErrorTracking.buildEventMessage(exception, hint).then((msg) => {
-      this.client.capture(msg)
-    })
+  private async onException(exception: unknown, hint: EventHint): Promise<void> {
+    const eventMessage = await ErrorTracking.buildEventMessage(exception, hint)
+    this.client.capture(eventMessage)
   }
 
-  private async onFatalError(): Promise<void> {
+  private async onFatalError(exception: Error): Promise<void> {
+    console.error(exception)
     await this.client.shutdown(SHUTDOWN_TIMEOUT)
+    process.exit(1)
   }
 
   isEnabled(): boolean {
