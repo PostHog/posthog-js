@@ -25,10 +25,8 @@ const enhanceTypeWithExample = (type, config) => {
 };
 
 // Filter public methods
-const filterPublicMethods = (posthogClass) =>
-    posthogClass?.members.filter(member =>
-        member.kind === apiExtractor.ApiItemKind.Method && !member.name.startsWith('_')
-    ) || [];
+const filterPublicMethods = (posthogClass) => 
+    methods.collectMethodsWithInheritance(posthogClass);
 
 // Transform parameters
 const transformParameter = (method) => (param) => ({

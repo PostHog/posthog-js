@@ -73,6 +73,23 @@ export class PostHogBackendClient extends PostHogCoreStateless {
         super.debug(enabled);
         this.featureFlagsPoller?.debug(enabled);
     }
+    /**
+     * @label Capture
+     * @description Capture an event manually.
+     *
+     * @example
+     * ```ts
+     * // Basic capture
+     * client.capture({
+     *   distinctId: 'user_123',
+     *   event: 'button_clicked',
+     *   properties: { button_color: 'red' }
+     * })
+     * ```
+     *
+     * @param props - The event properties
+     * @returns void
+     */
     capture(props) {
         if (typeof props === 'string') {
             this.logMsgIfDebug(() => console.warn('Called capture() with a string as the first argument when an object was expected.'));
