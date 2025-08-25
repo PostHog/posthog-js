@@ -1,4 +1,4 @@
-import { isNull } from './type-utils'
+import { isNull } from '@posthog/core'
 
 export function _base64Encode(data: null): null
 export function _base64Encode(data: undefined): undefined

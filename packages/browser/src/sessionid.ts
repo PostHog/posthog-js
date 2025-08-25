@@ -5,10 +5,9 @@ import { PostHogConfig, SessionIdChangedCallback } from './types'
 import { uuid7ToTimestampMs, uuidv7 } from './uuidv7'
 import { window } from './utils/globals'
 
-import { isArray, isNumber, isUndefined } from './utils/type-utils'
 import { createLogger } from './utils/logger'
 
-import { clampToRange } from './utils/number-utils'
+import { isArray, isNumber, isUndefined, clampToRange } from '@posthog/core'
 import { PostHog } from './posthog-core'
 import { addEventListener } from './utils'
 
@@ -62,7 +61,7 @@ export class SessionIdManager {
                 desiredTimeout,
                 MIN_SESSION_IDLE_TIMEOUT_SECONDS,
                 MAX_SESSION_IDLE_TIMEOUT_SECONDS,
-                'session_idle_timeout_seconds',
+                logger.createLogger('session_idle_timeout_seconds'),
                 DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS
             ) * 1000
 

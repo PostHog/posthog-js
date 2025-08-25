@@ -10,10 +10,8 @@
     "scripts": {
         "clean": "rimraf lib dist react/dist",
         "start": "pnpm build-react && NODE_OPTIONS=\"--max-old-space-size=8192\" pnpm build-rollup -w",
-        "dev": "tsc -b tsconfig.lib.json && NODE_OPTIONS=\"--max-old-space-size=8192\" rollup -cw",
-        "build": "tsc -b tsconfig.lib.json && rollup -c",
-        "build-rollup": "rm -rf lib && tsc -b && rollup -c rollup.config.mjs",
-        "build-lib": "rm -rf lib && tsc -b tsconfig.lib.json",
+        "dev": "tsc -b && NODE_OPTIONS=\"--max-old-space-size=8192\" rollup -cw",
+        "build": "tsc -b && rollup -c",
         "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
         "lint": "eslint src && eslint playwright",
         "lint:fix": "eslint src --fix && eslint playwright --fix",
@@ -38,7 +36,7 @@
         "deprecate-old-versions": "node scripts/deprecate-old-versions.mjs",
         "check-testcafe-results": "ts-node testcafe/check-testcafe-results.js",
         "run-testcafe-localhost": "node scripts/run-testcafe-localhost.mjs",
-        "write-mangled-property-names": "WRITE_MANGLED_PROPERTIES=1 pnpm build-rollup",
+        "write-mangled-property-names": "WRITE_MANGLED_PROPERTIES=1 pnpm build",
         "gen-specs": "pnpm exec tsc && pnpm exec api-extractor run --config ./api-extractor.json --local",
         "parse-specs": "node scripts/specs/parser.js"
     },
@@ -55,7 +53,8 @@
         "core-js": "^3.38.1",
         "fflate": "^0.4.8",
         "preact": "^10.19.3",
-        "web-vitals": "^4.2.4"
+        "web-vitals": "^4.2.4",
+        "@posthog/core": "workspace:*"
     },
     "devDependencies": {
         "@babel/core": "7.27.1",

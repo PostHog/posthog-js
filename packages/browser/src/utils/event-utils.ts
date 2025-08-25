@@ -1,11 +1,10 @@
 import { convertToURL, getQueryParam, maskQueryParams } from './request-utils'
-import { isNull } from './type-utils'
+import { isNull, stripLeadingDollar } from '@posthog/core'
 import { Properties } from '../types'
 import Config from '../config'
 import { each, extend, extendArray, stripEmptyProperties } from './index'
 import { document, location, userAgent, window } from './globals'
 import { detectBrowser, detectBrowserVersion, detectDevice, detectDeviceType, detectOS } from './user-agent-utils'
-import { stripLeadingDollar } from './string-utils'
 import { cookieStore } from '../storage'
 
 const URL_REGEX_PREFIX = 'https?://(.*)'

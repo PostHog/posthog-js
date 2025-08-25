@@ -2,8 +2,9 @@ import { mockLogger } from './helpers/mock-logger'
 
 import { uuidv7 } from '../uuidv7'
 import { defaultPostHog } from './helpers/posthog-instance'
-import { CaptureResult, knownUnsafeEditableEvent, PostHogConfig } from '../types'
+import { CaptureResult, PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
+import { knownUnsafeEditableEvent } from '@posthog/core'
 
 const rejectingEventFn = () => {
     return null

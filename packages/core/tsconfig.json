@@ -6,6 +6,7 @@
     "outDir": "dist",
     "module": "CommonJS",
     "moduleResolution": "node",
+    "isolatedModules": true,
     "composite": false,
     "declaration": true,
     "declarationMap": true,

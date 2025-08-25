@@ -15,7 +15,7 @@ import { PostHog } from '../posthog-core'
 import { window } from '../utils/globals'
 import { createPosthogInstance } from './helpers/posthog-instance'
 import { uuidv7 } from '../uuidv7'
-import { isUndefined } from '../utils/type-utils'
+import { isUndefined } from '@posthog/core'
 
 // JS DOM doesn't have ClipboardEvent, so we need to mock it
 // see https://github.com/jsdom/jsdom/issues/1568
@@ -630,7 +630,7 @@ describe('Autocapture system', () => {
         })
 
         it('does not include $click_external_href for same site', () => {
-            window!.location = new URL('https://www.example.com/location') as unknown as Location
+            window!.location = new URL('https://www.example.com/location') as unknown as string & Location
             const elTarget = document.createElement('img')
             const elParent = document.createElement('span')
             elParent.appendChild(elTarget)
@@ -1106,11 +1106,11 @@ describe('Autocapture system', () => {
                 url_allowlist: ['https://posthog.com/test/*'],
             }
 
-            window!.location = new URL('https://posthog.com/test/matching') as unknown as Location
+            window!.location = new URL('https://posthog.com/test/matching') as unknown as string & Location
 
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
 
-            window!.location = new URL('https://posthog.com/docs/not-matching') as unknown as Location
+            window!.location = new URL('https://posthog.com/docs/not-matching') as unknown as string & Location
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
         })
 
@@ -1127,11 +1127,11 @@ describe('Autocapture system', () => {
                 url_ignorelist: ['https://posthog.com/test/*'],
             }
 
-            window!.location = new URL('https://posthog.com/test/matching') as unknown as Location
+            window!.location = new URL('https://posthog.com/test/matching') as unknown as string & Location
 
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
 
-            window!.location = new URL('https://posthog.com/docs/not-matching') as unknown as Location
+            window!.location = new URL('https://posthog.com/docs/not-matching') as unknown as string & Location
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(true)
         })
 
@@ -1148,7 +1148,7 @@ describe('Autocapture system', () => {
                 url_allowlist: [],
             }
 
-            window!.location = new URL('https://posthog.com/test/captured') as unknown as Location
+            window!.location = new URL('https://posthog.com/test/captured') as unknown as string & Location
 
             expect(shouldCaptureDomEvent(button, e, autocapture_config)).toBe(false)
         })

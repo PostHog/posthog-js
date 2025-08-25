@@ -5,7 +5,8 @@
  */
 
 import { AssignableWindow } from './globals'
-import { isAngularZonePresent, isFunction, isNativeFunction } from './type-utils'
+import { isAngularZonePresent } from './type-utils'
+import { isFunction, isNativeFunction } from '@posthog/core'
 import { logger } from './logger'
 
 interface NativeImplementationsCache {

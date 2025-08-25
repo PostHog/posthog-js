@@ -155,6 +155,7 @@
         "_log",
         "_logInfo",
         "_loggedTracker",
+        "_logger",
         "_makeSamplingDecision",
         "_manageWidgetSelectorListener",
         "_maskUrl",

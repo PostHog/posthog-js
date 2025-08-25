@@ -10,7 +10,7 @@
         "allowSyntheticDefaultImports": true,
         "strict": true,
         "forceConsistentCasingInFileNames": true,
-        "module": "es2015",
+        "module": "CommonJS",
         "moduleResolution": "node",
         "isolatedModules": true,
         "noImplicitReturns": true,

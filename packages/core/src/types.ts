@@ -507,3 +507,38 @@ export type ActionStepType = {
   /** @default StringMatching.Contains */
   url_matching?: ActionStepStringMatching
 }
+
+export type Logger = {
+  _log: (level: 'log' | 'warn' | 'error', ...args: any[]) => void
+  info: (...args: any[]) => void
+  warn: (...args: any[]) => void
+  error: (...args: any[]) => void
+  critical: (...args: any[]) => void
+  uninitializedWarning: (methodName: string) => void
+  createLogger: (prefix: string) => Logger
+}
+
+export const knownUnsafeEditableEvent = [
+  '$snapshot',
+  '$pageview',
+  '$pageleave',
+  '$set',
+  'survey dismissed',
+  'survey sent',
+  'survey shown',
+  '$identify',
+  '$groupidentify',
+  '$create_alias',
+  '$$client_ingestion_warning',
+  '$web_experiment_applied',
+  '$feature_enrollment_update',
+  '$feature_flag_called',
+] as const
+
+/**
+ * These events can be processed by the `beforeCapture` function
+ * but can cause unexpected confusion in data.
+ *
+ * Some features of PostHog rely on receiving 100% of these events
+ */
+export type KnownUnsafeEditableEvent = (typeof knownUnsafeEditableEvent)[number]

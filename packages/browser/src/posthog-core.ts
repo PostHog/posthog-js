@@ -75,21 +75,22 @@ import { logger } from './utils/logger'
 import { getPersonPropertiesHash } from './utils/property-utils'
 import { RequestRouter, RequestRouterRegion } from './utils/request-router'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
-import { includes, isDistinctIdStringLike } from './utils/string-utils'
 import { getSurveyInteractionProperty, setSurveySeenOnLocalStorage } from './utils/survey-utils'
 import {
-    isArray,
-    isEmptyObject,
     isEmptyString,
     isError,
     isFunction,
     isKnownUnsafeEditableEvent,
     isNullish,
     isNumber,
-    isObject,
     isString,
     isUndefined,
-} from './utils/type-utils'
+    includes,
+    isDistinctIdStringLike,
+    isArray,
+    isEmptyObject,
+    isObject,
+} from '@posthog/core'
 import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'

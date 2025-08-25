@@ -28,7 +28,7 @@
 // CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 // OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-import { isUndefined } from '../../utils/type-utils'
+import { isUndefined } from '@posthog/core'
 
 export type StackParser = (stack: string, skipFirstLines?: number) => StackFrame[]
 export type StackLineParserFn = (line: string) => StackFrame | undefined

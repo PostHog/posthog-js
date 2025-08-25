@@ -1,7 +1,7 @@
 // import { patch } from 'rrweb/typings/utils'
 // copied from https://github.com/rrweb-io/rrweb/blob/8aea5b00a4dfe5a6f59bd2ae72bb624f45e51e81/packages/rrweb/src/utils.ts#L129
 // which was copied from https://github.com/getsentry/sentry-javascript/blob/b2109071975af8bf0316d3b5b38f519bdaf5dc15/packages/utils/src/object.ts
-import { isFunction } from '../../../utils/type-utils'
+import { isFunction } from '@posthog/core'
 
 export function patch(
     source: { [key: string]: any },

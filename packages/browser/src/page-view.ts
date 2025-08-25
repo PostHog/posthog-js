@@ -1,8 +1,8 @@
 import { window } from './utils/globals'
 import { PostHog } from './posthog-core'
-import { isUndefined } from './utils/type-utils'
-import { clampToRange } from './utils/number-utils'
+import { clampToRange, isUndefined } from '@posthog/core'
 import { extend } from './utils'
+import { logger } from './utils/logger'
 
 interface PageViewEventProperties {
     $pageview_id?: string
@@ -90,12 +90,13 @@ export class PageViewManager {
 
                 // if the maximum scroll height is near 0, then the percentage is 1
                 const lastScrollPercentage =
-                    maxScrollHeight <= 1 ? 1 : clampToRange(lastScrollY / maxScrollHeight, 0, 1)
-                const maxScrollPercentage = maxScrollHeight <= 1 ? 1 : clampToRange(maxScrollY / maxScrollHeight, 0, 1)
+                    maxScrollHeight <= 1 ? 1 : clampToRange(lastScrollY / maxScrollHeight, 0, 1, logger)
+                const maxScrollPercentage =
+                    maxScrollHeight <= 1 ? 1 : clampToRange(maxScrollY / maxScrollHeight, 0, 1, logger)
                 const lastContentPercentage =
-                    maxContentHeight <= 1 ? 1 : clampToRange(lastContentY / maxContentHeight, 0, 1)
+                    maxContentHeight <= 1 ? 1 : clampToRange(lastContentY / maxContentHeight, 0, 1, logger)
                 const maxContentPercentage =
-                    maxContentHeight <= 1 ? 1 : clampToRange(maxContentY / maxContentHeight, 0, 1)
+                    maxContentHeight <= 1 ? 1 : clampToRange(maxContentY / maxContentHeight, 0, 1, logger)
 
                 properties = extend(properties, {
                     $prev_pageview_last_scroll: lastScrollY,

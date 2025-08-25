@@ -36,16 +36,23 @@ import {
     RecordPlugin,
 } from '@rrweb/types'
 
-import { isBoolean, isFunction, isNullish, isNumber, isObject, isUndefined } from '../../utils/type-utils'
 import { createLogger } from '../../utils/logger'
 import { assignableWindow, document, PostHogExtensionKind, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
 import { MutationThrottler } from './mutation-throttler'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
-import { clampToRange } from '../../utils/number-utils'
+import {
+    clampToRange,
+    isBoolean,
+    isFunction,
+    isNullish,
+    isNumber,
+    isUndefined,
+    isObject,
+    includes,
+} from '@posthog/core'
 import Config from '../../config'
-import { includes } from '../../utils/string-utils'
 import { addEventListener } from '../../utils'
 import { sampleOnProperty } from '../sampling'
 import {
@@ -360,8 +367,14 @@ export class SessionRecording {
 
         return {
             enabled,
-            fps: clampToRange(fps, 0, MAX_CANVAS_FPS, 'canvas recording fps', DEFAULT_CANVAS_FPS),
-            quality: clampToRange(quality, 0, MAX_CANVAS_QUALITY, 'canvas recording quality', DEFAULT_CANVAS_QUALITY),
+            fps: clampToRange(fps, 0, MAX_CANVAS_FPS, logger.createLogger('canvas recording fps'), DEFAULT_CANVAS_FPS),
+            quality: clampToRange(
+                quality,
+                0,
+                MAX_CANVAS_QUALITY,
+                logger.createLogger('canvas recording quality'),
+                DEFAULT_CANVAS_QUALITY
+            ),
         }
     }
 

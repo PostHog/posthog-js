@@ -7,7 +7,7 @@ import {
     getReferrerInfo,
 } from '../utils/event-utils'
 import { each, extend } from '../utils'
-import { includes } from '../utils/string-utils'
+import { includes } from '@posthog/core'
 
 export const setAllPersonProfilePropertiesAsPersonPropertiesForFlags = (posthog: PostHog): void => {
     const allProperties = extend(

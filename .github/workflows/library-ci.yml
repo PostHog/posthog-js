@@ -89,7 +89,9 @@ jobs:
         with:
           build: false
 
-      - run: pnpm write-mangled-property-names
-        working-directory: packages/browser
+      - name: Build posthog-js
+        run: pnpm exec turbo --filter=posthog-js build
+        env:
+          WRITE_MANGLED_PROPERTIES: 1
 
       - run: git diff --exit-code # fail if e.g. the mangled properties list has changed, see rollup.config.js

@@ -8,7 +8,7 @@ import {
     SESSION_RECORDING_IS_SAMPLED,
 } from './constants'
 
-import { isNull, isUndefined } from './utils/type-utils'
+import { isNull, isUndefined } from '@posthog/core'
 import { logger } from './utils/logger'
 import { window, document } from './utils/globals'
 import { uuidv7 } from './uuidv7'

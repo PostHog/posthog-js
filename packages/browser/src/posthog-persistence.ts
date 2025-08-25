@@ -12,7 +12,7 @@ import {
     PERSISTENCE_RESERVED_PROPERTIES,
 } from './constants'
 
-import { isEmptyObject, isObject, isUndefined } from './utils/type-utils'
+import { isUndefined } from '@posthog/core'
 import {
     getCampaignParams,
     getInitialPersonPropsFromInfo,
@@ -21,7 +21,7 @@ import {
     getSearchInfo,
 } from './utils/event-utils'
 import { logger } from './utils/logger'
-import { stripLeadingDollar } from './utils/string-utils'
+import { stripLeadingDollar, isEmptyObject, isObject } from '@posthog/core'
 
 const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['persistence']>[] = [
     'cookie',

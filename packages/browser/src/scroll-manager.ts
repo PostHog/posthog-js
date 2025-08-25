@@ -1,7 +1,7 @@
 import { window } from './utils/globals'
 import { PostHog } from './posthog-core'
-import { isArray } from './utils/type-utils'
 import { addEventListener } from './utils'
+import { isArray } from '@posthog/core'
 
 export interface ScrollContext {
     // scroll is how far down the page the user has scrolled,

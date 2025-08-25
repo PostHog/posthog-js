@@ -5,7 +5,7 @@ import { ActionMatcher } from '../extensions/surveys/action-matcher'
 import { PostHog } from '../posthog-core'
 import { CaptureResult } from '../types'
 import { SURVEY_LOGGER as logger } from './survey-utils'
-import { isUndefined } from './type-utils'
+import { isUndefined } from '@posthog/core'
 
 const SURVEY_SHOWN_EVENT_NAME = 'survey shown'
 
