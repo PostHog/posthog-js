@@ -74,7 +74,7 @@ export class PostHogBackendClient extends PostHogCoreStateless {
         this.featureFlagsPoller?.debug(enabled);
     }
     /**
-     * @label Capture
+     * { @label Capture }
      * @description Capture an event manually.
      *
      * @example
