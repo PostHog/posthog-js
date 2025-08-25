@@ -282,7 +282,7 @@ function parseStackFrames(stackParser: StackParser, error: Error): StackFrame[] 
 export function applyChunkIds(frames: StackFrame[], parser: StackParser): StackFrame[] {
   const filenameChunkIdMap = getFilenameToChunkIdMap(parser)
   frames.forEach((frame) => {
-    if (frame.filename) {
+    if (frame.filename && filenameChunkIdMap) {
       frame.chunk_id = filenameChunkIdMap[frame.filename]
     }
   })
