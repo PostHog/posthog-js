@@ -263,9 +263,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         // Something went wrong getting the flag info - we should capture the event anyways
         return {}
       })
-      .then((additionalProperties) => {
+      .then(async (additionalProperties) => {
         // No matter what - capture the event
-        _capture({
+        await _capture({
           ...additionalProperties,
           ...(eventMessage.properties || {}),
           $groups: eventMessage.groups || groups,
