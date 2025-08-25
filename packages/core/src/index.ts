@@ -409,6 +409,27 @@ export abstract class PostHogCoreStateless {
     })
   }
 
+  protected async groupIdentifyStatelessImmediate(
+    groupType: string,
+    groupKey: string | number,
+    groupProperties?: PostHogEventProperties,
+    options?: PostHogCaptureOptions,
+    distinctId?: string,
+    eventProperties?: PostHogEventProperties
+  ): Promise<void> {
+    const payload = this.buildPayload({
+      distinct_id: distinctId || `$${groupType}_${groupKey}`,
+      event: '$groupidentify',
+      properties: {
+        $group_type: groupType,
+        $group_key: groupKey,
+        $group_set: groupProperties || {},
+        ...(eventProperties || {}),
+      },
+    })
+    await this.sendImmediate('capture', payload, options)
+  }
+
   protected async getRemoteConfig(): Promise<PostHogRemoteConfig | undefined> {
     await this._initPromise
 
