@@ -4,7 +4,6 @@ import { SessionIdManager } from '../sessionid'
 import {
     DeadClicksAutoCaptureConfig,
     ExternalIntegrationKind,
-    PostHogConfig,
     Properties,
     RemoteConfig,
     SessionStartReason,
@@ -214,7 +213,7 @@ interface PostHogExtensions {
     integrations?: {
         [K in ExternalIntegrationKind]?: { start: (posthog: PostHog) => void; stop: () => void }
     }
-    initSessionRecording?: (ph: PostHog, config: PostHogConfig) => LazyLoadedSessionRecordingInterface
+    initSessionRecording?: (ph: PostHog) => LazyLoadedSessionRecordingInterface
 }
 
 const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win

@@ -18,7 +18,7 @@ import {
     META_EVENT_TYPE,
 } from '../../../extensions/replay/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
-import { FlagsResponse, PostHogConfig, Property } from '../../../types'
+import { PostHogConfig, Property } from '../../../types'
 import { uuidv7 } from '../../../uuidv7'
 import { SessionRecording } from '../../../extensions/replay/sessionrecording'
 import { assignableWindow, window } from '../../../utils/globals'
@@ -29,7 +29,6 @@ import {
     type incrementalSnapshotEvent,
     type metaEvent,
 } from '@rrweb/types'
-import Mock = jest.Mock
 import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
 import {
@@ -39,6 +38,8 @@ import {
     OrTriggerMatching,
 } from '../../../extensions/replay/triggerMatching'
 import { LazyLoadedSessionRecording } from '../../../entrypoints/recorder'
+import { makeFlagsResponse } from './utils'
+import Mock = jest.Mock
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -74,10 +75,6 @@ const createIncrementalSnapshot = (event = {}): incrementalSnapshotEvent => ({
     } as Partial<incrementalData> as incrementalData,
     ...event,
 })
-
-function makeFlagsResponse(partialResponse: Partial<FlagsResponse>) {
-    return partialResponse as unknown as FlagsResponse
-}
 
 const originalLocation = window!.location
 
@@ -137,7 +134,7 @@ describe('SessionRecording', () => {
             },
         }
 
-        assignableWindow.__PosthogExtensions__.initSessionRecording = (i, c) => new LazyLoadedSessionRecording(i, c)
+        assignableWindow.__PosthogExtensions__.initSessionRecording = (i) => new LazyLoadedSessionRecording(i)
 
         sessionIdGeneratorMock = jest.fn().mockImplementation(() => sessionId)
         windowIdGeneratorMock = jest.fn().mockImplementation(() => 'windowId')

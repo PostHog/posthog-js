@@ -62,15 +62,14 @@ export class SessionRecording {
     private get _isRecordingEnabled() {
         const enabled_server_side = !!this._instance.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)
         const enabled_client_side = !this._instance.config.disable_session_recording
-        return window && enabled_server_side && enabled_client_side
+        const isDisabled = this._instance.config.disable_session_recording || this._instance.consent.isOptedOut()
+        return window && enabled_server_side && enabled_client_side && !isDisabled
     }
 
     startIfEnabledOrStop(startReason?: SessionStartReason) {
-        // do not start if explicitly disabled or if the user has opted out
-        const shouldNotStart =
-            this._captureStarted ||
-            this._instance.config.disable_session_recording ||
-            this._instance.consent.isOptedOut()
+        if (this._isRecordingEnabled && this._captureStarted) {
+            return
+        }
 
         // According to the rrweb docs, rrweb is not supported on IE11 and below:
         // "rrweb does not support IE11 and below because it uses the MutationObserver API, which was supported by these browsers."
@@ -80,7 +79,7 @@ export class SessionRecording {
         // Instead, when we load "recorder.js", the first JS error is about "Object.assign" and "Array.from" being undefined.
         // Thus instead of MutationObserver, we look for this function and block recording if it's undefined.
         const canRunReplay = !isUndefined(Object.assign) || !isUndefined(Array.from)
-        if (this._isRecordingEnabled && canRunReplay && !shouldNotStart) {
+        if (this._isRecordingEnabled && canRunReplay) {
             this._lazyLoadAndStart(startReason)
             logger.info('starting')
         } else {
@@ -95,6 +94,10 @@ export class SessionRecording {
      * if start is called and there is no remote config then we wait until there is
      */
     private _lazyLoadAndStart(startReason?: SessionStartReason) {
+        if (!this._isRecordingEnabled) {
+            return
+        }
+
         if (!this._pendingRemoteConfig) {
             logger.info('no remote config yet, deferring script load')
             return
@@ -121,6 +124,7 @@ export class SessionRecording {
 
     stopRecording() {
         this._lazyLoadedSessionRecording?.stop()
+        // todo should this be on the lazy item so it knows about internal stops?
         this._captureStarted = false
     }
 

@@ -1324,7 +1324,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
 assignableWindow.__PosthogExtensions__.rrwebPlugins = { getRecordConsolePlugin, getRecordNetworkPlugin }
 assignableWindow.__PosthogExtensions__.rrweb = { record: rrwebRecord, version: 'v2' }
-assignableWindow.__PosthogExtensions__.initSessionRecording = (ph, config) => new LazyLoadedSessionRecording(ph, config)
+assignableWindow.__PosthogExtensions__.initSessionRecording = (ph) => new LazyLoadedSessionRecording(ph)
 // we used to put all of these items directly on window, and now we put it on __PosthogExtensions__
 // but that means that old clients which lazily load this extension are looking in the wrong place
 // yuck,
