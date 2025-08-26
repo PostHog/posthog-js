@@ -3,7 +3,7 @@ import { PostHog } from '../../posthog-core'
 import { Properties, RemoteConfig, SessionStartReason } from '../../types'
 import { type eventWithTime } from '@rrweb/types'
 
-import { isUndefined } from '../../utils/type-utils'
+import { isUndefined } from '@posthog/core'
 import { createLogger } from '../../utils/logger'
 import {
     assignableWindow,

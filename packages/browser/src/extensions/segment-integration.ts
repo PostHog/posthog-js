@@ -20,7 +20,7 @@ import { PostHog } from '../posthog-core'
 import { createLogger } from '../utils/logger'
 
 import { USER_STATE } from '../constants'
-import { isFunction } from '../utils/type-utils'
+import { isFunction } from '@posthog/core'
 import { uuidv7 } from '../uuidv7'
 
 const logger = createLogger('[SegmentIntegration]')

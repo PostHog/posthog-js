@@ -28,10 +28,18 @@ import {
     SESSION_RECORDING_SCRIPT_CONFIG,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
 } from '../constants'
-import { clampToRange } from '../utils/number-utils'
 import { createLogger } from '../utils/logger'
 import { MutationThrottler } from '../extensions/replay/mutation-throttler'
-import { isBoolean, isFunction, isNullish, isNumber, isObject, isUndefined } from '../utils/type-utils'
+import {
+    isBoolean,
+    isFunction,
+    isNullish,
+    isNumber,
+    isObject,
+    isUndefined,
+    clampToRange,
+    includes,
+} from '@posthog/core'
 
 const BASE_ENDPOINT = '/s/'
 const DEFAULT_CANVAS_QUALITY = 0.4
@@ -93,7 +101,6 @@ import {
 } from '../extensions/replay/sessionrecording-utils'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
 import Config from '../config'
-import { includes } from '../utils/string-utils'
 import { sampleOnProperty } from '../extensions/sampling'
 
 interface QueuedRRWebEvent {

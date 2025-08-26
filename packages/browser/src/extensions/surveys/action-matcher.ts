@@ -2,7 +2,7 @@ import { PostHog } from '../../posthog-core'
 import { ActionStepStringMatching, ActionStepType, SurveyActionType, SurveyElement } from '../../posthog-surveys-types'
 import { SimpleEventEmitter } from '../../utils/simple-event-emitter'
 import { CaptureResult } from '../../types'
-import { isUndefined } from '../../utils/type-utils'
+import { isUndefined } from '@posthog/core'
 import { window } from '../../utils/globals'
 import { isMatchingRegex } from '../../utils/regex-utils'
 
