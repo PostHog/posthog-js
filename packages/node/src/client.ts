@@ -743,11 +743,6 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     properties: PostHogEventProperties
     options: PostHogCaptureOptions
   }> {
-    if (typeof props === 'string') {
-      this.logMsgIfDebug(() =>
-        console.warn('Called capture() with a string as the first argument when an object was expected.')
-      )
-    }
     const { distinctId, event, properties, groups, sendFeatureFlags, timestamp, disableGeoip, uuid }: EventMessage =
       props
 
