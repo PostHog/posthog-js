@@ -53,13 +53,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *   { host: 'https://app.posthog.com' }
    * )
    * ```
-   * 
+   *
    * @example
    * ```
    * // With personal API key
    * const client = new PostHogBackendClient(
    *   'your-api-key',
-   *   { 
+   *   {
    *     host: 'https://app.posthog.com',
    *     personalApiKey: 'your-personal-api-key'
    *   }
@@ -176,7 +176,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * ```
    *
    * @internal
-   * 
+   *
    * {@label Initialization}
    *
    * @param url - The URL to fetch
