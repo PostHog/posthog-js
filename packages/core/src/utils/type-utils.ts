@@ -86,3 +86,8 @@ export const isError = (x: unknown): x is Error => {
 export const isKnownUnsafeEditableEvent = (x: unknown): x is KnownUnsafeEditableEvent => {
   return includes(knownUnsafeEditableEvent as unknown as string[], x)
 }
+
+export const yesLikeValues = [true, 'true', 1, '1', 'yes']
+export const isYesLike = (val: string | boolean | number): boolean => includes(yesLikeValues, val)
+export const noLikeValues = [false, 'false', 0, '0', 'no']
+export const isNoLike = (val: string | boolean | number): boolean => includes(noLikeValues, val)

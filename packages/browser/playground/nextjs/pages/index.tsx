@@ -113,9 +113,10 @@ export default function Home() {
                             </p>
                         </PostHogFeature>
                     </div>
-                    {!consentGiven && (
+                    {consentGiven !== 'granted' && (
                         <p className="border border-red-900 bg-red-200 rounded p-2">
-                            <b>Consent not given!</b> Session recording, surveys, and autocapture are disabled.
+                            <b>Consent not given!{consentGiven === 'pending' ? ' (yet).' : ''}</b> Session recording,
+                            surveys, and autocapture are disabled.
                         </p>
                     )}
 
