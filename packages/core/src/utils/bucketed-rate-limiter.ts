@@ -8,6 +8,7 @@ export class BucketedRateLimiter<T extends string | number> {
   private _onBucketRateLimited?: (key: T) => void
 
   private _buckets: Record<string, number> = {}
+  private _removeInterval: NodeJS.Timeout | undefined
 
   constructor(
     private readonly _options: {
@@ -32,7 +33,7 @@ export class BucketedRateLimiter<T extends string | number> {
       86400000, // one day in milliseconds
       this._options._logger
     )
-    setInterval(() => {
+    this._removeInterval = setInterval(() => {
       this._refillBuckets()
     }, this._refillInterval)
   }
@@ -73,5 +74,12 @@ export class BucketedRateLimiter<T extends string | number> {
     }
 
     return hasReachedZero
+  }
+
+  public stop() {
+    if (this._removeInterval) {
+      clearInterval(this._removeInterval)
+      this._removeInterval = undefined
+    }
   }
 }

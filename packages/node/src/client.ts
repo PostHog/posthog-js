@@ -554,6 +554,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
   async _shutdown(shutdownTimeoutMs?: number): Promise<void> {
     this.featureFlagsPoller?.stopPoller()
+    this.errorTracking.shutdown()
     return super._shutdown(shutdownTimeoutMs)
   }
 
@@ -714,11 +715,9 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   captureException(error: unknown, distinctId?: string, additionalProperties?: Record<string | number, any>): void {
     const syntheticException = new Error('PostHog syntheticException')
     this.addPendingPromise(
-      ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties)
-        .then((msg) => this.prepareEventMessage(msg))
-        .then(({ distinctId, event, properties, options }) => {
-          return super.captureStateless(distinctId, event, properties, options)
-        })
+      ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
+        this.capture(msg)
+      )
     )
   }
 
@@ -729,15 +728,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   ): Promise<void> {
     const syntheticException = new Error('PostHog syntheticException')
     this.addPendingPromise(
-      ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties)
-        .then((msg) => this.prepareEventMessage(msg))
-        .then(({ distinctId, event, properties, options }) => {
-          return super.captureStatelessImmediate(distinctId, event, properties, options)
-        })
+      ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
+        this.captureImmediate(msg)
+      )
     )
   }
 
-  private async prepareEventMessage(props: EventMessage): Promise<{
+  public async prepareEventMessage(props: EventMessage): Promise<{
     distinctId: string
     event: string
     properties: PostHogEventProperties
