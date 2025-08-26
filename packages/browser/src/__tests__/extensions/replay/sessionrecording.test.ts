@@ -5,10 +5,8 @@ import '@testing-library/jest-dom'
 import { PostHogPersistence } from '../../../posthog-persistence'
 import {
     CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
-    SESSION_RECORDING_CANVAS_RECORDING,
     SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_IS_SAMPLED,
-    SESSION_RECORDING_MASKING,
 } from '../../../constants'
 import { SessionIdManager } from '../../../sessionid'
 import {
@@ -356,9 +354,12 @@ describe('SessionRecording', () => {
                                   canvasQuality: '0.1',
                                   canvasFps: 4,
                               }
-                            : undefined,
+                            : {},
                     })
                 )
+
+                console.log('wat', sessionRecording['_lazyLoadedSessionRecording'])
+                expect(sessionRecording['_lazyLoadedSessionRecording']).toBeDefined()
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_canvasRecording']).toMatchObject({
                     enabled: expected,
                     fps: 4,
@@ -393,6 +394,10 @@ describe('SessionRecording', () => {
                         },
                     })
                 )
+                console.log('wat', sessionRecording['_lazyLoadedSessionRecording'])
+                if (!sessionRecording['_lazyLoadedSessionRecording']) {
+                    throw new Error('lazy loaded session recording not defined')
+                }
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_canvasRecording']).toMatchObject({
                     enabled: true,
                     fps: expectedFps,
@@ -778,15 +783,15 @@ describe('SessionRecording', () => {
 
         describe('canvas', () => {
             it('passes the remote config to rrweb', () => {
-                posthog.persistence?.register({
-                    [SESSION_RECORDING_CANVAS_RECORDING]: {
-                        enabled: true,
-                        fps: 6,
-                        quality: 0.2,
-                    },
-                })
-
-                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: {} }))
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            recordCanvas: true,
+                            canvasFps: 6,
+                            canvasQuality: '0.2',
+                        },
+                    })
+                )
 
                 sessionRecording['_onScriptLoaded']()
                 expect(assignableWindow.__PosthogExtensions__.rrweb.record).toHaveBeenCalledWith(
@@ -802,15 +807,11 @@ describe('SessionRecording', () => {
             })
 
             it('skips when any config variable is missing', () => {
-                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: {} }))
-
                 sessionRecording.onRemoteConfig(
                     makeFlagsResponse({
                         sessionRecording: { endpoint: '/s/', recordCanvas: null, canvasFps: null, canvasQuality: null },
                     })
                 )
-
-                sessionRecording['_onScriptLoaded']()
 
                 const mockParams = assignableWindow.__PosthogExtensions__.rrweb.record.mock.calls[0][0]
                 expect(mockParams).not.toHaveProperty('recordCanvas')
@@ -847,11 +848,13 @@ describe('SessionRecording', () => {
             it('passes remote masking options to rrweb', () => {
                 posthog.config.session_recording.maskAllInputs = undefined
 
-                posthog.persistence?.register({
-                    [SESSION_RECORDING_MASKING]: { maskAllInputs: true, maskTextSelector: '*' },
-                })
-
-                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: {} }))
+                sessionRecording.onRemoteConfig(
+                    makeFlagsResponse({
+                        sessionRecording: {
+                            masking: { maskAllInputs: true, maskTextSelector: '*' },
+                        },
+                    })
+                )
 
                 sessionRecording['_onScriptLoaded']()
 
@@ -1088,12 +1091,10 @@ describe('SessionRecording', () => {
 
         it('loads script after `_startCapture` if not previously loaded', () => {
             posthog.persistence?.register({ [SESSION_RECORDING_ENABLED_SERVER_SIDE]: false })
-
-            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: {} }))
+            sessionRecording.startIfEnabledOrStop()
             expect(loadScriptMock).not.toHaveBeenCalled()
 
-            sessionRecording['_startCapture']()
-
+            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: {} }))
             expect(loadScriptMock).toHaveBeenCalled()
         })
 
@@ -1101,7 +1102,6 @@ describe('SessionRecording', () => {
             posthog.config.disable_session_recording = true
 
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: {} }))
-            sessionRecording['_startCapture']()
 
             expect(loadScriptMock).not.toHaveBeenCalled()
         })
@@ -1121,7 +1121,7 @@ describe('SessionRecording', () => {
         })
 
         it('session recording can be turned on after being turned off', () => {
-            expect(sessionRecording['_lazyLoadedSessionRecording']['_stopRrweb']).toEqual(undefined)
+            expect(sessionRecording['_lazyLoadedSessionRecording']?.['_stopRrweb']).toEqual(undefined)
 
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: {} }))
 
@@ -1333,8 +1333,10 @@ describe('SessionRecording', () => {
                 it('restarts recording if the session is rotated because session has been inactive for 30 minutes', () => {
                     const startingSessionId = sessionManager['_getSessionId']()[1]
 
-                    sessionRecording['_lazyLoadedSessionRecording'].stop = jest.fn()
+                    sessionRecording.stopRecording = jest.fn()
                     sessionRecording.startIfEnabledOrStop = jest.fn()
+                    sessionRecording['_lazyLoadedSessionRecording'].stop = jest.fn()
+                    sessionRecording['_lazyLoadedSessionRecording'].start = jest.fn()
 
                     emitAtDateTime(startingDate)
                     emitAtDateTime(
@@ -1357,8 +1359,12 @@ describe('SessionRecording', () => {
                     emitAtDateTime(inactivityThresholdLater)
 
                     expect(sessionManager['_getSessionId']()[1]).not.toEqual(startingSessionId)
-                    expect(sessionRecording.stopRecording).toHaveBeenCalled()
-                    expect(sessionRecording.startIfEnabledOrStop).toHaveBeenCalled()
+                    // the parent wrapper doesn't know anything about session rotation
+                    expect(sessionRecording.stopRecording).not.toHaveBeenCalled()
+                    expect(sessionRecording.startIfEnabledOrStop).not.toHaveBeenCalled()
+
+                    expect(sessionRecording['_lazyLoadedSessionRecording'].stop).toHaveBeenCalled()
+                    expect(sessionRecording['_lazyLoadedSessionRecording'].start).toHaveBeenCalled()
                 })
 
                 it('restarts recording if the session is rotated because max time has passed', () => {
@@ -1366,6 +1372,8 @@ describe('SessionRecording', () => {
 
                     sessionRecording.stopRecording = jest.fn()
                     sessionRecording.startIfEnabledOrStop = jest.fn()
+                    sessionRecording['_lazyLoadedSessionRecording'].stop = jest.fn()
+                    sessionRecording['_lazyLoadedSessionRecording'].start = jest.fn()
 
                     emitAtDateTime(startingDate)
                     emitAtDateTime(
@@ -1388,8 +1396,12 @@ describe('SessionRecording', () => {
 
                     expect(sessionManager['_getSessionId']()[1]).not.toEqual(startingSessionId)
 
-                    expect(sessionRecording.stopRecording).toHaveBeenCalled()
-                    expect(sessionRecording.startIfEnabledOrStop).toHaveBeenCalled()
+                    // the parent wrapper doesn't know anything about session rotation
+                    expect(sessionRecording.stopRecording).not.toHaveBeenCalled()
+                    expect(sessionRecording.startIfEnabledOrStop).not.toHaveBeenCalled()
+
+                    expect(sessionRecording['_lazyLoadedSessionRecording'].stop).toHaveBeenCalled()
+                    expect(sessionRecording['_lazyLoadedSessionRecording'].start).toHaveBeenCalled()
                 })
             })
         })

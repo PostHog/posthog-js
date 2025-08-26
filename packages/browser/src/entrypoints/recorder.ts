@@ -744,8 +744,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             })
         }
 
-        this._addEventTriggerListener()
-
         if (isNullish(this._removePageViewCaptureHook)) {
             // :TRICKY: rrweb does not capture navigation within SPA-s, so hook into our $pageview events to get access to all events.
             //   Dropping the initial event is fine (it's always captured by rrweb).
@@ -893,14 +891,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     get status(): SessionRecordingStatus {
+        // todo: should we be buffering, if we can load persisted /cached config and code while waiting for onRemoteConfig
         if (!this._receivedFlags) {
             return BUFFERING
         }
 
         return this._statusMatcher({
-            receivedFlags: this._receivedFlags,
             // can't get here without recording being enabled...
+            receivedFlags: this._receivedFlags,
             isRecordingEnabled: true,
+            // things that do still vary
             isSampled: this._isSampled,
             urlTriggerMatching: this._urlTriggerMatching,
             eventTriggerMatching: this._eventTriggerMatching,
@@ -992,7 +992,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         })
 
         this._urlTriggerMatching.onRemoteConfig(response)
+
         this._eventTriggerMatching.onRemoteConfig(response)
+        this._removeEventTriggerCaptureHook?.()
+        this._addEventTriggerListener()
+
         this._linkedFlagMatching.onRemoteConfig(response, (flag, variant) => {
             this._reportStarted('linked_flag_matched', {
                 flag,

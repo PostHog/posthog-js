@@ -168,8 +168,7 @@ export class SessionRecording {
         }
         if (!this._lazyLoadedSessionRecording) {
             this._lazyLoadedSessionRecording = assignableWindow.__PosthogExtensions__?.initSessionRecording(
-                this._instance,
-                this._instance.config
+                this._instance
             )
 
             // If we have a pending remote config, apply it now
