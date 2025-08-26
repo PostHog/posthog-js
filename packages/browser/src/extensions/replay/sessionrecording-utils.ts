@@ -1,7 +1,6 @@
 import type { eventWithTime, pluginEvent } from '@rrweb/types'
 
 import { isObject } from '../../utils/type-utils'
-import { SnapshotBuffer } from './sessionrecording'
 
 // taken from https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Cyclic_object_value#circular_references
 export function circularReferenceReplacer() {
@@ -110,32 +109,4 @@ export function truncateLargeConsoleLogs(_event: eventWithTime) {
         return _event
     }
     return _event
-}
-
-export const SEVEN_MEGABYTES = 1024 * 1024 * 7 * 0.9 // ~7mb (with some wiggle room)
-
-// recursively splits large buffers into smaller ones
-// uses a pretty high size limit to avoid splitting too much
-export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = SEVEN_MEGABYTES): SnapshotBuffer[] {
-    if (buffer.size >= sizeLimit && buffer.data.length > 1) {
-        const half = Math.floor(buffer.data.length / 2)
-        const firstHalf = buffer.data.slice(0, half)
-        const secondHalf = buffer.data.slice(half)
-        return [
-            splitBuffer({
-                size: estimateSize(firstHalf),
-                data: firstHalf,
-                sessionId: buffer.sessionId,
-                windowId: buffer.windowId,
-            }),
-            splitBuffer({
-                size: estimateSize(secondHalf),
-                data: secondHalf,
-                sessionId: buffer.sessionId,
-                windowId: buffer.windowId,
-            }),
-        ].flatMap((x) => x)
-    } else {
-        return [buffer]
-    }
 }

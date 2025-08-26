@@ -89,7 +89,6 @@ import {
 import {
     estimateSize,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
-    splitBuffer,
     truncateLargeConsoleLogs,
 } from '../extensions/replay/sessionrecording-utils'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
@@ -243,6 +242,34 @@ function isSessionIdleEvent(e: eventWithTime): e is eventWithTime & customEvent 
  *  so we need to manually let this one through */
 function isRecordingPausedEvent(e: eventWithTime) {
     return e.type === EventType.Custom && e.data.tag === 'recording paused'
+}
+
+export const SEVEN_MEGABYTES = 1024 * 1024 * 7 * 0.9 // ~7mb (with some wiggle room)
+
+// recursively splits large buffers into smaller ones
+// uses a pretty high size limit to avoid splitting too much
+export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = SEVEN_MEGABYTES): SnapshotBuffer[] {
+    if (buffer.size >= sizeLimit && buffer.data.length > 1) {
+        const half = Math.floor(buffer.data.length / 2)
+        const firstHalf = buffer.data.slice(0, half)
+        const secondHalf = buffer.data.slice(half)
+        return [
+            splitBuffer({
+                size: estimateSize(firstHalf),
+                data: firstHalf,
+                sessionId: buffer.sessionId,
+                windowId: buffer.windowId,
+            }),
+            splitBuffer({
+                size: estimateSize(secondHalf),
+                data: secondHalf,
+                sessionId: buffer.sessionId,
+                windowId: buffer.windowId,
+            }),
+        ].flatMap((x) => x)
+    } else {
+        return [buffer]
+    }
 }
 
 export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInterface {

@@ -1,3 +1,4 @@
+import { SEVEN_MEGABYTES, splitBuffer } from '../../../entrypoints/recorder'
 import {
     ensureMaxMessageSize,
     replacementImageURI,
@@ -5,8 +6,6 @@ import {
     CONSOLE_LOG_PLUGIN_NAME,
     PLUGIN_EVENT_TYPE,
     FULL_SNAPSHOT_EVENT_TYPE,
-    splitBuffer,
-    SEVEN_MEGABYTES,
     estimateSize,
     circularReferenceReplacer,
 } from '../../../extensions/replay/sessionrecording-utils'
