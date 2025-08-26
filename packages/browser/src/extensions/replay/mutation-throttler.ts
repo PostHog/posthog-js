@@ -1,7 +1,8 @@
 import type { eventWithTime, mutationCallbackParam } from '@rrweb/types'
 import { INCREMENTAL_SNAPSHOT_EVENT_TYPE, MUTATION_SOURCE_TYPE } from './sessionrecording-utils'
 import type { rrwebRecord } from './types/rrweb'
-import { BucketedRateLimiter } from '../../utils/bucketed-rate-limiter'
+import { BucketedRateLimiter } from '@posthog/core'
+import { logger } from '../../utils/logger'
 
 export class MutationThrottler {
     private _loggedTracker: Record<string, boolean> = {}
@@ -20,6 +21,7 @@ export class MutationThrottler {
             refillRate: this._options.refillRate ?? 10,
             refillInterval: 1000, // one second
             _onBucketRateLimited: this._onNodeRateLimited,
+            _logger: logger,
         })
     }
 

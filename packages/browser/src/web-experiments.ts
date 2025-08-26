@@ -8,7 +8,7 @@ import {
     WebExperimentVariant,
 } from './web-experiments-types'
 import { WEB_EXPERIMENTS } from './constants'
-import { isNullish, isString } from './utils/type-utils'
+import { isNullish, isString } from '@posthog/core'
 import { getQueryParam } from './utils/request-utils'
 import { isMatchingRegex } from './utils/regex-utils'
 import { logger } from './utils/logger'

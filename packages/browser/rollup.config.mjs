@@ -20,7 +20,7 @@ let nameCache = {}
 const plugins = (es5, noExternal) => [
     json(),
     resolve({ browser: true }),
-    typescript({ sourceMap: true, outDir: './dist' }),
+    typescript({ sourceMap: true, outDir: './dist', module: 'es2015' }),
     commonjs(),
     postcss({
         plugins: [
@@ -64,7 +64,7 @@ const plugins = (es5, noExternal) => [
         inject: false,
     }),
     babel({
-        extensions: ['.js', '.jsx', '.ts', '.tsx'],
+        extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx'],
         babelHelpers: 'bundled',
         plugins: [
             '@babel/plugin-transform-nullish-coalescing-operator',

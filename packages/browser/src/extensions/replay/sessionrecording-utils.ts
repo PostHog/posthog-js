@@ -1,7 +1,7 @@
 import type { eventWithTime, pluginEvent } from '@rrweb/types'
 
-import { isObject } from '../../utils/type-utils'
 import { SnapshotBuffer } from './sessionrecording'
+import { isObject } from '@posthog/core'
 
 // taken from https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Cyclic_object_value#circular_references
 export function circularReferenceReplacer() {
