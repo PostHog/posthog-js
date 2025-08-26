@@ -11,7 +11,7 @@ import {
     PostHogExtensionKind,
     window,
 } from '../../utils/globals'
-import { BUFFERING, SessionRecordingStatus, TriggerType } from './triggerMatching'
+import { DISABLED, LAZY_LOADING, SessionRecordingStatus, TriggerType } from './triggerMatching'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
@@ -38,7 +38,10 @@ export class SessionRecording {
      * once a flags response is received status can be disabled, active or sampled
      */
     get status(): SessionRecordingStatus {
-        return this._lazyLoadedSessionRecording?.status || BUFFERING
+        if (!this._isRecordingEnabled) {
+            return DISABLED
+        }
+        return this._lazyLoadedSessionRecording?.status || LAZY_LOADING
     }
 
     constructor(private readonly _instance: PostHog) {
@@ -198,6 +201,10 @@ export class SessionRecording {
      * when looking at the event feed for a session
      */
     get sdkDebugProperties(): Properties {
-        return this._lazyLoadedSessionRecording?.sdkDebugProperties || {}
+        return (
+            this._lazyLoadedSessionRecording?.sdkDebugProperties || {
+                $recording_status: this.status,
+            }
+        )
     }
 }

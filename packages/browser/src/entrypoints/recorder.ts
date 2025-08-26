@@ -245,7 +245,7 @@ function isRecordingPausedEvent(e: eventWithTime) {
     return e.type === EventType.Custom && e.data.tag === 'recording paused'
 }
 
-class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInterface {
+export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInterface {
     private _endpoint: string = BASE_ENDPOINT
     private _mutationThrottler?: MutationThrottler
     /**
