@@ -54,7 +54,7 @@ export function CookieBanner(): ReactElement | null {
                 <>
                     <button
                         onClick={() => {
-                            setConsentGiven('granted')
+                            setConsentGiven('denied')
                         }}
                     >
                         Give back my cookies! (revoke consent)
@@ -71,7 +71,7 @@ export function CookieBanner(): ReactElement | null {
                 <>
                     <button
                         onClick={() => {
-                            setConsentGiven('denied')
+                            setConsentGiven('granted')
                         }}
                     >
                         Ok you can have a cookie (accept cookies)
