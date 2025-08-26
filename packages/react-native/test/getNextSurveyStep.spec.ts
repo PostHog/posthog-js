@@ -294,7 +294,7 @@ describe('getNextSurveyStep', () => {
       expect(result).toBe(SurveyQuestionBranchingType.End)
     })
 
-    it('should throw error for invalid rating response type', () => {
+    it('should handle invalid rating response type gracefully', () => {
       const survey = createBasicSurvey([
         {
           type: SurveyQuestionType.Rating,
@@ -307,10 +307,28 @@ describe('getNextSurveyStep', () => {
             },
           },
         },
+        { type: SurveyQuestionType.Open, question: 'Question 2' },
       ])
 
-      expect(() => getNextSurveyStep(survey, 0, 'invalid')).toThrow('The response type must be an integer')
-      expect(() => getNextSurveyStep(survey, 0, 3.5)).toThrow('The response type must be an integer')
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+
+      // Test invalid string response
+      let result = getNextSurveyStep(survey, 0, 'invalid')
+      expect(result).toBe(1) // Should go to next question
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'PostHog Debug: Expected integer response for rating question but received:',
+        'invalid'
+      )
+
+      // Test invalid decimal response
+      result = getNextSurveyStep(survey, 0, 3.5)
+      expect(result).toBe(1) // Should go to next question
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'PostHog Debug: Expected integer response for rating question but received:',
+        3.5
+      )
+
+      consoleSpy.mockRestore()
     })
 
     it('should fall back to next question if no matching rating bucket', () => {
@@ -333,6 +351,65 @@ describe('getNextSurveyStep', () => {
       // Test positive rating (no branching defined)
       const result = getNextSurveyStep(survey, 0, 5)
       expect(result).toBe(1) // Should go to next question
+    })
+
+    it('should handle out-of-range rating values gracefully', () => {
+      const survey = createBasicSurvey([
+        {
+          type: SurveyQuestionType.Rating,
+          question: 'Rate this',
+          scale: 5,
+          branching: {
+            type: SurveyQuestionBranchingType.ResponseBased,
+            responseValues: {
+              negative: 1,
+              neutral: 2,
+              positive: SurveyQuestionBranchingType.End,
+            },
+          },
+        },
+        { type: SurveyQuestionType.Open, question: 'Question 2' },
+        { type: SurveyQuestionType.Open, question: 'Question 3' },
+      ])
+
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+
+      // Test out-of-range low value
+      let result = getNextSurveyStep(survey, 0, 0)
+      expect(result).toBe(2) // Should use neutral bucket and go to question 3
+      expect(consoleSpy).toHaveBeenCalledWith('PostHog Debug: Rating response out of range for scale 5:', 0)
+
+      // Test out-of-range high value
+      result = getNextSurveyStep(survey, 0, 6)
+      expect(result).toBe(2) // Should use neutral bucket and go to question 3
+      expect(consoleSpy).toHaveBeenCalledWith('PostHog Debug: Rating response out of range for scale 5:', 6)
+
+      consoleSpy.mockRestore()
+    })
+
+    it('should handle unsupported rating scales gracefully', () => {
+      const survey = createBasicSurvey([
+        {
+          type: SurveyQuestionType.Rating,
+          question: 'Rate this',
+          scale: 4, // Unsupported scale
+          branching: {
+            type: SurveyQuestionBranchingType.ResponseBased,
+            responseValues: {
+              neutral: SurveyQuestionBranchingType.End,
+            },
+          },
+        },
+        { type: SurveyQuestionType.Open, question: 'Question 2' },
+      ])
+
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+
+      const result = getNextSurveyStep(survey, 0, 2)
+      expect(result).toBe(SurveyQuestionBranchingType.End) // Should use neutral bucket
+      expect(consoleSpy).toHaveBeenCalledWith('PostHog Debug: Unsupported rating scale:', 4)
+
+      consoleSpy.mockRestore()
     })
   })
 
