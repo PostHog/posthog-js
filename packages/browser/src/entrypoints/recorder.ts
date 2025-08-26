@@ -419,8 +419,14 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
         return {
             enabled,
-            fps: clampToRange(fps, 0, MAX_CANVAS_FPS, 'canvas recording fps', DEFAULT_CANVAS_FPS),
-            quality: clampToRange(quality, 0, MAX_CANVAS_QUALITY, 'canvas recording quality', DEFAULT_CANVAS_QUALITY),
+            fps: clampToRange(fps, 0, MAX_CANVAS_FPS, createLogger('canvas recording fps'), DEFAULT_CANVAS_FPS),
+            quality: clampToRange(
+                quality,
+                0,
+                MAX_CANVAS_QUALITY,
+                createLogger('canvas recording quality'),
+                DEFAULT_CANVAS_QUALITY
+            ),
         }
     }
 
