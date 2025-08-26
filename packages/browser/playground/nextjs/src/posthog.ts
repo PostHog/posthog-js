@@ -44,7 +44,6 @@ export const configForConsent = (): Partial<PostHogConfig> => {
 }
 
 export const updatePostHogConsent = (consentGiven: ConsentState) => {
-    console.log(`PostHog consent given: ${consentGiven}`)
     if (consentGiven !== undefined) {
         if (consentGiven === 'granted') {
             posthog.opt_in_capturing()
