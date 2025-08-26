@@ -18,8 +18,8 @@ export const posthog: PostHog = POSTHOG_USE_SNIPPET
         : null
     : posthogJS
 
-// this is a bit gross, we use null to represent "not yet determined", and undefined for SSR
-export type ConsentState = boolean | null | undefined
+// we use undefined for SSR to indicated that we haven't check yet (as the state lives in cookies)
+export type ConsentState = 'granted' | 'denied' | 'pending' | undefined
 
 /**
  * Below is an example of a consent-driven config for PostHog
@@ -37,20 +37,22 @@ export const configForConsent = (): Partial<PostHogConfig> => {
     const consentGiven = cookieConsentGiven()
 
     return {
-        disable_surveys: !consentGiven,
-        autocapture: !!consentGiven,
-        disable_session_recording: !consentGiven,
+        disable_surveys: consentGiven !== 'granted',
+        autocapture: consentGiven === 'granted',
+        disable_session_recording: consentGiven !== 'granted',
     }
 }
 
 export const updatePostHogConsent = (consentGiven: ConsentState) => {
     console.log(`PostHog consent given: ${consentGiven}`)
-    // eslint-disable-next-line posthog-js/no-direct-null-check
-    if (consentGiven !== null) {
-        if (consentGiven) {
+    if (consentGiven !== undefined) {
+        if (consentGiven === 'granted') {
             posthog.opt_in_capturing()
-        } else {
+        } else if (consentGiven === 'denied') {
             posthog.opt_out_capturing()
+        } else if (consentGiven === 'pending') {
+            posthog.clear_opt_in_out_capturing()
+            posthog.reset()
         }
     }
 

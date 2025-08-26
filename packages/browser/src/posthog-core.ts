@@ -2978,11 +2978,11 @@ export class PostHog {
      * @example
      * ```js
      * const consentStatus = posthog.get_explicit_consent_status()
-     * if (consentStatus === true) {
+     * if (consentStatus === "granted") {
      *     // user has explicitly opted in
-     * } else if (consentStatus === false) {
+     * } else if (consentStatus === "denied") {
      *     // user has explicitly opted out
-     * } else {
+     * } else if (consentStatus === "pending"){
      *     // user has not made a choice, show consent banner
      * }
      * ```
@@ -2991,9 +2991,9 @@ export class PostHog {
      *
      * @returns {boolean | null} current explicit consent status
      */
-    get_explicit_consent_status(): boolean | null {
+    get_explicit_consent_status(): 'granted' | 'denied' | 'pending' {
         const consent = this.consent.consent
-        return consent === ConsentStatus.GRANTED ? true : consent === ConsentStatus.DENIED ? false : null
+        return consent === ConsentStatus.GRANTED ? 'granted' : consent === ConsentStatus.DENIED ? 'denied' : 'pending'
     }
 
     /**

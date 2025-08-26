@@ -45,7 +45,7 @@ describe('consentManager', () => {
     it('should start default opted in', () => {
         expect(posthog.has_opted_in_capturing()).toBe(true)
         expect(posthog.has_opted_out_capturing()).toBe(false)
-        expect(posthog.get_explicit_consent_status()).toBe(null)
+        expect(posthog.get_explicit_consent_status()).toBe('pending')
 
         expect(posthog.persistence?._disabled).toBe(false)
         expect(posthog.sessionPersistence?._disabled).toBe(false)
@@ -55,7 +55,7 @@ describe('consentManager', () => {
         posthog = createPostHog({ opt_out_capturing_by_default: true })
         expect(posthog.has_opted_in_capturing()).toBe(false)
         expect(posthog.has_opted_out_capturing()).toBe(true)
-        expect(posthog.get_explicit_consent_status()).toBe(null)
+        expect(posthog.get_explicit_consent_status()).toBe('pending')
 
         expect(posthog.persistence?._disabled).toBe(false)
         expect(posthog.sessionPersistence?._disabled).toBe(false)
@@ -65,7 +65,7 @@ describe('consentManager', () => {
         posthog = createPostHog({ opt_out_capturing_by_default: true, opt_out_persistence_by_default: true })
         expect(posthog.has_opted_in_capturing()).toBe(false)
         expect(posthog.has_opted_out_capturing()).toBe(true)
-        expect(posthog.get_explicit_consent_status()).toBe(null)
+        expect(posthog.get_explicit_consent_status()).toBe('pending')
 
         expect(posthog.persistence?._disabled).toBe(true)
         expect(posthog.sessionPersistence?._disabled).toBe(true)
@@ -75,16 +75,17 @@ describe('consentManager', () => {
         posthog = createPostHog({ opt_out_capturing_by_default: true, opt_out_persistence_by_default: true })
         expect(posthog.has_opted_in_capturing()).toBe(false)
         expect(posthog.persistence?._disabled).toBe(true)
+        expect(posthog.get_explicit_consent_status()).toBe('pending')
 
         posthog.opt_in_capturing()
         expect(posthog.has_opted_in_capturing()).toBe(true)
         expect(posthog.persistence?._disabled).toBe(false)
-        expect(posthog.get_explicit_consent_status()).toBe(true)
+        expect(posthog.get_explicit_consent_status()).toBe('granted')
 
         posthog.opt_out_capturing()
         expect(posthog.has_opted_in_capturing()).toBe(false)
         expect(posthog.persistence?._disabled).toBe(true)
-        expect(posthog.get_explicit_consent_status()).toBe(false)
+        expect(posthog.get_explicit_consent_status()).toBe('denied')
     })
 
     describe('opt out event', () => {
