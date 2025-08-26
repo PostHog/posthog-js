@@ -1,6 +1,6 @@
 import { each } from './'
 
-import { isArray, isFile, isUndefined } from './type-utils'
+import { isArray, isFile, isUndefined } from '@posthog/core'
 import { logger } from './logger'
 import { document } from './globals'
 

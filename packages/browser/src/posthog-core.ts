@@ -1,6 +1,6 @@
 import { Autocapture } from './autocapture'
 import Config from './config'
-import { ConsentManager } from './consent'
+import { ConsentManager, ConsentStatus } from './consent'
 import {
     ALIAS_ID_KEY,
     COOKIELESS_MODE_FLAG_PROPERTY,
@@ -75,21 +75,22 @@ import { logger } from './utils/logger'
 import { getPersonPropertiesHash } from './utils/property-utils'
 import { RequestRouter, RequestRouterRegion } from './utils/request-router'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
-import { includes, isDistinctIdStringLike } from './utils/string-utils'
 import { getSurveyInteractionProperty, setSurveySeenOnLocalStorage } from './utils/survey-utils'
 import {
-    isArray,
-    isEmptyObject,
     isEmptyString,
     isError,
     isFunction,
     isKnownUnsafeEditableEvent,
     isNullish,
     isNumber,
-    isObject,
     isString,
     isUndefined,
-} from './utils/type-utils'
+    includes,
+    isDistinctIdStringLike,
+    isArray,
+    isEmptyObject,
+    isObject,
+} from '@posthog/core'
 import { uuidv7 } from './uuidv7'
 import { WebExperiments } from './web-experiments'
 import { ExternalIntegrations } from './extensions/external-integration'
@@ -2964,6 +2965,35 @@ export class PostHog {
      */
     has_opted_out_capturing(): boolean {
         return this.consent.isOptedOut()
+    }
+
+    /**
+     * Returns the explicit consent status of the user.
+     *
+     * @remarks
+     * This can be used to check if the user has explicitly opted in or out of data capturing, or neither. This does not
+     * take the default config options into account, only whether the user has made an explicit choice, so this can be
+     * used to determine whether to show an initial cookie banner or not.
+     *
+     * @example
+     * ```js
+     * const consentStatus = posthog.get_explicit_consent_status()
+     * if (consentStatus === "granted") {
+     *     // user has explicitly opted in
+     * } else if (consentStatus === "denied") {
+     *     // user has explicitly opted out
+     * } else if (consentStatus === "pending"){
+     *     // user has not made a choice, show consent banner
+     * }
+     * ```
+     *
+     * @public
+     *
+     * @returns {boolean | null} current explicit consent status
+     */
+    get_explicit_consent_status(): 'granted' | 'denied' | 'pending' {
+        const consent = this.consent.consent
+        return consent === ConsentStatus.GRANTED ? 'granted' : consent === ConsentStatus.DENIED ? 'denied' : 'pending'
     }
 
     /**

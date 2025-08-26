@@ -79,6 +79,9 @@ module.exports = {
                 'no-console': 'off',
                 '@typescript-eslint/no-require-imports': 'off',
                 'no-undef': 'off',
+                'posthog-js/no-direct-array-check': 'off',
+                'posthog-js/no-direct-undefined-check': 'off',
+                'posthog-js/no-direct-null-check': 'off',
             },
             env: {
                 node: true,

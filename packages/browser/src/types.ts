@@ -1,37 +1,13 @@
 import type { recordOptions } from './extensions/replay/types/rrweb'
 import type { SegmentAnalytics } from './extensions/segment-integration'
 import { PostHog } from './posthog-core'
+import { KnownUnsafeEditableEvent } from '@posthog/core'
 import { Survey } from './posthog-surveys-types'
 
 export type Property = any
 export type Properties = Record<string, Property>
 
 export const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
-
-export const knownUnsafeEditableEvent = [
-    '$snapshot',
-    '$pageview',
-    '$pageleave',
-    '$set',
-    'survey dismissed',
-    'survey sent',
-    'survey shown',
-    '$identify',
-    '$groupidentify',
-    '$create_alias',
-    '$$client_ingestion_warning',
-    '$web_experiment_applied',
-    '$feature_enrollment_update',
-    '$feature_flag_called',
-] as const
-
-/**
- * These events can be processed by the `beforeCapture` function
- * but can cause unexpected confusion in data.
- *
- * Some features of PostHog rely on receiving 100% of these events
- */
-export type KnownUnsafeEditableEvent = (typeof knownUnsafeEditableEvent)[number]
 
 /**
  * These are known events PostHog events that can be processed by the `beforeCapture` function
