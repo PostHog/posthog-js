@@ -1,7 +1,17 @@
 import { ErrorProperties } from '../extensions/exception-autocapture/error-conversion'
 import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
-import { DeadClicksAutoCaptureConfig, ExternalIntegrationKind, RemoteConfig, SiteAppLoader } from '../types'
+import {
+    DeadClicksAutoCaptureConfig,
+    ExternalIntegrationKind,
+    PostHogConfig,
+    Properties,
+    RemoteConfig,
+    SessionStartReason,
+    SiteAppLoader,
+} from '../types'
+import { eventWithTime } from '@rrweb/types'
+import { SessionRecordingStatus, TriggerType } from '../extensions/replay/triggerMatching'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
@@ -156,6 +166,20 @@ export interface LazyLoadedDeadClicksAutocaptureInterface {
     stop: () => void
 }
 
+export interface LazyLoadedSessionRecordingInterface {
+    start: (startReason?: SessionStartReason) => void
+    stop: () => void
+    sessionId: string
+    status: SessionRecordingStatus
+    onRRwebEmit: (rawEvent: eventWithTime) => void
+    onRemoteConfig: (response: RemoteConfig) => void
+    log: (message: string, level: 'log' | 'warn' | 'error') => void
+    sdkDebugProperties: Properties
+    overrideLinkedFlag: () => void
+    overrideSampling: () => void
+    overrideTrigger: (triggerType: TriggerType) => void
+}
+
 interface PostHogExtensions {
     loadExternalDependency?: (
         posthog: PostHog,
@@ -190,6 +214,7 @@ interface PostHogExtensions {
     integrations?: {
         [K in ExternalIntegrationKind]?: { start: (posthog: PostHog) => void; stop: () => void }
     }
+    initSessionRecording?: (ph: PostHog, config: PostHogConfig) => LazyLoadedSessionRecordingInterface
 }
 
 const global: typeof globalThis | undefined = typeof globalThis !== 'undefined' ? globalThis : win

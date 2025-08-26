@@ -2,6 +2,7 @@ import type { recordOptions } from './extensions/replay/types/rrweb'
 import type { SegmentAnalytics } from './extensions/segment-integration'
 import { PostHog } from './posthog-core'
 import { Survey } from './posthog-surveys-types'
+import { SAMPLED } from './extensions/replay/triggerMatching'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -1050,6 +1051,16 @@ export interface ErrorTrackingOptions {
      */
     __exceptionRateLimiterBucketSize?: number
 }
+
+export type SessionStartReason =
+    | 'sampling_overridden'
+    | 'recording_initialized'
+    | 'linked_flag_matched'
+    | 'linked_flag_overridden'
+    | typeof SAMPLED
+    | 'session_id_changed'
+    | 'url_trigger_matched'
+    | 'event_trigger_matched'
 
 export interface SessionRecordingOptions {
     /**
