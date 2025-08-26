@@ -11,6 +11,15 @@ import {
   SurveyQuestionDescriptionContentType,
 } from '@posthog/core'
 
+/**
+ * Utility function to check if some value is an integer
+ * @param value The value to check
+ * @returns Truthy if the value is an integer
+ */
+function isInteger(value: unknown): boolean {
+  return typeof value === 'number' && Number.isInteger(value)
+}
+
 export const defaultBackgroundColor = '#eeeded' as const
 
 export type SurveyAppearanceTheme = Omit<
@@ -170,7 +179,7 @@ export function getNextSurveyStep(
   if (question.branching.type === SurveyQuestionBranchingType.End) {
     return SurveyQuestionBranchingType.End
   } else if (question.branching.type === SurveyQuestionBranchingType.SpecificQuestion) {
-    if (Number.isInteger(question.branching.index)) {
+    if (isInteger(question.branching.index)) {
       return question.branching.index
     }
   } else if (question.branching.type === SurveyQuestionBranchingType.ResponseBased) {
@@ -189,7 +198,7 @@ export function getNextSurveyStep(
         const nextStep = question.branching.responseValues[selectedChoiceIndex]
 
         // Specific question
-        if (Number.isInteger(nextStep)) {
+        if (isInteger(nextStep)) {
           return nextStep
         }
 
@@ -200,18 +209,18 @@ export function getNextSurveyStep(
         return nextQuestionIndex
       }
     } else if (question.type === SurveyQuestionType.Rating) {
-      if (typeof response !== 'number' || !Number.isInteger(response)) {
+      if (!isInteger(response)) {
         throw new Error('The response type must be an integer')
       }
 
       const ratingQuestion = question as RatingSurveyQuestion
-      const ratingBucket = getRatingBucketForResponseValue(response, ratingQuestion.scale)
+      const ratingBucket = getRatingBucketForResponseValue(response as number, ratingQuestion.scale)
 
       if (question.branching?.responseValues?.hasOwnProperty(ratingBucket)) {
         const nextStep = question.branching.responseValues[ratingBucket]
 
         // Specific question
-        if (Number.isInteger(nextStep)) {
+        if (isInteger(nextStep)) {
           return nextStep
         }
 
