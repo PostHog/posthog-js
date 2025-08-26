@@ -17,6 +17,8 @@ const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
 
 export class SessionRecording {
+    private _lastRemoteConfig: RemoteConfig | undefined
+
     // todo can we improve the API here, folk are using this e.g. for capacitor
     set forceAllowLocalhostNetworkCapture(value: boolean) {
         if ((this._lazyLoadedSessionRecording as any)?._forceAllowLocalhostNetworkCapture) {
@@ -27,6 +29,7 @@ export class SessionRecording {
     private _captureStarted: boolean
 
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
+    private _pendingRemoteConfig: RemoteConfig | undefined
 
     public get started(): boolean {
         // TODO could we use status instead of _captureStarted?
@@ -63,57 +66,39 @@ export class SessionRecording {
     }
 
     startIfEnabledOrStop(startReason?: SessionStartReason) {
-        if (this._isRecordingEnabled) {
-            this._startCapture(startReason)
+        // do not start if explicitly disabled or if the user has opted out
+        const shouldNotStart =
+            this._captureStarted ||
+            this._instance.config.disable_session_recording ||
+            this._instance.consent.isOptedOut()
+
+        // According to the rrweb docs, rrweb is not supported on IE11 and below:
+        // "rrweb does not support IE11 and below because it uses the MutationObserver API, which was supported by these browsers."
+        // https://github.com/rrweb-io/rrweb/blob/master/guide.md#compatibility-note
+        //
+        // However, MutationObserver does exist on IE11, it just doesn't work well and does not detect all changes.
+        // Instead, when we load "recorder.js", the first JS error is about "Object.assign" and "Array.from" being undefined.
+        // Thus instead of MutationObserver, we look for this function and block recording if it's undefined.
+        const canRunReplay = !isUndefined(Object.assign) || !isUndefined(Array.from)
+        if (this._isRecordingEnabled && canRunReplay && !shouldNotStart) {
+            this._lazyLoadAndStart(startReason)
+            logger.info('starting')
         } else {
             this.stopRecording()
         }
     }
 
-    stopRecording() {
-        if (this._captureStarted) {
-            this._lazyLoadedSessionRecording?.stop()
-            this._captureStarted = false
-        }
-    }
-
-    onRemoteConfig(response: RemoteConfig) {
-        // TODO: and what if we get the remote config before we get the lazy loader?
-        this._lazyLoadedSessionRecording?.onRemoteConfig(response)
-        this.startIfEnabledOrStop()
-    }
-
-    log(message: string, level: 'log' | 'warn' | 'error' = 'log') {
-        if (this._lazyLoadedSessionRecording?.log) {
-            this._lazyLoadedSessionRecording.log(message, level)
-        } else {
-            logger.warn('log called before recorder was ready')
-        }
-    }
-
-    private _startCapture(startReason?: SessionStartReason) {
-        if (isUndefined(Object.assign) || isUndefined(Array.from)) {
-            // According to the rrweb docs, rrweb is not supported on IE11 and below:
-            // "rrweb does not support IE11 and below because it uses the MutationObserver API, which was supported by these browsers."
-            // https://github.com/rrweb-io/rrweb/blob/master/guide.md#compatibility-note
-            //
-            // However, MutationObserver does exist on IE11, it just doesn't work well and does not detect all changes.
-            // Instead, when we load "recorder.js", the first JS error is about "Object.assign" and "Array.from" being undefined.
-            // Thus instead of MutationObserver, we look for this function and block recording if it's undefined.
+    /**
+     * session recording waits until it receives remote config before loading the script
+     * this is to ensure we can control the script name remotely
+     * and because we wait until we have local and remote config to determine if we should start at all
+     * if start is called and there is no remote config then we wait until there is
+     */
+    private _lazyLoadAndStart(startReason?: SessionStartReason) {
+        if (!this._pendingRemoteConfig) {
+            logger.info('no remote config yet, deferring script load')
             return
         }
-
-        // We do not switch recorder versions midway through a recording.
-        // do not start if explicitly disabled or if the user has opted out
-        if (
-            this._captureStarted ||
-            this._instance.config.disable_session_recording ||
-            this._instance.consent.isOptedOut()
-        ) {
-            return
-        }
-
-        this._captureStarted = true
 
         // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
         // imported), don't load the script. Otherwise, remotely import recorder.js from cdn since it hasn't been loaded.
@@ -132,10 +117,39 @@ export class SessionRecording {
         } else {
             this._onScriptLoaded(startReason)
         }
-
-        logger.info('starting')
     }
 
+    stopRecording() {
+        this._lazyLoadedSessionRecording?.stop()
+        this._captureStarted = false
+    }
+
+    onRemoteConfig(response: RemoteConfig) {
+        this._pendingRemoteConfig = response
+
+        const persistence = this._instance.persistence
+        if (persistence) {
+            persistence.register({
+                [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response['sessionRecording'],
+                [SESSION_RECORDING_SCRIPT_CONFIG]: response.sessionRecording?.scriptConfig,
+            })
+        }
+
+        if (!this._lazyLoadedSessionRecording) {
+            this._lazyLoadAndStart()
+        } else {
+            this._lazyLoadedSessionRecording.onRemoteConfig(response)
+        }
+        this.startIfEnabledOrStop()
+    }
+
+    log(message: string, level: 'log' | 'warn' | 'error' = 'log') {
+        if (this._lazyLoadedSessionRecording?.log) {
+            this._lazyLoadedSessionRecording.log(message, level)
+        } else {
+            logger.warn('log called before recorder was ready')
+        }
+    }
     private get _scriptName(): PostHogExtensionKind {
         return (
             (this._instance?.persistence?.get_property(SESSION_RECORDING_SCRIPT_CONFIG)
@@ -153,9 +167,17 @@ export class SessionRecording {
                 this._instance,
                 this._instance.config
             )
+
+            // If we have a pending remote config, apply it now
+            if (this._pendingRemoteConfig) {
+                this._lazyLoadedSessionRecording.onRemoteConfig(this._pendingRemoteConfig)
+                // Clear the pending config after applying it
+                this._pendingRemoteConfig = undefined
+            }
         }
 
         this._lazyLoadedSessionRecording.start(startReason)
+        this._captureStarted = true
     }
 
     onRRwebEmit(rawEvent: eventWithTime) {

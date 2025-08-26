@@ -327,7 +327,7 @@ describe('SessionRecording', () => {
             (_name: string, serverSide: boolean | undefined, clientSide: boolean | undefined, expected: boolean) => {
                 posthog.persistence?.register({ [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: serverSide })
                 posthog.config.enable_recording_console_log = clientSide
-                sessionRecording.startIfEnabledOrStop()
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: {} }))
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_isConsoleLogCaptureEnabled']).toBe(expected)
             }
         )
@@ -351,7 +351,7 @@ describe('SessionRecording', () => {
                     [SESSION_RECORDING_CANVAS_RECORDING]: { enabled: serverSide, fps: 4, quality: '0.1' },
                 })
                 posthog.config.session_recording.captureCanvas = { recordCanvas: clientSide }
-                sessionRecording.startIfEnabledOrStop()
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: {} }))
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_canvasRecording']).toMatchObject({
                     enabled: expected,
                     fps: 4,
@@ -381,7 +381,7 @@ describe('SessionRecording', () => {
                     [SESSION_RECORDING_CANVAS_RECORDING]: { enabled: true, fps, quality },
                 })
 
-                sessionRecording.startIfEnabledOrStop()
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: {} }))
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_canvasRecording']).toMatchObject({
                     enabled: true,
                     fps: expectedFps,
@@ -433,7 +433,7 @@ describe('SessionRecording', () => {
                     [SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE]: { capturePerformance: serverSide },
                 })
                 posthog.config.capture_performance = clientSide
-                sessionRecording.startIfEnabledOrStop()
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: {} }))
                 expect(
                     sessionRecording['_lazyLoadedSessionRecording']['_networkPayloadCapture']?.recordPerformance
                 ).toBe(expected)
@@ -518,7 +518,8 @@ describe('SessionRecording', () => {
                 posthog.config.session_recording.maskTextSelector = clientConfig?.maskTextSelector
                 posthog.config.session_recording.blockSelector = clientConfig?.blockSelector
 
-                sessionRecording.startIfEnabledOrStop()
+                sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: {} }))
+
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_masking']).toEqual(expected)
             }
         )
