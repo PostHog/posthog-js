@@ -1,4 +1,5 @@
 const { ReleaseTag, ApiItemKind } = require('@microsoft/api-extractor-model');
+const { getInheritanceChain } = require('./inheritance');
 
 // for release tag mapping
 const releaseTagMap = {
@@ -27,14 +28,12 @@ const hasDeprecatedBlock = (apiMethod) =>
  */
 const isMethodDeprecated = hasDeprecatedBlock;
 
-const { findTypeInPackage, getInheritanceChain } = require('./inheritance');
-
 /**
  * Collect all public methods from a class and its inheritance chain
  * @param {any} posthogClass - Starting class
  * @returns {any[]} - Array of unique public methods
  */
-const collectMethodsWithInheritance = (posthogClass) => {
+const collectMethodsWithInheritance = (posthogClass, rootClass) => {
     if (!posthogClass) return [];
     
     const allMethods = new Map();
@@ -47,11 +46,16 @@ const collectMethodsWithInheritance = (posthogClass) => {
         const members = inheritanceResult.items || [];
         
         const methods = members.filter(member =>
-            member.kind === ApiItemKind.Method && !member.name.startsWith('_')
-        );
-        
+          (member.kind === ApiItemKind.Method && 
+          !member.name.startsWith('_') ) ||
+          member.kind === ApiItemKind.Constructor
+      );
+
         // Add methods to map (child methods take precedence over parent methods)
         methods.forEach(method => {
+            if (method.kind === ApiItemKind.Constructor) {
+              method.name = rootClass;
+            }
             if (!allMethods.has(method.name)) {
                 allMethods.set(method.name, method);
             }

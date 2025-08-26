@@ -35,7 +35,8 @@ const config = {
     id: NODE_SPEC_INFO.id,
     hogRef: HOG_REF,
     specInfo: NODE_SPEC_INFO,
-    typeExamples: NODE_TYPE_EXAMPLES
+    typeExamples: NODE_TYPE_EXAMPLES,
+    parentClass: 'PostHog'
 };
 
 generateApiSpecs(config);
