@@ -1,5 +1,6 @@
 import { PostHog } from 'posthog-node'
 import PostHogGemini from '../src/gemini'
+import { version } from '../package.json'
 
 let mockGeminiResponse: any = {}
 let mockGeminiStreamResponse: any = {}
@@ -163,6 +164,8 @@ describe('PostHogGemini - Jest test suite', () => {
 
     expect(distinctId).toBe('test-id')
     expect(event).toBe('$ai_generation')
+    expect(properties['$ai_lib']).toBe('posthog-ai')
+    expect(properties['$ai_lib_version']).toBe(version)
     expect(properties['$ai_provider']).toBe('gemini')
     expect(properties['$ai_model']).toBe('gemini-2.0-flash-001')
     expect(properties['$ai_input']).toEqual([{ role: 'user', content: 'Hello' }])
@@ -203,6 +206,8 @@ describe('PostHogGemini - Jest test suite', () => {
 
     expect(distinctId).toBe('test-id')
     expect(event).toBe('$ai_generation')
+    expect(properties['$ai_lib']).toBe('posthog-ai')
+    expect(properties['$ai_lib_version']).toBe(version)
     expect(properties['$ai_provider']).toBe('gemini')
     expect(properties['$ai_model']).toBe('gemini-2.0-flash-001')
     expect(properties['$ai_input']).toEqual([{ role: 'user', content: 'Write a short poem' }])
