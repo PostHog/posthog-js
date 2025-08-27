@@ -4,6 +4,7 @@ import openaiModule from 'openai'
 import type { ChatCompletion, ChatCompletionChunk } from 'openai/resources/chat/completions'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
 import { flushPromises } from './test-utils'
+import { version } from '../package.json'
 
 // Test-specific helper interface for async iteration
 interface MockAsyncIterator<T> {
@@ -370,6 +371,8 @@ describe('PostHogOpenAI - Jest test suite', () => {
 
     expect(distinctId).toBe('test-id')
     expect(event).toBe('$ai_generation')
+    expect(properties['$ai_lib']).toBe('posthog-ai')
+    expect(properties['$ai_lib_version']).toBe(version)
     expect(properties['$ai_provider']).toBe('openai')
     expect(properties['$ai_model']).toBe('gpt-4')
     expect(properties['$ai_input']).toEqual([{ role: 'user', content: 'Hello' }])
@@ -555,6 +558,8 @@ describe('PostHogOpenAI - Jest test suite', () => {
 
     expect(distinctId).toBe('test-id')
     expect(event).toBe('$ai_generation')
+    expect(properties['$ai_lib']).toBe('posthog-ai')
+    expect(properties['$ai_lib_version']).toBe(version)
     expect(properties['$ai_provider']).toBe('openai')
     expect(properties['$ai_model']).toBe('gpt-4o-2024-08-06')
     expect(properties['$ai_input']).toEqual([
@@ -637,6 +642,8 @@ describe('PostHogOpenAI - Jest test suite', () => {
 
       expect(distinctId).toBe('test-stream-user')
       expect(event).toBe('$ai_generation')
+      expect(properties['$ai_lib']).toBe('posthog-ai')
+      expect(properties['$ai_lib_version']).toBe(version)
       expect(properties['$ai_provider']).toBe('openai')
       expect(properties['$ai_model']).toBe('gpt-4')
 
