@@ -13,6 +13,7 @@ interface MockAsyncIterator<T> {
 
 let mockOpenAiChatResponse: ChatCompletion = {} as ChatCompletion
 let mockOpenAiParsedResponse: ParsedResponse<any> = {} as ParsedResponse<any>
+let mockOpenAiEmbeddingResponse: any = {}
 let mockStreamChunks: ChatCompletionChunk[] = []
 
 jest.mock('posthog-node', () => {
@@ -58,6 +59,14 @@ jest.mock('openai', () => {
     }
   }
 
+  // Mock Embeddings class
+  class MockEmbeddings {
+    constructor() {}
+    create() {
+      return Promise.resolve({})
+    }
+  }
+
   // Mock OpenAI class
   class MockOpenAI {
     chat: any
@@ -78,6 +87,7 @@ jest.mock('openai', () => {
     }
     static Chat = MockChat
     static Responses = MockResponses
+    static Embeddings = MockEmbeddings
   }
 
   return {
@@ -86,6 +96,7 @@ jest.mock('openai', () => {
     OpenAI: MockOpenAI,
     Chat: MockChat,
     Responses: MockResponses,
+    Embeddings: MockEmbeddings,
   }
 })
 
@@ -323,6 +334,23 @@ describe('PostHogOpenAI - Jest test suite', () => {
       top_p: 1.0,
     } as unknown as ParsedResponse<any>
 
+    // Default embeddings response
+    mockOpenAiEmbeddingResponse = {
+      object: 'list',
+      data: [
+        {
+          object: 'embedding',
+          embedding: new Array(1536).fill(0).map(() => Math.random()),
+          index: 0,
+        },
+      ],
+      model: 'text-embedding-3-small',
+      usage: {
+        prompt_tokens: 5,
+        total_tokens: 5,
+      },
+    }
+
     // Default stream chunks for streaming tests
     mockStreamChunks = createMockStreamChunks({
       content: 'Hello from streaming OpenAI!',
@@ -347,6 +375,10 @@ describe('PostHogOpenAI - Jest test suite', () => {
     const ResponsesMock: any = openaiModule.Responses
     ResponsesMock.prototype.parse = jest.fn().mockResolvedValue(mockOpenAiParsedResponse)
     ResponsesMock.prototype.create = jest.fn().mockResolvedValue(mockOpenAiParsedResponse)
+
+    // Mock the Embeddings class
+    const EmbeddingsMock: any = openaiModule.Embeddings || class MockEmbeddings {}
+    EmbeddingsMock.prototype.create = jest.fn().mockResolvedValue(mockOpenAiEmbeddingResponse)
   })
 
   // Conditionally run tests based on API key availability
@@ -916,7 +948,6 @@ describe('PostHogOpenAI - Jest test suite', () => {
               const error = new Error('Stream interrupted') as Error & { status: number }
               error.status = 503
               throw error
-              yield // Adding yield to satisfy generator function requirement
             },
           },
         ]),
@@ -1003,6 +1034,137 @@ describe('PostHogOpenAI - Jest test suite', () => {
         },
       ])
       expect(properties['$ai_output_tokens']).toBe(0)
+    })
+  })
+
+  describe('Embeddings', () => {
+    conditionalTest('basic embeddings', async () => {
+      const response = await client.embeddings.create({
+        model: 'text-embedding-3-small',
+        input: 'Hello world',
+        posthogDistinctId: 'test-id',
+        posthogProperties: { test: 'embeddings' },
+      })
+
+      expect(response).toEqual(mockOpenAiEmbeddingResponse)
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { distinctId, event, properties } = captureArgs[0]
+
+      expect(distinctId).toBe('test-id')
+      expect(event).toBe('$ai_embedding')
+      expect(properties['$ai_provider']).toBe('openai')
+      expect(properties['$ai_model']).toBe('text-embedding-3-small')
+      expect(properties['$ai_input']).toBe('Hello world')
+      expect(properties['$ai_output_choices']).toBeNull() // Embeddings don't have output
+      expect(properties['$ai_input_tokens']).toBe(5)
+      expect(properties['$ai_output_tokens']).toBeUndefined() // Embeddings don't send output tokens (matches Python)
+      expect(properties['$ai_http_status']).toBe(200)
+      expect(properties['test']).toBe('embeddings')
+      expect(typeof properties['$ai_latency']).toBe('number')
+    })
+
+    conditionalTest('embeddings with array input', async () => {
+      const arrayInput = ['Hello', 'World', 'Test']
+      mockOpenAiEmbeddingResponse = {
+        object: 'list',
+        data: [
+          {
+            object: 'embedding',
+            embedding: new Array(1536).fill(0).map(() => Math.random()),
+            index: 0,
+          },
+          {
+            object: 'embedding',
+            embedding: new Array(1536).fill(0).map(() => Math.random()),
+            index: 1,
+          },
+          {
+            object: 'embedding',
+            embedding: new Array(1536).fill(0).map(() => Math.random()),
+            index: 2,
+          },
+        ],
+        model: 'text-embedding-3-small',
+        usage: {
+          prompt_tokens: 8,
+          total_tokens: 8,
+        },
+      }
+
+      const EmbeddingsMock: any = openaiModule.Embeddings || class MockEmbeddings {}
+      EmbeddingsMock.prototype.create = jest.fn().mockResolvedValue(mockOpenAiEmbeddingResponse)
+
+      const response = await client.embeddings.create({
+        model: 'text-embedding-3-small',
+        input: arrayInput,
+        posthogDistinctId: 'test-array-id',
+      })
+
+      expect(response).toEqual(mockOpenAiEmbeddingResponse)
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      expect(properties['$ai_input']).toEqual(arrayInput)
+      expect(properties['$ai_output_choices']).toBeNull() // Embeddings don't have output
+      expect(properties['$ai_input_tokens']).toBe(8)
+      expect(properties['$ai_output_tokens']).toBeUndefined() // Embeddings don't send output tokens (matches Python)
+    })
+
+    conditionalTest('embeddings privacy mode', async () => {
+      await client.embeddings.create({
+        model: 'text-embedding-3-small',
+        input: 'Sensitive data',
+        posthogDistinctId: 'test-id',
+        posthogPrivacyMode: true,
+      })
+
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      expect(properties['$ai_input']).toBeNull()
+      expect(properties['$ai_output_choices']).toBeNull()
+    })
+
+    conditionalTest('embeddings error handling', async () => {
+      const EmbeddingsMock: any = openaiModule.Embeddings || class MockEmbeddings {}
+      const testError = new Error('API Error') as Error & { status: number }
+      testError.status = 400
+      EmbeddingsMock.prototype.create = jest.fn().mockRejectedValue(testError)
+
+      await expect(
+        client.embeddings.create({
+          model: 'text-embedding-3-small',
+          input: 'Test input',
+          posthogDistinctId: 'error-user',
+        })
+      ).rejects.toThrow('API Error')
+
+      // Verify error was captured
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+      const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+      const { properties } = captureArgs[0]
+
+      expect(properties['$ai_http_status']).toBe(400)
+      expect(properties['$ai_is_error']).toBe(true)
+      expect(properties['$ai_error']).toContain('400')
+    })
+
+    conditionalTest('embeddings captureImmediate flag', async () => {
+      await client.embeddings.create({
+        model: 'text-embedding-3-small',
+        input: 'Test input',
+        posthogDistinctId: 'test-id',
+        posthogCaptureImmediate: true,
+      })
+
+      // captureImmediate should be called once, and capture should not be called
+      expect(mockPostHogClient.captureImmediate).toHaveBeenCalledTimes(1)
+      expect(mockPostHogClient.capture).toHaveBeenCalledTimes(0)
     })
   })
 })
