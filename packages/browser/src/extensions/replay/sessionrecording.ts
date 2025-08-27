@@ -20,7 +20,7 @@ export class SessionRecording {
     private _lastRemoteConfig: RemoteConfig | undefined
 
     // todo can we improve the API here, folk are using this e.g. for capacitor
-    set forceAllowLocalhostNetworkCapture(value: boolean) {
+    set _forceAllowLocalhostNetworkCapture(value: boolean) {
         if ((this._lazyLoadedSessionRecording as any)?._forceAllowLocalhostNetworkCapture) {
             ;(this._lazyLoadedSessionRecording as any)._forceAllowLocalhostNetworkCapture = value
         }
@@ -105,7 +105,10 @@ export class SessionRecording {
 
         // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
         // imported), don't load the script. Otherwise, remotely import recorder.js from cdn since it hasn't been loaded.
-        if (!assignableWindow?.__PosthogExtensions__?.rrweb?.record) {
+        if (
+            !assignableWindow?.__PosthogExtensions__?.rrweb?.record ||
+            !assignableWindow.__PosthogExtensions__?.initSessionRecording
+        ) {
             assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
                 this._instance,
                 this._scriptName,
@@ -113,7 +116,6 @@ export class SessionRecording {
                     if (err) {
                         return logger.error('could not load recorder', err)
                     }
-
                     this._onScriptLoaded(startReason)
                 }
             )
@@ -143,6 +145,7 @@ export class SessionRecording {
             this._lazyLoadAndStart()
         } else {
             this._lazyLoadedSessionRecording.onRemoteConfig(response)
+            this._pendingRemoteConfig = undefined
         }
         this.startIfEnabledOrStop()
     }
@@ -166,6 +169,7 @@ export class SessionRecording {
             // TODO make this impossible
             throw Error('Called on script loaded before session recording is available')
         }
+
         if (!this._lazyLoadedSessionRecording) {
             this._lazyLoadedSessionRecording = assignableWindow.__PosthogExtensions__?.initSessionRecording(
                 this._instance
