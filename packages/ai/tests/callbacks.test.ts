@@ -30,11 +30,11 @@ describe('LangChainCallbackHandler', () => {
     const parentRunId = 'parent_lib'
     const metadata = { ls_model_name: 'gpt-4', ls_provider: 'openai' }
     // Need to provide extraParams with invocation_params to set up modelParams
-    const extraParams = { 
-      invocation_params: { 
+    const extraParams = {
+      invocation_params: {
         temperature: 0.7,
-        max_tokens: 100
-      } 
+        max_tokens: 100,
+      },
     }
 
     // Start LLM with extraParams
@@ -69,7 +69,7 @@ describe('LangChainCallbackHandler', () => {
     // Check $ai_lib and $ai_lib_version
     expect(captureCall[0].properties['$ai_lib']).toBe('posthog-ai')
     expect(captureCall[0].properties['$ai_lib_version']).toBe(version)
-    
+
     // Check other expected properties
     expect(captureCall[0].event).toBe('$ai_generation')
     expect(captureCall[0].properties.$ai_model).toBe('gpt-4')

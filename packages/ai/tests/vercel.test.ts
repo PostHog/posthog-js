@@ -127,11 +127,11 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
       // Verify PostHog was called
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
       const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
-      
+
       // Verify $ai_lib and $ai_lib_version
       expect(captureCall[0].properties['$ai_lib']).toBe('posthog-ai')
       expect(captureCall[0].properties['$ai_lib_version']).toBe(version)
-      
+
       expect(captureCall[0]).toEqual({
         distinctId: 'test-user',
         event: '$ai_generation',
@@ -225,7 +225,7 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
       // Check that PostHog capture was called
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
       const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
-      
+
       // Verify $ai_lib and $ai_lib_version
       expect(captureCall[0].properties['$ai_lib']).toBe('posthog-ai')
       expect(captureCall[0].properties['$ai_lib_version']).toBe(version)
@@ -282,7 +282,7 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
       // Verify error was tracked
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
       const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
-      
+
       // Verify $ai_lib and $ai_lib_version
       expect(captureCall[0].properties['$ai_lib']).toBe('posthog-ai')
       expect(captureCall[0].properties['$ai_lib_version']).toBe(version)
@@ -375,7 +375,7 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
       // Verify PostHog was called with tools
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
       const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
-      
+
       // Verify $ai_lib and $ai_lib_version
       expect(captureCall[0].properties['$ai_lib']).toBe('posthog-ai')
       expect(captureCall[0].properties['$ai_lib_version']).toBe(version)
