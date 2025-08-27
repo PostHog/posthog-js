@@ -1,5 +1,11 @@
 # posthog-ai
 
+## 6.2.0
+
+### Minor Changes
+
+- [#2252](https://github.com/PostHog/posthog-js/pull/2252) [`a806e49`](https://github.com/PostHog/posthog-js/commit/a806e494bc995cad4526fbac29a150e3942cae37) Thanks [@Radu-Raicea](https://github.com/Radu-Raicea)! - send ai library version in events
+
 ## 6.1.2
 
 ### Patch Changes
