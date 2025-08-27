@@ -226,6 +226,7 @@
         "_remoteEnabled",
         "_remove",
         "_removeEventTriggerCaptureHook",
+        "_removeInterval",
         "_removePageViewCaptureHook",
         "_removeSurveyFromDom",
         "_removeSurveyFromFocus",
