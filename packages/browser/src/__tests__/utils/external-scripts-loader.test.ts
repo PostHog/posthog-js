@@ -46,7 +46,10 @@ describe('external-scripts-loader', () => {
 
             // Verify both callbacks are called when script loads
             const event = new Event('test')
-            scripts[0].onload!(event)
+
+            scripts[0].dispatchEvent(new Event('load'))
+
+            // we replace the handler
             expect(callback).toHaveBeenCalledTimes(2)
             expect(callback).toHaveBeenCalledWith(undefined, event)
         })
