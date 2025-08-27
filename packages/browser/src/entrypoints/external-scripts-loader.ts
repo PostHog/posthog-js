@@ -24,14 +24,17 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
                     return callback()
                 }
 
-                alreadyExistingScriptTag.onload = (event) => {
+                // eslint-disable-next-line posthog-js/no-add-event-listener
+                alreadyExistingScriptTag.addEventListener('load', (event) => {
                     // it hasn't already loaded
                     // we probably called loadScript twice in quick succession,
                     // so we attach a callback to the onload event
                     ;(alreadyExistingScriptTag as any).__posthog_loading_callback_fired = true
                     callback(undefined, event)
-                }
+                })
                 alreadyExistingScriptTag.onerror = (error) => callback(error)
+
+                return // and finish processing here
             }
         }
     }
@@ -44,7 +47,11 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
         scriptTag.type = 'text/javascript'
         scriptTag.crossOrigin = 'anonymous'
         scriptTag.src = url
-        scriptTag.onload = (event) => callback(undefined, event)
+        scriptTag.onload = (event) => {
+            // mark the script as having had its callback fired, so we can avoid double-calling it
+            ;(scriptTag as any).__posthog_loading_callback_fired = true
+            callback(undefined, event)
+        }
         scriptTag.onerror = (error) => callback(error)
 
         if (posthog.config.prepare_external_dependency_script) {
