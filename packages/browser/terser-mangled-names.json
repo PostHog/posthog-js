@@ -241,6 +241,7 @@
         "_restoreFetchPatch",
         "_restoreXHRPatch",
         "_resumeRecording",
+        "_removeInterval",
         "_retryQueue",
         "_runBeforeSend",
         "_sampleRate",
