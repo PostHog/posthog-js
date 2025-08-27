@@ -1,5 +1,16 @@
 # posthog-js
 
+## 1.261.0
+
+### Minor Changes
+
+- [#2238](https://github.com/PostHog/posthog-js/pull/2238) [`be2104b`](https://github.com/PostHog/posthog-js/commit/be2104bbafc0a78dfd5c735aae4ae126e3a3253e) Thanks [@robbie-c](https://github.com/robbie-c)! - Improve Consent APIs
+
+### Patch Changes
+
+- Updated dependencies [[`1981815`](https://github.com/PostHog/posthog-js/commit/19818159b7074098150bc79cfa2962761a14cb46)]:
+    - @posthog/core@1.0.2
+
 ## 1.260.3
 
 ### Patch Changes
