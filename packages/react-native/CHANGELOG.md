@@ -1,5 +1,18 @@
 # posthog-react-native
 
+## 4.5.0
+
+### Minor Changes
+
+- [#2239](https://github.com/PostHog/posthog-js/pull/2239) [`637f6fd`](https://github.com/PostHog/posthog-js/commit/637f6fd3817eac5c9c91cd55ee3e24a252ed5669) Thanks [@ioannisj](https://github.com/ioannisj)! - add support for conditional survey questions
+
+## 4.4.3
+
+### Patch Changes
+
+- Updated dependencies [[`1981815`](https://github.com/PostHog/posthog-js/commit/19818159b7074098150bc79cfa2962761a14cb46)]:
+  - @posthog/core@1.0.2
+
 ## 4.4.2
 
 ### Patch Changes

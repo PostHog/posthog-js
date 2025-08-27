@@ -19,18 +19,22 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
                 const alreadyExistingScriptTag = existingScripts[i]
 
                 if ((alreadyExistingScriptTag as any).__posthog_loading_callback_fired) {
-                    // already loaded, we call the callback again, they need to be idempotent
+                    // script already exists and fired its load event,
+                    // we call the callback again, they need to be idempotent
                     return callback()
                 }
 
-                alreadyExistingScriptTag.onload = (event) => {
+                // eslint-disable-next-line posthog-js/no-add-event-listener
+                alreadyExistingScriptTag.addEventListener('load', (event) => {
                     // it hasn't already loaded
                     // we probably called loadScript twice in quick succession,
                     // so we attach a callback to the onload event
                     ;(alreadyExistingScriptTag as any).__posthog_loading_callback_fired = true
                     callback(undefined, event)
-                }
+                })
                 alreadyExistingScriptTag.onerror = (error) => callback(error)
+
+                return // and finish processing here
             }
         }
     }

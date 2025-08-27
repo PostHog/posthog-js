@@ -12,11 +12,10 @@ let parsedStackResults: Record<StackString, CachedResult> | undefined
 let lastKeysCount: number | undefined
 let cachedFilenameChunkIds: ChunkIdMapType | undefined
 
-export function getFilenameToChunkIdMap(stackParser: StackParser): ChunkIdMapType {
+export function getFilenameToChunkIdMap(stackParser: StackParser): ChunkIdMapType | null {
   const chunkIdMap = (globalThis as any)._posthogChunkIds as ChunkIdMapType | undefined
   if (!chunkIdMap) {
-    console.error('No chunk id map found')
-    return {}
+    return null
   }
 
   const chunkIdKeys = Object.keys(chunkIdMap)

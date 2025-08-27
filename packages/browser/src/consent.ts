@@ -3,7 +3,7 @@ import { find } from './utils'
 import { assignableWindow, navigator } from './utils/globals'
 import { cookieStore, localStore } from './storage'
 import { PersistentStore } from './types'
-import { includes } from '@posthog/core'
+import { isNoLike, isYesLike } from '@posthog/core'
 
 const OPT_OUT_PREFIX = '__ph_opt_in_out_'
 
@@ -77,7 +77,8 @@ export class ConsentManager {
         } else if (opt_out_capturing_cookie_prefix) {
             // Deprecated, but we still support it for backwards compatibility.
             // This was deprecated because it differed in behaviour from storage.ts, and appends the token.
-            // This meant it was not possible to share the same consent state across multiple PostHog instances.
+            // This meant it was not possible to share the same consent state across multiple PostHog instances,
+            // and made it harder for people to migrate from other systems.
             return opt_out_capturing_cookie_prefix + token
         } else {
             return OPT_OUT_PREFIX + token
@@ -86,7 +87,8 @@ export class ConsentManager {
 
     private get _storedConsent(): ConsentStatus {
         const value = this._storage._get(this._storageKey)
-        return value === '1' ? ConsentStatus.GRANTED : value === '0' ? ConsentStatus.DENIED : ConsentStatus.PENDING
+        // be somewhat permissive in what we accept as yes/opt-in, to make it easier for people to migrate from other systems
+        return isYesLike(value) ? ConsentStatus.GRANTED : isNoLike(value) ? ConsentStatus.DENIED : ConsentStatus.PENDING
     }
 
     private get _storage() {
@@ -98,7 +100,7 @@ export class ConsentManager {
             if (otherStorage._get(this._storageKey)) {
                 if (!this._persistentStore._get(this._storageKey)) {
                     // This indicates we have moved to a new storage format so we migrate the value over
-                    this.optInOut(otherStorage._get(this._storageKey) === '1')
+                    this.optInOut(isYesLike(otherStorage._get(this._storageKey)))
                 }
 
                 otherStorage._remove(this._storageKey, this._config.cross_subdomain_cookie)
@@ -119,7 +121,7 @@ export class ConsentManager {
                 assignableWindow['doNotTrack'],
             ],
             (dntValue): boolean => {
-                return includes([true, 1, '1', 'yes'], dntValue)
+                return isYesLike(dntValue)
             }
         )
     }
