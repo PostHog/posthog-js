@@ -17,14 +17,7 @@ const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
 
 export class SessionRecording {
-    private _lastRemoteConfig: RemoteConfig | undefined
-
-    // todo can we improve the API here, folk are using this e.g. for capacitor
-    set _forceAllowLocalhostNetworkCapture(value: boolean) {
-        if ((this._lazyLoadedSessionRecording as any)?._forceAllowLocalhostNetworkCapture) {
-            ;(this._lazyLoadedSessionRecording as any)._forceAllowLocalhostNetworkCapture = value
-        }
-    }
+    private _forceAllowLocalhostNetworkCapture: boolean = false
 
     private _captureStarted: boolean
 
@@ -54,6 +47,7 @@ export class SessionRecording {
             logger.error('started without valid sessionManager')
             throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
         }
+
         if (this._instance.config.cookieless_mode === 'always') {
             throw new Error(LOGGER_PREFIX + ' cannot be used with cookieless_mode="always"')
         }
@@ -173,6 +167,8 @@ export class SessionRecording {
             this._lazyLoadedSessionRecording = assignableWindow.__PosthogExtensions__?.initSessionRecording(
                 this._instance
             )
+            ;(this._lazyLoadedSessionRecording as any)._forceAllowLocalhostNetworkCapture =
+                this._forceAllowLocalhostNetworkCapture
 
             // If we have a pending remote config, apply it now
             if (this._pendingRemoteConfig) {
