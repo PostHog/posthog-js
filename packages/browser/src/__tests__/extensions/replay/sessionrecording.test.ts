@@ -358,7 +358,6 @@ describe('SessionRecording', () => {
                     })
                 )
 
-                console.log('wat', sessionRecording['_lazyLoadedSessionRecording'])
                 expect(sessionRecording['_lazyLoadedSessionRecording']).toBeDefined()
                 expect(sessionRecording['_lazyLoadedSessionRecording']['_canvasRecording']).toMatchObject({
                     enabled: expected,
@@ -394,7 +393,7 @@ describe('SessionRecording', () => {
                         },
                     })
                 )
-                console.log('wat', sessionRecording['_lazyLoadedSessionRecording'])
+
                 if (!sessionRecording['_lazyLoadedSessionRecording']) {
                     throw new Error('lazy loaded session recording not defined')
                 }
