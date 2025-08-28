@@ -948,6 +948,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
               const error = new Error('Stream interrupted') as Error & { status: number }
               error.status = 503
               throw error
+              yield // Adding yield to satisfy generator function requirement
             },
           },
         ]),
