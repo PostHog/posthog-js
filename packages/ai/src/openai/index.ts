@@ -1,7 +1,13 @@
 import { OpenAI as OpenAIOrignal, ClientOptions } from 'openai'
 import { PostHog } from 'posthog-node'
 import { v4 as uuidv4 } from 'uuid'
-import { formatResponseOpenAI, MonitoringParams, sendEventToPosthog, extractAvailableToolCalls, withPrivacyMode } from '../utils'
+import {
+  formatResponseOpenAI,
+  MonitoringParams,
+  sendEventToPosthog,
+  extractAvailableToolCalls,
+  withPrivacyMode,
+} from '../utils'
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
@@ -678,9 +684,7 @@ export class WrappedEmbeddings extends Embeddings {
       },
       async (error: unknown) => {
         const httpStatus =
-          error && typeof error === 'object' && 'status' in error
-            ? ((error as { status?: number }).status ?? 500)
-            : 500
+          error && typeof error === 'object' && 'status' in error ? ((error as { status?: number }).status ?? 500) : 500
 
         await sendEventToPosthog({
           client: this.phClient,
