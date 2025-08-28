@@ -36,16 +36,16 @@ import {
     type metaEvent,
     type pluginEvent,
 } from '@rrweb/types'
-import Mock = jest.Mock
 import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
+import { SessionRecording } from '../../../extensions/replay/sessionrecording'
+import { makeFlagsResponse } from './utils'
 import {
     LazyLoadedSessionRecording,
     RECORDING_IDLE_THRESHOLD_MS,
     RECORDING_MAX_EVENT_SIZE,
-} from '../../../entrypoints/recorder'
-import { SessionRecording } from '../../../extensions/replay/sessionrecording'
-import { makeFlagsResponse } from './utils'
+} from '../../../extensions/replay/external/lazy-loaded-session-recorder'
+import Mock = jest.Mock
 // Type and source defined here designate a non-user-generated recording event
 
 jest.mock('../../../config', () => ({ LIB_VERSION: '0.0.1' }))
@@ -593,8 +593,7 @@ describe('SessionRecording', () => {
 
         it('sets the window event listeners', () => {
             //mock window add event listener to check if it is called
-            const addEventListener = jest.fn().mockImplementation(() => () => {})
-            window.addEventListener = addEventListener
+            window.addEventListener = jest.fn().mockImplementation(() => () => {})
 
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: {} }))
             setupLazySpys()
@@ -998,7 +997,13 @@ describe('SessionRecording', () => {
         })
 
         it('maintains the buffer if the recording is buffering', () => {
-            sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: {} }))
+            sessionRecording.onRemoteConfig(
+                makeFlagsResponse({
+                    sessionRecording: {
+                        linkedFlag: 'not received', // forces into buffering while pending
+                    },
+                })
+            )
             expect(loadScriptMock).toHaveBeenCalled()
 
             const bigData = 'a'.repeat(RECORDING_MAX_EVENT_SIZE * 0.8)

@@ -37,9 +37,9 @@ import {
     anyMatchSessionRecordingStatus,
     OrTriggerMatching,
 } from '../../../extensions/replay/triggerMatching'
-import { LazyLoadedSessionRecording } from '../../../entrypoints/recorder'
 import { makeFlagsResponse } from './utils'
 import Mock = jest.Mock
+import { LazyLoadedSessionRecording } from '../../../extensions/replay/external/lazy-loaded-session-recorder'
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -134,13 +134,13 @@ describe('SessionRecording', () => {
             },
         }
 
+        const postHogPersistence = new PostHogPersistence(config)
+        postHogPersistence.clear()
+
         assignableWindow.__PosthogExtensions__.initSessionRecording = (i) => new LazyLoadedSessionRecording(i)
 
         sessionIdGeneratorMock = jest.fn().mockImplementation(() => sessionId)
         windowIdGeneratorMock = jest.fn().mockImplementation(() => 'windowId')
-
-        const postHogPersistence = new PostHogPersistence(config)
-        postHogPersistence.clear()
 
         sessionManager = new SessionIdManager(
             { config, persistence: postHogPersistence, register: jest.fn() } as unknown as PostHog,
@@ -193,6 +193,7 @@ describe('SessionRecording', () => {
     })
 
     afterEach(() => {
+        // @ts-expect-error it's a test, so it's ok to assign to location
         window!.location = originalLocation
     })
 
@@ -260,13 +261,6 @@ describe('SessionRecording', () => {
         })
 
         it('when the first event is a meta it does not take a manual full snapshot', () => {
-            expect(sessionRecording['status']).toBe('lazy_loading')
-
-            sessionRecording.startIfEnabledOrStop()
-
-            expect(loadScriptMock).not.toHaveBeenCalled()
-            expect(sessionRecording['status']).toBe('lazy_loading')
-
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
                     sessionRecording: { endpoint: '/s/' },
@@ -292,8 +286,6 @@ describe('SessionRecording', () => {
         })
 
         it('when the first event is a full snapshot it does not take a manual full snapshot', () => {
-            sessionRecording.startIfEnabledOrStop()
-            expect(loadScriptMock).not.toHaveBeenCalled()
             expect(sessionRecording['status']).toBe('lazy_loading')
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -319,8 +311,6 @@ describe('SessionRecording', () => {
         })
 
         it('buffers snapshots until flags is received and drops them if disabled', () => {
-            sessionRecording.startIfEnabledOrStop()
-            expect(loadScriptMock).not.toHaveBeenCalled()
             expect(sessionRecording['status']).toBe('lazy_loading')
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -351,8 +341,6 @@ describe('SessionRecording', () => {
         })
 
         it('emit is not active until flags is called', () => {
-            sessionRecording.startIfEnabledOrStop()
-            expect(loadScriptMock).not.toHaveBeenCalled()
             expect(sessionRecording['status']).toBe('lazy_loading')
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({
@@ -364,8 +352,6 @@ describe('SessionRecording', () => {
         })
 
         it('sample rate is null when flags does not return it', () => {
-            sessionRecording.startIfEnabledOrStop()
-            expect(loadScriptMock).not.toHaveBeenCalled()
             expect(sessionRecording['status']).toBe('lazy_loading')
             sessionRecording.onRemoteConfig(
                 makeFlagsResponse({

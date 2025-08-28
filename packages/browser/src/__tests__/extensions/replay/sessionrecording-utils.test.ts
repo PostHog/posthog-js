@@ -1,4 +1,4 @@
-import { SEVEN_MEGABYTES, splitBuffer } from '../../../entrypoints/recorder'
+import { SEVEN_MEGABYTES, splitBuffer } from '../../../extensions/replay/external/lazy-loaded-session-recorder'
 import {
     ensureMaxMessageSize,
     replacementImageURI,
