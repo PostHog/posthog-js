@@ -1,7 +1,7 @@
 import OpenAIOrignal, { AzureOpenAI } from 'openai'
 import { PostHog } from 'posthog-node'
 import { v4 as uuidv4 } from 'uuid'
-import { formatResponseOpenAI, MonitoringParams, sendEventToPosthog } from '../utils'
+import { formatResponseOpenAI, MonitoringParams, sendEventToPosthog, withPrivacyMode } from '../utils'
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
@@ -15,6 +15,8 @@ type ChatCompletionCreateParamsStreaming = OpenAIOrignal.Chat.Completions.ChatCo
 type ResponsesCreateParamsBase = OpenAIOrignal.Responses.ResponseCreateParams
 type ResponsesCreateParamsNonStreaming = OpenAIOrignal.Responses.ResponseCreateParamsNonStreaming
 type ResponsesCreateParamsStreaming = OpenAIOrignal.Responses.ResponseCreateParamsStreaming
+type CreateEmbeddingResponse = OpenAIOrignal.CreateEmbeddingResponse
+type EmbeddingCreateParams = OpenAIOrignal.EmbeddingCreateParams
 
 interface MonitoringOpenAIConfig {
   apiKey: string
@@ -27,12 +29,14 @@ type RequestOptions = Record<string, any>
 export class PostHogAzureOpenAI extends AzureOpenAI {
   private readonly phClient: PostHog
   public chat: WrappedChat
+  public embeddings: WrappedEmbeddings
 
   constructor(config: MonitoringOpenAIConfig) {
     const { posthog, ...openAIConfig } = config
     super(openAIConfig)
     this.phClient = posthog
     this.chat = new WrappedChat(this, this.phClient)
+    this.embeddings = new WrappedEmbeddings(this, this.phClient)
   }
 }
 
@@ -586,6 +590,89 @@ export class WrappedResponses extends AzureOpenAI.Responses {
     )
 
     return wrappedPromise as APIPromise<ParsedResponse<ParsedT>>
+  }
+}
+
+export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
+  private readonly phClient: PostHog
+
+  constructor(client: AzureOpenAI, phClient: PostHog) {
+    super(client)
+    this.phClient = phClient
+  }
+
+  public create(
+    body: EmbeddingCreateParams & MonitoringParams,
+    options?: RequestOptions
+  ): APIPromise<CreateEmbeddingResponse> {
+    const {
+      posthogDistinctId,
+      posthogTraceId,
+      posthogProperties,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      posthogPrivacyMode = false,
+      posthogGroups,
+      posthogCaptureImmediate,
+      ...openAIParams
+    } = body
+
+    const traceId = posthogTraceId ?? uuidv4()
+    const startTime = Date.now()
+
+    const parentPromise = super.create(openAIParams, options)
+
+    const wrappedPromise = parentPromise.then(
+      async (result) => {
+        const latency = (Date.now() - startTime) / 1000
+        await sendEventToPosthog({
+          client: this.phClient,
+          eventType: '$ai_embedding',
+          distinctId: posthogDistinctId,
+          traceId,
+          model: openAIParams.model,
+          provider: 'azure',
+          input: withPrivacyMode(this.phClient, posthogPrivacyMode, openAIParams.input),
+          output: null, // Embeddings don't have output content
+          latency,
+          baseURL: (this as any).baseURL ?? '',
+          params: body,
+          httpStatus: 200,
+          usage: {
+            inputTokens: result.usage?.prompt_tokens ?? 0,
+          },
+          captureImmediate: posthogCaptureImmediate,
+        })
+        return result
+      },
+      async (error: unknown) => {
+        const httpStatus =
+          error && typeof error === 'object' && 'status' in error ? ((error as { status?: number }).status ?? 500) : 500
+
+        await sendEventToPosthog({
+          client: this.phClient,
+          eventType: '$ai_embedding',
+          distinctId: posthogDistinctId,
+          traceId,
+          model: openAIParams.model,
+          provider: 'azure',
+          input: withPrivacyMode(this.phClient, posthogPrivacyMode, openAIParams.input),
+          output: null,
+          latency: 0,
+          baseURL: (this as any).baseURL ?? '',
+          params: body,
+          httpStatus,
+          usage: {
+            inputTokens: 0,
+          },
+          isError: true,
+          error: JSON.stringify(error),
+          captureImmediate: posthogCaptureImmediate,
+        })
+        throw error
+      }
+    ) as APIPromise<CreateEmbeddingResponse>
+
+    return wrappedPromise
   }
 }
 
