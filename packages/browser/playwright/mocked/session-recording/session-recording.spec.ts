@@ -42,6 +42,8 @@ async function ensureActivitySendsSnapshots(page: Page, expectedCustomTags: stri
             customEvents.push(snapshot)
         } else if (snapshot.type === 3) {
             seenIncremental = true
+        } else {
+            throw new Error(`Unexpected snapshot type: ${snapshot.type}`)
         }
     }
 
