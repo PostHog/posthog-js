@@ -701,10 +701,11 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._eventTriggerMatching.stop()
         this._urlTriggerMatching.stop()
         this._linkedFlagMatching.stop()
-        logger.info('stopped')
 
         this._stopRrweb?.()
         this._stopRrweb = undefined
+
+        logger.info('stopped')
     }
 
     onRRwebEmit(rawEvent: eventWithTime) {

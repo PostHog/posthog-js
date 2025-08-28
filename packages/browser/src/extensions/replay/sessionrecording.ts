@@ -94,12 +94,10 @@ export class SessionRecording {
      * if start is called and there is no remote config then we wait until there is
      */
     private _lazyLoadAndStart(startReason?: SessionStartReason) {
+        // by checking `_isRecordingEnabled` here we know that
+        // we have stored remote config and client config to read
+        // replay waits for both local and remote config before starting
         if (!this._isRecordingEnabled) {
-            return
-        }
-
-        if (!this._pendingRemoteConfig) {
-            logger.info('no remote config yet, deferring script load')
             return
         }
 
@@ -157,6 +155,7 @@ export class SessionRecording {
             logger.warn('log called before recorder was ready')
         }
     }
+
     private get _scriptName(): PostHogExtensionKind {
         return (
             (this._instance?.persistence?.get_property(SESSION_RECORDING_SCRIPT_CONFIG)
