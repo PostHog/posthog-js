@@ -67,7 +67,7 @@ export class SessionRecording {
         // However, MutationObserver does exist on IE11, it just doesn't work well and does not detect all changes.
         // Instead, when we load "recorder.js", the first JS error is about "Object.assign" and "Array.from" being undefined.
         // Thus instead of MutationObserver, we look for this function and block recording if it's undefined.
-        const canRunReplay = !isUndefined(Object.assign) || !isUndefined(Array.from)
+        const canRunReplay = !isUndefined(Object.assign) && !isUndefined(Array.from)
         if (this._isRecordingEnabled && canRunReplay) {
             this._lazyLoadAndStart(startReason)
             logger.info('starting')
