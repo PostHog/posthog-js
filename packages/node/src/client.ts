@@ -58,7 +58,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    * ```
    *
    * @example
-   * ```
+   * ```ts
    * // With personal API key
    * const client = new PostHogBackendClient(
    *   'your-api-key',
