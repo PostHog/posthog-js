@@ -132,12 +132,11 @@ describe('SessionRecording', () => {
                 getRecordConsolePlugin: undefined,
                 getRecordNetworkPlugin: undefined,
             },
+            initSessionRecording: (i) => new LazyLoadedSessionRecording(i),
         }
 
         const postHogPersistence = new PostHogPersistence(config)
         postHogPersistence.clear()
-
-        assignableWindow.__PosthogExtensions__.initSessionRecording = (i) => new LazyLoadedSessionRecording(i)
 
         sessionIdGeneratorMock = jest.fn().mockImplementation(() => sessionId)
         windowIdGeneratorMock = jest.fn().mockImplementation(() => 'windowId')
