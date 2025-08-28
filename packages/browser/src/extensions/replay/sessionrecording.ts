@@ -19,14 +19,11 @@ const logger = createLogger(LOGGER_PREFIX)
 export class SessionRecording {
     private _forceAllowLocalhostNetworkCapture: boolean = false
 
-    private _captureStarted: boolean
-
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
     private _pendingRemoteConfig: RemoteConfig | undefined
 
     public get started(): boolean {
-        // TODO could we use status instead of _captureStarted?
-        return this._captureStarted
+        return !!this._lazyLoadedSessionRecording?.isStarted
     }
 
     /**
@@ -41,8 +38,6 @@ export class SessionRecording {
     }
 
     constructor(private readonly _instance: PostHog) {
-        this._captureStarted = false
-
         if (!this._instance.sessionManager) {
             logger.error('started without valid sessionManager')
             throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
@@ -61,7 +56,7 @@ export class SessionRecording {
     }
 
     startIfEnabledOrStop(startReason?: SessionStartReason) {
-        if (this._isRecordingEnabled && this._captureStarted) {
+        if (this._isRecordingEnabled && this._lazyLoadedSessionRecording?.isStarted) {
             return
         }
 
@@ -118,8 +113,6 @@ export class SessionRecording {
 
     stopRecording() {
         this._lazyLoadedSessionRecording?.stop()
-        // todo should this be on the lazy item so it knows about internal stops?
-        this._captureStarted = false
     }
 
     onRemoteConfig(response: RemoteConfig) {
@@ -128,7 +121,7 @@ export class SessionRecording {
         const persistence = this._instance.persistence
         if (persistence) {
             persistence.register({
-                [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response['sessionRecording'],
+                [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response.sessionRecording,
                 [SESSION_RECORDING_SCRIPT_CONFIG]: response.sessionRecording?.scriptConfig,
             })
         }
@@ -159,7 +152,6 @@ export class SessionRecording {
 
     private _onScriptLoaded(startReason?: SessionStartReason) {
         if (!assignableWindow.__PosthogExtensions__?.initSessionRecording) {
-            // TODO make this impossible
             throw Error('Called on script loaded before session recording is available')
         }
 
@@ -179,7 +171,6 @@ export class SessionRecording {
         }
 
         this._lazyLoadedSessionRecording.start(startReason)
-        this._captureStarted = true
     }
 
     onRRwebEmit(rawEvent: eventWithTime) {

@@ -627,6 +627,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
     }
 
+    get isStarted(): boolean {
+        return !!this._stopRrweb
+    }
+
     start(startReason?: SessionStartReason) {
         // We want to ensure the sessionManager is reset if necessary on loading the recorder
         this._sessionManager.checkAndGetSessionAndWindowId()

@@ -177,6 +177,7 @@ export interface LazyLoadedSessionRecordingInterface {
     overrideLinkedFlag: () => void
     overrideSampling: () => void
     overrideTrigger: (triggerType: TriggerType) => void
+    isStarted: boolean
 }
 
 interface PostHogExtensions {
