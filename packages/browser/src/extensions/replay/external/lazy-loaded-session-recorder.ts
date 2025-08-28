@@ -500,7 +500,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             if (this._queuedRRWebEvents.length < 10) {
                 this._queuedRRWebEvents.push({
                     enqueuedAt: queuedRRWebEvent.enqueuedAt || Date.now(),
-                    attempt: queuedRRWebEvent.attempt++,
+                    attempt: queuedRRWebEvent.attempt + 1,
                     rrwebMethod: queuedRRWebEvent.rrwebMethod,
                 })
             } else {
