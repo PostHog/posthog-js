@@ -4,7 +4,7 @@ const apiExtractor = require('@microsoft/api-extractor-model');
  * Finds a class or interface by name in the API package
  * @param {string} typeName - Name of the type to find
  * @param {any} apiPackage - API package to search in
- * @returns {any|null} - Found class/interface or null
+ * @returns {any|null} - Found class or null
  */
 const findTypeInPackage = (typeName, apiPackage) => {
     for (const entryPoint of apiPackage.entryPoints) {

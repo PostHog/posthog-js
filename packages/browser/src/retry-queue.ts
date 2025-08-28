@@ -1,6 +1,6 @@
 import { RetriableRequestWithOptions } from './types'
 
-import { isNumber, isUndefined } from './utils/type-utils'
+import { isNumber, isUndefined } from '@posthog/core'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
 import { PostHog } from './posthog-core'

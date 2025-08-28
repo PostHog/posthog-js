@@ -43,10 +43,13 @@ export type PropertyGroup = {
 export type FlagProperty = {
   key: string
   type?: string
-  value: string | number | (string | number)[]
+  value: FlagPropertyValue
   operator?: string
   negation?: boolean
+  dependency_chain?: string[]
 }
+
+export type FlagPropertyValue = string | number | (string | number)[] | boolean
 
 export type FeatureFlagCondition = {
   properties: FlagProperty[]

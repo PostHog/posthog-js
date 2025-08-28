@@ -8,6 +8,8 @@ import {
   PostHogFetchResponse,
   PostHogFlagsAndPayloadsResponse,
   PostHogPersistedProperty,
+  Logger,
+  PostHogCaptureOptions,
 } from '@posthog/core'
 import {
   EventMessage,
@@ -16,14 +18,14 @@ import {
   IPostHog,
   PostHogOptions,
   SendFeatureFlagsOptions,
-  BeforeSendFn,
 } from './types'
-import { FeatureFlagDetail, FeatureFlagValue } from '@posthog/core'
+import { FeatureFlagDetail, FeatureFlagValue, getFeatureFlagValue } from '@posthog/core'
 import { FeatureFlagsPoller } from './extensions/feature-flags/feature-flags'
 import ErrorTracking from './extensions/error-tracking'
 import { isPlainObject } from './extensions/error-tracking/type-checking'
-import { getFeatureFlagValue, safeSetTimeout } from '@posthog/core'
+import { safeSetTimeout, PostHogEventProperties } from '@posthog/core'
 import { PostHogMemoryStorage } from './storage-memory'
+import { createLogger } from './utils/logger'
 
 // Standard local evaluation rate limit is 600 per minute (10 per second),
 // so the fastest a poller should ever be set is 100ms.
@@ -38,6 +40,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   private featureFlagsPoller?: FeatureFlagsPoller
   protected errorTracking: ErrorTracking
   private maxCacheSize: number
+  private logger: Logger
   public readonly options: PostHogOptions
 
   distinctIdHasSentFlagCalls: Record<string, string[]>
@@ -76,6 +79,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
 
     this.options = options
 
+    this.logger = createLogger(this.logMsgIfDebug.bind(this))
+
     this.options.featureFlagsPollingInterval =
       typeof options.featureFlagsPollingInterval === 'number'
         ? Math.max(options.featureFlagsPollingInterval, MINIMUM_POLLING_INTERVAL)
@@ -109,7 +114,8 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         })
       }
     }
-    this.errorTracking = new ErrorTracking(this, options)
+
+    this.errorTracking = new ErrorTracking(this, options, this.logger)
     this.distinctIdHasSentFlagCalls = {}
     this.maxCacheSize = options.maxCacheSize || MAX_CACHE_SIZE
   }
@@ -307,78 +313,21 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
         console.warn('Called capture() with a string as the first argument when an object was expected.')
       )
     }
-    const { distinctId, event, properties, groups, sendFeatureFlags, timestamp, disableGeoip, uuid }: EventMessage =
-      props
-
-    // Run before_send if configured
-    const eventMessage = this._runBeforeSend({
-      distinctId,
-      event,
-      properties,
-      groups,
-      sendFeatureFlags,
-      timestamp,
-      disableGeoip,
-      uuid,
-    })
-    if (!eventMessage) {
-      return
-    }
-
-    const _capture = (props: EventMessage['properties']): void => {
-      super.captureStateless(eventMessage.distinctId, eventMessage.event, props, {
-        timestamp: eventMessage.timestamp,
-        disableGeoip: eventMessage.disableGeoip,
-        uuid: eventMessage.uuid,
-      })
-    }
-
-    // :TRICKY: If we flush, or need to shut down, to not lose events we want this promise to resolve before we flush
-    const capturePromise = Promise.resolve()
-      .then(async () => {
-        if (sendFeatureFlags) {
-          // If we are sending feature flags, we evaluate them locally if the user prefers it, otherwise we fall back to remote evaluation
-          const sendFeatureFlagsOptions = typeof sendFeatureFlags === 'object' ? sendFeatureFlags : undefined
-          return await this.getFeatureFlagsForEvent(distinctId, groups, disableGeoip, sendFeatureFlagsOptions)
-        }
-
-        if (event === '$feature_flag_called') {
-          // If we're capturing a $feature_flag_called event, we don't want to enrich the event with cached flags that may be out of date.
-          return {}
-        }
-        return {}
-      })
-      .then((flags) => {
-        // Derive the relevant flag properties to add
-        const additionalProperties: Record<string, any> = {}
-        if (flags) {
-          for (const [feature, variant] of Object.entries(flags)) {
-            additionalProperties[`$feature/${feature}`] = variant
-          }
-        }
-        const activeFlags = Object.keys(flags || {})
-          .filter((flag) => flags?.[flag] !== false)
-          .sort()
-        if (activeFlags.length > 0) {
-          additionalProperties['$active_feature_flags'] = activeFlags
-        }
-
-        return additionalProperties
-      })
-      .catch(() => {
-        // Something went wrong getting the flag info - we should capture the event anyways
-        return {}
-      })
-      .then((additionalProperties) => {
-        // No matter what - capture the event
-        _capture({
-          ...additionalProperties,
-          ...(eventMessage.properties || {}),
-          $groups: eventMessage.groups || groups,
+    this.addPendingPromise(
+      this.prepareEventMessage(props)
+        .then(({ distinctId, event, properties, options }) => {
+          return super.captureStateless(distinctId, event, properties, {
+            timestamp: options.timestamp,
+            disableGeoip: options.disableGeoip,
+            uuid: options.uuid,
+          })
         })
-      })
-
-    this.addPendingPromise(capturePromise)
+        .catch((err) => {
+          if (err) {
+            console.error(err)
+          }
+        })
+    )
   }
 
   /**
@@ -412,80 +361,24 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
   async captureImmediate(props: EventMessage): Promise<void> {
     if (typeof props === 'string') {
       this.logMsgIfDebug(() =>
-        console.warn('Called capture() with a string as the first argument when an object was expected.')
+        console.warn('Called captureImmediate() with a string as the first argument when an object was expected.')
       )
     }
-    const { distinctId, event, properties, groups, sendFeatureFlags, timestamp, disableGeoip, uuid }: EventMessage =
-      props
-
-    // Run before_send if configured
-    const eventMessage = this._runBeforeSend({
-      distinctId,
-      event,
-      properties,
-      groups,
-      sendFeatureFlags,
-      timestamp,
-      disableGeoip,
-      uuid,
-    })
-    if (!eventMessage) {
-      return
-    }
-
-    const _capture = (props: EventMessage['properties']): Promise<void> => {
-      return super.captureStatelessImmediate(eventMessage.distinctId, eventMessage.event, props, {
-        timestamp: eventMessage.timestamp,
-        disableGeoip: eventMessage.disableGeoip,
-        uuid: eventMessage.uuid,
-      })
-    }
-
-    const capturePromise = Promise.resolve()
-      .then(async () => {
-        if (sendFeatureFlags) {
-          // If we are sending feature flags, we evaluate them locally if the user prefers it, otherwise we fall back to remote evaluation
-          const sendFeatureFlagsOptions = typeof sendFeatureFlags === 'object' ? sendFeatureFlags : undefined
-          return await this.getFeatureFlagsForEvent(distinctId, groups, disableGeoip, sendFeatureFlagsOptions)
-        }
-
-        if (event === '$feature_flag_called') {
-          // If we're capturing a $feature_flag_called event, we don't want to enrich the event with cached flags that may be out of date.
-          return {}
-        }
-        return {}
-      })
-      .then((flags) => {
-        // Derive the relevant flag properties to add
-        const additionalProperties: Record<string, any> = {}
-        if (flags) {
-          for (const [feature, variant] of Object.entries(flags)) {
-            additionalProperties[`$feature/${feature}`] = variant
-          }
-        }
-        const activeFlags = Object.keys(flags || {})
-          .filter((flag) => flags?.[flag] !== false)
-          .sort()
-        if (activeFlags.length > 0) {
-          additionalProperties['$active_feature_flags'] = activeFlags
-        }
-
-        return additionalProperties
-      })
-      .catch(() => {
-        // Something went wrong getting the flag info - we should capture the event anyways
-        return {}
-      })
-      .then((additionalProperties) => {
-        // No matter what - capture the event
-        _capture({
-          ...additionalProperties,
-          ...(eventMessage.properties || {}),
-          $groups: eventMessage.groups || groups,
+    return this.addPendingPromise(
+      this.prepareEventMessage(props)
+        .then(({ distinctId, event, properties, options }) => {
+          return super.captureStatelessImmediate(distinctId, event, properties, {
+            timestamp: options.timestamp,
+            disableGeoip: options.disableGeoip,
+            uuid: options.uuid,
+          })
         })
-      })
-
-    await capturePromise
+        .catch((err) => {
+          if (err) {
+            console.error(err)
+          }
+        })
+    )
   }
 
   /**
@@ -1268,6 +1161,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   async _shutdown(shutdownTimeoutMs?: number): Promise<void> {
     this.featureFlagsPoller?.stopPoller()
+    this.errorTracking.shutdown()
     return super._shutdown(shutdownTimeoutMs)
   }
 
@@ -1461,9 +1355,11 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    */
   captureException(error: unknown, distinctId?: string, additionalProperties?: Record<string | number, any>): void {
     const syntheticException = new Error('PostHog syntheticException')
-    ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) => {
-      this.capture(msg)
-    })
+    this.addPendingPromise(
+      ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
+        this.capture(msg)
+      )
+    )
   }
 
   /**
@@ -1507,13 +1403,94 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     additionalProperties?: Record<string | number, any>
   ): Promise<void> {
     const syntheticException = new Error('PostHog syntheticException')
-    const evtMsg = await ErrorTracking.buildEventMessage(
-      error,
-      { syntheticException },
-      distinctId,
-      additionalProperties
+    this.addPendingPromise(
+      ErrorTracking.buildEventMessage(error, { syntheticException }, distinctId, additionalProperties).then((msg) =>
+        this.captureImmediate(msg)
+      )
     )
-    return await this.captureImmediate(evtMsg)
+  }
+
+  public async prepareEventMessage(props: EventMessage): Promise<{
+    distinctId: string
+    event: string
+    properties: PostHogEventProperties
+    options: PostHogCaptureOptions
+  }> {
+    const { distinctId, event, properties, groups, sendFeatureFlags, timestamp, disableGeoip, uuid }: EventMessage =
+      props
+
+    // Run before_send if configured
+    const eventMessage = this._runBeforeSend({
+      distinctId,
+      event,
+      properties,
+      groups,
+      sendFeatureFlags,
+      timestamp,
+      disableGeoip,
+      uuid,
+    })
+
+    if (!eventMessage) {
+      return Promise.reject(null)
+    }
+
+    // :TRICKY: If we flush, or need to shut down, to not lose events we want this promise to resolve before we flush
+    const eventProperties = await Promise.resolve()
+      .then(async () => {
+        if (sendFeatureFlags) {
+          // If we are sending feature flags, we evaluate them locally if the user prefers it, otherwise we fall back to remote evaluation
+          const sendFeatureFlagsOptions = typeof sendFeatureFlags === 'object' ? sendFeatureFlags : undefined
+          return await this.getFeatureFlagsForEvent(distinctId, groups, disableGeoip, sendFeatureFlagsOptions)
+        }
+
+        if (event === '$feature_flag_called') {
+          // If we're capturing a $feature_flag_called event, we don't want to enrich the event with cached flags that may be out of date.
+          return {}
+        }
+        return {}
+      })
+      .then((flags) => {
+        // Derive the relevant flag properties to add
+        const additionalProperties: Record<string, any> = {}
+        if (flags) {
+          for (const [feature, variant] of Object.entries(flags)) {
+            additionalProperties[`$feature/${feature}`] = variant
+          }
+        }
+        const activeFlags = Object.keys(flags || {})
+          .filter((flag) => flags?.[flag] !== false)
+          .sort()
+        if (activeFlags.length > 0) {
+          additionalProperties['$active_feature_flags'] = activeFlags
+        }
+
+        return additionalProperties
+      })
+      .catch(() => {
+        // Something went wrong getting the flag info - we should capture the event anyways
+        return {}
+      })
+      .then((additionalProperties) => {
+        // No matter what - capture the event
+        const props = {
+          ...additionalProperties,
+          ...(eventMessage.properties || {}),
+          $groups: eventMessage.groups || groups,
+        } as PostHogEventProperties
+        return props
+      })
+
+    return {
+      distinctId: eventMessage.distinctId,
+      event: eventMessage.event,
+      properties: eventProperties,
+      options: {
+        timestamp: eventMessage.timestamp,
+        disableGeoip: eventMessage.disableGeoip,
+        uuid: eventMessage.uuid,
+      },
+    }
   }
 
   private _runBeforeSend(eventMessage: EventMessage): EventMessage | null {

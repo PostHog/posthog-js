@@ -1,5 +1,11 @@
 # posthog-js-lite
 
+## 4.1.1
+
+### Patch Changes
+
+- [#2219](https://github.com/PostHog/posthog-js/pull/2219) [`44d10c4`](https://github.com/PostHog/posthog-js/commit/44d10c46c5378fa046320b7c50bd046eb1e75994) Thanks [@daibhin](https://github.com/daibhin)! - update @posthog/core
+
 ## 4.1.0 - 2025-06-12
 
 1. chore: use `/flags?v=2&config=true` instead of `/decide?v=4` for the flag evaluation backend

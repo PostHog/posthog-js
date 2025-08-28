@@ -1,6 +1,6 @@
 import { assignableWindow, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { PostHog } from '../posthog-core'
-import { isNull, isNumber, isUndefined } from '../utils/type-utils'
+import { isNull, isNumber, isUndefined } from '@posthog/core'
 import { autocaptureCompatibleElements, getEventTarget } from '../autocapture-utils'
 import { DeadClickCandidate, DeadClicksAutoCaptureConfig, Properties } from '../types'
 import { autocapturePropertiesForElement } from '../autocapture'

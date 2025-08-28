@@ -1,7 +1,7 @@
 import { Breaker, Properties } from '../types'
 import { nativeForEach, nativeIndexOf } from './globals'
 import { logger } from './logger'
-import { hasOwnProperty, isArray, isFormData, isNull, isNullish, isNumber, isString, isUndefined } from './type-utils'
+import { isFormData, isNull, isNullish, isNumber, isString, isUndefined, hasOwnProperty, isArray } from '@posthog/core'
 
 const breaker: Breaker = {}
 

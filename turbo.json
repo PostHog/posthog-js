@@ -6,7 +6,8 @@
         "build": {
             "dependsOn": ["^build"],
             "inputs": ["src/**", "tsconfig.json", "package.json", ".babelrc", "babel.config.js", "rollup.config.mjs"],
-            "outputs": ["dist/**", "lib/**", "react/**"]
+            "outputs": ["dist/**", "lib/**", "react/**"],
+            "env": ["WRITE_MANGLED_PROPERTIES"]
         },
         "package": {
             "cache": false,

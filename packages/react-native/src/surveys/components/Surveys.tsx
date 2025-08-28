@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react'
 import { ScrollView, StyleProp, ViewStyle } from 'react-native'
 
-import { getDisplayOrderQuestions, SurveyAppearanceTheme } from '../surveys-utils'
-import { Survey, SurveyAppearance, SurveyQuestion, maybeAdd } from '@posthog/core'
+import { getDisplayOrderQuestions, getNextSurveyStep, SurveyAppearanceTheme } from '../surveys-utils'
+import { Survey, SurveyAppearance, SurveyQuestion, maybeAdd, SurveyQuestionBranchingType } from '@posthog/core'
 import { LinkQuestion, MultipleChoiceQuestion, OpenTextQuestion, RatingQuestion } from './QuestionTypes'
 import { PostHog } from '../../posthog-rn'
 import { usePostHog } from '../../hooks/usePostHog'
@@ -84,12 +84,16 @@ export function Questions({
 
     setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
 
-    const isLastDisplayedQuestion = originalQuestionIndex === survey.questions.length - 1
-    if (isLastDisplayedQuestion) {
+    // Get the next question index based on conditional logic
+    const nextStep = getNextSurveyStep(survey, originalQuestionIndex, res)
+
+    if (nextStep === SurveyQuestionBranchingType.End) {
+      // End the survey
       sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
       onSubmit()
     } else {
-      setCurrentQuestionIndex(originalQuestionIndex + 1)
+      // Move to the next question
+      setCurrentQuestionIndex(nextStep)
     }
   }
 

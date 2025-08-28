@@ -1,5 +1,4 @@
-import { isFunction, isUndefined } from './type-utils'
-import { includes } from './string-utils'
+import { isFunction, isUndefined, includes } from '@posthog/core'
 
 /**
  * this device detection code is (at time of writing) about 3% of the size of the entire library

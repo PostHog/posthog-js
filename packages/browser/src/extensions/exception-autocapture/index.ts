@@ -4,9 +4,8 @@ import { ExceptionAutoCaptureConfig, RemoteConfig } from '../../types'
 
 import { createLogger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
-import { isObject, isUndefined } from '../../utils/type-utils'
+import { isUndefined, BucketedRateLimiter, isObject } from '@posthog/core'
 import { ErrorProperties } from './error-conversion'
-import { BucketedRateLimiter } from '../../utils/bucketed-rate-limiter'
 
 const logger = createLogger('[ExceptionAutocapture]')
 
@@ -30,7 +29,8 @@ export class ExceptionObserver {
         this._rateLimiter = new BucketedRateLimiter({
             refillRate: this._instance.config.error_tracking.__exceptionRateLimiterRefillRate ?? 1,
             bucketSize: this._instance.config.error_tracking.__exceptionRateLimiterBucketSize ?? 10,
-            refillInterval: 10000, // ten seconds in milliseconds
+            refillInterval: 10000, // ten seconds in milliseconds,
+            _logger: logger,
         })
 
         this.startIfEnabled()

@@ -1,6 +1,7 @@
 import { PostHog } from 'posthog-node'
 import { withPrivacyMode, getModelParams } from '../utils'
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base'
+import { version } from '../../package.json'
 import type { Serialized } from '@langchain/core/load/serializable'
 import type { ChainValues } from '@langchain/core/utils/types'
 import type { LLMResult } from '@langchain/core/outputs'
@@ -361,6 +362,8 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     const eventName = parentRunId ? '$ai_span' : '$ai_trace'
     const latency = run.endTime ? (run.endTime - run.startTime) / 1000 : 0
     const eventProperties: Record<string, any> = {
+      $ai_lib: 'posthog-ai',
+      $ai_lib_version: version,
       $ai_trace_id: traceId,
       $ai_input_state: withPrivacyMode(this.client, this.privacyMode, run.input),
       $ai_latency: latency,
@@ -414,6 +417,8 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
   ): void {
     const latency = run.endTime ? (run.endTime - run.startTime) / 1000 : 0
     const eventProperties: Record<string, any> = {
+      $ai_lib: 'posthog-ai',
+      $ai_lib_version: version,
       $ai_trace_id: traceId,
       $ai_span_id: runId,
       $ai_span_name: run.name,

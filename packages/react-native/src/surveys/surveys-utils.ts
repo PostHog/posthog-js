@@ -1,11 +1,24 @@
 import {
-  MultipleSurveyQuestion,
   Survey,
-  SurveyAppearance,
   SurveyQuestion,
+  SurveyQuestionBranchingType,
+  SurveyQuestionType,
+  SurveyRatingDisplay,
+  RatingSurveyQuestion,
+  MultipleSurveyQuestion,
+  SurveyAppearance,
   SurveyPosition,
   SurveyQuestionDescriptionContentType,
 } from '@posthog/core'
+
+/**
+ * Utility function to check if some value is an integer
+ * @param value The value to check
+ * @returns Truthy if the value is an integer
+ */
+function isInteger(value: unknown): boolean {
+  return typeof value === 'number' && Number.isInteger(value)
+}
 
 export const defaultBackgroundColor = '#eeeded' as const
 
@@ -102,6 +115,134 @@ export const getDisplayOrderChoices = (question: MultipleSurveyQuestion): string
   // }
 
   // return shuffledOptions
+}
+
+/**
+ * Get the rating bucket for a response value based on the scale
+ * @param responseValue The numeric rating value
+ * @param scale The scale of the rating (3, 5, 7, or 10)
+ * @returns The bucket name for the rating
+ */
+function getRatingBucketForResponseValue(responseValue: number, scale: number): string {
+  if (scale === 3) {
+    if (responseValue < 1 || responseValue > 3) {
+      console.warn('PostHog Debug: Rating response out of range for scale 3:', responseValue)
+      return 'neutral' // Default to neutral for out-of-range values
+    }
+
+    return responseValue === 1 ? 'negative' : responseValue === 2 ? 'neutral' : 'positive'
+  } else if (scale === 5) {
+    if (responseValue < 1 || responseValue > 5) {
+      console.warn('PostHog Debug: Rating response out of range for scale 5:', responseValue)
+      return 'neutral' // Default to neutral for out-of-range values
+    }
+
+    return responseValue <= 2 ? 'negative' : responseValue === 3 ? 'neutral' : 'positive'
+  } else if (scale === 7) {
+    if (responseValue < 1 || responseValue > 7) {
+      console.warn('PostHog Debug: Rating response out of range for scale 7:', responseValue)
+      return 'neutral' // Default to neutral for out-of-range values
+    }
+
+    return responseValue <= 3 ? 'negative' : responseValue === 4 ? 'neutral' : 'positive'
+  } else if (scale === 10) {
+    if (responseValue < 0 || responseValue > 10) {
+      console.warn('PostHog Debug: Rating response out of range for scale 10:', responseValue)
+      return 'passives' // Default to passives for out-of-range values
+    }
+
+    return responseValue <= 6 ? 'detractors' : responseValue <= 8 ? 'passives' : 'promoters'
+  }
+
+  console.warn('PostHog Debug: Unsupported rating scale:', scale)
+  return 'neutral' // Default fallback for unsupported scales
+}
+
+/**
+ * Determines the next question to show based on the survey's branching logic
+ * @param survey The survey object
+ * @param currentQuestionIndex The current question index
+ * @param response The user's response to the current question
+ * @returns The index of the next question or SurveyQuestionBranchingType.End if the survey should end
+ */
+export function getNextSurveyStep(
+  survey: Survey,
+  currentQuestionIndex: number,
+  response: string | string[] | number | null
+): number | typeof SurveyQuestionBranchingType.End {
+  const question = survey.questions[currentQuestionIndex]
+  const nextQuestionIndex = currentQuestionIndex + 1
+
+  if (!question.branching?.type) {
+    if (currentQuestionIndex === survey.questions.length - 1) {
+      return SurveyQuestionBranchingType.End
+    }
+
+    return nextQuestionIndex
+  }
+
+  if (question.branching.type === SurveyQuestionBranchingType.End) {
+    return SurveyQuestionBranchingType.End
+  } else if (question.branching.type === SurveyQuestionBranchingType.SpecificQuestion) {
+    if (isInteger(question.branching.index)) {
+      return question.branching.index
+    }
+  } else if (question.branching.type === SurveyQuestionBranchingType.ResponseBased) {
+    // Single choice
+    if (question.type === SurveyQuestionType.SingleChoice) {
+      // Look up the choiceIndex based on the response
+      let selectedChoiceIndex = question.choices.indexOf(`${response}`)
+
+      if (selectedChoiceIndex === -1 && question.hasOpenChoice) {
+        // if the response is not found in the choices, it must be the open choice,
+        // which is always the last choice
+        selectedChoiceIndex = question.choices.length - 1
+      }
+
+      if (question.branching?.responseValues?.hasOwnProperty(selectedChoiceIndex)) {
+        const nextStep = question.branching.responseValues[selectedChoiceIndex]
+
+        // Specific question
+        if (isInteger(nextStep)) {
+          return nextStep
+        }
+
+        if (nextStep === SurveyQuestionBranchingType.End) {
+          return SurveyQuestionBranchingType.End
+        }
+
+        return nextQuestionIndex
+      }
+    } else if (question.type === SurveyQuestionType.Rating) {
+      if (!isInteger(response)) {
+        console.warn('PostHog Debug: Expected integer response for rating question but received:', response)
+        return nextQuestionIndex // Fail gracefully by continuing to next question
+      }
+
+      const ratingQuestion = question as RatingSurveyQuestion
+      const ratingBucket = getRatingBucketForResponseValue(response as number, ratingQuestion.scale)
+
+      if (question.branching?.responseValues?.hasOwnProperty(ratingBucket)) {
+        const nextStep = question.branching.responseValues[ratingBucket]
+
+        // Specific question
+        if (isInteger(nextStep)) {
+          return nextStep
+        }
+
+        if (nextStep === SurveyQuestionBranchingType.End) {
+          return SurveyQuestionBranchingType.End
+        }
+
+        return nextQuestionIndex
+      }
+    }
+
+    return nextQuestionIndex
+  }
+
+  console.warn('Falling back to next question index due to unexpected branching type')
+  return nextQuestionIndex
 }
 
 export function getContrastingTextColor(color: string): 'black' | 'white' {

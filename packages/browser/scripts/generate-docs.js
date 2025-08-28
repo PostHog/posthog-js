@@ -18,7 +18,8 @@ const config = {
     typeExamples: {
         Properties: PROPERTIES_EXAMPLE,
         Property: PROPERTY_EXAMPLE
-    }
+    },
+    parentClass: 'PostHog'
 };
 
 generateApiSpecs(config);

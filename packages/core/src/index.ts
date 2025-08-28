@@ -21,6 +21,7 @@ import {
   PostHogGroupProperties,
   Compression,
 } from './types'
+
 import {
   createFlagsResponseFromFlagsAndPayloads,
   getFeatureFlagValue,
@@ -29,6 +30,7 @@ import {
   normalizeFlagsResponse,
   updateFlagValue,
 } from './featureFlagUtils'
+
 import {
   allSettled,
   assert,
@@ -40,14 +42,14 @@ import {
   safeSetTimeout,
   STRING_FORMAT,
 } from './utils'
+
 import { isGzipSupported, gzipCompress } from './gzip'
 import { SimpleEventEmitter } from './eventemitter'
 import { uuidv7 } from './vendor/uuidv7'
+import { PromiseQueue } from './utils/promise-queue'
 
-export { safeSetTimeout } from './utils'
-export { getFetch } from './utils'
 export { getFeatureFlagValue } from './featureFlagUtils'
-export * as utils from './utils'
+export * from './utils'
 
 class PostHogFetchHttpError extends Error {
   name = 'PostHogFetchHttpError'
@@ -135,7 +137,7 @@ export abstract class PostHogCoreStateless {
   protected disableCompression: boolean
 
   private defaultOptIn: boolean
-  private pendingPromises: Record<string, Promise<any>> = {}
+  private promiseQueue: PromiseQueue = new PromiseQueue()
 
   // internal
   protected _events = new SimpleEventEmitter()
@@ -268,16 +270,8 @@ export abstract class PostHogCoreStateless {
     }
   }
 
-  protected addPendingPromise<T>(promise: Promise<T>): Promise<T> {
-    const promiseUUID = uuidv7()
-    this.pendingPromises[promiseUUID] = promise
-    promise
-      .catch(() => {})
-      .finally(() => {
-        delete this.pendingPromises[promiseUUID]
-      })
-
-    return promise
+  public addPendingPromise<T>(promise: Promise<T>): Promise<T> {
+    return this.promiseQueue.add(promise)
   }
 
   /***
@@ -1141,7 +1135,7 @@ export abstract class PostHogCoreStateless {
 
     const doShutdown = async (): Promise<void> => {
       try {
-        await Promise.all(Object.values(this.pendingPromises))
+        await this.promiseQueue.join()
 
         while (true) {
           const queue = this.getPersistedProperty<PostHogQueueItem[]>(PostHogPersistedProperty.Queue) || []

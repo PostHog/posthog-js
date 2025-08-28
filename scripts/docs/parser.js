@@ -12,9 +12,9 @@ const loadPackageInfo = (packageDir) =>
 const loadApiPackage = (filePath) => 
     apiExtractor.ApiPackage.loadFromJsonFile(filePath);
 
-const findPostHogClass = (apiPackage) =>
+const findPostHogClass = (apiPackage, className) =>
     apiPackage.entryPoints[0].members.find(member =>
-        member.kind === apiExtractor.ApiItemKind.Class && member.name === 'PostHog'
+        member.kind === apiExtractor.ApiItemKind.Class && member.name === className
     );
 
 // Enhance types with examples
@@ -25,8 +25,8 @@ const enhanceTypeWithExample = (type, config) => {
 };
 
 // Filter public methods
-const filterPublicMethods = (posthogClass) => 
-    methods.collectMethodsWithInheritance(posthogClass);
+const filterPublicMethods = (posthogClass, parentClass) => 
+    methods.collectMethodsWithInheritance(posthogClass, parentClass);
 
 // Transform parameters
 const transformParameter = (method) => (param) => ({
@@ -83,13 +83,13 @@ const composeOutput = (packageJson, posthogClass, functions, types, config) => (
 const generateApiSpecs = (config) => {
     const packageJson = loadPackageInfo(config.packageDir);
     const apiPackage = loadApiPackage(config.apiJsonPath);
-    const posthogClass = findPostHogClass(apiPackage);
+    const posthogClass = findPostHogClass(apiPackage, config.parentClass);
     
     const resolvedTypes = types
         .resolveTypeDefinitions(apiPackage)
         .map(type => enhanceTypeWithExample(type, config));
     
-    const methods = filterPublicMethods(posthogClass);
+    const methods = filterPublicMethods(posthogClass, config.parentClass);
     const functions = methods.map(transformMethod(posthogClass));
     
     const output = composeOutput(packageJson, posthogClass, functions, resolvedTypes, config);

@@ -4,8 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-pnpmfileChecksum: sha256-cEvMMkfkheI3EBa4G37GQNElnmWChFh76TB33kbeS1E=
-
 importers:
 
   .:
@@ -16,9 +14,6 @@ importers:
       express:
         specifier: ^4.18.1
         version: 4.21.2
-      posthog-node:
-        specifier: file:../../target/posthog-node.tgz
-        version: file:../../target/posthog-node.tgz
       undici:
         specifier: ^5.8.0
         version: 5.29.0
@@ -328,10 +323,6 @@ packages:
     engines: {node: '>=14'}
     peerDependencies:
       '@opentelemetry/api': ^1.1.0
-
-  '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-SEmf7ATAKNuDEtREr97sJMlHjzcmUM6g/CtD3XoByO0RsJI9gJ8AzmWBM6VXJ2tUB2gvS4m6ohfw5QoP+InXcw==, tarball: file:../../target/posthog-core.tgz}
-    version: 1.0.0
 
   '@prisma/instrumentation@5.22.0':
     resolution: {integrity: sha512-LxccF392NN37ISGxIurUljZSh1YWnphO34V5a0+T7FVQG2u9bhAXRTJpgmQ3483woVhkraQZFF7cbRrpbw/F4Q==}
@@ -934,11 +925,6 @@ packages:
     resolution: {integrity: sha512-9ZhXKM/rw350N1ovuWHbGxnGh/SNJ4cnxHiM0rxE4VN41wsg8P8zWn9hv/buK00RP4WvlOyr/RBDiptyxVbkZQ==}
     engines: {node: '>=0.10.0'}
 
-  posthog-node@file:../../target/posthog-node.tgz:
-    resolution: {integrity: sha512-It4jo/Vtg2Wl/xkIJI/DKyCH60lKL5x8KNEapo6nPbAj1WyHTu1duGVBfPMqueeCGDiI4wviO0qcyN0j6ZoEng==, tarball: file:../../target/posthog-node.tgz}
-    version: 5.7.0
-    engines: {node: '>=20'}
-
   prelude-ls@1.2.1:
     resolution: {integrity: sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g==}
     engines: {node: '>= 0.8.0'}
@@ -1508,8 +1494,6 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.0)
-
-  '@posthog/core@file:../../target/posthog-core.tgz': {}
 
   '@prisma/instrumentation@5.22.0':
     dependencies:
@@ -2178,10 +2162,6 @@ snapshots:
   postgres-interval@1.2.0:
     dependencies:
       xtend: 4.0.2
-
-  posthog-node@file:../../target/posthog-node.tgz:
-    dependencies:
-      '@posthog/core': file:../../target/posthog-core.tgz
 
   prelude-ls@1.2.1: {}
 
