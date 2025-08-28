@@ -631,97 +631,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         // We want to ensure the sessionManager is reset if necessary on loading the recorder
         this._sessionManager.checkAndGetSessionAndWindowId()
 
-        // rrweb config info: https://github.com/rrweb-io/rrweb/blob/7d5d0033258d6c29599fb08412202d9a2c7b9413/src/record/index.ts#L28
-        const sessionRecordingOptions: recordOptions = {
-            // a limited set of the rrweb config options that we expose to our users.
-            // see https://github.com/rrweb-io/rrweb/blob/master/guide.md
-            blockClass: 'ph-no-capture',
-            blockSelector: undefined,
-            ignoreClass: 'ph-ignore-input',
-            maskTextClass: 'ph-mask',
-            maskTextSelector: undefined,
-            maskTextFn: undefined,
-            maskAllInputs: true,
-            maskInputOptions: { password: true },
-            maskInputFn: undefined,
-            slimDOMOptions: {},
-            collectFonts: false,
-            inlineStylesheet: true,
-            recordCrossOriginIframes: false,
-        }
-
-        // only allows user to set our allowlisted options
-        const userSessionRecordingOptions = this._instance.config.session_recording
-        for (const [key, value] of Object.entries(userSessionRecordingOptions || {})) {
-            if (key in sessionRecordingOptions) {
-                if (key === 'maskInputOptions') {
-                    // ensure password config is set if not included
-                    sessionRecordingOptions.maskInputOptions = { password: true, ...value }
-                } else {
-                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                    // @ts-ignore
-                    sessionRecordingOptions[key] = value
-                }
-            }
-        }
-
-        if (this._canvasRecording && this._canvasRecording.enabled) {
-            sessionRecordingOptions.recordCanvas = true
-            sessionRecordingOptions.sampling = { canvas: this._canvasRecording.fps }
-            sessionRecordingOptions.dataURLOptions = { type: 'image/webp', quality: this._canvasRecording.quality }
-        }
-
-        if (this._masking) {
-            sessionRecordingOptions.maskAllInputs = this._masking.maskAllInputs ?? true
-            sessionRecordingOptions.maskTextSelector = this._masking.maskTextSelector ?? undefined
-            sessionRecordingOptions.blockSelector = this._masking.blockSelector ?? undefined
-        }
-
-        const rrwebRecord = getRRWebRecord()
-        if (!rrwebRecord) {
-            logger.error(
-                'onScriptLoaded was called but rrwebRecord is not available. This indicates something has gone wrong.'
-            )
-            return
-        }
-
-        this._mutationThrottler =
-            this._mutationThrottler ??
-            new MutationThrottler(rrwebRecord, {
-                refillRate: this._instance.config.session_recording.__mutationThrottlerRefillRate,
-                bucketSize: this._instance.config.session_recording.__mutationThrottlerBucketSize,
-                onBlockedNode: (id, node) => {
-                    const message = `Too many mutations on node '${id}'. Rate limiting. This could be due to SVG animations or something similar`
-                    logger.info(message, {
-                        node: node,
-                    })
-
-                    this.log(LOGGER_PREFIX + ' ' + message, 'warn')
-                },
-            })
-
-        const activePlugins = this._gatherRRWebPlugins()
-        this._stopRrweb = rrwebRecord({
-            emit: (event) => {
-                this.onRRwebEmit(event)
-            },
-            plugins: activePlugins,
-            ...sessionRecordingOptions,
-        })
-
-        // We reset the last activity timestamp, resetting the idle timer
-        this._lastActivityTimestamp = Date.now()
-        // stay unknown if we're not sure if we're idle or not
-        this._isIdle = isBoolean(this._isIdle) ? this._isIdle : 'unknown'
-
-        this._tryAddCustomEvent('$session_options', {
-            sessionRecordingOptions,
-            activePlugins: activePlugins.map((p) => p?.name),
-        })
-
-        this._tryAddCustomEvent('$posthog_config', {
-            config: this._instance.config,
-        })
+        this._startRecorder()
 
         // calling addEventListener multiple times is safe and will not add duplicates
         addEventListener(window, 'beforeunload', this._onBeforeUnload)
@@ -1322,5 +1232,103 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             $sdk_debug_current_session_duration: this._sessionDuration,
             $sdk_debug_session_start: sessionStartTimestamp,
         }
+    }
+
+    private _startRecorder() {
+        if (this._stopRrweb) {
+            return
+        }
+
+        // rrweb config info: https://github.com/rrweb-io/rrweb/blob/7d5d0033258d6c29599fb08412202d9a2c7b9413/src/record/index.ts#L28
+        const sessionRecordingOptions: recordOptions = {
+            // a limited set of the rrweb config options that we expose to our users.
+            // see https://github.com/rrweb-io/rrweb/blob/master/guide.md
+            blockClass: 'ph-no-capture',
+            blockSelector: undefined,
+            ignoreClass: 'ph-ignore-input',
+            maskTextClass: 'ph-mask',
+            maskTextSelector: undefined,
+            maskTextFn: undefined,
+            maskAllInputs: true,
+            maskInputOptions: { password: true },
+            maskInputFn: undefined,
+            slimDOMOptions: {},
+            collectFonts: false,
+            inlineStylesheet: true,
+            recordCrossOriginIframes: false,
+        }
+
+        // only allows user to set our allowlisted options
+        const userSessionRecordingOptions = this._instance.config.session_recording
+        for (const [key, value] of Object.entries(userSessionRecordingOptions || {})) {
+            if (key in sessionRecordingOptions) {
+                if (key === 'maskInputOptions') {
+                    // ensure password config is set if not included
+                    sessionRecordingOptions.maskInputOptions = { password: true, ...value }
+                } else {
+                    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                    // @ts-ignore
+                    sessionRecordingOptions[key] = value
+                }
+            }
+        }
+
+        if (this._canvasRecording && this._canvasRecording.enabled) {
+            sessionRecordingOptions.recordCanvas = true
+            sessionRecordingOptions.sampling = { canvas: this._canvasRecording.fps }
+            sessionRecordingOptions.dataURLOptions = { type: 'image/webp', quality: this._canvasRecording.quality }
+        }
+
+        if (this._masking) {
+            sessionRecordingOptions.maskAllInputs = this._masking.maskAllInputs ?? true
+            sessionRecordingOptions.maskTextSelector = this._masking.maskTextSelector ?? undefined
+            sessionRecordingOptions.blockSelector = this._masking.blockSelector ?? undefined
+        }
+
+        const rrwebRecord = getRRWebRecord()
+        if (!rrwebRecord) {
+            logger.error(
+                '_startRecorder was called but rrwebRecord is not available. This indicates something has gone wrong.'
+            )
+            return
+        }
+
+        this._mutationThrottler =
+            this._mutationThrottler ??
+            new MutationThrottler(rrwebRecord, {
+                refillRate: this._instance.config.session_recording.__mutationThrottlerRefillRate,
+                bucketSize: this._instance.config.session_recording.__mutationThrottlerBucketSize,
+                onBlockedNode: (id, node) => {
+                    const message = `Too many mutations on node '${id}'. Rate limiting. This could be due to SVG animations or something similar`
+                    logger.info(message, {
+                        node: node,
+                    })
+
+                    this.log(LOGGER_PREFIX + ' ' + message, 'warn')
+                },
+            })
+
+        const activePlugins = this._gatherRRWebPlugins()
+        this._stopRrweb = rrwebRecord({
+            emit: (event) => {
+                this.onRRwebEmit(event)
+            },
+            plugins: activePlugins,
+            ...sessionRecordingOptions,
+        })
+
+        // We reset the last activity timestamp, resetting the idle timer
+        this._lastActivityTimestamp = Date.now()
+        // stay unknown if we're not sure if we're idle or not
+        this._isIdle = isBoolean(this._isIdle) ? this._isIdle : 'unknown'
+
+        this._tryAddCustomEvent('$session_options', {
+            sessionRecordingOptions,
+            activePlugins: activePlugins.map((p) => p?.name),
+        })
+
+        this._tryAddCustomEvent('$posthog_config', {
+            config: this._instance.config,
+        })
     }
 }
