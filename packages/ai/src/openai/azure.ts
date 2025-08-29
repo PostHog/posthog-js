@@ -85,9 +85,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
     const {
       posthogDistinctId,
       posthogTraceId,
-      posthogProperties,
       posthogPrivacyMode = false,
-      posthogGroups,
       posthogCaptureImmediate,
       ...openAIParams
     } = body
@@ -356,15 +354,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
     body: ResponsesCreateParamsBase & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<OpenAIOrignal.Responses.Response | Stream<OpenAIOrignal.Responses.ResponseStreamEvent>> {
-    const {
-      posthogDistinctId,
-      posthogTraceId,
-      posthogProperties,
-      posthogGroups,
-      posthogCaptureImmediate,
-      tool_choice,
-      ...openAIParams
-    } = body
+    const { posthogDistinctId, posthogTraceId, posthogCaptureImmediate, tool_choice, ...openAIParams } = body
 
     const traceId = posthogTraceId ?? uuidv4()
     const startTime = Date.now()
@@ -611,9 +601,7 @@ export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
     const {
       posthogDistinctId,
       posthogTraceId,
-      posthogProperties,
       posthogPrivacyMode = false,
-      posthogGroups,
       posthogCaptureImmediate,
       ...openAIParams
     } = body

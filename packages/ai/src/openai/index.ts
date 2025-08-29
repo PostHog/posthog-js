@@ -99,9 +99,7 @@ export class WrappedCompletions extends Completions {
     const {
       posthogDistinctId,
       posthogTraceId,
-      posthogProperties,
       posthogPrivacyMode = false,
-      posthogGroups,
       posthogCaptureImmediate,
       ...openAIParams
     } = body
@@ -377,9 +375,7 @@ export class WrappedResponses extends Responses {
     const {
       posthogDistinctId,
       posthogTraceId,
-      posthogProperties,
       posthogPrivacyMode = false,
-      posthogGroups,
       posthogCaptureImmediate,
       ...openAIParams
     } = body
@@ -548,9 +544,7 @@ export class WrappedResponses extends Responses {
     const {
       posthogDistinctId,
       posthogTraceId,
-      posthogProperties,
       posthogPrivacyMode = false,
-      posthogGroups,
       posthogCaptureImmediate,
       ...openAIParams
     } = body
@@ -649,9 +643,7 @@ export class WrappedEmbeddings extends Embeddings {
     const {
       posthogDistinctId,
       posthogTraceId,
-      posthogProperties,
       posthogPrivacyMode = false,
-      posthogGroups,
       posthogCaptureImmediate,
       ...openAIParams
     } = body
