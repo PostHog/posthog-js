@@ -311,11 +311,14 @@ export const extractAvailableToolCalls = (
   return null
 }
 
-export type AiEvent = '$ai_generation' | '$ai_embedding'
+export enum AIEvent {
+  Generation = '$ai_generation',
+  Embedding = '$ai_embedding',
+}
 
 export type SendEventToPosthogParams = {
   client: PostHog
-  eventType?: AiEvent
+  eventType?: AIEvent
   distinctId?: string
   traceId: string
   model: string
@@ -351,7 +354,7 @@ function sanitizeValues(obj: any): any {
 
 export const sendEventToPosthog = async ({
   client,
-  eventType = '$ai_generation',
+  eventType = AIEvent.Generation,
   distinctId,
   traceId,
   model,

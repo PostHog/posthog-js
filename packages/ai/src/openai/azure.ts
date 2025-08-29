@@ -1,7 +1,7 @@
 import OpenAIOrignal, { AzureOpenAI } from 'openai'
 import { PostHog } from 'posthog-node'
 import { v4 as uuidv4 } from 'uuid'
-import { formatResponseOpenAI, MonitoringParams, sendEventToPosthog, withPrivacyMode } from '../utils'
+import { AIEvent, formatResponseOpenAI, MonitoringParams, sendEventToPosthog, withPrivacyMode } from '../utils'
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
@@ -616,7 +616,7 @@ export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
         const latency = (Date.now() - startTime) / 1000
         await sendEventToPosthog({
           client: this.phClient,
-          eventType: '$ai_embedding',
+          eventType: AIEvent.Embedding,
           distinctId: posthogDistinctId,
           traceId,
           model: openAIParams.model,
@@ -640,7 +640,7 @@ export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
 
         await sendEventToPosthog({
           client: this.phClient,
-          eventType: '$ai_embedding',
+          eventType: AIEvent.Embedding,
           distinctId: posthogDistinctId,
           traceId,
           model: openAIParams.model,
