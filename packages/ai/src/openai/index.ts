@@ -98,7 +98,6 @@ export class WrappedCompletions extends Completions {
       posthogDistinctId,
       posthogTraceId,
       posthogProperties,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       posthogPrivacyMode = false,
       posthogGroups,
       posthogCaptureImmediate,
@@ -375,7 +374,6 @@ export class WrappedResponses extends Responses {
       posthogDistinctId,
       posthogTraceId,
       posthogProperties,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       posthogPrivacyMode = false,
       posthogGroups,
       posthogCaptureImmediate,
@@ -547,7 +545,6 @@ export class WrappedResponses extends Responses {
       posthogDistinctId,
       posthogTraceId,
       posthogProperties,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       posthogPrivacyMode = false,
       posthogGroups,
       posthogCaptureImmediate,
@@ -647,7 +644,6 @@ export class WrappedEmbeddings extends Embeddings {
       posthogDistinctId,
       posthogTraceId,
       posthogProperties,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       posthogPrivacyMode = false,
       posthogGroups,
       posthogCaptureImmediate,

@@ -22,7 +22,6 @@ jest.mock('openai', () => {
   // instance field (which would overwrite the subclass implementation).
   class MockCompletions {
     constructor() {}
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     create(..._args: any[]): any {
       /* will be stubbed in beforeEach */
       return undefined

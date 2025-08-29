@@ -84,7 +84,6 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
       posthogDistinctId,
       posthogTraceId,
       posthogProperties,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       posthogPrivacyMode = false,
       posthogGroups,
       posthogCaptureImmediate,
@@ -357,8 +356,6 @@ export class WrappedResponses extends AzureOpenAI.Responses {
       posthogDistinctId,
       posthogTraceId,
       posthogProperties,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      posthogPrivacyMode = false,
       posthogGroups,
       posthogCaptureImmediate,
       ...openAIParams
@@ -525,7 +522,6 @@ export class WrappedResponses extends AzureOpenAI.Responses {
       posthogDistinctId,
       posthogTraceId,
       posthogProperties,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       posthogPrivacyMode = false,
       posthogGroups,
       posthogCaptureImmediate,
@@ -609,7 +605,6 @@ export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
       posthogDistinctId,
       posthogTraceId,
       posthogProperties,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       posthogPrivacyMode = false,
       posthogGroups,
       posthogCaptureImmediate,

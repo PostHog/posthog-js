@@ -69,7 +69,6 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
       posthogDistinctId,
       posthogTraceId,
       posthogProperties,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       posthogPrivacyMode = false,
       posthogGroups,
       posthogCaptureImmediate,
