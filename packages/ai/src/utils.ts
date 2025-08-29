@@ -256,17 +256,32 @@ export const withPrivacyMode = (client: PostHog, privacyMode: boolean, input: an
   return (client as any).privacy_mode || privacyMode ? null : input
 }
 
-export const truncate = (input: unknown): string => {
-  // Handle non string cases
+function toSafeString(input: unknown): string {
   if (input === undefined || input === null) {
     return ''
   }
-  const str = typeof input === 'string' ? input : JSON.stringify(input)
+  if (typeof input === 'string') {
+    return input
+  }
+  try {
+    return JSON.stringify(input)
+  } catch {
+    console.warn('Failed to stringify input', input)
+    return ''
+  }
+}
+
+export const truncate = (input: unknown): string => {
+  const str = toSafeString(input)
+  if (str === '') {
+    return ''
+  }
 
   // Check if we need to truncate and ensure STRING_FORMAT is respected
   const encoder = new TextEncoder()
   const buffer = encoder.encode(str)
   if (buffer.length <= MAX_OUTPUT_SIZE) {
+    // Ensure STRING_FORMAT is respected
     return new TextDecoder(STRING_FORMAT).decode(buffer)
   }
 
