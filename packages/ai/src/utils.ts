@@ -311,9 +311,11 @@ export const extractAvailableToolCalls = (
   return null
 }
 
+export type AiEvent = '$ai_generation' | '$ai_embedding'
+
 export type SendEventToPosthogParams = {
   client: PostHog
-  eventType?: '$ai_generation' | '$ai_embedding'
+  eventType?: AiEvent
   distinctId?: string
   traceId: string
   model: string
