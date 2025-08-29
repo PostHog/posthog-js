@@ -130,7 +130,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 // Handle text delta events
                 if ('delta' in chunk) {
                   if ('text' in chunk.delta) {
-                    const delta = chunk?.delta?.text
+                    const delta = chunk.delta.text
 
                     accumulatedContent += delta
 
