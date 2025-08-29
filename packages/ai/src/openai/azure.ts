@@ -51,12 +51,12 @@ export class WrappedChat extends AzureOpenAI.Chat {
 
 export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
   private readonly phClient: PostHog
-  // TODO: Figure out where this is being assigned and type it better
-  private readonly baseURL?: string
+  private readonly baseURL: string
 
   constructor(client: AzureOpenAI, phClient: PostHog) {
     super(client)
     this.phClient = phClient
+    this.baseURL = client.baseURL
   }
 
   // --- Overload #1: Non-streaming
@@ -221,7 +221,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 input: openAIParams.messages,
                 output: formattedOutput,
                 latency,
-                baseURL: this.baseURL ?? '',
+                baseURL: this.baseURL,
                 params: body,
                 httpStatus: 200,
                 usage,
@@ -242,7 +242,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 input: openAIParams.messages,
                 output: [],
                 latency: 0,
-                baseURL: this.baseURL ?? '',
+                baseURL: this.baseURL,
                 params: body,
                 httpStatus,
                 usage: { inputTokens: 0, outputTokens: 0 },
@@ -272,7 +272,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
               input: openAIParams.messages,
               output: formatResponseOpenAI(result),
               latency,
-              baseURL: this.baseURL ?? '',
+              baseURL: this.baseURL,
               params: body,
               httpStatus: 200,
               usage: {
@@ -301,7 +301,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
             input: openAIParams.messages,
             output: [],
             latency: 0,
-            baseURL: this.baseURL ?? '',
+            baseURL: this.baseURL,
             params: body,
             httpStatus,
             usage: {
@@ -323,12 +323,12 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
 
 export class WrappedResponses extends AzureOpenAI.Responses {
   private readonly phClient: PostHog
-  // TODO: Figure out where this is being assigned and type it better
-  private readonly baseURL?: string
+  private readonly baseURL: string
 
   constructor(client: AzureOpenAI, phClient: PostHog) {
     super(client)
     this.phClient = phClient
+    this.baseURL = client.baseURL
   }
 
   // --- Overload #1: Non-streaming
@@ -408,7 +408,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 input: openAIParams.input,
                 output: finalContent,
                 latency,
-                baseURL: this.baseURL ?? '',
+                baseURL: this.baseURL,
                 params: body,
                 httpStatus: 200,
                 usage,
@@ -430,7 +430,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 input: openAIParams.input,
                 output: [],
                 latency: 0,
-                baseURL: this.baseURL ?? '',
+                baseURL: this.baseURL,
                 params: body,
                 httpStatus,
                 usage: { inputTokens: 0, outputTokens: 0 },
@@ -460,7 +460,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
               input: openAIParams.input,
               output: result.output,
               latency,
-              baseURL: this.baseURL ?? '',
+              baseURL: this.baseURL,
               params: body,
               httpStatus: 200,
               usage: {
@@ -490,7 +490,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
             input: openAIParams.input,
             output: [],
             latency: 0,
-            baseURL: this.baseURL ?? '',
+            baseURL: this.baseURL,
             params: body,
             httpStatus,
             usage: {
@@ -541,7 +541,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
           input: openAIParams.input,
           output: result.output,
           latency,
-          baseURL: this.baseURL ?? '',
+          baseURL: this.baseURL,
           params: body,
           httpStatus: 200,
           usage: {
@@ -565,7 +565,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
           input: openAIParams.input,
           output: [],
           latency: 0,
-          baseURL: this.baseURL ?? '',
+          baseURL: this.baseURL,
           params: body,
           httpStatus: error?.status ? error.status : 500,
           usage: {
@@ -586,12 +586,12 @@ export class WrappedResponses extends AzureOpenAI.Responses {
 
 export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
   private readonly phClient: PostHog
-  // TODO: Figure out where this is being assigned and type it better
-  private readonly baseURL?: string
+  private readonly baseURL: string
 
   constructor(client: AzureOpenAI, phClient: PostHog) {
     super(client)
     this.phClient = phClient
+    this.baseURL = client.baseURL
   }
 
   public create(
@@ -624,7 +624,7 @@ export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
           input: withPrivacyMode(this.phClient, posthogPrivacyMode, openAIParams.input),
           output: null, // Embeddings don't have output content
           latency,
-          baseURL: this.baseURL ?? '',
+          baseURL: this.baseURL,
           params: body,
           httpStatus: 200,
           usage: {
@@ -648,7 +648,7 @@ export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
           input: withPrivacyMode(this.phClient, posthogPrivacyMode, openAIParams.input),
           output: null,
           latency: 0,
-          baseURL: this.baseURL ?? '',
+          baseURL: this.baseURL,
           params: body,
           httpStatus,
           usage: {
