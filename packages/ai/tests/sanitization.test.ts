@@ -5,6 +5,7 @@ import {
   sanitizeAnthropic,
   sanitizeGemini,
   sanitizeLangChain,
+  parseGeminiSystemInstruction,
 } from '../src/sanitization'
 
 const sanitize = (data: unknown, provider: string): unknown => {
@@ -558,6 +559,139 @@ describe('Base64 image redaction', () => {
 
       const result = sanitize(input, 'langchain') as any
       expect(result.content[0].image_url.url).toBe('https://example.com/image.jpg')
+    })
+  })
+})
+
+describe('parseGeminiSystemInstruction', () => {
+  describe('parseGeminiSystemInstruction', () => {
+    it('should return empty array for falsy input', () => {
+      expect(parseGeminiSystemInstruction(undefined)).toEqual([])
+      expect(parseGeminiSystemInstruction(null as any)).toEqual([])
+      expect(parseGeminiSystemInstruction('')).toEqual([])
+    })
+
+    it('should filter out empty strings but keep non-empty ones', () => {
+      const instructions = ['', 'Valid instruction', '   ', 'Another valid']
+      const result = parseGeminiSystemInstruction(instructions)
+      expect(result).toEqual([
+        { role: 'system', content: 'Valid instruction' },
+        { role: 'system', content: '   ' },
+        { role: 'system', content: 'Another valid' },
+      ])
+    })
+
+    it('should handle string system instruction', () => {
+      const instruction = 'You are a helpful assistant'
+      const result = parseGeminiSystemInstruction(instruction)
+      expect(result).toEqual([{ role: 'system', content: 'You are a helpful assistant' }])
+    })
+
+    it('should handle array of string instructions', () => {
+      const instructions = ['First instruction', 'Second instruction']
+      const result = parseGeminiSystemInstruction(instructions)
+      expect(result).toEqual([
+        { role: 'system', content: 'First instruction' },
+        { role: 'system', content: 'Second instruction' },
+      ])
+    })
+
+    it('should handle array of objects with text property', () => {
+      const instructions = [{ text: 'First instruction' }, { text: 'Second instruction' }]
+      const result = parseGeminiSystemInstruction(instructions)
+      expect(result).toEqual([
+        { role: 'system', content: 'First instruction' },
+        { role: 'system', content: 'Second instruction' },
+      ])
+    })
+
+    it('should handle array of mixed string and object instructions', () => {
+      const instructions = ['String instruction', { text: 'Object instruction' }]
+      const result = parseGeminiSystemInstruction(instructions)
+      expect(result).toEqual([
+        { role: 'system', content: 'String instruction' },
+        { role: 'system', content: 'Object instruction' },
+      ])
+    })
+
+    it('should filter out empty text from array', () => {
+      const instructions = [
+        'Valid instruction',
+        { text: '' },
+        { text: 'Another valid' },
+        { text: null },
+        { text: undefined },
+      ]
+      const result = parseGeminiSystemInstruction(instructions)
+      expect(result).toEqual([
+        { role: 'system', content: 'Valid instruction' },
+        { role: 'system', content: 'Another valid' },
+      ])
+    })
+
+    it('should handle object with parts array', () => {
+      const instruction = {
+        parts: [{ text: 'First part' }, { text: 'Second part' }],
+      }
+      const result = parseGeminiSystemInstruction(instruction)
+      expect(result).toEqual([
+        { role: 'system', content: 'First part' },
+        { role: 'system', content: 'Second part' },
+      ])
+    })
+
+    it('should handle object with parts array containing mixed content', () => {
+      const instruction = {
+        parts: ['String part', { text: 'Object part' }, { text: '' }, { text: null }],
+      }
+      const result = parseGeminiSystemInstruction(instruction)
+      expect(result).toEqual([
+        { role: 'system', content: 'String part' },
+        { role: 'system', content: 'Object part' },
+      ])
+    })
+
+    it('should handle object with non-array parts', () => {
+      const instruction = {
+        parts: 'Not an array',
+      }
+      const result = parseGeminiSystemInstruction(instruction)
+      expect(result).toEqual([])
+    })
+
+    it('should handle object without parts property', () => {
+      const instruction = { other: 'property' }
+      const result = parseGeminiSystemInstruction(instruction)
+      expect(result).toEqual([])
+    })
+
+    it('should handle non-object inputs', () => {
+      expect(parseGeminiSystemInstruction(123)).toEqual([])
+      expect(parseGeminiSystemInstruction(true)).toEqual([])
+      expect(parseGeminiSystemInstruction(false)).toEqual([])
+      expect(parseGeminiSystemInstruction([])).toEqual([])
+    })
+
+    it('should handle complex nested structures', () => {
+      const instruction = {
+        parts: [
+          { text: 'Simple text' },
+          {
+            text: 'Complex text',
+            metadata: { key: 'value' },
+          },
+          {
+            text: 'Another text',
+            nested: { deep: { text: 'test' } },
+          },
+        ],
+      }
+      const result = parseGeminiSystemInstruction(instruction)
+      expect(result).toEqual([
+        { role: 'system', content: 'Simple text' },
+        { role: 'system', content: 'Complex text' },
+        { role: 'system', content: 'Another text' },
+      ])
     })
   })
 })

@@ -245,7 +245,11 @@ const getPartText = (part: unknown): string => {
   }
 
   if (part && typeof part === 'object' && 'text' in part) {
-    return String(part.text)
+    const text = part.text
+    if (text === null || text === undefined) {
+      return ''
+    }
+    return String(text)
   }
 
   return ''
