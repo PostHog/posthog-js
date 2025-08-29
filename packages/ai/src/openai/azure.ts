@@ -51,6 +51,8 @@ export class WrappedChat extends AzureOpenAI.Chat {
 
 export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
   private readonly phClient: PostHog
+  // TODO: Figure out where this is being assigned and type it better
+  private readonly baseURL?: string
 
   constructor(client: AzureOpenAI, phClient: PostHog) {
     super(client)
@@ -221,7 +223,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 input: openAIParams.messages,
                 output: formattedOutput,
                 latency,
-                baseURL: (this as any).baseURL ?? '',
+                baseURL: this.baseURL ?? '',
                 params: body,
                 httpStatus: 200,
                 usage,
@@ -242,7 +244,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 input: openAIParams.messages,
                 output: [],
                 latency: 0,
-                baseURL: (this as any).baseURL ?? '',
+                baseURL: this.baseURL ?? '',
                 params: body,
                 httpStatus,
                 usage: { inputTokens: 0, outputTokens: 0 },
@@ -272,7 +274,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
               input: openAIParams.messages,
               output: formatResponseOpenAI(result),
               latency,
-              baseURL: (this as any).baseURL ?? '',
+              baseURL: this.baseURL ?? '',
               params: body,
               httpStatus: 200,
               usage: {
@@ -301,7 +303,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
             input: openAIParams.messages,
             output: [],
             latency: 0,
-            baseURL: (this as any).baseURL ?? '',
+            baseURL: this.baseURL ?? '',
             params: body,
             httpStatus,
             usage: {
@@ -323,6 +325,8 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
 
 export class WrappedResponses extends AzureOpenAI.Responses {
   private readonly phClient: PostHog
+  // TODO: Figure out where this is being assigned and type it better
+  private readonly baseURL?: string
 
   constructor(client: AzureOpenAI, phClient: PostHog) {
     super(client)
@@ -358,6 +362,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
       posthogProperties,
       posthogGroups,
       posthogCaptureImmediate,
+      tool_choice,
       ...openAIParams
     } = body
 
@@ -413,7 +418,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 input: openAIParams.input,
                 output: finalContent,
                 latency,
-                baseURL: (this as any).baseURL ?? '',
+                baseURL: this.baseURL ?? '',
                 params: body,
                 httpStatus: 200,
                 usage,
@@ -435,7 +440,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 input: openAIParams.input,
                 output: [],
                 latency: 0,
-                baseURL: (this as any).baseURL ?? '',
+                baseURL: this.baseURL ?? '',
                 params: body,
                 httpStatus,
                 usage: { inputTokens: 0, outputTokens: 0 },
@@ -465,7 +470,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
               input: openAIParams.input,
               output: result.output,
               latency,
-              baseURL: (this as any).baseURL ?? '',
+              baseURL: this.baseURL ?? '',
               params: body,
               httpStatus: 200,
               usage: {
@@ -495,7 +500,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
             input: openAIParams.input,
             output: [],
             latency: 0,
-            baseURL: (this as any).baseURL ?? '',
+            baseURL: this.baseURL ?? '',
             params: body,
             httpStatus,
             usage: {
@@ -546,7 +551,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
           input: openAIParams.input,
           output: result.output,
           latency,
-          baseURL: (this as any).baseURL ?? '',
+          baseURL: this.baseURL ?? '',
           params: body,
           httpStatus: 200,
           usage: {
@@ -570,7 +575,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
           input: openAIParams.input,
           output: [],
           latency: 0,
-          baseURL: (this as any).baseURL ?? '',
+          baseURL: this.baseURL ?? '',
           params: body,
           httpStatus: error?.status ? error.status : 500,
           usage: {
@@ -591,6 +596,8 @@ export class WrappedResponses extends AzureOpenAI.Responses {
 
 export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
   private readonly phClient: PostHog
+  // TODO: Figure out where this is being assigned and type it better
+  private readonly baseURL?: string
 
   constructor(client: AzureOpenAI, phClient: PostHog) {
     super(client)
@@ -615,7 +622,7 @@ export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
     const startTime = Date.now()
 
     const parentPromise = super.create(openAIParams, options)
-
+    type A = typeof this
     const wrappedPromise = parentPromise.then(
       async (result) => {
         const latency = (Date.now() - startTime) / 1000
@@ -629,7 +636,7 @@ export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
           input: withPrivacyMode(this.phClient, posthogPrivacyMode, openAIParams.input),
           output: null, // Embeddings don't have output content
           latency,
-          baseURL: (this as any).baseURL ?? '',
+          baseURL: this.baseURL ?? '',
           params: body,
           httpStatus: 200,
           usage: {
@@ -653,7 +660,7 @@ export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
           input: withPrivacyMode(this.phClient, posthogPrivacyMode, openAIParams.input),
           output: null,
           latency: 0,
-          baseURL: (this as any).baseURL ?? '',
+          baseURL: this.baseURL ?? '',
           params: body,
           httpStatus,
           usage: {

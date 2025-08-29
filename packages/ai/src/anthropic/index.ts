@@ -46,6 +46,8 @@ export class PostHogAnthropic extends AnthropicOriginal {
 
 export class WrappedMessages extends AnthropicOriginal.Messages {
   private readonly phClient: PostHog
+  // TODO: Figure out where this is being assigned and type it better
+  private readonly baseURL?: string
 
   constructor(parentClient: PostHogAnthropic, phClient: PostHog) {
     super(parentClient)
@@ -221,7 +223,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic')),
                 output: formattedOutput,
                 latency,
-                baseURL: (this as any).baseURL ?? '',
+                baseURL: this.baseURL ?? '',
                 params: body,
                 httpStatus: 200,
                 usage,
@@ -239,7 +241,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic')),
                 output: [],
                 latency: 0,
-                baseURL: (this as any).baseURL ?? '',
+                baseURL: this.baseURL ?? '',
                 params: body,
                 httpStatus: error?.status ? error.status : 500,
                 usage: {
@@ -275,7 +277,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
               input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic')),
               output: formatResponseAnthropic(result),
               latency,
-              baseURL: (this as any).baseURL ?? '',
+              baseURL: this.baseURL ?? '',
               params: body,
               httpStatus: 200,
               usage: {
@@ -300,7 +302,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
             input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic')),
             output: [],
             latency: 0,
-            baseURL: (this as any).baseURL ?? '',
+            baseURL: this.baseURL ?? '',
             params: body,
             httpStatus: error?.status ? error.status : 500,
             usage: {

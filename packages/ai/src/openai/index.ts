@@ -65,6 +65,8 @@ export class WrappedChat extends Chat {
 
 export class WrappedCompletions extends Completions {
   private readonly phClient: PostHog
+  // TODO: Figure out where this is being assigned and type it better
+  private readonly baseURL?: string
 
   constructor(client: OpenAIOrignal, phClient: PostHog) {
     super(client)
@@ -236,7 +238,7 @@ export class WrappedCompletions extends Completions {
                 input: sanitizeOpenAI(openAIParams.messages),
                 output: formattedOutput,
                 latency,
-                baseURL: (this as any).baseURL ?? '',
+                baseURL: this.baseURL ?? '',
                 params: body,
                 httpStatus: 200,
                 usage,
@@ -258,7 +260,7 @@ export class WrappedCompletions extends Completions {
                 input: sanitizeOpenAI(openAIParams.messages),
                 output: [],
                 latency: 0,
-                baseURL: (this as any).baseURL ?? '',
+                baseURL: this.baseURL ?? '',
                 params: body,
                 httpStatus,
                 usage: { inputTokens: 0, outputTokens: 0 },
@@ -289,7 +291,7 @@ export class WrappedCompletions extends Completions {
               input: sanitizeOpenAI(openAIParams.messages),
               output: formatResponseOpenAI(result),
               latency,
-              baseURL: (this as any).baseURL ?? '',
+              baseURL: this.baseURL ?? '',
               params: body,
               httpStatus: 200,
               usage: {
@@ -319,7 +321,7 @@ export class WrappedCompletions extends Completions {
             input: sanitizeOpenAI(openAIParams.messages),
             output: [],
             latency: 0,
-            baseURL: (this as any).baseURL ?? '',
+            baseURL: this.baseURL ?? '',
             params: body,
             httpStatus,
             usage: {
@@ -341,6 +343,8 @@ export class WrappedCompletions extends Completions {
 
 export class WrappedResponses extends Responses {
   private readonly phClient: PostHog
+  // TODO: Figure out where this is being assigned and type it better
+  private readonly baseURL?: string
 
   constructor(client: OpenAIOrignal, phClient: PostHog) {
     super(client)
@@ -433,7 +437,7 @@ export class WrappedResponses extends Responses {
                 input: sanitizeOpenAIResponse(openAIParams.input),
                 output: finalContent,
                 latency,
-                baseURL: (this as any).baseURL ?? '',
+                baseURL: this.baseURL ?? '',
                 params: body,
                 httpStatus: 200,
                 usage,
@@ -456,7 +460,7 @@ export class WrappedResponses extends Responses {
                 input: sanitizeOpenAIResponse(openAIParams.input),
                 output: [],
                 latency: 0,
-                baseURL: (this as any).baseURL ?? '',
+                baseURL: this.baseURL ?? '',
                 params: body,
                 httpStatus,
                 usage: { inputTokens: 0, outputTokens: 0 },
@@ -487,7 +491,7 @@ export class WrappedResponses extends Responses {
               input: sanitizeOpenAIResponse(openAIParams.input),
               output: formatResponseOpenAI({ output: result.output }),
               latency,
-              baseURL: (this as any).baseURL ?? '',
+              baseURL: this.baseURL ?? '',
               params: body,
               httpStatus: 200,
               usage: {
@@ -518,7 +522,7 @@ export class WrappedResponses extends Responses {
             input: sanitizeOpenAIResponse(openAIParams.input),
             output: [],
             latency: 0,
-            baseURL: (this as any).baseURL ?? '',
+            baseURL: this.baseURL ?? '',
             params: body,
             httpStatus,
             usage: {
@@ -576,7 +580,7 @@ export class WrappedResponses extends Responses {
             input: sanitizeOpenAIResponse(openAIParams.input),
             output: result.output,
             latency,
-            baseURL: (this as any).baseURL ?? '',
+            baseURL: this.baseURL ?? '',
             params: body,
             httpStatus: 200,
             usage: {
@@ -605,7 +609,7 @@ export class WrappedResponses extends Responses {
             input: sanitizeOpenAIResponse(openAIParams.input),
             output: [],
             latency: 0,
-            baseURL: (this as any).baseURL ?? '',
+            baseURL: this.baseURL ?? '',
             params: body,
             httpStatus,
             usage: {
@@ -630,6 +634,8 @@ export class WrappedResponses extends Responses {
 
 export class WrappedEmbeddings extends Embeddings {
   private readonly phClient: PostHog
+  // TODO: Figure out where this is being assigned and type it better
+  private readonly baseURL?: string
 
   constructor(client: OpenAIOrignal, phClient: PostHog) {
     super(client)
@@ -668,7 +674,7 @@ export class WrappedEmbeddings extends Embeddings {
           input: withPrivacyMode(this.phClient, posthogPrivacyMode, openAIParams.input),
           output: null, // Embeddings don't have output content
           latency,
-          baseURL: (this as any).baseURL ?? '',
+          baseURL: this.baseURL ?? '',
           params: body,
           httpStatus: 200,
           usage: {
@@ -692,7 +698,7 @@ export class WrappedEmbeddings extends Embeddings {
           input: withPrivacyMode(this.phClient, posthogPrivacyMode, openAIParams.input),
           output: null, // Embeddings don't have output content
           latency: 0,
-          baseURL: (this as any).baseURL ?? '',
+          baseURL: this.baseURL ?? '',
           params: body,
           httpStatus,
           usage: {
