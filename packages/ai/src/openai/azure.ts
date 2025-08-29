@@ -82,13 +82,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
     body: ChatCompletionCreateParamsBase & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<ChatCompletion | Stream<ChatCompletionChunk>> {
-    const {
-      posthogDistinctId,
-      posthogTraceId,
-      posthogPrivacyMode = false,
-      posthogCaptureImmediate,
-      ...openAIParams
-    } = body
+    const { posthogDistinctId, posthogTraceId, posthogCaptureImmediate, ...openAIParams } = body
 
     const traceId = posthogTraceId ?? uuidv4()
     const startTime = Date.now()
@@ -354,7 +348,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
     body: ResponsesCreateParamsBase & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<OpenAIOrignal.Responses.Response | Stream<OpenAIOrignal.Responses.ResponseStreamEvent>> {
-    const { posthogDistinctId, posthogTraceId, posthogCaptureImmediate, tool_choice, ...openAIParams } = body
+    const { posthogDistinctId, posthogTraceId, posthogCaptureImmediate, ...openAIParams } = body
 
     const traceId = posthogTraceId ?? uuidv4()
     const startTime = Date.now()
@@ -513,15 +507,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
     body: Params & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<ParsedResponse<ParsedT>> {
-    const {
-      posthogDistinctId,
-      posthogTraceId,
-      posthogProperties,
-      posthogPrivacyMode = false,
-      posthogGroups,
-      posthogCaptureImmediate,
-      ...openAIParams
-    } = body
+    const { posthogDistinctId, posthogTraceId, posthogCaptureImmediate, ...openAIParams } = body
 
     const traceId = posthogTraceId ?? uuidv4()
     const startTime = Date.now()
@@ -610,7 +596,6 @@ export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
     const startTime = Date.now()
 
     const parentPromise = super.create(openAIParams, options)
-    type A = typeof this
     const wrappedPromise = parentPromise.then(
       async (result) => {
         const latency = (Date.now() - startTime) / 1000

@@ -67,15 +67,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
     body: MessageCreateParams & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<Message> | APIPromise<Stream<RawMessageStreamEvent>> {
-    const {
-      posthogDistinctId,
-      posthogTraceId,
-      posthogProperties,
-      posthogPrivacyMode = false,
-      posthogGroups,
-      posthogCaptureImmediate,
-      ...anthropicParams
-    } = body
+    const { posthogDistinctId, posthogTraceId, posthogCaptureImmediate, ...anthropicParams } = body
 
     const traceId = posthogTraceId ?? uuidv4()
     const startTime = Date.now()

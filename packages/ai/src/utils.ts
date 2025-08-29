@@ -268,7 +268,7 @@ export const truncate = (str: string): string => {
     }
     const truncatedBuffer = buffer.slice(0, MAX_OUTPUT_SIZE)
     return `${truncatedBuffer.toString(STRING_FORMAT)}... [truncated]`
-  } catch (error) {
+  } catch {
     console.error('Error truncating, likely not a string')
     return str
   }

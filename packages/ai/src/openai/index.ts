@@ -97,13 +97,7 @@ export class WrappedCompletions extends Completions {
     body: ChatCompletionCreateParamsBase & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<ChatCompletion | Stream<ChatCompletionChunk>> {
-    const {
-      posthogDistinctId,
-      posthogTraceId,
-      posthogPrivacyMode = false,
-      posthogCaptureImmediate,
-      ...openAIParams
-    } = body
+    const { posthogDistinctId, posthogTraceId, posthogCaptureImmediate, ...openAIParams } = body
 
     const traceId = posthogTraceId ?? uuidv4()
     const startTime = Date.now()
@@ -373,13 +367,7 @@ export class WrappedResponses extends Responses {
     body: ResponsesCreateParamsBase & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<OpenAIOrignal.Responses.Response | Stream<OpenAIOrignal.Responses.ResponseStreamEvent>> {
-    const {
-      posthogDistinctId,
-      posthogTraceId,
-      posthogPrivacyMode = false,
-      posthogCaptureImmediate,
-      ...openAIParams
-    } = body
+    const { posthogDistinctId, posthogTraceId, posthogCaptureImmediate, ...openAIParams } = body
 
     const traceId = posthogTraceId ?? uuidv4()
     const startTime = Date.now()
@@ -542,13 +530,7 @@ export class WrappedResponses extends Responses {
     body: Params & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<ParsedResponse<ParsedT>> {
-    const {
-      posthogDistinctId,
-      posthogTraceId,
-      posthogPrivacyMode = false,
-      posthogCaptureImmediate,
-      ...openAIParams
-    } = body
+    const { posthogDistinctId, posthogTraceId, posthogCaptureImmediate, ...openAIParams } = body
 
     const traceId = posthogTraceId ?? uuidv4()
     const startTime = Date.now()

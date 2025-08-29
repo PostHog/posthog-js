@@ -85,7 +85,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     parentRunId?: string,
     tags?: string[],
     metadata?: Record<string, unknown>,
-    runType?: string,
+    _runType?: string,
     runName?: string
   ): void {
     this._logDebugEvent('on_chain_start', runId, parentRunId, { inputs, tags })
@@ -93,14 +93,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     this._setTraceOrSpanMetadata(chain, inputs, runId, parentRunId, metadata, tags, runName)
   }
 
-  public handleChainEnd(
-    outputs: ChainValues,
-    runId: string,
-    parentRunId?: string,
-    tags?: string[],
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    kwargs?: { inputs?: Record<string, unknown> }
-  ): void {
+  public handleChainEnd(outputs: ChainValues, runId: string, parentRunId?: string, tags?: string[]): void {
     this._logDebugEvent('on_chain_end', runId, parentRunId, { outputs, tags })
     this._popRunAndCaptureTraceOrSpan(runId, parentRunId, outputs)
   }
@@ -110,8 +103,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     runId: string,
     parentRunId?: string,
     tags?: string[],
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    kwargs?: { inputs?: Record<string, unknown> }
+    _kwargs?: { inputs?: Record<string, unknown> }
   ): void {
     this._logDebugEvent('on_chain_error', runId, parentRunId, { error, tags })
     this._popRunAndCaptureTraceOrSpan(runId, parentRunId, error)
@@ -154,8 +146,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     runId: string,
     parentRunId?: string,
     tags?: string[],
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    extraParams?: Record<string, unknown>
+    _extraParams?: Record<string, unknown>
   ): void {
     this._logDebugEvent('on_llm_end', runId, parentRunId, { output, tags })
     this._popRunAndCaptureGeneration(runId, parentRunId, output)
@@ -166,8 +157,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     runId: string,
     parentRunId?: string,
     tags?: string[],
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    extraParams?: Record<string, unknown>
+    _extraParams?: Record<string, unknown>
   ): void {
     this._logDebugEvent('on_llm_error', runId, parentRunId, { err, tags })
     this._popRunAndCaptureGeneration(runId, parentRunId, err)
@@ -325,7 +315,7 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     return this.traceId ? String(this.traceId) : this._findRootRun(runId)
   }
 
-  private _getParentRunId(traceId: string, runId: string, parentRunId?: string): string | undefined {
+  private _getParentRunId(traceId: string, _runId: string, parentRunId?: string): string | undefined {
     // Replace the parent-run if not found in our stored parent tree.
     if (parentRunId && !this.parentTree[parentRunId]) {
       return traceId

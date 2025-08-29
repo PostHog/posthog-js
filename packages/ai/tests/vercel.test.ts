@@ -308,7 +308,7 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
       })
 
       // Mock doGenerate to handle tools
-      baseModel.doGenerate = jest.fn().mockImplementation(async (params: LanguageModelV2CallOptions) => {
+      baseModel.doGenerate = jest.fn().mockImplementation(async (_params: LanguageModelV2CallOptions) => {
         return {
           text: 'I will use the weather tool',
           usage: { inputTokens: 15, outputTokens: 5 },

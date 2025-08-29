@@ -66,7 +66,6 @@ module.exports = {
         },
         {
             files: [
-                'packages/ai/**',
                 'packages/core/**',
                 'packages/nextjs-config/**',
                 'packages/react-native/**',
