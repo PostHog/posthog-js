@@ -93,7 +93,13 @@ export class LangChainCallbackHandler extends BaseCallbackHandler {
     this._setTraceOrSpanMetadata(chain, inputs, runId, parentRunId, metadata, tags, runName)
   }
 
-  public handleChainEnd(outputs: ChainValues, runId: string, parentRunId?: string, tags?: string[]): void {
+  public handleChainEnd(
+    outputs: ChainValues,
+    runId: string,
+    parentRunId?: string,
+    tags?: string[],
+    _kwargs?: { inputs?: Record<string, unknown> }
+  ): void {
     this._logDebugEvent('on_chain_end', runId, parentRunId, { outputs, tags })
     this._popRunAndCaptureTraceOrSpan(runId, parentRunId, outputs)
   }
