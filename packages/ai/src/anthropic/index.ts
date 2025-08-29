@@ -46,10 +46,12 @@ export class PostHogAnthropic extends AnthropicOriginal {
 
 export class WrappedMessages extends AnthropicOriginal.Messages {
   private readonly phClient: PostHog
+  private readonly baseURL: string
 
   constructor(parentClient: PostHogAnthropic, phClient: PostHog) {
     super(parentClient)
     this.phClient = phClient
+    this.baseURL = parentClient.baseURL
   }
 
   public create(body: MessageCreateParamsNonStreaming, options?: RequestOptions): APIPromise<Message>
@@ -65,16 +67,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
     body: MessageCreateParams & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<Message> | APIPromise<Stream<RawMessageStreamEvent>> {
-    const {
-      posthogDistinctId,
-      posthogTraceId,
-      posthogProperties,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      posthogPrivacyMode = false,
-      posthogGroups,
-      posthogCaptureImmediate,
-      ...anthropicParams
-    } = body
+    const { posthogDistinctId, posthogTraceId, posthogCaptureImmediate, ...anthropicParams } = body
 
     const traceId = posthogTraceId ?? uuidv4()
     const startTime = Date.now()
@@ -137,7 +130,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 // Handle text delta events
                 if ('delta' in chunk) {
                   if ('text' in chunk.delta) {
-                    const delta = chunk?.delta?.text ?? ''
+                    const delta = chunk.delta.text
 
                     accumulatedContent += delta
 
@@ -222,7 +215,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic')),
                 output: formattedOutput,
                 latency,
-                baseURL: (this as any).baseURL ?? '',
+                baseURL: this.baseURL,
                 params: body,
                 httpStatus: 200,
                 usage,
@@ -240,7 +233,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic')),
                 output: [],
                 latency: 0,
-                baseURL: (this as any).baseURL ?? '',
+                baseURL: this.baseURL,
                 params: body,
                 httpStatus: error?.status ? error.status : 500,
                 usage: {
@@ -276,7 +269,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
               input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic')),
               output: formatResponseAnthropic(result),
               latency,
-              baseURL: (this as any).baseURL ?? '',
+              baseURL: this.baseURL,
               params: body,
               httpStatus: 200,
               usage: {
@@ -301,7 +294,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
             input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic')),
             output: [],
             latency: 0,
-            baseURL: (this as any).baseURL ?? '',
+            baseURL: this.baseURL,
             params: body,
             httpStatus: error?.status ? error.status : 500,
             usage: {

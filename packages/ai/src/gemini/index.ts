@@ -43,14 +43,7 @@ export class WrappedModels {
   }
 
   public async generateContent(params: GenerateContentParameters & MonitoringParams): Promise<GeminiResponse> {
-    const {
-      posthogDistinctId,
-      posthogTraceId,
-      posthogProperties,
-      posthogGroups,
-      posthogCaptureImmediate,
-      ...geminiParams
-    } = params
+    const { posthogDistinctId, posthogTraceId, posthogCaptureImmediate, ...geminiParams } = params
 
     const traceId = posthogTraceId ?? uuidv4()
     const startTime = Date.now()
@@ -116,14 +109,7 @@ export class WrappedModels {
   public async *generateContentStream(
     params: GenerateContentParameters & MonitoringParams
   ): AsyncGenerator<GeminiResponse, void, unknown> {
-    const {
-      posthogDistinctId,
-      posthogTraceId,
-      posthogProperties,
-      posthogGroups,
-      posthogCaptureImmediate,
-      ...geminiParams
-    } = params
+    const { posthogDistinctId, posthogTraceId, posthogCaptureImmediate, ...geminiParams } = params
 
     const traceId = posthogTraceId ?? uuidv4()
     const startTime = Date.now()

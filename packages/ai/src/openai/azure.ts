@@ -1,7 +1,7 @@
 import OpenAIOrignal, { AzureOpenAI } from 'openai'
 import { PostHog } from 'posthog-node'
 import { v4 as uuidv4 } from 'uuid'
-import { formatResponseOpenAI, MonitoringParams, sendEventToPosthog } from '../utils'
+import { AIEvent, formatResponseOpenAI, MonitoringParams, sendEventToPosthog, withPrivacyMode } from '../utils'
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
@@ -15,6 +15,8 @@ type ChatCompletionCreateParamsStreaming = OpenAIOrignal.Chat.Completions.ChatCo
 type ResponsesCreateParamsBase = OpenAIOrignal.Responses.ResponseCreateParams
 type ResponsesCreateParamsNonStreaming = OpenAIOrignal.Responses.ResponseCreateParamsNonStreaming
 type ResponsesCreateParamsStreaming = OpenAIOrignal.Responses.ResponseCreateParamsStreaming
+type CreateEmbeddingResponse = OpenAIOrignal.CreateEmbeddingResponse
+type EmbeddingCreateParams = OpenAIOrignal.EmbeddingCreateParams
 
 interface MonitoringOpenAIConfig {
   apiKey: string
@@ -27,12 +29,14 @@ type RequestOptions = Record<string, any>
 export class PostHogAzureOpenAI extends AzureOpenAI {
   private readonly phClient: PostHog
   public chat: WrappedChat
+  public embeddings: WrappedEmbeddings
 
   constructor(config: MonitoringOpenAIConfig) {
     const { posthog, ...openAIConfig } = config
     super(openAIConfig)
     this.phClient = posthog
     this.chat = new WrappedChat(this, this.phClient)
+    this.embeddings = new WrappedEmbeddings(this, this.phClient)
   }
 }
 
@@ -47,10 +51,12 @@ export class WrappedChat extends AzureOpenAI.Chat {
 
 export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
   private readonly phClient: PostHog
+  private readonly baseURL: string
 
   constructor(client: AzureOpenAI, phClient: PostHog) {
     super(client)
     this.phClient = phClient
+    this.baseURL = client.baseURL
   }
 
   // --- Overload #1: Non-streaming
@@ -76,16 +82,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
     body: ChatCompletionCreateParamsBase & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<ChatCompletion | Stream<ChatCompletionChunk>> {
-    const {
-      posthogDistinctId,
-      posthogTraceId,
-      posthogProperties,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      posthogPrivacyMode = false,
-      posthogGroups,
-      posthogCaptureImmediate,
-      ...openAIParams
-    } = body
+    const { posthogDistinctId, posthogTraceId, posthogCaptureImmediate, ...openAIParams } = body
 
     const traceId = posthogTraceId ?? uuidv4()
     const startTime = Date.now()
@@ -218,7 +215,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 input: openAIParams.messages,
                 output: formattedOutput,
                 latency,
-                baseURL: (this as any).baseURL ?? '',
+                baseURL: this.baseURL,
                 params: body,
                 httpStatus: 200,
                 usage,
@@ -239,7 +236,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 input: openAIParams.messages,
                 output: [],
                 latency: 0,
-                baseURL: (this as any).baseURL ?? '',
+                baseURL: this.baseURL,
                 params: body,
                 httpStatus,
                 usage: { inputTokens: 0, outputTokens: 0 },
@@ -269,7 +266,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
               input: openAIParams.messages,
               output: formatResponseOpenAI(result),
               latency,
-              baseURL: (this as any).baseURL ?? '',
+              baseURL: this.baseURL,
               params: body,
               httpStatus: 200,
               usage: {
@@ -298,7 +295,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
             input: openAIParams.messages,
             output: [],
             latency: 0,
-            baseURL: (this as any).baseURL ?? '',
+            baseURL: this.baseURL,
             params: body,
             httpStatus,
             usage: {
@@ -320,10 +317,12 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
 
 export class WrappedResponses extends AzureOpenAI.Responses {
   private readonly phClient: PostHog
+  private readonly baseURL: string
 
   constructor(client: AzureOpenAI, phClient: PostHog) {
     super(client)
     this.phClient = phClient
+    this.baseURL = client.baseURL
   }
 
   // --- Overload #1: Non-streaming
@@ -349,16 +348,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
     body: ResponsesCreateParamsBase & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<OpenAIOrignal.Responses.Response | Stream<OpenAIOrignal.Responses.ResponseStreamEvent>> {
-    const {
-      posthogDistinctId,
-      posthogTraceId,
-      posthogProperties,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      posthogPrivacyMode = false,
-      posthogGroups,
-      posthogCaptureImmediate,
-      ...openAIParams
-    } = body
+    const { posthogDistinctId, posthogTraceId, posthogCaptureImmediate, ...openAIParams } = body
 
     const traceId = posthogTraceId ?? uuidv4()
     const startTime = Date.now()
@@ -412,7 +402,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 input: openAIParams.input,
                 output: finalContent,
                 latency,
-                baseURL: (this as any).baseURL ?? '',
+                baseURL: this.baseURL,
                 params: body,
                 httpStatus: 200,
                 usage,
@@ -434,7 +424,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
                 input: openAIParams.input,
                 output: [],
                 latency: 0,
-                baseURL: (this as any).baseURL ?? '',
+                baseURL: this.baseURL,
                 params: body,
                 httpStatus,
                 usage: { inputTokens: 0, outputTokens: 0 },
@@ -464,7 +454,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
               input: openAIParams.input,
               output: result.output,
               latency,
-              baseURL: (this as any).baseURL ?? '',
+              baseURL: this.baseURL,
               params: body,
               httpStatus: 200,
               usage: {
@@ -494,7 +484,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
             input: openAIParams.input,
             output: [],
             latency: 0,
-            baseURL: (this as any).baseURL ?? '',
+            baseURL: this.baseURL,
             params: body,
             httpStatus,
             usage: {
@@ -517,16 +507,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
     body: Params & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<ParsedResponse<ParsedT>> {
-    const {
-      posthogDistinctId,
-      posthogTraceId,
-      posthogProperties,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      posthogPrivacyMode = false,
-      posthogGroups,
-      posthogCaptureImmediate,
-      ...openAIParams
-    } = body
+    const { posthogDistinctId, posthogTraceId, posthogCaptureImmediate, ...openAIParams } = body
 
     const traceId = posthogTraceId ?? uuidv4()
     const startTime = Date.now()
@@ -546,7 +527,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
           input: openAIParams.input,
           output: result.output,
           latency,
-          baseURL: (this as any).baseURL ?? '',
+          baseURL: this.baseURL,
           params: body,
           httpStatus: 200,
           usage: {
@@ -570,7 +551,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
           input: openAIParams.input,
           output: [],
           latency: 0,
-          baseURL: (this as any).baseURL ?? '',
+          baseURL: this.baseURL,
           params: body,
           httpStatus: error?.status ? error.status : 500,
           usage: {
@@ -586,6 +567,87 @@ export class WrappedResponses extends AzureOpenAI.Responses {
     )
 
     return wrappedPromise as APIPromise<ParsedResponse<ParsedT>>
+  }
+}
+
+export class WrappedEmbeddings extends AzureOpenAI.Embeddings {
+  private readonly phClient: PostHog
+  private readonly baseURL: string
+
+  constructor(client: AzureOpenAI, phClient: PostHog) {
+    super(client)
+    this.phClient = phClient
+    this.baseURL = client.baseURL
+  }
+
+  public create(
+    body: EmbeddingCreateParams & MonitoringParams,
+    options?: RequestOptions
+  ): APIPromise<CreateEmbeddingResponse> {
+    const {
+      posthogDistinctId,
+      posthogTraceId,
+      posthogPrivacyMode = false,
+      posthogCaptureImmediate,
+      ...openAIParams
+    } = body
+
+    const traceId = posthogTraceId ?? uuidv4()
+    const startTime = Date.now()
+
+    const parentPromise = super.create(openAIParams, options)
+    const wrappedPromise = parentPromise.then(
+      async (result) => {
+        const latency = (Date.now() - startTime) / 1000
+        await sendEventToPosthog({
+          client: this.phClient,
+          eventType: AIEvent.Embedding,
+          distinctId: posthogDistinctId,
+          traceId,
+          model: openAIParams.model,
+          provider: 'azure',
+          input: withPrivacyMode(this.phClient, posthogPrivacyMode, openAIParams.input),
+          output: null, // Embeddings don't have output content
+          latency,
+          baseURL: this.baseURL,
+          params: body,
+          httpStatus: 200,
+          usage: {
+            inputTokens: result.usage?.prompt_tokens ?? 0,
+          },
+          captureImmediate: posthogCaptureImmediate,
+        })
+        return result
+      },
+      async (error: unknown) => {
+        const httpStatus =
+          error && typeof error === 'object' && 'status' in error ? ((error as { status?: number }).status ?? 500) : 500
+
+        await sendEventToPosthog({
+          client: this.phClient,
+          eventType: AIEvent.Embedding,
+          distinctId: posthogDistinctId,
+          traceId,
+          model: openAIParams.model,
+          provider: 'azure',
+          input: withPrivacyMode(this.phClient, posthogPrivacyMode, openAIParams.input),
+          output: null,
+          latency: 0,
+          baseURL: this.baseURL,
+          params: body,
+          httpStatus,
+          usage: {
+            inputTokens: 0,
+          },
+          isError: true,
+          error: JSON.stringify(error),
+          captureImmediate: posthogCaptureImmediate,
+        })
+        throw error
+      }
+    ) as APIPromise<CreateEmbeddingResponse>
+
+    return wrappedPromise
   }
 }
 
