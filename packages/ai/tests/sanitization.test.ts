@@ -570,7 +570,7 @@ describe('parseGeminiSystemInstruction', () => {
     expect(parseGeminiSystemInstruction('')).toEqual([])
   })
 
-  it('should filter out empty strings but keep non-empty ones', () => {
+  it('should filter out empty strings but keep whitespace only strings', () => {
     const instructions = ['', 'Valid instruction', '   ', 'Another valid']
     const result = parseGeminiSystemInstruction(instructions)
     expect(result).toEqual([

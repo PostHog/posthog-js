@@ -265,7 +265,7 @@ export const parseGeminiSystemInstruction = (systemInstruction?: unknown): unkno
   }
 
   if (Array.isArray(systemInstruction)) {
-    const result = []
+    const result: Array<{ role: string; content: string }> = []
     for (const instruction of systemInstruction) {
       const partText = getPartText(instruction)
       if (partText) {
@@ -278,7 +278,7 @@ export const parseGeminiSystemInstruction = (systemInstruction?: unknown): unkno
   if (systemInstruction && typeof systemInstruction === 'object' && 'parts' in systemInstruction) {
     const parts = systemInstruction.parts
     if (Array.isArray(parts)) {
-      const result = []
+      const result: Array<{ role: string; content: string }> = []
       for (const part of parts) {
         const partText = getPartText(part)
         if (partText) {
