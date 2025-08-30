@@ -146,7 +146,7 @@ export class SessionRecording {
     private get _scriptName(): PostHogExtensionKind {
         return (
             (this._instance?.persistence?.get_property(SESSION_RECORDING_SCRIPT_CONFIG)
-                ?.script as PostHogExtensionKind) || 'recorder'
+                ?.script as PostHogExtensionKind) || 'lazy-recorder'
         )
     }
 
