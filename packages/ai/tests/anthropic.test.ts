@@ -1,6 +1,7 @@
 import { PostHog } from 'posthog-node'
 import PostHogAnthropic from '../src/anthropic'
 import AnthropicOriginal from '@anthropic-ai/sdk'
+import { version } from '../package.json'
 
 // Type definitions
 interface MockAnthropicResponseOptions {
@@ -273,6 +274,10 @@ const assertPostHogCapture = (mockClient: PostHog, expectations: CaptureExpectat
 
   // Always check that latency is a number
   expect(typeof properties['$ai_latency']).toBe('number')
+
+  // Always check $ai_lib and $ai_lib_version
+  expect(properties['$ai_lib']).toBe('posthog-ai')
+  expect(properties['$ai_lib_version']).toBe(version)
 }
 
 describe('PostHogAnthropic', () => {

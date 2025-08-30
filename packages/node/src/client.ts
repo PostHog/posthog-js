@@ -122,6 +122,24 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     this.featureFlagsPoller?.debug(enabled)
   }
 
+  /**
+   * Capture an event manually.
+   *
+   * @example
+   * ```ts
+   * // Basic capture
+   * client.capture({
+   *   distinctId: 'user_123',
+   *   event: 'button_clicked',
+   *   properties: { button_color: 'red' }
+   * })
+   * ```
+   *
+   * {@label Capture}
+   *
+   * @param props - The event properties
+   * @returns void
+   */
   capture(props: EventMessage): void {
     if (typeof props === 'string') {
       this.logMsgIfDebug(() =>

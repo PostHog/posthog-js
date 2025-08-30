@@ -5,6 +5,7 @@ import AnthropicOriginal from '@anthropic-ai/sdk'
 import type { ChatCompletionTool } from 'openai/resources/chat/completions'
 import type { Tool as GeminiTool } from '@google/genai'
 import type { FormattedMessage, FormattedContent, TokenUsage } from './types'
+import { version } from '../package.json'
 
 type ChatCompletionCreateParamsBase = OpenAIOrignal.Chat.Completions.ChatCompletionCreateParams
 type MessageCreateParams = AnthropicOriginal.Messages.MessageCreateParams
@@ -391,6 +392,8 @@ export const sendEventToPosthog = async ({
   }
 
   const properties = {
+    $ai_lib: 'posthog-ai',
+    $ai_lib_version: version,
     $ai_provider: params.posthogProviderOverride ?? provider,
     $ai_model: params.posthogModelOverride ?? model,
     $ai_model_parameters: getModelParams(params),
