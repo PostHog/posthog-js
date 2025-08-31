@@ -1,6 +1,6 @@
 import { SessionIdManager } from '../sessionid'
 import { patch } from '../extensions/replay/rrweb-plugins/patch'
-import { assignableWindow, window } from '../utils/globals'
+import { assignableWindow, posthogExtensions, window } from '../utils/globals'
 import { COOKIELESS_SENTINEL_VALUE } from '../constants'
 import { isArray } from '@posthog/core'
 
@@ -83,12 +83,11 @@ const patchXHR = (hostnames: string[], distinctId: string, sessionManager?: Sess
     )
 }
 
-assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
 const patchFns = {
     _patchFetch: patchFetch,
     _patchXHR: patchXHR,
 }
-assignableWindow.__PosthogExtensions__.tracingHeadersPatchFns = patchFns
+posthogExtensions.tracingHeadersPatchFns = patchFns
 
 // we used to put tracingHeadersPatchFns on window, and now we put it on __PosthogExtensions__
 // but that means that old clients which lazily load this extension are looking in the wrong place

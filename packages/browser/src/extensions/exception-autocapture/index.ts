@@ -1,4 +1,4 @@
-import { assignableWindow, window } from '../../utils/globals'
+import { posthogExtensions, window } from '../../utils/globals'
 import { PostHog } from '../../posthog-core'
 import { ExceptionAutoCaptureConfig, RemoteConfig } from '../../types'
 
@@ -69,32 +69,27 @@ export class ExceptionObserver {
     }
 
     private _loadScript(cb: () => void): void {
-        if (assignableWindow.__PosthogExtensions__?.errorWrappingFunctions) {
+        if (posthogExtensions?.errorWrappingFunctions) {
             // already loaded
             cb()
         }
 
-        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
-            this._instance,
-            'exception-autocapture',
-            (err) => {
-                if (err) {
-                    return logger.error('failed to load script', err)
-                }
-                cb()
+        posthogExtensions?.loadExternalDependency?.(this._instance, 'exception-autocapture', (err) => {
+            if (err) {
+                return logger.error('failed to load script', err)
             }
-        )
+            cb()
+        })
     }
 
     private _startCapturing = () => {
-        if (!window || !this.isEnabled || !assignableWindow.__PosthogExtensions__?.errorWrappingFunctions) {
+        if (!window || !this.isEnabled || !posthogExtensions?.errorWrappingFunctions) {
             return
         }
 
-        const wrapOnError = assignableWindow.__PosthogExtensions__.errorWrappingFunctions.wrapOnError
-        const wrapUnhandledRejection =
-            assignableWindow.__PosthogExtensions__.errorWrappingFunctions.wrapUnhandledRejection
-        const wrapConsoleError = assignableWindow.__PosthogExtensions__.errorWrappingFunctions.wrapConsoleError
+        const wrapOnError = posthogExtensions.errorWrappingFunctions.wrapOnError
+        const wrapUnhandledRejection = posthogExtensions.errorWrappingFunctions.wrapUnhandledRejection
+        const wrapConsoleError = posthogExtensions.errorWrappingFunctions.wrapConsoleError
 
         try {
             if (!this._unwrapOnError && this._config.capture_unhandled_errors) {

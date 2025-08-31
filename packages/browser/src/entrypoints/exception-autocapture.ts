@@ -3,7 +3,7 @@ import {
     errorToProperties,
     unhandledRejectionToProperties,
 } from '../extensions/exception-autocapture/error-conversion'
-import { assignableWindow, window } from '../utils/globals'
+import { assignableWindow, posthogExtensions, window } from '../utils/globals'
 import { ErrorEventArgs } from '../types'
 import { createLogger } from '../utils/logger'
 
@@ -82,8 +82,7 @@ const posthogErrorWrappingFunctions = {
     wrapConsoleError,
 }
 
-assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
-assignableWindow.__PosthogExtensions__.errorWrappingFunctions = posthogErrorWrappingFunctions
+posthogExtensions.errorWrappingFunctions = posthogErrorWrappingFunctions
 
 // we used to put these on window, and now we put them on __PosthogExtensions__
 // but that means that old clients which lazily load this extension are looking in the wrong place

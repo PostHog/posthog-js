@@ -1,5 +1,5 @@
 import { PostHog } from '../posthog-core'
-import { assignableWindow } from '../utils/globals'
+import { assignableWindow, posthogExtensions } from '../utils/globals'
 import { createLogger } from '../utils/logger'
 
 const logger = createLogger('[PostHog Crisp Chat]')
@@ -7,9 +7,8 @@ const logger = createLogger('[PostHog Crisp Chat]')
 const reportedSessionIds = new Set<string>()
 let sessionIdListenerUnsubscribe: undefined | (() => void) = undefined
 
-assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
-assignableWindow.__PosthogExtensions__.integrations = assignableWindow.__PosthogExtensions__.integrations || {}
-assignableWindow.__PosthogExtensions__.integrations.crispChat = {
+posthogExtensions.integrations = posthogExtensions.integrations || {}
+posthogExtensions.integrations.crispChat = {
     start: (posthog: PostHog) => {
         if (!posthog.config.integrations?.crispChat) {
             return

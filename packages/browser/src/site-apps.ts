@@ -1,6 +1,6 @@
 import { PostHog } from './posthog-core'
 import { CaptureResult, Properties, RemoteConfig, SiteApp, SiteAppGlobals, SiteAppLoader } from './types'
-import { assignableWindow } from './utils/globals'
+import { assignableWindow, posthogExtensions } from './utils/globals'
 import { createLogger } from './utils/logger'
 
 const logger = createLogger('[SiteApps]')
@@ -198,7 +198,7 @@ export class SiteApps {
 
         for (const { id, url } of response['siteApps']) {
             assignableWindow[`__$$ph_site_app_${id}`] = this._instance
-            assignableWindow.__PosthogExtensions__?.loadSiteApp?.(this._instance, url, (err) => {
+            posthogExtensions?.loadSiteApp?.(this._instance, url, (err) => {
                 if (err) {
                     return logger.error(`Error while initializing PostHog app with config id ${id}`, err)
                 }
