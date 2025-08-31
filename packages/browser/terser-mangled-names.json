@@ -282,6 +282,7 @@
         "_startCapturing",
         "_startClickObserver",
         "_startMutationObserver",
+        "_startRecorder",
         "_startScrollObserver",
         "_startSelectionChangedObserver",
         "_start_queue_if_opted_in",
