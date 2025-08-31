@@ -1,8 +1,14 @@
 import { ErrorProperties } from '../extensions/exception-autocapture/error-conversion'
 import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
-import { DeadClicksAutoCaptureConfig, ExternalIntegrationKind, Properties, RemoteConfig, SiteAppLoader } from '../types'
-import { SessionStartReason } from '../../lib/src/types'
+import {
+    DeadClicksAutoCaptureConfig,
+    ExternalIntegrationKind,
+    Properties,
+    RemoteConfig,
+    SiteAppLoader,
+    SessionStartReason,
+} from '../types'
 import { SessionRecordingStatus, TriggerType } from '../extensions/replay/triggerMatching'
 import { eventWithTime } from '@rrweb/types'
 
