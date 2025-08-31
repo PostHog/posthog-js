@@ -207,7 +207,5 @@ export const XMLHttpRequest =
 export const AbortController = global?.AbortController
 export const userAgent = navigator?.userAgent
 export const assignableWindow: AssignableWindow = win ?? ({} as any)
-assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
-export const posthogExtensions: PostHogExtensions = assignableWindow.__PosthogExtensions__
 
 export { win as window }

@@ -1,5 +1,5 @@
 import { PostHog } from '../posthog-core'
-import { posthogExtensions } from '../utils/globals'
+import { assignableWindow } from '../utils/globals'
 import { createLogger } from '../utils/logger'
 import { isUndefined } from '@posthog/core'
 
@@ -12,12 +12,12 @@ export class TracingHeaders {
     constructor(private readonly _instance: PostHog) {}
 
     private _loadScript(cb: () => void): void {
-        if (posthogExtensions?.tracingHeadersPatchFns) {
+        if (assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns) {
             // already loaded
             cb()
         }
 
-        posthogExtensions?.loadExternalDependency?.(this._instance, 'tracing-headers', (err) => {
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, 'tracing-headers', (err) => {
             if (err) {
                 return logger.error('failed to load script', err)
             }
@@ -38,14 +38,14 @@ export class TracingHeaders {
 
     private _startCapturing = () => {
         if (isUndefined(this._restoreXHRPatch)) {
-            posthogExtensions?.tracingHeadersPatchFns?._patchXHR(
+            assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchXHR(
                 this._instance.config.__add_tracing_headers || [],
                 this._instance.get_distinct_id(),
                 this._instance.sessionManager
             )
         }
         if (isUndefined(this._restoreFetchPatch)) {
-            posthogExtensions?.tracingHeadersPatchFns?._patchFetch(
+            assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchFetch(
                 this._instance.config.__add_tracing_headers || [],
                 this._instance.get_distinct_id(),
                 this._instance.sessionManager

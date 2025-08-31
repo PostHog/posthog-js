@@ -1,7 +1,7 @@
 import { PostHog } from '../posthog-core'
 import { DEAD_CLICKS_ENABLED_SERVER_SIDE } from '../constants'
 import { isBoolean, isObject } from '@posthog/core'
-import { document, LazyLoadedDeadClicksAutocaptureInterface, posthogExtensions } from '../utils/globals'
+import { assignableWindow, document, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { createLogger } from '../utils/logger'
 import { DeadClicksAutoCaptureConfig, RemoteConfig } from '../types'
 
@@ -49,17 +49,21 @@ export class DeadClicksAutocapture {
     }
 
     private _loadScript(cb: () => void): void {
-        if (posthogExtensions?.initDeadClicksAutocapture) {
+        if (assignableWindow.__PosthogExtensions__?.initDeadClicksAutocapture) {
             // already loaded
             cb()
         }
-        posthogExtensions?.loadExternalDependency?.(this.instance, 'dead-clicks-autocapture', (err) => {
-            if (err) {
-                logger.error('failed to load script', err)
-                return
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
+            this.instance,
+            'dead-clicks-autocapture',
+            (err) => {
+                if (err) {
+                    logger.error('failed to load script', err)
+                    return
+                }
+                cb()
             }
-            cb()
-        })
+        )
     }
 
     private _start() {
@@ -68,13 +72,19 @@ export class DeadClicksAutocapture {
             return
         }
 
-        if (!this._lazyLoadedDeadClicksAutocapture && posthogExtensions?.initDeadClicksAutocapture) {
+        if (
+            !this._lazyLoadedDeadClicksAutocapture &&
+            assignableWindow.__PosthogExtensions__?.initDeadClicksAutocapture
+        ) {
             const config = isObject(this.instance.config.capture_dead_clicks)
                 ? this.instance.config.capture_dead_clicks
                 : {}
             config.__onCapture = this.onCapture
 
-            this._lazyLoadedDeadClicksAutocapture = posthogExtensions.initDeadClicksAutocapture(this.instance, config)
+            this._lazyLoadedDeadClicksAutocapture = assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture(
+                this.instance,
+                config
+            )
             this._lazyLoadedDeadClicksAutocapture.start(document)
             logger.info(`starting...`)
         }

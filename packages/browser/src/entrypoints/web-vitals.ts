@@ -1,5 +1,5 @@
 import { onINP, onLCP, onCLS, onFCP } from 'web-vitals/attribution'
-import { assignableWindow, posthogExtensions } from '../utils/globals'
+import { assignableWindow } from '../utils/globals'
 
 const postHogWebVitalsCallbacks = {
     onLCP,
@@ -8,7 +8,8 @@ const postHogWebVitalsCallbacks = {
     onINP,
 }
 
-posthogExtensions.postHogWebVitalsCallbacks = postHogWebVitalsCallbacks
+assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
+assignableWindow.__PosthogExtensions__.postHogWebVitalsCallbacks = postHogWebVitalsCallbacks
 
 // we used to put posthogWebVitalsCallbacks on window, and now we put it on __PosthogExtensions__
 // but that means that old clients which lazily load this extension are looking in the wrong place

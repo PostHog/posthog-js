@@ -3,7 +3,7 @@ import { PostHog } from '../posthog-core'
 import { ToolbarParams } from '../types'
 import { _getHashParam } from '../utils/request-utils'
 import { createLogger } from '../utils/logger'
-import { window, document, assignableWindow, posthogExtensions } from '../utils/globals'
+import { window, document, assignableWindow } from '../utils/globals'
 import { TOOLBAR_ID } from '../constants'
 import { isFunction, isNullish } from '@posthog/core'
 
@@ -166,7 +166,7 @@ export class Toolbar {
             // only load the toolbar once, even if there are multiple instances of PostHogLib
             this._setToolbarState(ToolbarState.LOADING)
 
-            posthogExtensions?.loadExternalDependency?.(this.instance, 'toolbar', (err) => {
+            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'toolbar', (err) => {
                 if (err) {
                     logger.error('[Toolbar] Failed to load', err)
                     this._setToolbarState(ToolbarState.UNINITIALIZED)

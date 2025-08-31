@@ -3,7 +3,7 @@ import { RemoteConfig, SupportedWebVitalsMetrics } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { isBoolean, isNullish, isNumber, isUndefined, isObject } from '@posthog/core'
 import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
-import { window, location, posthogExtensions } from '../../utils/globals'
+import { assignableWindow, window, location } from '../../utils/globals'
 
 const logger = createLogger('[Web Vitals]')
 
@@ -104,11 +104,11 @@ export class WebVitalsAutocapture {
     }
 
     private _loadScript(cb: () => void): void {
-        if (posthogExtensions?.postHogWebVitalsCallbacks) {
+        if (assignableWindow.__PosthogExtensions__?.postHogWebVitalsCallbacks) {
             // already loaded
             cb()
         }
-        posthogExtensions?.loadExternalDependency?.(this._instance, 'web-vitals', (err) => {
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, 'web-vitals', (err) => {
             if (err) {
                 logger.error('failed to load script', err)
                 return
@@ -220,6 +220,7 @@ export class WebVitalsAutocapture {
         let onFCP: WebVitalsMetricCallback | undefined
         let onINP: WebVitalsMetricCallback | undefined
 
+        const posthogExtensions = assignableWindow.__PosthogExtensions__
         if (!isUndefined(posthogExtensions) && !isUndefined(posthogExtensions.postHogWebVitalsCallbacks)) {
             ;({ onLCP, onCLS, onFCP, onINP } = posthogExtensions.postHogWebVitalsCallbacks)
         }

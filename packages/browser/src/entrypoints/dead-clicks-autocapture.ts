@@ -1,4 +1,4 @@
-import { assignableWindow, LazyLoadedDeadClicksAutocaptureInterface, posthogExtensions } from '../utils/globals'
+import { assignableWindow, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { PostHog } from '../posthog-core'
 import { isNull, isNumber, isUndefined } from '@posthog/core'
 import { autocaptureCompatibleElements, getEventTarget } from '../autocapture-utils'
@@ -271,6 +271,8 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
     }
 }
 
-posthogExtensions.initDeadClicksAutocapture = (ph, config) => new LazyLoadedDeadClicksAutocapture(ph, config)
+assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
+assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture = (ph, config) =>
+    new LazyLoadedDeadClicksAutocapture(ph, config)
 
 export default LazyLoadedDeadClicksAutocapture

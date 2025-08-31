@@ -1,5 +1,5 @@
 import { PostHog } from '../posthog-core'
-import { assignableWindow, posthogExtensions } from '../utils/globals'
+import { assignableWindow } from '../utils/globals'
 import { createLogger } from '../utils/logger'
 
 const logger = createLogger('[PostHog Intercom integration]')
@@ -7,8 +7,9 @@ const logger = createLogger('[PostHog Intercom integration]')
 const reportedSessionIds = new Set<string>()
 let sessionIdListenerUnsubscribe: undefined | (() => void) = undefined
 
-posthogExtensions.integrations = posthogExtensions.integrations || {}
-posthogExtensions.integrations.intercom = {
+assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
+assignableWindow.__PosthogExtensions__.integrations = assignableWindow.__PosthogExtensions__.integrations || {}
+assignableWindow.__PosthogExtensions__.integrations.intercom = {
     start: (posthog: PostHog) => {
         if (!posthog.config.integrations?.intercom) {
             return

@@ -2,7 +2,7 @@ import { PostHog } from './posthog-core'
 import { RemoteConfig } from './types'
 
 import { createLogger } from './utils/logger'
-import { assignableWindow, posthogExtensions } from './utils/globals'
+import { assignableWindow } from './utils/globals'
 
 const logger = createLogger('[RemoteConfig]')
 
@@ -14,8 +14,8 @@ export class RemoteConfigLoader {
     }
 
     private _loadRemoteConfigJs(cb: (config?: RemoteConfig) => void): void {
-        if (posthogExtensions?.loadExternalDependency) {
-            posthogExtensions?.loadExternalDependency?.(this._instance, 'remote-config', () => {
+        if (assignableWindow.__PosthogExtensions__?.loadExternalDependency) {
+            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, 'remote-config', () => {
                 return cb(this.remoteConfig)
             })
         } else {

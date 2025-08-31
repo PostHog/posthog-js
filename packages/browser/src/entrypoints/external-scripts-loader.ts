@@ -1,5 +1,5 @@
 import type { PostHog } from '../posthog-core'
-import { document, PostHogExtensionKind, posthogExtensions } from '../utils/globals'
+import { assignableWindow, document, PostHogExtensionKind } from '../utils/globals'
 import { createLogger } from '../utils/logger'
 
 const logger = createLogger('[ExternalScriptsLoader]')
@@ -81,7 +81,8 @@ const loadScript = (posthog: PostHog, url: string, callback: (error?: string | E
     }
 }
 
-posthogExtensions.loadExternalDependency = (
+assignableWindow.__PosthogExtensions__ = assignableWindow.__PosthogExtensions__ || {}
+assignableWindow.__PosthogExtensions__.loadExternalDependency = (
     posthog: PostHog,
     kind: PostHogExtensionKind,
     callback: (error?: string | Event, event?: Event) => void
@@ -106,7 +107,7 @@ posthogExtensions.loadExternalDependency = (
     loadScript(posthog, url, callback)
 }
 
-posthogExtensions.loadSiteApp = (
+assignableWindow.__PosthogExtensions__.loadSiteApp = (
     posthog: PostHog,
     url: string,
     callback: (error?: string | Event, event?: Event) => void

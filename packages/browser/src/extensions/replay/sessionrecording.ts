@@ -37,7 +37,7 @@ import {
 } from '@rrweb/types'
 
 import { createLogger } from '../../utils/logger'
-import { assignableWindow, document, PostHogExtensionKind, posthogExtensions, window } from '../../utils/globals'
+import { assignableWindow, document, PostHogExtensionKind, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
 import { MutationThrottler } from './mutation-throttler'
@@ -776,13 +776,17 @@ export class SessionRecording {
         // If recorder.js is already loaded (if array.full.js snippet is used or posthog-js/dist/recorder is
         // imported), don't load the script. Otherwise, remotely import recorder.js from cdn since it hasn't been loaded.
         if (!getRRWebRecord()) {
-            posthogExtensions?.loadExternalDependency?.(this._instance, this._scriptName, (err) => {
-                if (err) {
-                    return logger.error('could not load recorder', err)
-                }
+            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
+                this._instance,
+                this._scriptName,
+                (err) => {
+                    if (err) {
+                        return logger.error('could not load recorder', err)
+                    }
 
-                this._onScriptLoaded()
-            })
+                    this._onScriptLoaded()
+                }
+            )
         } else {
             this._onScriptLoaded()
         }
@@ -1026,12 +1030,12 @@ export class SessionRecording {
     private _gatherRRWebPlugins() {
         const plugins: RecordPlugin[] = []
 
-        const recordConsolePlugin = posthogExtensions?.rrwebPlugins?.getRecordConsolePlugin
+        const recordConsolePlugin = assignableWindow.__PosthogExtensions__?.rrwebPlugins?.getRecordConsolePlugin
         if (recordConsolePlugin && this._isConsoleLogCaptureEnabled) {
             plugins.push(recordConsolePlugin())
         }
 
-        const networkPlugin = posthogExtensions?.rrwebPlugins?.getRecordNetworkPlugin
+        const networkPlugin = assignableWindow.__PosthogExtensions__?.rrwebPlugins?.getRecordNetworkPlugin
         if (this._networkPayloadCapture && isFunction(networkPlugin)) {
             const canRecordNetwork = !isLocalhost() || this._forceAllowLocalhostNetworkCapture
 
