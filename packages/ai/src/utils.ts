@@ -260,18 +260,44 @@ export const withPrivacyMode = (client: PostHog, privacyMode: boolean, input: an
   return (client as any).privacy_mode || privacyMode ? null : input
 }
 
-export const truncate = (str: string): string => {
-  try {
-    const buffer = Buffer.from(str, STRING_FORMAT)
-    if (buffer.length <= MAX_OUTPUT_SIZE) {
-      return str
-    }
-    const truncatedBuffer = buffer.slice(0, MAX_OUTPUT_SIZE)
-    return `${truncatedBuffer.toString(STRING_FORMAT)}... [truncated]`
-  } catch {
-    console.error('Error truncating, likely not a string')
-    return str
+function toSafeString(input: unknown): string {
+  if (input === undefined || input === null) {
+    return ''
   }
+  if (typeof input === 'string') {
+    return input
+  }
+  try {
+    return JSON.stringify(input)
+  } catch {
+    console.warn('Failed to stringify input', input)
+    return ''
+  }
+}
+
+export const truncate = (input: unknown): string => {
+  const str = toSafeString(input)
+  if (str === '') {
+    return ''
+  }
+
+  // Check if we need to truncate and ensure STRING_FORMAT is respected
+  const encoder = new TextEncoder()
+  const buffer = encoder.encode(str)
+  if (buffer.length <= MAX_OUTPUT_SIZE) {
+    // Ensure STRING_FORMAT is respected
+    return new TextDecoder(STRING_FORMAT).decode(buffer)
+  }
+
+  // Truncate the buffer and ensure a valid string is returned
+  const truncatedBuffer = buffer.slice(0, MAX_OUTPUT_SIZE)
+  // fatal: false means we get U+FFFD at the end if truncation broke the encoding
+  const decoder = new TextDecoder(STRING_FORMAT, { fatal: false })
+  let truncatedStr = decoder.decode(truncatedBuffer)
+  if (truncatedStr.endsWith('\uFFFD')) {
+    truncatedStr = truncatedStr.slice(0, -1)
+  }
+  return `${truncatedStr}... [truncated]`
 }
 
 /**
