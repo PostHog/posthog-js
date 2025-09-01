@@ -1,5 +1,11 @@
 # posthog-ai
 
+## 6.3.0
+
+### Minor Changes
+
+- [#2253](https://github.com/PostHog/posthog-js/pull/2253) [`6461420`](https://github.com/PostHog/posthog-js/commit/6461420953d741dccae434d55637665c4c9f98dc) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Adds support for embeddings for OpenAI and Azure OpenAI
+
 ## 6.2.0
 
 ### Minor Changes
