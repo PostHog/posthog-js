@@ -243,7 +243,7 @@ const mapVercelOutput = (result: LanguageModelV2Content[]): PostHogInput[] => {
   try {
     const jsonOutput = JSON.stringify(result)
     return [{ content: truncate(jsonOutput), role: 'assistant' }]
-  } catch (error) {
+  } catch {
     console.error('Error stringifying output')
     return []
   }

@@ -10,6 +10,7 @@ import { version } from '../package.json'
 type ChatCompletionCreateParamsBase = OpenAIOrignal.Chat.Completions.ChatCompletionCreateParams
 type MessageCreateParams = AnthropicOriginal.Messages.MessageCreateParams
 type ResponseCreateParams = OpenAIOrignal.Responses.ResponseCreateParams
+type EmbeddingCreateParams = OpenAIOrignal.EmbeddingCreateParams
 type AnthropicTool = AnthropicOriginal.Tool
 
 // limit large outputs by truncating to 200kb (approx 200k bytes)
@@ -34,7 +35,10 @@ export interface CostOverride {
 }
 
 export const getModelParams = (
-  params: ((ChatCompletionCreateParamsBase | MessageCreateParams | ResponseCreateParams) & MonitoringParams) | null
+  params:
+    | ((ChatCompletionCreateParamsBase | MessageCreateParams | ResponseCreateParams | EmbeddingCreateParams) &
+        MonitoringParams)
+    | null
 ): Record<string, any> => {
   if (!params) {
     return {}
@@ -264,7 +268,7 @@ export const truncate = (str: string): string => {
     }
     const truncatedBuffer = buffer.slice(0, MAX_OUTPUT_SIZE)
     return `${truncatedBuffer.toString(STRING_FORMAT)}... [truncated]`
-  } catch (error) {
+  } catch {
     console.error('Error truncating, likely not a string')
     return str
   }
@@ -307,8 +311,14 @@ export const extractAvailableToolCalls = (
   return null
 }
 
+export enum AIEvent {
+  Generation = '$ai_generation',
+  Embedding = '$ai_embedding',
+}
+
 export type SendEventToPosthogParams = {
   client: PostHog
+  eventType?: AIEvent
   distinctId?: string
   traceId: string
   model: string
@@ -319,7 +329,8 @@ export type SendEventToPosthogParams = {
   baseURL: string
   httpStatus: number
   usage?: TokenUsage
-  params: (ChatCompletionCreateParamsBase | MessageCreateParams | ResponseCreateParams) & MonitoringParams
+  params: (ChatCompletionCreateParamsBase | MessageCreateParams | ResponseCreateParams | EmbeddingCreateParams) &
+    MonitoringParams
   isError?: boolean
   error?: string
   tools?: ChatCompletionTool[] | AnthropicTool[] | GeminiTool[] | null
@@ -343,6 +354,7 @@ function sanitizeValues(obj: any): any {
 
 export const sendEventToPosthog = async ({
   client,
+  eventType = AIEvent.Generation,
   distinctId,
   traceId,
   model,
@@ -401,7 +413,7 @@ export const sendEventToPosthog = async ({
     $ai_output_choices: withPrivacyMode(client, params.posthogPrivacyMode ?? false, safeOutput),
     $ai_http_status: httpStatus,
     $ai_input_tokens: usage.inputTokens ?? 0,
-    $ai_output_tokens: usage.outputTokens ?? 0,
+    ...(usage.outputTokens !== undefined ? { $ai_output_tokens: usage.outputTokens } : {}),
     ...additionalTokenValues,
     $ai_latency: latency,
     $ai_trace_id: traceId,
@@ -415,7 +427,7 @@ export const sendEventToPosthog = async ({
 
   const event = {
     distinctId: distinctId ?? traceId,
-    event: '$ai_generation',
+    event: eventType,
     properties,
     groups: params.posthogGroups,
   }
