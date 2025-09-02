@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.261.1
+
+### Patch Changes
+
+- [#2263](https://github.com/PostHog/posthog-js/pull/2263) [`41d3890`](https://github.com/PostHog/posthog-js/commit/41d3890b72b880576a57d1e1133fdd16744835d4) Thanks [@pauldambra](https://github.com/pauldambra)! - chore: add unused lazy loaded session recorder to prime CDN
+
 ## 1.261.0
 
 ### Minor Changes
