@@ -1028,16 +1028,6 @@ export interface ErrorTrackingOptions {
     __exceptionRateLimiterBucketSize?: number
 }
 
-export type SessionStartReason =
-    | 'sampling_overridden'
-    | 'recording_initialized'
-    | 'linked_flag_matched'
-    | 'linked_flag_overridden'
-    | typeof SAMPLED
-    | 'session_id_changed'
-    | 'url_trigger_matched'
-    | 'event_trigger_matched'
-
 export interface SessionRecordingOptions {
     /**
      * Derived from `rrweb.record` options
