@@ -247,6 +247,10 @@ const plugins = (es5, noExternal) => [
                               '_map',
                           ],
                       },
+                      reserved: [
+                          // we don't want to emit $ since that clashes with jquery
+                          '$',
+                      ],
                   },
     }),
     {
