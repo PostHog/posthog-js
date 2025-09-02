@@ -6,11 +6,11 @@ import {
     ExternalIntegrationKind,
     Properties,
     RemoteConfig,
-    SessionStartReason,
     SiteAppLoader,
+    SessionStartReason,
 } from '../types'
-import type { eventWithTime } from '@rrweb/types'
-import type { SessionRecordingStatus, TriggerType } from '../extensions/replay/triggerMatching'
+import { SessionRecordingStatus, TriggerType } from '../extensions/replay/triggerMatching'
+import { eventWithTime } from '@rrweb/types'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
@@ -160,11 +160,6 @@ export type PostHogExtensionKind =
     | 'remote-config'
     | ExternalExtensionKind
 
-export interface LazyLoadedDeadClicksAutocaptureInterface {
-    start: (observerTarget: Node) => void
-    stop: () => void
-}
-
 export interface LazyLoadedSessionRecordingInterface {
     start: (startReason?: SessionStartReason) => void
     stop: () => void
@@ -178,6 +173,11 @@ export interface LazyLoadedSessionRecordingInterface {
     overrideSampling: () => void
     overrideTrigger: (triggerType: TriggerType) => void
     isStarted: boolean
+}
+
+export interface LazyLoadedDeadClicksAutocaptureInterface {
+    start: (observerTarget: Node) => void
+    stop: () => void
 }
 
 interface PostHogExtensions {

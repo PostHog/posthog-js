@@ -10,6 +10,7 @@ import { version } from '../package.json'
 type ChatCompletionCreateParamsBase = OpenAIOrignal.Chat.Completions.ChatCompletionCreateParams
 type MessageCreateParams = AnthropicOriginal.Messages.MessageCreateParams
 type ResponseCreateParams = OpenAIOrignal.Responses.ResponseCreateParams
+type EmbeddingCreateParams = OpenAIOrignal.EmbeddingCreateParams
 type AnthropicTool = AnthropicOriginal.Tool
 
 // limit large outputs by truncating to 200kb (approx 200k bytes)
@@ -34,7 +35,10 @@ export interface CostOverride {
 }
 
 export const getModelParams = (
-  params: ((ChatCompletionCreateParamsBase | MessageCreateParams | ResponseCreateParams) & MonitoringParams) | null
+  params:
+    | ((ChatCompletionCreateParamsBase | MessageCreateParams | ResponseCreateParams | EmbeddingCreateParams) &
+        MonitoringParams)
+    | null
 ): Record<string, any> => {
   if (!params) {
     return {}
@@ -256,18 +260,44 @@ export const withPrivacyMode = (client: PostHog, privacyMode: boolean, input: an
   return (client as any).privacy_mode || privacyMode ? null : input
 }
 
-export const truncate = (str: string): string => {
-  try {
-    const buffer = Buffer.from(str, STRING_FORMAT)
-    if (buffer.length <= MAX_OUTPUT_SIZE) {
-      return str
-    }
-    const truncatedBuffer = buffer.slice(0, MAX_OUTPUT_SIZE)
-    return `${truncatedBuffer.toString(STRING_FORMAT)}... [truncated]`
-  } catch (error) {
-    console.error('Error truncating, likely not a string')
-    return str
+function toSafeString(input: unknown): string {
+  if (input === undefined || input === null) {
+    return ''
   }
+  if (typeof input === 'string') {
+    return input
+  }
+  try {
+    return JSON.stringify(input)
+  } catch {
+    console.warn('Failed to stringify input', input)
+    return ''
+  }
+}
+
+export const truncate = (input: unknown): string => {
+  const str = toSafeString(input)
+  if (str === '') {
+    return ''
+  }
+
+  // Check if we need to truncate and ensure STRING_FORMAT is respected
+  const encoder = new TextEncoder()
+  const buffer = encoder.encode(str)
+  if (buffer.length <= MAX_OUTPUT_SIZE) {
+    // Ensure STRING_FORMAT is respected
+    return new TextDecoder(STRING_FORMAT).decode(buffer)
+  }
+
+  // Truncate the buffer and ensure a valid string is returned
+  const truncatedBuffer = buffer.slice(0, MAX_OUTPUT_SIZE)
+  // fatal: false means we get U+FFFD at the end if truncation broke the encoding
+  const decoder = new TextDecoder(STRING_FORMAT, { fatal: false })
+  let truncatedStr = decoder.decode(truncatedBuffer)
+  if (truncatedStr.endsWith('\uFFFD')) {
+    truncatedStr = truncatedStr.slice(0, -1)
+  }
+  return `${truncatedStr}... [truncated]`
 }
 
 /**
@@ -307,8 +337,14 @@ export const extractAvailableToolCalls = (
   return null
 }
 
+export enum AIEvent {
+  Generation = '$ai_generation',
+  Embedding = '$ai_embedding',
+}
+
 export type SendEventToPosthogParams = {
   client: PostHog
+  eventType?: AIEvent
   distinctId?: string
   traceId: string
   model: string
@@ -319,7 +355,8 @@ export type SendEventToPosthogParams = {
   baseURL: string
   httpStatus: number
   usage?: TokenUsage
-  params: (ChatCompletionCreateParamsBase | MessageCreateParams | ResponseCreateParams) & MonitoringParams
+  params: (ChatCompletionCreateParamsBase | MessageCreateParams | ResponseCreateParams | EmbeddingCreateParams) &
+    MonitoringParams
   isError?: boolean
   error?: string
   tools?: ChatCompletionTool[] | AnthropicTool[] | GeminiTool[] | null
@@ -343,6 +380,7 @@ function sanitizeValues(obj: any): any {
 
 export const sendEventToPosthog = async ({
   client,
+  eventType = AIEvent.Generation,
   distinctId,
   traceId,
   model,
@@ -401,7 +439,7 @@ export const sendEventToPosthog = async ({
     $ai_output_choices: withPrivacyMode(client, params.posthogPrivacyMode ?? false, safeOutput),
     $ai_http_status: httpStatus,
     $ai_input_tokens: usage.inputTokens ?? 0,
-    $ai_output_tokens: usage.outputTokens ?? 0,
+    ...(usage.outputTokens !== undefined ? { $ai_output_tokens: usage.outputTokens } : {}),
     ...additionalTokenValues,
     $ai_latency: latency,
     $ai_trace_id: traceId,
@@ -415,7 +453,7 @@ export const sendEventToPosthog = async ({
 
   const event = {
     distinctId: distinctId ?? traceId,
-    event: '$ai_generation',
+    event: eventType,
     properties,
     groups: params.posthogGroups,
   }
