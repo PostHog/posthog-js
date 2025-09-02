@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.261.4
+
+### Patch Changes
+
+- [#2268](https://github.com/PostHog/posthog-js/pull/2268) [`999c63f`](https://github.com/PostHog/posthog-js/commit/999c63f56dea80efc32d45ffbdf897b20aa97547) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: session recorder wrapper had private field that should be public"
+
 ## 1.261.3
 
 ### Patch Changes
