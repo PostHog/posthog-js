@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.261.3
+
+### Patch Changes
+
+- [#2267](https://github.com/PostHog/posthog-js/pull/2267) [`f2ac956`](https://github.com/PostHog/posthog-js/commit/f2ac9569d80a10961919d51a8132e0153b471a69) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: allow testing of the new lazy loaded session recorder
+
 ## 1.261.2
 
 ### Patch Changes
