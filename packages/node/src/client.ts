@@ -352,6 +352,21 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *   sendFeatureFlags: true
    * })
    * ```
+   * 
+   * @example
+   * ```ts
+   * // With custom feature flags options
+   * await client.captureImmediate({
+   *   distinctId: 'user_123',
+   *   event: 'user_action',
+   *   sendFeatureFlags: {
+   *     onlyEvaluateLocally: true,
+   *     personProperties: { plan: 'premium' },
+   *     groupProperties: { org: { tier: 'enterprise' } }
+   *     flagKeys: ['flag1', 'flag2']
+   *   }
+   * })
+   * ```
    *
    * {@label Capture}
    *
