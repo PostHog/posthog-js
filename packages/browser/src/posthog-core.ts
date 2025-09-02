@@ -526,7 +526,7 @@ export class PostHog {
         this.siteApps?.init()
 
         if (!startInCookielessMode) {
-            if (this.config._preview_lazy_load_replay) {
+            if (this.config.__preview_lazy_load_replay) {
                 this.sessionRecording = new SessionRecordingWrapper(this)
             } else {
                 this.sessionRecording = new SessionRecording(this)
