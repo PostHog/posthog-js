@@ -21,7 +21,7 @@ const logger = createLogger(LOGGER_PREFIX)
  * it should not be depended on in other ways, since i'm going to delete it long before the end of September 2025
  */
 export class SessionRecordingWrapper {
-    private _forceAllowLocalhostNetworkCapture: boolean = false
+    _forceAllowLocalhostNetworkCapture: boolean = false
 
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
     private _pendingRemoteConfig: RemoteConfig | undefined
