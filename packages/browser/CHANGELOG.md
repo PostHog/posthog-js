@@ -1,5 +1,13 @@
 # posthog-js
 
+## 1.261.2
+
+### Patch Changes
+
+- [#2266](https://github.com/PostHog/posthog-js/pull/2266) [`9470d97`](https://github.com/PostHog/posthog-js/commit/9470d974dde28648559b3d853ab20331f6ef36b1) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: don't mangle variables to `# posthog-js
+
+- [#2265](https://github.com/PostHog/posthog-js/pull/2265) [`2487d12`](https://github.com/PostHog/posthog-js/commit/2487d12548699e10f7a7f0f6917b3ae602bf80d9) Thanks [@pauldambra](https://github.com/pauldambra)! - chore: update to latest rollup and terser
+
 ## 1.261.1
 
 ### Patch Changes
