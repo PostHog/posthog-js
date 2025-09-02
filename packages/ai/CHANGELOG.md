@@ -1,5 +1,11 @@
 # posthog-ai
 
+## 6.3.1
+
+### Patch Changes
+
+- [#2264](https://github.com/PostHog/posthog-js/pull/2264) [`cb5dd15`](https://github.com/PostHog/posthog-js/commit/cb5dd15632b3436db21b320a84d76fe739851a2f) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Fixes noisy truncation function
+
 ## 6.3.0
 
 ### Minor Changes

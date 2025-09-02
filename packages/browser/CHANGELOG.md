@@ -1,5 +1,19 @@
 # posthog-js
 
+## 1.261.2
+
+### Patch Changes
+
+- [#2266](https://github.com/PostHog/posthog-js/pull/2266) [`9470d97`](https://github.com/PostHog/posthog-js/commit/9470d974dde28648559b3d853ab20331f6ef36b1) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: don't mangle variables to `# posthog-js
+
+- [#2265](https://github.com/PostHog/posthog-js/pull/2265) [`2487d12`](https://github.com/PostHog/posthog-js/commit/2487d12548699e10f7a7f0f6917b3ae602bf80d9) Thanks [@pauldambra](https://github.com/pauldambra)! - chore: update to latest rollup and terser
+
+## 1.261.1
+
+### Patch Changes
+
+- [#2263](https://github.com/PostHog/posthog-js/pull/2263) [`41d3890`](https://github.com/PostHog/posthog-js/commit/41d3890b72b880576a57d1e1133fdd16744835d4) Thanks [@pauldambra](https://github.com/pauldambra)! - chore: add unused lazy loaded session recorder to prime CDN
+
 ## 1.261.0
 
 ### Minor Changes
