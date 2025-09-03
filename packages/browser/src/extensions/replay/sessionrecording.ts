@@ -216,7 +216,7 @@ export class SessionRecording {
      * instead call `posthog.startSessionRecording({linked_flag: true})`
      * */
     public overrideLinkedFlag() {
-        this._queueOverrideFn({ fn: (llsr) => llsr.overrideLinkedFlag, label: 'linked_flag' })
+        this._queueOverrideFn({ fn: (llsr) => llsr.overrideLinkedFlag(), label: 'linked_flag' })
     }
 
     /**

@@ -1090,7 +1090,7 @@ describe('SessionRecording', () => {
         it('loads recording script from right place', () => {
             sessionRecording.onRemoteConfig(makeFlagsResponse({ sessionRecording: {} }))
 
-            expect(loadScriptMock).toHaveBeenCalledWith(expect.anything(), 'recorder', expect.anything())
+            expect(loadScriptMock).toHaveBeenCalledWith(expect.anything(), 'lazy-recorder', expect.anything())
         })
 
         it('loads script after `_startCapture` if not previously loaded', () => {
