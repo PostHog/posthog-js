@@ -16,6 +16,11 @@ import { DISABLED, LAZY_LOADING, SessionRecordingStatus, TriggerType } from './t
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
 
+interface QueuedOverride {
+    fn: (sessionRecording: LazyLoadedSessionRecordingInterface) => void
+    label: string
+}
+
 /**
  * This only exists to let us test changes to sessionrecording.ts before rolling them out to everyone
  * it should not be depended on in other ways, since i'm going to delete it long before the end of September 2025
@@ -25,6 +30,7 @@ export class SessionRecording {
 
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
     private _pendingRemoteConfig: RemoteConfig | undefined
+    private _overrideQueue: QueuedOverride[] = []
 
     public get started(): boolean {
         return !!this._lazyLoadedSessionRecording?.isStarted
@@ -155,23 +161,30 @@ export class SessionRecording {
     }
 
     private _onScriptLoaded(startReason?: SessionStartReason) {
-        if (!assignableWindow.__PosthogExtensions__?.initSessionRecording) {
+        const lazyLoadedInitFn = assignableWindow.__PosthogExtensions__?.initSessionRecording
+        if (!lazyLoadedInitFn) {
             throw Error('Called on script loaded before session recording is available')
         }
 
         if (!this._lazyLoadedSessionRecording) {
-            this._lazyLoadedSessionRecording = assignableWindow.__PosthogExtensions__?.initSessionRecording(
-                this._instance
-            )
-            ;(this._lazyLoadedSessionRecording as any)._forceAllowLocalhostNetworkCapture =
+            this._lazyLoadedSessionRecording = lazyLoadedInitFn(this._instance)
+            // capture the thing so that TS knows it's not undefined below
+            const lazyLoadedSessionRecording = this._lazyLoadedSessionRecording
+            ;(lazyLoadedSessionRecording as any)._forceAllowLocalhostNetworkCapture =
                 this._forceAllowLocalhostNetworkCapture
 
             // If we have a pending remote config, apply it now
             if (this._pendingRemoteConfig) {
-                this._lazyLoadedSessionRecording.onRemoteConfig(this._pendingRemoteConfig)
+                lazyLoadedSessionRecording.onRemoteConfig(this._pendingRemoteConfig)
                 // Clear the pending config after applying it
                 this._pendingRemoteConfig = undefined
             }
+            // if we have pending overrides, apply them now
+            this._overrideQueue.forEach((queuedOverride) => {
+                logger.info(`applying queued trigger override for ${queuedOverride.label}`)
+                queuedOverride.fn(lazyLoadedSessionRecording)
+            })
+            this._overrideQueue = []
         }
 
         this._lazyLoadedSessionRecording.start(startReason)
@@ -182,14 +195,28 @@ export class SessionRecording {
     }
 
     /**
+     * When overriding a trigger we don't know the user will call their override when we're ready
+     * so we either call it right away, or we queue it until we're ready
+     */
+    private _queueOverrideFn(overrideToCall: {
+        fn: (sessionRecording: LazyLoadedSessionRecordingInterface) => void
+        label: string
+    }) {
+        if (this._lazyLoadedSessionRecording) {
+            overrideToCall.fn(this._lazyLoadedSessionRecording)
+        } else {
+            logger.info('queueing override until recorder is ready')
+            this._overrideQueue.push(overrideToCall)
+        }
+    }
+    /**
      * this ignores the linked flag config and (if other conditions are met) causes capture to start
      *
      * It is not usual to call this directly,
      * instead call `posthog.startSessionRecording({linked_flag: true})`
      * */
     public overrideLinkedFlag() {
-        // TODO what if this gets called before lazy loading is done
-        this._lazyLoadedSessionRecording?.overrideLinkedFlag()
+        this._queueOverrideFn({ fn: (llsr) => llsr.overrideLinkedFlag, label: 'linked_flag' })
     }
 
     /**
@@ -199,8 +226,7 @@ export class SessionRecording {
      * instead call `posthog.startSessionRecording({sampling: true})`
      * */
     public overrideSampling() {
-        // TODO what if this gets called before lazy loading is done
-        this._lazyLoadedSessionRecording?.overrideSampling()
+        this._queueOverrideFn({ fn: (llsr) => llsr.overrideSampling(), label: 'sampling' })
     }
 
     /**
@@ -210,8 +236,7 @@ export class SessionRecording {
      * instead call `posthog.startSessionRecording({trigger: 'url' | 'event'})`
      * */
     public overrideTrigger(triggerType: TriggerType) {
-        // TODO what if this gets called before lazy loading is done
-        this._lazyLoadedSessionRecording?.overrideTrigger(triggerType)
+        this._queueOverrideFn({ fn: (llsr) => llsr.overrideTrigger(triggerType), label: triggerType })
     }
 
     /*
