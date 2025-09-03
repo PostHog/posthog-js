@@ -782,7 +782,9 @@ export function usePopupVisibility(
     removeSurveyFromFocus: (survey: SurveyWithTypeAndAppearance) => void,
     surveyContainerRef?: React.RefObject<HTMLDivElement>
 ) {
-    const [isPopupVisible, setIsPopupVisible] = useState(isPreviewMode || millisecondDelay === 0)
+    const [isPopupVisible, setIsPopupVisible] = useState(
+        isPreviewMode || millisecondDelay === 0 || survey.type === SurveyType.ExternalSurvey
+    )
     const [isSurveySent, setIsSurveySent] = useState(false)
 
     const hidePopupWithViewTransition = () => {
@@ -907,6 +909,10 @@ function getPopoverPosition(
     position: SurveyPosition = SurveyPosition.Right,
     surveyWidgetType?: SurveyWidgetType
 ) {
+    if (type === SurveyType.ExternalSurvey) {
+        return {}
+    }
+
     switch (position) {
         case SurveyPosition.TopLeft:
             return { top: '0', left: '0', transform: 'translate(30px, 30px)' }

@@ -282,4 +282,23 @@ describe('SurveyPopup', () => {
 
         expect(mockedDismissedSurveyEvent).toHaveBeenCalledWith(mockSurvey, mockPosthog, false)
     })
+
+    test('always shows external surveys even if millisecondDelay is set', () => {
+        const survey = {
+            ...mockSurvey,
+            type: SurveyType.ExternalSurvey,
+            appearance: {
+                surveyPopupDelaySeconds: 1000,
+            },
+        }
+        render(
+            <SurveyPopup
+                survey={survey}
+                removeSurveyFromFocus={mockRemoveSurveyFromFocus}
+                isPopup={true}
+                posthog={mockPosthog as any}
+            />
+        )
+        expect(screen.getByRole('textbox')).toBeVisible()
+    })
 })
