@@ -1,6 +1,18 @@
 import { v4 as uuidv4 } from 'uuid'
 import { MonitoringEventProperties, MonitoringEventPropertiesWithDefaults, MonitoringParams } from '../utils'
 
+const POSTHOG_PARAMS_MAP: Record<string, string> = {
+  posthogDistinctId: 'distinctId',
+  posthogTraceId: 'traceId',
+  posthogProperties: 'properties',
+  posthogPrivacyMode: 'privacyMode',
+  posthogGroups: 'groups',
+  posthogModelOverride: 'modelOverride',
+  posthogProviderOverride: 'providerOverride',
+  posthogCostOverride: 'costOverride',
+  posthogCaptureImmediate: 'captureImmediate',
+}
+
 export function extractPosthogParams<T>(body: T & MonitoringParams): {
   openAIParams: T
   posthogParams: MonitoringEventPropertiesWithDefaults
@@ -9,27 +21,20 @@ export function extractPosthogParams<T>(body: T & MonitoringParams): {
   const posthogParams: Record<string, unknown> = {}
 
   for (const [key, value] of Object.entries(body)) {
-    if (isPosthogParam(key)) {
-      const unprefixedKey = removePosthogPrefix(key)
-      posthogParams[unprefixedKey] = value
+    if (POSTHOG_PARAMS_MAP[key]) {
+      posthogParams[POSTHOG_PARAMS_MAP[key]] = value
     } else {
+      if (key.startsWith('posthog')) {
+        throw new Error(`Posthog parameter ${key} is being passed to the OpenAI client, and will cause it to fail`)
+      }
       openAIParams[key] = value
     }
   }
 
   return {
     openAIParams: openAIParams as T,
-    posthogParams: addDefaults(posthogParams as MonitoringEventProperties),
+    posthogParams: addDefaults(posthogParams),
   }
-}
-
-function isPosthogParam(key: string): key is keyof MonitoringParams {
-  return key.startsWith('posthog')
-}
-
-function removePosthogPrefix(key: keyof MonitoringParams): keyof MonitoringEventProperties {
-  const unprefixed = key.replace(/^posthog/, '')
-  return (unprefixed.charAt(0).toLowerCase() + unprefixed.slice(1)) as keyof MonitoringEventProperties
 }
 
 function addDefaults(params: MonitoringEventProperties): MonitoringEventPropertiesWithDefaults {
