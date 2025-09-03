@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.261.6
+
+### Patch Changes
+
+- [#2274](https://github.com/PostHog/posthog-js/pull/2274) [`50fe70a`](https://github.com/PostHog/posthog-js/commit/50fe70ae4f22c08c7afe6fabd4430dbe7b946c67) Thanks [@robbie-c](https://github.com/robbie-c)! - Fix initial pageview not firing when using cookieless_mode: "always"
+
 ## 1.261.5
 
 ### Patch Changes
