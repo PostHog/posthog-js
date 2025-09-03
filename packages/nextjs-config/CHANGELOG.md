@@ -1,5 +1,11 @@
 # @posthog/nextjs-config
 
+## 1.3.0
+
+### Minor Changes
+
+- [#2273](https://github.com/PostHog/posthog-js/pull/2273) [`48ed95b`](https://github.com/PostHog/posthog-js/commit/48ed95b0d89677bc26a94bb57acffae986bdb07e) Thanks [@marandaneto](https://github.com/marandaneto)! - nextjs-config bump min node version to 20
+
 ## 1.2.1
 
 ### Patch Changes
