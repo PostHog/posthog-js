@@ -5,7 +5,7 @@ import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
 import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
-import { extractPosthogParams } from './util'
+import { extractPosthogParams } from './utils'
 
 type ChatCompletion = OpenAIOrignal.ChatCompletion
 type ChatCompletionChunk = OpenAIOrignal.ChatCompletionChunk

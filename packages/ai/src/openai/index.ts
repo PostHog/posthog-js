@@ -13,7 +13,7 @@ import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
 import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
 import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
-import { extractPosthogParams } from './util'
+import { extractPosthogParams } from './utils'
 
 const Chat = OpenAIOrignal.Chat
 const Completions = Chat.Completions
