@@ -1,5 +1,11 @@
 # @posthog/nextjs-config
 
+## 1.2.1
+
+### Patch Changes
+
+- [#2275](https://github.com/PostHog/posthog-js/pull/2275) [`401d076`](https://github.com/PostHog/posthog-js/commit/401d07622886f8a3e5fa2847c1a3f34e773a9d13) Thanks [@hpouillot](https://github.com/hpouillot)! - bump @posthog/cli version
+
 ## 1.2.0
 
 ### Minor Changes
