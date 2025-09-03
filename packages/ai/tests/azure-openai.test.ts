@@ -638,4 +638,27 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
       expect(groups).toEqual(testGroups)
     })
   })
+
+  conditionalTest('posthogProperties are not sent to Azure OpenAI', async () => {
+    const ChatMock: any = openaiModule.Chat
+    const mockCreate = jest.fn().mockResolvedValue({})
+    const originalCreate = (ChatMock.Completions as any).prototype.create
+    ;(ChatMock.Completions as any).prototype.create = mockCreate
+
+    await client.chat.completions.create({
+      model: 'gpt-4',
+      messages: [],
+      posthogDistinctId: 'test-id',
+      posthogProperties: { key: 'value' },
+      posthogGroups: { team: 'test' },
+      posthogPrivacyMode: true,
+      posthogCaptureImmediate: true,
+      posthogTraceId: 'trace-123',
+    })
+
+    const [actualParams] = mockCreate.mock.calls[0]
+    const posthogParams = Object.keys(actualParams).filter((key) => key.startsWith('posthog'))
+    expect(posthogParams).toEqual([])
+    ;(ChatMock.Completions as any).prototype.create = originalCreate
+  })
 })
