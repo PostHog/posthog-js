@@ -17,16 +17,22 @@ type AnthropicTool = AnthropicOriginal.Tool
 export const MAX_OUTPUT_SIZE = 200000
 const STRING_FORMAT = 'utf8'
 
-export interface MonitoringParams {
-  posthogDistinctId?: string
-  posthogTraceId?: string
-  posthogProperties?: Record<string, any>
-  posthogPrivacyMode?: boolean
-  posthogGroups?: Record<string, any>
-  posthogModelOverride?: string
-  posthogProviderOverride?: string
-  posthogCostOverride?: CostOverride
-  posthogCaptureImmediate?: boolean
+export interface MonitoringEventPropertiesWithDefaults {
+  distinctId?: string
+  traceId: string
+  properties?: Record<string, any>
+  privacyMode: boolean
+  groups?: Record<string, any>
+  modelOverride?: string
+  providerOverride?: string
+  costOverride?: CostOverride
+  captureImmediate?: boolean
+}
+
+export type MonitoringEventProperties = Partial<MonitoringEventPropertiesWithDefaults>
+
+export type MonitoringParams = {
+  [K in keyof MonitoringEventProperties as `posthog${Capitalize<string & K>}`]: MonitoringEventProperties[K]
 }
 
 export interface CostOverride {
