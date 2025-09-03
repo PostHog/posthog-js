@@ -409,8 +409,8 @@ importers:
   packages/nextjs-config:
     dependencies:
       '@posthog/cli':
-        specifier: ^0.4.2
-        version: 0.4.2
+        specifier: ^0.4.4
+        version: 0.4.4
       semver:
         specifier: ^7.7.2
         version: 7.7.2
@@ -2478,8 +2478,8 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  '@posthog/cli@0.4.2':
-    resolution: {integrity: sha512-5I8YnjObWc55tU1ICNzg2Uc3s6IArXSyfWR8EdnjLt2MLhdFdp1U9byamUnxOHk3MKGF3Gb/DU3jrI/BduHbDg==}
+  '@posthog/cli@0.4.4':
+    resolution: {integrity: sha512-8tW73Wg+qA7YgB1DkdlVL50cZHa9/w+gsDbI84nrxUTQ0F3xPj3FlZXvIjKcpgPADK1IHrnSh2e1KCjUjmmTWg==}
     engines: {node: '>=14', npm: '>=6'}
     hasBin: true
 
@@ -13439,7 +13439,7 @@ snapshots:
     dependencies:
       playwright: 1.52.0
 
-  '@posthog/cli@0.4.2':
+  '@posthog/cli@0.4.4':
     dependencies:
       axios: 1.10.0
       axios-proxy-builder: 0.1.2
