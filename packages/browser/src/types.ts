@@ -985,8 +985,9 @@ export interface PostHogConfig {
     __preview_flags_v2?: boolean
 
     /**
-     * PREVIEW - MAY CHANGE WITHOUT WARNING - REALLY REALLY DO NOT USE IN PRODUCTION
-     * Enables lazy loading of much more session recording code, not just rrweb and network plugin
+     * @deprecated PREVIEW - MAY CHANGE WITHOUT WARNING - REALLY REALLY DO NOT USE IN PRODUCTION
+     * does nothing anymore as it was only present for testing
+     * will be removed in a nearby release
      * */
     __preview_lazy_load_replay?: boolean
 

@@ -16,8 +16,12 @@ import { DISABLED, LAZY_LOADING, SessionRecordingStatus, TriggerType } from './t
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
 
+/**
+ * This only exists to let us test changes to sessionrecording.ts before rolling them out to everyone
+ * it should not be depended on in other ways, since i'm going to delete it long before the end of September 2025
+ */
 export class SessionRecording {
-    private _forceAllowLocalhostNetworkCapture: boolean = false
+    _forceAllowLocalhostNetworkCapture: boolean = false
 
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
     private _pendingRemoteConfig: RemoteConfig | undefined
