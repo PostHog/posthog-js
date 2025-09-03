@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.261.5
+
+### Patch Changes
+
+- [#2270](https://github.com/PostHog/posthog-js/pull/2270) [`980f5c4`](https://github.com/PostHog/posthog-js/commit/980f5c483f059bc3551975c9094f19ff04a985b0) Thanks [@lucasheriques](https://github.com/lucasheriques)! - fix: hosted surveys should ignore any delays
+
 ## 1.261.4
 
 ### Patch Changes
