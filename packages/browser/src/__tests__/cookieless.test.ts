@@ -44,11 +44,18 @@ jest.mock('../utils/globals', () => {
                 toString: () => url,
             }
         },
+        XMLHttpRequest: () => ({
+            open: jest.fn(),
+            send: jest.fn(),
+            setRequestHeader: jest.fn(),
+        }),
     }
 })
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { mockURLGetter, mockedCookieBox, document } = require('../utils/globals')
+
+const delay = (timeoutMs: number) => new Promise((resolve) => setTimeout(resolve, timeoutMs))
 
 describe('cookieless', () => {
     const eventName = 'custom_event'
@@ -93,6 +100,33 @@ describe('cookieless', () => {
             // should ignore cookie consent, and throw in test code due to logging an error
             expect(() => posthog.opt_in_capturing()).toThrow()
         })
+
+        it.each([[true], ['history_change']])(
+            'should send the initial pageview event when capture_pageview is %p',
+            async (capturePageview: PostHogConfig['capture_pageview']) => {
+                const { posthog, beforeSendMock } = await setup({
+                    cookieless_mode: 'always',
+                    capture_pageview: capturePageview,
+                })
+                expect(posthog.has_opted_in_capturing()).toBe(false)
+                await delay(1) // wait for async pageview capture
+
+                expect(beforeSendMock).toBeCalledTimes(1)
+                const event = beforeSendMock.mock.calls[0][0]
+                expect(event.event).toBe('$pageview')
+                expect(event.properties.distinct_id).toBe('$posthog_cookieless')
+                expect(event.properties.$anon_distinct_id).toBe(undefined)
+                expect(event.properties.$device_id).toBe(null)
+                expect(event.properties.$session_id).toBe(undefined)
+                expect(event.properties.$window_id).toBe(undefined)
+                expect(event.properties.$cookieless_mode).toEqual(true)
+                expect(document.cookie).toBe('')
+                expect(posthog.sessionRecording).toBeFalsy()
+
+                // should ignore cookie consent, and throw in test code due to logging an error
+                expect(() => posthog.opt_in_capturing()).toThrow()
+            }
+        )
     })
 
     describe('on_reject mode', () => {
