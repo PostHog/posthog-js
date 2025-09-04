@@ -352,7 +352,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
    *   sendFeatureFlags: true
    * })
    * ```
-   * 
+   *
    * @example
    * ```ts
    * // With custom feature flags options
