@@ -1,4 +1,4 @@
-import { EventTriggerMatching, LinkedFlagMatching, URLTriggerMatching } from './triggerMatching'
+import { EventTriggerMatching, LinkedFlagMatching, URLTriggerMatching } from './external/triggerMatching'
 
 export const DISABLED = 'disabled'
 export const SAMPLED = 'sampled'

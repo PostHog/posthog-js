@@ -19,7 +19,7 @@ import {
     PendingTriggerMatching,
     TriggerStatusMatching,
     URLTriggerMatching,
-} from '../triggerMatching'
+} from './triggerMatching'
 import { estimateSize, INCREMENTAL_SNAPSHOT_EVENT_TYPE, truncateLargeConsoleLogs } from '../sessionrecording-utils'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
 import { assignableWindow, LazyLoadedSessionRecordingInterface, window, document } from '../../../utils/globals'

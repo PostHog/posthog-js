@@ -1,11 +1,11 @@
 import {
     SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
-} from '../../constants'
-import { PostHog } from '../../posthog-core'
-import { FlagVariant, RemoteConfig, SessionRecordingUrlTrigger } from '../../types'
+} from '../../../constants'
+import { PostHog } from '../../../posthog-core'
+import { FlagVariant, RemoteConfig, SessionRecordingUrlTrigger } from '../../../types'
 import { isBoolean, isNullish, isObject, isString } from '@posthog/core'
-import { window } from '../../utils/globals'
+import { window } from '../../../utils/globals'
 import {
     ACTIVE,
     BUFFERING,
@@ -19,7 +19,7 @@ import {
     TRIGGER_PENDING,
     TriggerStatus,
     TriggerType,
-} from './types'
+} from '../types'
 
 function sessionRecordingUrlTriggerMatches(url: string, triggers: SessionRecordingUrlTrigger[]) {
     return triggers.some((trigger) => {

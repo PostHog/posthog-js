@@ -4,7 +4,7 @@ import {
     EventTriggerMatching,
     LinkedFlagMatching,
     URLTriggerMatching,
-} from '../../../extensions/replay/triggerMatching'
+} from '../../../extensions/replay/external/triggerMatching'
 import { PostHog } from '../../../posthog-core'
 import {
     ACTIVE,

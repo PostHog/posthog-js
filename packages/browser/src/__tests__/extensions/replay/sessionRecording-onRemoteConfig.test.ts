@@ -36,7 +36,7 @@ import {
     AndTriggerMatching,
     anyMatchSessionRecordingStatus,
     OrTriggerMatching,
-} from '../../../extensions/replay/triggerMatching'
+} from '../../../extensions/replay/external/triggerMatching'
 import { makeFlagsResponse } from './utils'
 import Mock = jest.Mock
 import { LazyLoadedSessionRecording } from '../../../extensions/replay/external/lazy-loaded-session-recorder'
