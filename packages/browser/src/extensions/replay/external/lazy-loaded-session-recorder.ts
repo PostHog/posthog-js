@@ -24,7 +24,7 @@ import { estimateSize, INCREMENTAL_SNAPSHOT_EVENT_TYPE, truncateLargeConsoleLogs
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
 import { assignableWindow, LazyLoadedSessionRecordingInterface, window, document } from '../../../utils/globals'
 import { addEventListener } from '../../../utils'
-import { MutationThrottler } from '../mutation-throttler'
+import { MutationThrottler } from './mutation-throttler'
 import { createLogger } from '../../../utils/logger'
 import {
     clampToRange,

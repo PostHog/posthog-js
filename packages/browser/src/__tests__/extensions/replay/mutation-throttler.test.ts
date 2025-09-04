@@ -1,4 +1,4 @@
-import { MutationThrottler } from '../../../extensions/replay/mutation-throttler'
+import { MutationThrottler } from '../../../extensions/replay/external/mutation-throttler'
 import {
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     MUTATION_SOURCE_TYPE,
