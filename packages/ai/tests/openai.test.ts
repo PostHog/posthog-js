@@ -370,7 +370,6 @@ describe('PostHogOpenAI - Jest test suite', () => {
     EmbeddingsMock.prototype.create = jest.fn().mockResolvedValue(mockOpenAiEmbeddingResponse)
   })
 
-
   test('basic completion', async () => {
     // We ensure calls to create a completion return our mock
     // This is handled by the inherited Chat.Completions mock in openai
@@ -1186,7 +1185,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       posthogDistinctId: 'test-id',
       posthogCostOverride: {
         inputCost: 0.05,
-        outputCost: 0.10,
+        outputCost: 0.1,
       },
     })
 
@@ -1196,9 +1195,9 @@ describe('PostHogOpenAI - Jest test suite', () => {
 
     // Cost override values are passed directly (not multiplied by tokens)
     expect(properties['$ai_input_cost_usd']).toBe(0.05)
-    expect(properties['$ai_output_cost_usd']).toBe(0.10)
+    expect(properties['$ai_output_cost_usd']).toBe(0.1)
     expect(properties['$ai_total_cost_usd']).toBeCloseTo(0.15)
-    
+
     // Token counts are still present
     expect(properties['$ai_input_tokens']).toBe(20)
     expect(properties['$ai_output_tokens']).toBe(10)

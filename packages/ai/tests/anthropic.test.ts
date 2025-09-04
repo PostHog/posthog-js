@@ -790,11 +790,13 @@ describe('PostHogAnthropic', () => {
       })
 
       // Try to consume the stream (it should throw)
-      await expect((async () => {
-        for await (const _chunk of stream) {
-          // Should throw before getting here
-        }
-      })()).rejects.toThrow('Stream Error')
+      await expect(
+        (async () => {
+          for await (const _chunk of stream) {
+            // Should throw before getting here
+          }
+        })()
+      ).rejects.toThrow('Stream Error')
 
       // Allow async error capture to complete
       await new Promise(process.nextTick)

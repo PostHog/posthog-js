@@ -856,7 +856,7 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
       posthogDistinctId: 'test-user',
       posthogCostOverride: {
         inputCost: 0.05,
-        outputCost: 0.10,
+        outputCost: 0.1,
       },
     })
 
@@ -868,7 +868,7 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
     const { properties } = captureCall[0]
 
     expect(properties.$ai_input_cost_usd).toBe(0.05)
-    expect(properties.$ai_output_cost_usd).toBe(0.10)
+    expect(properties.$ai_output_cost_usd).toBe(0.1)
     expect(properties.$ai_total_cost_usd).toBeCloseTo(0.15)
     expect(properties.$ai_input_tokens).toBe(5)
     expect(properties.$ai_output_tokens).toBe(1)

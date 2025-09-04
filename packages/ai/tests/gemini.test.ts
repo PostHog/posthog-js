@@ -49,7 +49,6 @@ describe('PostHogGemini - Jest test suite', () => {
   let client: PostHogGemini
 
   beforeEach(() => {
-
     jest.clearAllMocks()
 
     // Reset the default mocks

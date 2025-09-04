@@ -168,8 +168,7 @@ export class WrappedModels {
           usage = {
             inputTokens: metadata.promptTokenCount ?? 0,
             outputTokens: metadata.candidatesTokenCount ?? 0,
-            reasoningTokens: metadata.thoughtsTokenCount ??
-              0,
+            reasoningTokens: metadata.thoughtsTokenCount ?? 0,
             cacheReadInputTokens: metadata.cachedContentTokenCount ?? 0,
           }
         }

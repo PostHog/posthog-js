@@ -42,10 +42,10 @@ interface PostHogInput {
   role: string
   type?: string
   content?:
-  | string
-  | {
-    [key: string]: any
-  }
+    | string
+    | {
+        [key: string]: any
+      }
 }
 
 // Content types for the output array
@@ -279,14 +279,16 @@ export const createInstrumentationMiddleware = (
         const content = mapVercelOutput(result.content)
         const latency = (Date.now() - startTime) / 1000
 
-        const anthropicCacheCreationInputTokens: JSONValue | undefined = result.providerMetadata?.anthropic?.cacheCreationInputTokens
+        const anthropicCacheCreationInputTokens: JSONValue | undefined =
+          result.providerMetadata?.anthropic?.cacheCreationInputTokens
 
         const usage: TokenUsage = {
           inputTokens: result.usage.inputTokens,
           outputTokens: result.usage.outputTokens,
           reasoningTokens: result.usage.reasoningTokens,
           cacheReadInputTokens: result.usage.cachedInputTokens,
-          cacheCreationInputTokens: typeof anthropicCacheCreationInputTokens === 'number' ? anthropicCacheCreationInputTokens : undefined,
+          cacheCreationInputTokens:
+            typeof anthropicCacheCreationInputTokens === 'number' ? anthropicCacheCreationInputTokens : undefined,
         }
 
         await sendEventToPosthog({
@@ -401,14 +403,16 @@ export const createInstrumentationMiddleware = (
             }
 
             if (chunk.type === 'finish') {
-              const anthropicCacheCreationInputTokens: JSONValue | undefined = chunk.providerMetadata?.anthropic?.cacheCreationInputTokens
+              const anthropicCacheCreationInputTokens: JSONValue | undefined =
+                chunk.providerMetadata?.anthropic?.cacheCreationInputTokens
 
               usage = {
                 inputTokens: chunk.usage?.inputTokens,
                 outputTokens: chunk.usage?.outputTokens,
                 reasoningTokens: chunk.usage?.reasoningTokens,
                 cacheReadInputTokens: chunk.usage?.cachedInputTokens,
-                cacheCreationInputTokens: typeof anthropicCacheCreationInputTokens === 'number' ? anthropicCacheCreationInputTokens : undefined,
+                cacheCreationInputTokens:
+                  typeof anthropicCacheCreationInputTokens === 'number' ? anthropicCacheCreationInputTokens : undefined,
               }
             }
             controller.enqueue(chunk)
@@ -443,11 +447,11 @@ export const createInstrumentationMiddleware = (
             const output =
               content.length > 0
                 ? [
-                  {
-                    role: 'assistant',
-                    content: content.length === 1 && content[0].type === 'text' ? content[0].text : content,
-                  },
-                ]
+                    {
+                      role: 'assistant',
+                      content: content.length === 1 && content[0].type === 'text' ? content[0].text : content,
+                    },
+                  ]
                 : []
 
             await sendEventToPosthog({
