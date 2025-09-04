@@ -238,24 +238,13 @@ describe('PostHogOpenAI - Jest test suite', () => {
   let mockPostHogClient: PostHog
   let client: PostHogOpenAI
 
-  beforeAll(() => {
-    if (!process.env.OPENAI_API_KEY) {
-      console.warn('⚠️ Skipping OpenAI tests: No OPENAI_API_KEY environment variable set')
-    }
-  })
-
   beforeEach(() => {
-    // Skip all tests if no API key is present
-    if (!process.env.OPENAI_API_KEY) {
-      return
-    }
-
     jest.clearAllMocks()
 
     // Reset the default mocks
     mockPostHogClient = new (PostHog as any)()
     client = new PostHogOpenAI({
-      apiKey: process.env.OPENAI_API_KEY || '',
+      apiKey: 'test-api-key',
       posthog: mockPostHogClient as any,
     })
 
@@ -381,10 +370,8 @@ describe('PostHogOpenAI - Jest test suite', () => {
     EmbeddingsMock.prototype.create = jest.fn().mockResolvedValue(mockOpenAiEmbeddingResponse)
   })
 
-  // Conditionally run tests based on API key availability
-  const conditionalTest = process.env.OPENAI_API_KEY ? test : test.skip
 
-  conditionalTest('basic completion', async () => {
+  test('basic completion', async () => {
     // We ensure calls to create a completion return our mock
     // This is handled by the inherited Chat.Completions mock in openai
     const response = await client.chat.completions.create({
@@ -427,7 +414,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(typeof properties['$ai_latency']).toBe('number')
   })
 
-  conditionalTest('groups', async () => {
+  test('groups', async () => {
     await client.chat.completions.create({
       model: 'gpt-4',
       messages: [{ role: 'user', content: 'Hello' }],
@@ -440,7 +427,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(groups).toEqual({ company: 'test_company' })
   })
 
-  conditionalTest('privacy mode local', async () => {
+  test('privacy mode local', async () => {
     await client.chat.completions.create({
       model: 'gpt-4',
       messages: [{ role: 'user', content: 'Hello' }],
@@ -455,7 +442,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(properties['$ai_output_choices']).toBeNull()
   })
 
-  conditionalTest('privacy mode global', async () => {
+  test('privacy mode global', async () => {
     // override mock to appear globally in privacy mode
     ;(mockPostHogClient as any).privacy_mode = true
 
@@ -474,7 +461,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(properties['$ai_output_choices']).toBeNull()
   })
 
-  conditionalTest('core model params', async () => {
+  test('core model params', async () => {
     mockOpenAiChatResponse.usage = {
       prompt_tokens: 20,
       completion_tokens: 10,
@@ -504,7 +491,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(properties['foo']).toBe('bar')
   })
 
-  conditionalTest('reasoning and cache tokens', async () => {
+  test('reasoning and cache tokens', async () => {
     // Set up mock response with standard token usage
     mockOpenAiChatResponse.usage = {
       prompt_tokens: 20,
@@ -541,7 +528,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
   })
 
   // New test: ensure captureImmediate is used when flag is set
-  conditionalTest('captureImmediate flag', async () => {
+  test('captureImmediate flag', async () => {
     await client.chat.completions.create({
       model: 'gpt-4',
       messages: [{ role: 'user', content: 'Hello' }],
@@ -554,7 +541,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(0)
   })
 
-  conditionalTest('responses parse', async () => {
+  test('responses parse', async () => {
     const response = await client.responses.parse({
       model: 'gpt-4o-2024-08-06',
       input: [
@@ -608,7 +595,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(typeof properties['$ai_latency']).toBe('number')
   })
 
-  conditionalTest('anonymous user - $process_person_profile set to false', async () => {
+  test('anonymous user - $process_person_profile set to false', async () => {
     await client.chat.completions.create({
       model: 'gpt-4',
       messages: [{ role: 'user', content: 'Hello' }],
@@ -623,7 +610,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(properties['$process_person_profile']).toBe(false)
   })
 
-  conditionalTest('identified user - $process_person_profile not set', async () => {
+  test('identified user - $process_person_profile not set', async () => {
     await client.chat.completions.create({
       model: 'gpt-4',
       messages: [{ role: 'user', content: 'Hello' }],
@@ -640,7 +627,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
   })
 
   describe('Streaming Responses', () => {
-    conditionalTest('handles basic streaming completion', async () => {
+    test('handles basic streaming completion', async () => {
       // Create a simple streaming response
       mockStreamChunks = createMockStreamChunks({
         content: 'This is a streaming response',
@@ -697,7 +684,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(properties['streamTest']).toBe(true)
     })
 
-    conditionalTest('handles streaming with tool calls', async () => {
+    test('handles streaming with tool calls', async () => {
       // Create stream chunks with tool calls
       mockStreamChunks = createMockStreamChunks({
         content: 'Let me check the weather for you.',
@@ -771,7 +758,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(properties['$ai_tools'][0].function.name).toBe('get_current_weather')
     })
 
-    conditionalTest('handles multiple tool calls in streaming', async () => {
+    test('handles multiple tool calls in streaming', async () => {
       // Create custom chunks with multiple tool calls
       const multiToolChunks: ChatCompletionChunk[] = [
         {
@@ -919,7 +906,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(outputContent[2].function.name).toBe('get_news')
     })
 
-    conditionalTest('handles streaming errors gracefully', async () => {
+    test('handles streaming errors gracefully', async () => {
       // Mock a stream that throws an error
       const errorStream = {
         tee: jest.fn().mockReturnValue([
@@ -985,7 +972,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(properties['$ai_error']).toContain('503')
     })
 
-    conditionalTest('handles empty streaming response', async () => {
+    test('handles empty streaming response', async () => {
       // Create chunks with no content
       mockStreamChunks = [
         {
@@ -1039,7 +1026,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
   })
 
   describe('Embeddings', () => {
-    conditionalTest('basic embeddings', async () => {
+    test('basic embeddings', async () => {
       const response = await client.embeddings.create({
         model: 'text-embedding-3-small',
         input: 'Hello world',
@@ -1066,7 +1053,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(typeof properties['$ai_latency']).toBe('number')
     })
 
-    conditionalTest('embeddings with array input', async () => {
+    test('embeddings with array input', async () => {
       const arrayInput = ['Hello', 'World', 'Test']
       mockOpenAiEmbeddingResponse = {
         object: 'list',
@@ -1115,7 +1102,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(properties['$ai_output_tokens']).toBeUndefined() // Embeddings don't send output tokens (matches Python)
     })
 
-    conditionalTest('embeddings privacy mode', async () => {
+    test('embeddings privacy mode', async () => {
       await client.embeddings.create({
         model: 'text-embedding-3-small',
         input: 'Sensitive data',
@@ -1131,7 +1118,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(properties['$ai_output_choices']).toBeNull()
     })
 
-    conditionalTest('embeddings error handling', async () => {
+    test('embeddings error handling', async () => {
       const EmbeddingsMock: any = openaiModule.Embeddings || class MockEmbeddings {}
       const testError = new Error('API Error') as Error & { status: number }
       testError.status = 400
@@ -1155,7 +1142,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
       expect(properties['$ai_error']).toContain('400')
     })
 
-    conditionalTest('embeddings captureImmediate flag', async () => {
+    test('embeddings captureImmediate flag', async () => {
       await client.embeddings.create({
         model: 'text-embedding-3-small',
         input: 'Test input',
@@ -1169,7 +1156,7 @@ describe('PostHogOpenAI - Jest test suite', () => {
     })
   })
 
-  conditionalTest('posthogProperties are not sent to OpenAI', async () => {
+  test('posthogProperties are not sent to OpenAI', async () => {
     const ChatMock: any = openaiModule.Chat
     const mockCreate = jest.fn().mockResolvedValue({})
     const originalCreate = (ChatMock.Completions as any).prototype.create
@@ -1190,5 +1177,45 @@ describe('PostHogOpenAI - Jest test suite', () => {
     const posthogParams = Object.keys(actualParams).filter((key) => key.startsWith('posthog'))
     expect(posthogParams).toEqual([])
     ;(ChatMock.Completions as any).prototype.create = originalCreate
+  })
+
+  test('Cost Override - passes costs directly without multiplication', async () => {
+    await client.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Hello' }],
+      posthogDistinctId: 'test-id',
+      posthogCostOverride: {
+        inputCost: 0.05,
+        outputCost: 0.10,
+      },
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { properties } = captureArgs[0]
+
+    // Cost override values are passed directly (not multiplied by tokens)
+    expect(properties['$ai_input_cost_usd']).toBe(0.05)
+    expect(properties['$ai_output_cost_usd']).toBe(0.10)
+    expect(properties['$ai_total_cost_usd']).toBeCloseTo(0.15)
+    
+    // Token counts are still present
+    expect(properties['$ai_input_tokens']).toBe(20)
+    expect(properties['$ai_output_tokens']).toBe(10)
+  })
+
+  test('Cost Override - no cost properties when override not provided', async () => {
+    await client.chat.completions.create({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Hello' }],
+      posthogDistinctId: 'test-id',
+    })
+
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { properties } = captureArgs[0]
+
+    expect(properties['$ai_input_cost_usd']).toBeUndefined()
+    expect(properties['$ai_output_cost_usd']).toBeUndefined()
+    expect(properties['$ai_total_cost_usd']).toBeUndefined()
   })
 })

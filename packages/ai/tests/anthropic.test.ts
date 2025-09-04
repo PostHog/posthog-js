@@ -301,19 +301,13 @@ describe('PostHogAnthropic', () => {
     }
   }
 
-  beforeAll(() => {
-    if (!process.env.ANTHROPIC_API_KEY) {
-      console.warn('⚠️ Skipping Anthropic tests: No ANTHROPIC_API_KEY environment variable set')
-    }
-  })
-
   beforeEach(() => {
     jest.clearAllMocks()
 
     // Reset the default mocks
     mockPostHogClient = new (PostHog as any)()
     client = new PostHogAnthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY || '',
+      apiKey: 'test-api-key',
       posthog: mockPostHogClient as any,
     })
 
@@ -343,11 +337,8 @@ describe('PostHogAnthropic', () => {
     })
   })
 
-  // Wrap each test with conditional skip
-  const conditionalTest = process.env.ANTHROPIC_API_KEY ? test : test.skip
-
   describe('Message Creation', () => {
-    conditionalTest('should handle non-streaming message creation', async () => {
+    test('should handle non-streaming message creation', async () => {
       const response = await client.messages.create({
         model: 'claude-3-opus-20240229',
         messages: [{ role: 'user', content: 'Hello Claude' }],
@@ -372,7 +363,7 @@ describe('PostHogAnthropic', () => {
       })
     })
 
-    conditionalTest('should handle system prompts correctly', async () => {
+    test('should handle system prompts correctly', async () => {
       mockResponse = createMockResponse({
         content: 'I am a helpful assistant.',
       })
@@ -396,7 +387,7 @@ describe('PostHogAnthropic', () => {
       ])
     })
 
-    conditionalTest('should handle multi-turn conversations', async () => {
+    test('should handle multi-turn conversations', async () => {
       const messages = [
         { role: 'user' as const, content: 'Hello' },
         { role: 'assistant' as const, content: 'Hi there!' },
@@ -419,7 +410,7 @@ describe('PostHogAnthropic', () => {
   })
 
   describe('Streaming Responses', () => {
-    conditionalTest('should handle streaming responses', async () => {
+    test('should handle streaming responses', async () => {
       const stream = await client.messages.create({
         model: 'claude-3-opus-20240229',
         messages: [{ role: 'user', content: 'Hello' }],
@@ -450,7 +441,7 @@ describe('PostHogAnthropic', () => {
       })
     })
 
-    conditionalTest('should handle streaming with tool calls', async () => {
+    test('should handle streaming with tool calls', async () => {
       mockStreamChunks = createMockStreamChunks({
         content: 'I will check the weather for you.',
         tools: [
@@ -517,7 +508,7 @@ describe('PostHogAnthropic', () => {
   })
 
   describe('Tool Usage', () => {
-    conditionalTest('should handle tool calls in non-streaming mode', async () => {
+    test('should handle tool calls in non-streaming mode', async () => {
       mockResponse = createMockResponse({
         content: 'I will search for that information.',
         tools: [
@@ -571,7 +562,7 @@ describe('PostHogAnthropic', () => {
       ])
     })
 
-    conditionalTest('should handle multiple tool calls', async () => {
+    test('should handle multiple tool calls', async () => {
       mockResponse = createMockResponse({
         content: 'Let me check both of those for you.',
         tools: [
@@ -618,7 +609,7 @@ describe('PostHogAnthropic', () => {
   })
 
   describe('Privacy Mode', () => {
-    conditionalTest('should respect local privacy mode', async () => {
+    test('should respect local privacy mode', async () => {
       await client.messages.create({
         model: 'claude-3-opus-20240229',
         messages: [{ role: 'user', content: 'Sensitive information' }],
@@ -633,7 +624,7 @@ describe('PostHogAnthropic', () => {
       })
     })
 
-    conditionalTest('should respect global privacy mode', async () => {
+    test('should respect global privacy mode', async () => {
       // Set global privacy mode
       ;(mockPostHogClient as any).privacy_mode = true
 
@@ -653,7 +644,7 @@ describe('PostHogAnthropic', () => {
   })
 
   describe('Token Tracking', () => {
-    conditionalTest('should track standard token usage', async () => {
+    test('should track standard token usage', async () => {
       mockResponse = createMockResponse({
         content: 'Response',
         usage: {
@@ -675,7 +666,7 @@ describe('PostHogAnthropic', () => {
       })
     })
 
-    conditionalTest('should track cache tokens', async () => {
+    test('should track cache tokens', async () => {
       mockResponse = createMockResponse({
         content: 'Response',
         usage: {
@@ -701,7 +692,7 @@ describe('PostHogAnthropic', () => {
       })
     })
 
-    conditionalTest('should track tokens in streaming mode', async () => {
+    test('should track tokens in streaming mode', async () => {
       mockStreamChunks = createMockStreamChunks({
         content: 'Streaming response',
         usage: {
@@ -738,7 +729,7 @@ describe('PostHogAnthropic', () => {
   })
 
   describe('Error Handling', () => {
-    conditionalTest('should handle API errors', async () => {
+    test('should handle API errors', async () => {
       const apiError = new Error('API Error') as Error & { status: number }
       apiError.status = 429
 
@@ -767,7 +758,7 @@ describe('PostHogAnthropic', () => {
       expect(properties['$ai_error']).toBeDefined()
     })
 
-    conditionalTest('should handle streaming errors', async () => {
+    test('should handle streaming errors', async () => {
       const streamError = new Error('Stream Error') as Error & { status: number }
       streamError.status = 500
 
@@ -775,12 +766,12 @@ describe('PostHogAnthropic', () => {
       const errorStream = {
         tee: jest.fn().mockReturnValue([
           {
-            [Symbol.asyncIterator]: async function () {
+            [Symbol.asyncIterator]: async function* () {
               throw streamError
             },
           },
           {
-            [Symbol.asyncIterator]: async function () {
+            [Symbol.asyncIterator]: async function* () {
               throw streamError
             },
           },
@@ -799,11 +790,11 @@ describe('PostHogAnthropic', () => {
       })
 
       // Try to consume the stream (it should throw)
-      await expect(async () => {
+      await expect((async () => {
         for await (const _chunk of stream) {
           // Should throw before getting here
         }
-      }).rejects.toThrow('Stream Error')
+      })()).rejects.toThrow('Stream Error')
 
       // Allow async error capture to complete
       await new Promise(process.nextTick)
@@ -817,7 +808,7 @@ describe('PostHogAnthropic', () => {
   })
 
   describe('Additional Features', () => {
-    conditionalTest('should handle groups', async () => {
+    test('should handle groups', async () => {
       await client.messages.create({
         model: 'claude-3-opus-20240229',
         messages: [{ role: 'user', content: 'Hello' }],
@@ -831,7 +822,7 @@ describe('PostHogAnthropic', () => {
       })
     })
 
-    conditionalTest('should use captureImmediate when flag is set', async () => {
+    test('should use captureImmediate when flag is set', async () => {
       await client.messages.create({
         model: 'claude-3-opus-20240229',
         messages: [{ role: 'user', content: 'Hello' }],
@@ -845,7 +836,7 @@ describe('PostHogAnthropic', () => {
       expect(mockPostHogClient.capture).toHaveBeenCalledTimes(0)
     })
 
-    conditionalTest('should track model parameters', async () => {
+    test('should track model parameters', async () => {
       await client.messages.create({
         model: 'claude-3-opus-20240229',
         messages: [{ role: 'user', content: 'Hello' }],
@@ -866,7 +857,7 @@ describe('PostHogAnthropic', () => {
       })
     })
 
-    conditionalTest('should handle anonymous users with trace ID', async () => {
+    test('should handle anonymous users with trace ID', async () => {
       await client.messages.create({
         model: 'claude-3-opus-20240229',
         messages: [{ role: 'user', content: 'Hello' }],
@@ -882,7 +873,7 @@ describe('PostHogAnthropic', () => {
       expect(properties['$process_person_profile']).toBe(false)
     })
 
-    conditionalTest('should handle identified users without setting $process_person_profile', async () => {
+    test('should handle identified users without setting $process_person_profile', async () => {
       await client.messages.create({
         model: 'claude-3-opus-20240229',
         messages: [{ role: 'user', content: 'Hello' }],
@@ -898,5 +889,43 @@ describe('PostHogAnthropic', () => {
       expect(distinctId).toBe('user-456')
       expect(properties['$process_person_profile']).toBeUndefined()
     })
+  })
+
+  test('Cost Override - passes costs directly without multiplication', async () => {
+    await client.messages.create({
+      model: 'claude-3-opus-20240229',
+      messages: [{ role: 'user', content: 'Hello' }],
+      max_tokens: 100,
+      posthogDistinctId: 'test-user',
+      posthogCostOverride: {
+        inputCost: 0.03,
+        outputCost: 0.06,
+      },
+    })
+
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { properties } = captureArgs[0]
+
+    expect(properties['$ai_input_cost_usd']).toBe(0.03)
+    expect(properties['$ai_output_cost_usd']).toBe(0.06)
+    expect(properties['$ai_total_cost_usd']).toBeCloseTo(0.09)
+    expect(properties['$ai_input_tokens']).toBeDefined()
+    expect(properties['$ai_output_tokens']).toBeDefined()
+  })
+
+  test('Cost Override - no cost properties when override not provided', async () => {
+    await client.messages.create({
+      model: 'claude-3-opus-20240229',
+      messages: [{ role: 'user', content: 'Hello' }],
+      max_tokens: 100,
+      posthogDistinctId: 'test-user',
+    })
+
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { properties } = captureArgs[0]
+
+    expect(properties['$ai_input_cost_usd']).toBeUndefined()
+    expect(properties['$ai_output_cost_usd']).toBeUndefined()
+    expect(properties['$ai_total_cost_usd']).toBeUndefined()
   })
 })

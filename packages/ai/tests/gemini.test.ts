@@ -48,24 +48,14 @@ describe('PostHogGemini - Jest test suite', () => {
   let mockPostHogClient: PostHog
   let client: PostHogGemini
 
-  beforeAll(() => {
-    if (!process.env.GEMINI_API_KEY) {
-      console.warn('⚠️ Skipping Gemini tests: No GEMINI_API_KEY environment variable set')
-    }
-  })
-
   beforeEach(() => {
-    // Skip all tests if no API key is present
-    if (!process.env.GEMINI_API_KEY) {
-      return
-    }
 
     jest.clearAllMocks()
 
     // Reset the default mocks
     mockPostHogClient = new (PostHog as any)()
     client = new PostHogGemini({
-      apiKey: process.env.GEMINI_API_KEY || '',
+      apiKey: 'test-api-key',
       posthog: mockPostHogClient as any,
     })
 
@@ -144,10 +134,7 @@ describe('PostHogGemini - Jest test suite', () => {
     ;(client as any).client.models.generateContentStream = mockGenerateContentStream(mockGeminiStreamResponse)
   })
 
-  // Wrap each test with conditional skip
-  const conditionalTest = process.env.GEMINI_API_KEY ? test : test.skip
-
-  conditionalTest('basic content generation', async () => {
+  test('basic content generation', async () => {
     const response = await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
       contents: 'Hello',
@@ -182,7 +169,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(typeof properties['$ai_latency']).toBe('number')
   })
 
-  conditionalTest('streaming content generation', async () => {
+  test('streaming content generation', async () => {
     const stream = client.models.generateContentStream({
       model: 'gemini-2.0-flash-001',
       contents: 'Write a short poem',
@@ -224,7 +211,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(typeof properties['$ai_latency']).toBe('number')
   })
 
-  conditionalTest('groups', async () => {
+  test('groups', async () => {
     await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
       contents: 'Hello',
@@ -239,7 +226,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(groups).toEqual({ team: 'ai-team' })
   })
 
-  conditionalTest('privacy mode', async () => {
+  test('privacy mode', async () => {
     await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
       contents: 'Sensitive information',
@@ -255,7 +242,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$ai_output_choices']).toBeNull()
   })
 
-  conditionalTest('error handling', async () => {
+  test('error handling', async () => {
     const error = new Error('API Error')
     ;(error as any).status = 400
     ;(client as any).client.models.generateContent = jest.fn().mockRejectedValue(error)
@@ -278,7 +265,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$ai_output_tokens']).toBe(0)
   })
 
-  conditionalTest('array contents input', async () => {
+  test('array contents input', async () => {
     await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
       contents: ['Hello', 'How are you?'],
@@ -295,7 +282,7 @@ describe('PostHogGemini - Jest test suite', () => {
     ])
   })
 
-  conditionalTest('object contents input', async () => {
+  test('object contents input', async () => {
     await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
       contents: { text: 'Hello world' },
@@ -309,7 +296,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$ai_input']).toEqual([{ role: 'user', content: 'Hello world' }])
   })
 
-  conditionalTest('capture immediate', async () => {
+  test('capture immediate', async () => {
     await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
       contents: 'Hello',
@@ -321,7 +308,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(mockPostHogClient.capture).toHaveBeenCalledTimes(0)
   })
 
-  conditionalTest('vertex ai configuration', () => {
+  test('vertex ai configuration', () => {
     const vertexClient = new PostHogGemini({
       vertexai: true,
       project: 'test-project',
@@ -333,7 +320,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(vertexClient.models).toBeDefined()
   })
 
-  conditionalTest('streaming with function calls', async () => {
+  test('streaming with function calls', async () => {
     // Mock streaming response with function calls
     const mockStreamWithFunctions = [
       {
@@ -446,7 +433,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$ai_output_tokens']).toBe(15)
   })
 
-  conditionalTest('streaming with multiple text chunks accumulation', async () => {
+  test('streaming with multiple text chunks accumulation', async () => {
     // Mock streaming response with multiple text chunks
     const mockMultipleTextChunks = [
       {
@@ -500,7 +487,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$ai_output_tokens']).toBe(4)
   })
 
-  conditionalTest('anonymous user - $process_person_profile set to false', async () => {
+  test('anonymous user - $process_person_profile set to false', async () => {
     await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
       contents: 'Hello',
@@ -515,7 +502,7 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$process_person_profile']).toBe(false)
   })
 
-  conditionalTest('identified user - $process_person_profile not set', async () => {
+  test('identified user - $process_person_profile not set', async () => {
     await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
       contents: 'Hello',
@@ -529,5 +516,41 @@ describe('PostHogGemini - Jest test suite', () => {
 
     expect(distinctId).toBe('user-456')
     expect(properties['$process_person_profile']).toBeUndefined()
+  })
+
+  test('Cost Override - passes costs directly without multiplication', async () => {
+    await client.models.generateContent({
+      model: 'gemini-2.0-flash-001',
+      contents: 'Hello',
+      posthogDistinctId: 'test-user',
+      posthogCostOverride: {
+        inputCost: 0.02,
+        outputCost: 0.04,
+      },
+    })
+
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { properties } = captureArgs[0]
+
+    expect(properties['$ai_input_cost_usd']).toBe(0.02)
+    expect(properties['$ai_output_cost_usd']).toBe(0.04)
+    expect(properties['$ai_total_cost_usd']).toBeCloseTo(0.06)
+    expect(properties['$ai_input_tokens']).toBeDefined()
+    expect(properties['$ai_output_tokens']).toBeDefined()
+  })
+
+  test('Cost Override - no cost properties when override not provided', async () => {
+    await client.models.generateContent({
+      model: 'gemini-2.0-flash-001',
+      contents: 'Hello',
+      posthogDistinctId: 'test-user',
+    })
+
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { properties } = captureArgs[0]
+
+    expect(properties['$ai_input_cost_usd']).toBeUndefined()
+    expect(properties['$ai_output_cost_usd']).toBeUndefined()
+    expect(properties['$ai_total_cost_usd']).toBeUndefined()
   })
 })

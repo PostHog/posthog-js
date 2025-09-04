@@ -70,9 +70,7 @@ export class WrappedModels {
         usage: {
           inputTokens: metadata?.promptTokenCount ?? 0,
           outputTokens: metadata?.candidatesTokenCount ?? 0,
-          reasoningTokens:
-            (metadata as GenerateContentResponseUsageMetadata & { thoughtsTokenCount?: number })?.thoughtsTokenCount ??
-            0,
+          reasoningTokens: metadata?.thoughtsTokenCount ?? 0,
           cacheReadInputTokens: metadata?.cachedContentTokenCount ?? 0,
         },
         tools: availableTools,
@@ -170,8 +168,7 @@ export class WrappedModels {
           usage = {
             inputTokens: metadata.promptTokenCount ?? 0,
             outputTokens: metadata.candidatesTokenCount ?? 0,
-            reasoningTokens:
-              (metadata as GenerateContentResponseUsageMetadata & { thoughtsTokenCount?: number }).thoughtsTokenCount ??
+            reasoningTokens: metadata.thoughtsTokenCount ??
               0,
             cacheReadInputTokens: metadata.cachedContentTokenCount ?? 0,
           }
