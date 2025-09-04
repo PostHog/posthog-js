@@ -2,23 +2,25 @@ import { PostHog } from './posthog-core'
 import { CaptureResult, Properties, RemoteConfig, SiteApp, SiteAppGlobals, SiteAppLoader } from './types'
 import { assignableWindow } from './utils/globals'
 import { createLogger } from './utils/logger'
+import { PostHogComponent } from './posthog-component'
 
 const logger = createLogger('[SiteApps]')
 
-export class SiteApps {
+export class SiteApps extends PostHogComponent {
     apps: Record<string, SiteApp>
 
     private _stopBuffering?: () => void
     private _bufferedInvocations: SiteAppGlobals[]
 
-    constructor(private _instance: PostHog) {
+    constructor(instance: PostHog) {
+        super(instance)
         // events captured between loading posthog-js and the site app; up to 1000 events
         this._bufferedInvocations = []
         this.apps = {}
     }
 
     public get isEnabled(): boolean {
-        return !!this._instance.config.opt_in_site_apps
+        return this._config.opt_in_site_apps
     }
 
     private _eventCollector(_eventName: string, eventPayload?: CaptureResult | undefined) {
@@ -33,7 +35,7 @@ export class SiteApps {
     }
 
     get siteAppLoaders(): SiteAppLoader[] | undefined {
-        return assignableWindow._POSTHOG_REMOTE_CONFIG?.[this._instance.config.token]?.siteApps
+        return assignableWindow._POSTHOG_REMOTE_CONFIG?.[this._config.token]?.siteApps
     }
 
     init() {
