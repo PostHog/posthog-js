@@ -30,6 +30,8 @@ const initPostHogInAPromise = (
                 segment: segment,
                 loaded: resolve,
                 disable_surveys: true,
+                // want to avoid flags code logging during tests
+                advanced_disable_feature_flags: true,
                 ...(config || {}),
             },
             posthogName
