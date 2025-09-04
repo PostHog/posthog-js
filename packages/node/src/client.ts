@@ -781,12 +781,13 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       personProperties?: Record<string, string>
       groupProperties?: Record<string, Record<string, string>>
       onlyEvaluateLocally?: boolean
+      /** @deprecated THIS OPTION HAS NO EFFECT, kept here for backwards compatibility reasons. */
       sendFeatureFlagEvents?: boolean
       disableGeoip?: boolean
     }
   ): Promise<JsonType | undefined> {
     const { groups, disableGeoip } = options || {}
-    let { onlyEvaluateLocally, sendFeatureFlagEvents, personProperties, groupProperties } = options || {}
+    let { onlyEvaluateLocally, personProperties, groupProperties } = options || {}
 
     const adjustedProperties = this.addLocalPersonAndGroupProperties(
       distinctId,
@@ -825,9 +826,6 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
     // set defaults
     if (onlyEvaluateLocally == undefined) {
       onlyEvaluateLocally = false
-    }
-    if (sendFeatureFlagEvents == undefined) {
-      sendFeatureFlagEvents = true
     }
 
     const payloadWasLocallyEvaluated = response !== undefined
