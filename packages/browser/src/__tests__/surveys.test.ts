@@ -1561,7 +1561,7 @@ describe('surveys', () => {
         it('can be disabled by config despite results of onRemoteConfig', () => {
             surveys['_instance'].config.disable_surveys = true
             surveys.onRemoteConfig({
-                surveys: false,
+                surveys: ['example'],
             } as Partial<RemoteConfig> as RemoteConfig)
             expect(surveys['_isSurveysEnabled']).toBe(false)
         })
