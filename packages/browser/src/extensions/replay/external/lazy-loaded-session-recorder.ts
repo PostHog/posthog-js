@@ -523,8 +523,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
         const currentUrl = this._maskUrl(window.location.href)
         if (this._lastHref !== currentUrl) {
-            this._tryAddCustomEvent('$url_changed', { href: currentUrl })
             this._lastHref = currentUrl
+            this._tryAddCustomEvent('$url_changed', { href: currentUrl })
         }
     }
 
