@@ -1,7 +1,7 @@
-import { PostHog } from '../posthog-core'
 import { ExternalIntegrationKind } from '../types'
 import { assignableWindow, ExternalExtensionKind } from '../utils/globals'
 import { createLogger } from '../utils/logger'
+import { PostHogComponent } from '../posthog-component'
 
 const logger = createLogger('[PostHog ExternalIntegrations]')
 
@@ -10,9 +10,7 @@ const MAPPED_INTEGRATIONS: Record<ExternalIntegrationKind, ExternalExtensionKind
     crispChat: 'crisp-chat-integration',
 }
 
-export class ExternalIntegrations {
-    constructor(private readonly _instance: PostHog) {}
-
+export class ExternalIntegrations extends PostHogComponent {
     private _loadScript(name: ExternalExtensionKind, cb: () => void): void {
         assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, name, (err) => {
             if (err) {

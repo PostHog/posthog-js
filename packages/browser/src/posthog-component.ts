@@ -9,7 +9,7 @@ export abstract class PostHogComponent {
     readonly _instance: PostHog
     readonly _config: PostHogConfig
 
-    protected constructor(instance: PostHog) {
+    constructor(instance: PostHog) {
         this._instance = instance
         this._config = instance.config
     }
