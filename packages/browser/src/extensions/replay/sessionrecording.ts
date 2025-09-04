@@ -198,10 +198,7 @@ export class SessionRecording {
      * When overriding a trigger we don't know the user will call their override when we're ready
      * so we either call it right away, or we queue it until we're ready
      */
-    private _queueOverrideFn(overrideToCall: {
-        fn: (sessionRecording: LazyLoadedSessionRecordingInterface) => void
-        label: string
-    }) {
+    private _queueOverrideFn(overrideToCall: QueuedOverride) {
         if (this._lazyLoadedSessionRecording) {
             overrideToCall.fn(this._lazyLoadedSessionRecording)
         } else {
