@@ -20,7 +20,7 @@ import {
     SurveyQuestionType,
     SurveyType,
 } from '../posthog-surveys-types'
-import { FlagsResponse, PostHogConfig, Properties } from '../types'
+import { FlagsResponse, PostHogConfig, Properties, RemoteConfig } from '../types'
 import * as globals from '../utils/globals'
 import { assignableWindow, window } from '../utils/globals'
 import { RequestRouter } from '../utils/request-router'
@@ -1535,6 +1535,35 @@ describe('surveys', () => {
             ] as unknown as SurveyQuestion[]
             expect(() => getNextSurveyStep(survey, 0, '2')).toThrow('The response type must be an integer')
             expect(() => getNextSurveyStep(survey, 0, 'some_string')).toThrow('The response type must be an integer')
+        })
+    })
+
+    describe('is enabled', () => {
+        it('starts effectively disabled', () => {
+            expect(surveys['_isSurveysEnabled']).toBe(undefined)
+        })
+
+        it('is disabled by having no results in onRemoteConfig', () => {
+            surveys.onRemoteConfig({
+                surveys: [],
+            } as Partial<RemoteConfig> as RemoteConfig)
+            expect(surveys['_isSurveysEnabled']).toBe(false)
+        })
+
+        it('is enabled by having results in onRemoteConfig', () => {
+            expect(surveys['_isSurveysEnabled']).toBe(undefined)
+            surveys.onRemoteConfig({
+                surveys: ['example' as unknown as Survey],
+            } as Partial<RemoteConfig> as RemoteConfig)
+            expect(surveys['_isSurveysEnabled']).toBe(true)
+        })
+
+        it('can be disabled by config despite results of onRemoteConfig', () => {
+            surveys['_instance'].config.disable_surveys = true
+            surveys.onRemoteConfig({
+                surveys: ['example' as unknown as Survey],
+            } as Partial<RemoteConfig> as RemoteConfig)
+            expect(surveys['_isSurveysEnabled']).toBe(undefined)
         })
     })
 })

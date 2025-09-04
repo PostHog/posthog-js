@@ -36,6 +36,10 @@ export class PostHogSurveys {
 
     onRemoteConfig(response: RemoteConfig) {
         // only load surveys if they are enabled and there are surveys to load
+        if (this._instance.config.disable_surveys) {
+            return
+        }
+
         const surveys = response['surveys']
         if (isNullish(surveys)) {
             return logger.warn('Flags not loaded yet. Not loading surveys.')
