@@ -1546,7 +1546,7 @@ describe('surveys', () => {
         it('is enabled by having results in onRemoteConfig', () => {
             expect(surveys['_isSurveysEnabled']).toBe(undefined)
             surveys.onRemoteConfig({
-                surveys: true,
+                surveys: ['example'],
             } as Partial<RemoteConfig> as RemoteConfig)
             expect(surveys['_isSurveysEnabled']).toBe(true)
         })
