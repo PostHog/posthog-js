@@ -1,5 +1,11 @@
 # posthog-ai
 
+## 6.3.2
+
+### Patch Changes
+
+- [#2272](https://github.com/PostHog/posthog-js/pull/2272) [`9eccea4`](https://github.com/PostHog/posthog-js/commit/9eccea4b7d6a11468d9c890eae4b51be8710c9cf) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Don't send Posthog specific params to OpenAI
+
 ## 6.3.1
 
 ### Patch Changes
