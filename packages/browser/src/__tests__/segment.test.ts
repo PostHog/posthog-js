@@ -13,6 +13,29 @@ import { USER_STATE } from '../constants'
 import { SegmentContext, SegmentPlugin } from '../extensions/segment-integration'
 import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
+import { PostHogConfig } from '../types'
+
+const initPostHogInAPromise = (
+    segment: any,
+    posthogName: string,
+    config?: Partial<PostHogConfig>
+): Promise<PostHog> => {
+    return new Promise((resolve) => {
+        return new PostHog().init(
+            `test-token`,
+            {
+                debug: true,
+                persistence: `localStorage`,
+                api_host: `https://test.com`,
+                segment: segment,
+                loaded: resolve,
+                disable_surveys: true,
+                ...(config || {}),
+            },
+            posthogName
+        )
+    })
+}
 
 describe(`Segment integration`, () => {
     let segment: any
@@ -57,40 +80,14 @@ describe(`Segment integration`, () => {
     })
 
     it('should call loaded after the segment integration has been set up', async () => {
-        const loadPromise = new Promise((resolve) => {
-            return new PostHog().init(
-                `test-token`,
-                {
-                    debug: true,
-                    persistence: `localStorage`,
-                    api_host: `https://test.com`,
-                    segment: segment,
-                    loaded: resolve,
-                    disable_surveys: true,
-                },
-                posthogName
-            )
-        })
+        const loadPromise = initPostHogInAPromise(segment, posthogName)
         expect(segmentIntegration).toBeUndefined()
         await loadPromise
         expect(segmentIntegration).toBeDefined()
     })
 
     it('should set properties from the segment user', async () => {
-        const posthog = await new Promise<PostHog>((resolve) => {
-            return new PostHog().init(
-                `test-token`,
-                {
-                    debug: true,
-                    persistence: `localStorage`,
-                    api_host: `https://test.com`,
-                    segment: segment,
-                    loaded: resolve,
-                    disable_surveys: true,
-                },
-                posthogName
-            )
-        })
+        const posthog = await initPostHogInAPromise(segment, posthogName)
 
         expect(posthog.get_distinct_id()).toBe('test-id')
         expect(posthog.get_property('$device_id')).toBe('test-anonymous-id')
@@ -103,20 +100,7 @@ describe(`Segment integration`, () => {
                 id: () => 'test-id',
             })
 
-        const posthog = await new Promise<PostHog>((resolve) => {
-            return new PostHog().init(
-                `test-token`,
-                {
-                    debug: true,
-                    persistence: `localStorage`,
-                    api_host: `https://test.com`,
-                    segment: segment,
-                    loaded: resolve,
-                    disable_surveys: true,
-                },
-                posthogName
-            )
-        })
+        const posthog = await initPostHogInAPromise(segment, posthogName)
 
         expect(posthog.get_distinct_id()).toBe('test-id')
         expect(posthog.get_property('$device_id')).toBe('test-anonymous-id')
@@ -128,20 +112,7 @@ describe(`Segment integration`, () => {
             id: () => '',
         })
 
-        const posthog = await new Promise<PostHog>((resolve) => {
-            return new PostHog().init(
-                `test-token`,
-                {
-                    debug: true,
-                    persistence: `memory`,
-                    api_host: `https://test.com`,
-                    segment: segment,
-                    loaded: resolve,
-                    disable_surveys: true,
-                },
-                posthogName
-            )
-        })
+        const posthog = await initPostHogInAPromise(segment, posthogName, { persistence: 'memory' })
 
         expect(posthog.get_distinct_id()).not.toEqual('test-id')
         expect(posthog.persistence?.get_property(USER_STATE)).toEqual('anonymous')
