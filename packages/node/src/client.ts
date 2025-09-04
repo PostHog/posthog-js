@@ -669,7 +669,7 @@ export abstract class PostHogBackendClient extends PostHogCoreStateless implemen
       onlyEvaluateLocally = false
     }
     if (sendFeatureFlagEvents == undefined) {
-      sendFeatureFlagEvents = true
+      sendFeatureFlagEvents = this.options.sendFeatureFlagEvent ?? true
     }
 
     let response = await this.featureFlagsPoller?.getFeatureFlag(
