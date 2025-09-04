@@ -1555,7 +1555,7 @@ describe('surveys', () => {
             surveys.onRemoteConfig({
                 surveys: false,
             } as Partial<RemoteConfig> as RemoteConfig)
-            expect(surveys['_isSurveysEnabled']).toBe(true)
+            expect(surveys['_isSurveysEnabled']).toBe(false)
         })
 
         it('can be disabled by config despite results of onRemoteConfig', () => {
