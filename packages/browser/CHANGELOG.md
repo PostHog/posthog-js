@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.261.7
+
+### Patch Changes
+
+- [#2284](https://github.com/PostHog/posthog-js/pull/2284) [`bdfe450`](https://github.com/PostHog/posthog-js/commit/bdfe4501899e57879cbda677f84d2a21a4ea9a7c) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: order of operations when replay does pageview fallback
+
 ## 1.261.6
 
 ### Patch Changes
