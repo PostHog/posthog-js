@@ -766,12 +766,12 @@ describe('PostHogAnthropic', () => {
       const errorStream = {
         tee: jest.fn().mockReturnValue([
           {
-            [Symbol.asyncIterator]: async function* () {
+            async *[Symbol.asyncIterator]() {
               throw streamError
             },
           },
           {
-            [Symbol.asyncIterator]: async function* () {
+            async *[Symbol.asyncIterator]() {
               throw streamError
             },
           },
