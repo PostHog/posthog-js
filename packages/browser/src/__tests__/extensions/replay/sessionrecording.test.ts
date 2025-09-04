@@ -13,7 +13,7 @@ import {
     FULL_SNAPSHOT_EVENT_TYPE,
     INCREMENTAL_SNAPSHOT_EVENT_TYPE,
     META_EVENT_TYPE,
-} from '../../../extensions/replay/sessionrecording-utils'
+} from '../../../extensions/replay/external/sessionrecording-utils'
 import { PostHog } from '../../../posthog-core'
 import {
     PerformanceCaptureConfig,
