@@ -9,24 +9,15 @@ import {
 } from '@rrweb/types'
 import { buildNetworkRequestOptions } from '../config'
 import {
-    ACTIVE,
     allMatchSessionRecordingStatus,
     AndTriggerMatching,
     anyMatchSessionRecordingStatus,
-    BUFFERING,
-    DISABLED,
     EventTriggerMatching,
     LinkedFlagMatching,
     nullMatchSessionRecordingStatus,
     OrTriggerMatching,
-    PAUSED,
     PendingTriggerMatching,
-    RecordingTriggersStatus,
-    SAMPLED,
-    SessionRecordingStatus,
-    TRIGGER_PENDING,
     TriggerStatusMatching,
-    TriggerType,
     URLTriggerMatching,
 } from '../triggerMatching'
 import { estimateSize, INCREMENTAL_SNAPSHOT_EVENT_TYPE, truncateLargeConsoleLogs } from '../sessionrecording-utils'
@@ -71,6 +62,17 @@ import {
 import { isLocalhost } from '../../../utils/request-utils'
 import Config from '../../../config'
 import { sampleOnProperty } from '../../sampling'
+import {
+    ACTIVE,
+    BUFFERING,
+    DISABLED,
+    PAUSED,
+    RecordingTriggersStatus,
+    SAMPLED,
+    SessionRecordingStatus,
+    TRIGGER_PENDING,
+    TriggerType,
+} from '../types'
 
 const BASE_ENDPOINT = '/s/'
 const DEFAULT_CANVAS_QUALITY = 0.4

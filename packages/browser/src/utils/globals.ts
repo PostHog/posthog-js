@@ -9,8 +9,8 @@ import {
     SiteAppLoader,
     SessionStartReason,
 } from '../types'
-import { SessionRecordingStatus, TriggerType } from '../extensions/replay/triggerMatching'
 import { eventWithTime } from '@rrweb/types'
+import { SessionRecordingStatus, TriggerType } from '../extensions/replay/types'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets

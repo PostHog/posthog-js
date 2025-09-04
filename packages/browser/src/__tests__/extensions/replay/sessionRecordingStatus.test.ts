@@ -1,11 +1,15 @@
 import {
-    ACTIVE,
     allMatchSessionRecordingStatus,
     anyMatchSessionRecordingStatus,
-    BUFFERING,
-    DISABLED,
     EventTriggerMatching,
     LinkedFlagMatching,
+    URLTriggerMatching,
+} from '../../../extensions/replay/triggerMatching'
+import { PostHog } from '../../../posthog-core'
+import {
+    ACTIVE,
+    BUFFERING,
+    DISABLED,
     PAUSED,
     RecordingTriggersStatus,
     SAMPLED,
@@ -13,9 +17,7 @@ import {
     TRIGGER_ACTIVATED,
     TRIGGER_DISABLED,
     TRIGGER_PENDING,
-    URLTriggerMatching,
-} from '../../../extensions/replay/triggerMatching'
-import { PostHog } from '../../../posthog-core'
+} from '../../../extensions/replay/types'
 
 type TestConfig = {
     name: string

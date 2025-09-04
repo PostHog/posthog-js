@@ -3,7 +3,8 @@ import type { SegmentAnalytics } from './extensions/segment-integration'
 import { PostHog } from './posthog-core'
 import { KnownUnsafeEditableEvent } from '@posthog/core'
 import { Survey } from './posthog-surveys-types'
-import { SAMPLED } from './extensions/replay/triggerMatching'
+
+import { SAMPLED } from './extensions/replay/types'
 
 export type Property = any
 export type Properties = Record<string, Property>
