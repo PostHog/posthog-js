@@ -10,11 +10,11 @@
  */
 import { getPersonInfo, getPersonPropsFromInfo } from './utils/event-utils'
 import type { SessionIdManager } from './sessionid'
-import type { PostHogPersistence } from './posthog-persistence'
 import { CLIENT_SESSION_PROPS } from './constants'
 import type { PostHog } from './posthog-core'
 import { each, stripEmptyProperties } from './utils'
 import { stripLeadingDollar } from '@posthog/core'
+import { PostHogComponent } from './posthog-component'
 
 interface LegacySessionSourceProps {
     initialPathName: string
@@ -40,10 +40,8 @@ const generateSessionSourceParams = (posthog?: PostHog): LegacySessionSourceProp
     return getPersonInfo(posthog?.config.mask_personal_data_properties, posthog?.config.custom_personal_data_properties)
 }
 
-export class SessionPropsManager {
-    private readonly _instance: PostHog
+export class SessionPropsManager extends PostHogComponent {
     private readonly _sessionIdManager: SessionIdManager
-    private readonly _persistence: PostHogPersistence
     private readonly _sessionSourceParamGenerator: (
         instance?: PostHog
     ) => LegacySessionSourceProps | CurrentSessionSourceProps
@@ -51,19 +49,18 @@ export class SessionPropsManager {
     constructor(
         instance: PostHog,
         sessionIdManager: SessionIdManager,
-        persistence: PostHogPersistence,
         sessionSourceParamGenerator?: (instance?: PostHog) => LegacySessionSourceProps | CurrentSessionSourceProps
     ) {
-        this._instance = instance
+        super(instance)
+
         this._sessionIdManager = sessionIdManager
-        this._persistence = persistence
         this._sessionSourceParamGenerator = sessionSourceParamGenerator || generateSessionSourceParams
 
         this._sessionIdManager.onSessionId(this._onSessionIdCallback)
     }
 
     _getStored(): StoredSessionSourceProps | undefined {
-        return this._persistence.props[CLIENT_SESSION_PROPS]
+        return this.ph_property(CLIENT_SESSION_PROPS)
     }
 
     _onSessionIdCallback = (sessionId: string) => {
@@ -76,7 +73,8 @@ export class SessionPropsManager {
             sessionId,
             props: this._sessionSourceParamGenerator(this._instance),
         }
-        this._persistence.register({ [CLIENT_SESSION_PROPS]: newProps })
+        // this is typed as undefined but in reality persistence is always defined here
+        this._instance.persistence?.register({ [CLIENT_SESSION_PROPS]: newProps })
     }
 
     getSetOnceProps() {

@@ -4,6 +4,7 @@ import { isBoolean, isObject } from '@posthog/core'
 import { assignableWindow, document, LazyLoadedDeadClicksAutocaptureInterface } from '../utils/globals'
 import { createLogger } from '../utils/logger'
 import { DeadClicksAutoCaptureConfig, RemoteConfig } from '../types'
+import { PostHogComponent } from '../posthog-component'
 
 const logger = createLogger('[Dead Clicks]')
 
@@ -11,12 +12,12 @@ export const isDeadClicksEnabledForHeatmaps = () => {
     return true
 }
 export const isDeadClicksEnabledForAutocapture = (instance: DeadClicksAutocapture) => {
-    const isRemoteEnabled = !!instance.instance.persistence?.get_property(DEAD_CLICKS_ENABLED_SERVER_SIDE)
-    const clientConfig = instance.instance.config.capture_dead_clicks
+    const isRemoteEnabled = !!instance._instance.persistence?.get_property(DEAD_CLICKS_ENABLED_SERVER_SIDE)
+    const clientConfig = instance._config.capture_dead_clicks
     return isBoolean(clientConfig) ? clientConfig : isRemoteEnabled
 }
 
-export class DeadClicksAutocapture {
+export class DeadClicksAutocapture extends PostHogComponent {
     get lazyLoadedDeadClicksAutocapture(): LazyLoadedDeadClicksAutocaptureInterface | undefined {
         return this._lazyLoadedDeadClicksAutocapture
     }
@@ -24,16 +25,18 @@ export class DeadClicksAutocapture {
     private _lazyLoadedDeadClicksAutocapture: LazyLoadedDeadClicksAutocaptureInterface | undefined
 
     constructor(
-        readonly instance: PostHog,
+        instance: PostHog,
         readonly isEnabled: (dca: DeadClicksAutocapture) => boolean,
         readonly onCapture?: DeadClicksAutoCaptureConfig['__onCapture']
     ) {
+        super(instance)
+
         this.startIfEnabled()
     }
 
     public onRemoteConfig(response: RemoteConfig) {
-        if (this.instance.persistence) {
-            this.instance.persistence.register({
+        if (this._instance.persistence) {
+            this._instance.persistence.register({
                 [DEAD_CLICKS_ENABLED_SERVER_SIDE]: response?.captureDeadClicks,
             })
         }
@@ -54,7 +57,7 @@ export class DeadClicksAutocapture {
             cb()
         }
         assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
-            this.instance,
+            this._instance,
             'dead-clicks-autocapture',
             (err) => {
                 if (err) {
@@ -76,13 +79,11 @@ export class DeadClicksAutocapture {
             !this._lazyLoadedDeadClicksAutocapture &&
             assignableWindow.__PosthogExtensions__?.initDeadClicksAutocapture
         ) {
-            const config = isObject(this.instance.config.capture_dead_clicks)
-                ? this.instance.config.capture_dead_clicks
-                : {}
+            const config = isObject(this._config.capture_dead_clicks) ? this._config.capture_dead_clicks : {}
             config.__onCapture = this.onCapture
 
             this._lazyLoadedDeadClicksAutocapture = assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture(
-                this.instance,
+                this._instance,
                 config
             )
             this._lazyLoadedDeadClicksAutocapture.start(document)

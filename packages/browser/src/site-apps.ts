@@ -2,23 +2,25 @@ import { PostHog } from './posthog-core'
 import { CaptureResult, Properties, RemoteConfig, SiteApp, SiteAppGlobals, SiteAppLoader } from './types'
 import { assignableWindow } from './utils/globals'
 import { createLogger } from './utils/logger'
+import { PostHogComponent } from './posthog-component'
 
 const logger = createLogger('[SiteApps]')
 
-export class SiteApps {
+export class SiteApps extends PostHogComponent {
     apps: Record<string, SiteApp>
 
     private _stopBuffering?: () => void
     private _bufferedInvocations: SiteAppGlobals[]
 
-    constructor(private _instance: PostHog) {
+    constructor(instance: PostHog) {
+        super(instance)
         // events captured between loading posthog-js and the site app; up to 1000 events
         this._bufferedInvocations = []
         this.apps = {}
     }
 
     public get isEnabled(): boolean {
-        return !!this._instance.config.opt_in_site_apps
+        return this._config.opt_in_site_apps
     }
 
     private _eventCollector(_eventName: string, eventPayload?: CaptureResult | undefined) {
@@ -33,7 +35,7 @@ export class SiteApps {
     }
 
     get siteAppLoaders(): SiteAppLoader[] | undefined {
-        return assignableWindow._POSTHOG_REMOTE_CONFIG?.[this._instance.config.token]?.siteApps
+        return assignableWindow._POSTHOG_REMOTE_CONFIG?.[this._config.token]?.siteApps
     }
 
     init() {
@@ -52,9 +54,8 @@ export class SiteApps {
             throw new Error('Event payload is required')
         }
         const groups: SiteAppGlobals['groups'] = {}
-        const groupIds = this._instance.get_property('$groups') || []
-        const groupProperties: Record<string, Properties> =
-            this._instance.get_property('$stored_group_properties') || {}
+        const groupIds = this.ph_property('$groups') || []
+        const groupProperties: Record<string, Properties> = this.ph_property('$stored_group_properties') || {}
         for (const [type, properties] of Object.entries(groupProperties)) {
             groups[type] = { id: groupIds[type], type, properties }
         }
@@ -76,7 +77,7 @@ export class SiteApps {
                 distinct_id: event.properties?.['distinct_id'],
             },
             person: {
-                properties: this._instance.get_property('$stored_person_properties'),
+                properties: this.ph_property('$stored_person_properties'),
             },
             groups,
         }

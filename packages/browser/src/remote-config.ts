@@ -1,16 +1,14 @@
-import { PostHog } from './posthog-core'
 import { RemoteConfig } from './types'
 
 import { createLogger } from './utils/logger'
 import { assignableWindow } from './utils/globals'
+import { PostHogComponent } from './posthog-component'
 
 const logger = createLogger('[RemoteConfig]')
 
-export class RemoteConfigLoader {
-    constructor(private readonly _instance: PostHog) {}
-
+export class RemoteConfigLoader extends PostHogComponent {
     get remoteConfig(): RemoteConfig | undefined {
-        return assignableWindow._POSTHOG_REMOTE_CONFIG?.[this._instance.config.token]?.config
+        return assignableWindow._POSTHOG_REMOTE_CONFIG?.[this._config.token]?.config
     }
 
     private _loadRemoteConfigJs(cb: (config?: RemoteConfig) => void): void {
@@ -27,7 +25,7 @@ export class RemoteConfigLoader {
     private _loadRemoteConfigJSON(cb: (config?: RemoteConfig) => void): void {
         this._instance._send_request({
             method: 'GET',
-            url: this._instance.requestRouter.endpointFor('assets', `/array/${this._instance.config.token}/config`),
+            url: this._instance.requestRouter.endpointFor('assets', `/array/${this._config.token}/config`),
             callback: (response) => {
                 cb(response.json as RemoteConfig | undefined)
             },
@@ -74,7 +72,7 @@ export class RemoteConfigLoader {
             return
         }
 
-        if (!this._instance.config.__preview_remote_config) {
+        if (!this._config.__preview_remote_config) {
             logger.info('__preview_remote_config is disabled. Logging config instead', config)
             return
         }
