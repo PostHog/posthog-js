@@ -591,22 +591,25 @@ export class PostHogFeatureFlags {
         })
     }
 
-    /*
+    /**
      * See if feature flag is enabled for user.
      *
      * ### Usage:
      *
      *     if(posthog.isFeatureEnabled('beta-feature')) { // do something }
      *
-     * @param {Object|String} key Key of the feature flag.
-     * @param {Object|String} options (optional) If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
+     * @param key Key of the feature flag.
+     * @param [options] If {send_event: false}, we won't send an $feature_flag_call event to PostHog.
+     * @returns A boolean value indicating whether or not the specified feature flag is enabled. If flag information has not yet been loaded,
+     *          or if the specified feature flag is disabled or does not exist, returns undefined.
      */
     isFeatureEnabled(key: string, options: { send_event?: boolean } = {}): boolean | undefined {
         if (!this._hasLoadedFlags && !(this.getFlags() && this.getFlags().length > 0)) {
             logger.warn('isFeatureEnabled for key "' + key + '" failed. Feature flags didn\'t load in time.')
             return undefined
         }
-        return !!this.getFeatureFlag(key, options)
+        const flagValue = this.getFeatureFlag(key, options)
+        return isUndefined(flagValue) ? undefined : !!flagValue
     }
 
     addFeatureFlagsHandler(handler: FeatureFlagsCallback): void {
