@@ -67,11 +67,11 @@ jobs:
             ### What should you do?
             - If this is a breaking change, please reconsider the implementation to maintain backwards compatibility
             - Change the version bump to \`minor\` or \`patch\` in the changeset file
-            - You maybe want to change the `defaults` version of the config? 
+            - You maybe want to change the \`defaults\` version of the config? 
             
             To update the changeset, run:
             \`\`\`bash
-            npx changeset
+            pnpm changeset
             \`\`\`
             And select a non-breaking version bump for \`posthog-js\`.`;
             
