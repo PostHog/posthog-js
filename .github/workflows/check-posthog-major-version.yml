@@ -60,6 +60,55 @@ jobs:
             echo "major_bump_found=false" >> $GITHUB_OUTPUT
           fi
       
+      - name: Remove outdated comments
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const noChangesetFound = '${{ steps.check-major.outputs.no_changesets }}' === 'true';
+            const majorBumpFound = '${{ steps.check-major.outputs.major_bump_found }}' === 'true';
+            
+            // If there ARE changesets now, remove the "no changeset" comment
+            if (!noChangesetFound) {
+              const noChangesetComment = comments.find(comment => 
+                comment.user.type === 'Bot' && 
+                comment.body.includes('No Changeset Found')
+              );
+              
+              if (noChangesetComment) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: noChangesetComment.id
+                });
+                console.log('Removed outdated "No Changeset Found" comment');
+              }
+            }
+            
+            // If there is NO major bump now, remove the "major bump" comment
+            if (!majorBumpFound) {
+              const majorBumpComment = comments.find(comment => 
+                comment.user.type === 'Bot' && 
+                comment.body.includes('Major Version Bump Detected for posthog-js')
+              );
+              
+              if (majorBumpComment) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: majorBumpComment.id
+                });
+                console.log('Removed outdated "Major Version Bump" comment');
+              }
+            }
+      
       - name: Comment on PR
         if: failure() && steps.check-major.outputs.major_bump_found == 'true'
         uses: actions/github-script@v7
