@@ -1,4 +1,4 @@
-name: Check PostHog Major Version
+name: Validate Versioning
 
 permissions:
   contents: read
@@ -113,27 +113,13 @@ jobs:
           script: |
             const comment = `## 📝 No Changeset Found
             
-            This PR doesn't include a changeset. Consider whether this PR requires a version bump.
-            
-            ### Should you add a changeset?
-            
-            **Add a changeset if this PR:**
-            - ✅ Adds a new feature
-            - ✅ Fixes a bug  
-            - ✅ Changes existing behavior
-            - ✅ Updates dependencies that affect the public API
-            
-            **Skip the changeset if this PR:**
-            - 📚 Only updates documentation
-            - 🧹 Only includes internal refactoring  
-            - 🧪 Only adds or updates tests
-            - 🔧 Only changes development tooling
+            This PR doesn't include a changeset. A changeset (and the release label) is required to release a new version.
             
             ### How to add a changeset
             
             Run this command and follow the prompts:
             \`\`\`bash
-            npx changeset
+            pnpm changeset
             \`\`\`
             
             **Remember:** Never use \`major\` version bumps for \`posthog-js\` as it's autoloaded by clients.`;
