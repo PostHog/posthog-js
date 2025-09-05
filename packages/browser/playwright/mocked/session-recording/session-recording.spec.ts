@@ -46,6 +46,7 @@ async function ensureActivitySendsSnapshots(page: Page, expectedCustomTags: stri
             throw new Error(`Unexpected snapshot type: ${snapshot.type}`)
         }
     }
+
     const customEventTags = customEvents.map((s) => s.data.tag)
     expect(customEventTags).toEqual(expectedCustomTags)
 }
