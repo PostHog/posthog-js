@@ -21,7 +21,7 @@ export class ExceptionObserver extends PostHogComponent {
     constructor(instance: PostHog) {
         super(instance)
 
-        this._remoteEnabled = !!this._instance.persistence?.props[EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]
+        this._remoteEnabled = !!this.ph_property(EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE)
         this._errorConfig = this._requiredConfig()
 
         // by default captures ten exceptions before rate limiting by exception type

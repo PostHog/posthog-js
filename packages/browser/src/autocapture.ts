@@ -333,7 +333,7 @@ export class Autocapture extends PostHogComponent {
     }
 
     public get isEnabled(): boolean {
-        const persistedServerDisabled = this._instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
+        const persistedServerDisabled = this.ph_property(AUTOCAPTURE_DISABLED_SERVER_SIDE)
         const memoryDisabled = this._isDisabledServerSide
 
         if (isNull(memoryDisabled) && !isBoolean(persistedServerDisabled) && !this._instance._shouldDisableFlags()) {

@@ -1,5 +1,5 @@
 import { PostHog } from './posthog-core'
-import { PostHogConfig } from './types'
+import { PostHogConfig, Property } from './types'
 
 /**
  * Base class for all PostHog components that need access to the PostHog instance.
@@ -14,5 +14,9 @@ export abstract class PostHogComponent {
 
     constructor(instance: PostHog) {
         this._instance = instance
+    }
+
+    ph_property(property_name: string): Property | undefined {
+        return this._instance.get_property(property_name)
     }
 }

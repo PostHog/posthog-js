@@ -26,7 +26,7 @@ export class WebVitalsAutocapture extends PostHogComponent {
     constructor(instance: PostHog) {
         super(instance)
 
-        this._enabledServerSide = !!this._instance.persistence?.props[WEB_VITALS_ENABLED_SERVER_SIDE]
+        this._enabledServerSide = !!this.ph_property(WEB_VITALS_ENABLED_SERVER_SIDE)
         this.startIfEnabled()
     }
 
@@ -38,7 +38,7 @@ export class WebVitalsAutocapture extends PostHogComponent {
             : undefined
         return !isUndefined(clientConfigMetricAllowList)
             ? clientConfigMetricAllowList
-            : this._instance.persistence?.props[WEB_VITALS_ALLOWED_METRICS] || ['CLS', 'FCP', 'INP', 'LCP']
+            : this.ph_property(WEB_VITALS_ALLOWED_METRICS) || ['CLS', 'FCP', 'INP', 'LCP']
     }
 
     public get flushToCaptureTimeoutMs(): number {

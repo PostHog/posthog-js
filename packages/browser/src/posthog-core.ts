@@ -517,7 +517,7 @@ export class PostHog {
 
         if (!startInCookielessMode) {
             this.sessionManager = new SessionIdManager(this)
-            this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
+            this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager)
         }
 
         new TracingHeaders(this).startIfEnabledOrStop()

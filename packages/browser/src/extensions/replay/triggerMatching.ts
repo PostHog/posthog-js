@@ -136,7 +136,7 @@ export class URLTriggerMatching extends PostHogComponent implements TriggerStatu
             return TRIGGER_DISABLED
         }
 
-        const currentTriggerSession = this._instance?.get_property(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
+        const currentTriggerSession = this.ph_property(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
         return currentTriggerSession === sessionId ? TRIGGER_ACTIVATED : TRIGGER_PENDING
     }
 
@@ -249,7 +249,7 @@ export class EventTriggerMatching extends PostHogComponent implements TriggerSta
             return TRIGGER_DISABLED
         }
 
-        const currentTriggerSession = this._instance?.get_property(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
+        const currentTriggerSession = this.ph_property(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
         return currentTriggerSession === sessionId ? TRIGGER_ACTIVATED : TRIGGER_PENDING
     }
 
