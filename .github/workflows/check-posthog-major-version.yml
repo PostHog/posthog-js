@@ -9,7 +9,7 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
-  check-major-version:
+  check-version-change-is-present-and-allowed:
     runs-on: ubuntu-latest
     
     steps:
