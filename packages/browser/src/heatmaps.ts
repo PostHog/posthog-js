@@ -134,7 +134,7 @@ export class Heatmaps extends PostHogComponent {
         })
 
         this._deadClicksCapture = new DeadClicksAutocapture(
-            this.instance,
+            this._instance,
             isDeadClicksEnabledForHeatmaps,
             this._onDeadClick.bind(this)
         )

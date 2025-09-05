@@ -2862,7 +2862,7 @@ export class PostHog {
             this.reset(true)
             this.sessionManager = new SessionIdManager(this)
             if (this.persistence) {
-                this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager, this.persistence)
+                this.sessionPropsManager = new SessionPropsManager(this, this.sessionManager)
             }
             this.sessionRecording = new SessionRecording(this)
             this.sessionRecording.startIfEnabledOrStop()
