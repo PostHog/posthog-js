@@ -6,22 +6,23 @@ import { createLogger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
 import { isUndefined, BucketedRateLimiter, isObject } from '@posthog/core'
 import { ErrorProperties } from './error-conversion'
+import { PostHogComponent } from '../../posthog-component'
 
 const logger = createLogger('[ExceptionAutocapture]')
 
-export class ExceptionObserver {
-    private _instance: PostHog
+export class ExceptionObserver extends PostHogComponent {
     private _rateLimiter: BucketedRateLimiter<string>
     private _remoteEnabled: boolean | undefined
-    private _config: Required<ExceptionAutoCaptureConfig>
+    private _errorConfig: Required<ExceptionAutoCaptureConfig>
     private _unwrapOnError: (() => void) | undefined
     private _unwrapUnhandledRejection: (() => void) | undefined
     private _unwrapConsoleError: (() => void) | undefined
 
     constructor(instance: PostHog) {
-        this._instance = instance
+        super(instance)
+
         this._remoteEnabled = !!this._instance.persistence?.props[EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]
-        this._config = this._requiredConfig()
+        this._errorConfig = this._requiredConfig()
 
         // by default captures ten exceptions before rate limiting by exception type
         // refills at a rate of one token / 10 second period
@@ -37,7 +38,7 @@ export class ExceptionObserver {
     }
 
     private _requiredConfig(): Required<ExceptionAutoCaptureConfig> {
-        const providedConfig = this._instance.config.capture_exceptions
+        const providedConfig = this._config.capture_exceptions
         let config = {
             capture_unhandled_errors: false,
             capture_unhandled_rejections: false,
@@ -55,9 +56,9 @@ export class ExceptionObserver {
 
     public get isEnabled(): boolean {
         return (
-            this._config.capture_console_errors ||
-            this._config.capture_unhandled_errors ||
-            this._config.capture_unhandled_rejections
+            this._errorConfig.capture_console_errors ||
+            this._errorConfig.capture_unhandled_errors ||
+            this._errorConfig.capture_unhandled_rejections
         )
     }
 
@@ -97,13 +98,13 @@ export class ExceptionObserver {
         const wrapConsoleError = assignableWindow.__PosthogExtensions__.errorWrappingFunctions.wrapConsoleError
 
         try {
-            if (!this._unwrapOnError && this._config.capture_unhandled_errors) {
+            if (!this._unwrapOnError && this._errorConfig.capture_unhandled_errors) {
                 this._unwrapOnError = wrapOnError(this.captureException.bind(this))
             }
-            if (!this._unwrapUnhandledRejection && this._config.capture_unhandled_rejections) {
+            if (!this._unwrapUnhandledRejection && this._errorConfig.capture_unhandled_rejections) {
                 this._unwrapUnhandledRejection = wrapUnhandledRejection(this.captureException.bind(this))
             }
-            if (!this._unwrapConsoleError && this._config.capture_console_errors) {
+            if (!this._unwrapConsoleError && this._errorConfig.capture_console_errors) {
                 this._unwrapConsoleError = wrapConsoleError(this.captureException.bind(this))
             }
         } catch (e) {
@@ -128,7 +129,7 @@ export class ExceptionObserver {
 
         // store this in-memory in case persistence is disabled
         this._remoteEnabled = !!autocaptureExceptionsResponse || false
-        this._config = this._requiredConfig()
+        this._errorConfig = this._requiredConfig()
 
         if (this._instance.persistence) {
             this._instance.persistence.register({

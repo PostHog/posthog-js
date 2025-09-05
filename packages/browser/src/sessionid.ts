@@ -1,7 +1,7 @@
 import { PostHogPersistence } from './posthog-persistence'
 import { SESSION_ID } from './constants'
 import { sessionStore } from './storage'
-import { PostHogConfig, SessionIdChangedCallback } from './types'
+import { SessionIdChangedCallback } from './types'
 import { uuid7ToTimestampMs, uuidv7 } from './uuidv7'
 import { window } from './utils/globals'
 
@@ -10,6 +10,7 @@ import { createLogger } from './utils/logger'
 import { isArray, isNumber, isUndefined, clampToRange } from '@posthog/core'
 import { PostHog } from './posthog-core'
 import { addEventListener } from './utils'
+import { PostHogComponent } from './posthog-component'
 
 const logger = createLogger('[SessionId]')
 
@@ -18,10 +19,9 @@ export const MAX_SESSION_IDLE_TIMEOUT_SECONDS = 10 * 60 * 60 // 10 hours
 const MIN_SESSION_IDLE_TIMEOUT_SECONDS = 60 // 1 minute
 const SESSION_LENGTH_LIMIT_MILLISECONDS = 24 * 3600 * 1000 // 24 hours
 
-export class SessionIdManager {
+export class SessionIdManager extends PostHogComponent {
     private readonly _sessionIdGenerator: () => string
     private readonly _windowIdGenerator: () => string
-    private _config: Partial<PostHogConfig>
     private _persistence: PostHogPersistence
     private _windowId: string | null | undefined
     private _sessionId: string | null | undefined
@@ -37,6 +37,8 @@ export class SessionIdManager {
     private _enforceIdleTimeout: ReturnType<typeof setTimeout> | undefined
 
     constructor(instance: PostHog, sessionIdGenerator?: () => string, windowIdGenerator?: () => string) {
+        super(instance)
+
         if (!instance.persistence) {
             throw new Error('SessionIdManager requires a PostHogPersistence instance')
         }
@@ -44,7 +46,6 @@ export class SessionIdManager {
             throw new Error('SessionIdManager cannot be used with cookieless_mode="always"')
         }
 
-        this._config = instance.config
         this._persistence = instance.persistence
         this._windowId = undefined
         this._sessionId = undefined

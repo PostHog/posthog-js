@@ -2,6 +2,7 @@ import { CAPTURE_RATE_LIMIT } from './constants'
 import type { PostHog } from './posthog-core'
 import { RequestResponse } from './types'
 import { createLogger } from './utils/logger'
+import { PostHogComponent } from './posthog-component'
 
 const logger = createLogger('[RateLimiter]')
 
@@ -12,8 +13,7 @@ interface CaptureResponse {
     quota_limited?: string[]
 }
 
-export class RateLimiter {
-    instance: PostHog
+export class RateLimiter extends PostHogComponent {
     serverLimits: Record<string, number> = {}
 
     captureEventsPerSecond: number
@@ -21,7 +21,7 @@ export class RateLimiter {
     lastEventRateLimited = false
 
     constructor(instance: PostHog) {
-        this.instance = instance
+        super(instance)
 
         this.captureEventsPerSecond = instance.config.rate_limiting?.events_per_second || 10
         this.captureEventsBurstLimit = Math.max(
@@ -39,7 +39,7 @@ export class RateLimiter {
         // This is primarily to prevent runaway loops from flooding capture with millions of events for a single user.
         // It's as much for our protection as theirs.
         const now = new Date().getTime()
-        const bucket = this.instance.persistence?.get_property(CAPTURE_RATE_LIMIT) ?? {
+        const bucket = this._instance.persistence?.get_property(CAPTURE_RATE_LIMIT) ?? {
             tokens: this.captureEventsBurstLimit,
             last: now,
         }
@@ -58,7 +58,7 @@ export class RateLimiter {
         }
 
         if (isRateLimited && !this.lastEventRateLimited && !checkOnly) {
-            this.instance.capture(
+            this._instance.capture(
                 RATE_LIMIT_EVENT,
                 {
                     $$client_ingestion_warning_message: `posthog-js client rate limited. Config is set to ${this.captureEventsPerSecond} events per second and ${this.captureEventsBurstLimit} events burst limit.`,
@@ -70,7 +70,7 @@ export class RateLimiter {
         }
 
         this.lastEventRateLimited = isRateLimited
-        this.instance.persistence?.set_property(CAPTURE_RATE_LIMIT, bucket)
+        this._instance.persistence?.set_property(CAPTURE_RATE_LIMIT, bucket)
 
         return {
             isRateLimited,

@@ -2,10 +2,10 @@ import {
     SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
 } from '../../constants'
-import { PostHog } from '../../posthog-core'
 import { FlagVariant, RemoteConfig, SessionRecordingUrlTrigger } from '../../types'
 import { isNullish, isBoolean, isString, isObject } from '@posthog/core'
 import { window } from '../../utils/globals'
+import { PostHogComponent } from '../../posthog-component'
 
 export const DISABLED = 'disabled'
 export const SAMPLED = 'sampled'
@@ -120,13 +120,11 @@ export class PendingTriggerMatching implements TriggerStatusMatching {
     }
 }
 
-export class URLTriggerMatching implements TriggerStatusMatching {
+export class URLTriggerMatching extends PostHogComponent implements TriggerStatusMatching {
     _urlTriggers: SessionRecordingUrlTrigger[] = []
     _urlBlocklist: SessionRecordingUrlTrigger[] = []
 
     urlBlocked: boolean = false
-
-    constructor(private readonly _instance: PostHog) {}
 
     onRemoteConfig(response: RemoteConfig) {
         this._urlTriggers = response.sessionRecording?.urlTriggers || []
@@ -187,11 +185,10 @@ export class URLTriggerMatching implements TriggerStatusMatching {
     }
 }
 
-export class LinkedFlagMatching implements TriggerStatusMatching {
+export class LinkedFlagMatching extends PostHogComponent implements TriggerStatusMatching {
     linkedFlag: string | FlagVariant | null = null
     linkedFlagSeen: boolean = false
     private _flaglistenerCleanup: () => void = () => {}
-    constructor(private readonly _instance: PostHog) {}
 
     triggerStatus(): TriggerStatus {
         let result = TRIGGER_PENDING
@@ -240,10 +237,8 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
     }
 }
 
-export class EventTriggerMatching implements TriggerStatusMatching {
+export class EventTriggerMatching extends PostHogComponent implements TriggerStatusMatching {
     _eventTriggers: string[] = []
-
-    constructor(private readonly _instance: PostHog) {}
 
     onRemoteConfig(response: RemoteConfig) {
         this._eventTriggers = response.sessionRecording?.eventTriggers || []

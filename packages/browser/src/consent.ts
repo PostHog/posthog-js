@@ -1,9 +1,9 @@
-import { PostHog } from './posthog-core'
 import { find } from './utils'
 import { assignableWindow, navigator } from './utils/globals'
 import { cookieStore, localStore } from './storage'
 import { PersistentStore } from './types'
 import { isNoLike, isYesLike } from '@posthog/core'
+import { PostHogComponent } from './posthog-component'
 
 const OPT_OUT_PREFIX = '__ph_opt_in_out_'
 
@@ -16,14 +16,8 @@ export enum ConsentStatus {
 /**
  * ConsentManager provides tools for managing user consent as configured by the application.
  */
-export class ConsentManager {
+export class ConsentManager extends PostHogComponent {
     private _persistentStore?: PersistentStore
-
-    constructor(private _instance: PostHog) {}
-
-    private get _config() {
-        return this._instance.config
-    }
 
     public get consent(): ConsentStatus {
         if (this._getDnt()) {
@@ -71,7 +65,7 @@ export class ConsentManager {
     }
 
     private get _storageKey() {
-        const { token, opt_out_capturing_cookie_prefix, consent_persistence_name } = this._instance.config
+        const { token, opt_out_capturing_cookie_prefix, consent_persistence_name } = this._config
         if (consent_persistence_name) {
             return consent_persistence_name
         } else if (opt_out_capturing_cookie_prefix) {

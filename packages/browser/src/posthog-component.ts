@@ -7,10 +7,12 @@ import { PostHogConfig } from './types'
  */
 export abstract class PostHogComponent {
     readonly _instance: PostHog
-    readonly _config: PostHogConfig
+
+    get _config(): PostHogConfig {
+        return this._instance.config
+    }
 
     constructor(instance: PostHog) {
         this._instance = instance
-        this._config = instance.config
     }
 }

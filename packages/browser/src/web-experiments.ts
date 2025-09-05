@@ -14,6 +14,7 @@ import { isMatchingRegex } from './utils/regex-utils'
 import { logger } from './utils/logger'
 import { isLikelyBot } from './utils/blocked-uas'
 import { getCampaignParams } from './utils/event-utils'
+import { PostHogComponent } from './posthog-component'
 
 export const webExperimentUrlValidationMap: Record<
     WebExperimentUrlMatchType,
@@ -29,10 +30,11 @@ export const webExperimentUrlValidationMap: Record<
     is_not: (conditionsUrl, location) => location.href !== conditionsUrl,
 }
 
-export class WebExperiments {
+export class WebExperiments extends PostHogComponent {
     private _flagToExperiments?: Map<string, WebExperiment>
 
-    constructor(private _instance: PostHog) {
+    constructor(instance: PostHog) {
+        super(instance)
         this._instance.onFeatureFlags((flags: string[]) => {
             this.onFeatureFlags(flags)
         })
@@ -44,7 +46,7 @@ export class WebExperiments {
             return
         }
 
-        if (this._instance.config.disable_web_experiments) {
+        if (this._config.disable_web_experiments) {
             return
         }
 
@@ -91,7 +93,7 @@ export class WebExperiments {
     }
 
     loadIfEnabled() {
-        if (this._instance.config.disable_web_experiments) {
+        if (this._config.disable_web_experiments) {
             return
         }
 
@@ -137,7 +139,7 @@ export class WebExperiments {
     }
 
     public getWebExperiments(callback: WebExperimentsCallback, forceReload: boolean, previewing?: boolean) {
-        if (this._instance.config.disable_web_experiments && !previewing) {
+        if (this._config.disable_web_experiments && !previewing) {
             return callback([])
         }
 
@@ -147,10 +149,7 @@ export class WebExperiments {
         }
 
         this._instance._send_request({
-            url: this._instance.requestRouter.endpointFor(
-                'api',
-                `/api/web_experiments/?token=${this._instance.config.token}`
-            ),
+            url: this._instance.requestRouter.endpointFor('api', `/api/web_experiments/?token=${this._config.token}`),
             method: 'GET',
             callback: (response) => {
                 if (response.statusCode !== 200 || !response.json) {

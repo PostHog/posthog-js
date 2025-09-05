@@ -71,6 +71,7 @@ import {
 import { isLocalhost } from '../../../utils/request-utils'
 import Config from '../../../config'
 import { sampleOnProperty } from '../../sampling'
+import { PostHogComponent } from '../../../posthog-component'
 
 const BASE_ENDPOINT = '/s/'
 const DEFAULT_CANVAS_QUALITY = 0.4
@@ -269,7 +270,7 @@ export function splitBuffer(buffer: SnapshotBuffer, sizeLimit: number = SEVEN_ME
     }
 }
 
-export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInterface {
+export class LazyLoadedSessionRecording extends PostHogComponent implements LazyLoadedSessionRecordingInterface {
     private _endpoint: string = BASE_ENDPOINT
     private _mutationThrottler?: MutationThrottler
     /**
@@ -320,7 +321,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private get _sessionIdleThresholdMilliseconds(): number {
-        return this._instance.config.session_recording.session_idle_threshold_ms || RECORDING_IDLE_THRESHOLD_MS
+        return this._config.session_recording.session_idle_threshold_ms || RECORDING_IDLE_THRESHOLD_MS
     }
 
     private get _isSampled(): boolean | null {
@@ -347,7 +348,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _persistFlagsOnSessionListener: (() => void) | undefined = undefined
     private _samplingSessionListener: (() => void) | undefined = undefined
 
-    constructor(private readonly _instance: PostHog) {
+    constructor(instance: PostHog) {
+        super(instance)
+
         // we know there's a sessionManager, so don't need to start without a session id
         const { sessionId, windowId } = this._sessionManager.checkAndGetSessionAndWindowId()
         this._sessionId = sessionId
@@ -371,9 +374,9 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         | undefined {
         const masking_server_side = this._instance.get_property(SESSION_RECORDING_MASKING)
         const masking_client_side = {
-            maskAllInputs: this._instance.config.session_recording?.maskAllInputs,
-            maskTextSelector: this._instance.config.session_recording?.maskTextSelector,
-            blockSelector: this._instance.config.session_recording?.blockSelector,
+            maskAllInputs: this._config.session_recording?.maskAllInputs,
+            maskTextSelector: this._config.session_recording?.maskTextSelector,
+            blockSelector: this._config.session_recording?.blockSelector,
         }
 
         const maskAllInputs = masking_client_side?.maskAllInputs ?? masking_server_side?.maskAllInputs
@@ -390,7 +393,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private get _canvasRecording(): { enabled: boolean; fps: number; quality: number } {
-        const canvasRecording_client_side = this._instance.config.session_recording.captureCanvas
+        const canvasRecording_client_side = this._config.session_recording.captureCanvas
         const canvasRecording_server_side = this._instance.get_property(SESSION_RECORDING_CANVAS_RECORDING)
 
         const enabled: boolean =
@@ -419,7 +422,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private get _isConsoleLogCaptureEnabled() {
         const enabled_server_side = !!this._instance.get_property(CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE)
-        const enabled_client_side = this._instance.config.enable_recording_console_log
+        const enabled_client_side = this._config.enable_recording_console_log
         return enabled_client_side ?? enabled_server_side
     }
 
@@ -430,16 +433,16 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         | undefined {
         const networkPayloadCapture_server_side = this._instance.get_property(SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE)
         const networkPayloadCapture_client_side = {
-            recordHeaders: this._instance.config.session_recording?.recordHeaders,
-            recordBody: this._instance.config.session_recording?.recordBody,
+            recordHeaders: this._config.session_recording?.recordHeaders,
+            recordBody: this._config.session_recording?.recordBody,
         }
         const headersEnabled =
             networkPayloadCapture_client_side?.recordHeaders || networkPayloadCapture_server_side?.recordHeaders
         const bodyEnabled =
             networkPayloadCapture_client_side?.recordBody || networkPayloadCapture_server_side?.recordBody
-        const clientConfigForPerformanceCapture = isObject(this._instance.config.capture_performance)
-            ? this._instance.config.capture_performance.network_timing
-            : this._instance.config.capture_performance
+        const clientConfigForPerformanceCapture = isObject(this._config.capture_performance)
+            ? this._config.capture_performance.network_timing
+            : this._config.capture_performance
         const networkTimingEnabled = !!(isBoolean(clientConfigForPerformanceCapture)
             ? clientConfigForPerformanceCapture
             : networkPayloadCapture_server_side?.capturePerformance)
@@ -474,7 +477,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _maskUrl(url: string): string | undefined {
-        const userSessionRecordingOptions = this._instance.config.session_recording
+        const userSessionRecordingOptions = this._config.session_recording
 
         if (userSessionRecordingOptions.maskNetworkRequestFn) {
             let networkRequest: NetworkRequest | null | undefined = {
@@ -516,7 +519,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _pageViewFallBack() {
-        if (this._instance.config.capture_pageview || !window) {
+        if (this._config.capture_pageview || !window) {
             return
         }
         const currentUrl = this._maskUrl(window.location.href)
@@ -557,7 +560,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             return ONE_MINUTE
         }
 
-        return this._instance.config.session_recording?.full_snapshot_interval_millis ?? FIVE_MINUTES
+        return this._config.session_recording?.full_snapshot_interval_millis ?? FIVE_MINUTES
     }
 
     private _scheduleFullSnapshot(): void {
@@ -786,8 +789,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             }
         }
 
-        const eventToSend =
-            (this._instance.config.session_recording.compress_events ?? true) ? compressEvent(event) : event
+        const eventToSend = (this._config.session_recording.compress_events ?? true) ? compressEvent(event) : event
         const size = estimateSize(eventToSend)
 
         const properties = {
@@ -1264,7 +1266,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         // only allows user to set our allowlisted options
-        const userSessionRecordingOptions = this._instance.config.session_recording
+        const userSessionRecordingOptions = this._config.session_recording
         for (const [key, value] of Object.entries(userSessionRecordingOptions || {})) {
             if (key in sessionRecordingOptions) {
                 if (key === 'maskInputOptions') {
@@ -1301,8 +1303,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._mutationThrottler =
             this._mutationThrottler ??
             new MutationThrottler(rrwebRecord, {
-                refillRate: this._instance.config.session_recording.__mutationThrottlerRefillRate,
-                bucketSize: this._instance.config.session_recording.__mutationThrottlerBucketSize,
+                refillRate: this._config.session_recording.__mutationThrottlerRefillRate,
+                bucketSize: this._config.session_recording.__mutationThrottlerBucketSize,
                 onBlockedNode: (id, node) => {
                     const message = `Too many mutations on node '${id}'. Rate limiting. This could be due to SVG animations or something similar`
                     logger.info(message, {

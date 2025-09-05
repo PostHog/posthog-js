@@ -1,4 +1,4 @@
-import { PostHog } from '../posthog-core'
+import { PostHogComponent } from '../posthog-component'
 
 /**
  * The request router helps simplify the logic to determine which endpoints should be called for which things
@@ -16,23 +16,18 @@ export type RequestRouterTarget = 'api' | 'ui' | 'assets'
 
 const ingestionDomain = 'i.posthog.com'
 
-export class RequestRouter {
-    instance: PostHog
+export class RequestRouter extends PostHogComponent {
     private _regionCache: Record<string, RequestRouterRegion> = {}
 
-    constructor(instance: PostHog) {
-        this.instance = instance
-    }
-
     get apiHost(): string {
-        const host = this.instance.config.api_host.trim().replace(/\/$/, '')
+        const host = this._config.api_host.trim().replace(/\/$/, '')
         if (host === 'https://app.posthog.com') {
             return 'https://us.i.posthog.com'
         }
         return host
     }
     get uiHost(): string | undefined {
-        let host = this.instance.config.ui_host?.replace(/\/$/, '')
+        let host = this._config.ui_host?.replace(/\/$/, '')
 
         if (!host) {
             // No ui_host set, get it from the api_host. But api_host differs

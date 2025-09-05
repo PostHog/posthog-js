@@ -56,6 +56,7 @@ import {
     getSurveyStylesheet,
     addSurveyCSSVariablesToElement,
 } from './surveys/surveys-extension-utils'
+import { PostHogComponent } from '../posthog-component'
 
 // We cast the types here which is dangerous but protected by the top level generateSurveys call
 const window = _window as Window & typeof globalThis
@@ -216,15 +217,15 @@ function getNextToTriggerPosition(target: HTMLElement, surveyWidth: number): Rea
 // Keep in sync with posthog/constants.py on main repo
 const SURVEY_TARGETING_FLAG_PREFIX = 'survey-targeting-'
 
-export class SurveyManager {
-    private _posthog: PostHog
+export class SurveyManager extends PostHogComponent {
     private _surveyInFocus: string | null
     private _surveyTimeouts: Map<string, NodeJS.Timeout> = new Map()
     private _widgetSelectorListeners: Map<string, { element: Element; listener: EventListener; survey: Survey }> =
         new Map()
 
-    constructor(posthog: PostHog) {
-        this._posthog = posthog
+    constructor(instance: PostHog) {
+        super(instance)
+
         // This is used to track the survey that is currently in focus. We only show one survey at a time.
         this._surveyInFocus = null
     }
@@ -241,11 +242,11 @@ export class SurveyManager {
         this._clearSurveyTimeout(survey.id)
         this._addSurveyToFocus(survey)
         const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
-        const { shadow } = retrieveSurveyShadow(survey, this._posthog)
+        const { shadow } = retrieveSurveyShadow(survey, this._instance)
         if (delaySeconds <= 0) {
             return Preact.render(
                 <SurveyPopup
-                    posthog={this._posthog}
+                    posthog={this._instance}
                     survey={survey}
                     removeSurveyFromFocus={this._removeSurveyFromFocus}
                 />,
@@ -259,7 +260,7 @@ export class SurveyManager {
             // rendering with surveyPopupDelaySeconds = 0 because we're already handling the timeout here
             Preact.render(
                 <SurveyPopup
-                    posthog={this._posthog}
+                    posthog={this._instance}
                     survey={{ ...survey, appearance: { ...survey.appearance, surveyPopupDelaySeconds: 0 } }}
                     removeSurveyFromFocus={this._removeSurveyFromFocus}
                 />,
@@ -271,14 +272,14 @@ export class SurveyManager {
 
     private _handleWidget = (survey: Survey): void => {
         // Ensure widget container exists if it doesn't
-        const { shadow, isNewlyCreated } = retrieveSurveyShadow(survey, this._posthog)
+        const { shadow, isNewlyCreated } = retrieveSurveyShadow(survey, this._instance)
 
         // If the widget is already rendered, do nothing. Otherwise the widget will be re-rendered every second
         if (!isNewlyCreated) {
             return
         }
 
-        Preact.render(<FeedbackWidget posthog={this._posthog} survey={survey} key={survey.id} />, shadow)
+        Preact.render(<FeedbackWidget posthog={this._instance} survey={survey} key={survey.id} />, shadow)
     }
 
     private _removeWidgetSelectorListener = (survey: Pick<Survey, 'id' | 'type' | 'appearance'>): void => {
@@ -377,7 +378,7 @@ export class SurveyManager {
     public renderSurvey = (survey: Survey, selector: Element): void => {
         Preact.render(
             <SurveyPopup
-                posthog={this._posthog}
+                posthog={this._instance}
                 survey={survey}
                 removeSurveyFromFocus={this._removeSurveyFromFocus}
                 isPopup={false}
@@ -390,12 +391,12 @@ export class SurveyManager {
         if (!flagKey) {
             return true
         }
-        const isFeatureEnabled = !!this._posthog.featureFlags.isFeatureEnabled(flagKey, {
+        const isFeatureEnabled = !!this._instance.featureFlags.isFeatureEnabled(flagKey, {
             send_event: !flagKey.startsWith(SURVEY_TARGETING_FLAG_PREFIX),
         })
         let flagVariantCheck = true
         if (flagVariant) {
-            const flagVariantValue = this._posthog.featureFlags.getFeatureFlag(flagKey, { send_event: false })
+            const flagVariantValue = this._instance.featureFlags.getFeatureFlag(flagKey, { send_event: false })
             flagVariantCheck = flagVariantValue === flagVariant || flagVariant === 'any'
         }
         return isFeatureEnabled && flagVariantCheck
@@ -481,7 +482,7 @@ export class SurveyManager {
             return true
         }
         const surveysActivatedByEventsOrActions: string[] | undefined =
-            this._posthog.surveys._surveyEventReceiver?.getSurveys()
+            this._instance.surveys._surveyEventReceiver?.getSurveys()
         return !!surveysActivatedByEventsOrActions?.includes(survey.id)
     }
 
@@ -499,7 +500,7 @@ export class SurveyManager {
     }
 
     public getActiveMatchingSurveys = (callback: SurveyCallback, forceReload = false): void => {
-        this._posthog?.surveys.getSurveys((surveys) => {
+        this._instance?.surveys.getSurveys((surveys) => {
             const targetingMatchedSurveys = surveys.filter((survey) => {
                 const eligibility = this.checkSurveyEligibility(survey)
                 return (

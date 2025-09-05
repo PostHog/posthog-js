@@ -27,6 +27,7 @@ import {
 import { isUndefined, isArray } from '@posthog/core'
 import { createLogger } from './utils/logger'
 import { getTimezone } from './utils/event-utils'
+import { PostHogComponent } from './posthog-component'
 
 const logger = createLogger('[FeatureFlags]')
 
@@ -152,7 +153,7 @@ export enum QuotaLimitedResource {
     Recordings = 'recordings',
 }
 
-export class PostHogFeatureFlags {
+export class PostHogFeatureFlags extends PostHogComponent {
     _override_warning: boolean = false
     featureFlagEventHandlers: FeatureFlagsCallback[]
     $anon_distinct_id: string | undefined
@@ -164,12 +165,14 @@ export class PostHogFeatureFlags {
     private _flagsCalled: boolean = false
     private _flagsLoadedFromRemote: boolean = false
 
-    constructor(private _instance: PostHog) {
+    constructor(instance: PostHog) {
+        super(instance)
+
         this.featureFlagEventHandlers = []
     }
 
     flags(): void {
-        if (this._instance.config.__preview_remote_config) {
+        if (this._config.__preview_remote_config) {
             // If remote config is enabled we don't call /flags and we mark it as called so that we don't simulate it
             this._flagsCalled = true
             return
@@ -178,8 +181,7 @@ export class PostHogFeatureFlags {
         // TRICKY: We want to disable flags if we don't have a queued reload, and one of the settings exist for disabling on first load
         const disableFlags =
             !this._reloadDebouncer &&
-            (this._instance.config.advanced_disable_feature_flags ||
-                this._instance.config.advanced_disable_feature_flags_on_first_load)
+            (this._config.advanced_disable_feature_flags || this._config.advanced_disable_feature_flags_on_first_load)
 
         this._callFlagsEndpoint({
             disableFlags,
@@ -320,7 +322,7 @@ export class PostHogFeatureFlags {
      * 2. Delay a few milliseconds after each reloadFeatureFlags call to batch subsequent changes together
      */
     reloadFeatureFlags(): void {
-        if (this._reloadingDisabled || this._instance.config.advanced_disable_feature_flags) {
+        if (this._reloadingDisabled || this._config.advanced_disable_feature_flags) {
             // If reloading has been explicitly disabled then we don't want to do anything
             // Or if feature flags are disabled
             return
@@ -374,7 +376,7 @@ export class PostHogFeatureFlags {
             this._additionalReloadRequested = true
             return
         }
-        const token = this._instance.config.token
+        const token = this._config.token
         const data: Record<string, any> = {
             token: token,
             distinct_id: this._instance.get_distinct_id(),
@@ -387,17 +389,17 @@ export class PostHogFeatureFlags {
             group_properties: this._instance.get_property(STORED_GROUP_PROPERTIES_KEY),
         }
 
-        if (options?.disableFlags || this._instance.config.advanced_disable_feature_flags) {
+        if (options?.disableFlags || this._config.advanced_disable_feature_flags) {
             data.disable_flags = true
         }
 
         // flags supports loading config data with the `config` query param, but if you're using remote config, you
         // don't need to add that parameter because all the config data is loaded from the remote config endpoint.
-        const useRemoteConfigWithFlags = this._instance.config.__preview_remote_config
+        const useRemoteConfigWithFlags = this._config.__preview_remote_config
 
         const flagsRoute = useRemoteConfigWithFlags ? '/flags/?v=2' : '/flags/?v=2&config=true'
 
-        const queryParams = this._instance.config.advanced_only_evaluate_survey_feature_flags
+        const queryParams = this._config.advanced_only_evaluate_survey_feature_flags
             ? '&only_evaluate_survey_feature_flags=true'
             : ''
 
@@ -412,8 +414,8 @@ export class PostHogFeatureFlags {
             method: 'POST',
             url,
             data,
-            compression: this._instance.config.disable_compression ? undefined : Compression.Base64,
-            timeout: this._instance.config.feature_flag_request_timeout_ms,
+            compression: this._config.disable_compression ? undefined : Compression.Base64,
+            timeout: this._config.feature_flag_request_timeout_ms,
             callback: (response) => {
                 let errorsLoading = true
 
@@ -429,7 +431,7 @@ export class PostHogFeatureFlags {
 
                 this._requestInFlight = false
 
-                // NB: this block is only reached if this._instance.config.__preview_remote_config is false
+                // NB: this block is only reached if this._config.__preview_remote_config is false
                 if (!this._flagsCalled) {
                     this._flagsCalled = true
                     this._instance._onRemoteConfig(response.json ?? {})
@@ -499,9 +501,8 @@ export class PostHogFeatureFlags {
                     $feature_flag_response: flagValue,
                     $feature_flag_payload: this.getFeatureFlagPayload(key) || null,
                     $feature_flag_request_id: requestId,
-                    $feature_flag_bootstrapped_response: this._instance.config.bootstrap?.featureFlags?.[key] || null,
-                    $feature_flag_bootstrapped_payload:
-                        this._instance.config.bootstrap?.featureFlagPayloads?.[key] || null,
+                    $feature_flag_bootstrapped_response: this._config.bootstrap?.featureFlags?.[key] || null,
+                    $feature_flag_bootstrapped_payload: this._config.bootstrap?.featureFlagPayloads?.[key] || null,
                     // If we haven't yet received a response from the /flags endpoint, we must have used the bootstrapped value
                     $used_bootstrap_value: !this._flagsLoadedFromRemote,
                 }
@@ -574,7 +575,7 @@ export class PostHogFeatureFlags {
      * @param {Function} [callback] The callback function will be called once the remote config feature flag payload has been fetched.
      */
     getRemoteConfigPayload(key: string, callback: RemoteConfigFeatureFlagCallback): void {
-        const token = this._instance.config.token
+        const token = this._config.token
         this._instance._send_request({
             method: 'POST',
             url: this._instance.requestRouter.endpointFor('api', '/flags/?v=2&config=true'),
@@ -582,8 +583,8 @@ export class PostHogFeatureFlags {
                 distinct_id: this._instance.get_distinct_id(),
                 token,
             },
-            compression: this._instance.config.disable_compression ? undefined : Compression.Base64,
-            timeout: this._instance.config.feature_flag_request_timeout_ms,
+            compression: this._config.disable_compression ? undefined : Compression.Base64,
+            timeout: this._config.feature_flag_request_timeout_ms,
             callback: (response) => {
                 const flagPayloads = response.json?.['featureFlagPayloads']
                 callback(flagPayloads?.[key] || undefined)
@@ -783,7 +784,7 @@ export class PostHogFeatureFlags {
             this._instance._send_request({
                 url: this._instance.requestRouter.endpointFor(
                     'api',
-                    `/api/early_access_features/?token=${this._instance.config.token}${stageParams}`
+                    `/api/early_access_features/?token=${this._config.token}${stageParams}`
                 ),
                 method: 'GET',
                 callback: (response) => {

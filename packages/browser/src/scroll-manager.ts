@@ -1,7 +1,7 @@
 import { window } from './utils/globals'
-import { PostHog } from './posthog-core'
 import { addEventListener } from './utils'
 import { isArray } from '@posthog/core'
+import { PostHogComponent } from './posthog-component'
 
 export interface ScrollContext {
     // scroll is how far down the page the user has scrolled,
@@ -17,10 +17,8 @@ export interface ScrollContext {
 }
 
 // This class is responsible for tracking scroll events and maintaining the scroll context
-export class ScrollManager {
+export class ScrollManager extends PostHogComponent {
     private _context: ScrollContext | undefined
-
-    constructor(private _instance: PostHog) {}
 
     getContext(): ScrollContext | undefined {
         return this._context
@@ -67,10 +65,10 @@ export class ScrollManager {
     }
 
     public scrollElement(): Element | undefined {
-        if (this._instance.config.scroll_root_selector) {
-            const selectors = isArray(this._instance.config.scroll_root_selector)
-                ? this._instance.config.scroll_root_selector
-                : [this._instance.config.scroll_root_selector]
+        if (this._config.scroll_root_selector) {
+            const selectors = isArray(this._config.scroll_root_selector)
+                ? this._config.scroll_root_selector
+                : [this._config.scroll_root_selector]
             for (const selector of selectors) {
                 const element = window?.document.querySelector(selector)
                 if (element) {
@@ -84,7 +82,7 @@ export class ScrollManager {
     }
 
     public scrollY(): number {
-        if (this._instance.config.scroll_root_selector) {
+        if (this._config.scroll_root_selector) {
             const element = this.scrollElement()
             return (element && element.scrollTop) || 0
         } else {
@@ -93,7 +91,7 @@ export class ScrollManager {
     }
 
     public scrollX(): number {
-        if (this._instance.config.scroll_root_selector) {
+        if (this._config.scroll_root_selector) {
             const element = this.scrollElement()
             return (element && element.scrollLeft) || 0
         } else {

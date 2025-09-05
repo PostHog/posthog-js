@@ -77,6 +77,7 @@ import {
     TriggerType,
     URLTriggerMatching,
 } from './triggerMatching'
+import { PostHogComponent } from '../../posthog-component'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
@@ -245,7 +246,7 @@ function isRecordingPausedEvent(e: eventWithTime) {
     return e.type === EventType.Custom && e.data.tag === 'recording paused'
 }
 
-export class SessionRecording {
+export class SessionRecording extends PostHogComponent {
     private _endpoint: string
     private _flushBufferTimer?: any
 
@@ -295,7 +296,7 @@ export class SessionRecording {
     _forceAllowLocalhostNetworkCapture = false
 
     private get _sessionIdleThresholdMilliseconds(): number {
-        return this._instance.config.session_recording.session_idle_threshold_ms || RECORDING_IDLE_THRESHOLD_MS
+        return this._config.session_recording.session_idle_threshold_ms || RECORDING_IDLE_THRESHOLD_MS
     }
 
     public get started(): boolean {
@@ -316,7 +317,7 @@ export class SessionRecording {
             return ONE_MINUTE
         }
 
-        return this._instance.config.session_recording?.full_snapshot_interval_millis ?? FIVE_MINUTES
+        return this._config.session_recording?.full_snapshot_interval_millis ?? FIVE_MINUTES
     }
 
     private get _isSampled(): boolean | null {
@@ -332,18 +333,18 @@ export class SessionRecording {
 
     private get _isRecordingEnabled() {
         const enabled_server_side = !!this._instance.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)
-        const enabled_client_side = !this._instance.config.disable_session_recording
+        const enabled_client_side = !this._config.disable_session_recording
         return window && enabled_server_side && enabled_client_side
     }
 
     private get _isConsoleLogCaptureEnabled() {
         const enabled_server_side = !!this._instance.get_property(CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE)
-        const enabled_client_side = this._instance.config.enable_recording_console_log
+        const enabled_client_side = this._config.enable_recording_console_log
         return enabled_client_side ?? enabled_server_side
     }
 
     private get _canvasRecording(): { enabled: boolean; fps: number; quality: number } {
-        const canvasRecording_client_side = this._instance.config.session_recording.captureCanvas
+        const canvasRecording_client_side = this._config.session_recording.captureCanvas
         const canvasRecording_server_side = this._instance.get_property(SESSION_RECORDING_CANVAS_RECORDING)
 
         const enabled: boolean =
@@ -377,16 +378,16 @@ export class SessionRecording {
         | undefined {
         const networkPayloadCapture_server_side = this._instance.get_property(SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE)
         const networkPayloadCapture_client_side = {
-            recordHeaders: this._instance.config.session_recording?.recordHeaders,
-            recordBody: this._instance.config.session_recording?.recordBody,
+            recordHeaders: this._config.session_recording?.recordHeaders,
+            recordBody: this._config.session_recording?.recordBody,
         }
         const headersEnabled =
             networkPayloadCapture_client_side?.recordHeaders || networkPayloadCapture_server_side?.recordHeaders
         const bodyEnabled =
             networkPayloadCapture_client_side?.recordBody || networkPayloadCapture_server_side?.recordBody
-        const clientConfigForPerformanceCapture = isObject(this._instance.config.capture_performance)
-            ? this._instance.config.capture_performance.network_timing
-            : this._instance.config.capture_performance
+        const clientConfigForPerformanceCapture = isObject(this._config.capture_performance)
+            ? this._config.capture_performance.network_timing
+            : this._config.capture_performance
         const networkTimingEnabled = !!(isBoolean(clientConfigForPerformanceCapture)
             ? clientConfigForPerformanceCapture
             : networkPayloadCapture_server_side?.capturePerformance)
@@ -401,9 +402,9 @@ export class SessionRecording {
         | undefined {
         const masking_server_side = this._instance.get_property(SESSION_RECORDING_MASKING)
         const masking_client_side = {
-            maskAllInputs: this._instance.config.session_recording?.maskAllInputs,
-            maskTextSelector: this._instance.config.session_recording?.maskTextSelector,
-            blockSelector: this._instance.config.session_recording?.blockSelector,
+            maskAllInputs: this._config.session_recording?.maskAllInputs,
+            maskTextSelector: this._config.session_recording?.maskTextSelector,
+            blockSelector: this._config.session_recording?.blockSelector,
         }
 
         const maskAllInputs = masking_client_side?.maskAllInputs ?? masking_server_side?.maskAllInputs
@@ -449,7 +450,9 @@ export class SessionRecording {
         })
     }
 
-    constructor(private readonly _instance: PostHog) {
+    constructor(instance: PostHog) {
+        super(instance)
+
         this._captureStarted = false
         this._endpoint = BASE_ENDPOINT
         this._stopRrweb = undefined
@@ -459,7 +462,7 @@ export class SessionRecording {
             logger.error('started without valid sessionManager')
             throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
         }
-        if (this._instance.config.cookieless_mode === 'always') {
+        if (this._config.cookieless_mode === 'always') {
             throw new Error(LOGGER_PREFIX + ' cannot be used with cookieless_mode="always"')
         }
 
@@ -753,11 +756,7 @@ export class SessionRecording {
 
         // We do not switch recorder versions midway through a recording.
         // do not start if explicitly disabled or if the user has opted out
-        if (
-            this._captureStarted ||
-            this._instance.config.disable_session_recording ||
-            this._instance.consent.isOptedOut()
-        ) {
+        if (this._captureStarted || this._config.disable_session_recording || this._instance.consent.isOptedOut()) {
             return
         }
 
@@ -927,7 +926,7 @@ export class SessionRecording {
         }
 
         // only allows user to set our allowlisted options
-        const userSessionRecordingOptions = this._instance.config.session_recording
+        const userSessionRecordingOptions = this._config.session_recording
         for (const [key, value] of Object.entries(userSessionRecordingOptions || {})) {
             if (key in sessionRecordingOptions) {
                 if (key === 'maskInputOptions') {
@@ -964,8 +963,8 @@ export class SessionRecording {
         this._mutationThrottler =
             this._mutationThrottler ??
             new MutationThrottler(rrwebRecord, {
-                refillRate: this._instance.config.session_recording.__mutationThrottlerRefillRate,
-                bucketSize: this._instance.config.session_recording.__mutationThrottlerBucketSize,
+                refillRate: this._config.session_recording.__mutationThrottlerRefillRate,
+                bucketSize: this._config.session_recording.__mutationThrottlerBucketSize,
                 onBlockedNode: (id, node) => {
                     const message = `Too many mutations on node '${id}'. Rate limiting. This could be due to SVG animations or something similar`
                     logger.info(message, {
@@ -996,7 +995,7 @@ export class SessionRecording {
         })
 
         this._tryAddCustomEvent('$posthog_config', {
-            config: this._instance.config,
+            config: this._config,
         })
     }
 
@@ -1032,9 +1031,7 @@ export class SessionRecording {
             const canRecordNetwork = !isLocalhost() || this._forceAllowLocalhostNetworkCapture
 
             if (canRecordNetwork) {
-                plugins.push(
-                    networkPlugin(buildNetworkRequestOptions(this._instance.config, this._networkPayloadCapture))
-                )
+                plugins.push(networkPlugin(buildNetworkRequestOptions(this._config, this._networkPayloadCapture)))
             } else {
                 logger.info('NetworkCapture not started because we are on localhost.')
             }
@@ -1117,8 +1114,7 @@ export class SessionRecording {
             }
         }
 
-        const eventToSend =
-            (this._instance.config.session_recording.compress_events ?? true) ? compressEvent(event) : event
+        const eventToSend = (this._config.session_recording.compress_events ?? true) ? compressEvent(event) : event
         const size = estimateSize(eventToSend)
 
         const properties = {
@@ -1137,7 +1133,7 @@ export class SessionRecording {
     }
 
     private _pageViewFallBack() {
-        if (this._instance.config.capture_pageview || !window) {
+        if (this._config.capture_pageview || !window) {
             return
         }
         const currentUrl = this._maskUrl(window.location.href)
@@ -1170,7 +1166,7 @@ export class SessionRecording {
     }
 
     private _maskUrl(url: string): string | undefined {
-        const userSessionRecordingOptions = this._instance.config.session_recording
+        const userSessionRecordingOptions = this._config.session_recording
 
         if (userSessionRecordingOptions.maskNetworkRequestFn) {
             let networkRequest: NetworkRequest | null | undefined = {

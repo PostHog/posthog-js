@@ -11,6 +11,7 @@ import { isElementInToolbar, isElementNode, isTag } from './utils/element-utils'
 import { DeadClicksAutocapture, isDeadClicksEnabledForHeatmaps } from './extensions/dead-clicks-autocapture'
 import { includes } from '@posthog/core'
 import { addEventListener } from './utils'
+import { PostHogComponent } from './posthog-component'
 
 const DEFAULT_FLUSH_INTERVAL = 5000
 
@@ -44,8 +45,7 @@ function isValidMouseEvent(e: unknown): e is MouseEvent {
     return isObject(e) && 'clientX' in e && 'clientY' in e && isNumber(e.clientX) && isNumber(e.clientY)
 }
 
-export class Heatmaps {
-    instance: PostHog
+export class Heatmaps extends PostHogComponent {
     rageclicks = new RageClick()
     _enabledServerSide: boolean = false
     _initialized = false
@@ -57,27 +57,25 @@ export class Heatmaps {
     private _deadClicksCapture: DeadClicksAutocapture | undefined
 
     constructor(instance: PostHog) {
-        this.instance = instance
-        this._enabledServerSide = !!this.instance.persistence?.props[HEATMAPS_ENABLED_SERVER_SIDE]
+        super(instance)
+
+        this._enabledServerSide = !!this._instance.persistence?.props[HEATMAPS_ENABLED_SERVER_SIDE]
     }
 
     public get flushIntervalMilliseconds(): number {
         let flushInterval = DEFAULT_FLUSH_INTERVAL
-        if (
-            isObject(this.instance.config.capture_heatmaps) &&
-            this.instance.config.capture_heatmaps.flush_interval_milliseconds
-        ) {
-            flushInterval = this.instance.config.capture_heatmaps.flush_interval_milliseconds
+        if (isObject(this._config.capture_heatmaps) && this._config.capture_heatmaps.flush_interval_milliseconds) {
+            flushInterval = this._config.capture_heatmaps.flush_interval_milliseconds
         }
         return flushInterval
     }
 
     public get isEnabled(): boolean {
-        if (!isUndefined(this.instance.config.capture_heatmaps)) {
-            return this.instance.config.capture_heatmaps !== false
+        if (!isUndefined(this._config.capture_heatmaps)) {
+            return this._config.capture_heatmaps !== false
         }
-        if (!isUndefined(this.instance.config.enable_heatmaps)) {
-            return this.instance.config.enable_heatmaps
+        if (!isUndefined(this._config.enable_heatmaps)) {
+            return this._config.enable_heatmaps
         }
         return this._enabledServerSide
     }
@@ -103,8 +101,8 @@ export class Heatmaps {
     public onRemoteConfig(response: RemoteConfig) {
         const optIn = !!response['heatmaps']
 
-        if (this.instance.persistence) {
-            this.instance.persistence.register({
+        if (this._instance.persistence) {
+            this._instance.persistence.register({
                 [HEATMAPS_ENABLED_SERVER_SIDE]: optIn,
             })
         }
@@ -150,9 +148,9 @@ export class Heatmaps {
         // If fixed then we won't account for scrolling
         // If not then we will account for scrolling
 
-        const scrollY = this.instance.scrollManager.scrollY()
-        const scrollX = this.instance.scrollManager.scrollX()
-        const scrollElement = this.instance.scrollManager.scrollElement()
+        const scrollY = this._instance.scrollManager.scrollY()
+        const scrollX = this._instance.scrollManager.scrollX()
+        const scrollElement = this._instance.scrollManager.scrollElement()
 
         const isFixedOrSticky = elementOrParentPositionMatches(getEventTarget(e), ['fixed', 'sticky'], scrollElement)
 
@@ -215,7 +213,7 @@ export class Heatmaps {
             return
         }
 
-        this.instance.capture('$$heatmap', {
+        this._instance.capture('$$heatmap', {
             $heatmap_data: this.getAndClearBuffer(),
         })
     }

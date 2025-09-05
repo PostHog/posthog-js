@@ -15,6 +15,7 @@ import { CLIENT_SESSION_PROPS } from './constants'
 import type { PostHog } from './posthog-core'
 import { each, stripEmptyProperties } from './utils'
 import { stripLeadingDollar } from '@posthog/core'
+import { PostHogComponent } from './posthog-component'
 
 interface LegacySessionSourceProps {
     initialPathName: string
@@ -40,8 +41,7 @@ const generateSessionSourceParams = (posthog?: PostHog): LegacySessionSourceProp
     return getPersonInfo(posthog?.config.mask_personal_data_properties, posthog?.config.custom_personal_data_properties)
 }
 
-export class SessionPropsManager {
-    private readonly _instance: PostHog
+export class SessionPropsManager extends PostHogComponent {
     private readonly _sessionIdManager: SessionIdManager
     private readonly _persistence: PostHogPersistence
     private readonly _sessionSourceParamGenerator: (
@@ -54,7 +54,8 @@ export class SessionPropsManager {
         persistence: PostHogPersistence,
         sessionSourceParamGenerator?: (instance?: PostHog) => LegacySessionSourceProps | CurrentSessionSourceProps
     ) {
-        this._instance = instance
+        super(instance)
+
         this._sessionIdManager = sessionIdManager
         this._persistence = persistence
         this._sessionSourceParamGenerator = sessionSourceParamGenerator || generateSessionSourceParams

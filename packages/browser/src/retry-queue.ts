@@ -6,6 +6,7 @@ import { window } from './utils/globals'
 import { PostHog } from './posthog-core'
 import { extendURLParams } from './request'
 import { addEventListener } from './utils'
+import { PostHogComponent } from './posthog-component'
 
 const thirtyMinutes = 30 * 60 * 1000
 
@@ -33,14 +34,16 @@ interface RetryQueueElement {
     requestOptions: RetriableRequestWithOptions
 }
 
-export class RetryQueue {
+export class RetryQueue extends PostHogComponent {
     private _isPolling: boolean = false // flag to continue to recursively poll or not
     private _poller: number | undefined // to become interval for reference to clear later
     private _pollIntervalMs: number = 3000
     private _queue: RetryQueueElement[] = []
     private _areWeOnline: boolean
 
-    constructor(private _instance: PostHog) {
+    constructor(instance: PostHog) {
+        super(instance)
+
         this._queue = []
         this._areWeOnline = true
 

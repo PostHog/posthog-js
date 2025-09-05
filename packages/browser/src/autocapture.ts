@@ -16,7 +16,7 @@ import {
 } from './autocapture-utils'
 
 import RageClick from './extensions/rageclick'
-import { AutocaptureConfig, COPY_AUTOCAPTURE_EVENT, EventName, Properties, RemoteConfig } from './types'
+import { AutocaptureConfig, COPY_AUTOCAPTURE_EVENT, EventName, PostHogConfig, Properties, RemoteConfig } from './types'
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
@@ -26,6 +26,7 @@ import { document, window } from './utils/globals'
 import { convertToURL } from './utils/request-utils'
 import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
 import { includes } from '@posthog/core'
+import { PostHogComponent } from './posthog-component'
 
 const logger = createLogger('[AutoCapture]')
 
@@ -229,8 +230,16 @@ export function autocapturePropertiesForElement(
     return { props }
 }
 
-export class Autocapture {
-    instance: PostHog
+function preCompileConfigRegex(config: PostHogConfig): AutocaptureConfig {
+    const acConfig = isObject(config.autocapture) ? config.autocapture : {}
+    // precompile the regex
+    acConfig.url_allowlist = acConfig.url_allowlist?.map((url) => new RegExp(url))
+    acConfig.url_ignorelist = acConfig.url_ignorelist?.map((url) => new RegExp(url))
+
+    return acConfig
+}
+
+export class Autocapture extends PostHogComponent {
     _initialized: boolean = false
     _isDisabledServerSide: boolean | null = null
     _elementSelectors: Set<string> | null
@@ -238,16 +247,14 @@ export class Autocapture {
     _elementsChainAsString = false
 
     constructor(instance: PostHog) {
-        this.instance = instance
+        super(instance)
+
+        this._instance.config.autocapture = preCompileConfigRegex(this._instance.config)
         this._elementSelectors = null
     }
 
-    private get _config(): AutocaptureConfig {
-        const config = isObject(this.instance.config.autocapture) ? this.instance.config.autocapture : {}
-        // precompile the regex
-        config.url_allowlist = config.url_allowlist?.map((url) => new RegExp(url))
-        config.url_ignorelist = config.url_ignorelist?.map((url) => new RegExp(url))
-        return config
+    private get _acConfig(): AutocaptureConfig {
+        return isObject(this._config.autocapture) ? this._config.autocapture : {}
     }
 
     _addDomEventHandlers(): void {
@@ -273,7 +280,7 @@ export class Autocapture {
         addEventListener(document, 'change', handler, { capture: true })
         addEventListener(document, 'click', handler, { capture: true })
 
-        if (this._config.capture_copied_text) {
+        if (this._acConfig.capture_copied_text) {
             const copiedTextHandler = (e: Event) => {
                 e = e || window?.event
                 this._captureEvent(e, COPY_AUTOCAPTURE_EVENT)
@@ -296,8 +303,8 @@ export class Autocapture {
             this._elementsChainAsString = response.elementsChainAsString
         }
 
-        if (this.instance.persistence) {
-            this.instance.persistence.register({
+        if (this._instance.persistence) {
+            this._instance.persistence.register({
                 [AUTOCAPTURE_DISABLED_SERVER_SIDE]: !!response['autocapture_opt_out'],
             })
         }
@@ -326,16 +333,16 @@ export class Autocapture {
     }
 
     public get isEnabled(): boolean {
-        const persistedServerDisabled = this.instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
+        const persistedServerDisabled = this._instance.persistence?.props[AUTOCAPTURE_DISABLED_SERVER_SIDE]
         const memoryDisabled = this._isDisabledServerSide
 
-        if (isNull(memoryDisabled) && !isBoolean(persistedServerDisabled) && !this.instance._shouldDisableFlags()) {
+        if (isNull(memoryDisabled) && !isBoolean(persistedServerDisabled) && !this._instance._shouldDisableFlags()) {
             // We only enable if we know that the server has not disabled it (unless /flags is disabled)
             return false
         }
 
         const disabledServer = this._isDisabledServerSide ?? !!persistedServerDisabled
-        const disabledClient = !this.instance.config.autocapture
+        const disabledClient = !this._instance.config.autocapture
         return !disabledClient && !disabledServer
     }
 
@@ -353,7 +360,7 @@ export class Autocapture {
 
         if (eventName === '$autocapture' && e.type === 'click' && e instanceof MouseEvent) {
             if (
-                this.instance.config.rageclick &&
+                this._instance.config.rageclick &&
                 this.rageclicks?.isRageClick(e.clientX, e.clientY, new Date().getTime())
             ) {
                 this._captureEvent(e, '$rageclick')
@@ -366,7 +373,7 @@ export class Autocapture {
             shouldCaptureDomEvent(
                 target,
                 e,
-                this._config,
+                this._acConfig,
                 // mostly this method cares about the target element, but in the case of copy events,
                 // we want some of the work this check does without insisting on the target element's type
                 isCopyAutocapture,
@@ -377,9 +384,9 @@ export class Autocapture {
         ) {
             const { props, explicitNoCapture } = autocapturePropertiesForElement(target, {
                 e,
-                maskAllElementAttributes: this.instance.config.mask_all_element_attributes,
-                maskAllText: this.instance.config.mask_all_text,
-                elementAttributeIgnoreList: this._config.element_attribute_ignorelist,
+                maskAllElementAttributes: this._instance.config.mask_all_element_attributes,
+                maskAllText: this._instance.config.mask_all_text,
+                elementAttributeIgnoreList: this._acConfig.element_attribute_ignorelist,
                 elementsChainAsString: this._elementsChainAsString,
             })
 
@@ -404,7 +411,7 @@ export class Autocapture {
                 props['$copy_type'] = clipType
             }
 
-            this.instance.capture(eventName, props)
+            this._instance.capture(eventName, props)
             return true
         }
     }

@@ -1,11 +1,11 @@
 import { addEventListener, trySafe } from '../utils'
-import { PostHog } from '../posthog-core'
 import { ToolbarParams } from '../types'
 import { _getHashParam } from '../utils/request-utils'
 import { createLogger } from '../utils/logger'
 import { window, document, assignableWindow } from '../utils/globals'
 import { TOOLBAR_ID } from '../constants'
 import { isFunction, isNullish } from '@posthog/core'
+import { PostHogComponent } from '../posthog-component'
 
 // TRICKY: Many web frameworks will modify the route on load, potentially before posthog is initialized.
 // To get ahead of this we grab it as soon as the posthog-js is parsed
@@ -23,13 +23,7 @@ enum ToolbarState {
     LOADED = 2,
 }
 
-export class Toolbar {
-    instance: PostHog
-
-    constructor(instance: PostHog) {
-        this.instance = instance
-    }
-
+export class Toolbar extends PostHogComponent {
     // NOTE: We store the state of the toolbar in the global scope to avoid multiple instances of the SDK loading the toolbar
     private _setToolbarState(state: ToolbarState) {
         assignableWindow['ph_toolbar_state'] = state
@@ -115,7 +109,7 @@ export class Toolbar {
                 delete toolbarParams.userIntent
             }
 
-            if (toolbarParams['token'] && this.instance.config.token === toolbarParams['token']) {
+            if (toolbarParams['token'] && this._config.token === toolbarParams['token']) {
                 this.loadToolbar(toolbarParams)
                 return true
             } else {
@@ -132,7 +126,7 @@ export class Toolbar {
             logger.warn('No toolbar load function found')
             return
         }
-        loadFn(params, this.instance)
+        loadFn(params, this._instance)
     }
 
     loadToolbar(params?: ToolbarParams): boolean {
@@ -144,12 +138,12 @@ export class Toolbar {
         }
 
         const disableToolbarMetrics =
-            this.instance.requestRouter.region === 'custom' && this.instance.config.advanced_disable_toolbar_metrics
+            this._instance.requestRouter.region === 'custom' && this._config.advanced_disable_toolbar_metrics
 
         const toolbarParams = {
-            token: this.instance.config.token,
+            token: this._config.token,
             ...params,
-            apiURL: this.instance.requestRouter.endpointFor('ui'),
+            apiURL: this._instance.requestRouter.endpointFor('ui'),
             ...(disableToolbarMetrics ? { instrument: false } : {}),
         }
         window.localStorage.setItem(
@@ -166,7 +160,7 @@ export class Toolbar {
             // only load the toolbar once, even if there are multiple instances of PostHogLib
             this._setToolbarState(ToolbarState.LOADING)
 
-            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.instance, 'toolbar', (err) => {
+            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, 'toolbar', (err) => {
                 if (err) {
                     logger.error('[Toolbar] Failed to load', err)
                     this._setToolbarState(ToolbarState.UNINITIALIZED)

@@ -4,6 +4,7 @@ import { createLogger } from '../../utils/logger'
 import { isBoolean, isNullish, isNumber, isUndefined, isObject } from '@posthog/core'
 import { WEB_VITALS_ALLOWED_METRICS, WEB_VITALS_ENABLED_SERVER_SIDE } from '../../constants'
 import { assignableWindow, window, location } from '../../utils/globals'
+import { PostHogComponent } from '../../posthog-component'
 
 const logger = createLogger('[Web Vitals]')
 
@@ -15,24 +16,25 @@ export const FIFTEEN_MINUTES_IN_MILLIS = 15 * ONE_MINUTE_IN_MILLIS
 
 type WebVitalsEventBuffer = { url: string | undefined; metrics: any[]; firstMetricTimestamp: number | undefined }
 
-export class WebVitalsAutocapture {
+export class WebVitalsAutocapture extends PostHogComponent {
     private _enabledServerSide: boolean = false
     private _initialized = false
 
     private _buffer: WebVitalsEventBuffer = { url: undefined, metrics: [], firstMetricTimestamp: undefined }
     private _delayedFlushTimer: ReturnType<typeof setTimeout> | undefined
 
-    constructor(private readonly _instance: PostHog) {
-        this._enabledServerSide = !!this._instance.persistence?.props[WEB_VITALS_ENABLED_SERVER_SIDE]
+    constructor(instance: PostHog) {
+        super(instance)
 
+        this._enabledServerSide = !!this._instance.persistence?.props[WEB_VITALS_ENABLED_SERVER_SIDE]
         this.startIfEnabled()
     }
 
     public get allowedMetrics(): SupportedWebVitalsMetrics[] {
         const clientConfigMetricAllowList: SupportedWebVitalsMetrics[] | undefined = isObject(
-            this._instance.config.capture_performance
+            this._config.capture_performance
         )
-            ? this._instance.config.capture_performance?.web_vitals_allowed_metrics
+            ? this._config.capture_performance?.web_vitals_allowed_metrics
             : undefined
         return !isUndefined(clientConfigMetricAllowList)
             ? clientConfigMetricAllowList
@@ -40,17 +42,17 @@ export class WebVitalsAutocapture {
     }
 
     public get flushToCaptureTimeoutMs(): number {
-        const clientConfig: number | undefined = isObject(this._instance.config.capture_performance)
-            ? this._instance.config.capture_performance.web_vitals_delayed_flush_ms
+        const clientConfig: number | undefined = isObject(this._config.capture_performance)
+            ? this._config.capture_performance.web_vitals_delayed_flush_ms
             : undefined
         return clientConfig || DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS
     }
 
     public get _maxAllowedValue(): number {
         const configured =
-            isObject(this._instance.config.capture_performance) &&
-            isNumber(this._instance.config.capture_performance.__web_vitals_max_value)
-                ? this._instance.config.capture_performance.__web_vitals_max_value
+            isObject(this._config.capture_performance) &&
+            isNumber(this._config.capture_performance.__web_vitals_max_value)
+                ? this._config.capture_performance.__web_vitals_max_value
                 : FIFTEEN_MINUTES_IN_MILLIS
         // you can set to 0 to disable the check or any value over ten seconds
         // 1 milli to 1 minute will be set to 15 minutes, cos that would be a silly low maximum
@@ -66,10 +68,10 @@ export class WebVitalsAutocapture {
         }
 
         // Otherwise, check config
-        const clientConfig = isObject(this._instance.config.capture_performance)
-            ? this._instance.config.capture_performance.web_vitals
-            : isBoolean(this._instance.config.capture_performance)
-              ? this._instance.config.capture_performance
+        const clientConfig = isObject(this._config.capture_performance)
+            ? this._config.capture_performance.web_vitals
+            : isBoolean(this._config.capture_performance)
+              ? this._config.capture_performance
               : undefined
         return isBoolean(clientConfig) ? clientConfig : this._enabledServerSide
     }
