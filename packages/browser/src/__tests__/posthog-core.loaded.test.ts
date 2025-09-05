@@ -30,6 +30,20 @@ describe('loaded() with flags', () => {
         return posthog
     }
 
+    describe('replay', () => {
+        it('can set force allow localhost network capture', async () => {
+            instance = await createPosthog({
+                loaded: (ph) => {
+                    if (ph.sessionRecording) {
+                        ph.sessionRecording._forceAllowLocalhostNetworkCapture = true
+                    }
+                },
+            })
+
+            expect(instance.sessionRecording?._forceAllowLocalhostNetworkCapture).toBe(true)
+        })
+    })
+
     describe('flag reloading', () => {
         it('only calls flags once whilst loading', async () => {
             instance = await createPosthog({
