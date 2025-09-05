@@ -6,8 +6,7 @@ permissions:
 
 on:
   pull_request:
-    paths:
-      - '.changeset/**'
+    types: [opened, synchronize, reopened]
 
 jobs:
   check-major-version:
