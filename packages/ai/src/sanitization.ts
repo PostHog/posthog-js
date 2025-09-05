@@ -238,3 +238,56 @@ export const sanitizeGemini = (data: unknown): unknown => {
 export const sanitizeLangChain = (data: unknown): unknown => {
   return processMessages(data, sanitizeLangChainImage)
 }
+
+const getPartText = (part: unknown): string => {
+  if (typeof part === 'string') {
+    return part
+  }
+
+  if (part && typeof part === 'object' && 'text' in part) {
+    const text = part.text
+    if (text === null || text === undefined) {
+      return ''
+    }
+    return String(text)
+  }
+
+  return ''
+}
+
+export const parseGeminiSystemInstruction = (systemInstruction?: unknown): unknown[] => {
+  if (!systemInstruction) {
+    return []
+  }
+
+  if (typeof systemInstruction === 'string') {
+    return [{ role: 'system', content: systemInstruction }]
+  }
+
+  if (Array.isArray(systemInstruction)) {
+    const result: Array<{ role: string; content: string }> = []
+    for (const instruction of systemInstruction) {
+      const partText = getPartText(instruction)
+      if (partText) {
+        result.push({ role: 'system', content: partText })
+      }
+    }
+    return result
+  }
+
+  if (systemInstruction && typeof systemInstruction === 'object' && 'parts' in systemInstruction) {
+    const parts = systemInstruction.parts
+    if (Array.isArray(parts)) {
+      const result: Array<{ role: string; content: string }> = []
+      for (const part of parts) {
+        const partText = getPartText(part)
+        if (partText) {
+          result.push({ role: 'system', content: partText })
+        }
+      }
+      return result
+    }
+  }
+
+  return []
+}

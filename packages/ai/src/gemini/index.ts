@@ -8,7 +8,7 @@ import {
 import { PostHog } from 'posthog-node'
 import { v4 as uuidv4 } from 'uuid'
 import { MonitoringParams, sendEventToPosthog, extractAvailableToolCalls, formatResponseGemini } from '../utils'
-import { sanitizeGemini } from '../sanitization'
+import { sanitizeGemini, parseGeminiSystemInstruction } from '../sanitization'
 import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessage } from '../types'
 
 interface MonitoringGeminiConfig {
@@ -61,7 +61,7 @@ export class WrappedModels {
         traceId,
         model: geminiParams.model,
         provider: 'gemini',
-        input: this.formatInputForPostHog(geminiParams.contents),
+        input: this.formatInputForPostHog(geminiParams.contents, geminiParams.config?.systemInstruction),
         output: formatResponseGemini(response),
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -88,7 +88,7 @@ export class WrappedModels {
         traceId,
         model: geminiParams.model,
         provider: 'gemini',
-        input: this.formatInputForPostHog(geminiParams.contents),
+        input: this.formatInputForPostHog(geminiParams.contents, geminiParams.config?.systemInstruction),
         output: [],
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -192,7 +192,7 @@ export class WrappedModels {
         traceId,
         model: geminiParams.model,
         provider: 'gemini',
-        input: this.formatInputForPostHog(geminiParams.contents),
+        input: this.formatInputForPostHog(geminiParams.contents, geminiParams.config?.systemInstruction),
         output,
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -210,7 +210,7 @@ export class WrappedModels {
         traceId,
         model: geminiParams.model,
         provider: 'gemini',
-        input: this.formatInputForPostHog(geminiParams.contents),
+        input: this.formatInputForPostHog(geminiParams.contents, geminiParams.config?.systemInstruction),
         output: [],
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -280,9 +280,11 @@ export class WrappedModels {
     return [{ role: 'user', content: String(contents) }]
   }
 
-  private formatInputForPostHog(contents: unknown): unknown {
+  private formatInputForPostHog(contents: unknown, systemInstruction?: unknown): unknown {
     const sanitized = sanitizeGemini(contents)
-    return this.formatInput(sanitized)
+    const input = this.formatInput(sanitized)
+    const systemInstructions = parseGeminiSystemInstruction(systemInstruction)
+    return [...systemInstructions, ...input]
   }
 }
 
