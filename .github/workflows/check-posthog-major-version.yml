@@ -35,6 +35,9 @@ jobs:
           echo "no_changesets=false" >> $GITHUB_OUTPUT
           
           # Check each new changeset for major version bumps to posthog-js
+          major_found=false
+          major_file=""
+          
           for changeset in $changesets; do
             echo "Checking $changeset"
             
@@ -42,14 +45,20 @@ jobs:
             if grep -q "'posthog-js':[[:space:]]*major" "$changeset"; then
               echo "❌ Error: Major version bump detected for 'posthog-js' in $changeset"
               echo "The 'posthog-js' package is autoloaded by clients and must not have breaking changes."
-              echo "major_bump_found=true" >> $GITHUB_OUTPUT
-              echo "changeset_file=$changeset" >> $GITHUB_OUTPUT
-              exit 1
+              major_found=true
+              major_file="$changeset"
+              break
             fi
           done
           
-          echo "✅ No major version bumps found for 'posthog-js' in new changesets"
-          echo "major_bump_found=false" >> $GITHUB_OUTPUT
+          if [ "$major_found" = "true" ]; then
+            echo "major_bump_found=true" >> $GITHUB_OUTPUT
+            echo "changeset_file=$major_file" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "✅ No major version bumps found for 'posthog-js' in new changesets"
+            echo "major_bump_found=false" >> $GITHUB_OUTPUT
+          fi
       
       - name: Comment on PR
         if: failure() && steps.check-major.outputs.major_bump_found == 'true'
