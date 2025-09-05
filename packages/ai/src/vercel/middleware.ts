@@ -1,4 +1,4 @@
-import { wrapLanguageModel } from 'ai'
+import { JSONValue, wrapLanguageModel } from 'ai'
 import type {
   LanguageModelV2,
   LanguageModelV2Content,
@@ -12,6 +12,7 @@ import { CostOverride, sendEventToPosthog, truncate, MAX_OUTPUT_SIZE, extractAva
 import { Buffer } from 'buffer'
 import { redactBase64DataUrl } from '../sanitization'
 import { isString } from '../typeGuards'
+import { TokenUsage } from '../types'
 
 interface ClientOptions {
   posthogDistinctId?: string
@@ -277,21 +278,19 @@ export const createInstrumentationMiddleware = (
         const baseURL = '' // cannot currently get baseURL from vercel
         const content = mapVercelOutput(result.content)
         const latency = (Date.now() - startTime) / 1000
-        const providerMetadata = result.providerMetadata
-        const additionalTokenValues = {
-          ...(providerMetadata?.anthropic
-            ? {
-                cacheCreationInputTokens: providerMetadata.anthropic.cacheCreationInputTokens,
-              }
-            : {}),
-        }
-        const usage = {
+
+        const anthropicCacheCreationInputTokens: JSONValue | undefined =
+          result.providerMetadata?.anthropic?.cacheCreationInputTokens
+
+        const usage: TokenUsage = {
           inputTokens: result.usage.inputTokens,
           outputTokens: result.usage.outputTokens,
           reasoningTokens: result.usage.reasoningTokens,
           cacheReadInputTokens: result.usage.cachedInputTokens,
-          ...additionalTokenValues,
+          cacheCreationInputTokens:
+            typeof anthropicCacheCreationInputTokens === 'number' ? anthropicCacheCreationInputTokens : undefined,
         }
+
         await sendEventToPosthog({
           client: phClient,
           distinctId: options.posthogDistinctId,
@@ -341,13 +340,7 @@ export const createInstrumentationMiddleware = (
       const startTime = Date.now()
       let generatedText = ''
       let reasoningText = ''
-      let usage: {
-        inputTokens?: number
-        outputTokens?: number
-        reasoningTokens?: any
-        cacheReadInputTokens?: any
-        cacheCreationInputTokens?: any
-      } = {}
+      let usage: TokenUsage = {}
       const mergedParams = {
         ...options,
         ...mapVercelParams(params),
@@ -410,20 +403,16 @@ export const createInstrumentationMiddleware = (
             }
 
             if (chunk.type === 'finish') {
-              const providerMetadata = chunk.providerMetadata
-              const additionalTokenValues = {
-                ...(providerMetadata?.anthropic
-                  ? {
-                      cacheCreationInputTokens: providerMetadata.anthropic.cacheCreationInputTokens,
-                    }
-                  : {}),
-              }
+              const anthropicCacheCreationInputTokens: JSONValue | undefined =
+                chunk.providerMetadata?.anthropic?.cacheCreationInputTokens
+
               usage = {
                 inputTokens: chunk.usage?.inputTokens,
                 outputTokens: chunk.usage?.outputTokens,
                 reasoningTokens: chunk.usage?.reasoningTokens,
                 cacheReadInputTokens: chunk.usage?.cachedInputTokens,
-                ...additionalTokenValues,
+                cacheCreationInputTokens:
+                  typeof anthropicCacheCreationInputTokens === 'number' ? anthropicCacheCreationInputTokens : undefined,
               }
             }
             controller.enqueue(chunk)
