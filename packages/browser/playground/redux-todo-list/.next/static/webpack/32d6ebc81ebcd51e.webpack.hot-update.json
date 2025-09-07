@@ -1,8 +1,0 @@
-{
-    "c": ["pages/_app", "webpack"],
-    "r": ["app/_not-found/page"],
-    "m": [
-        "(app-pages-browser)/../../../../node_modules/.pnpm/next@15.0.0_@opentelemetry+api@1.9.0_@playwright+test@1.52.0_react-dom@18.2.0_react@18.2.0__react@18.2.0/node_modules/next/dist/build/webpack/loaders/next-client-pages-loader.js?absolutePagePath=%2FUsers%2Fpauldambra%2Fgithub%2Fposthog-js%2Fnode_modules%2F.pnpm%2Fnext%4015.0.0_%40opentelemetry%2Bapi%401.9.0_%40playwright%2Btest%401.52.0_react-dom%4018.2.0_react%4018.2.0__react%4018.2.0%2Fnode_modules%2Fnext%2Fdist%2Fclient%2Fcomponents%2Fnot-found-error.js&page=%2F_not-found%2Fpage!",
-        "(app-pages-browser)/../../../../node_modules/.pnpm/next@15.0.0_@opentelemetry+api@1.9.0_@playwright+test@1.52.0_react-dom@18.2.0_react@18.2.0__react@18.2.0/node_modules/next/dist/client/components/not-found-error.js"
-    ]
-}
