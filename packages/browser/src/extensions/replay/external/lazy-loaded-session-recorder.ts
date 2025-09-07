@@ -325,17 +325,17 @@ export class LazyLoadedSessionRecording extends PostHogComponent implements Lazy
     }
 
     private get _isSampled(): boolean | null {
-        const currentValue = this.ph_prop(SESSION_RECORDING_IS_SAMPLED)
+        const currentValue = this.get_prop(SESSION_RECORDING_IS_SAMPLED)
         return isBoolean(currentValue) ? currentValue : null
     }
 
     private get _sampleRate(): number | null {
-        const rate = this.ph_prop(SESSION_RECORDING_SAMPLE_RATE)
+        const rate = this.get_prop(SESSION_RECORDING_SAMPLE_RATE)
         return isNumber(rate) ? rate : null
     }
 
     private get _minimumDuration(): number | null {
-        const duration = this.ph_prop(SESSION_RECORDING_MINIMUM_DURATION)
+        const duration = this.get_prop(SESSION_RECORDING_MINIMUM_DURATION)
         return isNumber(duration) ? duration : null
     }
 
@@ -372,7 +372,7 @@ export class LazyLoadedSessionRecording extends PostHogComponent implements Lazy
     private get _masking():
         | Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector' | 'blockSelector'>
         | undefined {
-        const masking_server_side = this.ph_prop(SESSION_RECORDING_MASKING)
+        const masking_server_side = this.get_prop(SESSION_RECORDING_MASKING)
         const masking_client_side = {
             maskAllInputs: this.c.session_recording?.maskAllInputs,
             maskTextSelector: this.c.session_recording?.maskTextSelector,
@@ -394,7 +394,7 @@ export class LazyLoadedSessionRecording extends PostHogComponent implements Lazy
 
     private get _canvasRecording(): { enabled: boolean; fps: number; quality: number } {
         const canvasRecording_client_side = this.c.session_recording.captureCanvas
-        const canvasRecording_server_side = this.ph_prop(SESSION_RECORDING_CANVAS_RECORDING)
+        const canvasRecording_server_side = this.get_prop(SESSION_RECORDING_CANVAS_RECORDING)
 
         const enabled: boolean =
             canvasRecording_client_side?.recordCanvas ?? canvasRecording_server_side?.enabled ?? false
@@ -421,7 +421,7 @@ export class LazyLoadedSessionRecording extends PostHogComponent implements Lazy
     }
 
     private get _isConsoleLogCaptureEnabled() {
-        const enabled_server_side = !!this.ph_prop(CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE)
+        const enabled_server_side = !!this.get_prop(CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE)
         const enabled_client_side = this.c.enable_recording_console_log
         return enabled_client_side ?? enabled_server_side
     }
@@ -431,7 +431,7 @@ export class LazyLoadedSessionRecording extends PostHogComponent implements Lazy
     private get _networkPayloadCapture():
         | Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody' | 'recordPerformance'>
         | undefined {
-        const networkPayloadCapture_server_side = this.ph_prop(SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE)
+        const networkPayloadCapture_server_side = this.get_prop(SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE)
         const networkPayloadCapture_client_side = {
             recordHeaders: this.c.session_recording?.recordHeaders,
             recordBody: this.c.session_recording?.recordBody,
@@ -617,7 +617,7 @@ export class LazyLoadedSessionRecording extends PostHogComponent implements Lazy
     private _activateTrigger(triggerType: TriggerType) {
         if (this._triggerMatching.triggerStatus(this.sessionId) === TRIGGER_PENDING) {
             // status is stored separately for URL and event triggers
-            this.i?.persistence?.register({
+            this.reg_property({
                 [triggerType === 'url'
                     ? SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION
                     : SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION]: this._sessionId,
@@ -935,7 +935,7 @@ export class LazyLoadedSessionRecording extends PostHogComponent implements Lazy
      * instead call `posthog.startSessionRecording({sampling: true})`
      * */
     public overrideSampling() {
-        this.i.persistence?.register({
+        this.reg_property({
             // short-circuits the `makeSamplingDecision` function in the session recording module
             [SESSION_RECORDING_IS_SAMPLED]: true,
         })
@@ -1204,7 +1204,7 @@ export class LazyLoadedSessionRecording extends PostHogComponent implements Lazy
             })
         }
 
-        this.i.persistence?.register({
+        this.reg_property({
             [SESSION_RECORDING_IS_SAMPLED]: shouldSample,
         })
     }

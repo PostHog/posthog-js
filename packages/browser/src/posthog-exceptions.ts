@@ -15,7 +15,7 @@ export class PostHogExceptions extends PostHogComponent {
     constructor(instance: PostHog) {
         super(instance)
 
-        this._suppressionRules = this.ph_prop(ERROR_TRACKING_SUPPRESSION_RULES) ?? []
+        this._suppressionRules = this.get_prop(ERROR_TRACKING_SUPPRESSION_RULES) ?? []
     }
 
     onRemoteConfig(response: RemoteConfig) {
@@ -34,7 +34,7 @@ export class PostHogExceptions extends PostHogComponent {
     }
 
     private get _captureExtensionExceptions() {
-        const enabled_server_side = !!this.ph_prop(ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS)
+        const enabled_server_side = !!this.get_prop(ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS)
         const enabled_client_side = this.c.error_tracking.captureExtensionExceptions
         return enabled_client_side ?? enabled_server_side ?? false
     }

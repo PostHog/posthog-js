@@ -54,8 +54,8 @@ export class SiteApps extends PostHogComponent {
             throw new Error('Event payload is required')
         }
         const groups: SiteAppGlobals['groups'] = {}
-        const groupIds = this.ph_prop('$groups') || []
-        const groupProperties: Record<string, Properties> = this.ph_prop('$stored_group_properties') || {}
+        const groupIds = this.get_prop('$groups') || []
+        const groupProperties: Record<string, Properties> = this.get_prop('$stored_group_properties') || {}
         for (const [type, properties] of Object.entries(groupProperties)) {
             groups[type] = { id: groupIds[type], type, properties }
         }
@@ -77,7 +77,7 @@ export class SiteApps extends PostHogComponent {
                 distinct_id: event.properties?.['distinct_id'],
             },
             person: {
-                properties: this.ph_prop('$stored_person_properties'),
+                properties: this.get_prop('$stored_person_properties'),
             },
             groups,
         }

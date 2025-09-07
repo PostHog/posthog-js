@@ -237,7 +237,7 @@ export class PostHogSurveys extends PostHogComponent {
                         this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
                     }
 
-                    this.i.persistence?.register({ [SURVEYS]: surveys })
+                    this.reg_property({ [SURVEYS]: surveys })
                     return callback(surveys, {
                         isLoaded: true,
                     })

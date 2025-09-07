@@ -60,7 +60,7 @@ export class SessionPropsManager extends PostHogComponent {
     }
 
     _getStored(): StoredSessionSourceProps | undefined {
-        return this.ph_prop(CLIENT_SESSION_PROPS)
+        return this.get_prop(CLIENT_SESSION_PROPS)
     }
 
     _onSessionIdCallback = (sessionId: string) => {
@@ -74,7 +74,7 @@ export class SessionPropsManager extends PostHogComponent {
             props: this._sessionSourceParamGenerator(this.i),
         }
         // this is typed as undefined but in reality persistence is always defined here
-        this.i.persistence?.register({ [CLIENT_SESSION_PROPS]: newProps })
+        this.reg_property({ [CLIENT_SESSION_PROPS]: newProps })
     }
 
     getSetOnceProps() {

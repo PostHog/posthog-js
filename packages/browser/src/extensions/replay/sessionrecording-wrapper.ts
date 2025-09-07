@@ -56,7 +56,7 @@ export class SessionRecordingWrapper extends PostHogComponent {
     }
 
     private get _isRecordingEnabled() {
-        const enabled_server_side = !!this.ph_prop(SESSION_RECORDING_ENABLED_SERVER_SIDE)
+        const enabled_server_side = !!this.get_prop(SESSION_RECORDING_ENABLED_SERVER_SIDE)
         const enabled_client_side = !this.c.disable_session_recording
         const isDisabled = this.c.disable_session_recording || this.i.consent.isOptedOut()
         return window && enabled_server_side && enabled_client_side && !isDisabled
@@ -147,7 +147,7 @@ export class SessionRecordingWrapper extends PostHogComponent {
     }
 
     private get _scriptName(): PostHogExtensionKind {
-        return (this.ph_prop(SESSION_RECORDING_SCRIPT_CONFIG)?.script as PostHogExtensionKind) || 'lazy-recorder'
+        return (this.get_prop(SESSION_RECORDING_SCRIPT_CONFIG)?.script as PostHogExtensionKind) || 'lazy-recorder'
     }
 
     private _onScriptLoaded(startReason?: SessionStartReason) {

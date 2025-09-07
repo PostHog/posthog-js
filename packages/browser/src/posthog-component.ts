@@ -1,5 +1,5 @@
 import { PostHog } from './posthog-core'
-import { PostHogConfig, Property } from './types'
+import { PostHogConfig, Properties, Property } from './types'
 
 /**
  * Base class for all PostHog components that need access to the PostHog instance.
@@ -32,7 +32,15 @@ export abstract class PostHogComponent {
      * get a property from the posthog instance's persistence properties
      * @param property_name
      */
-    ph_prop(property_name: string): Property | undefined {
+    get_prop(property_name: string): Property | undefined {
         return this.i.get_property(property_name)
+    }
+
+    /**
+     * register properties on the posthog instance
+     * registered properties are sent on every event
+     */
+    reg_property(props: Properties, days?: number): boolean {
+        return this.i.persistence?.register(props, days) ?? false
     }
 }
