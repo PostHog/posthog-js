@@ -41,6 +41,7 @@ export interface PostHogReplayReduxLoggerConfig<S = any> {
     maskReduxState?: (state: S, action?: UnknownAction) => S
     titleFunction?: (reduxEvent: ReduxEvent) => string
     logger?: (title: string, reduxEvent: ReduxEvent) => void
+    diffState?: boolean
 }
 
 /**
@@ -129,6 +130,7 @@ export function posthogReplayReduxLogger<S = any>(
         maskReduxState = (state: S) => state,
         titleFunction = defaultTitleFunction,
         logger = defaultLogger,
+        diffState = true,
     } = config
 
     return (store: MiddlewareAPI<Dispatch, S>) => (next: Dispatch) => (action: UnknownAction) => {
@@ -139,7 +141,6 @@ export function posthogReplayReduxLogger<S = any>(
         // eslint-disable-next-line compat/compat
         const startTime = performance.now()
 
-        // Execute the action
         const result = next(action)
 
         // eslint-disable-next-line compat/compat
@@ -149,10 +150,8 @@ export function posthogReplayReduxLogger<S = any>(
         // Get the state after the action
         const nextState = store.getState()
 
-        // Apply masking function to the action
         const maskedAction = maskReduxAction(action)
 
-        // Skip logging if the masking function returns null
         if (!maskedAction) {
             return result
         }
@@ -161,36 +160,32 @@ export function posthogReplayReduxLogger<S = any>(
         const maskedPrevState = maskReduxState(prevState, maskedAction)
         const maskedNextState = maskReduxState(nextState, maskedAction)
 
-        // Get only the changed keys from both states
-        const { prevState: filteredPrevState, nextState: filteredNextState } = getChangedStateKeys(
-            maskedPrevState,
-            maskedNextState
-        )
+        let filteredPrevState: Partial<S>
+        let filteredNextState: Partial<S>
+        if (diffState) {
+            const { prevState: diffedPrevState, nextState: diffedNextState } = getChangedStateKeys(
+                maskedPrevState,
+                maskedNextState
+            )
+            filteredPrevState = diffedPrevState
+            filteredNextState = diffedNextState
+        } else {
+            filteredPrevState = maskedPrevState
+            filteredNextState = maskedNextState
+        }
 
-        // Extract type and the rest of the action properties
         const { type, ...actionData } = maskedAction
 
-        // Create the Redux event
         const reduxEvent: ReduxEvent = {
             type,
-            payload: Object.keys(actionData).length > 0 ? actionData : undefined,
+            payload: actionData,
             timestamp: Date.now(),
             executionTimeMs,
             prevState: filteredPrevState,
             nextState: filteredNextState,
         }
 
-        // Generate title using the title function
-        const title = titleFunction(reduxEvent)
-
-        // Log using the injected logger function
-        logger(title, reduxEvent)
-
-        // If window.posthog exists, we could send the event
-        if (typeof window !== 'undefined' && (window as any).posthog) {
-            // This would be the actual PostHog integration
-            // (window as any).posthog.capture('$redux_action', reduxEvent);
-        }
+        logger(titleFunction(reduxEvent), reduxEvent)
 
         return result
     }

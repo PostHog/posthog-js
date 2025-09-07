@@ -1,4 +1,4 @@
-import { createStore, Action, applyMiddleware, compose } from 'redux'
+import { applyMiddleware, compose, createStore } from 'redux'
 import { posthogReplayReduxLogger } from './posthogReplayReduxLogger'
 
 // Types
@@ -303,13 +303,12 @@ export const todoReducer = (state: TodoState = initialState, action: TodoAction)
             }
 
         case UPDATE_STATS:
-            const completedCount = state.todos.filter((todo) => todo.completed).length
             return {
                 ...state,
                 stats: {
                     ...state.stats,
                     totalTodos: state.todos.length,
-                    completedTodos: completedCount,
+                    completedTodos: state.todos.filter((todo) => todo.completed).length,
                     todayCount: state.todos.length, // Simplified for demo
                 },
             }
@@ -355,7 +354,13 @@ const posthogMiddleware = posthogReplayReduxLogger({
 })
 
 // Compose enhancers with Redux DevTools
-const composeEnhancers = (window as any).__REDUX_DEVTOOLS_EXTENSION_COMPOSE__ || compose
+const composeEnhancers =
+    typeof window !== 'undefined' && (window as any).__REDUX_DEVTOOLS_EXTENSION_COMPOSE__
+        ? (window as any).__REDUX_DEVTOOLS_EXTENSION_COMPOSE__
+        : compose
 
 // Create and export store with middleware
 export const store = createStore(todoReducer, initialState, composeEnhancers(applyMiddleware(posthogMiddleware)))
+
+export type RootState = ReturnType<typeof store.getState>
+export type AppDispatch = typeof store.dispatch
