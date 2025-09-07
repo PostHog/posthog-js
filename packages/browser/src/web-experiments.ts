@@ -143,7 +143,7 @@ export class WebExperiments extends PostHogComponent {
             return callback([])
         }
 
-        const existingWebExperiments = this.get_prop(WEB_EXPERIMENTS)
+        const existingWebExperiments = this.get_property(WEB_EXPERIMENTS)
         if (existingWebExperiments && !forceReload) {
             return callback(existingWebExperiments)
         }

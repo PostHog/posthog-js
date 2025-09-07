@@ -226,6 +226,7 @@
         "_refillInterval",
         "_refillRate",
         "_regionCache",
+        "_registerProps",
         "_register_single",
         "_reloadDebouncer",
         "_reloadingDisabled",

@@ -39,7 +39,7 @@ export class RateLimiter extends PostHogComponent {
         // This is primarily to prevent runaway loops from flooding capture with millions of events for a single user.
         // It's as much for our protection as theirs.
         const now = new Date().getTime()
-        const bucket = this.get_prop(CAPTURE_RATE_LIMIT) ?? {
+        const bucket = this.get_property(CAPTURE_RATE_LIMIT) ?? {
             tokens: this.captureEventsBurstLimit,
             last: now,
         }

@@ -197,10 +197,10 @@ export class PostHogFeatureFlags extends PostHogComponent {
     }
 
     getFlagsWithDetails(): Record<string, FeatureFlagDetail> {
-        const flagDetails = this.get_prop(PERSISTENCE_FEATURE_FLAG_DETAILS)
+        const flagDetails = this.get_property(PERSISTENCE_FEATURE_FLAG_DETAILS)
 
-        const overridenFlags = this.get_prop(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
-        const overriddenPayloads = this.get_prop(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
+        const overridenFlags = this.get_property(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
+        const overriddenPayloads = this.get_property(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
 
         if (!overriddenPayloads && !overridenFlags) {
             return flagDetails || {}
@@ -266,8 +266,8 @@ export class PostHogFeatureFlags extends PostHogComponent {
     }
 
     getFlagVariants(): Record<string, string | boolean> {
-        const enabledFlags = this.get_prop(ENABLED_FEATURE_FLAGS)
-        const overriddenFlags = this.get_prop(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
+        const enabledFlags = this.get_property(ENABLED_FEATURE_FLAGS)
+        const overriddenFlags = this.get_property(PERSISTENCE_OVERRIDE_FEATURE_FLAGS)
         if (!overriddenFlags) {
             return enabledFlags || {}
         }
@@ -289,8 +289,8 @@ export class PostHogFeatureFlags extends PostHogComponent {
     }
 
     getFlagPayloads(): Record<string, JsonType> {
-        const flagPayloads = this.get_prop(PERSISTENCE_FEATURE_FLAG_PAYLOADS)
-        const overriddenPayloads = this.get_prop(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
+        const flagPayloads = this.get_property(PERSISTENCE_FEATURE_FLAG_PAYLOADS)
+        const overriddenPayloads = this.get_property(PERSISTENCE_OVERRIDE_FEATURE_FLAG_PAYLOADS)
 
         if (!overriddenPayloads) {
             return flagPayloads || {}
@@ -384,9 +384,9 @@ export class PostHogFeatureFlags extends PostHogComponent {
             $anon_distinct_id: this.$anon_distinct_id,
             person_properties: {
                 ...(this.i.persistence?.get_initial_props() || {}),
-                ...(this.get_prop(STORED_PERSON_PROPERTIES_KEY) || {}),
+                ...(this.get_property(STORED_PERSON_PROPERTIES_KEY) || {}),
             },
-            group_properties: this.get_prop(STORED_GROUP_PROPERTIES_KEY),
+            group_properties: this.get_property(STORED_GROUP_PROPERTIES_KEY),
         }
 
         if (options?.disableFlags || this.c.advanced_disable_feature_flags) {
@@ -482,8 +482,8 @@ export class PostHogFeatureFlags extends PostHogComponent {
         }
         const flagValue = this.getFlagVariants()[key]
         const flagReportValue = `${flagValue}`
-        const requestId = this.get_prop(PERSISTENCE_FEATURE_FLAG_REQUEST_ID) || undefined
-        const flagCallReported: Record<string, string[]> = this.get_prop(FLAG_CALL_REPORTED) || {}
+        const requestId = this.get_property(PERSISTENCE_FEATURE_FLAG_REQUEST_ID) || undefined
+        const flagCallReported: Record<string, string[]> = this.get_property(FLAG_CALL_REPORTED) || {}
 
         if (options.send_event || !('send_event' in options)) {
             if (!(key in flagCallReported) || !flagCallReported[key].includes(flagReportValue)) {
@@ -739,7 +739,7 @@ export class PostHogFeatureFlags extends PostHogComponent {
 
     updateEarlyAccessFeatureEnrollment(key: string, isEnrolled: boolean, stage?: string): void {
         const existing_early_access_features: EarlyAccessFeature[] =
-            this.get_prop(PERSISTENCE_EARLY_ACCESS_FEATURES) || []
+            this.get_property(PERSISTENCE_EARLY_ACCESS_FEATURES) || []
         const feature = existing_early_access_features.find((f) => f.flagKey === key)
 
         const enrollmentPersonProp = {
@@ -776,7 +776,7 @@ export class PostHogFeatureFlags extends PostHogComponent {
         force_reload = false,
         stages?: EarlyAccessFeatureStage[]
     ): void {
-        const existing_early_access_features = this.get_prop(PERSISTENCE_EARLY_ACCESS_FEATURES)
+        const existing_early_access_features = this.get_property(PERSISTENCE_EARLY_ACCESS_FEATURES)
 
         const stageParams = stages ? `&${stages.map((s) => `stage=${s}`).join('&')}` : ''
 
@@ -835,7 +835,7 @@ export class PostHogFeatureFlags extends PostHogComponent {
      */
     setPersonPropertiesForFlags(properties: Properties, reloadFeatureFlags = true): void {
         // Get persisted person properties
-        const existingProperties = this.get_prop(STORED_PERSON_PROPERTIES_KEY) || {}
+        const existingProperties = this.get_property(STORED_PERSON_PROPERTIES_KEY) || {}
 
         this.i.register({
             [STORED_PERSON_PROPERTIES_KEY]: {
@@ -863,7 +863,7 @@ export class PostHogFeatureFlags extends PostHogComponent {
      */
     setGroupPropertiesForFlags(properties: { [type: string]: Properties }, reloadFeatureFlags = true): void {
         // Get persisted group properties
-        const existingProperties = this.get_prop(STORED_GROUP_PROPERTIES_KEY) || {}
+        const existingProperties = this.get_property(STORED_GROUP_PROPERTIES_KEY) || {}
 
         if (Object.keys(existingProperties).length !== 0) {
             Object.keys(existingProperties).forEach((groupType) => {
@@ -889,7 +889,7 @@ export class PostHogFeatureFlags extends PostHogComponent {
 
     resetGroupPropertiesForFlags(group_type?: string): void {
         if (group_type) {
-            const existingProperties = this.get_prop(STORED_GROUP_PROPERTIES_KEY) || {}
+            const existingProperties = this.get_property(STORED_GROUP_PROPERTIES_KEY) || {}
             this.i.register({
                 [STORED_GROUP_PROPERTIES_KEY]: { ...existingProperties, [group_type]: {} },
             })

@@ -59,7 +59,7 @@ export class Heatmaps extends PostHogComponent {
     constructor(instance: PostHog) {
         super(instance)
 
-        this._enabledServerSide = !!this.get_prop(HEATMAPS_ENABLED_SERVER_SIDE)
+        this._enabledServerSide = !!this.get_property(HEATMAPS_ENABLED_SERVER_SIDE)
     }
 
     public get flushIntervalMilliseconds(): number {

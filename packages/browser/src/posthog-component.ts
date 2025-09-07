@@ -32,7 +32,7 @@ export abstract class PostHogComponent {
      * get a property from the posthog instance's persistence properties
      * @param property_name
      */
-    get_prop(property_name: string): Property | undefined {
+    get_property(property_name: string): Property | undefined {
         return this.i.get_property(property_name)
     }
 

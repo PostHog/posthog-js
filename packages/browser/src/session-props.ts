@@ -60,7 +60,7 @@ export class SessionPropsManager extends PostHogComponent {
     }
 
     _getStored(): StoredSessionSourceProps | undefined {
-        return this.get_prop(CLIENT_SESSION_PROPS)
+        return this.get_property(CLIENT_SESSION_PROPS)
     }
 
     _onSessionIdCallback = (sessionId: string) => {
