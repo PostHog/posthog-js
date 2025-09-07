@@ -15,7 +15,7 @@ export class TracingHeaders extends PostHogComponent {
             cb()
         }
 
-        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, 'tracing-headers', (err) => {
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.i, 'tracing-headers', (err) => {
             if (err) {
                 return logger.error('failed to load script', err)
             }
@@ -23,7 +23,7 @@ export class TracingHeaders extends PostHogComponent {
         })
     }
     public startIfEnabledOrStop() {
-        if (this._config.__add_tracing_headers) {
+        if (this.c.__add_tracing_headers) {
             this._loadScript(this._startCapturing)
         } else {
             this._restoreXHRPatch?.()
@@ -37,16 +37,16 @@ export class TracingHeaders extends PostHogComponent {
     private _startCapturing = () => {
         if (isUndefined(this._restoreXHRPatch)) {
             assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchXHR(
-                this._config.__add_tracing_headers || [],
-                this._instance.get_distinct_id(),
-                this._instance.sessionManager
+                this.c.__add_tracing_headers || [],
+                this.i.get_distinct_id(),
+                this.i.sessionManager
             )
         }
         if (isUndefined(this._restoreFetchPatch)) {
             assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchFetch(
-                this._config.__add_tracing_headers || [],
-                this._instance.get_distinct_id(),
-                this._instance.sessionManager
+                this.c.__add_tracing_headers || [],
+                this.i.get_distinct_id(),
+                this.i.sessionManager
             )
         }
     }

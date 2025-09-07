@@ -65,10 +65,10 @@ export class ScrollManager extends PostHogComponent {
     }
 
     public scrollElement(): Element | undefined {
-        if (this._config.scroll_root_selector) {
-            const selectors = isArray(this._config.scroll_root_selector)
-                ? this._config.scroll_root_selector
-                : [this._config.scroll_root_selector]
+        if (this.c.scroll_root_selector) {
+            const selectors = isArray(this.c.scroll_root_selector)
+                ? this.c.scroll_root_selector
+                : [this.c.scroll_root_selector]
             for (const selector of selectors) {
                 const element = window?.document.querySelector(selector)
                 if (element) {
@@ -82,7 +82,7 @@ export class ScrollManager extends PostHogComponent {
     }
 
     public scrollY(): number {
-        if (this._config.scroll_root_selector) {
+        if (this.c.scroll_root_selector) {
             const element = this.scrollElement()
             return (element && element.scrollTop) || 0
         } else {
@@ -91,7 +91,7 @@ export class ScrollManager extends PostHogComponent {
     }
 
     public scrollX(): number {
-        if (this._config.scroll_root_selector) {
+        if (this.c.scroll_root_selector) {
             const element = this.scrollElement()
             return (element && element.scrollLeft) || 0
         } else {

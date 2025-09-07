@@ -35,7 +35,7 @@ export class WebExperiments extends PostHogComponent {
 
     constructor(instance: PostHog) {
         super(instance)
-        this._instance.onFeatureFlags((flags: string[]) => {
+        this.i.onFeatureFlags((flags: string[]) => {
             this.onFeatureFlags(flags)
         })
     }
@@ -46,7 +46,7 @@ export class WebExperiments extends PostHogComponent {
             return
         }
 
-        if (this._config.disable_web_experiments) {
+        if (this.c.disable_web_experiments) {
             return
         }
 
@@ -61,7 +61,7 @@ export class WebExperiments extends PostHogComponent {
         WebExperiments._logInfo('applying feature flags', flags)
         flags.forEach((flag) => {
             if (this._flagToExperiments && this._flagToExperiments?.has(flag)) {
-                const selectedVariant = this._instance.getFeatureFlag(flag) as unknown as string
+                const selectedVariant = this.i.getFeatureFlag(flag) as unknown as string
                 const webExperiment = this._flagToExperiments?.get(flag)
                 if (selectedVariant && webExperiment?.variants[selectedVariant]) {
                     this._applyTransforms(
@@ -93,7 +93,7 @@ export class WebExperiments extends PostHogComponent {
     }
 
     loadIfEnabled() {
-        if (this._config.disable_web_experiments) {
+        if (this.c.disable_web_experiments) {
             return
         }
 
@@ -117,7 +117,7 @@ export class WebExperiments extends PostHogComponent {
                         this._flagToExperiments?.set(webExperiment.feature_flag_key, webExperiment)
                     }
 
-                    const selectedVariant = this._instance.getFeatureFlag(webExperiment.feature_flag_key)
+                    const selectedVariant = this.i.getFeatureFlag(webExperiment.feature_flag_key)
                     if (isString(selectedVariant) && webExperiment.variants[selectedVariant]) {
                         this._applyTransforms(
                             webExperiment.name,
@@ -139,17 +139,17 @@ export class WebExperiments extends PostHogComponent {
     }
 
     public getWebExperiments(callback: WebExperimentsCallback, forceReload: boolean, previewing?: boolean) {
-        if (this._config.disable_web_experiments && !previewing) {
+        if (this.c.disable_web_experiments && !previewing) {
             return callback([])
         }
 
-        const existingWebExperiments = this.ph_property(WEB_EXPERIMENTS)
+        const existingWebExperiments = this.ph_prop(WEB_EXPERIMENTS)
         if (existingWebExperiments && !forceReload) {
             return callback(existingWebExperiments)
         }
 
-        this._instance._send_request({
-            url: this._instance.requestRouter.endpointFor('api', `/api/web_experiments/?token=${this._config.token}`),
+        this.i._send_request({
+            url: this.i.requestRouter.endpointFor('api', `/api/web_experiments/?token=${this.c.token}`),
             method: 'GET',
             callback: (response) => {
                 if (response.statusCode !== 200 || !response.json) {
@@ -272,8 +272,8 @@ export class WebExperiments extends PostHogComponent {
     }
 
     _is_bot(): boolean | undefined {
-        if (navigator && this._instance) {
-            return isLikelyBot(navigator, this._instance.config.custom_blocked_useragents)
+        if (navigator && this.i) {
+            return isLikelyBot(navigator, this.i.config.custom_blocked_useragents)
         } else {
             return undefined
         }

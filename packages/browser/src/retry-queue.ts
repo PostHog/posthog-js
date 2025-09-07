@@ -70,7 +70,7 @@ export class RetryQueue extends PostHogComponent {
             options.url = extendURLParams(options.url, { retry_count: retriesPerformedSoFar })
         }
 
-        this._instance._send_request({
+        this.i._send_request({
             ...options,
             callback: (response) => {
                 if (response.statusCode !== 200 && (response.statusCode < 400 || response.statusCode >= 500)) {
@@ -149,7 +149,7 @@ export class RetryQueue extends PostHogComponent {
             try {
                 // we've had send beacon in place for at least 2 years
                 // eslint-disable-next-line compat/compat
-                this._instance._send_request({
+                this.i._send_request({
                     ...requestOptions,
                     transport: 'sendBeacon',
                 })

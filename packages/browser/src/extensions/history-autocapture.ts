@@ -22,7 +22,7 @@ export class HistoryAutocapture extends PostHogComponent {
     }
 
     public get isEnabled(): boolean {
-        return this._config.capture_pageview === 'history_change'
+        return this.c.capture_pageview === 'history_change'
     }
 
     public startIfEnabled(): void {
@@ -90,7 +90,7 @@ export class HistoryAutocapture extends PostHogComponent {
 
             // Only capture pageview if the pathname has changed and the feature is enabled
             if (currentPathname !== this._lastPathname && this.isEnabled) {
-                this._instance.capture('$pageview', { navigation_type: navigationType })
+                this.i.capture('$pageview', { navigation_type: navigationType })
             }
 
             this._lastPathname = currentPathname

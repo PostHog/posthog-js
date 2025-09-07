@@ -20,14 +20,14 @@ export class RequestRouter extends PostHogComponent {
     private _regionCache: Record<string, RequestRouterRegion> = {}
 
     get apiHost(): string {
-        const host = this._config.api_host.trim().replace(/\/$/, '')
+        const host = this.c.api_host.trim().replace(/\/$/, '')
         if (host === 'https://app.posthog.com') {
             return 'https://us.i.posthog.com'
         }
         return host
     }
     get uiHost(): string | undefined {
-        let host = this._config.ui_host?.replace(/\/$/, '')
+        let host = this.c.ui_host?.replace(/\/$/, '')
 
         if (!host) {
             // No ui_host set, get it from the api_host. But api_host differs

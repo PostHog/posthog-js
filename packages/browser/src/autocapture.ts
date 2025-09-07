@@ -249,12 +249,12 @@ export class Autocapture extends PostHogComponent {
     constructor(instance: PostHog) {
         super(instance)
 
-        this._instance.config.autocapture = preCompileConfigRegex(this._instance.config)
+        this.i.config.autocapture = preCompileConfigRegex(this.i.config)
         this._elementSelectors = null
     }
 
     private get _acConfig(): AutocaptureConfig {
-        return isObject(this._config.autocapture) ? this._config.autocapture : {}
+        return isObject(this.c.autocapture) ? this.c.autocapture : {}
     }
 
     _addDomEventHandlers(): void {
@@ -303,8 +303,8 @@ export class Autocapture extends PostHogComponent {
             this._elementsChainAsString = response.elementsChainAsString
         }
 
-        if (this._instance.persistence) {
-            this._instance.persistence.register({
+        if (this.i.persistence) {
+            this.i.persistence.register({
                 [AUTOCAPTURE_DISABLED_SERVER_SIDE]: !!response['autocapture_opt_out'],
             })
         }
@@ -333,16 +333,16 @@ export class Autocapture extends PostHogComponent {
     }
 
     public get isEnabled(): boolean {
-        const persistedServerDisabled = this.ph_property(AUTOCAPTURE_DISABLED_SERVER_SIDE)
+        const persistedServerDisabled = this.ph_prop(AUTOCAPTURE_DISABLED_SERVER_SIDE)
         const memoryDisabled = this._isDisabledServerSide
 
-        if (isNull(memoryDisabled) && !isBoolean(persistedServerDisabled) && !this._instance._shouldDisableFlags()) {
+        if (isNull(memoryDisabled) && !isBoolean(persistedServerDisabled) && !this.i._shouldDisableFlags()) {
             // We only enable if we know that the server has not disabled it (unless /flags is disabled)
             return false
         }
 
         const disabledServer = this._isDisabledServerSide ?? !!persistedServerDisabled
-        const disabledClient = !this._instance.config.autocapture
+        const disabledClient = !this.i.config.autocapture
         return !disabledClient && !disabledServer
     }
 
@@ -359,10 +359,7 @@ export class Autocapture extends PostHogComponent {
         }
 
         if (eventName === '$autocapture' && e.type === 'click' && e instanceof MouseEvent) {
-            if (
-                this._instance.config.rageclick &&
-                this.rageclicks?.isRageClick(e.clientX, e.clientY, new Date().getTime())
-            ) {
+            if (this.i.config.rageclick && this.rageclicks?.isRageClick(e.clientX, e.clientY, new Date().getTime())) {
                 this._captureEvent(e, '$rageclick')
             }
         }
@@ -384,8 +381,8 @@ export class Autocapture extends PostHogComponent {
         ) {
             const { props, explicitNoCapture } = autocapturePropertiesForElement(target, {
                 e,
-                maskAllElementAttributes: this._instance.config.mask_all_element_attributes,
-                maskAllText: this._instance.config.mask_all_text,
+                maskAllElementAttributes: this.i.config.mask_all_element_attributes,
+                maskAllText: this.i.config.mask_all_text,
                 elementAttributeIgnoreList: this._acConfig.element_attribute_ignorelist,
                 elementsChainAsString: this._elementsChainAsString,
             })
@@ -411,7 +408,7 @@ export class Autocapture extends PostHogComponent {
                 props['$copy_type'] = clipType
             }
 
-            this._instance.capture(eventName, props)
+            this.i.capture(eventName, props)
             return true
         }
     }

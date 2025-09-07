@@ -12,17 +12,27 @@ import { PostHogConfig, Property } from './types'
  * And future improvements can be made in one place
  */
 export abstract class PostHogComponent {
-    readonly _instance: PostHog
+    /**
+     * the posthog instance this component belongs to
+     */
+    readonly i: PostHog
 
-    get _config(): PostHogConfig {
-        return this._instance.config
+    /**
+     * the config for the posthog instance this component belongs to
+     */
+    get c(): PostHogConfig {
+        return this.i.config
     }
 
     constructor(instance: PostHog) {
-        this._instance = instance
+        this.i = instance
     }
 
-    ph_property(property_name: string): Property | undefined {
-        return this._instance.get_property(property_name)
+    /**
+     * get a property from the posthog instance's persistence properties
+     * @param property_name
+     */
+    ph_prop(property_name: string): Property | undefined {
+        return this.i.get_property(property_name)
     }
 }

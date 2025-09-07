@@ -109,7 +109,7 @@ export class Toolbar extends PostHogComponent {
                 delete toolbarParams.userIntent
             }
 
-            if (toolbarParams['token'] && this._config.token === toolbarParams['token']) {
+            if (toolbarParams['token'] && this.c.token === toolbarParams['token']) {
                 this.loadToolbar(toolbarParams)
                 return true
             } else {
@@ -126,7 +126,7 @@ export class Toolbar extends PostHogComponent {
             logger.warn('No toolbar load function found')
             return
         }
-        loadFn(params, this._instance)
+        loadFn(params, this.i)
     }
 
     loadToolbar(params?: ToolbarParams): boolean {
@@ -138,12 +138,12 @@ export class Toolbar extends PostHogComponent {
         }
 
         const disableToolbarMetrics =
-            this._instance.requestRouter.region === 'custom' && this._config.advanced_disable_toolbar_metrics
+            this.i.requestRouter.region === 'custom' && this.c.advanced_disable_toolbar_metrics
 
         const toolbarParams = {
-            token: this._config.token,
+            token: this.c.token,
             ...params,
-            apiURL: this._instance.requestRouter.endpointFor('ui'),
+            apiURL: this.i.requestRouter.endpointFor('ui'),
             ...(disableToolbarMetrics ? { instrument: false } : {}),
         }
         window.localStorage.setItem(
@@ -160,7 +160,7 @@ export class Toolbar extends PostHogComponent {
             // only load the toolbar once, even if there are multiple instances of PostHogLib
             this._setToolbarState(ToolbarState.LOADING)
 
-            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, 'toolbar', (err) => {
+            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.i, 'toolbar', (err) => {
                 if (err) {
                     logger.error('[Toolbar] Failed to load', err)
                     this._setToolbarState(ToolbarState.UNINITIALIZED)

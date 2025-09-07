@@ -45,20 +45,20 @@ export class SessionRecordingWrapper extends PostHogComponent {
     constructor(instance: PostHog) {
         super(instance)
 
-        if (!this._instance.sessionManager) {
+        if (!this.i.sessionManager) {
             logger.error('started without valid sessionManager')
             throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
         }
 
-        if (this._config.cookieless_mode === 'always') {
+        if (this.c.cookieless_mode === 'always') {
             throw new Error(LOGGER_PREFIX + ' cannot be used with cookieless_mode="always"')
         }
     }
 
     private get _isRecordingEnabled() {
-        const enabled_server_side = !!this.ph_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)
-        const enabled_client_side = !this._config.disable_session_recording
-        const isDisabled = this._config.disable_session_recording || this._instance.consent.isOptedOut()
+        const enabled_server_side = !!this.ph_prop(SESSION_RECORDING_ENABLED_SERVER_SIDE)
+        const enabled_client_side = !this.c.disable_session_recording
+        const isDisabled = this.c.disable_session_recording || this.i.consent.isOptedOut()
         return window && enabled_server_side && enabled_client_side && !isDisabled
     }
 
@@ -103,16 +103,12 @@ export class SessionRecordingWrapper extends PostHogComponent {
             !assignableWindow?.__PosthogExtensions__?.rrweb?.record ||
             !assignableWindow.__PosthogExtensions__?.initSessionRecording
         ) {
-            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
-                this._instance,
-                this._scriptName,
-                (err) => {
-                    if (err) {
-                        return logger.error('could not load recorder', err)
-                    }
-                    this._onScriptLoaded(startReason)
+            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.i, this._scriptName, (err) => {
+                if (err) {
+                    return logger.error('could not load recorder', err)
                 }
-            )
+                this._onScriptLoaded(startReason)
+            })
         } else {
             this._onScriptLoaded(startReason)
         }
@@ -125,7 +121,7 @@ export class SessionRecordingWrapper extends PostHogComponent {
     onRemoteConfig(response: RemoteConfig) {
         this._pendingRemoteConfig = response
 
-        const persistence = this._instance.persistence
+        const persistence = this.i.persistence
         if (persistence) {
             persistence.register({
                 [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response.sessionRecording,
@@ -151,7 +147,7 @@ export class SessionRecordingWrapper extends PostHogComponent {
     }
 
     private get _scriptName(): PostHogExtensionKind {
-        return (this.ph_property(SESSION_RECORDING_SCRIPT_CONFIG)?.script as PostHogExtensionKind) || 'lazy-recorder'
+        return (this.ph_prop(SESSION_RECORDING_SCRIPT_CONFIG)?.script as PostHogExtensionKind) || 'lazy-recorder'
     }
 
     private _onScriptLoaded(startReason?: SessionStartReason) {
@@ -160,9 +156,7 @@ export class SessionRecordingWrapper extends PostHogComponent {
         }
 
         if (!this._lazyLoadedSessionRecording) {
-            this._lazyLoadedSessionRecording = assignableWindow.__PosthogExtensions__?.initSessionRecording(
-                this._instance
-            )
+            this._lazyLoadedSessionRecording = assignableWindow.__PosthogExtensions__?.initSessionRecording(this.i)
             ;(this._lazyLoadedSessionRecording as any)._forceAllowLocalhostNetworkCapture =
                 this._forceAllowLocalhostNetworkCapture
 

@@ -242,14 +242,10 @@ export class SurveyManager extends PostHogComponent {
         this._clearSurveyTimeout(survey.id)
         this._addSurveyToFocus(survey)
         const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
-        const { shadow } = retrieveSurveyShadow(survey, this._instance)
+        const { shadow } = retrieveSurveyShadow(survey, this.i)
         if (delaySeconds <= 0) {
             return Preact.render(
-                <SurveyPopup
-                    posthog={this._instance}
-                    survey={survey}
-                    removeSurveyFromFocus={this._removeSurveyFromFocus}
-                />,
+                <SurveyPopup posthog={this.i} survey={survey} removeSurveyFromFocus={this._removeSurveyFromFocus} />,
                 shadow
             )
         }
@@ -260,7 +256,7 @@ export class SurveyManager extends PostHogComponent {
             // rendering with surveyPopupDelaySeconds = 0 because we're already handling the timeout here
             Preact.render(
                 <SurveyPopup
-                    posthog={this._instance}
+                    posthog={this.i}
                     survey={{ ...survey, appearance: { ...survey.appearance, surveyPopupDelaySeconds: 0 } }}
                     removeSurveyFromFocus={this._removeSurveyFromFocus}
                 />,
@@ -272,14 +268,14 @@ export class SurveyManager extends PostHogComponent {
 
     private _handleWidget = (survey: Survey): void => {
         // Ensure widget container exists if it doesn't
-        const { shadow, isNewlyCreated } = retrieveSurveyShadow(survey, this._instance)
+        const { shadow, isNewlyCreated } = retrieveSurveyShadow(survey, this.i)
 
         // If the widget is already rendered, do nothing. Otherwise the widget will be re-rendered every second
         if (!isNewlyCreated) {
             return
         }
 
-        Preact.render(<FeedbackWidget posthog={this._instance} survey={survey} key={survey.id} />, shadow)
+        Preact.render(<FeedbackWidget posthog={this.i} survey={survey} key={survey.id} />, shadow)
     }
 
     private _removeWidgetSelectorListener = (survey: Pick<Survey, 'id' | 'type' | 'appearance'>): void => {
@@ -378,7 +374,7 @@ export class SurveyManager extends PostHogComponent {
     public renderSurvey = (survey: Survey, selector: Element): void => {
         Preact.render(
             <SurveyPopup
-                posthog={this._instance}
+                posthog={this.i}
                 survey={survey}
                 removeSurveyFromFocus={this._removeSurveyFromFocus}
                 isPopup={false}
@@ -391,12 +387,12 @@ export class SurveyManager extends PostHogComponent {
         if (!flagKey) {
             return true
         }
-        const isFeatureEnabled = !!this._instance.featureFlags.isFeatureEnabled(flagKey, {
+        const isFeatureEnabled = !!this.i.featureFlags.isFeatureEnabled(flagKey, {
             send_event: !flagKey.startsWith(SURVEY_TARGETING_FLAG_PREFIX),
         })
         let flagVariantCheck = true
         if (flagVariant) {
-            const flagVariantValue = this._instance.featureFlags.getFeatureFlag(flagKey, { send_event: false })
+            const flagVariantValue = this.i.featureFlags.getFeatureFlag(flagKey, { send_event: false })
             flagVariantCheck = flagVariantValue === flagVariant || flagVariant === 'any'
         }
         return isFeatureEnabled && flagVariantCheck
@@ -482,7 +478,7 @@ export class SurveyManager extends PostHogComponent {
             return true
         }
         const surveysActivatedByEventsOrActions: string[] | undefined =
-            this._instance.surveys._surveyEventReceiver?.getSurveys()
+            this.i.surveys._surveyEventReceiver?.getSurveys()
         return !!surveysActivatedByEventsOrActions?.includes(survey.id)
     }
 
@@ -500,7 +496,7 @@ export class SurveyManager extends PostHogComponent {
     }
 
     public getActiveMatchingSurveys = (callback: SurveyCallback, forceReload = false): void => {
-        this._instance?.surveys.getSurveys((surveys) => {
+        this.i?.surveys.getSurveys((surveys) => {
             const targetingMatchedSurveys = surveys.filter((survey) => {
                 const eligibility = this.checkSurveyEligibility(survey)
                 return (

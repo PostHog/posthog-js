@@ -8,12 +8,12 @@ const logger = createLogger('[RemoteConfig]')
 
 export class RemoteConfigLoader extends PostHogComponent {
     get remoteConfig(): RemoteConfig | undefined {
-        return assignableWindow._POSTHOG_REMOTE_CONFIG?.[this._config.token]?.config
+        return assignableWindow._POSTHOG_REMOTE_CONFIG?.[this.c.token]?.config
     }
 
     private _loadRemoteConfigJs(cb: (config?: RemoteConfig) => void): void {
         if (assignableWindow.__PosthogExtensions__?.loadExternalDependency) {
-            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, 'remote-config', () => {
+            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.i, 'remote-config', () => {
                 return cb(this.remoteConfig)
             })
         } else {
@@ -23,9 +23,9 @@ export class RemoteConfigLoader extends PostHogComponent {
     }
 
     private _loadRemoteConfigJSON(cb: (config?: RemoteConfig) => void): void {
-        this._instance._send_request({
+        this.i._send_request({
             method: 'GET',
-            url: this._instance.requestRouter.endpointFor('assets', `/array/${this._config.token}/config`),
+            url: this.i.requestRouter.endpointFor('assets', `/array/${this.c.token}/config`),
             callback: (response) => {
                 cb(response.json as RemoteConfig | undefined)
             },
@@ -41,7 +41,7 @@ export class RemoteConfigLoader extends PostHogComponent {
                 return
             }
 
-            if (this._instance._shouldDisableFlags()) {
+            if (this.i._shouldDisableFlags()) {
                 // This setting is essentially saying "dont call external APIs" hence we respect it here
                 logger.warn('Remote config is disabled. Falling back to local config.')
                 return
@@ -72,18 +72,18 @@ export class RemoteConfigLoader extends PostHogComponent {
             return
         }
 
-        if (!this._config.__preview_remote_config) {
+        if (!this.c.__preview_remote_config) {
             logger.info('__preview_remote_config is disabled. Logging config instead', config)
             return
         }
 
-        this._instance._onRemoteConfig(config)
+        this.i._onRemoteConfig(config)
 
         // We only need to reload if we haven't already loaded the flags or if the request is in flight
         if (config.hasFeatureFlags !== false) {
             // If the config has feature flags, we need to call /flags to get the feature flags
             // This completely separates it from the config logic which is good in terms of separation of concerns
-            this._instance.featureFlags.ensureFlagsLoaded()
+            this.i.featureFlags.ensureFlagsLoaded()
         }
     }
 }

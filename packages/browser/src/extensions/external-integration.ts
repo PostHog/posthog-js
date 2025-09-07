@@ -12,7 +12,7 @@ const MAPPED_INTEGRATIONS: Record<ExternalIntegrationKind, ExternalExtensionKind
 
 export class ExternalIntegrations extends PostHogComponent {
     private _loadScript(name: ExternalExtensionKind, cb: () => void): void {
-        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, name, (err) => {
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.i, name, (err) => {
             if (err) {
                 return logger.error('failed to load script', err)
             }
@@ -21,12 +21,12 @@ export class ExternalIntegrations extends PostHogComponent {
     }
 
     public startIfEnabledOrStop() {
-        for (const [key, value] of Object.entries(this._instance.config.integrations ?? {})) {
+        for (const [key, value] of Object.entries(this.i.config.integrations ?? {})) {
             // if the integration is enabled, and not present, then load it
             if (value && !assignableWindow.__PosthogExtensions__?.integrations?.[key as ExternalIntegrationKind]) {
                 this._loadScript(MAPPED_INTEGRATIONS[key as ExternalIntegrationKind], () => {
                     assignableWindow.__PosthogExtensions__?.integrations?.[key as ExternalIntegrationKind]?.start(
-                        this._instance
+                        this.i
                     )
                 })
             }

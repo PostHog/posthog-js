@@ -20,7 +20,7 @@ export class SiteApps extends PostHogComponent {
     }
 
     public get isEnabled(): boolean {
-        return this._config.opt_in_site_apps
+        return this.c.opt_in_site_apps
     }
 
     private _eventCollector(_eventName: string, eventPayload?: CaptureResult | undefined) {
@@ -35,12 +35,12 @@ export class SiteApps extends PostHogComponent {
     }
 
     get siteAppLoaders(): SiteAppLoader[] | undefined {
-        return assignableWindow._POSTHOG_REMOTE_CONFIG?.[this._config.token]?.siteApps
+        return assignableWindow._POSTHOG_REMOTE_CONFIG?.[this.c.token]?.siteApps
     }
 
     init() {
         if (this.isEnabled) {
-            const stop = this._instance._addCaptureHook(this._eventCollector.bind(this))
+            const stop = this.i._addCaptureHook(this._eventCollector.bind(this))
             this._stopBuffering = () => {
                 stop()
                 this._bufferedInvocations = []
@@ -54,8 +54,8 @@ export class SiteApps extends PostHogComponent {
             throw new Error('Event payload is required')
         }
         const groups: SiteAppGlobals['groups'] = {}
-        const groupIds = this.ph_property('$groups') || []
-        const groupProperties: Record<string, Properties> = this.ph_property('$stored_group_properties') || {}
+        const groupIds = this.ph_prop('$groups') || []
+        const groupProperties: Record<string, Properties> = this.ph_prop('$stored_group_properties') || {}
         for (const [type, properties] of Object.entries(groupProperties)) {
             groups[type] = { id: groupIds[type], type, properties }
         }
@@ -77,7 +77,7 @@ export class SiteApps extends PostHogComponent {
                 distinct_id: event.properties?.['distinct_id'],
             },
             person: {
-                properties: this.ph_property('$stored_person_properties'),
+                properties: this.ph_prop('$stored_person_properties'),
             },
             groups,
         }
@@ -111,7 +111,7 @@ export class SiteApps extends PostHogComponent {
 
         try {
             const { processEvent } = loader.init({
-                posthog: this._instance,
+                posthog: this.i,
                 callback: (success) => {
                     onLoaded(success)
                 },
@@ -179,7 +179,7 @@ export class SiteApps extends PostHogComponent {
             this._setupSiteApps()
 
             // NOTE: We could improve this to only fire if we actually have listeners for the event
-            this._instance.on('eventCaptured', (event) => this._onCapturedEvent(event))
+            this.i.on('eventCaptured', (event) => this._onCapturedEvent(event))
 
             return
         }
@@ -198,8 +198,8 @@ export class SiteApps extends PostHogComponent {
         }
 
         for (const { id, url } of response['siteApps']) {
-            assignableWindow[`__$$ph_site_app_${id}`] = this._instance
-            assignableWindow.__PosthogExtensions__?.loadSiteApp?.(this._instance, url, (err) => {
+            assignableWindow[`__$$ph_site_app_${id}`] = this.i
+            assignableWindow.__PosthogExtensions__?.loadSiteApp?.(this.i, url, (err) => {
                 if (err) {
                     return logger.error(`Error while initializing PostHog app with config id ${id}`, err)
                 }

@@ -20,16 +20,16 @@ export class ActionMatcher extends PostHogComponent {
     }
 
     init() {
-        if (!isUndefined(this._instance?._addCaptureHook)) {
+        if (!isUndefined(this.i?._addCaptureHook)) {
             const matchEventToAction = (eventName: string, eventPayload: any) => {
                 this.on(eventName, eventPayload)
             }
-            this._instance?._addCaptureHook(matchEventToAction)
+            this.i?._addCaptureHook(matchEventToAction)
         }
     }
 
     register(actions: SurveyActionType[]): void {
-        if (isUndefined(this._instance?._addCaptureHook)) {
+        if (isUndefined(this.i?._addCaptureHook)) {
             return
         }
 
@@ -40,7 +40,7 @@ export class ActionMatcher extends PostHogComponent {
             })
         })
 
-        if (this._instance?.autocapture) {
+        if (this.i?.autocapture) {
             const selectorsToWatch: Set<string> = new Set<string>()
             actions.forEach((action) => {
                 action.steps?.forEach((step) => {
@@ -49,7 +49,7 @@ export class ActionMatcher extends PostHogComponent {
                     }
                 })
             })
-            this._instance?.autocapture.setElementSelectors(selectorsToWatch)
+            this.i?.autocapture.setElementSelectors(selectorsToWatch)
         }
     }
 

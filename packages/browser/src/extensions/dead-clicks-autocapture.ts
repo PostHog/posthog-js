@@ -12,8 +12,8 @@ export const isDeadClicksEnabledForHeatmaps = () => {
     return true
 }
 export const isDeadClicksEnabledForAutocapture = (instance: DeadClicksAutocapture) => {
-    const isRemoteEnabled = !!instance._instance.persistence?.get_property(DEAD_CLICKS_ENABLED_SERVER_SIDE)
-    const clientConfig = instance._config.capture_dead_clicks
+    const isRemoteEnabled = !!instance.i.persistence?.get_property(DEAD_CLICKS_ENABLED_SERVER_SIDE)
+    const clientConfig = instance.c.capture_dead_clicks
     return isBoolean(clientConfig) ? clientConfig : isRemoteEnabled
 }
 
@@ -35,8 +35,8 @@ export class DeadClicksAutocapture extends PostHogComponent {
     }
 
     public onRemoteConfig(response: RemoteConfig) {
-        if (this._instance.persistence) {
-            this._instance.persistence.register({
+        if (this.i.persistence) {
+            this.i.persistence.register({
                 [DEAD_CLICKS_ENABLED_SERVER_SIDE]: response?.captureDeadClicks,
             })
         }
@@ -56,17 +56,13 @@ export class DeadClicksAutocapture extends PostHogComponent {
             // already loaded
             cb()
         }
-        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
-            this._instance,
-            'dead-clicks-autocapture',
-            (err) => {
-                if (err) {
-                    logger.error('failed to load script', err)
-                    return
-                }
-                cb()
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.i, 'dead-clicks-autocapture', (err) => {
+            if (err) {
+                logger.error('failed to load script', err)
+                return
             }
-        )
+            cb()
+        })
     }
 
     private _start() {
@@ -79,11 +75,11 @@ export class DeadClicksAutocapture extends PostHogComponent {
             !this._lazyLoadedDeadClicksAutocapture &&
             assignableWindow.__PosthogExtensions__?.initDeadClicksAutocapture
         ) {
-            const config = isObject(this._config.capture_dead_clicks) ? this._config.capture_dead_clicks : {}
+            const config = isObject(this.c.capture_dead_clicks) ? this.c.capture_dead_clicks : {}
             config.__onCapture = this.onCapture
 
             this._lazyLoadedDeadClicksAutocapture = assignableWindow.__PosthogExtensions__.initDeadClicksAutocapture(
-                this._instance,
+                this.i,
                 config
             )
             this._lazyLoadedDeadClicksAutocapture.start(document)

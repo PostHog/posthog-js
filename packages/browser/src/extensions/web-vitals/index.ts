@@ -26,33 +26,32 @@ export class WebVitalsAutocapture extends PostHogComponent {
     constructor(instance: PostHog) {
         super(instance)
 
-        this._enabledServerSide = !!this.ph_property(WEB_VITALS_ENABLED_SERVER_SIDE)
+        this._enabledServerSide = !!this.ph_prop(WEB_VITALS_ENABLED_SERVER_SIDE)
         this.startIfEnabled()
     }
 
     public get allowedMetrics(): SupportedWebVitalsMetrics[] {
         const clientConfigMetricAllowList: SupportedWebVitalsMetrics[] | undefined = isObject(
-            this._config.capture_performance
+            this.c.capture_performance
         )
-            ? this._config.capture_performance?.web_vitals_allowed_metrics
+            ? this.c.capture_performance?.web_vitals_allowed_metrics
             : undefined
         return !isUndefined(clientConfigMetricAllowList)
             ? clientConfigMetricAllowList
-            : this.ph_property(WEB_VITALS_ALLOWED_METRICS) || ['CLS', 'FCP', 'INP', 'LCP']
+            : this.ph_prop(WEB_VITALS_ALLOWED_METRICS) || ['CLS', 'FCP', 'INP', 'LCP']
     }
 
     public get flushToCaptureTimeoutMs(): number {
-        const clientConfig: number | undefined = isObject(this._config.capture_performance)
-            ? this._config.capture_performance.web_vitals_delayed_flush_ms
+        const clientConfig: number | undefined = isObject(this.c.capture_performance)
+            ? this.c.capture_performance.web_vitals_delayed_flush_ms
             : undefined
         return clientConfig || DEFAULT_FLUSH_TO_CAPTURE_TIMEOUT_MILLISECONDS
     }
 
     public get _maxAllowedValue(): number {
         const configured =
-            isObject(this._config.capture_performance) &&
-            isNumber(this._config.capture_performance.__web_vitals_max_value)
-                ? this._config.capture_performance.__web_vitals_max_value
+            isObject(this.c.capture_performance) && isNumber(this.c.capture_performance.__web_vitals_max_value)
+                ? this.c.capture_performance.__web_vitals_max_value
                 : FIFTEEN_MINUTES_IN_MILLIS
         // you can set to 0 to disable the check or any value over ten seconds
         // 1 milli to 1 minute will be set to 15 minutes, cos that would be a silly low maximum
@@ -68,10 +67,10 @@ export class WebVitalsAutocapture extends PostHogComponent {
         }
 
         // Otherwise, check config
-        const clientConfig = isObject(this._config.capture_performance)
-            ? this._config.capture_performance.web_vitals
-            : isBoolean(this._config.capture_performance)
-              ? this._config.capture_performance
+        const clientConfig = isObject(this.c.capture_performance)
+            ? this.c.capture_performance.web_vitals
+            : isBoolean(this.c.capture_performance)
+              ? this.c.capture_performance
               : undefined
         return isBoolean(clientConfig) ? clientConfig : this._enabledServerSide
     }
@@ -90,12 +89,12 @@ export class WebVitalsAutocapture extends PostHogComponent {
             ? response.capturePerformance.web_vitals_allowed_metrics
             : undefined
 
-        if (this._instance.persistence) {
-            this._instance.persistence.register({
+        if (this.i.persistence) {
+            this.i.persistence.register({
                 [WEB_VITALS_ENABLED_SERVER_SIDE]: webVitalsOptIn,
             })
 
-            this._instance.persistence.register({
+            this.i.persistence.register({
                 [WEB_VITALS_ALLOWED_METRICS]: allowedMetrics,
             })
         }
@@ -110,7 +109,7 @@ export class WebVitalsAutocapture extends PostHogComponent {
             // already loaded
             cb()
         }
-        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, 'web-vitals', (err) => {
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.i, 'web-vitals', (err) => {
             if (err) {
                 logger.error('failed to load script', err)
                 return
@@ -134,7 +133,7 @@ export class WebVitalsAutocapture extends PostHogComponent {
             return
         }
 
-        this._instance.capture(
+        this.i.capture(
             '$web_vitals',
             this._buffer.metrics.reduce(
                 (acc, metric) => ({
@@ -150,7 +149,7 @@ export class WebVitalsAutocapture extends PostHogComponent {
     }
 
     private _addToBuffer = (metric: any) => {
-        const sessionIds = this._instance.sessionManager?.checkAndGetSessionAndWindowId(true)
+        const sessionIds = this.i.sessionManager?.checkAndGetSessionAndWindowId(true)
         if (isUndefined(sessionIds)) {
             logger.error('Could not read session ID. Dropping metrics!')
             return

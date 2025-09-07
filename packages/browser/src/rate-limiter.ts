@@ -39,7 +39,7 @@ export class RateLimiter extends PostHogComponent {
         // This is primarily to prevent runaway loops from flooding capture with millions of events for a single user.
         // It's as much for our protection as theirs.
         const now = new Date().getTime()
-        const bucket = this.ph_property(CAPTURE_RATE_LIMIT) ?? {
+        const bucket = this.ph_prop(CAPTURE_RATE_LIMIT) ?? {
             tokens: this.captureEventsBurstLimit,
             last: now,
         }
@@ -58,7 +58,7 @@ export class RateLimiter extends PostHogComponent {
         }
 
         if (isRateLimited && !this.lastEventRateLimited && !checkOnly) {
-            this._instance.capture(
+            this.i.capture(
                 RATE_LIMIT_EVENT,
                 {
                     $$client_ingestion_warning_message: `posthog-js client rate limited. Config is set to ${this.captureEventsPerSecond} events per second and ${this.captureEventsBurstLimit} events burst limit.`,
@@ -70,7 +70,7 @@ export class RateLimiter extends PostHogComponent {
         }
 
         this.lastEventRateLimited = isRateLimited
-        this._instance.persistence?.set_property(CAPTURE_RATE_LIMIT, bucket)
+        this.i.persistence?.set_property(CAPTURE_RATE_LIMIT, bucket)
 
         return {
             isRateLimited,

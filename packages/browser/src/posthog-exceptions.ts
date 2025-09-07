@@ -15,7 +15,7 @@ export class PostHogExceptions extends PostHogComponent {
     constructor(instance: PostHog) {
         super(instance)
 
-        this._suppressionRules = this.ph_property(ERROR_TRACKING_SUPPRESSION_RULES) ?? []
+        this._suppressionRules = this.ph_prop(ERROR_TRACKING_SUPPRESSION_RULES) ?? []
     }
 
     onRemoteConfig(response: RemoteConfig) {
@@ -25,8 +25,8 @@ export class PostHogExceptions extends PostHogComponent {
         // store this in-memory in case persistence is disabled
         this._suppressionRules = suppressionRules
 
-        if (this._instance.persistence) {
-            this._instance.persistence.register({
+        if (this.i.persistence) {
+            this.i.persistence.register({
                 [ERROR_TRACKING_SUPPRESSION_RULES]: this._suppressionRules,
                 [ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS]: captureExtensionExceptions,
             })
@@ -34,8 +34,8 @@ export class PostHogExceptions extends PostHogComponent {
     }
 
     private get _captureExtensionExceptions() {
-        const enabled_server_side = !!this.ph_property(ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS)
-        const enabled_client_side = this._config.error_tracking.captureExtensionExceptions
+        const enabled_server_side = !!this.ph_prop(ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS)
+        const enabled_client_side = this.c.error_tracking.captureExtensionExceptions
         return enabled_client_side ?? enabled_server_side ?? false
     }
 
@@ -50,7 +50,7 @@ export class PostHogExceptions extends PostHogComponent {
             return
         }
 
-        return this._instance.capture('$exception', properties, {
+        return this.i.capture('$exception', properties, {
             _noTruncate: true,
             _batchKey: 'exceptionEvent',
         })

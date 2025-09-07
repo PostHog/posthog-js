@@ -21,15 +21,15 @@ export class ExceptionObserver extends PostHogComponent {
     constructor(instance: PostHog) {
         super(instance)
 
-        this._remoteEnabled = !!this.ph_property(EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE)
+        this._remoteEnabled = !!this.ph_prop(EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE)
         this._errorConfig = this._requiredConfig()
 
         // by default captures ten exceptions before rate limiting by exception type
         // refills at a rate of one token / 10 second period
         // e.g. will capture 1 exception rate limited exception every 10 seconds until burst ends
         this._rateLimiter = new BucketedRateLimiter({
-            refillRate: this._instance.config.error_tracking.__exceptionRateLimiterRefillRate ?? 1,
-            bucketSize: this._instance.config.error_tracking.__exceptionRateLimiterBucketSize ?? 10,
+            refillRate: this.i.config.error_tracking.__exceptionRateLimiterRefillRate ?? 1,
+            bucketSize: this.i.config.error_tracking.__exceptionRateLimiterBucketSize ?? 10,
             refillInterval: 10000, // ten seconds in milliseconds,
             _logger: logger,
         })
@@ -38,7 +38,7 @@ export class ExceptionObserver extends PostHogComponent {
     }
 
     private _requiredConfig(): Required<ExceptionAutoCaptureConfig> {
-        const providedConfig = this._config.capture_exceptions
+        const providedConfig = this.c.capture_exceptions
         let config = {
             capture_unhandled_errors: false,
             capture_unhandled_rejections: false,
@@ -75,16 +75,12 @@ export class ExceptionObserver extends PostHogComponent {
             cb()
         }
 
-        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
-            this._instance,
-            'exception-autocapture',
-            (err) => {
-                if (err) {
-                    return logger.error('failed to load script', err)
-                }
-                cb()
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.i, 'exception-autocapture', (err) => {
+            if (err) {
+                return logger.error('failed to load script', err)
             }
-        )
+            cb()
+        })
     }
 
     private _startCapturing = () => {
@@ -131,8 +127,8 @@ export class ExceptionObserver extends PostHogComponent {
         this._remoteEnabled = !!autocaptureExceptionsResponse || false
         this._errorConfig = this._requiredConfig()
 
-        if (this._instance.persistence) {
-            this._instance.persistence.register({
+        if (this.i.persistence) {
+            this.i.persistence.register({
                 [EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE]: this._remoteEnabled,
             })
         }
@@ -141,11 +137,11 @@ export class ExceptionObserver extends PostHogComponent {
     }
 
     captureException(errorProperties: ErrorProperties) {
-        const posthogHost = this._instance.requestRouter.endpointFor('ui')
+        const posthogHost = this.i.requestRouter.endpointFor('ui')
 
         errorProperties.$exception_personURL = `${posthogHost}/project/${
-            this._instance.config.token
-        }/person/${this._instance.get_distinct_id()}`
+            this.i.config.token
+        }/person/${this.i.get_distinct_id()}`
 
         const exceptionType = errorProperties.$exception_list[0].type ?? 'Exception'
         const isRateLimited = this._rateLimiter.consumeRateLimit(exceptionType)
@@ -157,6 +153,6 @@ export class ExceptionObserver extends PostHogComponent {
             return
         }
 
-        this._instance.exceptions.sendExceptionEvent(errorProperties)
+        this.i.exceptions.sendExceptionEvent(errorProperties)
     }
 }

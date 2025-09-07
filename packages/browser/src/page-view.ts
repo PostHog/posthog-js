@@ -36,7 +36,7 @@ export class PageViewManager extends PostHogComponent {
 
         // On a pageview we reset the contexts
         this._currentPageview = { pathname: window?.location.pathname ?? '', pageViewId, timestamp }
-        this._instance.scrollManager.resetContext()
+        this.i.scrollManager.resetContext()
 
         return response
     }
@@ -61,9 +61,9 @@ export class PageViewManager extends PostHogComponent {
             $prev_pageview_id: previousPageView.pageViewId,
         }
 
-        const scrollContext = this._instance.scrollManager.getContext()
+        const scrollContext = this.i.scrollManager.getContext()
 
-        if (scrollContext && !this._config.disable_scroll_properties) {
+        if (scrollContext && !this.c.disable_scroll_properties) {
             let { maxScrollHeight, lastScrollY, maxScrollY, maxContentHeight, lastContentY, maxContentY } =
                 scrollContext
 

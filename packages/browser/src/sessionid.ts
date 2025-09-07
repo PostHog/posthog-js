@@ -54,9 +54,9 @@ export class SessionIdManager extends PostHogComponent {
         this._sessionIdGenerator = sessionIdGenerator || uuidv7
         this._windowIdGenerator = windowIdGenerator || uuidv7
 
-        const persistenceName = this._config['persistence_name'] || this._config['token']
+        const persistenceName = this.c['persistence_name'] || this.c['token']
 
-        const desiredTimeout = this._config['session_idle_timeout_seconds'] || DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS
+        const desiredTimeout = this.c['session_idle_timeout_seconds'] || DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS
         this._sessionTimeoutMs =
             clampToRange(
                 desiredTimeout,
@@ -89,10 +89,10 @@ export class SessionIdManager extends PostHogComponent {
             sessionStore._set(this._primary_window_exists_storage_key, true)
         }
 
-        if (this._config.bootstrap?.sessionID) {
+        if (this.c.bootstrap?.sessionID) {
             try {
-                const sessionStartTimestamp = uuid7ToTimestampMs(this._config.bootstrap.sessionID)
-                this._setSessionId(this._config.bootstrap.sessionID, new Date().getTime(), sessionStartTimestamp)
+                const sessionStartTimestamp = uuid7ToTimestampMs(this.c.bootstrap.sessionID)
+                this._setSessionId(this.c.bootstrap.sessionID, new Date().getTime(), sessionStartTimestamp)
             } catch (e) {
                 logger.error('Invalid sessionID in bootstrap', e)
             }
@@ -123,7 +123,7 @@ export class SessionIdManager extends PostHogComponent {
 
     private _canUseSessionStorage(): boolean {
         // We only want to use sessionStorage if persistence is enabled and not memory storage
-        return this._config.persistence !== 'memory' && !this._persistence._disabled && sessionStore._is_supported()
+        return this.c.persistence !== 'memory' && !this._persistence._disabled && sessionStore._is_supported()
     }
 
     // Note: this tries to store the windowId in sessionStorage. SessionStorage is unique to the current window/tab,
@@ -233,7 +233,7 @@ export class SessionIdManager extends PostHogComponent {
      * @param {Number} timestamp (optional) Defaults to the current time. The timestamp to be stored with the sessionId (used when determining if a new sessionId should be generated)
      */
     checkAndGetSessionAndWindowId(readOnly = false, _timestamp: number | null = null) {
-        if (this._config.cookieless_mode === 'always') {
+        if (this.c.cookieless_mode === 'always') {
             throw new Error('checkAndGetSessionAndWindowId should not be called with cookieless_mode="always"')
         }
         const timestamp = _timestamp || new Date().getTime()

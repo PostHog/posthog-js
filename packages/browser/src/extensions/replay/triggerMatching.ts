@@ -136,7 +136,7 @@ export class URLTriggerMatching extends PostHogComponent implements TriggerStatu
             return TRIGGER_DISABLED
         }
 
-        const currentTriggerSession = this.ph_property(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
+        const currentTriggerSession = this.ph_prop(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
         return currentTriggerSession === sessionId ? TRIGGER_ACTIVATED : TRIGGER_PENDING
     }
 
@@ -146,7 +146,7 @@ export class URLTriggerMatching extends PostHogComponent implements TriggerStatu
         const eitherIsPending = urlTriggerStatus === TRIGGER_PENDING
 
         const result = eitherIsActivated ? TRIGGER_ACTIVATED : eitherIsPending ? TRIGGER_PENDING : TRIGGER_DISABLED
-        this._instance.register_for_session({
+        this.i.register_for_session({
             $sdk_debug_replay_url_trigger_status: result,
         })
         return result
@@ -198,7 +198,7 @@ export class LinkedFlagMatching extends PostHogComponent implements TriggerStatu
         if (this.linkedFlagSeen) {
             result = TRIGGER_ACTIVATED
         }
-        this._instance.register_for_session({
+        this.i.register_for_session({
             $sdk_debug_replay_linked_flag_trigger_status: result,
         })
         return result
@@ -210,7 +210,7 @@ export class LinkedFlagMatching extends PostHogComponent implements TriggerStatu
         if (!isNullish(this.linkedFlag) && !this.linkedFlagSeen) {
             const linkedFlag = isString(this.linkedFlag) ? this.linkedFlag : this.linkedFlag.flag
             const linkedVariant = isString(this.linkedFlag) ? null : this.linkedFlag.variant
-            this._flaglistenerCleanup = this._instance.onFeatureFlags((_flags, variants) => {
+            this._flaglistenerCleanup = this.i.onFeatureFlags((_flags, variants) => {
                 const flagIsPresent = isObject(variants) && linkedFlag in variants
                 let linkedFlagMatches = false
                 if (flagIsPresent) {
@@ -249,7 +249,7 @@ export class EventTriggerMatching extends PostHogComponent implements TriggerSta
             return TRIGGER_DISABLED
         }
 
-        const currentTriggerSession = this.ph_property(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
+        const currentTriggerSession = this.ph_prop(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
         return currentTriggerSession === sessionId ? TRIGGER_ACTIVATED : TRIGGER_PENDING
     }
 
@@ -261,7 +261,7 @@ export class EventTriggerMatching extends PostHogComponent implements TriggerSta
                 : eventTriggerStatus === TRIGGER_PENDING
                   ? TRIGGER_PENDING
                   : TRIGGER_DISABLED
-        this._instance.register_for_session({
+        this.i.register_for_session({
             $sdk_debug_replay_event_trigger_status: result,
         })
         return result

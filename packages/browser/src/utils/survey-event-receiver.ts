@@ -25,7 +25,7 @@ export class SurveyEventReceiver extends PostHogComponent {
     }
 
     register(surveys: Survey[]): void {
-        if (isUndefined(this._instance?._addCaptureHook)) {
+        if (isUndefined(this.i?._addCaptureHook)) {
             return
         }
 
@@ -43,7 +43,7 @@ export class SurveyEventReceiver extends PostHogComponent {
         }
 
         if (this._actionMatcher == null) {
-            this._actionMatcher = new ActionMatcher(this._instance)
+            this._actionMatcher = new ActionMatcher(this.i)
             this._actionMatcher.init()
             // match any actions to its corresponding survey.
             const matchActionToSurvey = (actionName: string) => {
@@ -93,7 +93,7 @@ export class SurveyEventReceiver extends PostHogComponent {
         const matchEventToSurvey = (eventName: string, eventPayload?: CaptureResult) => {
             this.onEvent(eventName, eventPayload)
         }
-        this._instance?._addCaptureHook(matchEventToSurvey)
+        this.i?._addCaptureHook(matchEventToSurvey)
 
         surveys.forEach((survey) => {
             // maintain a mapping of (Event1) => [Survey1, Survey2, Survey3]
@@ -111,7 +111,7 @@ export class SurveyEventReceiver extends PostHogComponent {
     }
 
     onEvent(event: string, eventPayload?: CaptureResult): void {
-        const existingActivatedSurveys: string[] = this.ph_property(SURVEYS_ACTIVATED) || []
+        const existingActivatedSurveys: string[] = this.ph_prop(SURVEYS_ACTIVATED) || []
         if (SURVEY_SHOWN_EVENT_NAME === event && eventPayload && existingActivatedSurveys.length > 0) {
             // remove survey that from activatedSurveys here.
             logger.info('survey event matched, removing survey from activated surveys', {
@@ -139,7 +139,7 @@ export class SurveyEventReceiver extends PostHogComponent {
     }
 
     onAction(actionName: string): void {
-        const existingActivatedSurveys: string[] = this.ph_property(SURVEYS_ACTIVATED) || []
+        const existingActivatedSurveys: string[] = this.ph_prop(SURVEYS_ACTIVATED) || []
         if (this._actionToSurveys.has(actionName)) {
             this._updateActivatedSurveys(existingActivatedSurveys.concat(this._actionToSurveys.get(actionName) || []))
         }
@@ -147,13 +147,13 @@ export class SurveyEventReceiver extends PostHogComponent {
 
     private _updateActivatedSurveys(activatedSurveys: string[]) {
         // we use a new Set here to remove duplicates.
-        this._instance?.persistence?.register({
+        this.i?.persistence?.register({
             [SURVEYS_ACTIVATED]: [...new Set(activatedSurveys)],
         })
     }
 
     getSurveys(): string[] {
-        const existingActivatedSurveys = this.ph_property(SURVEYS_ACTIVATED)
+        const existingActivatedSurveys = this.ph_prop(SURVEYS_ACTIVATED)
         return existingActivatedSurveys ? existingActivatedSurveys : []
     }
 

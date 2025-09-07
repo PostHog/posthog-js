@@ -59,23 +59,23 @@ export class Heatmaps extends PostHogComponent {
     constructor(instance: PostHog) {
         super(instance)
 
-        this._enabledServerSide = !!this.ph_property(HEATMAPS_ENABLED_SERVER_SIDE)
+        this._enabledServerSide = !!this.ph_prop(HEATMAPS_ENABLED_SERVER_SIDE)
     }
 
     public get flushIntervalMilliseconds(): number {
         let flushInterval = DEFAULT_FLUSH_INTERVAL
-        if (isObject(this._config.capture_heatmaps) && this._config.capture_heatmaps.flush_interval_milliseconds) {
-            flushInterval = this._config.capture_heatmaps.flush_interval_milliseconds
+        if (isObject(this.c.capture_heatmaps) && this.c.capture_heatmaps.flush_interval_milliseconds) {
+            flushInterval = this.c.capture_heatmaps.flush_interval_milliseconds
         }
         return flushInterval
     }
 
     public get isEnabled(): boolean {
-        if (!isUndefined(this._config.capture_heatmaps)) {
-            return this._config.capture_heatmaps !== false
+        if (!isUndefined(this.c.capture_heatmaps)) {
+            return this.c.capture_heatmaps !== false
         }
-        if (!isUndefined(this._config.enable_heatmaps)) {
-            return this._config.enable_heatmaps
+        if (!isUndefined(this.c.enable_heatmaps)) {
+            return this.c.enable_heatmaps
         }
         return this._enabledServerSide
     }
@@ -101,8 +101,8 @@ export class Heatmaps extends PostHogComponent {
     public onRemoteConfig(response: RemoteConfig) {
         const optIn = !!response['heatmaps']
 
-        if (this._instance.persistence) {
-            this._instance.persistence.register({
+        if (this.i.persistence) {
+            this.i.persistence.register({
                 [HEATMAPS_ENABLED_SERVER_SIDE]: optIn,
             })
         }
@@ -134,7 +134,7 @@ export class Heatmaps extends PostHogComponent {
         })
 
         this._deadClicksCapture = new DeadClicksAutocapture(
-            this._instance,
+            this.i,
             isDeadClicksEnabledForHeatmaps,
             this._onDeadClick.bind(this)
         )
@@ -148,9 +148,9 @@ export class Heatmaps extends PostHogComponent {
         // If fixed then we won't account for scrolling
         // If not then we will account for scrolling
 
-        const scrollY = this._instance.scrollManager.scrollY()
-        const scrollX = this._instance.scrollManager.scrollX()
-        const scrollElement = this._instance.scrollManager.scrollElement()
+        const scrollY = this.i.scrollManager.scrollY()
+        const scrollX = this.i.scrollManager.scrollX()
+        const scrollElement = this.i.scrollManager.scrollElement()
 
         const isFixedOrSticky = elementOrParentPositionMatches(getEventTarget(e), ['fixed', 'sticky'], scrollElement)
 
@@ -213,7 +213,7 @@ export class Heatmaps extends PostHogComponent {
             return
         }
 
-        this._instance.capture('$$heatmap', {
+        this.i.capture('$$heatmap', {
             $heatmap_data: this.getAndClearBuffer(),
         })
     }

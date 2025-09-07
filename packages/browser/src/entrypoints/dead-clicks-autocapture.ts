@@ -247,14 +247,14 @@ class LazyLoadedDeadClicksAutocapture extends PostHogComponent implements LazyLo
     private _captureDeadClick(click: DeadClickCandidate, properties: Properties) {
         // TODO need to check safe and captur-able as with autocapture
         // TODO autocaputure config
-        this._instance.capture(
+        this.i.capture(
             '$dead_click',
             {
                 ...properties,
                 ...autocapturePropertiesForElement(click.node, {
                     e: click.originalEvent,
-                    maskAllElementAttributes: this._config.mask_all_element_attributes,
-                    maskAllText: this._config.mask_all_text,
+                    maskAllElementAttributes: this.c.mask_all_element_attributes,
+                    maskAllText: this.c.mask_all_text,
                     elementAttributeIgnoreList: this._deadClicksConfig.element_attribute_ignorelist,
                     // TRICKY: it appears that we were moving to elementsChainAsString, but the UI still depends on elements, so :shrug:
                     elementsChainAsString: false,
