@@ -1,4 +1,4 @@
-import { applyMiddleware, compose, createStore } from 'redux'
+import { configureStore } from '@reduxjs/toolkit'
 import { posthogReplayReduxLogger } from './posthogReplayReduxLogger'
 
 // Types
@@ -353,14 +353,13 @@ const posthogMiddleware = posthogReplayReduxLogger({
     // },
 })
 
-// Compose enhancers with Redux DevTools
-const composeEnhancers =
-    typeof window !== 'undefined' && (window as any).__REDUX_DEVTOOLS_EXTENSION_COMPOSE__
-        ? (window as any).__REDUX_DEVTOOLS_EXTENSION_COMPOSE__
-        : compose
-
-// Create and export store with middleware
-export const store = createStore(todoReducer, initialState, composeEnhancers(applyMiddleware(posthogMiddleware)))
+// Create and export store with Redux Toolkit
+export const store = configureStore({
+    reducer: todoReducer,
+    preloadedState: initialState,
+    middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(posthogMiddleware),
+    devTools: true,
+})
 
 export type RootState = ReturnType<typeof store.getState>
 export type AppDispatch = typeof store.dispatch

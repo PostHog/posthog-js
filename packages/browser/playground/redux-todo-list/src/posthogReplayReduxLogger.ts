@@ -1,31 +1,5 @@
-// Redux-compatible types without depending on Redux
-// Copied from https://github.com/reduxjs/redux/blob/6c8c3a10f6e5a35f0c4a61413d7a93a53e4f11d4/src/types/actions.ts#L32
-
-/**
- * An Action type which accepts any other properties.
- * This is mainly for the use of the `Reducer` type.
- * This is not part of `Action` itself to prevent types that extend `Action` from
- * having an index signature.
- */
-export interface UnknownAction {
-    type: string
-    // Allows any extra properties to be defined in an action.
-    [extraProps: string]: unknown
-}
-
-// Redux middleware types
-export type Dispatch<A = UnknownAction> = (action: A) => A
-
-export interface MiddlewareAPI<D extends Dispatch = Dispatch, S = any> {
-    dispatch: D
-    getState(): S
-}
-
-// we need to pass a _DispatchExt but TS doesn't like that it is unused
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export interface Middleware<_DispatchExt = object, S = any, D extends Dispatch = Dispatch> {
-    (api: MiddlewareAPI<D, S>): (next: D) => (action: Parameters<D>[0]) => ReturnType<D>
-}
+// Import Redux types to be compatible with Redux Toolkit
+import type { Middleware as ReduxMiddleware, MiddlewareAPI, Dispatch, UnknownAction } from '@reduxjs/toolkit'
 
 export interface ReduxEvent {
     type: string
@@ -122,9 +96,11 @@ function getChangedStateKeys<S>(prevState: S, nextState: S): { prevState: Partia
  * Creates a Redux middleware that logs actions and state changes for PostHog session replay
  * This can be used as middleware in any Redux store to capture state changes
  */
-export function posthogReplayReduxLogger<S = any>(
+export function posthogReplayReduxLogger<S extends UnknownAction>(
     config: PostHogReplayReduxLoggerConfig<S> = {}
-): Middleware<object, S> {
+    // the empty object is the recommended typing from redux docs
+    //eslint-disable-next-line @typescript-eslint/no-empty-object-type
+): ReduxMiddleware<{}, S> {
     const {
         maskReduxAction = (action: UnknownAction) => action,
         maskReduxState = (state: S) => state,
@@ -133,60 +109,68 @@ export function posthogReplayReduxLogger<S = any>(
         diffState = true,
     } = config
 
-    return (store: MiddlewareAPI<Dispatch, S>) => (next: Dispatch) => (action: UnknownAction) => {
-        // Get the state before the action
-        const prevState = store.getState()
+    return (store: MiddlewareAPI<Dispatch, S>) =>
+        (next: Dispatch) =>
+        (action: UnknownAction): UnknownAction => {
+            const typedAction = action as UnknownAction
+            // Get the state before the action
+            const prevState = store.getState()
 
-        // Track execution time
-        // eslint-disable-next-line compat/compat
-        const startTime = performance.now()
+            // Track execution time
+            // eslint-disable-next-line compat/compat
+            const startTime = performance.now()
 
-        const result = next(action)
+            const result = next(typedAction)
 
-        // eslint-disable-next-line compat/compat
-        const endTime = performance.now()
-        const executionTimeMs = endTime - startTime
+            // eslint-disable-next-line compat/compat
+            const endTime = performance.now()
+            const executionTimeMs = endTime - startTime
 
-        // Get the state after the action
-        const nextState = store.getState()
+            // Get the state after the action
+            const nextState = store.getState()
 
-        const maskedAction = maskReduxAction(action)
+            const maskedAction = maskReduxAction(typedAction)
 
-        if (!maskedAction) {
+            if (!maskedAction) {
+                return result
+            }
+
+            // Apply masking to states
+            try {
+                const maskedPrevState = maskReduxState(prevState, maskedAction)
+                const maskedNextState = maskReduxState(nextState, maskedAction)
+
+                let filteredPrevState: Partial<S>
+                let filteredNextState: Partial<S>
+                if (diffState) {
+                    const { prevState: diffedPrevState, nextState: diffedNextState } = getChangedStateKeys(
+                        maskedPrevState,
+                        maskedNextState
+                    )
+                    filteredPrevState = diffedPrevState
+                    filteredNextState = diffedNextState
+                } else {
+                    filteredPrevState = maskedPrevState
+                    filteredNextState = maskedNextState
+                }
+
+                const { type, ...actionData } = maskedAction
+
+                const reduxEvent: ReduxEvent = {
+                    type,
+                    payload: actionData,
+                    timestamp: Date.now(),
+                    executionTimeMs,
+                    prevState: filteredPrevState,
+                    nextState: filteredNextState,
+                }
+
+                logger(titleFunction(reduxEvent), reduxEvent)
+            } catch (e: any) {
+                // logging should never throw errors and break someone's app
+                console.error('[PostHog Redux Logger] Error logging state:', e)
+            }
+
             return result
         }
-
-        // Apply masking to states
-        const maskedPrevState = maskReduxState(prevState, maskedAction)
-        const maskedNextState = maskReduxState(nextState, maskedAction)
-
-        let filteredPrevState: Partial<S>
-        let filteredNextState: Partial<S>
-        if (diffState) {
-            const { prevState: diffedPrevState, nextState: diffedNextState } = getChangedStateKeys(
-                maskedPrevState,
-                maskedNextState
-            )
-            filteredPrevState = diffedPrevState
-            filteredNextState = diffedNextState
-        } else {
-            filteredPrevState = maskedPrevState
-            filteredNextState = maskedNextState
-        }
-
-        const { type, ...actionData } = maskedAction
-
-        const reduxEvent: ReduxEvent = {
-            type,
-            payload: actionData,
-            timestamp: Date.now(),
-            executionTimeMs,
-            prevState: filteredPrevState,
-            nextState: filteredNextState,
-        }
-
-        logger(titleFunction(reduxEvent), reduxEvent)
-
-        return result
-    }
 }
