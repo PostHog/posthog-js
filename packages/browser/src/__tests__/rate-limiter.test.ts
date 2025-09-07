@@ -1,12 +1,15 @@
 import { clearLoggerMocks, mockLogger } from './helpers/mock-logger'
 import { window } from '../../src/utils/globals'
 import { RateLimiter } from '../rate-limiter'
+import { PostHog } from '../posthog-core'
+import { PostHogConfig } from '../types'
+import { PostHogPersistence } from '../posthog-persistence'
 
 describe('Rate Limiter', () => {
     let rateLimiter: RateLimiter
     let systemTime: number
     let persistedBucket = {}
-    let mockPostHog: any
+    let mockPostHog: Partial<PostHog>
 
     const moveTimeForward = (milliseconds: number) => {
         systemTime += milliseconds
@@ -25,23 +28,26 @@ describe('Rate Limiter', () => {
 
         persistedBucket = {}
 
+        const config: Partial<PostHogConfig> = {
+            rate_limiting: {
+                events_per_second: 10,
+                events_burst_limit: 100,
+            },
+        }
+        const persistence: Partial<PostHogPersistence> = {
+            get_property: jest.fn((key) => persistedBucket[key]),
+            set_property: jest.fn((key, value) => {
+                persistedBucket[key] = value
+            }),
+        }
         mockPostHog = {
-            config: {
-                rate_limiting: {
-                    events_per_second: 10,
-                    events_burst_limit: 100,
-                },
-            },
-            persistence: {
-                get_property: jest.fn((key) => persistedBucket[key]),
-                set_property: jest.fn((key, value) => {
-                    persistedBucket[key] = value
-                }),
-            },
+            config: config as unknown as PostHogConfig,
+            persistence: persistence as unknown as PostHogPersistence,
+            get_property: persistence.get_property,
             capture: jest.fn(),
         }
 
-        rateLimiter = new RateLimiter(mockPostHog as any)
+        rateLimiter = new RateLimiter(mockPostHog as unknown as PostHog)
 
         clearLoggerMocks()
     })

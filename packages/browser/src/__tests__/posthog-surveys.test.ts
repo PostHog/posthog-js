@@ -550,7 +550,7 @@ describe('posthog-surveys', () => {
                 expect(mockCallback).toHaveBeenCalledWith(mockSurveys, {
                     isLoaded: true,
                 })
-                expect(mockPostHog.persistence?.register).toHaveBeenCalledWith({ [SURVEYS]: mockSurveys })
+                expect(mockPostHog.persistence?.register).toHaveBeenCalledWith({ [SURVEYS]: mockSurveys }, undefined)
             })
 
             it('should reset _isFetchingSurveys after failed API call (non-200 status)', () => {
@@ -617,7 +617,7 @@ describe('posthog-surveys', () => {
                 expect(mockCallback).toHaveBeenCalledWith(delayedSurveys, {
                     isLoaded: true,
                 })
-                expect(mockPostHog.persistence?.register).toHaveBeenCalledWith({ [SURVEYS]: delayedSurveys })
+                expect(mockPostHog.persistence?.register).toHaveBeenCalledWith({ [SURVEYS]: delayedSurveys }, undefined)
             })
 
             it('should set correct timeout value in request', () => {

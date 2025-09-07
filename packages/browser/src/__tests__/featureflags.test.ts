@@ -976,9 +976,12 @@ describe('featureflags', () => {
             expect(unregisterCallOrder).toBeLessThan(registerCallOrder)
 
             // Verify register was called with new data
-            expect(registerSpy).toHaveBeenCalledWith({
-                $early_access_features: [EARLY_ACCESS_FEATURE_FIRST],
-            })
+            expect(registerSpy).toHaveBeenCalledWith(
+                {
+                    $early_access_features: [EARLY_ACCESS_FEATURE_FIRST],
+                },
+                undefined
+            )
 
             // Verify persistence only contains new features, not old ones
             expect(instance.persistence.props.$early_access_features).toEqual([EARLY_ACCESS_FEATURE_FIRST])

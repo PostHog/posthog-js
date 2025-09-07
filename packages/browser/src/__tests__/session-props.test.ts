@@ -2,26 +2,35 @@ import { SessionPropsManager } from '../session-props'
 import { SessionIdManager } from '../sessionid'
 import { PostHogPersistence } from '../posthog-persistence'
 import { PostHog } from '../posthog-core'
+import { PostHogConfig } from '../types'
 
 describe('Session Props Manager', () => {
     const createSessionPropsManager = () => {
         const onSessionId = jest.fn()
         const generateProps = jest.fn()
         const persistenceRegister = jest.fn()
+
         const sessionIdManager = {
             onSessionId,
         } as unknown as SessionIdManager
+
         const persistence = {
             register: persistenceRegister,
             props: {},
         } as unknown as PostHogPersistence
-        const posthog = {
+
+        const fakePosthog: Partial<PostHog> = {
             sessionManager: sessionIdManager,
             persistence,
-            config: {},
-        } as unknown as PostHog
+            get_property: (key: string) => persistence.props[key],
+            config: {} as unknown as PostHogConfig,
+        }
 
-        const sessionPropsManager = new SessionPropsManager(posthog, sessionIdManager, persistence, generateProps)
+        const sessionPropsManager = new SessionPropsManager(
+            fakePosthog as unknown as PostHog,
+            sessionIdManager,
+            generateProps
+        )
 
         return {
             onSessionId,
@@ -52,14 +61,17 @@ describe('Session Props Manager', () => {
         //assert
         expect(generateProps).toHaveBeenCalledTimes(1)
 
-        expect(persistenceRegister).toBeCalledWith({
-            $client_session_props: {
-                props: {
-                    utm_source: 'some-utm-source',
+        expect(persistenceRegister).toBeCalledWith(
+            {
+                $client_session_props: {
+                    props: {
+                        utm_source: 'some-utm-source',
+                    },
+                    sessionId: 'session-id',
                 },
-                sessionId: 'session-id',
             },
-        })
+            undefined
+        )
     })
 
     it('should not update client session props when session id stays the same', () => {

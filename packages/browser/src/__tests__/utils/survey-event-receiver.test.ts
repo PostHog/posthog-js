@@ -83,9 +83,11 @@ describe('survey-event-receiver', () => {
                 persistence: 'memory',
             } as unknown as PostHogConfig
 
+            const postHogPersistence = new PostHogPersistence(config)
             instance = {
                 config: config,
-                persistence: new PostHogPersistence(config),
+                persistence: postHogPersistence,
+                get_property: postHogPersistence.get_property.bind(postHogPersistence),
                 _addCaptureHook: mockAddCaptureHook,
             } as unknown as PostHog
         })
@@ -181,9 +183,11 @@ describe('survey-event-receiver', () => {
                 persistence: 'memory',
             } as unknown as PostHogConfig
 
+            const postHogPersistence = new PostHogPersistence(config)
             instance = {
                 config: config,
-                persistence: new PostHogPersistence(config),
+                persistence: postHogPersistence,
+                get_property: postHogPersistence.get_property.bind(postHogPersistence),
                 _addCaptureHook: jest.fn(),
             } as unknown as PostHog
         })

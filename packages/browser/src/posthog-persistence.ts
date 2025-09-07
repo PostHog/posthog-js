@@ -214,24 +214,25 @@ export class PostHogPersistence {
      */
 
     register(props: Properties, days?: number): boolean {
-        if (isObject(props)) {
-            this._expire_days = isUndefined(days) ? this._default_expiry : days
-
-            let hasChanges = false
-
-            each(props, (val, prop) => {
-                if (props.hasOwnProperty(prop) && this.props[prop] !== val) {
-                    this.props[prop] = val
-                    hasChanges = true
-                }
-            })
-
-            if (hasChanges) {
-                this.save()
-                return true
-            }
+        if (!isObject(props)) {
+            return false
         }
-        return false
+
+        this._expire_days = isUndefined(days) ? this._default_expiry : days
+
+        let hasChanges = false
+
+        each(props, (val, prop) => {
+            if (props.hasOwnProperty(prop) && this.props[prop] !== val) {
+                this.props[prop] = val
+                hasChanges = true
+            }
+        })
+
+        if (hasChanges) {
+            this.save()
+            return true
+        }
     }
 
     unregister(prop: string): void {
