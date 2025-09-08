@@ -985,12 +985,20 @@ export interface PostHogConfig {
     __preview_flags_v2?: boolean
 
     /**
-     * PREVIEW - MAY CHANGE WITHOUT WARNING - REALLY REALLY DO NOT USE IN PRODUCTION
-     * Enables lazy loading of much more session recording code, not just rrweb and network plugin
+     * PREVIEW - MAY CHANGE WITHOUT WARNING - ONLY USE WHEN TALKING TO POSTHOG SUPPORT
+     * Enables deprecated eager loading of session recording code, not just rrweb and network plugin
+     * we are switching the default to lazy loading because the bundle will ultimately be 18% smaller then
+     * keeping this around for a few days in case there are unexpected consequences that testing did not uncover
      * */
-    __preview_lazy_load_replay?: boolean
+    __preview_eager_load_replay?: boolean
 
     // ------- RETIRED CONFIGS - NO REPLACEMENT OR USAGE -------
+
+    /**
+     * @deprecated - does nothing
+     * was present only for PostHog testing of replay lazy loading
+     * */
+    __preview_lazy_load_replay?: boolean
 
     /** @deprecated - NOT USED ANYMORE, kept here for backwards compatibility reasons */
     api_method?: string
