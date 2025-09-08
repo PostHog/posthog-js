@@ -3,7 +3,8 @@ import type { SegmentAnalytics } from './extensions/segment-integration'
 import { PostHog } from './posthog-core'
 import { KnownUnsafeEditableEvent } from '@posthog/core'
 import { Survey } from './posthog-surveys-types'
-import { SAMPLED } from './extensions/replay/triggerMatching'
+
+import { SAMPLED } from './extensions/replay/types'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -985,8 +986,9 @@ export interface PostHogConfig {
     __preview_flags_v2?: boolean
 
     /**
-     * PREVIEW - MAY CHANGE WITHOUT WARNING - REALLY REALLY DO NOT USE IN PRODUCTION
-     * Enables lazy loading of much more session recording code, not just rrweb and network plugin
+     * @deprecated PREVIEW - MAY CHANGE WITHOUT WARNING - REALLY REALLY DO NOT USE IN PRODUCTION
+     * does nothing anymore as it was only present for testing
+     * will be removed in a nearby release
      * */
     __preview_lazy_load_replay?: boolean
 
