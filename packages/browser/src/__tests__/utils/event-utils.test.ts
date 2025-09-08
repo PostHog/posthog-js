@@ -1,11 +1,14 @@
 import {
     getBrowserLanguage,
     getBrowserLanguagePrefix,
+    getCampaignParams,
     getEventProperties,
     getTimezone,
     getTimezoneOffset,
 } from '../../utils/event-utils'
 import * as globals from '../../utils/globals'
+import { cookieStore } from '../../storage'
+import { PostHogConfig } from '../../types'
 
 describe(`event-utils`, () => {
     describe('properties', () => {
@@ -84,6 +87,18 @@ describe(`event-utils`, () => {
         it('should compute browser language prefix', () => {
             const languagePrefix = getBrowserLanguagePrefix()
             expect(languagePrefix).toBe('pt')
+        })
+    })
+
+    describe('getCampaignParams', () => {
+        it('should mask cookie params', () => {
+            const mockedCookieStore = jest.spyOn(cookieStore, '_get')
+            mockedCookieStore.mockReturnValue('SOME_SECRET')
+            const params = getCampaignParams({ mask_personal_data_properties: true } as PostHogConfig)
+            // li_fat_id should come from cookie
+            expect(params['li_fat_id']).toEqual('<masked>')
+            // gclid does not come from cookie
+            expect(params['gclid']).toEqual(null)
         })
     })
 })
