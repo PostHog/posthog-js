@@ -16,11 +16,7 @@ export const setAllPersonProfilePropertiesAsPersonPropertiesForFlags = (posthog:
             posthog.config.mask_personal_data_properties,
             posthog.config.custom_personal_data_properties
         ),
-        getCampaignParams(
-            posthog.config.custom_campaign_params,
-            posthog.config.mask_personal_data_properties,
-            posthog.config.custom_personal_data_properties
-        ),
+        getCampaignParams(posthog.config),
         getReferrerInfo()
     )
     const personProperties: Record<string, string> = {}
