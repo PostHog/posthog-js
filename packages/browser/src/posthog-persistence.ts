@@ -97,7 +97,9 @@ export class PostHogPersistence {
         let store: PersistentStore
         // We handle storage type in a case-insensitive way for backwards compatibility
         const storage_type = config['persistence'].toLowerCase() as Lowercase<PostHogConfig['persistence']>
-        if (storage_type === 'localstorage' && localStore._is_supported()) {
+        if (config.cookieless_mode === 'always') {
+            store = memoryStore
+        } else if (storage_type === 'localstorage' && localStore._is_supported()) {
             store = localStore
         } else if (storage_type === 'localstorage+cookie' && localPlusCookieStore._is_supported()) {
             store = localPlusCookieStore
@@ -243,11 +245,7 @@ export class PostHogPersistence {
 
     update_campaign_params(): void {
         if (!this._campaign_params_saved) {
-            const campaignParams = getCampaignParams(
-                this._config.custom_campaign_params,
-                this._config.mask_personal_data_properties,
-                this._config.custom_personal_data_properties
-            )
+            const campaignParams = getCampaignParams(this._config)
             // only save campaign params if there were any
             if (!isEmptyObject(stripEmptyProperties(campaignParams))) {
                 this.register(campaignParams)
