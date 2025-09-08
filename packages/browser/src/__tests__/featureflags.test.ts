@@ -163,7 +163,7 @@ describe('featureflags', () => {
             'disabled-flag': false,
         })
         expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
-        expect(featureFlags.isFeatureEnabled('random')).toEqual(false)
+        expect(featureFlags.isFeatureEnabled('random')).toEqual(undefined)
         expect(featureFlags.isFeatureEnabled('multivariate-flag')).toEqual(true)
 
         expect(instance.capture).toHaveBeenCalledTimes(3)
@@ -214,7 +214,7 @@ describe('featureflags', () => {
             $enabled_feature_flags: { x: 'y' },
         })
         expect(featureFlags.getFlagVariants()).toEqual({ x: 'y' })
-        expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(false)
+        expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(undefined)
         expect(instance.capture).toHaveBeenCalledTimes(2)
 
         instance.persistence.register({
@@ -245,6 +245,15 @@ describe('featureflags', () => {
         expect(featureFlags.getFeatureFlagPayload('alpha-feature-2')).toEqual(200)
         expect(featureFlags.getFeatureFlagPayload('multivariate-flag')).toEqual(undefined)
         expect(instance.capture).not.toHaveBeenCalled()
+    })
+
+    it('returns undefined for non-existent or disabled flags', () => {
+        featureFlags._hasLoadedFlags = true
+
+        expect(featureFlags.isFeatureEnabled('non-existent-flag')).toEqual(undefined)
+
+        // Despite being non-existent, the event will still be captured
+        expect(instance.capture).toHaveBeenCalled()
     })
 
     describe('feature flag overrides', () => {
