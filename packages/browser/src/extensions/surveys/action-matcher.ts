@@ -5,30 +5,31 @@ import { CaptureResult } from '../../types'
 import { isUndefined } from '@posthog/core'
 import { window } from '../../utils/globals'
 import { isMatchingRegex } from '../../utils/regex-utils'
+import { PostHogComponent } from '../../posthog-component'
 
-export class ActionMatcher {
+export class ActionMatcher extends PostHogComponent {
     private readonly _actionRegistry?: Set<SurveyActionType>
-    private readonly _instance?: PostHog
     private readonly _actionEvents: Set<string>
     private _debugEventEmitter = new SimpleEventEmitter()
 
-    constructor(instance?: PostHog) {
-        this._instance = instance
+    constructor(instance: PostHog) {
+        super(instance)
+
         this._actionEvents = new Set<string>()
         this._actionRegistry = new Set<SurveyActionType>()
     }
 
     init() {
-        if (!isUndefined(this._instance?._addCaptureHook)) {
+        if (!isUndefined(this.i?._addCaptureHook)) {
             const matchEventToAction = (eventName: string, eventPayload: any) => {
                 this.on(eventName, eventPayload)
             }
-            this._instance?._addCaptureHook(matchEventToAction)
+            this.i?._addCaptureHook(matchEventToAction)
         }
     }
 
     register(actions: SurveyActionType[]): void {
-        if (isUndefined(this._instance?._addCaptureHook)) {
+        if (isUndefined(this.i?._addCaptureHook)) {
             return
         }
 
@@ -39,7 +40,7 @@ export class ActionMatcher {
             })
         })
 
-        if (this._instance?.autocapture) {
+        if (this.i?.autocapture) {
             const selectorsToWatch: Set<string> = new Set<string>()
             actions.forEach((action) => {
                 action.steps?.forEach((step) => {
@@ -48,7 +49,7 @@ export class ActionMatcher {
                     }
                 })
             })
-            this._instance?.autocapture.setElementSelectors(selectorsToWatch)
+            this.i?.autocapture.setElementSelectors(selectorsToWatch)
         }
     }
 

@@ -1,15 +1,13 @@
-import { PostHog } from '../posthog-core'
 import { assignableWindow } from '../utils/globals'
 import { createLogger } from '../utils/logger'
 import { isUndefined } from '@posthog/core'
+import { PostHogComponent } from '../posthog-component'
 
 const logger = createLogger('[TracingHeaders]')
 
-export class TracingHeaders {
+export class TracingHeaders extends PostHogComponent {
     private _restoreXHRPatch: (() => void) | undefined = undefined
     private _restoreFetchPatch: (() => void) | undefined = undefined
-
-    constructor(private readonly _instance: PostHog) {}
 
     private _loadScript(cb: () => void): void {
         if (assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns) {
@@ -17,7 +15,7 @@ export class TracingHeaders {
             cb()
         }
 
-        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this._instance, 'tracing-headers', (err) => {
+        assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.i, 'tracing-headers', (err) => {
             if (err) {
                 return logger.error('failed to load script', err)
             }
@@ -25,7 +23,7 @@ export class TracingHeaders {
         })
     }
     public startIfEnabledOrStop() {
-        if (this._instance.config.__add_tracing_headers) {
+        if (this.c.__add_tracing_headers) {
             this._loadScript(this._startCapturing)
         } else {
             this._restoreXHRPatch?.()
@@ -39,16 +37,16 @@ export class TracingHeaders {
     private _startCapturing = () => {
         if (isUndefined(this._restoreXHRPatch)) {
             assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchXHR(
-                this._instance.config.__add_tracing_headers || [],
-                this._instance.get_distinct_id(),
-                this._instance.sessionManager
+                this.c.__add_tracing_headers || [],
+                this.i.get_distinct_id(),
+                this.i.sessionManager
             )
         }
         if (isUndefined(this._restoreFetchPatch)) {
             assignableWindow.__PosthogExtensions__?.tracingHeadersPatchFns?._patchFetch(
-                this._instance.config.__add_tracing_headers || [],
-                this._instance.get_distinct_id(),
-                this._instance.sessionManager
+                this.c.__add_tracing_headers || [],
+                this.i.get_distinct_id(),
+                this.i.sessionManager
             )
         }
     }

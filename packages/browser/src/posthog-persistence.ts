@@ -184,17 +184,25 @@ export class PostHogPersistence {
      * @param {number=} days
      */
 
-    register_once(props: Properties, default_value: any, days?: number): boolean {
+    private _registerProps(
+        props: Properties,
+        days?: number,
+        registerOnce: boolean = false,
+        defaultValue: any = undefined
+    ): boolean {
         if (isObject(props)) {
-            if (isUndefined(default_value)) {
-                default_value = 'None'
-            }
             this._expire_days = isUndefined(days) ? this._default_expiry : days
 
             let hasChanges = false
 
             each(props, (val, prop) => {
-                if (!this.props.hasOwnProperty(prop) || this.props[prop] === default_value) {
+                // registerOnce: only set the property if it doesn't exist or equals the default value
+                // register: always update the property if it has changed
+                const shouldUpdate = registerOnce
+                    ? !this.props.hasOwnProperty(prop) || this.props[prop] === defaultValue
+                    : props.hasOwnProperty(prop) && this.props[prop] !== val
+
+                if (shouldUpdate) {
                     this.props[prop] = val
                     hasChanges = true
                 }
@@ -208,30 +216,18 @@ export class PostHogPersistence {
         return false
     }
 
+    register_once(props: Properties, default_value: any, days?: number): boolean {
+        const defaultVal = isUndefined(default_value) ? 'None' : default_value
+        return this._registerProps(props, days, true, defaultVal)
+    }
+
     /**
      * @param {Object} props
      * @param {number=} days
      */
 
     register(props: Properties, days?: number): boolean {
-        if (isObject(props)) {
-            this._expire_days = isUndefined(days) ? this._default_expiry : days
-
-            let hasChanges = false
-
-            each(props, (val, prop) => {
-                if (props.hasOwnProperty(prop) && this.props[prop] !== val) {
-                    this.props[prop] = val
-                    hasChanges = true
-                }
-            })
-
-            if (hasChanges) {
-                this.save()
-                return true
-            }
-        }
-        return false
+        return this._registerProps(props, days, false)
     }
 
     unregister(prop: string): void {

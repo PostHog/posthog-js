@@ -6,26 +6,26 @@ import { PostHog } from '../posthog-core'
 import { CaptureResult } from '../types'
 import { SURVEY_LOGGER as logger } from './survey-utils'
 import { isUndefined } from '@posthog/core'
+import { PostHogComponent } from '../posthog-component'
 
 const SURVEY_SHOWN_EVENT_NAME = 'survey shown'
 
-export class SurveyEventReceiver {
+export class SurveyEventReceiver extends PostHogComponent {
     // eventToSurveys is a mapping of event name to all the surveys that are activated by it
     private readonly _eventToSurveys: Map<string, string[]>
     // actionToSurveys is a mapping of action name to all the surveys that are activated by it
     private readonly _actionToSurveys: Map<string, string[]>
     // actionMatcher can look at CaptureResult payloads and match an event to its corresponding action.
     private _actionMatcher?: ActionMatcher | null
-    private readonly _instance?: PostHog
 
     constructor(instance: PostHog) {
-        this._instance = instance
+        super(instance)
         this._eventToSurveys = new Map<string, string[]>()
         this._actionToSurveys = new Map<string, string[]>()
     }
 
     register(surveys: Survey[]): void {
-        if (isUndefined(this._instance?._addCaptureHook)) {
+        if (isUndefined(this.i?._addCaptureHook)) {
             return
         }
 
@@ -43,7 +43,7 @@ export class SurveyEventReceiver {
         }
 
         if (this._actionMatcher == null) {
-            this._actionMatcher = new ActionMatcher(this._instance)
+            this._actionMatcher = new ActionMatcher(this.i)
             this._actionMatcher.init()
             // match any actions to its corresponding survey.
             const matchActionToSurvey = (actionName: string) => {
@@ -93,7 +93,7 @@ export class SurveyEventReceiver {
         const matchEventToSurvey = (eventName: string, eventPayload?: CaptureResult) => {
             this.onEvent(eventName, eventPayload)
         }
-        this._instance?._addCaptureHook(matchEventToSurvey)
+        this.i?._addCaptureHook(matchEventToSurvey)
 
         surveys.forEach((survey) => {
             // maintain a mapping of (Event1) => [Survey1, Survey2, Survey3]
@@ -111,7 +111,7 @@ export class SurveyEventReceiver {
     }
 
     onEvent(event: string, eventPayload?: CaptureResult): void {
-        const existingActivatedSurveys: string[] = this._instance?.persistence?.props[SURVEYS_ACTIVATED] || []
+        const existingActivatedSurveys: string[] = this.get_property(SURVEYS_ACTIVATED) || []
         if (SURVEY_SHOWN_EVENT_NAME === event && eventPayload && existingActivatedSurveys.length > 0) {
             // remove survey that from activatedSurveys here.
             logger.info('survey event matched, removing survey from activated surveys', {
@@ -139,7 +139,7 @@ export class SurveyEventReceiver {
     }
 
     onAction(actionName: string): void {
-        const existingActivatedSurveys: string[] = this._instance?.persistence?.props[SURVEYS_ACTIVATED] || []
+        const existingActivatedSurveys: string[] = this.get_property(SURVEYS_ACTIVATED) || []
         if (this._actionToSurveys.has(actionName)) {
             this._updateActivatedSurveys(existingActivatedSurveys.concat(this._actionToSurveys.get(actionName) || []))
         }
@@ -147,13 +147,13 @@ export class SurveyEventReceiver {
 
     private _updateActivatedSurveys(activatedSurveys: string[]) {
         // we use a new Set here to remove duplicates.
-        this._instance?.persistence?.register({
+        this.reg_property({
             [SURVEYS_ACTIVATED]: [...new Set(activatedSurveys)],
         })
     }
 
     getSurveys(): string[] {
-        const existingActivatedSurveys = this._instance?.persistence?.props[SURVEYS_ACTIVATED]
+        const existingActivatedSurveys = this.get_property(SURVEYS_ACTIVATED)
         return existingActivatedSurveys ? existingActivatedSurveys : []
     }
 

@@ -15,8 +15,9 @@ import {
     SURVEY_SEEN_PREFIX,
 } from './utils/survey-utils'
 import { isNullish, isUndefined, isArray } from '@posthog/core'
+import { PostHogComponent } from './posthog-component'
 
-export class PostHogSurveys {
+export class PostHogSurveys extends PostHogComponent {
     // this is set to undefined until the remote config is loaded
     // then it's set to true if there are surveys to load
     // or false if there are no surveys to load
@@ -28,7 +29,9 @@ export class PostHogSurveys {
     private _isInitializingSurveys: boolean = false
     private _surveyCallbacks: SurveyCallback[] = []
 
-    constructor(private readonly _instance: PostHog) {
+    constructor(instance: PostHog) {
+        super(instance)
+
         // we set this to undefined here because we need the persistence storage for this type
         // but that's not initialized until loadIfEnabled is called.
         this._surveyEventReceiver = null
@@ -36,7 +39,7 @@ export class PostHogSurveys {
 
     onRemoteConfig(response: RemoteConfig) {
         // only load surveys if they are enabled and there are surveys to load
-        if (this._instance.config.disable_surveys) {
+        if (this.c.disable_surveys) {
             return
         }
 
@@ -72,11 +75,11 @@ export class PostHogSurveys {
             logger.info('Already initializing surveys, skipping...')
             return
         }
-        if (this._instance.config.disable_surveys) {
+        if (this.c.disable_surveys) {
             logger.info('Disabled. Not loading surveys.')
             return
         }
-        if (this._instance.config.cookieless_mode) {
+        if (this.c.cookieless_mode) {
             logger.info('Not loading surveys in cookieless mode.')
             return
         }
@@ -89,11 +92,11 @@ export class PostHogSurveys {
 
         // waiting for remote config to load
         // if surveys is forced enable (like external surveys), ignore the remote config and load surveys
-        if (isUndefined(this._isSurveysEnabled) && !this._instance.config.advanced_enable_surveys) {
+        if (isUndefined(this._isSurveysEnabled) && !this.c.advanced_enable_surveys) {
             return
         }
 
-        const isSurveysEnabled = this._isSurveysEnabled || this._instance.config.advanced_enable_surveys
+        const isSurveysEnabled = this._isSurveysEnabled || this.c.advanced_enable_surveys
 
         this._isInitializingSurveys = true
 
@@ -114,7 +117,7 @@ export class PostHogSurveys {
             }
 
             // If we reach here, we need to load the dependency
-            loadExternalDependency(this._instance, 'surveys', (err) => {
+            loadExternalDependency(this.i, 'surveys', (err) => {
                 if (err || !phExtensions.generateSurveys) {
                     this._handleSurveyLoadError('Could not load surveys script', err)
                 } else {
@@ -136,8 +139,8 @@ export class PostHogSurveys {
         generateSurveysFn: (instance: PostHog, isSurveysEnabled: boolean) => any,
         isSurveysEnabled: boolean
     ): void {
-        this._surveyManager = generateSurveysFn(this._instance, isSurveysEnabled)
-        this._surveyEventReceiver = new SurveyEventReceiver(this._instance)
+        this._surveyManager = generateSurveysFn(this.i, isSurveysEnabled)
+        this._surveyEventReceiver = new SurveyEventReceiver(this.i)
         logger.info('Surveys loaded successfully')
         this._notifySurveyCallbacks({ isLoaded: true })
     }
@@ -185,12 +188,12 @@ export class PostHogSurveys {
     getSurveys(callback: SurveyCallback, forceReload = false) {
         // In case we manage to load the surveys script, but config says not to load surveys
         // then we shouldn't return survey data
-        if (this._instance.config.disable_surveys) {
+        if (this.c.disable_surveys) {
             logger.info('Disabled. Not loading surveys.')
             return callback([])
         }
 
-        const existingSurveys = this._instance.get_property(SURVEYS)
+        const existingSurveys = this.i.get_property(SURVEYS)
         if (existingSurveys && !forceReload) {
             return callback(existingSurveys, {
                 isLoaded: true,
@@ -207,13 +210,10 @@ export class PostHogSurveys {
 
         try {
             this._isFetchingSurveys = true
-            this._instance._send_request({
-                url: this._instance.requestRouter.endpointFor(
-                    'api',
-                    `/api/surveys/?token=${this._instance.config.token}`
-                ),
+            this.i._send_request({
+                url: this.i.requestRouter.endpointFor('api', `/api/surveys/?token=${this.c.token}`),
                 method: 'GET',
-                timeout: this._instance.config.surveys_request_timeout_ms,
+                timeout: this.c.surveys_request_timeout_ms,
                 callback: (response) => {
                     this._isFetchingSurveys = false
                     const statusCode = response.statusCode
@@ -237,7 +237,7 @@ export class PostHogSurveys {
                         this._surveyEventReceiver?.register(eventOrActionBasedSurveys)
                     }
 
-                    this._instance.persistence?.register({ [SURVEYS]: surveys })
+                    this.reg_property({ [SURVEYS]: surveys })
                     return callback(surveys, {
                         isLoaded: true,
                     })

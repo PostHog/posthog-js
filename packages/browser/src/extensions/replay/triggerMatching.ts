@@ -2,10 +2,10 @@ import {
     SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
 } from '../../constants'
-import { PostHog } from '../../posthog-core'
 import { FlagVariant, RemoteConfig, SessionRecordingUrlTrigger } from '../../types'
 import { isNullish, isBoolean, isString, isObject } from '@posthog/core'
 import { window } from '../../utils/globals'
+import { PostHogComponent } from '../../posthog-component'
 
 export const DISABLED = 'disabled'
 export const SAMPLED = 'sampled'
@@ -120,13 +120,11 @@ export class PendingTriggerMatching implements TriggerStatusMatching {
     }
 }
 
-export class URLTriggerMatching implements TriggerStatusMatching {
+export class URLTriggerMatching extends PostHogComponent implements TriggerStatusMatching {
     _urlTriggers: SessionRecordingUrlTrigger[] = []
     _urlBlocklist: SessionRecordingUrlTrigger[] = []
 
     urlBlocked: boolean = false
-
-    constructor(private readonly _instance: PostHog) {}
 
     onRemoteConfig(response: RemoteConfig) {
         this._urlTriggers = response.sessionRecording?.urlTriggers || []
@@ -138,7 +136,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
             return TRIGGER_DISABLED
         }
 
-        const currentTriggerSession = this._instance?.get_property(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
+        const currentTriggerSession = this.get_property(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
         return currentTriggerSession === sessionId ? TRIGGER_ACTIVATED : TRIGGER_PENDING
     }
 
@@ -148,7 +146,7 @@ export class URLTriggerMatching implements TriggerStatusMatching {
         const eitherIsPending = urlTriggerStatus === TRIGGER_PENDING
 
         const result = eitherIsActivated ? TRIGGER_ACTIVATED : eitherIsPending ? TRIGGER_PENDING : TRIGGER_DISABLED
-        this._instance.register_for_session({
+        this.i.register_for_session({
             $sdk_debug_replay_url_trigger_status: result,
         })
         return result
@@ -187,11 +185,10 @@ export class URLTriggerMatching implements TriggerStatusMatching {
     }
 }
 
-export class LinkedFlagMatching implements TriggerStatusMatching {
+export class LinkedFlagMatching extends PostHogComponent implements TriggerStatusMatching {
     linkedFlag: string | FlagVariant | null = null
     linkedFlagSeen: boolean = false
     private _flaglistenerCleanup: () => void = () => {}
-    constructor(private readonly _instance: PostHog) {}
 
     triggerStatus(): TriggerStatus {
         let result = TRIGGER_PENDING
@@ -201,7 +198,7 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
         if (this.linkedFlagSeen) {
             result = TRIGGER_ACTIVATED
         }
-        this._instance.register_for_session({
+        this.i.register_for_session({
             $sdk_debug_replay_linked_flag_trigger_status: result,
         })
         return result
@@ -213,7 +210,7 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
         if (!isNullish(this.linkedFlag) && !this.linkedFlagSeen) {
             const linkedFlag = isString(this.linkedFlag) ? this.linkedFlag : this.linkedFlag.flag
             const linkedVariant = isString(this.linkedFlag) ? null : this.linkedFlag.variant
-            this._flaglistenerCleanup = this._instance.onFeatureFlags((_flags, variants) => {
+            this._flaglistenerCleanup = this.i.onFeatureFlags((_flags, variants) => {
                 const flagIsPresent = isObject(variants) && linkedFlag in variants
                 let linkedFlagMatches = false
                 if (flagIsPresent) {
@@ -240,10 +237,8 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
     }
 }
 
-export class EventTriggerMatching implements TriggerStatusMatching {
+export class EventTriggerMatching extends PostHogComponent implements TriggerStatusMatching {
     _eventTriggers: string[] = []
-
-    constructor(private readonly _instance: PostHog) {}
 
     onRemoteConfig(response: RemoteConfig) {
         this._eventTriggers = response.sessionRecording?.eventTriggers || []
@@ -254,7 +249,7 @@ export class EventTriggerMatching implements TriggerStatusMatching {
             return TRIGGER_DISABLED
         }
 
-        const currentTriggerSession = this._instance?.get_property(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
+        const currentTriggerSession = this.get_property(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
         return currentTriggerSession === sessionId ? TRIGGER_ACTIVATED : TRIGGER_PENDING
     }
 
@@ -266,7 +261,7 @@ export class EventTriggerMatching implements TriggerStatusMatching {
                 : eventTriggerStatus === TRIGGER_PENDING
                   ? TRIGGER_PENDING
                   : TRIGGER_DISABLED
-        this._instance.register_for_session({
+        this.i.register_for_session({
             $sdk_debug_replay_event_trigger_status: result,
         })
         return result

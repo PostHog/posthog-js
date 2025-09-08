@@ -12,6 +12,7 @@ import {
     window,
 } from '../../utils/globals'
 import { DISABLED, LAZY_LOADING, SessionRecordingStatus, TriggerType } from './triggerMatching'
+import { PostHogComponent } from '../../posthog-component'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
@@ -20,7 +21,7 @@ const logger = createLogger(LOGGER_PREFIX)
  * This only exists to let us test changes to sessionrecording.ts before rolling them out to everyone
  * it should not be depended on in other ways, since i'm going to delete it long before the end of September 2025
  */
-export class SessionRecordingWrapper {
+export class SessionRecordingWrapper extends PostHogComponent {
     _forceAllowLocalhostNetworkCapture: boolean = false
 
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
@@ -41,21 +42,23 @@ export class SessionRecordingWrapper {
         return this._lazyLoadedSessionRecording?.status || LAZY_LOADING
     }
 
-    constructor(private readonly _instance: PostHog) {
-        if (!this._instance.sessionManager) {
+    constructor(instance: PostHog) {
+        super(instance)
+
+        if (!this.i.sessionManager) {
             logger.error('started without valid sessionManager')
             throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
         }
 
-        if (this._instance.config.cookieless_mode === 'always') {
+        if (this.c.cookieless_mode === 'always') {
             throw new Error(LOGGER_PREFIX + ' cannot be used with cookieless_mode="always"')
         }
     }
 
     private get _isRecordingEnabled() {
-        const enabled_server_side = !!this._instance.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)
-        const enabled_client_side = !this._instance.config.disable_session_recording
-        const isDisabled = this._instance.config.disable_session_recording || this._instance.consent.isOptedOut()
+        const enabled_server_side = !!this.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)
+        const enabled_client_side = !this.c.disable_session_recording
+        const isDisabled = this.c.disable_session_recording || this.i.consent.isOptedOut()
         return window && enabled_server_side && enabled_client_side && !isDisabled
     }
 
@@ -100,16 +103,12 @@ export class SessionRecordingWrapper {
             !assignableWindow?.__PosthogExtensions__?.rrweb?.record ||
             !assignableWindow.__PosthogExtensions__?.initSessionRecording
         ) {
-            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
-                this._instance,
-                this._scriptName,
-                (err) => {
-                    if (err) {
-                        return logger.error('could not load recorder', err)
-                    }
-                    this._onScriptLoaded(startReason)
+            assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(this.i, this._scriptName, (err) => {
+                if (err) {
+                    return logger.error('could not load recorder', err)
                 }
-            )
+                this._onScriptLoaded(startReason)
+            })
         } else {
             this._onScriptLoaded(startReason)
         }
@@ -122,7 +121,7 @@ export class SessionRecordingWrapper {
     onRemoteConfig(response: RemoteConfig) {
         this._pendingRemoteConfig = response
 
-        const persistence = this._instance.persistence
+        const persistence = this.i.persistence
         if (persistence) {
             persistence.register({
                 [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response.sessionRecording,
@@ -148,10 +147,7 @@ export class SessionRecordingWrapper {
     }
 
     private get _scriptName(): PostHogExtensionKind {
-        return (
-            (this._instance?.persistence?.get_property(SESSION_RECORDING_SCRIPT_CONFIG)
-                ?.script as PostHogExtensionKind) || 'lazy-recorder'
-        )
+        return (this.get_property(SESSION_RECORDING_SCRIPT_CONFIG)?.script as PostHogExtensionKind) || 'lazy-recorder'
     }
 
     private _onScriptLoaded(startReason?: SessionStartReason) {
@@ -160,9 +156,7 @@ export class SessionRecordingWrapper {
         }
 
         if (!this._lazyLoadedSessionRecording) {
-            this._lazyLoadedSessionRecording = assignableWindow.__PosthogExtensions__?.initSessionRecording(
-                this._instance
-            )
+            this._lazyLoadedSessionRecording = assignableWindow.__PosthogExtensions__?.initSessionRecording(this.i)
             ;(this._lazyLoadedSessionRecording as any)._forceAllowLocalhostNetworkCapture =
                 this._forceAllowLocalhostNetworkCapture
 

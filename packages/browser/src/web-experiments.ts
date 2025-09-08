@@ -14,6 +14,7 @@ import { isMatchingRegex } from './utils/regex-utils'
 import { logger } from './utils/logger'
 import { isLikelyBot } from './utils/blocked-uas'
 import { getCampaignParams } from './utils/event-utils'
+import { PostHogComponent } from './posthog-component'
 
 export const webExperimentUrlValidationMap: Record<
     WebExperimentUrlMatchType,
@@ -29,11 +30,12 @@ export const webExperimentUrlValidationMap: Record<
     is_not: (conditionsUrl, location) => location.href !== conditionsUrl,
 }
 
-export class WebExperiments {
+export class WebExperiments extends PostHogComponent {
     private _flagToExperiments?: Map<string, WebExperiment>
 
-    constructor(private _instance: PostHog) {
-        this._instance.onFeatureFlags((flags: string[]) => {
+    constructor(instance: PostHog) {
+        super(instance)
+        this.i.onFeatureFlags((flags: string[]) => {
             this.onFeatureFlags(flags)
         })
     }
@@ -44,7 +46,7 @@ export class WebExperiments {
             return
         }
 
-        if (this._instance.config.disable_web_experiments) {
+        if (this.c.disable_web_experiments) {
             return
         }
 
@@ -59,7 +61,7 @@ export class WebExperiments {
         WebExperiments._logInfo('applying feature flags', flags)
         flags.forEach((flag) => {
             if (this._flagToExperiments && this._flagToExperiments?.has(flag)) {
-                const selectedVariant = this._instance.getFeatureFlag(flag) as unknown as string
+                const selectedVariant = this.i.getFeatureFlag(flag) as unknown as string
                 const webExperiment = this._flagToExperiments?.get(flag)
                 if (selectedVariant && webExperiment?.variants[selectedVariant]) {
                     this._applyTransforms(
@@ -91,7 +93,7 @@ export class WebExperiments {
     }
 
     loadIfEnabled() {
-        if (this._instance.config.disable_web_experiments) {
+        if (this.c.disable_web_experiments) {
             return
         }
 
@@ -115,7 +117,7 @@ export class WebExperiments {
                         this._flagToExperiments?.set(webExperiment.feature_flag_key, webExperiment)
                     }
 
-                    const selectedVariant = this._instance.getFeatureFlag(webExperiment.feature_flag_key)
+                    const selectedVariant = this.i.getFeatureFlag(webExperiment.feature_flag_key)
                     if (isString(selectedVariant) && webExperiment.variants[selectedVariant]) {
                         this._applyTransforms(
                             webExperiment.name,
@@ -137,20 +139,17 @@ export class WebExperiments {
     }
 
     public getWebExperiments(callback: WebExperimentsCallback, forceReload: boolean, previewing?: boolean) {
-        if (this._instance.config.disable_web_experiments && !previewing) {
+        if (this.c.disable_web_experiments && !previewing) {
             return callback([])
         }
 
-        const existingWebExperiments = this._instance.get_property(WEB_EXPERIMENTS)
+        const existingWebExperiments = this.get_property(WEB_EXPERIMENTS)
         if (existingWebExperiments && !forceReload) {
             return callback(existingWebExperiments)
         }
 
-        this._instance._send_request({
-            url: this._instance.requestRouter.endpointFor(
-                'api',
-                `/api/web_experiments/?token=${this._instance.config.token}`
-            ),
+        this.i._send_request({
+            url: this.i.requestRouter.endpointFor('api', `/api/web_experiments/?token=${this.c.token}`),
             method: 'GET',
             callback: (response) => {
                 if (response.statusCode !== 200 || !response.json) {
@@ -273,8 +272,8 @@ export class WebExperiments {
     }
 
     _is_bot(): boolean | undefined {
-        if (navigator && this._instance) {
-            return isLikelyBot(navigator, this._instance.config.custom_blocked_useragents)
+        if (navigator && this.i) {
+            return isLikelyBot(navigator, this.i.config.custom_blocked_useragents)
         } else {
             return undefined
         }

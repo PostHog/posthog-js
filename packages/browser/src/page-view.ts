@@ -1,8 +1,8 @@
 import { window } from './utils/globals'
-import { PostHog } from './posthog-core'
 import { clampToRange, isUndefined } from '@posthog/core'
 import { extend } from './utils'
 import { logger } from './utils/logger'
+import { PostHogComponent } from './posthog-component'
 
 interface PageViewEventProperties {
     $pageview_id?: string
@@ -28,20 +28,15 @@ interface PageViewEventProperties {
 // Practically, this means that to find the scroll properties for a given pageview, you need to find the event where
 // event name is $pageview or $pageleave and where $prev_pageview_id matches the original pageview event's id.
 
-export class PageViewManager {
+export class PageViewManager extends PostHogComponent {
     _currentPageview?: { timestamp: Date; pageViewId: string | undefined; pathname: string | undefined }
-    _instance: PostHog
-
-    constructor(instance: PostHog) {
-        this._instance = instance
-    }
 
     doPageView(timestamp: Date, pageViewId?: string): PageViewEventProperties {
         const response = this._previousPageViewProperties(timestamp, pageViewId)
 
         // On a pageview we reset the contexts
         this._currentPageview = { pathname: window?.location.pathname ?? '', pageViewId, timestamp }
-        this._instance.scrollManager.resetContext()
+        this.i.scrollManager.resetContext()
 
         return response
     }
@@ -66,9 +61,9 @@ export class PageViewManager {
             $prev_pageview_id: previousPageView.pageViewId,
         }
 
-        const scrollContext = this._instance.scrollManager.getContext()
+        const scrollContext = this.i.scrollManager.getContext()
 
-        if (scrollContext && !this._instance.config.disable_scroll_properties) {
+        if (scrollContext && !this.c.disable_scroll_properties) {
             let { maxScrollHeight, lastScrollY, maxScrollY, maxContentHeight, lastContentY, maxContentY } =
                 scrollContext
 

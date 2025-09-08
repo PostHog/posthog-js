@@ -1,9 +1,9 @@
-import { PostHog } from './posthog-core'
 import { find } from './utils'
 import { assignableWindow, navigator } from './utils/globals'
 import { cookieStore, localStore } from './storage'
 import { PersistentStore } from './types'
 import { isNoLike, isYesLike } from '@posthog/core'
+import { PostHogComponent } from './posthog-component'
 
 const OPT_OUT_PREFIX = '__ph_opt_in_out_'
 
@@ -16,14 +16,8 @@ export enum ConsentStatus {
 /**
  * ConsentManager provides tools for managing user consent as configured by the application.
  */
-export class ConsentManager {
+export class ConsentManager extends PostHogComponent {
     private _persistentStore?: PersistentStore
-
-    constructor(private _instance: PostHog) {}
-
-    private get _config() {
-        return this._instance.config
-    }
 
     public get consent(): ConsentStatus {
         if (this._getDnt()) {
@@ -34,7 +28,7 @@ export class ConsentManager {
     }
 
     public isOptedOut() {
-        if (this._config.cookieless_mode === 'always') {
+        if (this.c.cookieless_mode === 'always') {
             return true
         }
         // we are opted out if:
@@ -44,7 +38,7 @@ export class ConsentManager {
         return (
             this.consent === ConsentStatus.DENIED ||
             (this.consent === ConsentStatus.PENDING &&
-                (this._config.opt_out_capturing_by_default || this._config.cookieless_mode === 'on_reject'))
+                (this.c.opt_out_capturing_by_default || this.c.cookieless_mode === 'on_reject'))
         )
     }
 
@@ -60,18 +54,18 @@ export class ConsentManager {
         this._storage._set(
             this._storageKey,
             isOptedIn ? 1 : 0,
-            this._config.cookie_expiration,
-            this._config.cross_subdomain_cookie,
-            this._config.secure_cookie
+            this.c.cookie_expiration,
+            this.c.cross_subdomain_cookie,
+            this.c.secure_cookie
         )
     }
 
     public reset() {
-        this._storage._remove(this._storageKey, this._config.cross_subdomain_cookie)
+        this._storage._remove(this._storageKey, this.c.cross_subdomain_cookie)
     }
 
     private get _storageKey() {
-        const { token, opt_out_capturing_cookie_prefix, consent_persistence_name } = this._instance.config
+        const { token, opt_out_capturing_cookie_prefix, consent_persistence_name } = this.c
         if (consent_persistence_name) {
             return consent_persistence_name
         } else if (opt_out_capturing_cookie_prefix) {
@@ -93,7 +87,7 @@ export class ConsentManager {
 
     private get _storage() {
         if (!this._persistentStore) {
-            const persistenceType = this._config.opt_out_capturing_persistence_type
+            const persistenceType = this.c.opt_out_capturing_persistence_type
             this._persistentStore = persistenceType === 'localStorage' ? localStore : cookieStore
             const otherStorage = persistenceType === 'localStorage' ? cookieStore : localStore
 
@@ -103,7 +97,7 @@ export class ConsentManager {
                     this.optInOut(isYesLike(otherStorage._get(this._storageKey)))
                 }
 
-                otherStorage._remove(this._storageKey, this._config.cross_subdomain_cookie)
+                otherStorage._remove(this._storageKey, this.c.cross_subdomain_cookie)
             }
         }
 
@@ -111,7 +105,7 @@ export class ConsentManager {
     }
 
     private _getDnt(): boolean {
-        if (!this._config.respect_dnt) {
+        if (!this.c.respect_dnt) {
             return false
         }
         return !!find(

@@ -5,16 +5,17 @@ import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig }
 import { createLogger } from './utils/logger'
 import { propertyComparisons } from './utils/property-utils'
 import { isString, isArray } from '@posthog/core'
+import { PostHogComponent } from './posthog-component'
 
 const logger = createLogger('[Error tracking]')
 
-export class PostHogExceptions {
-    private readonly _instance: PostHog
+export class PostHogExceptions extends PostHogComponent {
     private _suppressionRules: ErrorTrackingSuppressionRule[] = []
 
     constructor(instance: PostHog) {
-        this._instance = instance
-        this._suppressionRules = this._instance.persistence?.get_property(ERROR_TRACKING_SUPPRESSION_RULES) ?? []
+        super(instance)
+
+        this._suppressionRules = this.get_property(ERROR_TRACKING_SUPPRESSION_RULES) ?? []
     }
 
     onRemoteConfig(response: RemoteConfig) {
@@ -24,8 +25,8 @@ export class PostHogExceptions {
         // store this in-memory in case persistence is disabled
         this._suppressionRules = suppressionRules
 
-        if (this._instance.persistence) {
-            this._instance.persistence.register({
+        if (this.i.persistence) {
+            this.i.persistence.register({
                 [ERROR_TRACKING_SUPPRESSION_RULES]: this._suppressionRules,
                 [ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS]: captureExtensionExceptions,
             })
@@ -33,8 +34,8 @@ export class PostHogExceptions {
     }
 
     private get _captureExtensionExceptions() {
-        const enabled_server_side = !!this._instance.get_property(ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS)
-        const enabled_client_side = this._instance.config.error_tracking.captureExtensionExceptions
+        const enabled_server_side = !!this.get_property(ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS)
+        const enabled_client_side = this.c.error_tracking.captureExtensionExceptions
         return enabled_client_side ?? enabled_server_side ?? false
     }
 
@@ -49,7 +50,7 @@ export class PostHogExceptions {
             return
         }
 
-        return this._instance.capture('$exception', properties, {
+        return this.i.capture('$exception', properties, {
             _noTruncate: true,
             _batchKey: 'exceptionEvent',
         })
