@@ -806,7 +806,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     get status(): SessionRecordingStatus {
-        // todo: should we be buffering, if we can load persisted /cached config and code while waiting for onRemoteConfig
+        // todo: this check should move into the status matcher
         if (!this._receivedFlags) {
             return BUFFERING
         }

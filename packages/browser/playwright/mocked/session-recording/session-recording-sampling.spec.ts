@@ -28,7 +28,7 @@ test.describe('Session recording - sampling', () => {
     }
     test.beforeEach(async ({ page, context }) => {
         await page.waitingForNetworkCausedBy({
-            urlPatternsToWaitFor: ['**/recorder.js*'],
+            urlPatternsToWaitFor: ['**/*recorder.js*'],
             action: async () => {
                 await start(startOptions, page, context)
             },
@@ -62,7 +62,7 @@ test.describe('Session recording - sampling', () => {
         await page.reload()
 
         await page.waitingForNetworkCausedBy({
-            urlPatternsToWaitFor: ['**/recorder.js*'],
+            urlPatternsToWaitFor: ['**/*recorder.js*'],
             action: async () => {
                 await start(
                     {
