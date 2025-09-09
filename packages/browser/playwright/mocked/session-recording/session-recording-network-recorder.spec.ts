@@ -63,7 +63,7 @@ test.beforeEach(async ({ context }) => {
             }
 
             await page.waitingForNetworkCausedBy({
-                urlPatternsToWaitFor: ['**/recorder.js*'],
+                urlPatternsToWaitFor: ['**/*recorder.js*'],
                 action: async () => {
                     await start(
                         {

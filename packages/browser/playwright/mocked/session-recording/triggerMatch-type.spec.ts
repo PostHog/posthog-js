@@ -43,7 +43,7 @@ test.describe('Session recording - trigger match types 30% sampling + event trig
 
         test.beforeEach(async ({ page, context }) => {
             await page.waitingForNetworkCausedBy({
-                urlPatternsToWaitFor: ['**/recorder.js*'],
+                urlPatternsToWaitFor: ['**/*recorder.js*'],
                 action: async () => {
                     await start(anyMatchOptions, page, context)
                 },
@@ -85,7 +85,7 @@ test.describe('Session recording - trigger match types 30% sampling + event trig
 
         test.beforeEach(async ({ page, context }) => {
             await page.waitingForNetworkCausedBy({
-                urlPatternsToWaitFor: ['**/recorder.js*'],
+                urlPatternsToWaitFor: ['**/*recorder.js*'],
                 action: async () => {
                     await start(allMatchOptions, page, context)
                 },
@@ -151,7 +151,7 @@ test.describe('Session recording - trigger match types 0% sampling + event trigg
 
         test.beforeEach(async ({ page, context }) => {
             await page.waitingForNetworkCausedBy({
-                urlPatternsToWaitFor: ['**/recorder.js*'],
+                urlPatternsToWaitFor: ['**/*recorder.js*'],
                 action: async () => {
                     await start(anyMatchOptions, page, context)
                 },
@@ -209,7 +209,7 @@ test.describe('Session recording - trigger match types 0% sampling + event trigg
 
         test.beforeEach(async ({ page, context }) => {
             await page.waitingForNetworkCausedBy({
-                urlPatternsToWaitFor: ['**/recorder.js*'],
+                urlPatternsToWaitFor: ['**/*recorder.js*'],
                 action: async () => {
                     await start(allMatchOptions, page, context)
                 },

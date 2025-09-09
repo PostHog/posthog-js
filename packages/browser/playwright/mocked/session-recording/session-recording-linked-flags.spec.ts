@@ -250,7 +250,7 @@ test.describe('Session recording - linked flags', () => {
         )
 
         await page.waitingForNetworkCausedBy({
-            urlPatternsToWaitFor: ['**/recorder.js*'],
+            urlPatternsToWaitFor: ['**/*recorder.js*'],
             action: async () => {
                 await page.evaluate(() => {
                     const ph = (window as WindowWithPostHog).posthog

@@ -57,7 +57,7 @@ test.describe('Session Recording - opting out', () => {
         await startWith({ opt_out_capturing_by_default: true }, page, context)
 
         await page.waitingForNetworkCausedBy({
-            urlPatternsToWaitFor: ['**/recorder.js*'],
+            urlPatternsToWaitFor: ['**/*recorder.js*'],
             action: async () => {
                 await page.evaluate(() => {
                     const ph = (window as WindowWithPostHog).posthog
@@ -80,7 +80,7 @@ test.describe('Session Recording - opting out', () => {
         await startWith({ disable_session_recording: true }, page, context)
 
         await page.waitingForNetworkCausedBy({
-            urlPatternsToWaitFor: ['**/recorder.js*'],
+            urlPatternsToWaitFor: ['**/*recorder.js*'],
             action: async () => {
                 await page.resetCapturedEvents()
                 await page.evaluate(() => {
