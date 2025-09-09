@@ -22,11 +22,17 @@
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
   },
   "devDependencies": {
-    "node-fetch": "^3.3.2",
+    "@pollyjs/adapter-fetch": "^6.0.7",
+    "@pollyjs/adapter-node-http": "^6.0.6",
+    "@pollyjs/core": "^6.0.6",
+    "@pollyjs/persister-fs": "^6.0.6",
     "@posthog-tooling/rollup-utils": "workspace:*",
     "@posthog-tooling/tsconfig-base": "workspace:*",
+    "@types/setup-polly-jest": "^0.5.5",
+    "jest": "catalog:",
+    "node-fetch": "^3.3.2",
     "posthog-node": "workspace:*",
-    "jest": "catalog:"
+    "setup-polly-jest": "^0.11.0"
   },
   "keywords": [
     "posthog",
