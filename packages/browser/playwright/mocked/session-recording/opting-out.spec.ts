@@ -32,7 +32,7 @@ async function startWith(config: Partial<PostHogConfig>, page: Page, context: Br
 test.describe('Session Recording - opting out', () => {
     test('does not capture events when config opts out by default', async ({ page, context }) => {
         // but no recorder or snapshot call, because we're opting out
-        void expect(page.waitForResponse('**/recorder.js*', { timeout: 250 })).rejects.toThrowError('Timeout')
+        void expect(page.waitForResponse('**/*recorder.js*', { timeout: 250 })).rejects.toThrowError('Timeout')
         void expect(page.waitForResponse('**/ses/*', { timeout: 250 })).rejects.toThrowError('Timeout')
         await startWith({ opt_out_capturing_by_default: true }, page, context)
 
@@ -43,7 +43,7 @@ test.describe('Session Recording - opting out', () => {
 
     test('does not capture recordings when config disables session recording', async ({ page, context }) => {
         // but no recorder or snapshot call, because we're opting out
-        void expect(page.waitForResponse('**/recorder.js*', { timeout: 250 })).rejects.toThrowError('Timeout')
+        void expect(page.waitForResponse('**/*recorder.js*', { timeout: 250 })).rejects.toThrowError('Timeout')
         void expect(page.waitForResponse('**/ses/*', { timeout: 250 })).rejects.toThrowError('Timeout')
 
         await startWith({ disable_session_recording: true }, page, context)

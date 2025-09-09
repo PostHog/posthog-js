@@ -44,7 +44,7 @@ test.describe('Session recording - linked flags', () => {
     }
 
     test('does not start when boolean linked flag is false', async ({ page, context }) => {
-        const recorderPromise = page.waitForResponse('**/recorder.js*')
+        const recorderPromise = page.waitForResponse('**/*recorder.js*')
         await startWithFlags(page, context, {
             options: {
                 opt_out_capturing_by_default: false,
@@ -73,7 +73,7 @@ test.describe('Session recording - linked flags', () => {
     })
 
     test('starts when boolean linked flag is true', async ({ page, context }) => {
-        const recorderPromise = page.waitForResponse('**/recorder.js*')
+        const recorderPromise = page.waitForResponse('**/*recorder.js*')
 
         await startWithFlags(page, context, {
             options: {
@@ -101,7 +101,7 @@ test.describe('Session recording - linked flags', () => {
     })
 
     test('starts when multi-variant linked flag is "any"', async ({ page, context }) => {
-        const recorderPromise = page.waitForResponse('**/recorder.js*')
+        const recorderPromise = page.waitForResponse('**/*recorder.js*')
 
         await startWithFlags(page, context, {
             options: {
@@ -138,7 +138,7 @@ test.describe('Session recording - linked flags', () => {
     })
 
     test('starts when multi-variant linked flag is matching variant', async ({ page, context }) => {
-        const recorderPromise = page.waitForResponse('**/recorder.js*')
+        const recorderPromise = page.waitForResponse('**/*recorder.js*')
 
         await startWithFlags(page, context, {
             options: {
@@ -180,7 +180,7 @@ test.describe('Session recording - linked flags', () => {
     })
 
     test('does not start when multi-variant linked flag is not matching variant', async ({ page, context }) => {
-        const recorderPromise = page.waitForResponse('**/recorder.js*')
+        const recorderPromise = page.waitForResponse('**/*recorder.js*')
 
         await startWithFlags(page, context, {
             options: {
