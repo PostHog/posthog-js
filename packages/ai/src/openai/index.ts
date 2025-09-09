@@ -11,6 +11,7 @@ import {
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
+import type { ZodTypeAny, infer as ZodInfer } from 'zod'
 import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
 import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
 import { extractPosthogParams } from './utils'
@@ -506,14 +507,26 @@ export class WrappedResponses extends Responses {
     }
   }
 
-  public parse<Params extends ResponsesCreateParamsBase, ParsedT = any>(
+  public parse<
+    Schema extends ZodTypeAny,
+    Params extends ResponsesCreateParamsBase & { text?: { format?: Schema } }
+  >(
     body: Params & MonitoringParams,
     options?: RequestOptions
-  ): APIPromise<ParsedResponse<ParsedT>> {
+  ): APIPromise<ParsedResponse<ZodInfer<Schema>>>
+
+  public parse<Params extends ResponsesCreateParamsBase>(
+    body: Params & MonitoringParams,
+    options?: RequestOptions
+  ): APIPromise<ParsedResponse<any>>
+
+  public parse<Params extends ResponsesCreateParamsBase>(
+    body: Params & MonitoringParams,
+    options?: RequestOptions
+  ): APIPromise<ParsedResponse<any>> {
     const { openAIParams, posthogParams } = extractPosthogParams(body)
     const startTime = Date.now()
 
-    // Create a temporary instance that bypasses our wrapped create method
     const originalCreate = super.create.bind(this)
     const originalSelf = this as any
     const tempCreate = originalSelf.create
@@ -575,7 +588,7 @@ export class WrappedResponses extends Responses {
         }
       )
 
-      return wrappedPromise as APIPromise<ParsedResponse<ParsedT>>
+      return wrappedPromise as APIPromise<ParsedResponse<any>>
     } finally {
       // Restore our wrapped create method
       originalSelf.create = tempCreate

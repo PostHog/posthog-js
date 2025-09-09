@@ -4,6 +4,7 @@ import { AIEvent, formatResponseOpenAI, MonitoringParams, sendEventToPosthog, wi
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
+import type { ZodTypeAny, infer as ZodInfer } from 'zod'
 import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
 import { extractPosthogParams } from './utils'
 
@@ -483,10 +484,23 @@ export class WrappedResponses extends AzureOpenAI.Responses {
     }
   }
 
-  public parse<Params extends OpenAIOrignal.Responses.ResponseCreateParams, ParsedT = any>(
+  public parse<
+    Schema extends ZodTypeAny,
+    Params extends OpenAIOrignal.Responses.ResponseCreateParams & { text?: { format?: Schema } }
+  >(
     body: Params & MonitoringParams,
     options?: RequestOptions
-  ): APIPromise<ParsedResponse<ParsedT>> {
+  ): APIPromise<ParsedResponse<ZodInfer<Schema>>>
+
+  public parse<Params extends OpenAIOrignal.Responses.ResponseCreateParams>(
+    body: Params & MonitoringParams,
+    options?: RequestOptions
+  ): APIPromise<ParsedResponse<any>>
+
+  public parse<Params extends OpenAIOrignal.Responses.ResponseCreateParams>(
+    body: Params & MonitoringParams,
+    options?: RequestOptions
+  ): APIPromise<ParsedResponse<any>> {
     const { openAIParams, posthogParams } = extractPosthogParams(body)
     const startTime = Date.now()
 
@@ -540,7 +554,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
       }
     )
 
-    return wrappedPromise as APIPromise<ParsedResponse<ParsedT>>
+    return wrappedPromise as APIPromise<ParsedResponse<any>>
   }
 }
 
