@@ -492,6 +492,11 @@ export class WrappedResponses extends AzureOpenAI.Responses {
     options?: RequestOptions
   ): APIPromise<ParsedResponse<ZodInfer<Schema>>>
 
+  public parse<Params extends OpenAIOrignal.Responses.ResponseCreateParams, ParsedT = any>(
+    body: Params & MonitoringParams,
+    options?: RequestOptions
+  ): APIPromise<ParsedResponse<ParsedT>>
+
   public parse<Params extends OpenAIOrignal.Responses.ResponseCreateParams>(
     body: Params & MonitoringParams,
     options?: RequestOptions

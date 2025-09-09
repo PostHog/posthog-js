@@ -515,6 +515,11 @@ export class WrappedResponses extends Responses {
     options?: RequestOptions
   ): APIPromise<ParsedResponse<ZodInfer<Schema>>>
 
+  public parse<Params extends ResponsesCreateParamsBase, ParsedT = any>(
+    body: Params & MonitoringParams,
+    options?: RequestOptions
+  ): APIPromise<ParsedResponse<ParsedT>>
+
   public parse<Params extends ResponsesCreateParamsBase>(
     body: Params & MonitoringParams,
     options?: RequestOptions
