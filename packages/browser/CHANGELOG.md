@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.262.0
+
+### Minor Changes
+
+- [#2296](https://github.com/PostHog/posthog-js/pull/2296) [`f9fe3ba`](https://github.com/PostHog/posthog-js/commit/f9fe3ba56c96ae3b6c0716ec24de68123422643f) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: switch replay default to lazy loading
+
 ## 1.261.8
 
 ### Patch Changes
