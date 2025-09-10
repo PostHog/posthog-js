@@ -16,6 +16,11 @@ export default function Home() {
             </Head>
             <div className="container">
                 <h1>Redux Todo List</h1>
+                <p style={{ marginBottom: '1rem' }}>
+                    <a href="/kea" style={{ color: '#0070f3', textDecoration: 'none' }}>
+                        → Try the Kea version
+                    </a>
+                </p>
                 <TodoInput />
                 <TodoFilters />
                 <TodoList />

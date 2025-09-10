@@ -7,5 +7,8 @@ As an example of how to use the posthog-js redux logging middleware
 ## To run it
 
 ```bash
-pnpm i && pnpm start
+pnpm i && pnpm dev
 ```
+
+then visit http://localhost:3000/redux
+or http://localhost:3000/kea
