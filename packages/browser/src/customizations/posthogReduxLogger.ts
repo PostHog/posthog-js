@@ -49,7 +49,7 @@ export interface MiddlewareAPI<D extends Dispatch = Dispatch, S = any> {
 
 // end of copied types
 
-export interface ReduxEvent {
+export interface StateEvent {
     type: string
     payload?: any
     timestamp: number
@@ -58,20 +58,20 @@ export interface ReduxEvent {
     nextState: any
 }
 
-export interface PostHogReduxLoggerConfig<S = any> {
-    maskReduxAction?: (action: UnknownAction) => UnknownAction | null
-    maskReduxState?: (state: S, action?: UnknownAction) => S
-    titleFunction?: (reduxEvent: ReduxEvent) => string
-    logger?: (title: string, reduxEvent: ReduxEvent) => void
+export interface PostHogStateLoggerConfig<S = any> {
+    maskAction?: (action: UnknownAction) => UnknownAction | null
+    maskState?: (state: S, action?: UnknownAction) => S
+    titleFunction?: (stateEvent: StateEvent) => string
+    logger?: (title: string, stateEvent: StateEvent) => void
     diffState?: boolean
     /**
-     * redux actions logging is token bucket rate limited to avoid flooding
+     * actions logging is token bucket rate limited to avoid flooding
      * this controls the rate limiter's refill rate, see BucketedRateLimiter docs for details
      * normally this is only changed with posthog support assistance
      */
     rateLimiterRefillRate?: number
     /**
-     * redux actions logging is token bucket rate limited to avoid flooding
+     * actions logging is token bucket rate limited to avoid flooding
      * this controls the rate limiter's bucket size, see BucketedRateLimiter docs for details
      * normally this is only changed with posthog support assistance
      */
@@ -80,26 +80,26 @@ export interface PostHogReduxLoggerConfig<S = any> {
      * separately invoked for the time taken to process each action
      * can be used to e.g. emit a log or event when there is a slow action
      */
-    onDuration?: (title: string, reduxEvent: ReduxEvent, durationMs: number) => void
+    onDuration?: (title: string, stateEvent: StateEvent, durationMs: number) => void
 }
 
 /**
  * Default title function for Redux events
  */
-function defaultTitleFunction(reduxEvent: ReduxEvent): string {
-    const { type, executionTimeMs } = reduxEvent
+function defaultTitleFunction(stateEvent: StateEvent): string {
+    const { type, executionTimeMs } = stateEvent
     const timeText = isNullish(executionTimeMs) ? '' : ` (${executionTimeMs.toFixed(2)}ms)`
     return `${type}${timeText}`
 }
 
 // we need a posthog logger for the rate limiter
-const phConsoleLogger: Logger = createLogger('[PostHog Redux RateLimiting Logger]')
+const phConsoleLogger: Logger = createLogger('[PostHog Action RateLimiting]')
 
-function defaultLogger(title: string, reduxEvent: ReduxEvent): void {
+function defaultLogger(title: string, stateEvent: StateEvent): void {
     // but the posthog logger swallows messages unless debug is on
     // so we don't want to use it in this default logger
     // eslint-disable-next-line no-console
-    console.log(title, reduxEvent)
+    console.log(title, stateEvent)
 }
 
 /**
@@ -198,6 +198,23 @@ const createDebouncedActionRateLimitedLogger = () => {
 const debouncedActionRateLimitedLogger = createDebouncedActionRateLimitedLogger()
 
 /**
+ * Creates a Kea plugin that logs actions and state changes to a provided logger
+ * This can be used as a plugin in any Kea setup to capture state changes
+ */
+export function posthogKeaLogger<S = any>(config: PostHogStateLoggerConfig<S> = {}) {
+    const middleware = posthogReduxLogger(config)
+
+    return {
+        name: 'posthog-kea-logger',
+        events: {
+            beforeReduxStore(options: any) {
+                options.middleware.push(middleware)
+            },
+        },
+    }
+}
+
+/**
  * Creates a Redux middleware that logs actions and state changes to a provided logger
  * This can be used as middleware in any Redux store to capture state changes
  *
@@ -207,13 +224,13 @@ const debouncedActionRateLimitedLogger = createDebouncedActionRateLimitedLogger(
  * e.g. will capture 1 rate limited action every 1 second until the burst ends
  */
 export function posthogReduxLogger<S = any>(
-    config: PostHogReduxLoggerConfig<S> = {}
+    config: PostHogStateLoggerConfig<S> = {}
     // the empty object is the recommended typing from redux docs
     //eslint-disable-next-line @typescript-eslint/no-empty-object-type
 ): ReduxMiddleware<{}, S> {
     const {
-        maskReduxAction = (action: UnknownAction) => action,
-        maskReduxState = (state: S) => state,
+        maskAction = (action: UnknownAction) => action,
+        maskState = (state: S) => state,
         titleFunction = defaultTitleFunction,
         logger = defaultLogger,
         diffState = true,
@@ -249,7 +266,7 @@ export function posthogReduxLogger<S = any>(
             // Get the state after the action
             const nextState = store.getState()
 
-            const maskedAction = maskReduxAction(typedAction)
+            const maskedAction = maskAction(typedAction)
 
             if (!maskedAction) {
                 return result
@@ -262,8 +279,8 @@ export function posthogReduxLogger<S = any>(
             } else {
                 // Apply masking to states
                 try {
-                    const maskedPrevState = maskReduxState(prevState, maskedAction)
-                    const maskedNextState = maskReduxState(nextState, maskedAction)
+                    const maskedPrevState = maskState(prevState, maskedAction)
+                    const maskedNextState = maskState(nextState, maskedAction)
 
                     type FilteredState = { 'invalid state'?: string } | (S & Record<string, any>)
                     let filteredPrevState: FilteredState
@@ -284,7 +301,7 @@ export function posthogReduxLogger<S = any>(
 
                     const { type, ...actionData } = maskedAction
 
-                    const reduxEvent: ReduxEvent = {
+                    const reduxEvent: StateEvent = {
                         type,
                         payload: actionData,
                         timestamp: Date.now(),
