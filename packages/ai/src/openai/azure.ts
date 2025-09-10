@@ -4,7 +4,7 @@ import { AIEvent, formatResponseOpenAI, MonitoringParams, sendEventToPosthog, wi
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
-import type { ZodTypeAny, infer as ZodInfer } from 'zod'
+import type { ZodTypeAny } from 'zod'
 import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
 import { extractPosthogParams } from './utils'
 
@@ -26,6 +26,9 @@ interface MonitoringOpenAIConfig {
 }
 
 type RequestOptions = Record<string, any>
+
+// Local helper to avoid importing Zod's `infer` symbol in d.ts output
+type InferZodSchema<SchemaT extends ZodTypeAny> = SchemaT['_output']
 
 export class PostHogAzureOpenAI extends AzureOpenAI {
   private readonly phClient: PostHog
@@ -490,7 +493,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
   >(
     body: Params & MonitoringParams,
     options?: RequestOptions
-  ): APIPromise<ParsedResponse<ZodInfer<Schema>>>
+  ): APIPromise<ParsedResponse<Schema extends { _output: infer O } ? O : any>>
 
   public parse<Params extends OpenAIOrignal.Responses.ResponseCreateParams, ParsedT = any>(
     body: Params & MonitoringParams,

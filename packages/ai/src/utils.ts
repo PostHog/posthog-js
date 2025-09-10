@@ -3,6 +3,7 @@ import { Buffer } from 'buffer'
 import OpenAIOrignal from 'openai'
 import AnthropicOriginal from '@anthropic-ai/sdk'
 import type { ChatCompletionTool } from 'openai/resources/chat/completions'
+import type { ResponseCreateParamsWithTools } from 'openai/lib/ResponsesParser'
 import type { Tool as GeminiTool } from '@google/genai'
 import type { FormattedMessage, FormattedContent, TokenUsage } from './types'
 import { version } from '../package.json'
@@ -42,7 +43,7 @@ export interface CostOverride {
 
 export const getModelParams = (
   params:
-    | ((ChatCompletionCreateParamsBase | MessageCreateParams | ResponseCreateParams | EmbeddingCreateParams) &
+    | ((ChatCompletionCreateParamsBase | MessageCreateParams | ResponseCreateParams | ResponseCreateParamsWithTools | EmbeddingCreateParams) &
         MonitoringParams)
     | null
 ): Record<string, any> => {
@@ -361,7 +362,7 @@ export type SendEventToPosthogParams = {
   baseURL: string
   httpStatus: number
   usage?: TokenUsage
-  params: (ChatCompletionCreateParamsBase | MessageCreateParams | ResponseCreateParams | EmbeddingCreateParams) &
+  params: (ChatCompletionCreateParamsBase | MessageCreateParams | ResponseCreateParams | ResponseCreateParamsWithTools | EmbeddingCreateParams) &
     MonitoringParams
   isError?: boolean
   error?: string
