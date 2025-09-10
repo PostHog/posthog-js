@@ -383,6 +383,9 @@ export class PostHogSurveys {
             logger.warn('Survey not found')
             return
         }
+        if (survey.appearance?.surveyPopupDelaySeconds && options.ignoreDelay) {
+            survey.appearance.surveyPopupDelaySeconds = 0
+        }
         if (options.ignoreConditions === false) {
             const canRender = this.canRenderSurvey(survey)
             if (!canRender.visible) {
@@ -394,12 +397,6 @@ export class PostHogSurveys {
             this.renderSurvey(survey, options.selector)
             return
         }
-        this._surveyManager.handlePopoverSurvey({
-            ...survey,
-            appearance: {
-                ...survey.appearance,
-                surveyPopupDelaySeconds: options.ignoreDelay ? 0 : survey.appearance?.surveyPopupDelaySeconds,
-            },
-        })
+        this._surveyManager.handlePopoverSurvey(survey)
     }
 }

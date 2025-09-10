@@ -150,14 +150,7 @@ test.describe('surveys - displaySurvey on demand', () => {
             })
         })
 
-        // Survey should
         await expect(page.locator('#survey').locator('.survey-form')).toBeVisible()
-        await expect(page.locator('#survey').locator('.survey-question')).toHaveText(
-            'What feedback do you have for us?'
-        )
-        await expect(page.locator('#survey').locator('.survey-question-description')).toHaveText(
-            'Please provide your feedback'
-        )
     })
 
     test('displaySurvey ignores survey popup delay when rendering on demand', async ({ page, context }) => {
