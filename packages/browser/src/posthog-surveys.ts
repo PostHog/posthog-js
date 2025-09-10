@@ -7,7 +7,6 @@ import {
     Survey,
     SurveyCallback,
     SurveyRenderReason,
-    SurveyType,
 } from './posthog-surveys-types'
 import { RemoteConfig } from './types'
 import { assignableWindow, document } from './utils/globals'
@@ -382,22 +381,5 @@ export class PostHogSurveys {
                 surveyPopupDelaySeconds: options.ignoreDelay ? 0 : survey.appearance?.surveyPopupDelaySeconds,
             },
         })
-    }
-
-    renderSurveyPopup(surveyId: string) {
-        if (isNullish(this._surveyManager)) {
-            logger.warn('init was not called')
-            return
-        }
-        const survey = this._getSurveyById(surveyId)
-        if (!survey) {
-            logger.warn('Survey not found')
-            return
-        }
-        if (survey.type === SurveyType.API) {
-            logger.warn('API surveys are not supported for renderSurveyPopup')
-            return
-        }
-        this._surveyManager.handlePopoverSurvey(survey)
     }
 }
