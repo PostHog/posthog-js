@@ -1,5 +1,11 @@
 # posthog-node
 
+## 5.8.3
+
+### Patch Changes
+
+- [#2306](https://github.com/PostHog/posthog-js/pull/2306) [`30873bc`](https://github.com/PostHog/posthog-js/commit/30873bcc6ee8a46a4c2811684a24ced425ecc6fc) Thanks [@haacked](https://github.com/haacked)! - Fix memory leak when calling getAllFlags and getAllFlagsAndPayloads
+
 ## 5.8.2
 
 ### Patch Changes
