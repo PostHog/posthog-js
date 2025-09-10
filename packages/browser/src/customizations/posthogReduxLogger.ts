@@ -26,6 +26,8 @@ export interface Dispatch<A extends UnknownAction = UnknownAction> {
  * A middleware is a higher-order function that composes a dispatch function
  * to return a new dispatch function. It often turns async actions into
  * actions.
+ *
+ * This matches Redux Toolkit's Middleware interface for compatibility.
  */
 export interface ReduxMiddleware<
     // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-object-type
@@ -33,7 +35,7 @@ export interface ReduxMiddleware<
     S = any,
     D extends Dispatch = Dispatch,
 > {
-    (api: MiddlewareAPI<D, S>): (next: D) => (action: any) => any
+    (api: MiddlewareAPI<D, S>): (next: (action: unknown) => unknown) => (action: unknown) => unknown
 }
 
 /**
@@ -225,8 +227,8 @@ export function posthogReduxLogger<S = any>(
     })
 
     return (store: MiddlewareAPI<Dispatch, S>) =>
-        (next: Dispatch) =>
-        (action: UnknownAction): UnknownAction => {
+        (next: (action: unknown) => unknown) =>
+        (action: unknown): unknown => {
             const typedAction = action as UnknownAction
             // Get the state before the action
             const prevState = store.getState()
