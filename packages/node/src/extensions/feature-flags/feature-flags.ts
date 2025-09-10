@@ -162,6 +162,9 @@ class FeatureFlagsPoller {
       ? flagKeysToExplicitlyEvaluate.map((key) => this.featureFlagsByKey[key]).filter(Boolean)
       : this.featureFlags
 
+    // Create a shared evaluation cache to prevent memory leaks when processing many flags
+    const sharedEvaluationCache: Record<string, FeatureFlagValue> = {}
+
     await Promise.all(
       flagsToEvaluate.map(async (flag) => {
         try {
@@ -170,7 +173,9 @@ class FeatureFlagsPoller {
             distinctId,
             groups,
             personProperties,
-            groupProperties
+            groupProperties,
+            undefined /* matchValue */,
+            sharedEvaluationCache
           )
           response[flag.key] = matchValue
           if (matchPayload) {
@@ -198,13 +203,17 @@ class FeatureFlagsPoller {
     groups: Record<string, string> = {},
     personProperties: Record<string, string> = {},
     groupProperties: Record<string, Record<string, string>> = {},
-    matchValue?: FeatureFlagValue
+    matchValue?: FeatureFlagValue,
+    evaluationCache?: Record<string, FeatureFlagValue>,
+    skipLoadCheck: boolean = false
   ): Promise<{
     value: FeatureFlagValue
     payload: JsonType | null
   }> {
-    // Always ensure flags are loaded for payload computation
-    await this.loadFeatureFlags()
+    // Only load flags if not already loaded and not skipping the check
+    if (!skipLoadCheck) {
+      await this.loadFeatureFlags()
+    }
 
     if (!this.loadedSuccessfullyOnce) {
       return { value: false, payload: null }
@@ -216,7 +225,14 @@ class FeatureFlagsPoller {
     if (matchValue !== undefined) {
       flagValue = matchValue
     } else {
-      flagValue = await this.computeFlagValueLocally(flag, distinctId, groups, personProperties, groupProperties)
+      flagValue = await this.computeFlagValueLocally(
+        flag,
+        distinctId,
+        groups,
+        personProperties,
+        groupProperties,
+        evaluationCache
+      )
     }
 
     // Always compute payload based on the final flagValue (whether provided or computed)
@@ -230,7 +246,8 @@ class FeatureFlagsPoller {
     distinctId: string,
     groups: Record<string, string> = {},
     personProperties: Record<string, string> = {},
-    groupProperties: Record<string, Record<string, string>> = {}
+    groupProperties: Record<string, Record<string, string>> = {},
+    evaluationCache: Record<string, FeatureFlagValue> = {}
   ): Promise<FeatureFlagValue> {
     if (flag.ensure_experience_continuity) {
       throw new InconclusiveMatchError('Flag has experience continuity enabled')
@@ -263,9 +280,9 @@ class FeatureFlagsPoller {
       }
 
       const focusedGroupProperties = groupProperties[groupName]
-      return await this.matchFeatureFlagProperties(flag, groups[groupName], focusedGroupProperties)
+      return await this.matchFeatureFlagProperties(flag, groups[groupName], focusedGroupProperties, evaluationCache)
     } else {
-      return await this.matchFeatureFlagProperties(flag, distinctId, personProperties)
+      return await this.matchFeatureFlagProperties(flag, distinctId, personProperties, evaluationCache)
     }
   }
 
