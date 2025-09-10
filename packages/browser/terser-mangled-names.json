@@ -110,7 +110,6 @@
         "_getSurveyById",
         "_getToolbarState",
         "_getWindowId",
-        "_handlePopoverSurvey",
         "_handleSurveyLoadError",
         "_handleWidget",
         "_hasActionOrEventTriggeredSurvey",

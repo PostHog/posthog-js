@@ -568,7 +568,7 @@ export class SurveyManager {
         }, forceReload)
     }
 
-    private _addSurveyToFocus(survey: Pick<Survey, 'id'>) {
+    private _addSurveyToFocus = (survey: Pick<Survey, 'id'>): void => {
         if (!isNull(this._surveyInFocus)) {
             logger.error(`Survey ${this._surveyInFocus} already in focus. Cannot add survey ${survey.id}.`)
         }
