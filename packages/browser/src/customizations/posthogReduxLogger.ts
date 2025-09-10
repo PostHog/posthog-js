@@ -108,7 +108,7 @@ function defaultLogger(title: string, stateEvent: StateEvent): void {
  */
 function getChangedStateKeys<S>(prevState: S, nextState: S): { prevState?: Partial<S>; nextState?: Partial<S> } {
     if (!isObject(prevState) || !isObject(nextState)) {
-        // we ony support objects as state, but can't guarantee that's what we'll get
+        // we only support objects as state, but can't guarantee that's what we'll get
         return {}
     }
 
