@@ -201,7 +201,7 @@ const debouncedActionRateLimitedLogger = createDebouncedActionRateLimitedLogger(
  * refills at a rate of one token / 1-second period
  * e.g. will capture 1 rate limited action every 1 second until the burst ends
  */
-export function posthogReduxLogger<S extends UnknownAction>(
+export function posthogReduxLogger<S = any>(
     config: PostHogReduxLoggerConfig<S> = {}
     // the empty object is the recommended typing from redux docs
     //eslint-disable-next-line @typescript-eslint/no-empty-object-type
