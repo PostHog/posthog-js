@@ -1,7 +1,14 @@
 import { SURVEYS } from './constants'
 import { SurveyManager } from './extensions/surveys'
 import { PostHog } from './posthog-core'
-import { Survey, SurveyCallback, SurveyRenderReason, SurveyType } from './posthog-surveys-types'
+import {
+    DisplaySurveyOptions,
+    DisplaySurveyType,
+    Survey,
+    SurveyCallback,
+    SurveyRenderReason,
+    SurveyType,
+} from './posthog-surveys-types'
 import { RemoteConfig } from './types'
 import { assignableWindow, document } from './utils/globals'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
@@ -290,12 +297,12 @@ export class PostHogSurveys {
         return this._surveyManager.checkSurveyEligibility(survey)
     }
 
-    canRenderSurvey(surveyId: string): SurveyRenderReason {
+    canRenderSurvey(survey: string | Survey): SurveyRenderReason {
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return { visible: false, disabledReason: 'SDK is not enabled or survey functionality is not yet loaded' }
         }
-        const eligibility = this._checkSurveyEligibility(surveyId)
+        const eligibility = this._checkSurveyEligibility(survey)
 
         return { visible: eligibility.eligible, disabledReason: eligibility.reason }
     }
@@ -325,7 +332,29 @@ export class PostHogSurveys {
         })
     }
 
-    renderSurvey(surveyId: string, selector: string) {
+    renderSurvey(surveyId: string | Survey, selector: string) {
+        if (isNullish(this._surveyManager)) {
+            logger.warn('init was not called')
+            return
+        }
+        const survey = typeof surveyId === 'string' ? this._getSurveyById(surveyId) : surveyId
+        if (!survey?.id) {
+            logger.warn('Survey not found')
+            return
+        }
+        if (!IN_APP_SURVEY_TYPES.includes(survey.type)) {
+            logger.warn(`Surveys of type ${survey.type} cannot be rendered in the app`)
+            return
+        }
+        const elem = document?.querySelector(selector)
+        if (!elem) {
+            logger.warn('Survey element not found')
+            return
+        }
+        this._surveyManager.renderSurvey(survey, elem)
+    }
+
+    displaySurvey(surveyId: string, options: DisplaySurveyOptions) {
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return
@@ -335,17 +364,24 @@ export class PostHogSurveys {
             logger.warn('Survey not found')
             return
         }
-        if (!IN_APP_SURVEY_TYPES.includes(survey.type)) {
-            logger.warn(`Surveys of type ${survey.type} cannot be rendered in the app`)
-            return
+        if (options.ignoreConditions === false) {
+            const canRender = this.canRenderSurvey(survey)
+            if (!canRender.visible) {
+                logger.warn('Survey is not eligible to be displayed: ', canRender.disabledReason)
+                return
+            }
+        }
+        if (options.displayType === DisplaySurveyType.Inline) {
+            this.renderSurvey(survey, options.selector)
             return
         }
-        const elem = document?.querySelector(selector)
-        if (!elem) {
-            logger.warn('Survey element not found')
-            return
-        }
-        this._surveyManager.renderSurvey(survey, elem)
+        this._surveyManager.handlePopoverSurvey({
+            ...survey,
+            appearance: {
+                ...survey.appearance,
+                surveyPopupDelaySeconds: options.ignoreDelay ? 0 : survey.appearance?.surveyPopupDelaySeconds,
+            },
+        })
     }
 
     renderSurveyPopup(surveyId: string) {
@@ -362,6 +398,6 @@ export class PostHogSurveys {
             logger.warn('API surveys are not supported for renderSurveyPopup')
             return
         }
-        this._surveyManager.handlePopoverSurvey(survey, true)
+        this._surveyManager.handlePopoverSurvey(survey)
     }
 }

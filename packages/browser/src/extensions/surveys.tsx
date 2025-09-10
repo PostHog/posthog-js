@@ -237,20 +237,16 @@ export class SurveyManager {
         }
     }
 
-    handlePopoverSurvey = (survey: Survey, ignoreDelay: boolean = false): void => {
+    public handlePopoverSurvey = (survey: Survey): void => {
         this._clearSurveyTimeout(survey.id)
         this._addSurveyToFocus(survey)
-        const delaySeconds = ignoreDelay ? 0 : survey.appearance?.surveyPopupDelaySeconds || 0
-        const surveyWithDelay = {
-            ...survey,
-            appearance: { ...survey.appearance, surveyPopupDelaySeconds: delaySeconds },
-        }
+        const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
         const { shadow } = retrieveSurveyShadow(survey, this._posthog)
-        if (delaySeconds <= 0 || ignoreDelay) {
+        if (delaySeconds <= 0) {
             return Preact.render(
                 <SurveyPopup
                     posthog={this._posthog}
-                    survey={surveyWithDelay}
+                    survey={survey}
                     removeSurveyFromFocus={this._removeSurveyFromFocus}
                 />,
                 shadow
@@ -376,6 +372,14 @@ export class SurveyManager {
             // If both are Always or neither is Always, sort by delay
             return (a.appearance?.surveyPopupDelaySeconds || 0) - (b.appearance?.surveyPopupDelaySeconds || 0)
         })
+    }
+
+    public renderPopover = (survey: Survey): void => {
+        const { shadow } = retrieveSurveyShadow(survey, this._posthog)
+        Preact.render(
+            <SurveyPopup posthog={this._posthog} survey={survey} removeSurveyFromFocus={this._removeSurveyFromFocus} />,
+            shadow
+        )
     }
 
     public renderSurvey = (survey: Survey, selector: Element): void => {
@@ -564,9 +568,9 @@ export class SurveyManager {
         }, forceReload)
     }
 
-    private _addSurveyToFocus = (survey: Pick<Survey, 'id'>): void => {
+    private _addSurveyToFocus(survey: Pick<Survey, 'id'>) {
         if (!isNull(this._surveyInFocus)) {
-            logger.error(`Survey ${[...this._surveyInFocus]} already in focus. Cannot add survey ${survey.id}.`)
+            logger.error(`Survey ${this._surveyInFocus} already in focus. Cannot add survey ${survey.id}.`)
         }
         this._surveyInFocus = survey.id
     }
