@@ -27,7 +27,14 @@ import { PostHogExceptions } from './posthog-exceptions'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import { PostHogSurveys } from './posthog-surveys'
-import { SurveyCallback, SurveyEventName, SurveyEventProperties, SurveyRenderReason } from './posthog-surveys-types'
+import {
+    DisplaySurveyOptions,
+    DisplaySurveyType,
+    SurveyCallback,
+    SurveyEventName,
+    SurveyEventProperties,
+    SurveyRenderReason,
+} from './posthog-surveys-types'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
@@ -1780,8 +1787,15 @@ export class PostHog {
     }
 
     /** Render a styled survey popup. Notice that this method ignores any delay or conditions set on the survey. */
-    renderSurveyPopup(surveyId: string): void {
-        this.surveys.renderSurveyPopup(surveyId)
+    displaySurvey(
+        surveyId: string,
+        options: DisplaySurveyOptions = {
+            ignoreDelay: false,
+            ignoreConditions: false,
+            displayType: DisplaySurveyType.Popover,
+        }
+    ): void {
+        this.surveys.displaySurvey(surveyId, options)
     }
 
     /**
