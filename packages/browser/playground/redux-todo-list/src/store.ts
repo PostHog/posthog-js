@@ -1,5 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit'
-import { posthogReplayReduxLogger } from './posthogReplayReduxLogger'
+import { posthogReduxLogger } from '../../../src/customizations/posthogReduxLogger'
 
 // Types
 export interface Todo {
@@ -319,7 +319,7 @@ export const todoReducer = (state: TodoState = initialState, action: TodoAction)
 }
 
 // Create PostHog Redux logger middleware
-const posthogMiddleware = posthogReplayReduxLogger({
+const posthogMiddleware = posthogReduxLogger({
     // Example: mask sensitive data from actions
     maskReduxAction: (action) => {
         // Return null to skip logging this action entirely
@@ -351,6 +351,12 @@ const posthogMiddleware = posthogReplayReduxLogger({
     //     // or disable logging entirely: () => {}
     //     // or log only errors: if (reduxEvent.type.includes('ERROR')) console.error(title, reduxEvent)
     // },
+    // Example: slow action logging
+    onDuration: (t, r, d) => {
+        if (d > 1500) {
+            console.error('SLOW ACTION DETECTED (' + d + 'ms): ', t, r)
+        }
+    },
 })
 
 // Create and export store with Redux Toolkit
