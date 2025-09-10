@@ -39,7 +39,10 @@ describe('Session ID manager', () => {
 
         persistence = {
             props: { [SESSION_ID]: undefined },
-            register: jest.fn(),
+            register: jest.fn().mockImplementation((props) => {
+                // Mock the behavior of register - it should update the props
+                Object.assign(persistence.props, props)
+            }),
             _disabled: false,
         }
         ;(sessionStore._is_supported as jest.Mock).mockReturnValue(true)
@@ -393,22 +396,69 @@ describe('Session ID manager', () => {
             expect(sessionIdManager['_enforceIdleTimeout']).toEqual(originalTimer)
         })
 
-        /** timer doesn't advance and fire this? */
-        it.skip('resets session id despite no activity after timeout', () => {
-            ;(uuidv7 as jest.Mock).mockImplementationOnce(() => 'originalUUID')
+        it('resets session when idle timeout is exceeded', async () => {
+            jest.useFakeTimers()
 
             const sessionIdManager = sessionIdMgr(persistence)
-            const { sessionId: originalSessionId } = sessionIdManager.checkAndGetSessionAndWindowId(
-                undefined,
-                timestamp
-            )
-            expect(originalSessionId).toBeDefined()
+            const resetSpy = jest.spyOn(sessionIdManager, 'resetSessionId')
 
-            jest.advanceTimersByTime(DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS * 1.1 + 1)
+            // Start with a fresh session
+            sessionIdManager.checkAndGetSessionAndWindowId(false, timestamp)
 
-            const { sessionId: finalSessionId } = sessionIdManager.checkAndGetSessionAndWindowId(undefined, timestamp)
-            expect(finalSessionId).toBeDefined()
-            expect(finalSessionId).not.toEqual(originalSessionId)
+            // Set up persistence to simulate inactivity - session was last active long ago
+            const idleTimestamp = timestamp - (sessionIdManager.sessionTimeoutMs + 1000)
+            persistence.props[SESSION_ID] = [idleTimestamp, 'oldSessionID', idleTimestamp]
+
+            // Fast-forward time to trigger the idle timeout timer
+            const idleTimeoutMs = sessionIdManager.sessionTimeoutMs * 1.1
+            jest.advanceTimersByTime(idleTimeoutMs + 1000)
+
+            // Timer should have fired and called resetSessionId
+            expect(resetSpy).toHaveBeenCalled()
+
+            // After reset, persistence.register should have been called with null values
+            expect(persistence.register).toHaveBeenCalledWith({ [SESSION_ID]: [null, null, null] })
+
+            // Next call should generate a new session due to no session ID
+            const newSessionData = sessionIdManager.checkAndGetSessionAndWindowId(false)
+            expect(newSessionData.sessionId).toBe('newUUID')
+            expect(newSessionData.sessionId).not.toEqual('oldSessionID')
+            expect(newSessionData.changeReason?.noSessionId).toBe(true)
+
+            jest.useRealTimers()
+        })
+
+        it('timer checks current session activity before resetting', async () => {
+            jest.useFakeTimers()
+
+            const sessionIdManager = sessionIdMgr(persistence)
+            const resetSpy = jest.spyOn(sessionIdManager, 'resetSessionId')
+
+            // Mock _getSessionId to control what the timer sees
+            const getSessionIdSpy = jest.spyOn(sessionIdManager as any, '_getSessionId')
+
+            // Start with a fresh session
+            sessionIdManager.checkAndGetSessionAndWindowId(false, timestamp)
+
+            // Initially set up an idle session
+            const idleTimestamp = timestamp - (sessionIdManager.sessionTimeoutMs + 1000)
+            getSessionIdSpy.mockReturnValue([idleTimestamp, 'sharedSessionID', timestamp])
+
+            // Fast-forward time almost to when timer fires
+            const idleTimeoutMs = sessionIdManager.sessionTimeoutMs * 1.1
+            jest.advanceTimersByTime(idleTimeoutMs - 100)
+
+            // Before timer fires, change mock to return recent activity (simulating another window updating)
+            const recentTimestamp = new Date().getTime() - 1000 // 1 second ago
+            getSessionIdSpy.mockReturnValue([recentTimestamp, 'sharedSessionID', timestamp])
+
+            // Let the timer fire
+            jest.advanceTimersByTime(200)
+
+            // The timer should NOT have reset the session because it found recent activity
+            expect(resetSpy).not.toHaveBeenCalled()
+
+            jest.useRealTimers()
         })
     })
 })

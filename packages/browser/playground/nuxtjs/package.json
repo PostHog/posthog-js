@@ -9,11 +9,11 @@
         "postinstall": "nuxt prepare"
     },
     "devDependencies": {
-        "@types/node": "^18",
+        "@types/node": "^20",
         "nuxt": "^3.16.2"
     },
     "dependencies": {
         "posthog-js": "file:../../dist/"
     },
-    "packageManager": "pnpm@9.15.4"
+    "packageManager": "pnpm@10.12.4"
 }

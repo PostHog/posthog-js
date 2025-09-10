@@ -1,16 +1,7 @@
 import Config from '../config'
-import { isUndefined } from './type-utils'
+import { isUndefined } from '@posthog/core'
 import { assignableWindow, window } from './globals'
-
-export type Logger = {
-    _log: (level: 'log' | 'warn' | 'error', ...args: any[]) => void
-    info: (...args: any[]) => void
-    warn: (...args: any[]) => void
-    error: (...args: any[]) => void
-    critical: (...args: any[]) => void
-    uninitializedWarning: (methodName: string) => void
-    createLogger: (prefix: string) => Logger
-}
+import type { Logger } from '@posthog/core'
 
 const _createLogger = (prefix: string): Logger => {
     const logger: Logger = {

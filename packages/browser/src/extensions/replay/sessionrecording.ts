@@ -26,6 +26,7 @@ import {
     Properties,
     RemoteConfig,
     type SessionRecordingOptions,
+    SessionStartReason,
 } from '../../types'
 import {
     type customEvent,
@@ -36,24 +37,33 @@ import {
     RecordPlugin,
 } from '@rrweb/types'
 
-import { isBoolean, isFunction, isNullish, isNumber, isObject, isUndefined } from '../../utils/type-utils'
 import { createLogger } from '../../utils/logger'
 import { assignableWindow, document, PostHogExtensionKind, window } from '../../utils/globals'
 import { buildNetworkRequestOptions } from './config'
 import { isLocalhost } from '../../utils/request-utils'
 import { MutationThrottler } from './mutation-throttler'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
-import { clampToRange } from '../../utils/number-utils'
+import {
+    clampToRange,
+    includes,
+    isBoolean,
+    isFunction,
+    isNullish,
+    isNumber,
+    isObject,
+    isUndefined,
+} from '@posthog/core'
 import Config from '../../config'
-import { includes } from '../../utils/string-utils'
 import { addEventListener } from '../../utils'
 import { sampleOnProperty } from '../sampling'
 import {
+    ACTIVE,
     allMatchSessionRecordingStatus,
     AndTriggerMatching,
     anyMatchSessionRecordingStatus,
     BUFFERING,
     DISABLED,
+    EventTriggerMatching,
     LinkedFlagMatching,
     nullMatchSessionRecordingStatus,
     OrTriggerMatching,
@@ -65,9 +75,8 @@ import {
     TRIGGER_PENDING,
     TriggerStatusMatching,
     TriggerType,
+    URLTriggerMatching,
 } from './triggerMatching'
-import { EventTriggerMatching, ACTIVE } from './triggerMatching'
-import { URLTriggerMatching } from './triggerMatching'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
@@ -75,16 +84,6 @@ const logger = createLogger(LOGGER_PREFIX)
 function getRRWebRecord(): rrwebRecord | undefined {
     return assignableWindow?.__PosthogExtensions__?.rrweb?.record
 }
-
-type SessionStartReason =
-    | 'sampling_overridden'
-    | 'recording_initialized'
-    | 'linked_flag_matched'
-    | 'linked_flag_overridden'
-    | typeof SAMPLED
-    | 'session_id_changed'
-    | 'url_trigger_matched'
-    | 'event_trigger_matched'
 
 const BASE_ENDPOINT = '/s/'
 
@@ -360,8 +359,14 @@ export class SessionRecording {
 
         return {
             enabled,
-            fps: clampToRange(fps, 0, MAX_CANVAS_FPS, 'canvas recording fps', DEFAULT_CANVAS_FPS),
-            quality: clampToRange(quality, 0, MAX_CANVAS_QUALITY, 'canvas recording quality', DEFAULT_CANVAS_QUALITY),
+            fps: clampToRange(fps, 0, MAX_CANVAS_FPS, logger.createLogger('canvas recording fps'), DEFAULT_CANVAS_FPS),
+            quality: clampToRange(
+                quality,
+                0,
+                MAX_CANVAS_QUALITY,
+                logger.createLogger('canvas recording quality'),
+                DEFAULT_CANVAS_QUALITY
+            ),
         }
     }
 
@@ -454,8 +459,8 @@ export class SessionRecording {
             logger.error('started without valid sessionManager')
             throw new Error(LOGGER_PREFIX + ' started without valid sessionManager. This is a bug.')
         }
-        if (this._instance.config.__preview_experimental_cookieless_mode) {
-            throw new Error(LOGGER_PREFIX + ' cannot be used with __preview_experimental_cookieless_mode.')
+        if (this._instance.config.cookieless_mode === 'always') {
+            throw new Error(LOGGER_PREFIX + ' cannot be used with cookieless_mode="always"')
         }
 
         this._linkedFlagMatching = new LinkedFlagMatching(this._instance)

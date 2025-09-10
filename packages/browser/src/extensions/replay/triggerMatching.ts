@@ -4,8 +4,7 @@ import {
 } from '../../constants'
 import { PostHog } from '../../posthog-core'
 import { FlagVariant, RemoteConfig, SessionRecordingUrlTrigger } from '../../types'
-import { isBoolean, isObject, isString } from '../../utils/type-utils'
-import { isNullish } from '../../utils/type-utils'
+import { isNullish, isBoolean, isString, isObject } from '@posthog/core'
 import { window } from '../../utils/globals'
 
 export const DISABLED = 'disabled'
@@ -13,6 +12,7 @@ export const SAMPLED = 'sampled'
 export const ACTIVE = 'active'
 export const BUFFERING = 'buffering'
 export const PAUSED = 'paused'
+export const LAZY_LOADING = 'lazy_loading'
 
 const TRIGGER = 'trigger'
 export const TRIGGER_ACTIVATED = TRIGGER + '_activated'
@@ -47,7 +47,7 @@ export type TriggerStatus = (typeof triggerStatuses)[number]
  * the sample rate determined this session should be sent to the server.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const sessionRecordingStatuses = [DISABLED, SAMPLED, ACTIVE, BUFFERING, PAUSED] as const
+const sessionRecordingStatuses = [DISABLED, SAMPLED, ACTIVE, BUFFERING, PAUSED, LAZY_LOADING] as const
 export type SessionRecordingStatus = (typeof sessionRecordingStatuses)[number]
 
 function sessionRecordingUrlTriggerMatches(url: string, triggers: SessionRecordingUrlTrigger[]) {

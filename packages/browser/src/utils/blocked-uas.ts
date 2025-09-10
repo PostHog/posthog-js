@@ -37,6 +37,7 @@ export const DEFAULT_BLOCKED_UA_STRS = [
     'trendictionbot',
     'turnitin',
     'twitterbot',
+    'vercel-screenshot',
     'vercelbot',
     'yahoo! slurp',
     'yandexbot',

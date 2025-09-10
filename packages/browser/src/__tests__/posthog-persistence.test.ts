@@ -2,10 +2,17 @@
 import { PostHogPersistence } from '../posthog-persistence'
 import { INITIAL_PERSON_INFO, SESSION_ID, USER_STATE } from '../constants'
 import { PostHogConfig } from '../types'
-import Mock = jest.Mock
 import { PostHog } from '../posthog-core'
 import { window } from '../utils/globals'
 import { uuidv7 } from '../uuidv7'
+import {
+    localPlusCookieStore,
+    resetLocalStorageSupported,
+    resetSessionStorageSupported,
+    sessionStore,
+} from '../storage'
+import { defaultPostHog } from './helpers/posthog-instance'
+import Mock = jest.Mock
 
 let referrer = '' // No referrer by default
 Object.defineProperty(document, 'referrer', { get: () => referrer })
@@ -265,5 +272,58 @@ describe('persistence', () => {
             expect(window.sessionStorage.getItem(persistenceKey)).toBeTruthy()
             expect(document.cookie).toEqual('')
         })
+    })
+})
+
+describe('posthog instance persistence', () => {
+    beforeEach(() => {
+        resetSessionStorageSupported()
+        resetLocalStorageSupported()
+    })
+    it('should not write to storage if opt_out_persistence_by_default and opt_out_capturing_by_default is true', () => {
+        const sessionSpy = jest.spyOn(sessionStore, '_set')
+        const localPlusCookieSpy = jest.spyOn(localPlusCookieStore, '_set')
+
+        // init posthog while opting out
+        defaultPostHog().init(
+            uuidv7(),
+            {
+                opt_out_persistence_by_default: true,
+                opt_out_capturing_by_default: true,
+                persistence: 'localStorage+cookie',
+            },
+            uuidv7()
+        )
+
+        // we do one call to check if session storage is supported, but don't actually store anything
+        // the important thing is that we don't store the session id or window id, etc. This test was added alongside
+        // a fix which prevented this
+        const sessionCalls = sessionSpy.mock.calls.filter(([key]) => key !== '__support__')
+        const localPlusCookieCalls = localPlusCookieSpy.mock.calls.filter(([key]) => key !== '__support__')
+
+        expect(sessionCalls).toEqual([])
+        expect(localPlusCookieCalls).toEqual([])
+    })
+
+    it('should write to storage if opt_out_persistence_by_default and opt_out_capturing_by_default is false', () => {
+        const sessionSpy = jest.spyOn(sessionStore, '_set')
+        const localPlusCookieSpy = jest.spyOn(localPlusCookieStore, '_set')
+
+        // init posthog while opting out
+        defaultPostHog().init(
+            uuidv7(),
+            {
+                opt_out_persistence_by_default: false,
+                opt_out_capturing_by_default: false,
+                persistence: 'localStorage+cookie',
+            },
+            uuidv7()
+        )
+
+        const sessionCalls = sessionSpy.mock.calls.filter(([key]) => key !== '__support__')
+        const localPlusCookieCalls = localPlusCookieSpy.mock.calls.filter(([key]) => key !== '__support__')
+
+        expect(sessionCalls.length).toBeGreaterThan(0)
+        expect(localPlusCookieCalls.length).toBeGreaterThan(0)
     })
 })

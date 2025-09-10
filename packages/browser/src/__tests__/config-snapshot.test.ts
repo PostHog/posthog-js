@@ -2,7 +2,7 @@ import ts from 'typescript'
 import path from 'path'
 import { PostHog } from '../posthog-core'
 import { PostHogConfig } from '../types'
-import { isFunction } from '../utils/type-utils'
+import { isFunction } from '@posthog/core'
 
 type ProcessedType = string | Record<string, string | string[] | Record<string, any> | any[]> | ProcessedType[]
 function extractTypeInfo(filePath: string, typeName: string): string {

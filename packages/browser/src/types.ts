@@ -1,37 +1,14 @@
 import type { recordOptions } from './extensions/replay/types/rrweb'
 import type { SegmentAnalytics } from './extensions/segment-integration'
 import { PostHog } from './posthog-core'
+import { KnownUnsafeEditableEvent } from '@posthog/core'
 import { Survey } from './posthog-surveys-types'
+import { SAMPLED } from './extensions/replay/triggerMatching'
 
 export type Property = any
 export type Properties = Record<string, Property>
 
 export const COPY_AUTOCAPTURE_EVENT = '$copy_autocapture'
-
-export const knownUnsafeEditableEvent = [
-    '$snapshot',
-    '$pageview',
-    '$pageleave',
-    '$set',
-    'survey dismissed',
-    'survey sent',
-    'survey shown',
-    '$identify',
-    '$groupidentify',
-    '$create_alias',
-    '$$client_ingestion_warning',
-    '$web_experiment_applied',
-    '$feature_enrollment_update',
-    '$feature_flag_called',
-] as const
-
-/**
- * These events can be processed by the `beforeCapture` function
- * but can cause unexpected confusion in data.
- *
- * Some features of PostHog rely on receiving 100% of these events
- */
-export type KnownUnsafeEditableEvent = (typeof knownUnsafeEditableEvent)[number]
 
 /**
  * These are known events PostHog events that can be processed by the `beforeCapture` function
@@ -277,6 +254,8 @@ export type BeforeSendFn = (cr: CaptureResult | null) => CaptureResult | null
 
 export type ConfigDefaults = '2025-05-24' | 'unset'
 
+export type ExternalIntegrationKind = 'intercom' | 'crispChat'
+
 /**
  * Configuration options for the PostHog JavaScript SDK.
  * @see https://posthog.com/docs/libraries/js#config
@@ -474,11 +453,18 @@ export interface PostHogConfig {
     disable_cookie?: boolean
 
     /**
-     * Determines whether PostHog should disable surveys.
+     * Determines whether PostHog should disable all surveys functionality.
      *
      * @default false
      */
     disable_surveys: boolean
+
+    /**
+     * Determines whether PostHog should disable automatic display of surveys. If this is true, popup or widget surveys will not be shown when display conditions are met.
+     *
+     * @default false
+     */
+    disable_surveys_automatic_display: boolean
 
     /**
      * Determines whether PostHog should disable web experiments.
@@ -535,13 +521,6 @@ export interface PostHogConfig {
     secure_cookie: boolean
 
     /**
-     * Determines whether PostHog should capture IP addresses.
-     *
-     * @default true
-     */
-    ip: boolean
-
-    /**
      * Determines if users should be opted out of PostHog tracking by default,
      * requiring additional logic to opt them into capturing by calling `posthog.opt_in_capturing()`.
      *
@@ -573,13 +552,17 @@ export interface PostHogConfig {
      */
     opt_out_useragent_filter: boolean
 
+    /** @deprecated Use `consent_persistence_name` instead. This will be removed in a future major version. **/
+    opt_out_capturing_cookie_prefix: string | null
+
     /**
-     * Determines the prefix for the cookie used to store the information about whether users are opted out of capturing.
-     * When `null`, it falls back to the default prefix found in `consent.ts`.
+     * Determines the key for the cookie / local storage used to store the information about whether users are opted in/out of capturing.
+     * When `null`, we used a key based on your token.
      *
      * @default null
+     * @see `ConsentManager._storageKey`
      */
-    opt_out_capturing_cookie_prefix: string | null
+    consent_persistence_name: string | null
 
     /**
      * Determines if users should be opted in to site apps.
@@ -691,17 +674,23 @@ export interface PostHogConfig {
     mask_all_text: boolean
 
     /**
-     * Prevent autocapture from capturing personal data properties.
-     * These include campaign parameters, UTM parameters, and other parameters that could be considered personal data under e.g. GDPR.
-     *
+     * Mask personal data properties from the current URL.
+     * This will mask personal data properties such as advertising IDs (gclid, fbclid, etc.), and you can also add
+     * custom properties to mask with `custom_personal_data_properties`.
      * @default false
+     * @see {PERSONAL_DATA_CAMPAIGN_PARAMS} - Default campaign parameters that are masked by default.
+     * @see {PostHogConfig.custom_personal_data_properties} - Custom list of personal data properties to mask.
      */
     mask_personal_data_properties: boolean
 
     /**
      * Custom list of personal data properties to mask.
      *
+     * E.g. if you added `email` to this list, then any `email` property in the URL will be masked.
+     * https://www.example.com/login?email=john.doe%40example.com => https://www.example.com/login?email=<MASKED>
+     *
      * @default []
+     * @see {PostHogConfig.mask_personal_data_properties} - Must be enabled for this to take effect.
      */
     custom_personal_data_properties: string[]
 
@@ -773,6 +762,14 @@ export interface PostHogConfig {
      * @default false
      */
     advanced_only_evaluate_survey_feature_flags: boolean
+    /**
+     * When this is enabled, surveys will always be initialized, regardless of the /flags response or remote config settings.
+     * This is useful if you want to use surveys but disable all other flag-dependent functionality.
+     * Used internally for displaying external surveys without making a /flags request.
+     *
+     * @default false
+     */
+    advanced_enable_surveys: boolean
 
     /**
      * Sets timeout for fetching feature flags
@@ -951,13 +948,29 @@ export interface PostHogConfig {
      */
     request_queue_config?: RequestQueueConfig
 
+    /**
+     * Used to set-up external integrations with PostHog data - such as session replays, distinct id, etc.
+     */
+    integrations?: Record<ExternalIntegrationKind, boolean>
+
+    /**
+     * Enables cookieless mode. In this mode, PostHog will not set any cookies, or use session or local storage. User
+     * identity is handled by generating a privacy-preserving hash on PostHog's servers.
+     * - 'always' - enable cookieless mode immediately on startup, use this if you do not intend to show a cookie banner
+     * - 'on_reject' - enable cookieless mode only if the user rejects cookies, use this if you want to show a cookie banner. If the user accepts cookies, cookieless mode will not be used, and PostHog will use cookies and local storage as usual.
+     *
+     * Note that you MUST enable cookieless mode in your PostHog project's settings, otherwise all your cookieless events will be ignored. We plan to remove this requirement in the future.
+     * */
+    cookieless_mode?: 'always' | 'on_reject'
+
     // ------- PREVIEW CONFIGS -------
 
     /**
      * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * Whether to wrap fetch and add tracing headers to the request
+     * A list of hostnames for which to inject PostHog tracing headers to all requests
+     * (X-POSTHOG-DISTINCT-ID, X-POSTHOG-SESSION-ID, X-POSTHOG-WINDOW-ID)
      * */
-    __add_tracing_headers?: boolean
+    __add_tracing_headers?: string[]
 
     /**
      * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
@@ -967,17 +980,25 @@ export interface PostHogConfig {
 
     /**
      * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
-     * Whether to send a sentinel value for distinct id, device id, and session id, which will be replaced server-side by a cookieless hash
-     * */
-    __preview_experimental_cookieless_mode?: boolean
-
-    /**
-     * PREVIEW - MAY CHANGE WITHOUT WARNING - DO NOT USE IN PRODUCTION
      * Whether to use the new /flags/ endpoint
      * */
     __preview_flags_v2?: boolean
 
+    /**
+     * PREVIEW - MAY CHANGE WITHOUT WARNING - ONLY USE WHEN TALKING TO POSTHOG SUPPORT
+     * Enables deprecated eager loading of session recording code, not just rrweb and network plugin
+     * we are switching the default to lazy loading because the bundle will ultimately be 18% smaller then
+     * keeping this around for a few days in case there are unexpected consequences that testing did not uncover
+     * */
+    __preview_eager_load_replay?: boolean
+
     // ------- RETIRED CONFIGS - NO REPLACEMENT OR USAGE -------
+
+    /**
+     * @deprecated - does nothing
+     * was present only for PostHog testing of replay lazy loading
+     * */
+    __preview_lazy_load_replay?: boolean
 
     /** @deprecated - NOT USED ANYMORE, kept here for backwards compatibility reasons */
     api_method?: string
@@ -987,9 +1008,21 @@ export interface PostHogConfig {
 
     /** @deprecated - NOT USED ANYMORE, kept here for backwards compatibility reasons */
     inapp_link_new_window?: boolean
+
+    /**
+     * @deprecated - THIS OPTION HAS NO EFFECT, kept here for backwards compatibility reasons.
+     * Use a custom transformation or "Discard IP data" project setting instead: @see https://posthog.com/tutorials/web-redact-properties#hiding-customer-ip-address.
+     */
+    ip: boolean
 }
 
 export interface ErrorTrackingOptions {
+    /**
+     * Decide whether exceptions thrown by browser extensions should be captured
+     *
+     * @default false
+     */
+    captureExtensionExceptions?: boolean
     /**
      * ADVANCED: alters the refill rate for the token bucket mutation throttling
      * Normally only altered alongside posthog support guidance.
@@ -1365,6 +1398,7 @@ export interface RemoteConfig {
      */
     errorTracking?: {
         autocaptureExceptions?: boolean
+        captureExtensionExceptions?: boolean
         suppressionRules?: ErrorTrackingSuppressionRule[]
     }
 
@@ -1718,3 +1752,13 @@ export interface ErrorTrackingSuppressionRuleValue {
     value: string | string[]
     type: string
 }
+
+export type SessionStartReason =
+    | 'sampling_overridden'
+    | 'recording_initialized'
+    | 'linked_flag_matched'
+    | 'linked_flag_overridden'
+    | typeof SAMPLED
+    | 'session_id_changed'
+    | 'url_trigger_matched'
+    | 'event_trigger_matched'

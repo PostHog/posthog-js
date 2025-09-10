@@ -1,0 +1,68 @@
+{
+  "name": "@posthog/nextjs-config",
+  "version": "1.3.0",
+  "description": "NextJS configuration helper for Posthog 🦔",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PostHog/posthog-js.git",
+    "directory": "packages/nextjs-config"
+  },
+  "author": {
+    "name": "PostHog",
+    "email": "hey@posthog.com",
+    "url": "https://posthog.com"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "prepublishOnly": "pnpm lint && pnpm build",
+    "clean": "rimraf dist",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "build": "rslib build",
+    "test:unit": "jest",
+    "dev": "rslib build --watch",
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@posthog/cli": "^0.4.4",
+    "semver": "^7.7.2"
+  },
+  "keywords": [
+    "posthog",
+    "nextjs"
+  ],
+  "devDependencies": {
+    "@posthog-tooling/rollup-utils": "workspace:*",
+    "@posthog-tooling/tsconfig-base": "workspace:*",
+    "@rslib/core": "catalog:",
+    "@types/node": "^22.15.23",
+    "@types/semver": "^7.7.0",
+    "jest": "catalog:",
+    "next": "^15.4.1",
+    "ts-jest": "catalog:"
+  },
+  "peerDependencies": {
+    "next": ">12.1.0"
+  },
+  "files": [
+    "dist/"
+  ]
+}

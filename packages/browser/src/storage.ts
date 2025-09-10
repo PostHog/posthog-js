@@ -8,7 +8,7 @@ import {
     SESSION_RECORDING_IS_SAMPLED,
 } from './constants'
 
-import { isNull, isUndefined } from './utils/type-utils'
+import { isNull, isUndefined } from '@posthog/core'
 import { logger } from './utils/logger'
 import { window, document } from './utils/globals'
 import { uuidv7 } from './uuidv7'
@@ -170,6 +170,9 @@ export const cookieStore: PersistentStore = {
     },
 
     _remove: function (name, cross_subdomain) {
+        if (!document?.cookie) {
+            return
+        }
         try {
             cookieStore._set(name, '', -1, cross_subdomain)
         } catch {
@@ -179,6 +182,9 @@ export const cookieStore: PersistentStore = {
 }
 
 let _localStorage_supported: boolean | null = null
+export const resetLocalStorageSupported = () => {
+    _localStorage_supported = null
+}
 
 export const localStore: PersistentStore = {
     _is_supported: function () {

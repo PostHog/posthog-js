@@ -77,6 +77,26 @@ describe('reset()', () => {
         )
     })
 
+    it('resets feature flags internal state', () => {
+        instance.featureFlags.receivedFeatureFlags({
+            featureFlags: { 'test-flag': true, 'another-flag': 'variant' },
+            featureFlagPayloads: {},
+        })
+
+        expect(instance.featureFlags.hasLoadedFlags).toBe(true)
+        expect(instance.featureFlags.getFlags()).toEqual(['test-flag', 'another-flag'])
+
+        instance.reset()
+
+        expect(instance.featureFlags.hasLoadedFlags).toBe(false)
+        expect(instance.featureFlags.getFlags()).toEqual([])
+
+        const mockCallback = jest.fn()
+        instance.featureFlags.onFeatureFlags(mockCallback)
+
+        expect(mockCallback).not.toHaveBeenCalled()
+    })
+
     describe('when calling reset(true)', () => {
         it('does reset the device id', () => {
             const initialDeviceId = instance.get_property('$device_id')

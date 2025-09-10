@@ -279,13 +279,18 @@
     padding: 1px 0;
     border: none;
 
+    & label,
+    & .response-choice {
+        color: inherit;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
     & label {
         /* The clickable label area that contains the input */
         cursor: pointer;
-        display: flex;
-        gap: 8px;
         font-size: 13px;
-        align-items: center;
 
         &:hover {
             &:not(:has(input:checked)) {

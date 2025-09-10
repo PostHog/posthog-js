@@ -1,0 +1,101 @@
+{
+  "name": "@posthog/ai",
+  "version": "6.3.2",
+  "description": "PostHog Node.js AI integrations",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PostHog/posthog-js.git",
+    "directory": "packages/ai"
+  },
+  "main": "dist/index.cjs",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "license": "MIT",
+  "scripts": {
+    "clean": "rimraf dist",
+    "test:unit": "jest",
+    "lint": "eslint src tests",
+    "lint:fix": "eslint src tests --fix",
+    "build": "rollup -c",
+    "dev": "rollup -c --watch",
+    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
+    "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz"
+  },
+  "devDependencies": {
+    "node-fetch": "^3.3.2",
+    "@posthog-tooling/rollup-utils": "workspace:*",
+    "@posthog-tooling/tsconfig-base": "workspace:*",
+    "posthog-node": "workspace:*",
+    "jest": "catalog:"
+  },
+  "keywords": [
+    "posthog",
+    "ai",
+    "openai",
+    "anthropic",
+    "gemini",
+    "llm",
+    "observability"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@ai-sdk/provider": "^2.0.0",
+    "@anthropic-ai/sdk": "^0.36.3",
+    "@google/genai": "^1.1.0",
+    "@langchain/core": "^0.3.37",
+    "ai": "^5.0.4",
+    "langchain": "^0.3.15",
+    "openai": "^5.0.0",
+    "uuid": "^11.0.5",
+    "zod": "^3.25.0"
+  },
+  "peerDependencies": {
+    "posthog-node": "^5.0.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "require": "./dist/index.cjs",
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.ts"
+    },
+    "./anthropic": {
+      "require": "./dist/anthropic/index.cjs",
+      "import": "./dist/anthropic/index.mjs",
+      "types": "./dist/anthropic/index.d.ts"
+    },
+    "./gemini": {
+      "require": "./dist/gemini/index.cjs",
+      "import": "./dist/gemini/index.mjs",
+      "types": "./dist/gemini/index.d.ts"
+    },
+    "./openai": {
+      "require": "./dist/openai/index.cjs",
+      "import": "./dist/openai/index.mjs",
+      "types": "./dist/openai/index.d.ts"
+    },
+    "./vercel": {
+      "require": "./dist/vercel/index.cjs",
+      "import": "./dist/vercel/index.mjs",
+      "types": "./dist/vercel/index.d.ts"
+    },
+    "./langchain": {
+      "require": "./dist/langchain/index.cjs",
+      "import": "./dist/langchain/index.mjs",
+      "types": "./dist/langchain/index.d.ts"
+    }
+  },
+  "directories": {
+    "lib": "lib",
+    "test": "tests"
+  },
+  "author": "PostHog",
+  "bugs": {
+    "url": "https://github.com/PostHog/posthog-js-lite/issues"
+  },
+  "homepage": "https://github.com/PostHog/posthog-js-lite#readme"
+}

@@ -8,7 +8,7 @@ import {
     SurveyAppearance,
     SurveyQuestionType,
 } from '../../../posthog-surveys-types'
-import { isArray, isNull, isNumber, isString } from '../../../utils/type-utils'
+import { isArray, isNull, isNumber, isString } from '@posthog/core'
 import { dissatisfiedEmoji, neutralEmoji, satisfiedEmoji, veryDissatisfiedEmoji, verySatisfiedEmoji } from '../icons'
 import { getDisplayOrderChoices, useSurveyContext } from '../surveys-extension-utils'
 import { BottomSection } from './BottomSection'
@@ -81,6 +81,7 @@ export function OpenTextQuestion({
 }: CommonQuestionProps & {
     question: BasicSurveyQuestion
 }) {
+    const { isPreviewMode } = useSurveyContext()
     const inputRef = useRef<HTMLTextAreaElement>(null)
     const [text, setText] = useState<string>(() => {
         if (isString(initialValue)) {
@@ -91,9 +92,11 @@ export function OpenTextQuestion({
 
     useEffect(() => {
         setTimeout(() => {
-            inputRef.current?.focus()
+            if (!isPreviewMode) {
+                inputRef.current?.focus()
+            }
         }, 100)
-    }, [])
+    }, [isPreviewMode])
 
     const htmlFor = `surveyQuestion${displayQuestionIndex}`
 
@@ -453,15 +456,17 @@ export function MultipleChoiceQuestion({
 
                         return (
                             <label className={isOpenChoice ? 'choice-option-open' : ''} key={idx}>
-                                <input
-                                    type={isSingleChoiceQuestion ? 'radio' : 'checkbox'}
-                                    name={inputId}
-                                    checked={isChecked}
-                                    onChange={() => handleChoiceChange(choice, isOpenChoice)}
-                                    id={inputId}
-                                    aria-controls={openInputId}
-                                />
-                                <span>{isOpenChoice ? `${choice}:` : choice}</span>
+                                <div className="response-choice">
+                                    <input
+                                        type={isSingleChoiceQuestion ? 'radio' : 'checkbox'}
+                                        name={inputId}
+                                        checked={isChecked}
+                                        onChange={() => handleChoiceChange(choice, isOpenChoice)}
+                                        id={inputId}
+                                        aria-controls={openInputId}
+                                    />
+                                    <span>{isOpenChoice ? `${choice}:` : choice}</span>
+                                </div>
                                 {isOpenChoice && (
                                     <input
                                         type="text"

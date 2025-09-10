@@ -12,7 +12,7 @@ import {
     PERSISTENCE_RESERVED_PROPERTIES,
 } from './constants'
 
-import { isEmptyObject, isObject, isUndefined } from './utils/type-utils'
+import { isUndefined } from '@posthog/core'
 import {
     getCampaignParams,
     getInitialPersonPropsFromInfo,
@@ -21,7 +21,7 @@ import {
     getSearchInfo,
 } from './utils/event-utils'
 import { logger } from './utils/logger'
-import { stripLeadingDollar } from './utils/string-utils'
+import { stripLeadingDollar, isEmptyObject, isObject } from '@posthog/core'
 
 const CASE_INSENSITIVE_PERSISTENCE_TYPES: readonly Lowercase<PostHogConfig['persistence']>[] = [
     'cookie',
@@ -60,7 +60,11 @@ export class PostHogPersistence {
     private _default_expiry: number | undefined
     private _cross_subdomain: boolean | undefined
 
-    constructor(config: PostHogConfig) {
+    /**
+     * @param {PostHogConfig} config initial PostHog configuration
+     * @param {boolean=} isDisabled should persistence be disabled (e.g. because of consent management)
+     */
+    constructor(config: PostHogConfig, isDisabled?: boolean) {
         this._config = config
         this.props = {}
         this._campaign_params_saved = false
@@ -70,8 +74,12 @@ export class PostHogPersistence {
         if (config.debug) {
             logger.info('Persistence loaded', config['persistence'], { ...this.props })
         }
-        this.update_config(config, config)
+        this.update_config(config, config, isDisabled)
         this.save()
+    }
+
+    public isDisabled(): boolean {
+        return !!this._disabled
     }
 
     private _buildStorage(config: PostHogConfig) {
@@ -308,9 +316,9 @@ export class PostHogPersistence {
         return props
     }
 
-    update_config(config: PostHogConfig, oldConfig: PostHogConfig): void {
+    update_config(config: PostHogConfig, oldConfig: PostHogConfig, isDisabled?: boolean): void {
         this._default_expiry = this._expire_days = config['cookie_expiration']
-        this.set_disabled(config['disable_persistence'])
+        this.set_disabled(config['disable_persistence'] || !!isDisabled)
         this.set_cross_subdomain(config['cross_subdomain_cookie'])
         this.set_secure(config['secure_cookie'])
 

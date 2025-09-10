@@ -3,8 +3,9 @@
 // to allow es5/IE11 support
 
 // it doesn't include recorder which doesn't support IE11,
-// and it doesn't include web-vitals which doesn't support IE11
+// and it doesn't include "web-vitals" which doesn't support IE11
 
+import 'core-js/features/object/entries'
 import 'core-js/features/object/from-entries'
 
 import './surveys'

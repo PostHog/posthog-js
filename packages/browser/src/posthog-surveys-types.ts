@@ -67,6 +67,7 @@ export enum SurveyType {
     Popover = 'popover',
     API = 'api',
     Widget = 'widget',
+    ExternalSurvey = 'external_survey',
 }
 
 export type SurveyQuestion = BasicSurveyQuestion | LinkSurveyQuestion | RatingSurveyQuestion | MultipleSurveyQuestion
@@ -181,8 +182,11 @@ export interface Survey {
               value?: string
           }[]
         | null
+    // the linked flag key is the flag key that is used to link the survey to a flag
     linked_flag_key: string | null
     targeting_flag_key: string | null
+    // the internal targeting flag key is the flag key that is used to target users who have seen the survey
+    // eg survey-targeting-<survey-id>
     internal_targeting_flag_key: string | null
     questions: SurveyQuestion[]
     appearance: SurveyAppearance | null
@@ -202,6 +206,7 @@ export interface Survey {
         } | null
         deviceTypes?: string[]
         deviceTypesMatchType?: PropertyMatchType
+        linkedFlagVariant?: string
     } | null
     start_date: string | null
     end_date: string | null

@@ -1,3 +1,206 @@
+# posthog-js
+
+## 1.262.0
+
+### Minor Changes
+
+- [#2296](https://github.com/PostHog/posthog-js/pull/2296) [`f9fe3ba`](https://github.com/PostHog/posthog-js/commit/f9fe3ba56c96ae3b6c0716ec24de68123422643f) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: switch replay default to lazy loading
+
+## 1.261.8
+
+### Patch Changes
+
+- [#2276](https://github.com/PostHog/posthog-js/pull/2276) [`97961e4`](https://github.com/PostHog/posthog-js/commit/97961e4b7a0914385bcb200cc0c32302ce911cae) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - `isFeatureEnabled` now returns `undefined` (instead of `false`) for missing or disabled feature flags, aligning with the documentation. Previously, `undefined` was returned only before flags had loaded, and missing/disabled flags returned `false`. This change clarifies the difference between flags that exist but don't match (`false`) and flags that don’t exist or are disabled (`undefined`).
+
+## 1.261.7
+
+### Patch Changes
+
+- [#2284](https://github.com/PostHog/posthog-js/pull/2284) [`bdfe450`](https://github.com/PostHog/posthog-js/commit/bdfe4501899e57879cbda677f84d2a21a4ea9a7c) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: order of operations when replay does pageview fallback
+
+## 1.261.6
+
+### Patch Changes
+
+- [#2274](https://github.com/PostHog/posthog-js/pull/2274) [`50fe70a`](https://github.com/PostHog/posthog-js/commit/50fe70ae4f22c08c7afe6fabd4430dbe7b946c67) Thanks [@robbie-c](https://github.com/robbie-c)! - Fix initial pageview not firing when using cookieless_mode: "always"
+
+## 1.261.5
+
+### Patch Changes
+
+- [#2270](https://github.com/PostHog/posthog-js/pull/2270) [`980f5c4`](https://github.com/PostHog/posthog-js/commit/980f5c483f059bc3551975c9094f19ff04a985b0) Thanks [@lucasheriques](https://github.com/lucasheriques)! - fix: hosted surveys should ignore any delays
+
+## 1.261.4
+
+### Patch Changes
+
+- [#2268](https://github.com/PostHog/posthog-js/pull/2268) [`999c63f`](https://github.com/PostHog/posthog-js/commit/999c63f56dea80efc32d45ffbdf897b20aa97547) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: session recorder wrapper had private field that should be public"
+
+## 1.261.3
+
+### Patch Changes
+
+- [#2267](https://github.com/PostHog/posthog-js/pull/2267) [`f2ac956`](https://github.com/PostHog/posthog-js/commit/f2ac9569d80a10961919d51a8132e0153b471a69) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: allow testing of the new lazy loaded session recorder
+
+## 1.261.2
+
+### Patch Changes
+
+- [#2266](https://github.com/PostHog/posthog-js/pull/2266) [`9470d97`](https://github.com/PostHog/posthog-js/commit/9470d974dde28648559b3d853ab20331f6ef36b1) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: don't mangle variables to `# posthog-js
+
+- [#2265](https://github.com/PostHog/posthog-js/pull/2265) [`2487d12`](https://github.com/PostHog/posthog-js/commit/2487d12548699e10f7a7f0f6917b3ae602bf80d9) Thanks [@pauldambra](https://github.com/pauldambra)! - chore: update to latest rollup and terser
+
+## 1.261.1
+
+### Patch Changes
+
+- [#2263](https://github.com/PostHog/posthog-js/pull/2263) [`41d3890`](https://github.com/PostHog/posthog-js/commit/41d3890b72b880576a57d1e1133fdd16744835d4) Thanks [@pauldambra](https://github.com/pauldambra)! - chore: add unused lazy loaded session recorder to prime CDN
+
+## 1.261.0
+
+### Minor Changes
+
+- [#2238](https://github.com/PostHog/posthog-js/pull/2238) [`be2104b`](https://github.com/PostHog/posthog-js/commit/be2104bbafc0a78dfd5c735aae4ae126e3a3253e) Thanks [@robbie-c](https://github.com/robbie-c)! - Improve Consent APIs
+
+### Patch Changes
+
+- Updated dependencies [[`1981815`](https://github.com/PostHog/posthog-js/commit/19818159b7074098150bc79cfa2962761a14cb46)]:
+    - @posthog/core@1.0.2
+
+## 1.260.3
+
+### Patch Changes
+
+- [#2219](https://github.com/PostHog/posthog-js/pull/2219) [`44d10c4`](https://github.com/PostHog/posthog-js/commit/44d10c46c5378fa046320b7c50bd046eb1e75994) Thanks [@daibhin](https://github.com/daibhin)! - add @posthog/core dependency
+
+- Updated dependencies [[`44d10c4`](https://github.com/PostHog/posthog-js/commit/44d10c46c5378fa046320b7c50bd046eb1e75994)]:
+    - @posthog/core@1.0.1
+
+## 1.260.2
+
+### Patch Changes
+
+- [#2236](https://github.com/PostHog/posthog-js/pull/2236) [`f3269f3`](https://github.com/PostHog/posthog-js/commit/f3269f3f26447ef7f032f925de7b1082b213867a) Thanks [@lucasheriques](https://github.com/lucasheriques)! - fix: set survey person properties on SDK <1.249.2
+
+## 1.260.1
+
+### Patch Changes
+
+- [#2215](https://github.com/PostHog/posthog-js/pull/2215) [`1e95d47`](https://github.com/PostHog/posthog-js/commit/1e95d47669af8c5824c4105906f0727bd67610c1) Thanks [@lucasheriques](https://github.com/lucasheriques)! - fix: always set surveySeen on local storage for old posthog-js versions
+
+## 1.260.0
+
+### Minor Changes
+
+- [#2185](https://github.com/PostHog/posthog-js/pull/2185) [`fda2932`](https://github.com/PostHog/posthog-js/commit/fda2932d0c4835d205fe0e0d0efb724b964f9f9b) Thanks [@robbie-c](https://github.com/robbie-c)! - Support 2 cookieless modes - 'always' and 'on_reject'
+
+### Patch Changes
+
+- [#2200](https://github.com/PostHog/posthog-js/pull/2200) [`4387da4`](https://github.com/PostHog/posthog-js/commit/4387da42148a6b96c7bf1f9f5a2c529a3eb4dd8a) Thanks [@daibhin](https://github.com/daibhin)! - expose captured exception to React error boundary fallback
+
+## 1.259.0
+
+### Minor Changes
+
+- [#2192](https://github.com/PostHog/posthog-js/pull/2192) [`dec3f44`](https://github.com/PostHog/posthog-js/commit/dec3f443465787216ee3015aa254c5312659ad3f) Thanks [@marandaneto](https://github.com/marandaneto)! - survey support for feature flag variants
+
+## 1.258.6
+
+### Patch Changes
+
+- [#2194](https://github.com/PostHog/posthog-js/pull/2194) [`faa2f28`](https://github.com/PostHog/posthog-js/commit/faa2f2868762c527148d9a59098d4eae7f0b3ffb) Thanks [@realguse](https://github.com/realguse)! - block vercel screenshot bot
+
+## 1.258.5
+
+### Patch Changes
+
+- [#2178](https://github.com/PostHog/posthog-js/pull/2178) [`db569fa`](https://github.com/PostHog/posthog-js/commit/db569fa952b4536280602db87bc12a0fa51923fa) Thanks [@lucasheriques](https://github.com/lucasheriques)! - - Fix surveys loading with advanced_enable_surveys config
+
+## 1.258.4
+
+### Patch Changes
+
+- [#2172](https://github.com/PostHog/posthog-js/pull/2172) [`ac254d9`](https://github.com/PostHog/posthog-js/commit/ac254d945be598314c365310ed7c13047edc9ead) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Adds a new config, `advanced_enable_surveys`, to always enable surveys funcionality in the SDK
+
+## 1.258.3
+
+### Patch Changes
+
+- [#2171](https://github.com/PostHog/posthog-js/pull/2171) [`14adc01`](https://github.com/PostHog/posthog-js/commit/14adc01875c87f6be10e70204307003d9d0f941c) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Fix early access features accumulation in persistence
+
+- [#2170](https://github.com/PostHog/posthog-js/pull/2170) [`262cc5c`](https://github.com/PostHog/posthog-js/commit/262cc5cc9364605e31788e5370b0663507e4c832) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Removes the `_renderExternalSurvey` method which is not needed anymore
+
+## 1.258.2
+
+### Patch Changes
+
+- [#2111](https://github.com/PostHog/posthog-js/pull/2111) [`7114593`](https://github.com/PostHog/posthog-js/commit/711459317bf807fa1d21be2f7067182952ea2a5e) Thanks [@pauldambra](https://github.com/pauldambra)! - checks for session activity in other windows when timing out in any particular window, avoids a race condition when proactively marking a session as idle
+
+## 1.258.1
+
+### Patch Changes
+
+- [#2120](https://github.com/PostHog/posthog-js/pull/2120) [`c7b03cd`](https://github.com/PostHog/posthog-js/commit/c7b03cddb621988323238b22acdf8faefd93742e) Thanks [@lucasheriques](https://github.com/lucasheriques)! - Updates the renderSurvey and getActiveMatchingSurveys methods to not take any external surveys into consideration
+
+## 1.258.0
+
+### Minor Changes
+
+- [#2089](https://github.com/PostHog/posthog-js/pull/2089) [`0a19df2`](https://github.com/PostHog/posthog-js/commit/0a19df28d6a62b97949f0e99bfadf33b7aadcb45) Thanks [@daibhin](https://github.com/daibhin)! - feat: exclude exceptions autocaptured by extensions
+
+## 1.257.2 - 2025-07-22
+
+- chore: Safer iteration of experimental `__add_tracing_headers` (#2100)
+
+## 1.257.1 - 2025-07-21
+
+- return capture results from captureException (#2081)
+- update posthog-js at workspace level (#2096)
+- chore(tests): use playwright for integration tests (#2093)
+- fix: Sync consent with persistence immediately (#2082)
+- Use posthog consent in next playground (#2083)
+
+## 1.257.0 - 2025-07-08
+
+- one for flags and flags for all (#2079)
+- Fix comment (#2078)
+- feat: Enhance AssignableWindow type with additional properties for better SDK integration (#2077)
+- reset flags internal state when posthog.reset is called (#2066)
+
+## 1.256.2 - 2025-07-04
+
+- fix: Fix backwards compatibility (#2074)
+- feat: Sdk spec gen (#2029)
+- Fix CHANGELOG.md (#2068)
+
+## 1.256.1 - 2025-07-02
+
+- fix survey input color on dark backgrounds (#2071)
+
+## 1.256.0 - 2025-06-30
+
+- feat: push replay and person data to intercom and crisp chat (#2039)
+
+## 1.255.3 - 2025-06-30
+
+- fix: init surveys manager if surveys is disabled in the project settings (#2056)
+
+## 1.255.2 - 2025-06-30
+
+- fix: word break on open ended choices (#2065)
+- chore: make it easier to run locally (#2061)
+- chore: deprecate ip config (#2053)
+- Fix dev on nextjs playground (#2051)
+- feat: add vscode extension playground (#2041)
+- chore: add a top-level changelog (#2040)
+- chore: improve eslint rule (#2038)
+- chore: Make nextjs playground work with regular install (#2035)
+
+## 1.255.1 - 2025-06-20
+
+- chore: new survey config (#2031)
+- split configuration and fix react linting (#2028)
+
 ## 1.255.0 - 2025-06-18
 
 - feat: enhance campaign parameter retrieval from cookies and URL (#2027)
@@ -22,8 +225,6 @@
 
 ## 1.253.1 - 2025-06-16
 
-
-
 ## 1.253.0 - 2025-06-16
 
 - chore: update readme instructions (#2017)
@@ -34,8 +235,6 @@
 - Fix crash when config has circular references (#2015)
 
 ## 1.252.0 - 2025-06-12
-
-
 
 ## 1.251.1 - 2025-06-12
 
@@ -51,11 +250,7 @@
 
 ## 1.250.1 - 2025-06-10
 
-
-
 ## 1.250.0 - 2025-06-09
-
-
 
 ## 1.249.5 - 2025-06-05
 
@@ -2709,7 +2904,7 @@ Manual addition of version 1.66.0 because CI failed to automatically bump the ve
 
 ## 1.52.0 - 2023-04-05
 
-- fix: Track referrer/search params per browser session (#496)  
+- fix: Track referrer/search params per browser session (#496)
   _**Note:** This change improves the accuracy of properties `$referrer` and `$referring_domain` in a major way. Previously, the values of these properties often represented pure backlinks in non-SPAs (non-single-page applications). Now those values will represent the true referrer for the current browser-level session (effectively: for the tab). Due to this, referrer data after this update \_may_ look different. It will be significantly more accurate though.\_
 - ci: Point out and close stale issues/PRs (#602)
 - docs(testcafe): update docs removing posthog server requirements (#594)

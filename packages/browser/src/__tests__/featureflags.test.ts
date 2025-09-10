@@ -163,7 +163,7 @@ describe('featureflags', () => {
             'disabled-flag': false,
         })
         expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(true)
-        expect(featureFlags.isFeatureEnabled('random')).toEqual(false)
+        expect(featureFlags.isFeatureEnabled('random')).toEqual(undefined)
         expect(featureFlags.isFeatureEnabled('multivariate-flag')).toEqual(true)
 
         expect(instance.capture).toHaveBeenCalledTimes(3)
@@ -214,7 +214,7 @@ describe('featureflags', () => {
             $enabled_feature_flags: { x: 'y' },
         })
         expect(featureFlags.getFlagVariants()).toEqual({ x: 'y' })
-        expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(false)
+        expect(featureFlags.isFeatureEnabled('beta-feature')).toEqual(undefined)
         expect(instance.capture).toHaveBeenCalledTimes(2)
 
         instance.persistence.register({
@@ -245,6 +245,15 @@ describe('featureflags', () => {
         expect(featureFlags.getFeatureFlagPayload('alpha-feature-2')).toEqual(200)
         expect(featureFlags.getFeatureFlagPayload('multivariate-flag')).toEqual(undefined)
         expect(instance.capture).not.toHaveBeenCalled()
+    })
+
+    it('returns undefined for non-existent or disabled flags', () => {
+        featureFlags._hasLoadedFlags = true
+
+        expect(featureFlags.isFeatureEnabled('non-existent-flag')).toEqual(undefined)
+
+        // Despite being non-existent, the event will still be captured
+        expect(instance.capture).toHaveBeenCalled()
     })
 
     describe('feature flag overrides', () => {
@@ -947,6 +956,77 @@ describe('featureflags', () => {
             })
         })
 
+        it('getEarlyAccessFeatures replaces existing features completely instead of merging', () => {
+            // Set up initial features in persistence
+            instance.persistence.props.$early_access_features = [
+                EARLY_ACCESS_FEATURE_FIRST,
+                { ...EARLY_ACCESS_FEATURE_SECOND, flagKey: 'old-feature' },
+            ]
+
+            // Mock unregister to track calls
+            const unregisterSpy = jest.spyOn(instance.persistence, 'unregister')
+            const registerSpy = jest.spyOn(instance.persistence, 'register')
+
+            // Force reload to trigger API call
+            featureFlags.getEarlyAccessFeatures((data) => {
+                expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
+            }, true)
+
+            // Verify unregister was called first to clear old data
+            expect(unregisterSpy).toHaveBeenCalledWith('$early_access_features')
+
+            // Verify both methods were called
+            expect(unregisterSpy).toHaveBeenCalled()
+            expect(registerSpy).toHaveBeenCalled()
+
+            // Verify the order by checking call order
+            const unregisterCallOrder = unregisterSpy.mock.invocationCallOrder[0]
+            const registerCallOrder = registerSpy.mock.invocationCallOrder[0]
+            expect(unregisterCallOrder).toBeLessThan(registerCallOrder)
+
+            // Verify register was called with new data
+            expect(registerSpy).toHaveBeenCalledWith({
+                $early_access_features: [EARLY_ACCESS_FEATURE_FIRST],
+            })
+
+            // Verify persistence only contains new features, not old ones
+            expect(instance.persistence.props.$early_access_features).toEqual([EARLY_ACCESS_FEATURE_FIRST])
+            expect(instance.persistence.props.$early_access_features).not.toContainEqual(
+                expect.objectContaining({ flagKey: 'old-feature' })
+            )
+        })
+
+        it('getEarlyAccessFeatures handles persistence absence gracefully', () => {
+            // Save original get_property function
+            const originalGetProperty = instance.get_property
+
+            // Remove persistence and update get_property to handle undefined persistence
+            instance.persistence = undefined
+            instance.get_property = (key) => {
+                if (!instance.persistence) {
+                    return undefined
+                }
+                return originalGetProperty.call(instance, key)
+            }
+
+            // Should not throw error
+            expect(() => {
+                featureFlags.getEarlyAccessFeatures((data) => {
+                    expect(data).toEqual([EARLY_ACCESS_FEATURE_FIRST])
+                }, true)
+            }).not.toThrow()
+
+            expect(instance._send_request).toHaveBeenCalled()
+
+            // Restore persistence for afterEach cleanup
+            instance.persistence = {
+                props: {},
+                register: jest.fn(),
+                unregister: jest.fn(),
+                clear: jest.fn(),
+            }
+        })
+
         it('update enrollment should update the early access feature enrollment', () => {
             featureFlags.updateEarlyAccessFeatureEnrollment('first-flag', true)
 
@@ -988,6 +1068,47 @@ describe('featureflags', () => {
                 // early access feature flag is added to list of flags
                 'first-flag': false,
             })
+        })
+
+        it('update enrollment with stage should include stage in event', () => {
+            featureFlags.updateEarlyAccessFeatureEnrollment('stage-flag', true, 'beta')
+
+            expect(instance.capture).toHaveBeenCalledTimes(1)
+            expect(instance.capture).toHaveBeenCalledWith('$feature_enrollment_update', {
+                $feature_enrollment: true,
+                $feature_flag: 'stage-flag',
+                $feature_enrollment_stage: 'beta',
+                $set: {
+                    '$feature_enrollment/stage-flag': true,
+                },
+            })
+
+            // Test with different stage
+            featureFlags.updateEarlyAccessFeatureEnrollment('concept-flag', false, 'concept')
+
+            expect(instance.capture).toHaveBeenCalledTimes(2)
+            expect(instance.capture).toHaveBeenLastCalledWith('$feature_enrollment_update', {
+                $feature_enrollment: false,
+                $feature_flag: 'concept-flag',
+                $feature_enrollment_stage: 'concept',
+                $set: {
+                    '$feature_enrollment/concept-flag': false,
+                },
+            })
+
+            // Test without stage (backward compatibility)
+            featureFlags.updateEarlyAccessFeatureEnrollment('no-stage-flag', true)
+
+            expect(instance.capture).toHaveBeenCalledTimes(3)
+            expect(instance.capture).toHaveBeenLastCalledWith('$feature_enrollment_update', {
+                $feature_enrollment: true,
+                $feature_flag: 'no-stage-flag',
+                $set: {
+                    '$feature_enrollment/no-stage-flag': true,
+                },
+            })
+            // Should not have stage property when not provided
+            expect(instance.capture.mock.calls[2][1]).not.toHaveProperty('$feature_enrollment_stage')
         })
 
         it('reloading flags after update enrollment should send properties', () => {

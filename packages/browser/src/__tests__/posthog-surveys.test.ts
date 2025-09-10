@@ -36,6 +36,7 @@ describe('posthog-surveys', () => {
             targeting_flag_key: 'targeting-flag-key',
             internal_targeting_flag_key: 'internal_targeting_flag_key',
             start_date: new Date('10/10/2022').toISOString(),
+            conditions: {},
         } as unknown as Survey
 
         const repeatableSurvey: Survey = {
@@ -55,6 +56,13 @@ describe('posthog-surveys', () => {
                 events: null,
                 actions: null,
             },
+        }
+
+        const externalSurvey: Survey = {
+            ...survey,
+            id: 'external-survey',
+            name: 'external survey',
+            type: SurveyType.ExternalSurvey,
         }
 
         const flagsResponse = {
@@ -150,7 +158,12 @@ describe('posthog-surveys', () => {
         describe('checkSurveyEligibility', () => {
             beforeEach(() => {
                 // mock getSurveys response
-                mockPostHog.get_property.mockReturnValue([survey, repeatableSurvey, surveyWithWaitPeriod])
+                mockPostHog.get_property.mockReturnValue([
+                    survey,
+                    repeatableSurvey,
+                    surveyWithWaitPeriod,
+                    externalSurvey,
+                ])
                 surveys['_surveyManager'] = new SurveyManager(mockPostHog as PostHog)
             })
 
@@ -194,6 +207,37 @@ describe('posthog-surveys', () => {
                 )
             })
 
+            it('cannot render survey if linkedFlagVariant is not the same as the linked flag', () => {
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = 'cost'
+                survey.conditions.linkedFlagVariant = 'control'
+                const result = surveys['_checkSurveyEligibility'](survey.id)
+                expect(result.eligible).toBeFalsy()
+                expect(result.reason).toEqual('Survey linked feature flag is not enabled for variant control')
+                survey.conditions.linkedFlagVariant = undefined
+            })
+
+            it('can render survey if linkedFlagVariant is the same as the linked flag', () => {
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = 'variant'
+                survey.conditions.linkedFlagVariant = 'variant'
+                const result = surveys['_checkSurveyEligibility'](survey.id)
+                expect(result.eligible).toBeTruthy()
+                survey.conditions.linkedFlagVariant = undefined
+            })
+
+            it('can render survey if linkedFlagVariant is any', () => {
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = 'variant'
+                survey.conditions.linkedFlagVariant = 'any'
+                const result = surveys['_checkSurveyEligibility'](survey.id)
+                expect(result.eligible).toBeTruthy()
+                survey.conditions.linkedFlagVariant = undefined
+            })
+
             it('can render if survey can activate repeatedly', () => {
                 flagsResponse.featureFlags[survey.targeting_flag_key] = true
                 flagsResponse.featureFlags[survey.linked_flag_key] = true
@@ -214,6 +258,18 @@ describe('posthog-surveys', () => {
                 )
                 const result = surveys['_checkSurveyEligibility'](survey.id)
                 expect(result.eligible).toBeTruthy()
+            })
+
+            it('cannot render external surveys', () => {
+                flagsResponse.featureFlags[survey.targeting_flag_key] = true
+                flagsResponse.featureFlags[survey.linked_flag_key] = true
+                flagsResponse.featureFlags[survey.internal_targeting_flag_key] = true
+
+                const result = surveys['_checkSurveyEligibility'](externalSurvey.id)
+                expect(result.eligible).toBeFalsy()
+                expect(result.reason).toEqual(
+                    'Surveys of type external_survey are never eligible to be shown in the app'
+                )
             })
 
             describe('integration with wait period and survey seen checks', () => {
@@ -374,7 +430,7 @@ describe('posthog-surveys', () => {
 
             it('should set isInitializingSurveys to false after successful initialization', () => {
                 // Set flags server response
-                surveys['_hasSurveys'] = true
+                surveys['_isSurveysEnabled'] = true
                 mockGenerateSurveys.mockReturnValue({})
 
                 surveys.loadIfEnabled()
@@ -384,7 +440,7 @@ describe('posthog-surveys', () => {
 
             it('should set isInitializingSurveys to false after failed initialization', () => {
                 // Set flags server response
-                surveys['_hasSurveys'] = true
+                surveys['_isSurveysEnabled'] = true
                 mockGenerateSurveys.mockImplementation(() => {
                     throw Error('Test error')
                 })
@@ -395,7 +451,7 @@ describe('posthog-surveys', () => {
 
             it('should set isInitializingSurveys to false when loadExternalDependency fails', () => {
                 // Set flags server response but no generateSurveys
-                surveys['_hasSurveys'] = true
+                surveys['_isSurveysEnabled'] = true
                 mockGenerateSurveys = undefined
                 assignableWindow.__PosthogExtensions__.generateSurveys = undefined
 
@@ -409,7 +465,7 @@ describe('posthog-surveys', () => {
             })
 
             it('should call the callback with the surveys when they are loaded', () => {
-                surveys['_hasSurveys'] = true
+                surveys['_isSurveysEnabled'] = true
                 mockGenerateSurveys.mockReturnValue({})
                 const callback = jest.fn()
                 const mockSurveys = [{ id: 'test-survey' }]
@@ -430,7 +486,7 @@ describe('posthog-surveys', () => {
             })
 
             it('should call the callback with an error when surveys are not loaded', () => {
-                surveys['_hasSurveys'] = true
+                surveys['_isSurveysEnabled'] = true
                 mockGenerateSurveys.mockImplementation(() => {
                     throw new Error('Error initializing surveys')
                 })

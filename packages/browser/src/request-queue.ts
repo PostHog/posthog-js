@@ -1,8 +1,8 @@
 import { QueuedRequestWithOptions, RequestQueueConfig } from './types'
 import { each } from './utils'
 
-import { isArray, isUndefined } from './utils/type-utils'
-import { clampToRange } from './utils/number-utils'
+import { isArray, isUndefined, clampToRange } from '@posthog/core'
+import { logger } from './utils/logger'
 
 export const DEFAULT_FLUSH_INTERVAL_MS = 3000
 
@@ -19,7 +19,7 @@ export class RequestQueue {
             config?.flush_interval_ms || DEFAULT_FLUSH_INTERVAL_MS,
             250,
             5000,
-            'flush interval',
+            logger.createLogger('flush interval'),
             DEFAULT_FLUSH_INTERVAL_MS
         )
         this._sendRequest = sendRequest

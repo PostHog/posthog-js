@@ -5,10 +5,9 @@ import { PostHogConfig, SessionIdChangedCallback } from './types'
 import { uuid7ToTimestampMs, uuidv7 } from './uuidv7'
 import { window } from './utils/globals'
 
-import { isArray, isNumber, isUndefined } from './utils/type-utils'
 import { createLogger } from './utils/logger'
 
-import { clampToRange } from './utils/number-utils'
+import { isArray, isNumber, isUndefined, clampToRange } from '@posthog/core'
 import { PostHog } from './posthog-core'
 import { addEventListener } from './utils'
 
@@ -41,8 +40,8 @@ export class SessionIdManager {
         if (!instance.persistence) {
             throw new Error('SessionIdManager requires a PostHogPersistence instance')
         }
-        if (instance.config.__preview_experimental_cookieless_mode) {
-            throw new Error('SessionIdManager cannot be used with __preview_experimental_cookieless_mode')
+        if (instance.config.cookieless_mode === 'always') {
+            throw new Error('SessionIdManager cannot be used with cookieless_mode="always"')
         }
 
         this._config = instance.config
@@ -62,7 +61,7 @@ export class SessionIdManager {
                 desiredTimeout,
                 MIN_SESSION_IDLE_TIMEOUT_SECONDS,
                 MAX_SESSION_IDLE_TIMEOUT_SECONDS,
-                'session_idle_timeout_seconds',
+                logger.createLogger('session_idle_timeout_seconds'),
                 DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS
             ) * 1000
 
@@ -212,6 +211,10 @@ export class SessionIdManager {
         )
     }
 
+    private _sessionHasBeenIdleTooLong = (timestamp: number, lastActivityTimestamp: number) => {
+        return Math.abs(timestamp - lastActivityTimestamp) > this.sessionTimeoutMs
+    }
+
     /*
      * This function returns the current sessionId and windowId. It should be used to
      * access these values over directly calling `._sessionId` or `._windowId`.
@@ -229,10 +232,8 @@ export class SessionIdManager {
      * @param {Number} timestamp (optional) Defaults to the current time. The timestamp to be stored with the sessionId (used when determining if a new sessionId should be generated)
      */
     checkAndGetSessionAndWindowId(readOnly = false, _timestamp: number | null = null) {
-        if (this._config.__preview_experimental_cookieless_mode) {
-            throw new Error(
-                'checkAndGetSessionAndWindowId should not be called in __preview_experimental_cookieless_mode'
-            )
+        if (this._config.cookieless_mode === 'always') {
+            throw new Error('checkAndGetSessionAndWindowId should not be called with cookieless_mode="always"')
         }
         const timestamp = _timestamp || new Date().getTime()
 
@@ -247,7 +248,7 @@ export class SessionIdManager {
 
         let valuesChanged = false
         const noSessionId = !sessionId
-        const activityTimeout = !readOnly && Math.abs(timestamp - lastActivityTimestamp) > this.sessionTimeoutMs
+        const activityTimeout = !readOnly && this._sessionHasBeenIdleTooLong(timestamp, lastActivityTimestamp)
         if (noSessionId || activityTimeout || sessionPastMaximumLength) {
             sessionId = this._sessionIdGenerator()
             windowId = this._windowIdGenerator()
@@ -297,7 +298,12 @@ export class SessionIdManager {
         clearTimeout(this._enforceIdleTimeout)
         this._enforceIdleTimeout = setTimeout(() => {
             // enforce idle timeout a little after the session timeout to ensure the session is reset even without activity
-            this.resetSessionId()
+            // we need to check session activity first in case a different window has kept the session active
+            // while this window has been idle - and the timer has not progressed - e.g. window memory frozen while hidden
+            const [lastActivityTimestamp] = this._getSessionId()
+            if (this._sessionHasBeenIdleTooLong(new Date().getTime(), lastActivityTimestamp)) {
+                this.resetSessionId()
+            }
         }, this.sessionTimeoutMs * 1.1)
     }
 }

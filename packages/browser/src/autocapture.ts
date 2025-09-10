@@ -14,17 +14,18 @@ import {
     shouldCaptureValue,
     splitClassString,
 } from './autocapture-utils'
+
 import RageClick from './extensions/rageclick'
 import { AutocaptureConfig, COPY_AUTOCAPTURE_EVENT, EventName, Properties, RemoteConfig } from './types'
 import { PostHog } from './posthog-core'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from './constants'
 
-import { isBoolean, isFunction, isNull, isObject } from './utils/type-utils'
+import { isBoolean, isFunction, isNull, isObject } from '@posthog/core'
 import { createLogger } from './utils/logger'
 import { document, window } from './utils/globals'
 import { convertToURL } from './utils/request-utils'
 import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
-import { includes } from './utils/string-utils'
+import { includes } from '@posthog/core'
 
 const logger = createLogger('[AutoCapture]')
 

@@ -1,17 +1,15 @@
 {
-    "name": "nextjs",
+    "name": "playground-nextjs",
     "version": "0.1.0",
     "private": true,
-    "packageManager": "pnpm@9.15.4",
+    "packageManager": "pnpm@10.12.4",
     "scripts": {
         "clean-react": "cd ../../react && pnpm run clean-node-modules",
         "dev": "next dev",
         "dev-crossdomain": "NEXT_PUBLIC_CROSSDOMAIN=1 next dev --experimental-https",
-        "install-deps": "pnpm install && pnpm run build-posthog-js && pnpm install --ignore-workspace",
         "build": "next build --no-lint",
         "start": "next start",
-        "lint": "next lint",
-        "build-posthog-js": "pnpm --filter=posthog-js build"
+        "lint": "next lint"
     },
     "dependencies": {
         "@lottiefiles/react-lottie-player": "^3.5.4",
@@ -21,8 +19,8 @@
         "cookie": "^0.7.2",
         "eslint": "^8.57.1",
         "hls.js": "^1.5.15",
-        "next": "14.2.20",
-        "posthog-js": "file:../..",
+        "next": "14.2.30",
+        "posthog-js": "*",
         "react": "18.3.1",
         "react-dom": "18.3.1",
         "socket.io": "^4.8.1",

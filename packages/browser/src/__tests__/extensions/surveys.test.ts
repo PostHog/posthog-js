@@ -74,12 +74,15 @@ describe('survey display logic', () => {
         },
         get_session_replay_url: jest.fn(),
         capture: jest.fn().mockImplementation((eventName) => eventName),
+        config: {
+            disable_surveys_automatic_display: false,
+        },
     } as unknown as PostHog
 
     test('callSurveysAndEvaluateDisplayLogic runs on interval irrespective of url change', () => {
         jest.useFakeTimers()
         jest.spyOn(global, 'setInterval')
-        generateSurveys(mockPostHog)
+        generateSurveys(mockPostHog, true)
         expect(mockPostHog.surveys.getSurveys).toBeCalledTimes(1)
         expect(setInterval).toHaveBeenLastCalledWith(expect.any(Function), 1000)
 

@@ -13,8 +13,14 @@ import {
     SurveyWidgetType,
 } from '../../posthog-surveys-types'
 import { document as _document, window as _window, userAgent } from '../../utils/globals'
-import { SURVEY_LOGGER as logger, SURVEY_IN_PROGRESS_PREFIX, SURVEY_SEEN_PREFIX } from '../../utils/survey-utils'
-import { isNullish, isArray } from '../../utils/type-utils'
+import {
+    getSurveyInteractionProperty,
+    getSurveySeenKey,
+    SURVEY_LOGGER as logger,
+    setSurveySeenOnLocalStorage,
+    SURVEY_IN_PROGRESS_PREFIX,
+} from '../../utils/survey-utils'
+import { isArray, isNullish } from '@posthog/core'
 
 import { detectDeviceType } from '../../utils/user-agent-utils'
 import { propertyComparisons } from '../../utils/property-utils'
@@ -397,6 +403,7 @@ export const sendSurveyEvent = ({
         logger.error('[survey sent] event not captured, PostHog instance not found.')
         return
     }
+    setSurveySeenOnLocalStorage(survey)
     posthog.capture(SurveyEventName.SENT, {
         [SurveyEventProperties.SURVEY_NAME]: survey.name,
         [SurveyEventProperties.SURVEY_ID]: survey.id,
@@ -411,6 +418,9 @@ export const sendSurveyEvent = ({
         [SurveyEventProperties.SURVEY_COMPLETED]: isSurveyCompleted,
         sessionRecordingUrl: posthog.get_session_replay_url?.(),
         ...responses,
+        $set: {
+            [getSurveyInteractionProperty(survey, 'responded')]: true,
+        },
     })
     if (isSurveyCompleted) {
         // Only dispatch PHSurveySent if the survey is completed, as that removes the survey from focus
@@ -445,10 +455,13 @@ export const dismissedSurveyEvent = (survey: Survey, posthog?: PostHog, readOnly
             question: question.question,
             response: getSurveyResponseValue(inProgressSurvey?.responses || {}, question.id),
         })),
+        $set: {
+            [getSurveyInteractionProperty(survey, 'dismissed')]: true,
+        },
     })
     // Clear in-progress state on dismissal
     clearInProgressSurveyState(survey)
-    localStorage.setItem(getSurveySeenKey(survey), 'true')
+    setSurveySeenOnLocalStorage(survey)
     window.dispatchEvent(new CustomEvent('PHSurveyClosed', { detail: { surveyId: survey.id } }))
 }
 
@@ -527,15 +540,6 @@ export const getSurveySeen = (survey: Survey): boolean => {
     }
 
     return false
-}
-
-export const getSurveySeenKey = (survey: Survey): string => {
-    let surveySeenKey = `${SURVEY_SEEN_PREFIX}${survey.id}`
-    if (survey.current_iteration && survey.current_iteration > 0) {
-        surveySeenKey = `${SURVEY_SEEN_PREFIX}${survey.id}_${survey.current_iteration}`
-    }
-
-    return surveySeenKey
 }
 
 const LAST_SEEN_SURVEY_DATE_KEY = 'lastSeenSurveyDate'
