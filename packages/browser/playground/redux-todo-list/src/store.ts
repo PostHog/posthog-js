@@ -1,5 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit'
-import { posthogReduxLogger } from '../../../src/customizations/posthogReduxLogger'
+import { posthogReduxLogger } from 'posthog-js/lib/src/customizations'
 
 // Types
 export interface Todo {

@@ -24,6 +24,7 @@
     "dependencies": {
         "@reduxjs/toolkit": "^2.0.0",
         "next": "^15.5.2",
+        "posthog-js": "*",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
         "react-redux": "^9.0.0",
