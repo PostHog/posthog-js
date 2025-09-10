@@ -90,20 +90,20 @@ export class PostHog extends PostHogCore {
    * ```ts
    * // posthog.ts
    * import PostHog from 'posthog-react-native'
-   * 
+   *
    * export const posthog = new PostHog('<ph_project_api_key>', {
-   *   host: '<ph_client_api_host>' 
+   *   host: '<ph_client_api_host>'
    * })
-   * 
+   *
    * // Then you can access PostHog by importing your instance
    * // Another file:
    * import { posthog } from './posthog'
-   * 
+   *
    * export function MyApp1() {
    *     useEffect(async () => {
    *         posthog.capture('event_name')
    *     }, [posthog])
-   * 
+   *
    *     return <View>Your app code</View>
    * }
    * ```
@@ -202,7 +202,7 @@ export class PostHog extends PostHogCore {
   }
 
   /**
-   * 
+   *
    * @internal
    *
    */
@@ -372,7 +372,6 @@ export class PostHog extends PostHogCore {
   optOut(): Promise<void> {
     return super.optOut()
   }
-
 
   /**
    * Checks if a feature flag is enabled for the current user.

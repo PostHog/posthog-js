@@ -1377,11 +1377,9 @@ export abstract class PostHogCore extends PostHogCoreStateless {
    * This should only be used for informative purposes.
    * Any actual internal use case for the session_id should be handled by the sessionManager.
    *
-   * {@label Session replay}
-   *
    * @public
    *
-   * @returns The current session_id
+   * @returns The stored session ID for the current session. This may be an empty string if the client is not yet fully initialized.
    */
   getSessionId(): string {
     if (!this._isInitialized) {
@@ -1473,7 +1471,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   /***
    *** TRACKING
    ***/
-  
+
   identify(distinctId?: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): void {
     this.wrap(() => {
       const previousDistinctId = this.getDistinctId()

@@ -2330,11 +2330,9 @@ export class PostHog {
      * This should only be used for informative purposes.
      * Any actual internal use case for the session_id should be handled by the sessionManager.
      *
-     * {@label Session replay}
-     *
      * @public
      *
-     * @returns The current session_id
+     * @returns The stored session ID for the current session. This may be an empty string if the client is not yet fully initialized.
      */
     get_session_id(): string {
         return this.sessionManager?.checkAndGetSessionAndWindowId(true).sessionId ?? ''
