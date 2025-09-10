@@ -92,11 +92,14 @@ function defaultTitleFunction(reduxEvent: ReduxEvent): string {
     return `${type}${timeText}`
 }
 
-const phConsoleLogger: Logger = createLogger('[PostHog Redux Logger]')
+// we need a posthog logger for the rate limiter
+const phConsoleLogger: Logger = createLogger('[PostHog Redux RateLimiting Logger]')
 
 function defaultLogger(title: string, reduxEvent: ReduxEvent): void {
+    // but the posthog logger swallows messages unless debug is on
+    // so we don't want to use it in this default logger
     // eslint-disable-next-line no-console
-    phConsoleLogger.info(title, reduxEvent)
+    console.log(title, reduxEvent)
 }
 
 /**
