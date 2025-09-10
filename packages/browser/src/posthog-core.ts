@@ -526,10 +526,10 @@ export class PostHog {
         this.siteApps?.init()
 
         if (!startInCookielessMode) {
-            if (this.config.__preview_lazy_load_replay) {
-                this.sessionRecording = new SessionRecordingWrapper(this)
-            } else {
+            if (this.config.__preview_eager_load_replay) {
                 this.sessionRecording = new SessionRecording(this)
+            } else {
+                this.sessionRecording = new SessionRecordingWrapper(this)
             }
             this.sessionRecording.startIfEnabledOrStop()
         }
