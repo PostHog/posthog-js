@@ -375,3 +375,61 @@ h1 {
     white-space: pre-wrap;
     word-wrap: break-word;
 }
+
+/* Home page styles */
+.example-card {
+    background: white;
+    border: 2px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 25px;
+    max-width: 300px;
+    text-align: center;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.example-card:hover {
+    border-color: #667eea;
+    box-shadow: 0 4px 20px rgba(102, 126, 234, 0.15);
+    transform: translateY(-2px);
+}
+
+.example-card h3 {
+    color: #333;
+    margin-bottom: 10px;
+    font-size: 20px;
+}
+
+.example-card p {
+    color: #666;
+    margin-bottom: 15px;
+    font-size: 14px;
+}
+
+.example-card ul {
+    font-size: 13px;
+    color: #555;
+    padding-left: 20px;
+}
+
+.example-card ul li {
+    margin-bottom: 5px;
+}
+
+.example-button {
+    display: inline-block;
+    padding: 12px 24px;
+    background: #667eea;
+    color: white;
+    text-decoration: none;
+    border-radius: 6px;
+    font-weight: 500;
+    transition: background 0.3s;
+    margin-top: 15px;
+}
+
+.example-button:hover {
+    background: #5a67d8;
+    text-decoration: none;
+    color: white;
+}

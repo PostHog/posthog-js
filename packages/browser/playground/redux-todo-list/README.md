@@ -12,3 +12,5 @@ pnpm i && pnpm dev
 
 then visit http://localhost:3000/redux
 or http://localhost:3000/kea
+
+Apologies to the future traveller, the example todo app is entirely AI slop
