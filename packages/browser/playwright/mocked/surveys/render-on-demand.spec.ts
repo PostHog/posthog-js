@@ -38,7 +38,9 @@ const testSurveyWithDelay = {
 }
 
 const startOptions = {
-    options: {},
+    options: {
+        disable_surveys_automatic_display: true,
+    },
     flagsResponseOverrides: {
         surveys: true,
     },
@@ -76,6 +78,84 @@ test.describe('surveys - displaySurvey on demand', () => {
             'What feedback do you have for us?'
         )
         await expect(page.locator('.PostHogSurvey-test-survey-123').locator('.survey-question-description')).toHaveText(
+            'Please provide your feedback'
+        )
+    })
+
+    test('displaySurvey shows a survey inline when called with valid survey ID', async ({ page, context }) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+            await route.fulfill({
+                json: {
+                    surveys: [testSurvey],
+                },
+            })
+        })
+
+        await start(startOptions, page, context)
+        await surveysAPICall
+
+        // Survey should not be visible initially
+        await expect(page.locator('#survey').locator('.survey-form')).not.toBeInViewport()
+
+        // Call displaySurvey programmatically
+        await page.evaluate(() => {
+            // @ts-expect-error - posthog is added to window in test setup
+            window.posthog.onSurveysLoaded(() => {
+                // @ts-expect-error - posthog is added to window in test setup
+                window.posthog.displaySurvey('test-survey-123', {
+                    displayType: 'inline',
+                    selector: '#survey',
+                })
+            })
+        })
+
+        // Survey should now be visible
+        await expect(page.locator('#survey').locator('.survey-form')).toBeVisible()
+        await expect(page.locator('#survey').locator('.survey-question')).toHaveText(
+            'What feedback do you have for us?'
+        )
+        await expect(page.locator('#survey').locator('.survey-question-description')).toHaveText(
+            'Please provide your feedback'
+        )
+    })
+
+    test('displaySurvey shows a survey inline when called with valid survey ID with delay', async ({
+        page,
+        context,
+    }) => {
+        const surveysAPICall = page.route('**/surveys/**', async (route) => {
+            await route.fulfill({
+                json: {
+                    surveys: [testSurveyWithDelay],
+                },
+            })
+        })
+
+        await start(startOptions, page, context)
+        await surveysAPICall
+
+        // Survey should not be visible initially, but playwright has 10 second timeout
+        await expect(page.locator('#survey').locator('.survey-form')).not.toBeInViewport()
+
+        // Call displaySurvey programmat ically
+        await page.evaluate(() => {
+            // @ts-expect-error - posthog is added to window in test setup
+            window.posthog.onSurveysLoaded(() => {
+                // @ts-expect-error - posthog is added to window in test setup
+                window.posthog.displaySurvey('test-survey-delay', {
+                    displayType: 'inline',
+                    selector: '#survey',
+                    ignoreDelay: true,
+                })
+            })
+        })
+
+        // Survey should
+        await expect(page.locator('#survey').locator('.survey-form')).toBeVisible()
+        await expect(page.locator('#survey').locator('.survey-question')).toHaveText(
+            'What feedback do you have for us?'
+        )
+        await expect(page.locator('#survey').locator('.survey-question-description')).toHaveText(
             'Please provide your feedback'
         )
     })
@@ -187,7 +267,10 @@ test.describe('surveys - displaySurvey on demand', () => {
         // Call displaySurvey first time
         await page.evaluate(() => {
             // @ts-expect-error - posthog is added to window in test setup
-            window.posthog.displaySurvey('test-survey-123')
+            window.posthog.onSurveysLoaded(() => {
+                // @ts-expect-error - posthog is added to window in test setup
+                window.posthog.displaySurvey('test-survey-123')
+            })
         })
 
         // Survey should be visible
@@ -265,7 +348,10 @@ test.describe('surveys - displaySurvey on demand', () => {
         // Call displaySurvey for first survey
         await page.evaluate(() => {
             // @ts-expect-error - posthog is added to window in test setup
-            window.posthog.displaySurvey('survey-1')
+            window.posthog.onSurveysLoaded(() => {
+                // @ts-expect-error - posthog is added to window in test setup
+                window.posthog.displaySurvey('survey-1')
+            })
         })
 
         // First survey should be visible

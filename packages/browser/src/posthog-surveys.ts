@@ -350,10 +350,30 @@ export class PostHogSurveys {
             logger.warn('Survey element not found')
             return
         }
+        if (survey.appearance?.surveyPopupDelaySeconds) {
+            logger.info(
+                `Rendering survey ${survey.id} with delay of ${survey.appearance.surveyPopupDelaySeconds} seconds`
+            )
+            setTimeout(() => {
+                logger.info(
+                    `Rendering survey ${survey.id} with delay of ${survey.appearance?.surveyPopupDelaySeconds} seconds`
+                )
+                this._surveyManager?.renderSurvey(survey, elem)
+                logger.info(`Survey ${survey.id} rendered`)
+            }, survey.appearance.surveyPopupDelaySeconds * 1000)
+            return
+        }
         this._surveyManager.renderSurvey(survey, elem)
     }
 
-    displaySurvey(surveyId: string, options: DisplaySurveyOptions) {
+    displaySurvey(
+        surveyId: string,
+        options: DisplaySurveyOptions = {
+            ignoreConditions: false,
+            ignoreDelay: false,
+            displayType: DisplaySurveyType.Popover,
+        }
+    ) {
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return

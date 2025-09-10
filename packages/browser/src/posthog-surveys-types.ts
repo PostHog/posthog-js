@@ -268,11 +268,11 @@ export enum DisplaySurveyType {
 
 interface DisplaySurveyOptionsBase {
     ignoreConditions: boolean
+    ignoreDelay: boolean
     displayType: DisplaySurveyType
 }
 
 interface DisplaySurveyPopoverOptions extends DisplaySurveyOptionsBase {
-    ignoreDelay: boolean
     displayType: DisplaySurveyType.Popover
 }
 
