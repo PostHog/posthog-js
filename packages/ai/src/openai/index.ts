@@ -12,10 +12,6 @@ import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
 import type { ZodTypeAny } from 'zod'
-import type { 
-  ResponseCreateParamsWithTools,
-  ExtractParsedContentFromParams
-} from 'openai/lib/ResponsesParser'
 import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
 import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
 import { extractPosthogParams } from './utils'
@@ -512,12 +508,27 @@ export class WrappedResponses extends Responses {
   }
 
   public parse<
-    Params extends ResponseCreateParamsWithTools, 
-    ParsedT = ExtractParsedContentFromParams<Params>
+    Schema extends ZodTypeAny,
+    Params extends ResponsesCreateParamsBase & { text?: { format?: Schema } }
   >(
     body: Params & MonitoringParams,
     options?: RequestOptions
-  ): APIPromise<ParsedResponse<ParsedT>> {
+  ): APIPromise<ParsedResponse<Schema extends { _output: infer O } ? O : any>>
+
+  public parse<Params extends ResponsesCreateParamsBase, ParsedT = any>(
+    body: Params & MonitoringParams,
+    options?: RequestOptions
+  ): APIPromise<ParsedResponse<ParsedT>>
+
+  public parse<Params extends ResponsesCreateParamsBase>(
+    body: Params & MonitoringParams,
+    options?: RequestOptions
+  ): APIPromise<ParsedResponse<any>>
+
+  public parse<Params extends ResponsesCreateParamsBase>(
+    body: Params & MonitoringParams,
+    options?: RequestOptions
+  ): APIPromise<ParsedResponse<any>> {
     const { openAIParams, posthogParams } = extractPosthogParams(body)
     const startTime = Date.now()
 
@@ -582,7 +593,7 @@ export class WrappedResponses extends Responses {
         }
       )
 
-      return wrappedPromise as APIPromise<ParsedResponse<ParsedT>>
+      return wrappedPromise as APIPromise<ParsedResponse<any>>
     } finally {
       // Restore our wrapped create method
       originalSelf.create = tempCreate

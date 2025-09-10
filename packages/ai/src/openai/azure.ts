@@ -27,9 +27,6 @@ interface MonitoringOpenAIConfig {
 
 type RequestOptions = Record<string, any>
 
-// Local helper to avoid importing Zod's `infer` symbol in d.ts output
-type InferZodSchema<SchemaT extends ZodTypeAny> = SchemaT['_output']
-
 export class PostHogAzureOpenAI extends AzureOpenAI {
   private readonly phClient: PostHog
   public chat: WrappedChat
