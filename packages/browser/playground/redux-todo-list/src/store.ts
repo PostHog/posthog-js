@@ -320,7 +320,7 @@ export const todoReducer = (state: TodoState = initialState, action: TodoAction)
 
 // Create PostHog Redux logger middleware
 const posthogMiddleware = posthogReduxLogger({
-    // Example: mask sensitive data from actions
+    // Example: optionally mask sensitive data from actions
     maskReduxAction: (action) => {
         // Return null to skip logging this action entirely
         // if (action.type === 'SENSITIVE_ACTION') return null
@@ -334,7 +334,7 @@ const posthogMiddleware = posthogReduxLogger({
         return action
     },
 
-    // Example: mask sensitive data from state
+    // Example: optionally mask sensitive data from state
     maskReduxState: (state) => {
         // You could remove sensitive fields from state here
         // const { sensitiveData, ...maskedState } = state
