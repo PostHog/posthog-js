@@ -1,7 +1,51 @@
 import { BucketedRateLimiter, isNullish, isObject, Logger } from '@posthog/core'
-// Import Redux types to be compatible with Redux Toolkit
-import type { Dispatch, Middleware as ReduxMiddleware, MiddlewareAPI, UnknownAction } from '@reduxjs/toolkit'
 import { createLogger } from '../utils/logger'
+
+// types copied from redux toolkit so we can avoid taking a dependency in the library and confusing people using the SDK
+
+/**
+ * An *unknown* action.
+ * This is the most minimal possible shape for an action.
+ * Allows for type-safe usage of actions without dependencies.
+ */
+export interface UnknownAction {
+    type: string
+    [extraProps: string]: unknown
+}
+
+/**
+ * A *dispatching function* (or simply *dispatch function*) is a function that
+ * accepts an action or an async action; it then may or may not dispatch one
+ * or more actions to the store.
+ */
+export interface Dispatch<A extends UnknownAction = UnknownAction> {
+    <T extends A>(action: T): T
+}
+
+/**
+ * A middleware is a higher-order function that composes a dispatch function
+ * to return a new dispatch function. It often turns async actions into
+ * actions.
+ */
+export interface ReduxMiddleware<
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-object-type
+    _DispatchExt = {},
+    S = any,
+    D extends Dispatch = Dispatch,
+> {
+    (api: MiddlewareAPI<D, S>): (next: D) => (action: any) => any
+}
+
+/**
+ * A middleware API is an object containing the store's dispatch function and getState function.
+ * A middleware is given the middleware API as its first parameter.
+ */
+export interface MiddlewareAPI<D extends Dispatch = Dispatch, S = any> {
+    dispatch: D
+    getState(): S
+}
+
+// end of copied types
 
 export interface ReduxEvent {
     type: string
@@ -217,7 +261,6 @@ export function posthogReduxLogger<S extends UnknownAction>(
                     const maskedNextState = maskReduxState(nextState, maskedAction)
 
                     type FilteredState = { 'invalid state'?: string } | (S & Record<string, any>)
-
                     let filteredPrevState: FilteredState
                     let filteredNextState: FilteredState
                     if (diffState) {
@@ -225,8 +268,9 @@ export function posthogReduxLogger<S extends UnknownAction>(
                             maskedPrevState,
                             maskedNextState
                         )
-                        filteredPrevState = diffedPrevState ?? {}
-                        filteredNextState = diffedNextState ?? {}
+                        const invalidPayloadForDiffing: FilteredState = { 'invalid state': 'no changes after diffing' }
+                        filteredPrevState = (diffedPrevState as FilteredState) ?? invalidPayloadForDiffing
+                        filteredNextState = (diffedNextState as FilteredState) ?? invalidPayloadForDiffing
                     } else {
                         const invalidPayloadForLogging = { 'invalid state': 'logger only supports object payloads' }
                         filteredPrevState = isObject(maskedPrevState) ? maskedPrevState : invalidPayloadForLogging
