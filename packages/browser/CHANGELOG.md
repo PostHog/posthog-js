@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.262.1
+
+### Patch Changes
+
+- [#2309](https://github.com/PostHog/posthog-js/pull/2309) [`28223c1`](https://github.com/PostHog/posthog-js/commit/28223c149a965882e4a47a50a29f8cb4eb322d30) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: default to eager loading replay while investigating trigger bug reports
+
 ## 1.262.0
 
 ### Minor Changes
