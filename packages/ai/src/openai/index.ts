@@ -11,7 +11,10 @@ import {
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
-import type { ZodTypeAny } from 'zod'
+import type {
+  ResponseCreateParamsWithTools,
+  ExtractParsedContentFromParams,
+} from 'openai/lib/ResponsesParser'
 import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
 import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
 import { extractPosthogParams } from './utils'
@@ -301,7 +304,7 @@ export class WrappedCompletions extends Completions {
           await sendEventToPosthog({
             client: this.phClient,
             ...posthogParams,
-            model: openAIParams.model,
+            model: String(openAIParams.model ?? ''),
             provider: 'openai',
             input: sanitizeOpenAI(openAIParams.messages),
             output: [],
@@ -483,8 +486,7 @@ export class WrappedResponses extends Responses {
           await sendEventToPosthog({
             client: this.phClient,
             ...posthogParams,
-            //@ts-expect-error
-            model: openAIParams.model,
+            model: String(openAIParams.model ?? ''),
             provider: 'openai',
             input: sanitizeOpenAIResponse(openAIParams.input),
             output: [],
@@ -508,27 +510,12 @@ export class WrappedResponses extends Responses {
   }
 
   public parse<
-    Schema extends ZodTypeAny,
-    Params extends ResponsesCreateParamsBase & { text?: { format?: Schema } }
+    Params extends ResponseCreateParamsWithTools,
+    ParsedT = ExtractParsedContentFromParams<Params>
   >(
     body: Params & MonitoringParams,
     options?: RequestOptions
-  ): APIPromise<ParsedResponse<Schema extends { _output: infer O } ? O : any>>
-
-  public parse<Params extends ResponsesCreateParamsBase, ParsedT = any>(
-    body: Params & MonitoringParams,
-    options?: RequestOptions
-  ): APIPromise<ParsedResponse<ParsedT>>
-
-  public parse<Params extends ResponsesCreateParamsBase>(
-    body: Params & MonitoringParams,
-    options?: RequestOptions
-  ): APIPromise<ParsedResponse<any>>
-
-  public parse<Params extends ResponsesCreateParamsBase>(
-    body: Params & MonitoringParams,
-    options?: RequestOptions
-  ): APIPromise<ParsedResponse<any>> {
+  ): APIPromise<ParsedResponse<ParsedT>> {
     const { openAIParams, posthogParams } = extractPosthogParams(body)
     const startTime = Date.now()
 
@@ -546,8 +533,7 @@ export class WrappedResponses extends Responses {
           await sendEventToPosthog({
             client: this.phClient,
             ...posthogParams,
-            //@ts-expect-error
-            model: openAIParams.model,
+            model: String(openAIParams.model ?? ''),
             provider: 'openai',
             input: sanitizeOpenAIResponse(openAIParams.input),
             output: result.output,
@@ -573,8 +559,7 @@ export class WrappedResponses extends Responses {
           await sendEventToPosthog({
             client: this.phClient,
             ...posthogParams,
-            //@ts-expect-error
-            model: openAIParams.model,
+            model: String(openAIParams.model ?? ''),
             provider: 'openai',
             input: sanitizeOpenAIResponse(openAIParams.input),
             output: [],
@@ -593,7 +578,7 @@ export class WrappedResponses extends Responses {
         }
       )
 
-      return wrappedPromise as APIPromise<ParsedResponse<any>>
+      return wrappedPromise as APIPromise<ParsedResponse<ParsedT>>
     } finally {
       // Restore our wrapped create method
       originalSelf.create = tempCreate
