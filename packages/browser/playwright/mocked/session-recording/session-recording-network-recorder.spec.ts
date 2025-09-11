@@ -167,7 +167,7 @@ test.beforeEach(async ({ context }) => {
                                   /https:\/\/localhost:\d+\/array\/test%20token\/config\?ip=0&_=\d+&ver=1\.\d\d\d\.\d+/,
                                   'fetch',
                               ],
-                              [/https:\/\/localhost:\d+\/static\/(lazy-?)recorder.js\?v=1\.\d\d\d\.\d+/, 'script'],
+                              [/https:\/\/localhost:\d+\/static\/(lazy-)?recorder.js\?v=1\.\d\d\d\.\d+/, 'script'],
                               [/https:\/\/example.com/, expectedInitiatorType],
                           ]
 
