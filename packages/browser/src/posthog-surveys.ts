@@ -76,8 +76,8 @@ export class PostHogSurveys {
             logger.info('Disabled. Not loading surveys.')
             return
         }
-        if (this._instance.config.cookieless_mode) {
-            logger.info('Not loading surveys in cookieless mode.')
+        if (this._instance.config.cookieless_mode && this._instance.consent.isOptedOut()) {
+            logger.info('Not loading surveys in cookieless mode without consent.')
             return
         }
 
