@@ -29,7 +29,6 @@ import { PostHogPersistence } from './posthog-persistence'
 import { PostHogSurveys } from './posthog-surveys'
 import {
     DisplaySurveyOptions,
-    DisplaySurveyType,
     SurveyCallback,
     SurveyEventName,
     SurveyEventProperties,
@@ -82,7 +81,11 @@ import { logger } from './utils/logger'
 import { getPersonPropertiesHash } from './utils/property-utils'
 import { RequestRouter, RequestRouterRegion } from './utils/request-router'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
-import { getSurveyInteractionProperty, setSurveySeenOnLocalStorage } from './utils/survey-utils'
+import {
+    DEFAULT_DISPLAY_SURVEY_OPTIONS,
+    getSurveyInteractionProperty,
+    setSurveySeenOnLocalStorage,
+} from './utils/survey-utils'
 import {
     isEmptyString,
     isError,
@@ -1786,15 +1789,30 @@ export class PostHog {
         this.surveys.renderSurvey(surveyId, selector)
     }
 
-    /** Render a styled survey popup. Notice that this method ignores any delay or conditions set on the survey. */
-    displaySurvey(
-        surveyId: string,
-        options: DisplaySurveyOptions = {
-            ignoreDelay: false,
-            ignoreConditions: false,
-            displayType: DisplaySurveyType.Popover,
-        }
-    ): void {
+    /**
+     * Display a survey programmatically as either a popover or inline element.
+     *
+     * @param {string} surveyId - The survey ID to display
+     * @param {DisplaySurveyOptions} options - Display configuration
+     *
+     * @example
+     * // Display as popover (respects all conditions defined in the dashboard)
+     * posthog.displaySurvey('survey-id-123')
+     *
+     * // Display inline in a specific element
+     * posthog.displaySurvey('survey-id-123', {
+     *   displayType: DisplaySurveyType.Inline,
+     *   selector: '#survey-container'
+     * })
+     *
+     * // Force display ignoring conditions and delays
+     * posthog.displaySurvey('survey-id-123', {
+     *   displayType: DisplaySurveyType.Popover,
+     *   ignoreConditions: true,
+     *   ignoreDelay: true
+     * })
+     */
+    displaySurvey(surveyId: string, options: DisplaySurveyOptions = DEFAULT_DISPLAY_SURVEY_OPTIONS): void {
         this.surveys.displaySurvey(surveyId, options)
     }
 

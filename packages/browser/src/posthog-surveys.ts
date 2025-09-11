@@ -296,12 +296,12 @@ export class PostHogSurveys {
         return this._surveyManager.checkSurveyEligibility(survey)
     }
 
-    canRenderSurvey(survey: string | Survey): SurveyRenderReason {
+    canRenderSurvey(surveyId: string | Survey): SurveyRenderReason {
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return { visible: false, disabledReason: 'SDK is not enabled or survey functionality is not yet loaded' }
         }
-        const eligibility = this._checkSurveyEligibility(survey)
+        const eligibility = this._checkSurveyEligibility(surveyId)
 
         return { visible: eligibility.eligible, disabledReason: eligibility.reason }
     }
@@ -366,14 +366,7 @@ export class PostHogSurveys {
         this._surveyManager.renderSurvey(survey, elem)
     }
 
-    displaySurvey(
-        surveyId: string,
-        options: DisplaySurveyOptions = {
-            ignoreConditions: false,
-            ignoreDelay: false,
-            displayType: DisplaySurveyType.Popover,
-        }
-    ) {
+    displaySurvey(surveyId: string, options: DisplaySurveyOptions) {
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return
@@ -383,8 +376,15 @@ export class PostHogSurveys {
             logger.warn('Survey not found')
             return
         }
+        let surveyToDisplay = survey
         if (survey.appearance?.surveyPopupDelaySeconds && options.ignoreDelay) {
-            survey.appearance.surveyPopupDelaySeconds = 0
+            surveyToDisplay = {
+                ...survey,
+                appearance: {
+                    ...survey.appearance,
+                    surveyPopupDelaySeconds: 0,
+                },
+            }
         }
         if (options.ignoreConditions === false) {
             const canRender = this.canRenderSurvey(survey)
@@ -394,9 +394,9 @@ export class PostHogSurveys {
             }
         }
         if (options.displayType === DisplaySurveyType.Inline) {
-            this.renderSurvey(survey, options.selector)
+            this.renderSurvey(surveyToDisplay, options.selector)
             return
         }
-        this._surveyManager.handlePopoverSurvey(survey)
+        this._surveyManager.handlePopoverSurvey(surveyToDisplay)
     }
 }
