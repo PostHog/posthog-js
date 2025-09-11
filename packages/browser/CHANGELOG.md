@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.264.0
+
+### Minor Changes
+
+- [#2310](https://github.com/PostHog/posthog-js/pull/2310) [`2eace6f`](https://github.com/PostHog/posthog-js/commit/2eace6f7efce6901ac8b51060bb2e6be834571b5) Thanks [@robbie-c](https://github.com/robbie-c)! - Add support for partitioned cookies
+
 ## 1.263.0
 
 ### Minor Changes
