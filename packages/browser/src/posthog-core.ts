@@ -167,6 +167,7 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_external_dependency_loading: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
+    partitioned_cookie: false,
     ip: false,
     opt_out_capturing_by_default: false,
     opt_out_persistence_by_default: false,
