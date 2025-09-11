@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.263.0
+
+### Minor Changes
+
+- [#2294](https://github.com/PostHog/posthog-js/pull/2294) [`5137440`](https://github.com/PostHog/posthog-js/commit/513744038f99b533f97c68235a730a1fefb6c330) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: add a redux logging middleware to posthog-js
+
 ## 1.262.1
 
 ### Patch Changes
