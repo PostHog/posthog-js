@@ -43,7 +43,13 @@ export interface CostOverride {
 
 export const getModelParams = (
   params:
-    | ((ChatCompletionCreateParamsBase | MessageCreateParams | ResponseCreateParams | ResponseCreateParamsWithTools | EmbeddingCreateParams) &
+    | ((
+        | ChatCompletionCreateParamsBase
+        | MessageCreateParams
+        | ResponseCreateParams
+        | ResponseCreateParamsWithTools
+        | EmbeddingCreateParams
+      ) &
         MonitoringParams)
     | null
 ): Record<string, any> => {
@@ -362,7 +368,13 @@ export type SendEventToPosthogParams = {
   baseURL: string
   httpStatus: number
   usage?: TokenUsage
-  params: (ChatCompletionCreateParamsBase | MessageCreateParams | ResponseCreateParams | ResponseCreateParamsWithTools | EmbeddingCreateParams) &
+  params: (
+    | ChatCompletionCreateParamsBase
+    | MessageCreateParams
+    | ResponseCreateParams
+    | ResponseCreateParamsWithTools
+    | EmbeddingCreateParams
+  ) &
     MonitoringParams
   isError?: boolean
   error?: string

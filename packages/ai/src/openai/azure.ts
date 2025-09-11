@@ -4,10 +4,7 @@ import { AIEvent, formatResponseOpenAI, MonitoringParams, sendEventToPosthog, wi
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
-import type {
-  ResponseCreateParamsWithTools,
-  ExtractParsedContentFromParams,
-} from 'openai/lib/ResponsesParser'
+import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } from 'openai/lib/ResponsesParser'
 import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
 import { extractPosthogParams } from './utils'
 
@@ -487,10 +484,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
     }
   }
 
-  public parse<
-    Params extends ResponseCreateParamsWithTools,
-    ParsedT = ExtractParsedContentFromParams<Params>
-  >(
+  public parse<Params extends ResponseCreateParamsWithTools, ParsedT = ExtractParsedContentFromParams<Params>>(
     body: Params & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<ParsedResponse<ParsedT>> {
