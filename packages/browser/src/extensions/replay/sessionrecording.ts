@@ -656,9 +656,9 @@ export class SessionRecording {
             $sdk_debug_replay_remote_trigger_matching_config: response.sessionRecording?.triggerMatchType,
         })
 
-        this._urlTriggerMatching.onRemoteConfig(response)
-        this._eventTriggerMatching.onRemoteConfig(response)
-        this._linkedFlagMatching.onRemoteConfig(response, (flag, variant) => {
+        this._urlTriggerMatching.onConfig(response)
+        this._eventTriggerMatching.onConfig(response)
+        this._linkedFlagMatching.onConfig(response, (flag, variant) => {
             this._reportStarted('linked_flag_matched', {
                 flag,
                 variant,

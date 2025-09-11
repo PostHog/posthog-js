@@ -3,7 +3,7 @@ import {
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
 } from '../../constants'
 import { PostHog } from '../../posthog-core'
-import { FlagVariant, RemoteConfig, SessionRecordingUrlTrigger } from '../../types'
+import { FlagVariant, RemoteConfig, SessionRecordingPersistedConfig, SessionRecordingUrlTrigger } from '../../types'
 import { isNullish, isBoolean, isString, isObject } from '@posthog/core'
 import { window } from '../../utils/globals'
 
@@ -49,6 +49,9 @@ export type TriggerStatus = (typeof triggerStatuses)[number]
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const sessionRecordingStatuses = [DISABLED, SAMPLED, ACTIVE, BUFFERING, PAUSED, LAZY_LOADING] as const
 export type SessionRecordingStatus = (typeof sessionRecordingStatuses)[number]
+
+// while we have both lazy and eager loaded replay we might get either type of config
+type ReplayConfigType = RemoteConfig | SessionRecordingPersistedConfig
 
 function sessionRecordingUrlTriggerMatches(url: string, triggers: SessionRecordingUrlTrigger[]) {
     return triggers.some((trigger) => {
@@ -120,6 +123,10 @@ export class PendingTriggerMatching implements TriggerStatusMatching {
     }
 }
 
+const isEagerLoadedConfig = (x: ReplayConfigType): x is RemoteConfig => {
+    return 'sessionRecording' in x
+}
+
 export class URLTriggerMatching implements TriggerStatusMatching {
     _urlTriggers: SessionRecordingUrlTrigger[] = []
     _urlBlocklist: SessionRecordingUrlTrigger[] = []
@@ -128,9 +135,11 @@ export class URLTriggerMatching implements TriggerStatusMatching {
 
     constructor(private readonly _instance: PostHog) {}
 
-    onRemoteConfig(response: RemoteConfig) {
-        this._urlTriggers = response.sessionRecording?.urlTriggers || []
-        this._urlBlocklist = response.sessionRecording?.urlBlocklist || []
+    onConfig(config: ReplayConfigType) {
+        this._urlTriggers =
+            (isEagerLoadedConfig(config) ? config.sessionRecording?.urlTriggers : config?.urlTriggers) || []
+        this._urlBlocklist =
+            (isEagerLoadedConfig(config) ? config.sessionRecording?.urlBlocklist : config?.urlBlocklist) || []
     }
 
     private _urlTriggerStatus(sessionId: string): TriggerStatus {
@@ -207,8 +216,9 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
         return result
     }
 
-    onRemoteConfig(response: RemoteConfig, onStarted: (flag: string, variant: string | null) => void) {
-        this.linkedFlag = response.sessionRecording?.linkedFlag || null
+    onConfig(config: ReplayConfigType, onStarted: (flag: string, variant: string | null) => void) {
+        this.linkedFlag =
+            (isEagerLoadedConfig(config) ? config.sessionRecording?.linkedFlag : config?.linkedFlag) || null
 
         if (!isNullish(this.linkedFlag) && !this.linkedFlagSeen) {
             const linkedFlag = isString(this.linkedFlag) ? this.linkedFlag : this.linkedFlag.flag
@@ -245,8 +255,9 @@ export class EventTriggerMatching implements TriggerStatusMatching {
 
     constructor(private readonly _instance: PostHog) {}
 
-    onRemoteConfig(response: RemoteConfig) {
-        this._eventTriggers = response.sessionRecording?.eventTriggers || []
+    onConfig(config: ReplayConfigType) {
+        this._eventTriggers =
+            (isEagerLoadedConfig(config) ? config.sessionRecording?.eventTriggers : config?.eventTriggers) || []
     }
 
     private _eventTriggerStatus(sessionId: string): TriggerStatus {

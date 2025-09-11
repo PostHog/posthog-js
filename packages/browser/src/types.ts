@@ -1356,6 +1356,55 @@ export type SessionRecordingCanvasOptions = {
     canvasQuality?: string | null
 }
 
+/** the config stored in persistence when session recording remote config is received */
+export type SessionRecordingPersistedConfig = Omit<
+    SessionRecordingRemoteConfig,
+    | 'recordCanvas'
+    | 'canvasFps'
+    | 'canvasQuality'
+    | 'networkPayloadCapture'
+    | 'sampleRate'
+    | 'minimumDurationMilliseconds'
+> & {
+    enabled: boolean
+    networkPayloadCapture: SessionRecordingRemoteConfig['networkPayloadCapture'] & {
+        capturePerformance: RemoteConfig['capturePerformance']
+    }
+    canvasRecording: {
+        enabled: SessionRecordingRemoteConfig['recordCanvas']
+        fps: SessionRecordingRemoteConfig['canvasFps']
+        quality: SessionRecordingRemoteConfig['canvasQuality']
+    }
+    // we don't allow string config here
+    sampleRate: number | null
+    minimumDurationMilliseconds: number | null | undefined
+}
+
+export type SessionRecordingRemoteConfig = SessionRecordingCanvasOptions & {
+    endpoint?: string
+    consoleLogRecordingEnabled?: boolean
+    // the API returns a decimal between 0 and 1 as a string
+    sampleRate?: string | null
+    minimumDurationMilliseconds?: number
+    linkedFlag?: string | FlagVariant | null
+    networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
+    masking?: Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector' | 'blockSelector'>
+    urlTriggers?: SessionRecordingUrlTrigger[]
+    scriptConfig?: { script?: string | undefined }
+    urlBlocklist?: SessionRecordingUrlTrigger[]
+    eventTriggers?: string[]
+    /**
+     * Controls how event, url, sampling, and linked flag triggers are combined
+     *
+     * `any` means that if any of the triggers match, the session will be recorded
+     * `all` means that all the triggers must match for the session to be recorded
+     *
+     * originally it was (event || url) && (sampling || linked flag)
+     * which nobody wanted, now the default is all
+     */
+    triggerMatchType?: 'any' | 'all'
+}
+
 /**
  * Remote configuration for the PostHog instance
  *
@@ -1417,30 +1466,7 @@ export interface RemoteConfig {
     /**
      * Session recording configuration options
      */
-    sessionRecording?: SessionRecordingCanvasOptions & {
-        endpoint?: string
-        consoleLogRecordingEnabled?: boolean
-        // the API returns a decimal between 0 and 1 as a string
-        sampleRate?: string | null
-        minimumDurationMilliseconds?: number
-        linkedFlag?: string | FlagVariant | null
-        networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
-        masking?: Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector'>
-        urlTriggers?: SessionRecordingUrlTrigger[]
-        scriptConfig?: { script?: string | undefined }
-        urlBlocklist?: SessionRecordingUrlTrigger[]
-        eventTriggers?: string[]
-        /**
-         * Controls how event, url, sampling, and linked flag triggers are combined
-         *
-         * `any` means that if any of the triggers match, the session will be recorded
-         * `all` means that all the triggers must match for the session to be recorded
-         *
-         * originally it was (event || url) && (sampling || linked flag)
-         * which nobody wanted, now the default is all
-         */
-        triggerMatchType?: 'any' | 'all'
-    }
+    sessionRecording?: SessionRecordingRemoteConfig
 
     /**
      * Whether surveys are enabled
