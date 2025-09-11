@@ -35,7 +35,6 @@ import { SeverityLevel } from '../types'
 // Uncomment the above and comment the below to get type checking for development
 
 type _SentryEvent = any
-type _SentryException = any
 type _SentryEventProcessor = any
 type _SentryHub = any
 
@@ -49,15 +48,6 @@ interface _SentryIntegrationClass {
     setupOnce(addGlobalEventProcessor: (callback: _SentryEventProcessor) => void, getCurrentHub: () => _SentryHub): void
 }
 
-interface SentryExceptionProperties {
-    $sentry_event_id: any
-    $sentry_exception: any
-    $sentry_exception_message: any
-    $sentry_exception_type: any
-    $sentry_tags: any
-    $sentry_url?: string
-}
-
 export type SentryIntegrationOptions = {
     organization?: string
     projectId?: number
@@ -69,7 +59,7 @@ const NAME = 'posthog-js'
 
 export function createEventProcessor(
     _posthog: PostHog,
-    { organization, projectId, prefix, severityAllowList = ['error'] }: SentryIntegrationOptions = {}
+    { severityAllowList = ['error'] }: SentryIntegrationOptions = {}
 ): (event: _SentryEvent) => _SentryEvent {
     return (event) => {
         const shouldProcessLevel = severityAllowList === '*' || severityAllowList.includes(event.level as SeverityLevel)
@@ -84,58 +74,6 @@ export function createEventProcessor(
         if (_posthog.sessionRecordingStarted()) {
             event.tags['PostHog Recording URL'] = _posthog.get_session_replay_url({ withTimestamp: true })
         }
-
-        const exceptions: _SentryException[] = event.exception?.values || []
-
-        const exceptionList = exceptions.map((exception) => {
-            return {
-                ...exception,
-                stacktrace: exception.stacktrace
-                    ? {
-                          ...exception.stacktrace,
-                          type: 'raw',
-                          frames: (exception.stacktrace.frames || []).map((frame: any) => {
-                              return { ...frame, platform: 'web:javascript' }
-                          }),
-                      }
-                    : undefined,
-            }
-        })
-
-        const data: SentryExceptionProperties & {
-            // two properties added to match any exception auto-capture
-            // added manually to avoid any dependency on the lazily loaded content
-            $exception_message: any
-            $exception_type: any
-            $exception_list: any
-            $exception_personURL: string
-            $exception_level: SeverityLevel
-        } = {
-            // PostHog Exception Properties,
-            $exception_message: exceptions[0]?.value || event.message,
-            $exception_type: exceptions[0]?.type,
-            $exception_personURL: personUrl,
-            $exception_level: event.level,
-            $exception_list: exceptionList,
-            // Sentry Exception Properties
-            $sentry_event_id: event.event_id,
-            $sentry_exception: event.exception,
-            $sentry_exception_message: exceptions[0]?.value || event.message,
-            $sentry_exception_type: exceptions[0]?.type,
-            $sentry_tags: event.tags,
-        }
-
-        if (organization && projectId) {
-            data['$sentry_url'] =
-                (prefix || 'https://sentry.io/organizations/') +
-                organization +
-                '/issues/?project=' +
-                projectId +
-                '&query=' +
-                event.event_id
-        }
-
-        _posthog.exceptions.sendExceptionEvent(data)
 
         return event
     }
