@@ -521,13 +521,6 @@ export interface PostHogConfig {
     secure_cookie: boolean
 
     /**
-     * Determines whether PostHog should use partitioned cookies.
-     * @see https://developer.mozilla.org/en-US/docs/Web/Privacy/Guides/Privacy_sandbox/Partitioned_cookies
-     * @default false
-     */
-    partitioned_cookie: boolean
-
-    /**
      * Determines if users should be opted out of PostHog tracking by default,
      * requiring additional logic to opt them into capturing by calling `posthog.opt_in_capturing()`.
      *
@@ -1583,7 +1576,6 @@ export interface PersistentStore {
         expire_days?: number | null,
         cross_subdomain?: boolean,
         secure?: boolean,
-        partitioned?: boolean,
         debug?: boolean
     ) => void
     _remove: (name: string, cross_subdomain?: boolean) => void

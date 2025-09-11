@@ -128,14 +128,13 @@ export const cookieStore: PersistentStore = {
         return cookie
     },
 
-    _set: function (name, value, days, cross_subdomain, is_secure, is_partitioned?: boolean) {
+    _set: function (name, value, days, cross_subdomain, is_secure) {
         if (!document) {
             return
         }
         try {
             let expires = '',
-                secure = '',
-                partition = ''
+                secure = ''
 
             const cdomain = chooseCookieDomain(document.location.hostname, cross_subdomain)
 
@@ -149,10 +148,6 @@ export const cookieStore: PersistentStore = {
                 secure = '; secure'
             }
 
-            if (is_partitioned) {
-                partition = '; partitioned'
-            }
-
             const new_cookie_val =
                 name +
                 '=' +
@@ -160,8 +155,7 @@ export const cookieStore: PersistentStore = {
                 expires +
                 '; SameSite=Lax; path=/' +
                 cdomain +
-                secure +
-                partition
+                secure
 
             // 4096 bytes is the size at which some browsers (e.g. firefox) will not store a cookie, warn slightly before that
             if (new_cookie_val.length > 4096 * 0.9) {
@@ -290,9 +284,9 @@ export const localPlusCookieStore: PersistentStore = {
         return null
     },
 
-    _set: function (name, value, days, cross_subdomain, is_secure, is_partitioned, debug) {
+    _set: function (name, value, days, cross_subdomain, is_secure, debug) {
         try {
-            localStore._set(name, value, undefined, undefined, undefined, debug)
+            localStore._set(name, value, undefined, undefined, debug)
             const cookiePersistedProperties: Record<string, any> = {}
             COOKIE_PERSISTED_PROPERTIES.forEach((key) => {
                 if (value[key]) {
@@ -301,15 +295,7 @@ export const localPlusCookieStore: PersistentStore = {
             })
 
             if (Object.keys(cookiePersistedProperties).length) {
-                cookieStore._set(
-                    name,
-                    cookiePersistedProperties,
-                    days,
-                    cross_subdomain,
-                    is_secure,
-                    is_partitioned,
-                    debug
-                )
+                cookieStore._set(name, cookiePersistedProperties, days, cross_subdomain, is_secure, debug)
             }
         } catch (err) {
             localStore._error(err)

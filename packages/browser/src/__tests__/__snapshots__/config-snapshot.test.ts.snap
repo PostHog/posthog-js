@@ -155,10 +155,6 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"false\\",
     \\"true\\"
   ],
-  \\"partitioned_cookie\\": [
-    \\"false\\",
-    \\"true\\"
-  ],
   \\"opt_out_capturing_by_default\\": [
     \\"false\\",
     \\"true\\"
