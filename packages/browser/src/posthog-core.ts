@@ -2874,6 +2874,11 @@ export class PostHog {
         this.consent.optInOut(true)
         this._sync_opt_out_with_persistence()
 
+        // Reinitialize surveys if we're in cookieless mode and just opted in
+        if (this.config.cookieless_mode == 'on_reject') {
+            this.surveys.loadIfEnabled()
+        }
+
         // Don't capture if captureEventName is null or false
         if (isUndefined(options?.captureEventName) || options?.captureEventName) {
             this.capture(options?.captureEventName ?? '$opt_in', options?.captureProperties, { send_instantly: true })
