@@ -624,7 +624,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     get _remoteConfig(): SessionRecordingPersistedConfig | undefined {
-        return this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)
+        const persistedConfig: any = this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)
+        if (!persistedConfig) {
+            return undefined
+        }
+        const parsedConfig = isObject(persistedConfig) ? persistedConfig : JSON.parse(persistedConfig)
+        return parsedConfig as SessionRecordingPersistedConfig
     }
 
     start(startReason?: SessionStartReason) {
