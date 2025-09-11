@@ -330,14 +330,12 @@ const posthogMiddleware = posthogReduxLogger<TodoState>({
     //     //     return { ...action, payload: { ...action.payload, password: '[REDACTED]' } }
     //     // }
     // },
-
     // Example: optionally mask sensitive data from state
     // maskReduxState: (state) => {
     //     // You could remove sensitive fields from state here
     //     // const { sensitiveData, ...maskedState } = state
     //     // return maskedState
     // },
-
     // Example: custom logger function
     // logger: (title, reduxEvent) => {
     //     // Custom logging - could send to analytics, save to file, etc.
@@ -345,12 +343,6 @@ const posthogMiddleware = posthogReduxLogger<TodoState>({
     //     // or disable logging entirely: () => {}
     //     // or log only errors: if (reduxEvent.type.includes('ERROR')) console.error(title, reduxEvent)
     // },
-    // Example: slow action logging
-    onDuration: (t, r, d) => {
-        if (d > 1500) {
-            console.error('SLOW ACTION DETECTED (' + d + 'ms): ', t, r)
-        }
-    },
 })
 
 // Create and export store with Redux Toolkit

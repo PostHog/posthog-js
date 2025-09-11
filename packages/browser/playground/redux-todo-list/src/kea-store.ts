@@ -11,19 +11,11 @@ resetContext({
             //     const { user, ...maskedState } = state
             //     return { ...maskedState, user: { ...user, email: '[MASKED]' } }
             // },
-
             // Example: skip logging certain actions
             // maskAction: (action) => {
             //     if (action.type.includes('SENSITIVE')) return null
             //     return action
             // },
-
-            // Example: slow action detection
-            onDuration: (title, event, durationMs) => {
-                if (durationMs > 100) {
-                    console.warn(`Slow Kea action detected (${durationMs}ms):`, title, event)
-                }
-            },
         }),
     ],
 })

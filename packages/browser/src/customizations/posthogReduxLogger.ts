@@ -76,11 +76,6 @@ export interface PostHogStateLoggerConfig<S = any> {
      * normally this is only changed with posthog support assistance
      */
     rateLimiterBucketSize?: number
-    /**
-     * separately invoked for the time taken to process each action
-     * can be used to e.g. emit a log or event when there is a slow action
-     */
-    onDuration?: (title: string, stateEvent: StateEvent, durationMs: number) => void
 }
 
 /**
@@ -229,14 +224,13 @@ export function posthogReduxLogger<S = any>(
     //eslint-disable-next-line @typescript-eslint/no-empty-object-type
 ): ReduxMiddleware<{}, S> {
     const {
-        maskAction = (action: UnknownAction) => action,
-        maskState = (state: S) => state,
+        maskAction,
+        maskState,
         titleFunction = defaultTitleFunction,
         logger = defaultLogger,
         diffState = true,
         rateLimiterRefillRate = 1,
         rateLimiterBucketSize = 10,
-        onDuration = () => {},
     } = config
 
     const rateLimiter: BucketedRateLimiter<string> = new BucketedRateLimiter({
@@ -266,7 +260,7 @@ export function posthogReduxLogger<S = any>(
             // Get the state after the action
             const nextState = store.getState()
 
-            const maskedAction = maskAction(typedAction)
+            const maskedAction = maskAction ? maskAction(typedAction) : typedAction
 
             if (!maskedAction) {
                 return result
@@ -279,8 +273,8 @@ export function posthogReduxLogger<S = any>(
             } else {
                 // Apply masking to states
                 try {
-                    const maskedPrevState = maskState(prevState, maskedAction)
-                    const maskedNextState = maskState(nextState, maskedAction)
+                    const maskedPrevState = maskState ? maskState(prevState, maskedAction) : prevState
+                    const maskedNextState = maskState ? maskState(nextState, maskedAction) : nextState
 
                     type FilteredState = { 'invalid state'?: string } | (S & Record<string, any>)
                     let filteredPrevState: FilteredState
@@ -312,7 +306,6 @@ export function posthogReduxLogger<S = any>(
 
                     const title = titleFunction(reduxEvent)
                     logger(title, reduxEvent)
-                    onDuration(title, reduxEvent, executionTimeMs)
                 } catch (e: any) {
                     // logging should never throw errors and break someone's app
                     phConsoleLogger.error('Error logging state:', e)
