@@ -2,7 +2,7 @@ const path = require('path');
 const { generateApiSpecs } = require('../../../scripts/docs/parser');
 const { HOG_REF } = require('../../../scripts/docs/constants');
 
-// Node-specific configuration
+// React Native-specific configuration
 const REACT_NATIVE_SPEC_INFO = {
     id: 'posthog-react-native',
     title: 'PostHog React Native SDK',
@@ -11,9 +11,9 @@ const REACT_NATIVE_SPEC_INFO = {
     specUrl: 'https://github.com/PostHog/posthog-js'
 };
 
-// Node-specific type examples (can be customized as needed)
+// React Native-specific type examples (can be customized as needed)
 const REACT_NATIVE_TYPE_EXAMPLES = {
-    Properties: `// Properties for React Native events
+    PostHogEventProperties: `// Properties for React Native events
 {
     event: 'user_signed_up',
     userId: 'user123',
@@ -24,7 +24,7 @@ const REACT_NATIVE_TYPE_EXAMPLES = {
         name: 'John Doe'
     }
 }`,
-    Property: `// React Native property value
+    PostHogEventProperty: `// Can be a string or an object
 "user@example.com" | { name: "John", age: 25 }`
 };
 

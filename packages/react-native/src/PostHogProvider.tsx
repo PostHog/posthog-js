@@ -46,7 +46,7 @@ function PostHogNavigationHook({
  * Autocapturing navigation requires further configuration. See the [React Native SDK navigation docs](https://posthog.com/docs/libraries/react-native#capturing-screen-views)
  * for more information about autocapturing navigation.
  *
- * This is the recommended way to set up PostHog for React Native. This utilizes the Context API to pass the PostHog client around, enable autocapture, and ensure that the queue is flushed at the right time.
+ * This is the recommended way to set up PostHog for React Native. This utilizes the Context API to pass the PostHog client around, enable autocapture.
  *
  * {@label Initialization}
  *
