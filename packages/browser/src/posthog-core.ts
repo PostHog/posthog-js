@@ -212,6 +212,8 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
 
     // Used for internal testing
     _onCapture: __NOOP,
+
+    __preview_eager_load_replay: true,
 })
 
 export const configRenames = (origConfig: Partial<PostHogConfig>): Partial<PostHogConfig> => {
