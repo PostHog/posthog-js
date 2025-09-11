@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.264.2
+
+### Patch Changes
+
+- [#2314](https://github.com/PostHog/posthog-js/pull/2314) [`5836a2f`](https://github.com/PostHog/posthog-js/commit/5836a2f6bbc32fa8717157edf1a29da29549691a) Thanks [@ordehi](https://github.com/ordehi)! - Fixed a bug that prevented surveys from loading in cookieless mode using the on_reject option. Surveys now correctly initialize when consent is given.
+
 ## 1.264.1
 
 ### Patch Changes
