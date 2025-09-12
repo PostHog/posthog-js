@@ -151,7 +151,7 @@ const createMockStreamChunks = (options: MockAnthropicResponseOptions = {}): Moc
         cache_creation_input_tokens: options.usage?.cache_creation_input_tokens || 0,
         cache_read_input_tokens: options.usage?.cache_read_input_tokens || 0,
         output_tokens: 0,
-      },
+      } as AnthropicOriginal.Messages.Usage,
     },
   })
 
@@ -775,12 +775,12 @@ describe('PostHogAnthropic', () => {
       const errorStream = {
         tee: jest.fn().mockReturnValue([
           {
-            [Symbol.asyncIterator]: async function () {
+            async *[Symbol.asyncIterator]() {
               throw streamError
             },
           },
           {
-            [Symbol.asyncIterator]: async function () {
+            async *[Symbol.asyncIterator]() {
               throw streamError
             },
           },
