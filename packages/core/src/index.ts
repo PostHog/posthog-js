@@ -35,7 +35,7 @@ import {
   allSettled,
   assert,
   currentISOTime,
-  isError,
+  isPlainError,
   removeTrailingSlash,
   retriable,
   RetriableOptions,
@@ -2015,8 +2015,8 @@ export abstract class PostHogCore extends PostHogCoreStateless {
       $exception_level: 'error',
       $exception_list: [
         {
-          type: isError(error) ? error.name : 'Error',
-          value: isError(error) ? error.message : error,
+          type: isPlainError(error) ? error.name : 'Error',
+          value: isPlainError(error) ? error.message : error,
           mechanism: {
             handled: true,
             synthetic: false,
