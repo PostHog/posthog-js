@@ -44,9 +44,9 @@
     "@ai-sdk/provider": "^2.0.0",
     "@anthropic-ai/sdk": "^0.62.0",
     "@google/genai": "^1.19.0",
-    "@langchain/core": "^0.3.37",
+    "@langchain/core": "^0.3.75",
     "ai": "^5.0.4",
-    "langchain": "^0.3.15",
+    "langchain": "^0.3.33",
     "openai": "^5.20.1",
     "uuid": "^11.0.5",
     "zod": "^3.25.0"
