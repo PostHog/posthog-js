@@ -4,8 +4,8 @@ import {
   createTestClient,
   PostHogCoreTestClient,
   PostHogCoreTestClientMocks,
-} from '../src/testing'
-import { PostHogPersistedProperty } from '../src'
+} from '@/testing'
+import { PostHogPersistedProperty } from '@/types'
 
 describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient

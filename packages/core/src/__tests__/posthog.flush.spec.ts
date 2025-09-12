@@ -1,11 +1,5 @@
-import {
-  delay,
-  waitForPromises,
-  createTestClient,
-  PostHogCoreTestClient,
-  PostHogCoreTestClientMocks,
-} from '../src/testing'
-import { PostHogPersistedProperty } from '../src'
+import { delay, waitForPromises, createTestClient, PostHogCoreTestClient, PostHogCoreTestClientMocks } from '@/testing'
+import { PostHogPersistedProperty } from '@/types'
 
 describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient

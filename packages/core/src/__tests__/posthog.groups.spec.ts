@@ -4,7 +4,7 @@ import {
   PostHogCoreTestClientMocks,
   parseBody,
   waitForPromises,
-} from '../src/testing'
+} from '@/testing'
 
 describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient

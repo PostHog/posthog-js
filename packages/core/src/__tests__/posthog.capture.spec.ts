@@ -4,8 +4,8 @@ import {
   createTestClient,
   PostHogCoreTestClient,
   PostHogCoreTestClientMocks,
-} from '../src/testing'
-import { uuidv7 } from '../src/vendor/uuidv7'
+} from '@/testing'
+import { uuidv7 } from '@/vendor/uuidv7'
 
 describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient

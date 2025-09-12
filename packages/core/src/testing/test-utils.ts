@@ -1,3 +1,5 @@
+import { Logger } from '@/types'
+
 export const wait = async (t: number): Promise<void> => {
   await new Promise((r) => setTimeout(r, t))
 }
@@ -30,4 +32,14 @@ export const delay = (ms: number): Promise<void> => {
   return new Promise((resolve) => {
     setTimeout(resolve, ms)
   })
+}
+
+export const mockLogger: Logger = {
+  _log: jest.fn(),
+  critical: jest.fn(),
+  uninitializedWarning: jest.fn(),
+  info: jest.fn(),
+  warn: jest.fn(),
+  error: jest.fn(),
+  createLogger: () => mockLogger,
 }
