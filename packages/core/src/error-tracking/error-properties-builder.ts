@@ -71,7 +71,7 @@ export class ErrorPropertiesBuilder {
   private applyChunkIds(frames: StackFrame[], chunkIdMap?: ChunkIdMapType): StackFrame[] {
     return frames.map((frame) => ({
       ...frame,
-      chunkId: frame.filename && chunkIdMap ? chunkIdMap[frame.filename] : undefined,
+      chunk_id: frame.filename && chunkIdMap ? chunkIdMap[frame.filename] : undefined,
     }))
   }
 
