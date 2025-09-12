@@ -56,7 +56,6 @@ export class PostHogPersistence {
     private readonly _name: string
     _disabled: boolean | undefined
     private _secure: boolean | undefined
-    private _partitioned: boolean | undefined
     private _expire_days: number | undefined
     private _default_expiry: number | undefined
     private _cross_subdomain: boolean | undefined
@@ -161,7 +160,6 @@ export class PostHogPersistence {
             this._expire_days,
             this._cross_subdomain,
             this._secure,
-            this._partitioned,
             this._config.debug
         )
     }
@@ -323,7 +321,6 @@ export class PostHogPersistence {
         this.set_disabled(config['disable_persistence'] || !!isDisabled)
         this.set_cross_subdomain(config['cross_subdomain_cookie'])
         this.set_secure(config['secure_cookie'])
-        this.set_partitioned(config['partitioned_cookie'])
 
         if (config.persistence !== oldConfig.persistence) {
             // If the persistence type has changed, we need to migrate the data.
@@ -359,14 +356,6 @@ export class PostHogPersistence {
     set_secure(secure: boolean): void {
         if (secure !== this._secure) {
             this._secure = secure
-            this.remove()
-            this.save()
-        }
-    }
-
-    set_partitioned(partitioned: boolean): void {
-        if (partitioned !== this._partitioned) {
-            this._partitioned = partitioned
             this.remove()
             this.save()
         }
