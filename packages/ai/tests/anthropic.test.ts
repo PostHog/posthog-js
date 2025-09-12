@@ -777,11 +777,13 @@ describe('PostHogAnthropic', () => {
           {
             async *[Symbol.asyncIterator]() {
               throw streamError
+              yield
             },
           },
           {
             async *[Symbol.asyncIterator]() {
               throw streamError
+              yield
             },
           },
         ]),
