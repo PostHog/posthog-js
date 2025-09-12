@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.265.0
+
+### Minor Changes
+
+- [#2032](https://github.com/PostHog/posthog-js/pull/2032) [`822d8df`](https://github.com/PostHog/posthog-js/commit/822d8dfb74e0fdbe78a45bc6fc04fb86896ba2eb) Thanks [@lucasheriques](https://github.com/lucasheriques)! - feat: allow display surveys popups on demand
+
 ## 1.264.2
 
 ### Patch Changes
