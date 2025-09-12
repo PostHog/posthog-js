@@ -46,6 +46,7 @@ describe('request', () => {
         readyState: 4,
         responseText: JSON.stringify('something here'),
         status: 200,
+        withCredentials: false,
     }
 
     const now = 1700000000000
@@ -115,6 +116,15 @@ describe('request', () => {
                 json: undefined,
                 text: '{wat',
             })
+        })
+
+        it('respects disableXHRCredentials=true', () => {
+            request(createRequest({ disableXHRCredentials: true }))
+            expect(mockedXHR.withCredentials).toBe(false)
+        })
+        it('respects disableXHRCredentials=false', () => {
+            request(createRequest({ disableXHRCredentials: false }))
+            expect(mockedXHR.withCredentials).toBe(true)
         })
     })
 
@@ -271,6 +281,15 @@ describe('request', () => {
                     )
                 }
             )
+        })
+        it('is used as a fallback when the requested transport is disabled', async () => {
+            request(
+                createRequest({
+                    transport: 'sendBeacon',
+                    disableTransport: ['sendBeacon'],
+                })
+            )
+            expect(mockedFetch).toHaveBeenCalled()
         })
     })
 
