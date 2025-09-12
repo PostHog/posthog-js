@@ -50,6 +50,7 @@ import { PromiseQueue } from './utils/promise-queue'
 
 export { getFeatureFlagValue } from './featureFlagUtils'
 export * from './utils'
+export * as ErrorTracking from './error-tracking'
 
 class PostHogFetchHttpError extends Error {
   name = 'PostHogFetchHttpError'
