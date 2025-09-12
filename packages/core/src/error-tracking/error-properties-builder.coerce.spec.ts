@@ -58,6 +58,16 @@ describe('ErrorPropertiesBuilder', () => {
       })
     })
 
+    it('should handle exception string', () => {
+      const syntheticError = new Error()
+      const exception = coerceInput('Uncaught exception: InternalError: but somehow still a string', syntheticError)
+      expect(exception).toMatchObject({
+        type: 'InternalError',
+        value: 'but somehow still a string',
+        stack: syntheticError.stack,
+      })
+    })
+
     it('should use keys in objects', async () => {
       const syntheticError = new Error()
       const errorObject = { foo: 'Foo value', bar: 'Bar value' }

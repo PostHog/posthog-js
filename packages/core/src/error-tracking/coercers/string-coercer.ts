@@ -9,9 +9,10 @@ export class StringCoercer implements ErrorTrackingCoercer<string> {
   }
 
   coerce(input: string, ctx: CoercingContext): ExceptionLike {
+    const [type, value] = this.getInfos(input)
     return {
-      type: 'Error',
-      value: input,
+      type: type ?? 'Error',
+      value: value ?? input,
       stack: ctx.syntheticException?.stack,
       synthetic: true,
     }
