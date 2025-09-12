@@ -1,4 +1,5 @@
-import { BucketedRateLimiter } from '../../src/utils/bucketed-rate-limiter'
+import { Logger } from '@/types'
+import { BucketedRateLimiter } from './bucketed-rate-limiter'
 
 jest.useFakeTimers()
 
@@ -10,7 +11,7 @@ describe('BucketedRateLimiter', () => {
       bucketSize: 10,
       refillRate: 1,
       refillInterval: 1000,
-      _logger: {},
+      _logger: {} as unknown as Logger,
     })
   })
 

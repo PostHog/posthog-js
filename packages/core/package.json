@@ -15,8 +15,8 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "lint": "eslint src test",
-    "lint:fix": "eslint src test --fix",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
     "build": "rslib build",
     "dev": "rslib build -w",
     "test:unit": "jest",

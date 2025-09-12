@@ -1,12 +1,12 @@
-import { PostHogPersistedProperty, PostHogV1FlagsResponse } from '../src'
-import { normalizeFlagsResponse } from '../src/featureFlagUtils'
+import { PostHogPersistedProperty, PostHogV1FlagsResponse } from '@/types'
+import { normalizeFlagsResponse } from '@/featureFlagUtils'
 import {
   parseBody,
   waitForPromises,
   createTestClient,
   PostHogCoreTestClient,
   PostHogCoreTestClientMocks,
-} from '../src/testing'
+} from '@/testing'
 
 describe('PostHog Feature Flags v1', () => {
   let posthog: PostHogCoreTestClient

@@ -1,4 +1,4 @@
-import { waitForPromises, createTestClient, PostHogCoreTestClient, PostHogCoreTestClientMocks } from '../src/testing'
+import { waitForPromises, createTestClient, PostHogCoreTestClient, PostHogCoreTestClientMocks } from '@/testing'
 
 describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient

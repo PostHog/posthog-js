@@ -1,4 +1,4 @@
-import { isGzipSupported, gzipCompress } from '../src/gzip'
+import { isGzipSupported, gzipCompress } from '@/gzip'
 import { gzip } from 'node:zlib'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { promisify } from 'node:util'

@@ -4,8 +4,8 @@ import {
   getFlagDetailsFromFlagsAndPayloads,
   getFeatureFlagValue,
   normalizeFlagsResponse,
-} from '../src/featureFlagUtils'
-import { PostHogFlagsResponse, FeatureFlagDetail } from '../src/types'
+} from '@/featureFlagUtils'
+import { PostHogFlagsResponse, FeatureFlagDetail } from '@/types'
 
 describe('featureFlagUtils', () => {
   describe('getFeatureFlagValue', () => {

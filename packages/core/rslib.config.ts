@@ -5,4 +5,10 @@ export default defineConfig({
     { format: 'esm', syntax: 'es6', dts: true, bundle: false },
     { format: 'cjs', syntax: 'es6', dts: true, bundle: false },
   ],
+  source: {
+    entry: {
+      index: ['src/**/*', '!src/__tests__/**/*', '!src/**/*.spec.ts'],
+    },
+    tsconfigPath: './tsconfig.build.json',
+  },
 })

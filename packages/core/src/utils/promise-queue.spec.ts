@@ -1,4 +1,4 @@
-import { PromiseQueue } from '../../src/utils/promise-queue'
+import { PromiseQueue } from './promise-queue'
 
 function buildPromise(time: number): Promise<number> {
   return new Promise((res, rej) => setTimeout(() => res(42), time))

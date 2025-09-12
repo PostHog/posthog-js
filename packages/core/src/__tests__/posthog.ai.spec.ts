@@ -4,7 +4,7 @@ import {
   createTestClient,
   PostHogCoreTestClient,
   PostHogCoreTestClientMocks,
-} from '../src/testing'
+} from '@/testing'
 
 describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient
