@@ -137,8 +137,8 @@ importers:
         specifier: ^0.62.0
         version: 0.62.0
       '@google/genai':
-        specifier: ^1.1.0
-        version: 1.10.0
+        specifier: ^1.19.0
+        version: 1.19.0
       '@langchain/core':
         specifier: ^0.3.37
         version: 0.3.66(@opentelemetry/api@1.9.0)(openai@5.20.1(ws@8.18.3)(zod@3.25.76))
@@ -1892,11 +1892,11 @@ packages:
   '@gar/promisify@1.1.3':
     resolution: {integrity: sha512-k2Ty1JcVojjJFwrg/ThKi2ujJ7XNLYaFGNB/bWT9wGR+oSMJHMa5w+CUq6p/pVrKeNNgA7pCqEcjSnHVoqJQFw==}
 
-  '@google/genai@1.10.0':
-    resolution: {integrity: sha512-PR4tLuiIFMrpAiiCko2Z16ydikFsPF1c5TBfI64hlZcv3xBEApSCceLuDYu1pNMq2SkNh4r66J4AG+ZexBnMLw==}
+  '@google/genai@1.19.0':
+    resolution: {integrity: sha512-mIMV3M/KfzzFA//0fziK472wKBJ1TdJLhozIUJKTPLyTDN1NotU+hyoHW/N0cfrcEWUK20YA0GxCeHC4z0SbMA==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
-      '@modelcontextprotocol/sdk': ^1.11.0
+      '@modelcontextprotocol/sdk': ^1.11.4
     peerDependenciesMeta:
       '@modelcontextprotocol/sdk':
         optional: true
@@ -12836,7 +12836,7 @@ snapshots:
       getenv: 1.0.0
       jimp-compact: 0.16.1
       mime: 2.6.0
-      node-fetch: 2.6.11
+      node-fetch: 2.7.0
       parse-png: 2.1.0
       resolve-from: 5.0.0
       semver: 7.3.2
@@ -12950,7 +12950,7 @@ snapshots:
 
   '@gar/promisify@1.1.3': {}
 
-  '@google/genai@1.10.0':
+  '@google/genai@1.19.0':
     dependencies:
       google-auth-library: 9.15.1
       ws: 8.18.3
@@ -18305,7 +18305,7 @@ snapshots:
       extend: 3.0.2
       https-proxy-agent: 7.0.6
       is-stream: 2.0.0
-      node-fetch: 2.6.11
+      node-fetch: 2.7.0
       uuid: 9.0.1
     transitivePeerDependencies:
       - encoding
@@ -18754,7 +18754,7 @@ snapshots:
   https-proxy-agent@7.0.6:
     dependencies:
       agent-base: 7.1.4
-      debug: 4.4.0
+      debug: 4.4.1
     transitivePeerDependencies:
       - supports-color
 
@@ -21236,7 +21236,7 @@ snapshots:
       metro-transform-plugins: 0.70.4
       metro-transform-worker: 0.70.4
       mime-types: 2.1.35
-      node-fetch: 2.6.11
+      node-fetch: 2.7.0
       nullthrows: 1.1.1
       rimraf: 2.7.1
       serialize-error: 2.1.0
