@@ -237,7 +237,7 @@ export class SurveyManager {
         }
     }
 
-    private _handlePopoverSurvey = (survey: Survey): void => {
+    public handlePopoverSurvey = (survey: Survey): void => {
         this._clearSurveyTimeout(survey.id)
         this._addSurveyToFocus(survey)
         const delaySeconds = survey.appearance?.surveyPopupDelaySeconds || 0
@@ -372,6 +372,14 @@ export class SurveyManager {
             // If both are Always or neither is Always, sort by delay
             return (a.appearance?.surveyPopupDelaySeconds || 0) - (b.appearance?.surveyPopupDelaySeconds || 0)
         })
+    }
+
+    public renderPopover = (survey: Survey): void => {
+        const { shadow } = retrieveSurveyShadow(survey, this._posthog)
+        Preact.render(
+            <SurveyPopup posthog={this._posthog} survey={survey} removeSurveyFromFocus={this._removeSurveyFromFocus} />,
+            shadow
+        )
     }
 
     public renderSurvey = (survey: Survey, selector: Element): void => {
@@ -547,7 +555,7 @@ export class SurveyManager {
 
                 // Popover Type Logic (only one shown at a time)
                 if (isNull(this._surveyInFocus) && survey.type === SurveyType.Popover) {
-                    this._handlePopoverSurvey(survey)
+                    this.handlePopoverSurvey(survey)
                 }
             })
 
@@ -562,7 +570,7 @@ export class SurveyManager {
 
     private _addSurveyToFocus = (survey: Pick<Survey, 'id'>): void => {
         if (!isNull(this._surveyInFocus)) {
-            logger.error(`Survey ${[...this._surveyInFocus]} already in focus. Cannot add survey ${survey.id}.`)
+            logger.error(`Survey ${this._surveyInFocus} already in focus. Cannot add survey ${survey.id}.`)
         }
         this._surveyInFocus = survey.id
     }
@@ -596,7 +604,7 @@ export class SurveyManager {
             surveyInFocus: this._surveyInFocus,
             surveyTimeouts: this._surveyTimeouts,
             handleWidget: this._handleWidget,
-            handlePopoverSurvey: this._handlePopoverSurvey,
+            handlePopoverSurvey: this.handlePopoverSurvey,
             manageWidgetSelectorListener: this._manageWidgetSelectorListener,
             sortSurveysByAppearanceDelay: this._sortSurveysByAppearanceDelay,
             checkFlags: this._checkFlags.bind(this),
@@ -782,7 +790,9 @@ export function usePopupVisibility(
     removeSurveyFromFocus: (survey: SurveyWithTypeAndAppearance) => void,
     surveyContainerRef?: React.RefObject<HTMLDivElement>
 ) {
-    const [isPopupVisible, setIsPopupVisible] = useState(isPreviewMode || millisecondDelay === 0)
+    const [isPopupVisible, setIsPopupVisible] = useState(
+        isPreviewMode || millisecondDelay === 0 || survey.type === SurveyType.ExternalSurvey
+    )
     const [isSurveySent, setIsSurveySent] = useState(false)
 
     const hidePopupWithViewTransition = () => {
@@ -907,6 +917,10 @@ function getPopoverPosition(
     position: SurveyPosition = SurveyPosition.Right,
     surveyWidgetType?: SurveyWidgetType
 ) {
+    if (type === SurveyType.ExternalSurvey) {
+        return {}
+    }
+
     switch (position) {
         case SurveyPosition.TopLeft:
             return { top: '0', left: '0', transform: 'translate(30px, 30px)' }

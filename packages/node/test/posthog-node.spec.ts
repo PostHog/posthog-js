@@ -2133,6 +2133,84 @@ describe('PostHog Node.js', () => {
       expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.any(Object))
     })
 
+    describe('`sendFeatureFlagEvent` client option', () => {
+      beforeEach(() => {
+        mockedFetch.mockClear()
+        const flags = {
+          flags: [
+            {
+              id: 1,
+              name: 'Beta Feature',
+              key: 'beta-feature',
+              active: true,
+              filters: {
+                groups: [
+                  {
+                    properties: [],
+                    rollout_percentage: 100,
+                  },
+                ],
+              },
+            },
+          ],
+        }
+        mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
+      })
+
+      afterAll(() => {
+        mockedFetch.mockClear()
+      })
+
+      const methods = [
+        { name: 'getFeatureFlag', expectedValue: true },
+        { name: 'isFeatureEnabled', expectedValue: true },
+      ] as const
+
+      describe.each(methods)('$name', ({ name: methodName, expectedValue }) => {
+        it('respects client sendFeatureFlagEvent option when method-level option is not provided', async () => {
+          posthog = new PostHog('TEST_API_KEY', {
+            host: 'http://example.com',
+            personalApiKey: 'TEST_PERSONAL_API_KEY',
+            sendFeatureFlagEvent: false, // We expect this to be respected
+          })
+
+          jest.runOnlyPendingTimers()
+
+          // Call method WITHOUT specifying sendFeatureFlagEvents option
+          // This should respect the global sendFeatureFlagEvent: false setting
+          const result = await posthog[methodName]('beta-feature', 'some-distinct-id')
+          expect(result).toEqual(expectedValue)
+
+          await waitForPromises()
+          await posthog.flush()
+
+          // Should NOT send $feature_flag_called event because global setting is false
+          expect(mockedFetch).not.toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
+        })
+
+        it('overrides client sendFeatureFlagEvent option when method-level option is provided', async () => {
+          posthog = new PostHog('TEST_API_KEY', {
+            host: 'http://example.com',
+            personalApiKey: 'TEST_PERSONAL_API_KEY',
+            sendFeatureFlagEvent: false,
+          })
+
+          jest.runOnlyPendingTimers()
+
+          // Call method WITH sendFeatureFlagEvents: true to override global setting
+          const result = await posthog[methodName]('beta-feature', 'some-distinct-id', { sendFeatureFlagEvents: true })
+          expect(result).toEqual(expectedValue)
+
+          jest.runOnlyPendingTimers()
+          await waitForPromises()
+          await posthog.flush()
+
+          // The client option should have been overridden, allowing the event to be sent
+          expect(mockedFetch).toHaveBeenCalledWith('http://example.com/batch/', expect.anything())
+        })
+      })
+    })
+
     it('should do getFeatureFlagPayloads', async () => {
       expect(mockedFetch).toHaveBeenCalledTimes(0)
       await expect(

@@ -30,7 +30,7 @@ test.describe('Session recording - multiple ingestion controls', () => {
 
     test('respects sampling when overriding linked flag', async ({ page }) => {
         await page.waitingForNetworkCausedBy({
-            urlPatternsToWaitFor: ['**/recorder.js*'],
+            urlPatternsToWaitFor: ['**/*recorder.js*'],
             action: async () => {
                 await page.evaluate(() => {
                     const ph = (window as WindowWithPostHog).posthog

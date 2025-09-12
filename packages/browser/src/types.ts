@@ -3,6 +3,7 @@ import type { SegmentAnalytics } from './extensions/segment-integration'
 import { PostHog } from './posthog-core'
 import { KnownUnsafeEditableEvent } from '@posthog/core'
 import { Survey } from './posthog-surveys-types'
+import { SAMPLED } from './extensions/replay/triggerMatching'
 
 export type Property = any
 export type Properties = Record<string, Property>
@@ -983,7 +984,21 @@ export interface PostHogConfig {
      * */
     __preview_flags_v2?: boolean
 
+    /**
+     * PREVIEW - MAY CHANGE WITHOUT WARNING - ONLY USE WHEN TALKING TO POSTHOG SUPPORT
+     * Enables deprecated eager loading of session recording code, not just rrweb and network plugin
+     * we are switching the default to lazy loading because the bundle will ultimately be 18% smaller then
+     * keeping this around for a few days in case there are unexpected consequences that testing did not uncover
+     * */
+    __preview_eager_load_replay?: boolean
+
     // ------- RETIRED CONFIGS - NO REPLACEMENT OR USAGE -------
+
+    /**
+     * @deprecated - does nothing
+     * was present only for PostHog testing of replay lazy loading
+     * */
+    __preview_lazy_load_replay?: boolean
 
     /** @deprecated - NOT USED ANYMORE, kept here for backwards compatibility reasons */
     api_method?: string
@@ -1737,3 +1752,13 @@ export interface ErrorTrackingSuppressionRuleValue {
     value: string | string[]
     type: string
 }
+
+export type SessionStartReason =
+    | 'sampling_overridden'
+    | 'recording_initialized'
+    | 'linked_flag_matched'
+    | 'linked_flag_overridden'
+    | typeof SAMPLED
+    | 'session_id_changed'
+    | 'url_trigger_matched'
+    | 'event_trigger_matched'

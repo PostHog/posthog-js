@@ -549,6 +549,16 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"false\\",
     \\"true\\"
   ],
+  \\"__preview_eager_load_replay\\": [
+    \\"undefined\\",
+    \\"false\\",
+    \\"true\\"
+  ],
+  \\"__preview_lazy_load_replay\\": [
+    \\"undefined\\",
+    \\"false\\",
+    \\"true\\"
+  ],
   \\"api_method\\": [
     \\"undefined\\",
     \\"string\\"

@@ -1,5 +1,97 @@
 # posthog-js
 
+## 1.265.0
+
+### Minor Changes
+
+- [#2032](https://github.com/PostHog/posthog-js/pull/2032) [`822d8df`](https://github.com/PostHog/posthog-js/commit/822d8dfb74e0fdbe78a45bc6fc04fb86896ba2eb) Thanks [@lucasheriques](https://github.com/lucasheriques)! - feat: allow display surveys popups on demand
+
+## 1.264.2
+
+### Patch Changes
+
+- [#2314](https://github.com/PostHog/posthog-js/pull/2314) [`5836a2f`](https://github.com/PostHog/posthog-js/commit/5836a2f6bbc32fa8717157edf1a29da29549691a) Thanks [@ordehi](https://github.com/ordehi)! - Fixed a bug that prevented surveys from loading in cookieless mode using the on_reject option. Surveys now correctly initialize when consent is given.
+
+## 1.264.1
+
+### Patch Changes
+
+- [#2312](https://github.com/PostHog/posthog-js/pull/2312) [`dff84c6`](https://github.com/PostHog/posthog-js/commit/dff84c6c21af9a8f4e3bfb58b4fb85ae2cbcdbc6) Thanks [@daibhin](https://github.com/daibhin)! - chore: allow PostHog exception capture to be skipped in Sentry integration
+
+## 1.264.0
+
+### Minor Changes
+
+- [#2310](https://github.com/PostHog/posthog-js/pull/2310) [`2eace6f`](https://github.com/PostHog/posthog-js/commit/2eace6f7efce6901ac8b51060bb2e6be834571b5) Thanks [@robbie-c](https://github.com/robbie-c)! - Add support for partitioned cookies
+
+## 1.263.0
+
+### Minor Changes
+
+- [#2294](https://github.com/PostHog/posthog-js/pull/2294) [`5137440`](https://github.com/PostHog/posthog-js/commit/513744038f99b533f97c68235a730a1fefb6c330) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: add a redux logging middleware to posthog-js
+
+## 1.262.1
+
+### Patch Changes
+
+- [#2309](https://github.com/PostHog/posthog-js/pull/2309) [`28223c1`](https://github.com/PostHog/posthog-js/commit/28223c149a965882e4a47a50a29f8cb4eb322d30) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: default to eager loading replay while investigating trigger bug reports
+
+## 1.262.0
+
+### Minor Changes
+
+- [#2296](https://github.com/PostHog/posthog-js/pull/2296) [`f9fe3ba`](https://github.com/PostHog/posthog-js/commit/f9fe3ba56c96ae3b6c0716ec24de68123422643f) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: switch replay default to lazy loading
+
+## 1.261.8
+
+### Patch Changes
+
+- [#2276](https://github.com/PostHog/posthog-js/pull/2276) [`97961e4`](https://github.com/PostHog/posthog-js/commit/97961e4b7a0914385bcb200cc0c32302ce911cae) Thanks [@dustinbyrne](https://github.com/dustinbyrne)! - `isFeatureEnabled` now returns `undefined` (instead of `false`) for missing or disabled feature flags, aligning with the documentation. Previously, `undefined` was returned only before flags had loaded, and missing/disabled flags returned `false`. This change clarifies the difference between flags that exist but don't match (`false`) and flags that don’t exist or are disabled (`undefined`).
+
+## 1.261.7
+
+### Patch Changes
+
+- [#2284](https://github.com/PostHog/posthog-js/pull/2284) [`bdfe450`](https://github.com/PostHog/posthog-js/commit/bdfe4501899e57879cbda677f84d2a21a4ea9a7c) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: order of operations when replay does pageview fallback
+
+## 1.261.6
+
+### Patch Changes
+
+- [#2274](https://github.com/PostHog/posthog-js/pull/2274) [`50fe70a`](https://github.com/PostHog/posthog-js/commit/50fe70ae4f22c08c7afe6fabd4430dbe7b946c67) Thanks [@robbie-c](https://github.com/robbie-c)! - Fix initial pageview not firing when using cookieless_mode: "always"
+
+## 1.261.5
+
+### Patch Changes
+
+- [#2270](https://github.com/PostHog/posthog-js/pull/2270) [`980f5c4`](https://github.com/PostHog/posthog-js/commit/980f5c483f059bc3551975c9094f19ff04a985b0) Thanks [@lucasheriques](https://github.com/lucasheriques)! - fix: hosted surveys should ignore any delays
+
+## 1.261.4
+
+### Patch Changes
+
+- [#2268](https://github.com/PostHog/posthog-js/pull/2268) [`999c63f`](https://github.com/PostHog/posthog-js/commit/999c63f56dea80efc32d45ffbdf897b20aa97547) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: session recorder wrapper had private field that should be public"
+
+## 1.261.3
+
+### Patch Changes
+
+- [#2267](https://github.com/PostHog/posthog-js/pull/2267) [`f2ac956`](https://github.com/PostHog/posthog-js/commit/f2ac9569d80a10961919d51a8132e0153b471a69) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: allow testing of the new lazy loaded session recorder
+
+## 1.261.2
+
+### Patch Changes
+
+- [#2266](https://github.com/PostHog/posthog-js/pull/2266) [`9470d97`](https://github.com/PostHog/posthog-js/commit/9470d974dde28648559b3d853ab20331f6ef36b1) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: don't mangle variables to `# posthog-js
+
+- [#2265](https://github.com/PostHog/posthog-js/pull/2265) [`2487d12`](https://github.com/PostHog/posthog-js/commit/2487d12548699e10f7a7f0f6917b3ae602bf80d9) Thanks [@pauldambra](https://github.com/pauldambra)! - chore: update to latest rollup and terser
+
+## 1.261.1
+
+### Patch Changes
+
+- [#2263](https://github.com/PostHog/posthog-js/pull/2263) [`41d3890`](https://github.com/PostHog/posthog-js/commit/41d3890b72b880576a57d1e1133fdd16744835d4) Thanks [@pauldambra](https://github.com/pauldambra)! - chore: add unused lazy loaded session recorder to prime CDN
+
 ## 1.261.0
 
 ### Minor Changes

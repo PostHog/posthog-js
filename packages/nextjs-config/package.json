@@ -1,6 +1,6 @@
 {
   "name": "@posthog/nextjs-config",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "NextJS configuration helper for Posthog 🦔",
   "repository": {
     "type": "git",
@@ -38,11 +38,11 @@
     }
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20"
   },
   "license": "MIT",
   "dependencies": {
-    "@posthog/cli": "^0.4.2",
+    "@posthog/cli": "^0.4.4",
     "semver": "^7.7.2"
   },
   "keywords": [

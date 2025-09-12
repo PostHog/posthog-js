@@ -1,5 +1,11 @@
 # @posthog/react
 
+## 1.2.0
+
+### Minor Changes
+
+- [#2300](https://github.com/PostHog/posthog-js/pull/2300) [`e4a147c`](https://github.com/PostHog/posthog-js/commit/e4a147c86553765d299fb0969bfd390e5aabc952) Thanks [@daibhin](https://github.com/daibhin)! - feat: added helper method for React 19 error callbacks
+
 ## 1.1.0
 
 ### Minor Changes

@@ -26,6 +26,7 @@ import {
     Properties,
     RemoteConfig,
     type SessionRecordingOptions,
+    SessionStartReason,
 } from '../../types'
 import {
     type customEvent,
@@ -44,23 +45,25 @@ import { MutationThrottler } from './mutation-throttler'
 import { gzipSync, strFromU8, strToU8 } from 'fflate'
 import {
     clampToRange,
+    includes,
     isBoolean,
     isFunction,
     isNullish,
     isNumber,
-    isUndefined,
     isObject,
-    includes,
+    isUndefined,
 } from '@posthog/core'
 import Config from '../../config'
 import { addEventListener } from '../../utils'
 import { sampleOnProperty } from '../sampling'
 import {
+    ACTIVE,
     allMatchSessionRecordingStatus,
     AndTriggerMatching,
     anyMatchSessionRecordingStatus,
     BUFFERING,
     DISABLED,
+    EventTriggerMatching,
     LinkedFlagMatching,
     nullMatchSessionRecordingStatus,
     OrTriggerMatching,
@@ -72,9 +75,8 @@ import {
     TRIGGER_PENDING,
     TriggerStatusMatching,
     TriggerType,
+    URLTriggerMatching,
 } from './triggerMatching'
-import { EventTriggerMatching, ACTIVE } from './triggerMatching'
-import { URLTriggerMatching } from './triggerMatching'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
@@ -82,16 +84,6 @@ const logger = createLogger(LOGGER_PREFIX)
 function getRRWebRecord(): rrwebRecord | undefined {
     return assignableWindow?.__PosthogExtensions__?.rrweb?.record
 }
-
-type SessionStartReason =
-    | 'sampling_overridden'
-    | 'recording_initialized'
-    | 'linked_flag_matched'
-    | 'linked_flag_overridden'
-    | typeof SAMPLED
-    | 'session_id_changed'
-    | 'url_trigger_matched'
-    | 'event_trigger_matched'
 
 const BASE_ENDPOINT = '/s/'
 

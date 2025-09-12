@@ -1,5 +1,17 @@
 # posthog-ai
 
+## 6.3.2
+
+### Patch Changes
+
+- [#2272](https://github.com/PostHog/posthog-js/pull/2272) [`9eccea4`](https://github.com/PostHog/posthog-js/commit/9eccea4b7d6a11468d9c890eae4b51be8710c9cf) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Don't send Posthog specific params to OpenAI
+
+## 6.3.1
+
+### Patch Changes
+
+- [#2264](https://github.com/PostHog/posthog-js/pull/2264) [`cb5dd15`](https://github.com/PostHog/posthog-js/commit/cb5dd15632b3436db21b320a84d76fe739851a2f) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Fixes noisy truncation function
+
 ## 6.3.0
 
 ### Minor Changes
