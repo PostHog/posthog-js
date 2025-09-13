@@ -74,7 +74,7 @@ export const getQueryParam = function (url: string, param: string): string {
     }
 }
 
-// replace any query params in the url with the provided mask value. Tries to keep the URL as instant as possible,
+// replace any query params in the url with the provided mask value. Tries to keep the URL as intact as possible,
 // including preserving malformed text in most cases
 export const maskQueryParams = function <T extends string | undefined>(
     url: T,
@@ -117,6 +117,22 @@ export const maskQueryParams = function <T extends string | undefined>(
     }
 
     return result as any
+}
+
+export function maskParams(
+    params: Record<string, string>,
+    maskedParams: string[] | undefined,
+    mask: string
+): Record<string, string> {
+    const newParams: Record<string, string> = {}
+    each(params, function (value: string, key: string) {
+        if (maskedParams && maskedParams.includes(key) && value) {
+            newParams[key] = mask
+        } else {
+            newParams[key] = value
+        }
+    })
+    return newParams
 }
 
 export const _getHashParam = function (hash: string, param: string): string | null {
