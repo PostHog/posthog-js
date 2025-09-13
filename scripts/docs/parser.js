@@ -17,6 +17,19 @@ const findPostHogClass = (apiPackage, className) =>
         member.kind === apiExtractor.ApiItemKind.Class && member.name === className
     );
 
+// Find extra methods (functions/components) from the API package
+const findExtraMethods = (apiPackage, extraMethodNames) => {
+    if (!extraMethodNames || extraMethodNames.length === 0) {
+        return [];
+    }
+    
+    return apiPackage.entryPoints[0].members.filter(member =>
+        (member.kind === apiExtractor.ApiItemKind.Function || 
+         member.kind === apiExtractor.ApiItemKind.Class) && 
+        extraMethodNames.includes(member.name)
+    );
+};
+
 // Enhance types with examples
 const enhanceTypeWithExample = (type, config) => {
     return config.typeExamples[type.name] 
@@ -49,7 +62,7 @@ const transformMethod = (posthogClass) => (method) => {
         title: method.name,
         examples: examples.extractExampleTags(method),
         releaseTag: methods.isMethodDeprecated(method) ? 'deprecated' : methods.getMethodReleaseTag(method),
-        params: method.parameters.map(transformParameter(method)),
+        params: (method.parameters || []).map(transformParameter(method)),
         returnType: {
             id: returnType,
             name: returnType
@@ -92,7 +105,14 @@ const generateApiSpecs = (config) => {
     const methods = filterPublicMethods(posthogClass, config.parentClass);
     const functions = methods.map(transformMethod(posthogClass));
     
-    const output = composeOutput(packageJson, posthogClass, functions, resolvedTypes, config);
+    // Process extra methods if specified
+    const extraMethods = findExtraMethods(apiPackage, config.extraMethods);
+    const providerMethods = extraMethods.map(transformMethod(null));
+    
+    // Combine regular methods with extra methods
+    const allFunctions = [...providerMethods,...functions];
+    
+    const output = composeOutput(packageJson, posthogClass, allFunctions, resolvedTypes, config);
     
     writeFileSync(config.outputPath, JSON.stringify(output, null, 2));
     
