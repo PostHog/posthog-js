@@ -1,7 +1,9 @@
-import { mockLogger } from '@/testing'
+import { createMockLogger } from '@/testing'
 import { clampToRange } from './number-utils'
 
 describe('number-utils', () => {
+  const mockLogger = createMockLogger()
+
   describe('clampToRange', () => {
     it.each([
       [

@@ -34,12 +34,14 @@ export const delay = (ms: number): Promise<void> => {
   })
 }
 
-export const mockLogger: Logger = {
-  _log: jest.fn(),
-  critical: jest.fn(),
-  uninitializedWarning: jest.fn(),
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
-  createLogger: () => mockLogger,
+export const createMockLogger = (): Logger => {
+  return {
+    _log: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    critical: jest.fn(),
+    uninitializedWarning: jest.fn(),
+    createLogger: createMockLogger,
+  }
 }

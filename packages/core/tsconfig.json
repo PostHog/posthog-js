@@ -9,7 +9,9 @@
     "composite": false,
     "declaration": true,
     "declarationMap": true,
-    "target": "ES2015",
+    "target": "ES2022",
+    // DOM should be removed here
+    "lib": ["ES2022", "DOM"],
     "paths": {
       "@/*": ["./src/*"]
     }
