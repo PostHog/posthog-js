@@ -46,16 +46,9 @@ import {
     isUndefined,
 } from '@posthog/core'
 import {
-    CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE,
-    SESSION_RECORDING_CANVAS_RECORDING,
-    SESSION_RECORDING_ENABLED_SERVER_SIDE,
     SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION,
     SESSION_RECORDING_IS_SAMPLED,
-    SESSION_RECORDING_MASKING,
-    SESSION_RECORDING_MINIMUM_DURATION,
-    SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE,
-    SESSION_RECORDING_SAMPLE_RATE,
-    SESSION_RECORDING_SCRIPT_CONFIG,
+    SESSION_RECORDING_REMOTE_CONFIG,
     SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION,
 } from '../../../constants'
 import { PostHog } from '../../../posthog-core'
@@ -64,8 +57,8 @@ import {
     NetworkRecordOptions,
     NetworkRequest,
     Properties,
-    RemoteConfig,
     SessionRecordingOptions,
+    SessionRecordingPersistedConfig,
     SessionStartReason,
 } from '../../../types'
 import { isLocalhost } from '../../../utils/request-utils'
@@ -329,12 +322,12 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private get _sampleRate(): number | null {
-        const rate = this._instance.get_property(SESSION_RECORDING_SAMPLE_RATE)
+        const rate = this._remoteConfig?.sampleRate
         return isNumber(rate) ? rate : null
     }
 
     private get _minimumDuration(): number | null {
-        const duration = this._instance.get_property(SESSION_RECORDING_MINIMUM_DURATION)
+        const duration = this._remoteConfig?.minimumDurationMilliseconds
         return isNumber(duration) ? duration : null
     }
 
@@ -344,7 +337,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _receivedFlags: boolean = false
 
     private _onSessionIdListener: (() => void) | undefined = undefined
-    private _persistFlagsOnSessionListener: (() => void) | undefined = undefined
     private _samplingSessionListener: (() => void) | undefined = undefined
 
     constructor(private readonly _instance: PostHog) {
@@ -369,7 +361,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private get _masking():
         | Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector' | 'blockSelector'>
         | undefined {
-        const masking_server_side = this._instance.get_property(SESSION_RECORDING_MASKING)
+        const masking_server_side = this._remoteConfig?.masking
         const masking_client_side = {
             maskAllInputs: this._instance.config.session_recording?.maskAllInputs,
             maskTextSelector: this._instance.config.session_recording?.maskTextSelector,
@@ -391,7 +383,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
     private get _canvasRecording(): { enabled: boolean; fps: number; quality: number } {
         const canvasRecording_client_side = this._instance.config.session_recording.captureCanvas
-        const canvasRecording_server_side = this._instance.get_property(SESSION_RECORDING_CANVAS_RECORDING)
+        const canvasRecording_server_side = this._remoteConfig?.canvasRecording
 
         const enabled: boolean =
             canvasRecording_client_side?.recordCanvas ?? canvasRecording_server_side?.enabled ?? false
@@ -418,7 +410,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private get _isConsoleLogCaptureEnabled() {
-        const enabled_server_side = !!this._instance.get_property(CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE)
+        const enabled_server_side = !!this._remoteConfig?.consoleLogRecordingEnabled
         const enabled_client_side = this._instance.config.enable_recording_console_log
         return enabled_client_side ?? enabled_server_side
     }
@@ -428,7 +420,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private get _networkPayloadCapture():
         | Pick<NetworkRecordOptions, 'recordHeaders' | 'recordBody' | 'recordPerformance'>
         | undefined {
-        const networkPayloadCapture_server_side = this._instance.get_property(SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE)
+        const networkPayloadCapture_server_side = this._remoteConfig?.networkPayloadCapture
         const networkPayloadCapture_client_side = {
             recordHeaders: this._instance.config.session_recording?.recordHeaders,
             recordBody: this._instance.config.session_recording?.recordBody,
@@ -631,10 +623,58 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         return !!this._stopRrweb
     }
 
+    get _remoteConfig(): SessionRecordingPersistedConfig | undefined {
+        const persistedConfig: any = this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)
+        if (!persistedConfig) {
+            return undefined
+        }
+        const parsedConfig = isObject(persistedConfig) ? persistedConfig : JSON.parse(persistedConfig)
+        return parsedConfig as SessionRecordingPersistedConfig
+    }
+
     start(startReason?: SessionStartReason) {
+        const config = this._remoteConfig
+        if (!config) {
+            logger.info('remote config must be stored in persistence before recording can start')
+            return
+        }
+
         // We want to ensure the sessionManager is reset if necessary on loading the recorder
         this._sessionManager.checkAndGetSessionAndWindowId()
 
+        if (config?.endpoint) {
+            this._endpoint = config?.endpoint
+        }
+
+        this._setupSampling()
+
+        if (config?.triggerMatchType === 'any') {
+            this._statusMatcher = anyMatchSessionRecordingStatus
+            this._triggerMatching = new OrTriggerMatching([this._eventTriggerMatching, this._urlTriggerMatching])
+        } else {
+            // either the setting is "ALL"
+            // or we default to the most restrictive
+            this._statusMatcher = allMatchSessionRecordingStatus
+            this._triggerMatching = new AndTriggerMatching([this._eventTriggerMatching, this._urlTriggerMatching])
+        }
+        this._instance.register_for_session({
+            $sdk_debug_replay_remote_trigger_matching_config: config?.triggerMatchType,
+        })
+
+        this._urlTriggerMatching.onConfig(config)
+
+        this._eventTriggerMatching.onConfig(config)
+        this._removeEventTriggerCaptureHook?.()
+        this._addEventTriggerListener()
+
+        this._linkedFlagMatching.onConfig(config, (flag, variant) => {
+            this._reportStarted('linked_flag_matched', {
+                flag,
+                variant,
+            })
+        })
+
+        this._receivedFlags = true
         this._startRecorder()
 
         // calling addEventListener multiple times is safe and will not add duplicates
@@ -838,88 +878,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             },
             timestamp: Date.now(),
         })
-    }
-
-    private _persistRemoteConfig(response: RemoteConfig): void {
-        if (this._instance.persistence) {
-            const persistence = this._instance.persistence
-
-            const persistResponse = () => {
-                const receivedSampleRate = response.sessionRecording?.sampleRate
-
-                const parsedSampleRate = isNullish(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
-                if (isNullish(parsedSampleRate)) {
-                    this._resetSampling()
-                }
-
-                const receivedMinimumDuration = response.sessionRecording?.minimumDurationMilliseconds
-
-                persistence.register({
-                    [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response['sessionRecording'],
-                    [CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE]: response.sessionRecording?.consoleLogRecordingEnabled,
-                    [SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE]: {
-                        capturePerformance: response.capturePerformance,
-                        ...response.sessionRecording?.networkPayloadCapture,
-                    },
-                    [SESSION_RECORDING_MASKING]: response.sessionRecording?.masking,
-                    [SESSION_RECORDING_CANVAS_RECORDING]: {
-                        enabled: response.sessionRecording?.recordCanvas,
-                        fps: response.sessionRecording?.canvasFps,
-                        quality: response.sessionRecording?.canvasQuality,
-                    },
-                    [SESSION_RECORDING_SAMPLE_RATE]: parsedSampleRate,
-                    [SESSION_RECORDING_MINIMUM_DURATION]: isUndefined(receivedMinimumDuration)
-                        ? null
-                        : receivedMinimumDuration,
-                    [SESSION_RECORDING_SCRIPT_CONFIG]: response.sessionRecording?.scriptConfig,
-                })
-            }
-
-            persistResponse()
-
-            // in case we see multiple flags responses, we should only use the response from the most recent one
-            this._persistFlagsOnSessionListener?.()
-            this._persistFlagsOnSessionListener = this._sessionManager.onSessionId(persistResponse)
-        }
-    }
-
-    onRemoteConfig(response: RemoteConfig) {
-        this._tryAddCustomEvent('$remote_config_received', response)
-        this._persistRemoteConfig(response)
-
-        if (response.sessionRecording?.endpoint) {
-            this._endpoint = response.sessionRecording?.endpoint
-        }
-
-        this._setupSampling()
-
-        if (response.sessionRecording?.triggerMatchType === 'any') {
-            this._statusMatcher = anyMatchSessionRecordingStatus
-            this._triggerMatching = new OrTriggerMatching([this._eventTriggerMatching, this._urlTriggerMatching])
-        } else {
-            // either the setting is "ALL"
-            // or we default to the most restrictive
-            this._statusMatcher = allMatchSessionRecordingStatus
-            this._triggerMatching = new AndTriggerMatching([this._eventTriggerMatching, this._urlTriggerMatching])
-        }
-        this._instance.register_for_session({
-            $sdk_debug_replay_remote_trigger_matching_config: response.sessionRecording?.triggerMatchType,
-        })
-
-        this._urlTriggerMatching.onRemoteConfig(response)
-
-        this._eventTriggerMatching.onRemoteConfig(response)
-        this._removeEventTriggerCaptureHook?.()
-        this._addEventTriggerListener()
-
-        this._linkedFlagMatching.onRemoteConfig(response, (flag, variant) => {
-            this._reportStarted('linked_flag_matched', {
-                flag,
-                variant,
-            })
-        })
-
-        this._receivedFlags = true
     }
 
     public overrideLinkedFlag() {
@@ -1149,10 +1107,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
     }
 
-    private _resetSampling() {
-        this._instance.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
-    }
-
     /**
      * This might be called more than once so needs to be idempotent
      */
@@ -1173,7 +1127,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         const currentSampleRate = this._sampleRate
 
         if (!isNumber(currentSampleRate)) {
-            this._resetSampling()
+            this._instance.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
             return
         }
 

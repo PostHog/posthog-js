@@ -1,9 +1,9 @@
-import { SESSION_RECORDING_ENABLED_SERVER_SIDE, SESSION_RECORDING_SCRIPT_CONFIG } from '../../constants'
+import { SESSION_RECORDING_IS_SAMPLED, SESSION_RECORDING_REMOTE_CONFIG } from '../../constants'
 import { PostHog } from '../../posthog-core'
-import { Properties, RemoteConfig, SessionStartReason } from '../../types'
+import { Properties, RemoteConfig, SessionRecordingPersistedConfig, SessionStartReason } from '../../types'
 import { type eventWithTime } from '@rrweb/types'
 
-import { isUndefined } from '@posthog/core'
+import { isNullish, isUndefined } from '@posthog/core'
 import { createLogger } from '../../utils/logger'
 import {
     assignableWindow,
@@ -23,8 +23,8 @@ const logger = createLogger(LOGGER_PREFIX)
 export class SessionRecordingWrapper {
     _forceAllowLocalhostNetworkCapture: boolean = false
 
+    private _persistFlagsOnSessionListener: (() => void) | undefined = undefined
     private _lazyLoadedSessionRecording: LazyLoadedSessionRecordingInterface | undefined
-    private _pendingRemoteConfig: RemoteConfig | undefined
 
     public get started(): boolean {
         return !!this._lazyLoadedSessionRecording?.isStarted
@@ -50,7 +50,7 @@ export class SessionRecordingWrapper {
     }
 
     private get _isRecordingEnabled() {
-        const enabled_server_side = !!this._instance.get_property(SESSION_RECORDING_ENABLED_SERVER_SIDE)
+        const enabled_server_side = !!this._instance.get_property(SESSION_RECORDING_REMOTE_CONFIG)?.enabled
         const enabled_client_side = !this._instance.config.disable_session_recording
         const isDisabled = this._instance.config.disable_session_recording || this._instance.consent.isOptedOut()
         return window && enabled_server_side && enabled_client_side && !isDisabled
@@ -116,23 +116,68 @@ export class SessionRecordingWrapper {
         this._lazyLoadedSessionRecording?.stop()
     }
 
+    private _resetSampling() {
+        this._instance.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
+    }
+
+    private _persistRemoteConfig(response: RemoteConfig): void {
+        if (this._instance.persistence) {
+            const persistence = this._instance.persistence
+
+            const persistResponse = () => {
+                const sessionRecordingConfigResponse = response.sessionRecording
+                const receivedSampleRate = sessionRecordingConfigResponse?.sampleRate
+
+                const parsedSampleRate = isNullish(receivedSampleRate) ? null : parseFloat(receivedSampleRate)
+                if (isNullish(parsedSampleRate)) {
+                    this._resetSampling()
+                }
+
+                const receivedMinimumDuration = sessionRecordingConfigResponse?.minimumDurationMilliseconds
+
+                persistence.register({
+                    [SESSION_RECORDING_REMOTE_CONFIG]: {
+                        enabled: !!sessionRecordingConfigResponse,
+                        ...sessionRecordingConfigResponse,
+                        networkPayloadCapture: {
+                            capturePerformance: response.capturePerformance,
+                            ...sessionRecordingConfigResponse?.networkPayloadCapture,
+                        },
+                        canvasRecording: {
+                            enabled: sessionRecordingConfigResponse?.recordCanvas,
+                            fps: sessionRecordingConfigResponse?.canvasFps,
+                            quality: sessionRecordingConfigResponse?.canvasQuality,
+                        },
+                        sampleRate: parsedSampleRate,
+                        minimumDurationMilliseconds: isUndefined(receivedMinimumDuration)
+                            ? null
+                            : receivedMinimumDuration,
+                        endpoint: sessionRecordingConfigResponse?.endpoint,
+                        triggerMatchType: sessionRecordingConfigResponse?.triggerMatchType,
+                        masking: sessionRecordingConfigResponse?.masking,
+                        urlTriggers: sessionRecordingConfigResponse?.urlTriggers,
+                    } satisfies SessionRecordingPersistedConfig,
+                })
+            }
+
+            persistResponse()
+
+            // in case we see multiple flags responses, we should only use the response from the most recent one
+            this._persistFlagsOnSessionListener?.()
+            // we 100% know there is a session manager by this point
+            this._persistFlagsOnSessionListener = this._instance.sessionManager?.onSessionId(persistResponse)
+        }
+    }
+
     onRemoteConfig(response: RemoteConfig) {
-        this._pendingRemoteConfig = response
-
-        const persistence = this._instance.persistence
-        if (persistence) {
-            persistence.register({
-                [SESSION_RECORDING_ENABLED_SERVER_SIDE]: !!response.sessionRecording,
-                [SESSION_RECORDING_SCRIPT_CONFIG]: response.sessionRecording?.scriptConfig,
-            })
+        if (!('sessionRecording' in response)) {
+            // if sessionRecording is not in the response, we do nothing
+            logger.info('skipping remote config with no sessionRecording', response)
+            return
         }
 
-        if (!this._lazyLoadedSessionRecording) {
-            this._lazyLoadAndStart()
-        } else {
-            this._lazyLoadedSessionRecording.onRemoteConfig(response)
-            this._pendingRemoteConfig = undefined
-        }
+        this._persistRemoteConfig(response)
+        // TODO how do we send a custom message with the received remote config like we used to for debug
         this.startIfEnabledOrStop()
     }
 
@@ -145,10 +190,10 @@ export class SessionRecordingWrapper {
     }
 
     private get _scriptName(): PostHogExtensionKind {
-        return (
-            (this._instance?.persistence?.get_property(SESSION_RECORDING_SCRIPT_CONFIG)
-                ?.script as PostHogExtensionKind) || 'lazy-recorder'
+        const remoteConfig: SessionRecordingPersistedConfig | undefined = this._instance?.persistence?.get_property(
+            SESSION_RECORDING_REMOTE_CONFIG
         )
+        return (remoteConfig?.scriptConfig?.script as PostHogExtensionKind) || 'lazy-recorder'
     }
 
     private _onScriptLoaded(startReason?: SessionStartReason) {
@@ -162,18 +207,15 @@ export class SessionRecordingWrapper {
             )
             ;(this._lazyLoadedSessionRecording as any)._forceAllowLocalhostNetworkCapture =
                 this._forceAllowLocalhostNetworkCapture
-
-            // If we have a pending remote config, apply it now
-            if (this._pendingRemoteConfig) {
-                this._lazyLoadedSessionRecording.onRemoteConfig(this._pendingRemoteConfig)
-                // Clear the pending config after applying it
-                this._pendingRemoteConfig = undefined
-            }
         }
 
         this._lazyLoadedSessionRecording.start(startReason)
     }
 
+    /**
+     * this is maintained on the public API only because it has always been on the public API
+     * if you are calling this directly you are probably doing something wrong
+     */
     onRRwebEmit(rawEvent: eventWithTime) {
         this._lazyLoadedSessionRecording?.onRRwebEmit?.(rawEvent)
     }
