@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.265.1
+
+### Patch Changes
+
+- [#2318](https://github.com/PostHog/posthog-js/pull/2318) [`e0f26ff`](https://github.com/PostHog/posthog-js/commit/e0f26ffbda97d36085c8604fdb7bc496642e0c9c) Thanks [@robbie-c](https://github.com/robbie-c)! - Add option to disable sendBeacon and xhr credentials
+
 ## 1.265.0
 
 ### Minor Changes
