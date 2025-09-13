@@ -992,6 +992,17 @@ export interface PostHogConfig {
      * */
     __preview_eager_load_replay?: boolean
 
+    /**
+     * Prevents posthog-js from using the `navigator.sendBeacon` API to send events.
+     * Enabling this option may hurt the reliability of sending $pageleave events
+     */
+    __preview_disable_beacon?: boolean
+
+    /**
+     * Disables sending credentials when using XHR requests.
+     */
+    __preview_disable_xhr_credentials?: boolean
+
     // ------- RETIRED CONFIGS - NO REPLACEMENT OR USAGE -------
 
     /**
@@ -1237,6 +1248,8 @@ export interface RequestWithOptions {
     callback?: RequestCallback
     timeout?: number
     noRetries?: boolean
+    disableTransport?: ('XHR' | 'fetch' | 'sendBeacon')[]
+    disableXHRCredentials?: boolean
     compression?: Compression | 'best-available'
     fetchOptions?: {
         cache?: RequestInit['cache']

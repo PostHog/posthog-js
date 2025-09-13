@@ -786,6 +786,10 @@ export class PostHog {
             ...this.config.request_headers,
         }
         options.compression = options.compression === 'best-available' ? this.compression : options.compression
+        options.disableXHRCredentials = this.config.__preview_disable_xhr_credentials
+        if (this.config.__preview_disable_beacon) {
+            options.disableTransport = ['sendBeacon']
+        }
 
         // Specially useful if you're doing SSR with NextJS
         // Users must be careful when tweaking `cache` because they might get out-of-date feature flags

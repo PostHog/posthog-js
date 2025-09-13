@@ -38,7 +38,7 @@ describe('request', () => {
     const mockedFetch: jest.MockedFunction<any> = fetch as jest.MockedFunction<any>
     const mockedXMLHttpRequest: jest.MockedFunction<any> = XMLHttpRequest as jest.MockedFunction<any>
     const mockedNavigator: jest.Mocked<typeof navigator> = navigator as jest.Mocked<typeof navigator>
-    const mockedXHR = {
+    let mockedXHR = {
         open: jest.fn(),
         setRequestHeader: jest.fn(),
         onreadystatechange: jest.fn(),
@@ -46,6 +46,7 @@ describe('request', () => {
         readyState: 4,
         responseText: JSON.stringify('something here'),
         status: 200,
+        withCredentials: false,
     }
 
     const now = 1700000000000
@@ -55,7 +56,16 @@ describe('request', () => {
     let transport: RequestWithOptions['transport']
 
     beforeEach(() => {
-        mockedXHR.open.mockClear()
+        mockedXHR = {
+            open: jest.fn(),
+            setRequestHeader: jest.fn(),
+            onreadystatechange: jest.fn(),
+            send: jest.fn(),
+            readyState: 4,
+            responseText: JSON.stringify('something here'),
+            status: 200,
+            withCredentials: false,
+        }
         mockedXMLHttpRequest.mockImplementation(() => mockedXHR)
 
         jest.useFakeTimers()
@@ -115,6 +125,15 @@ describe('request', () => {
                 json: undefined,
                 text: '{wat',
             })
+        })
+
+        it('respects disableXHRCredentials=true', () => {
+            request(createRequest({ disableXHRCredentials: true }))
+            expect(mockedXHR.withCredentials).toBe(false)
+        })
+        it('respects disableXHRCredentials=false', () => {
+            request(createRequest({ disableXHRCredentials: false }))
+            expect(mockedXHR.withCredentials).toBe(true)
         })
     })
 
@@ -271,6 +290,15 @@ describe('request', () => {
                     )
                 }
             )
+        })
+        it('is used as a fallback when the requested transport is disabled', async () => {
+            request(
+                createRequest({
+                    transport: 'sendBeacon',
+                    disableTransport: ['sendBeacon'],
+                })
+            )
+            expect(mockedFetch).toHaveBeenCalled()
         })
     })
 

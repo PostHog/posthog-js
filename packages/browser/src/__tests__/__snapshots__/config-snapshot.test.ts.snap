@@ -554,6 +554,16 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"false\\",
     \\"true\\"
   ],
+  \\"__preview_disable_beacon\\": [
+    \\"undefined\\",
+    \\"false\\",
+    \\"true\\"
+  ],
+  \\"__preview_disable_xhr_credentials\\": [
+    \\"undefined\\",
+    \\"false\\",
+    \\"true\\"
+  ],
   \\"__preview_lazy_load_replay\\": [
     \\"undefined\\",
     \\"false\\",
