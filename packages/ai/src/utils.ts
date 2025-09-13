@@ -412,16 +412,20 @@ export const sendEventToPosthog = async ({
   const safeError = sanitizeValues(error)
 
   let errorData = {}
+
   if (isError) {
     errorData = {
       $ai_is_error: true,
       $ai_error: safeError,
     }
   }
+
   let costOverrideData = {}
+
   if (params.posthogCostOverride) {
-    const inputCostUSD = (params.posthogCostOverride.inputCost ?? 0) * (usage.inputTokens ?? 0)
-    const outputCostUSD = (params.posthogCostOverride.outputCost ?? 0) * (usage.outputTokens ?? 0)
+    const inputCostUSD = params.posthogCostOverride.inputCost ?? 0
+    const outputCostUSD = params.posthogCostOverride.outputCost ?? 0
+
     costOverrideData = {
       $ai_input_cost_usd: inputCostUSD,
       $ai_output_cost_usd: outputCostUSD,

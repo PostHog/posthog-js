@@ -55,7 +55,7 @@ export interface FormattedMessage {
 export interface TokenUsage {
   inputTokens?: number
   outputTokens?: number
-  reasoningTokens?: unknown // Use unknown since various providers return different types
-  cacheReadInputTokens?: unknown // Use unknown for provider flexibility
-  cacheCreationInputTokens?: unknown // Use unknown for provider flexibility
+  reasoningTokens?: number
+  cacheReadInputTokens?: number
+  cacheCreationInputTokens?: number
 }
