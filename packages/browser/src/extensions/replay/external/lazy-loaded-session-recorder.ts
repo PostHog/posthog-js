@@ -1336,4 +1336,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             config: this._instance.config,
         })
     }
+
+    tryAddCustomEvent(tag: string, payload: any): boolean {
+        return this._tryAddCustomEvent(tag, payload)
+    }
 }
