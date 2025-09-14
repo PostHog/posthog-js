@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.266.0
+
+### Minor Changes
+
+- [#2321](https://github.com/PostHog/posthog-js/pull/2321) [`b81e152`](https://github.com/PostHog/posthog-js/commit/b81e15236115aec3629f93baa552b768b327904f) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: expose rrweb custom events on the public interface of the recorder. not intended for arbitrary public use but useful for internal purposes
+
 ## 1.265.1
 
 ### Patch Changes
