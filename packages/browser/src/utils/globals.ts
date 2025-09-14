@@ -173,6 +173,7 @@ export interface LazyLoadedSessionRecordingInterface {
     overrideSampling: () => void
     overrideTrigger: (triggerType: TriggerType) => void
     isStarted: boolean
+    tryAddCustomEvent(tag: string, payload: any): boolean
 }
 
 export interface LazyLoadedDeadClicksAutocaptureInterface {
