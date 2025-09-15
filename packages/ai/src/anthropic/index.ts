@@ -1,4 +1,4 @@
-import AnthropicOriginal from '@anthropic-ai/sdk'
+import AnthropicOriginal, { APIPromise } from '@anthropic-ai/sdk'
 import { PostHog } from 'posthog-node'
 import {
   formatResponseAnthropic,
@@ -16,8 +16,7 @@ type MessageCreateParams = AnthropicOriginal.Messages.MessageCreateParams
 type Message = AnthropicOriginal.Messages.Message
 type RawMessageStreamEvent = AnthropicOriginal.Messages.RawMessageStreamEvent
 type MessageCreateParamsBase = AnthropicOriginal.Messages.MessageCreateParams
-
-import type { APIPromise, RequestOptions } from '@anthropic-ai/sdk/core'
+type RequestOptions = AnthropicOriginal.RequestOptions
 import type { Stream } from '@anthropic-ai/sdk/streaming'
 import { sanitizeAnthropic } from '../sanitization'
 
