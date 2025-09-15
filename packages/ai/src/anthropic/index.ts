@@ -1,12 +1,12 @@
 import AnthropicOriginal from '@anthropic-ai/sdk'
 import { PostHog } from 'posthog-node'
-import { v4 as uuidv4 } from 'uuid'
 import {
   formatResponseAnthropic,
   mergeSystemPrompt,
   MonitoringParams,
   sendEventToPosthog,
   extractAvailableToolCalls,
+  extractPosthogParams,
 } from '../utils'
 import type { FormattedContentItem, FormattedTextContent, FormattedFunctionCall, FormattedMessage } from '../types'
 
@@ -67,9 +67,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
     body: MessageCreateParams & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<Message> | APIPromise<Stream<RawMessageStreamEvent>> {
-    const { posthogDistinctId, posthogTraceId, posthogCaptureImmediate, ...anthropicParams } = body
-
-    const traceId = posthogTraceId ?? uuidv4()
+    const { providerParams: anthropicParams, posthogParams } = extractPosthogParams(body)
     const startTime = Date.now()
 
     const parentPromise = super.create(anthropicParams, options)
@@ -208,8 +206,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
 
               await sendEventToPosthog({
                 client: this.phClient,
-                distinctId: posthogDistinctId,
-                traceId,
+                ...posthogParams,
                 model: anthropicParams.model,
                 provider: 'anthropic',
                 input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic')),
@@ -220,14 +217,12 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 httpStatus: 200,
                 usage,
                 tools: availableTools,
-                captureImmediate: posthogCaptureImmediate,
               })
             } catch (error: any) {
               // error handling
               await sendEventToPosthog({
                 client: this.phClient,
-                distinctId: posthogDistinctId,
-                traceId,
+                ...posthogParams,
                 model: anthropicParams.model,
                 provider: 'anthropic',
                 input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic')),
@@ -242,7 +237,6 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 },
                 isError: true,
                 error: JSON.stringify(error),
-                captureImmediate: posthogCaptureImmediate,
               })
             }
           })()
@@ -262,8 +256,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
 
             await sendEventToPosthog({
               client: this.phClient,
-              distinctId: posthogDistinctId,
-              traceId,
+              ...posthogParams,
               model: anthropicParams.model,
               provider: 'anthropic',
               input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic')),
@@ -279,7 +272,6 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
                 cacheReadInputTokens: result.usage.cache_read_input_tokens ?? 0,
               },
               tools: availableTools,
-              captureImmediate: posthogCaptureImmediate,
             })
           }
           return result
@@ -287,8 +279,7 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
         async (error: any) => {
           await sendEventToPosthog({
             client: this.phClient,
-            distinctId: posthogDistinctId,
-            traceId,
+            ...posthogParams,
             model: anthropicParams.model,
             provider: 'anthropic',
             input: sanitizeAnthropic(mergeSystemPrompt(anthropicParams, 'anthropic')),
@@ -303,7 +294,6 @@ export class WrappedMessages extends AnthropicOriginal.Messages {
             },
             isError: true,
             error: JSON.stringify(error),
-            captureImmediate: posthogCaptureImmediate,
           })
           throw error
         }

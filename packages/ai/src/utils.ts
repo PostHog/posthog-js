@@ -6,6 +6,7 @@ import type { ChatCompletionTool } from 'openai/resources/chat/completions'
 import type { Tool as GeminiTool } from '@google/genai'
 import type { FormattedMessage, FormattedContent, TokenUsage } from './types'
 import { version } from '../package.json'
+import { v4 as uuidv4 } from 'uuid'
 
 type ChatCompletionCreateParamsBase = OpenAIOrignal.Chat.Completions.ChatCompletionCreateParams
 type MessageCreateParams = AnthropicOriginal.Messages.MessageCreateParams
@@ -382,6 +383,49 @@ function sanitizeValues(obj: any): any {
     return Object.fromEntries(Object.entries(jsonSafe).map(([k, v]) => [k, sanitizeValues(v)]))
   }
   return jsonSafe
+}
+
+const POSTHOG_PARAMS_MAP: Record<keyof MonitoringParams, string> = {
+  posthogDistinctId: 'distinctId',
+  posthogTraceId: 'traceId',
+  posthogProperties: 'properties',
+  posthogPrivacyMode: 'privacyMode',
+  posthogGroups: 'groups',
+  posthogModelOverride: 'modelOverride',
+  posthogProviderOverride: 'providerOverride',
+  posthogCostOverride: 'costOverride',
+  posthogCaptureImmediate: 'captureImmediate',
+}
+
+export function extractPosthogParams<T>(body: T & MonitoringParams): {
+  providerParams: T
+  posthogParams: MonitoringEventPropertiesWithDefaults
+} {
+  const providerParams: Record<string, unknown> = {}
+  const posthogParams: Record<string, unknown> = {}
+
+  for (const [key, value] of Object.entries(body)) {
+    if (POSTHOG_PARAMS_MAP[key as keyof MonitoringParams]) {
+      posthogParams[POSTHOG_PARAMS_MAP[key as keyof MonitoringParams]] = value
+    } else if (key.startsWith('posthog')) {
+      console.warn(`Unknown Posthog parameter ${key}`)
+    } else {
+      providerParams[key] = value
+    }
+  }
+
+  return {
+    providerParams: providerParams as T,
+    posthogParams: addDefaults(posthogParams),
+  }
+}
+
+function addDefaults(params: MonitoringEventProperties): MonitoringEventPropertiesWithDefaults {
+  return {
+    ...params,
+    privacyMode: params.privacyMode ?? false,
+    traceId: params.traceId ?? uuidv4(),
+  }
 }
 
 export const sendEventToPosthog = async ({
