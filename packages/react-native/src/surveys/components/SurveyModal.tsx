@@ -64,9 +64,7 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
                     appearance={appearance}
                     header={appearance.thankYouMessageHeader}
                     description={appearance.thankYouMessageDescription}
-                    contentType={
-                      appearance.thankYouMessageDescriptionContentType ?? SurveyQuestionDescriptionContentType.Text
-                    }
+                    contentType={appearance.thankYouMessageDescriptionContentType}
                     onClose={onClose}
                     isModal={true}
                   />
