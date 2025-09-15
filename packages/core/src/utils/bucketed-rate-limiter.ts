@@ -1,4 +1,4 @@
-import { Logger } from 'types'
+import { Logger } from '../types'
 import { clampToRange } from './number-utils'
 
 export class BucketedRateLimiter<T extends string | number> {

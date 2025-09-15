@@ -100,6 +100,19 @@ describe('posthog-surveys', () => {
                 },
                 _send_request: jest.fn(),
                 get_property: jest.fn(),
+                consent: {
+                    _instance: {} as any,
+                    _config: {} as any,
+                    consent: {} as any,
+                    isOptedIn: jest.fn().mockReturnValue(true),
+                    isOptedOut: jest.fn().mockReturnValue(false),
+                    hasOptedInBefore: jest.fn().mockReturnValue(false),
+                    hasOptedOutBefore: jest.fn().mockReturnValue(false),
+                    optInCapturing: jest.fn(),
+                    optOutCapturing: jest.fn(),
+                    reset: jest.fn(),
+                    onConsentChange: jest.fn(),
+                },
                 featureFlags: {
                     _send_request: jest
                         .fn()
@@ -504,6 +517,31 @@ describe('posthog-surveys', () => {
 
                 // callback is only called once, even if surveys are loaded again
                 expect(callback).toHaveBeenCalledTimes(1)
+            })
+
+            it('should not load surveys in cookieless mode without consent', () => {
+                mockPostHog.config.cookieless_mode = 'on_reject'
+                const mockIsOptedOut = mockPostHog.consent.isOptedOut as jest.Mock
+                mockIsOptedOut.mockReturnValue(true)
+                surveys['_isSurveysEnabled'] = true
+
+                surveys.loadIfEnabled()
+
+                expect(mockGenerateSurveys).not.toHaveBeenCalled()
+                expect(mockLoadExternalDependency).not.toHaveBeenCalled()
+            })
+
+            it('should load surveys in cookieless mode after consent is given', () => {
+                mockPostHog.config.cookieless_mode = 'on_reject'
+                const mockIsOptedOut = mockPostHog.consent.isOptedOut as jest.Mock
+                mockIsOptedOut.mockReturnValue(false)
+                surveys['_isSurveysEnabled'] = true
+                mockGenerateSurveys.mockReturnValue({})
+
+                surveys.loadIfEnabled()
+
+                expect(surveys['_isInitializingSurveys']).toBe(false)
+                expect(mockGenerateSurveys).toHaveBeenCalled()
             })
         })
 

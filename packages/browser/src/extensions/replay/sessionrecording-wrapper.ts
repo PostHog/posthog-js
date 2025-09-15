@@ -11,7 +11,7 @@ import {
     PostHogExtensionKind,
     window,
 } from '../../utils/globals'
-import { DISABLED, LAZY_LOADING, SessionRecordingStatus, TriggerType } from './triggerMatching'
+import { LAZY_LOADING, SessionRecordingStatus, TriggerType } from './triggerMatching'
 
 const LOGGER_PREFIX = '[SessionRecording]'
 const logger = createLogger(LOGGER_PREFIX)
@@ -35,9 +35,6 @@ export class SessionRecordingWrapper {
      * once a flags response is received status can be disabled, active or sampled
      */
     get status(): SessionRecordingStatus {
-        if (!this._isRecordingEnabled) {
-            return DISABLED
-        }
         return this._lazyLoadedSessionRecording?.status || LAZY_LOADING
     }
 
@@ -225,5 +222,17 @@ export class SessionRecordingWrapper {
                 $recording_status: this.status,
             }
         )
+    }
+
+    /**
+     * This adds a custom event to the session recording
+     *
+     * It is not intended for arbitrary public use - playback only displays known custom events
+     * And is exposed on the public interface only so that other parts of the SDK are able to use it
+     *
+     * if you are calling this from client code, you're probably looking for `posthog.capture('$custom_event', {...})`
+     */
+    tryAddCustomEvent(tag: string, payload: any): boolean {
+        return !!this._lazyLoadedSessionRecording?.tryAddCustomEvent(tag, payload)
     }
 }

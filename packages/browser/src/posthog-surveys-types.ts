@@ -260,3 +260,25 @@ export enum SurveyEventProperties {
     SURVEY_QUESTIONS = '$survey_questions',
     SURVEY_COMPLETED = '$survey_completed',
 }
+
+export enum DisplaySurveyType {
+    Popover = 'popover',
+    Inline = 'inline',
+}
+
+interface DisplaySurveyOptionsBase {
+    ignoreConditions: boolean
+    ignoreDelay: boolean
+    displayType: DisplaySurveyType
+}
+
+interface DisplaySurveyPopoverOptions extends DisplaySurveyOptionsBase {
+    displayType: DisplaySurveyType.Popover
+}
+
+interface DisplaySurveyInlineOptions extends DisplaySurveyOptionsBase {
+    displayType: DisplaySurveyType.Inline
+    selector: string
+}
+
+export type DisplaySurveyOptions = DisplaySurveyPopoverOptions | DisplaySurveyInlineOptions

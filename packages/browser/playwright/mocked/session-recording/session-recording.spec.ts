@@ -67,7 +67,7 @@ const startOptions = {
 test.describe('Session recording - array.js', () => {
     test.beforeEach(async ({ page, context }) => {
         await page.waitingForNetworkCausedBy({
-            urlPatternsToWaitFor: ['**/recorder.js*'],
+            urlPatternsToWaitFor: ['**/*recorder.js*'],
             action: async () => {
                 await start(startOptions, page, context)
             },
@@ -153,7 +153,7 @@ test.describe('Session recording - array.js', () => {
         expect(new Set(capturedEvents.map((c) => c['properties']['$session_id']))).toEqual(new Set([firstSessionId]))
 
         await page.waitingForNetworkCausedBy({
-            urlPatternsToWaitFor: ['**/recorder.js*'],
+            urlPatternsToWaitFor: ['**/*recorder.js*'],
             action: async () => {
                 await start(
                     {

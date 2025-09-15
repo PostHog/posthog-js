@@ -1,5 +1,59 @@
 # posthog-js
 
+## 1.266.0
+
+### Minor Changes
+
+- [#2321](https://github.com/PostHog/posthog-js/pull/2321) [`b81e152`](https://github.com/PostHog/posthog-js/commit/b81e15236115aec3629f93baa552b768b327904f) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: expose rrweb custom events on the public interface of the recorder. not intended for arbitrary public use but useful for internal purposes
+
+## 1.265.1
+
+### Patch Changes
+
+- [#2318](https://github.com/PostHog/posthog-js/pull/2318) [`e0f26ff`](https://github.com/PostHog/posthog-js/commit/e0f26ffbda97d36085c8604fdb7bc496642e0c9c) Thanks [@robbie-c](https://github.com/robbie-c)! - Add option to disable sendBeacon and xhr credentials
+
+## 1.265.0
+
+### Minor Changes
+
+- [#2032](https://github.com/PostHog/posthog-js/pull/2032) [`822d8df`](https://github.com/PostHog/posthog-js/commit/822d8dfb74e0fdbe78a45bc6fc04fb86896ba2eb) Thanks [@lucasheriques](https://github.com/lucasheriques)! - feat: allow display surveys popups on demand
+
+## 1.264.2
+
+### Patch Changes
+
+- [#2314](https://github.com/PostHog/posthog-js/pull/2314) [`5836a2f`](https://github.com/PostHog/posthog-js/commit/5836a2f6bbc32fa8717157edf1a29da29549691a) Thanks [@ordehi](https://github.com/ordehi)! - Fixed a bug that prevented surveys from loading in cookieless mode using the on_reject option. Surveys now correctly initialize when consent is given.
+
+## 1.264.1
+
+### Patch Changes
+
+- [#2312](https://github.com/PostHog/posthog-js/pull/2312) [`dff84c6`](https://github.com/PostHog/posthog-js/commit/dff84c6c21af9a8f4e3bfb58b4fb85ae2cbcdbc6) Thanks [@daibhin](https://github.com/daibhin)! - chore: allow PostHog exception capture to be skipped in Sentry integration
+
+## 1.264.0
+
+### Minor Changes
+
+- [#2310](https://github.com/PostHog/posthog-js/pull/2310) [`2eace6f`](https://github.com/PostHog/posthog-js/commit/2eace6f7efce6901ac8b51060bb2e6be834571b5) Thanks [@robbie-c](https://github.com/robbie-c)! - Add support for partitioned cookies
+
+## 1.263.0
+
+### Minor Changes
+
+- [#2294](https://github.com/PostHog/posthog-js/pull/2294) [`5137440`](https://github.com/PostHog/posthog-js/commit/513744038f99b533f97c68235a730a1fefb6c330) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: add a redux logging middleware to posthog-js
+
+## 1.262.1
+
+### Patch Changes
+
+- [#2309](https://github.com/PostHog/posthog-js/pull/2309) [`28223c1`](https://github.com/PostHog/posthog-js/commit/28223c149a965882e4a47a50a29f8cb4eb322d30) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: default to eager loading replay while investigating trigger bug reports
+
+## 1.262.0
+
+### Minor Changes
+
+- [#2296](https://github.com/PostHog/posthog-js/pull/2296) [`f9fe3ba`](https://github.com/PostHog/posthog-js/commit/f9fe3ba56c96ae3b6c0716ec24de68123422643f) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: switch replay default to lazy loading
+
 ## 1.261.8
 
 ### Patch Changes

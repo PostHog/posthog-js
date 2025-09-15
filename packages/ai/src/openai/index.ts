@@ -14,7 +14,7 @@ import type { ParsedResponse } from 'openai/resources/responses/responses'
 import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } from 'openai/lib/ResponsesParser'
 import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
 import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
-import { extractPosthogParams } from './utils'
+import { extractPosthogParams } from '../utils'
 
 const Chat = OpenAIOrignal.Chat
 const Completions = Chat.Completions
@@ -98,7 +98,7 @@ export class WrappedCompletions extends Completions {
     body: ChatCompletionCreateParamsBase & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<ChatCompletion | Stream<ChatCompletionChunk>> {
-    const { openAIParams, posthogParams } = extractPosthogParams(body)
+    const { providerParams: openAIParams, posthogParams } = extractPosthogParams(body)
     const startTime = Date.now()
 
     const parentPromise = super.create(openAIParams, options)
@@ -358,7 +358,7 @@ export class WrappedResponses extends Responses {
     body: ResponsesCreateParamsBase & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<OpenAIOrignal.Responses.Response | Stream<OpenAIOrignal.Responses.ResponseStreamEvent>> {
-    const { openAIParams, posthogParams } = extractPosthogParams(body)
+    const { providerParams: openAIParams, posthogParams } = extractPosthogParams(body)
     const startTime = Date.now()
 
     const parentPromise = super.create(openAIParams, options)
@@ -510,7 +510,7 @@ export class WrappedResponses extends Responses {
     body: Params & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<ParsedResponse<ParsedT>> {
-    const { openAIParams, posthogParams } = extractPosthogParams(body)
+    const { providerParams: openAIParams, posthogParams } = extractPosthogParams(body)
     const startTime = Date.now()
 
     const originalCreate = super.create.bind(this)
@@ -594,7 +594,7 @@ export class WrappedEmbeddings extends Embeddings {
     body: EmbeddingCreateParams & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<CreateEmbeddingResponse> {
-    const { openAIParams, posthogParams } = extractPosthogParams(body)
+    const { providerParams: openAIParams, posthogParams } = extractPosthogParams(body)
     const startTime = Date.now()
 
     const parentPromise = super.create(openAIParams, options)
