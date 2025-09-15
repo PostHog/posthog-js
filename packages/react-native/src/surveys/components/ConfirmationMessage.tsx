@@ -1,7 +1,7 @@
 import React from 'react'
 import { StyleSheet, Text, View, ViewStyle } from 'react-native'
 
-import { getContrastingTextColor, SurveyAppearanceTheme } from '../surveys-utils'
+import { getContrastingTextColor, shouldRenderDescription, SurveyAppearanceTheme } from '../surveys-utils'
 import { SurveyQuestionDescriptionContentType } from '@posthog/core'
 import { BottomSection } from './BottomSection'
 
@@ -24,17 +24,11 @@ export function ConfirmationMessage({
 }): JSX.Element {
   const textColor = getContrastingTextColor(appearance.backgroundColor)
 
-  const processedDescription = description
-    ? contentType === SurveyQuestionDescriptionContentType.Html
-      ? description.replace(/<[^>]*>/g, '') // Strip HTML tags for React Native
-      : description
-    : null
-
   return (
     <View style={styleOverrides}>
       <View style={styles.thankYouMessageContainer}>
         <Text style={[styles.thankYouMessageHeader, { color: textColor }]}>{header}</Text>
-        {processedDescription && <Text>{processedDescription}</Text>}
+        {shouldRenderDescription(description, contentType) && <Text>{description}</Text>}
       </View>
       {isModal && (
         <BottomSection

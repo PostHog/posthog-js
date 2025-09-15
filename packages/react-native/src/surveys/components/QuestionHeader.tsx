@@ -2,6 +2,7 @@ import React from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { SurveyQuestionDescriptionContentType } from '@posthog/core'
+import { shouldRenderDescription } from '../surveys-utils'
 
 export function QuestionHeader({
   question,
@@ -12,16 +13,12 @@ export function QuestionHeader({
   description?: string | null
   descriptionContentType?: SurveyQuestionDescriptionContentType
 }): JSX.Element {
-  const processedDescription = description
-    ? descriptionContentType === SurveyQuestionDescriptionContentType.Html
-      ? description.replace(/<[^>]*>/g, '') // Strip HTML tags for React Native
-      : description
-    : null
-
   return (
     <View style={styles.container}>
       <Text style={styles.question}>{question}</Text>
-      {processedDescription && <Text style={styles.description}>{processedDescription}</Text>}
+      {shouldRenderDescription(description, descriptionContentType) && (
+        <Text style={styles.description}>{description}</Text>
+      )}
     </View>
   )
 }
