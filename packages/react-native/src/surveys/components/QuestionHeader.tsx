@@ -2,6 +2,7 @@ import React from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { SurveyQuestionDescriptionContentType } from '@posthog/core'
+import { shouldRenderDescription } from '../surveys-utils'
 
 export function QuestionHeader({
   question,
@@ -15,7 +16,7 @@ export function QuestionHeader({
   return (
     <View style={styles.container}>
       <Text style={styles.question}>{question}</Text>
-      {description && descriptionContentType === SurveyQuestionDescriptionContentType.Text && (
+      {shouldRenderDescription(description, descriptionContentType) && (
         <Text style={styles.description}>{description}</Text>
       )}
     </View>

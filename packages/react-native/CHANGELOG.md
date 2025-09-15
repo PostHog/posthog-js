@@ -50,7 +50,7 @@
 
 ### Fixed
 
-1. Fix issue with expo-filesystem on web and macos
+1. Fix issue with expo-file-system on web and macos
 
 ## 4.2.1 - 2025-07-21
 

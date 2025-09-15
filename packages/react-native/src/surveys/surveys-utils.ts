@@ -20,6 +20,22 @@ function isInteger(value: unknown): boolean {
   return typeof value === 'number' && Number.isInteger(value)
 }
 
+/**
+ * Utility function to determine if a description should be rendered based on content type
+ * Only renders text content, skips HTML content for React Native compatibility
+ * Defaults to Text content type when not specified
+ * @param description The description text
+ * @param contentType The content type (text or html), defaults to Text if not provided
+ * @returns True if the description should be rendered, false otherwise
+ */
+export function shouldRenderDescription(
+  description?: string | null,
+  contentType?: SurveyQuestionDescriptionContentType
+): boolean {
+  const effectiveContentType = contentType ?? SurveyQuestionDescriptionContentType.Text
+  return Boolean(description && effectiveContentType === SurveyQuestionDescriptionContentType.Text)
+}
+
 export const defaultBackgroundColor = '#eeeded' as const
 
 export type SurveyAppearanceTheme = Omit<
