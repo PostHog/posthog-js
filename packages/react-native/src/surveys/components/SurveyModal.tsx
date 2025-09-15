@@ -55,7 +55,7 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <View style={styles.modalBackdrop}>
             <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessible={false} />
-            <View
+            <Pressable
               style={[
                 styles.modalContent,
                 {
@@ -65,6 +65,7 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
                   marginHorizontal: 10,
                 },
               ]}
+              onPress={() => {}} // Prevent event bubbling to backdrop
             >
               {!shouldShowConfirmation ? (
                 <Questions survey={survey} appearance={appearance} onSubmit={() => setIsSurveySent(true)} />
@@ -83,7 +84,7 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
               <View style={styles.topIconContainer}>
                 <Cancel onPress={onClose} appearance={appearance} />
               </View>
-            </View>
+            </Pressable>
           </View>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>

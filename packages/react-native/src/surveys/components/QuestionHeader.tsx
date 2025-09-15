@@ -12,12 +12,16 @@ export function QuestionHeader({
   description?: string | null
   descriptionContentType?: SurveyQuestionDescriptionContentType
 }): JSX.Element {
+  const processedDescription = description
+    ? descriptionContentType === SurveyQuestionDescriptionContentType.Html
+      ? description.replace(/<[^>]*>/g, '') // Strip HTML tags for React Native
+      : description
+    : null
+
   return (
     <View style={styles.container}>
       <Text style={styles.question}>{question}</Text>
-      {description && descriptionContentType === SurveyQuestionDescriptionContentType.Text && (
-        <Text style={styles.description}>{description}</Text>
-      )}
+      {processedDescription && <Text style={styles.description}>{processedDescription}</Text>}
     </View>
   )
 }
