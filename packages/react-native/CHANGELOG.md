@@ -1,5 +1,11 @@
 # posthog-react-native
 
+## 4.5.1
+
+### Patch Changes
+
+- [#2325](https://github.com/PostHog/posthog-js/pull/2325) [`a9121df`](https://github.com/PostHog/posthog-js/commit/a9121dfbbe4c549e786124b1a8905c598fada757) Thanks [@marandaneto](https://github.com/marandaneto)! - surveys on react native web renders and get focused correctly
+
 ## 4.5.0
 
 ### Minor Changes
