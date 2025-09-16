@@ -4,6 +4,7 @@ import { AIEvent, formatResponseOpenAI, MonitoringParams, sendEventToPosthog, wi
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
+import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } from 'openai/lib/ResponsesParser'
 import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
 import { extractPosthogParams } from '../utils'
 
@@ -483,7 +484,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
     }
   }
 
-  public parse<Params extends OpenAIOrignal.Responses.ResponseCreateParams, ParsedT = any>(
+  public parse<Params extends ResponseCreateParamsWithTools, ParsedT = ExtractParsedContentFromParams<Params>>(
     body: Params & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<ParsedResponse<ParsedT>> {
@@ -498,8 +499,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
         await sendEventToPosthog({
           client: this.phClient,
           ...posthogParams,
-          //@ts-expect-error
-          model: openAIParams.model,
+          model: String(openAIParams.model ?? ''),
           provider: 'azure',
           input: openAIParams.input,
           output: result.output,
@@ -520,8 +520,7 @@ export class WrappedResponses extends AzureOpenAI.Responses {
         await sendEventToPosthog({
           client: this.phClient,
           ...posthogParams,
-          //@ts-expect-error
-          model: openAIParams.model,
+          model: String(openAIParams.model ?? ''),
           provider: 'azure',
           input: openAIParams.input,
           output: [],
