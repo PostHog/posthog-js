@@ -11,9 +11,10 @@ import {
 import type { APIPromise } from 'openai'
 import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
+import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } from 'openai/lib/ResponsesParser'
 import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
 import { sanitizeOpenAI, sanitizeOpenAIResponse } from '../sanitization'
-import { extractPosthogParams } from './utils'
+import { extractPosthogParams } from '../utils'
 
 const Chat = OpenAIOrignal.Chat
 const Completions = Chat.Completions
@@ -97,7 +98,7 @@ export class WrappedCompletions extends Completions {
     body: ChatCompletionCreateParamsBase & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<ChatCompletion | Stream<ChatCompletionChunk>> {
-    const { openAIParams, posthogParams } = extractPosthogParams(body)
+    const { providerParams: openAIParams, posthogParams } = extractPosthogParams(body)
     const startTime = Date.now()
 
     const parentPromise = super.create(openAIParams, options)
@@ -300,7 +301,7 @@ export class WrappedCompletions extends Completions {
           await sendEventToPosthog({
             client: this.phClient,
             ...posthogParams,
-            model: openAIParams.model,
+            model: String(openAIParams.model ?? ''),
             provider: 'openai',
             input: sanitizeOpenAI(openAIParams.messages),
             output: [],
@@ -357,7 +358,7 @@ export class WrappedResponses extends Responses {
     body: ResponsesCreateParamsBase & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<OpenAIOrignal.Responses.Response | Stream<OpenAIOrignal.Responses.ResponseStreamEvent>> {
-    const { openAIParams, posthogParams } = extractPosthogParams(body)
+    const { providerParams: openAIParams, posthogParams } = extractPosthogParams(body)
     const startTime = Date.now()
 
     const parentPromise = super.create(openAIParams, options)
@@ -482,8 +483,7 @@ export class WrappedResponses extends Responses {
           await sendEventToPosthog({
             client: this.phClient,
             ...posthogParams,
-            //@ts-expect-error
-            model: openAIParams.model,
+            model: String(openAIParams.model ?? ''),
             provider: 'openai',
             input: sanitizeOpenAIResponse(openAIParams.input),
             output: [],
@@ -506,14 +506,13 @@ export class WrappedResponses extends Responses {
     }
   }
 
-  public parse<Params extends ResponsesCreateParamsBase, ParsedT = any>(
+  public parse<Params extends ResponseCreateParamsWithTools, ParsedT = ExtractParsedContentFromParams<Params>>(
     body: Params & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<ParsedResponse<ParsedT>> {
-    const { openAIParams, posthogParams } = extractPosthogParams(body)
+    const { providerParams: openAIParams, posthogParams } = extractPosthogParams(body)
     const startTime = Date.now()
 
-    // Create a temporary instance that bypasses our wrapped create method
     const originalCreate = super.create.bind(this)
     const originalSelf = this as any
     const tempCreate = originalSelf.create
@@ -528,8 +527,7 @@ export class WrappedResponses extends Responses {
           await sendEventToPosthog({
             client: this.phClient,
             ...posthogParams,
-            //@ts-expect-error
-            model: openAIParams.model,
+            model: String(openAIParams.model ?? ''),
             provider: 'openai',
             input: sanitizeOpenAIResponse(openAIParams.input),
             output: result.output,
@@ -555,8 +553,7 @@ export class WrappedResponses extends Responses {
           await sendEventToPosthog({
             client: this.phClient,
             ...posthogParams,
-            //@ts-expect-error
-            model: openAIParams.model,
+            model: String(openAIParams.model ?? ''),
             provider: 'openai',
             input: sanitizeOpenAIResponse(openAIParams.input),
             output: [],
@@ -597,7 +594,7 @@ export class WrappedEmbeddings extends Embeddings {
     body: EmbeddingCreateParams & MonitoringParams,
     options?: RequestOptions
   ): APIPromise<CreateEmbeddingResponse> {
-    const { openAIParams, posthogParams } = extractPosthogParams(body)
+    const { providerParams: openAIParams, posthogParams } = extractPosthogParams(body)
     const startTime = Date.now()
 
     const parentPromise = super.create(openAIParams, options)

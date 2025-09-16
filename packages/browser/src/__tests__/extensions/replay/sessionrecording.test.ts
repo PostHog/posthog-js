@@ -45,9 +45,9 @@ import {
     type metaEvent,
     type pluginEvent,
 } from '@rrweb/types'
-import Mock = jest.Mock
 import { ConsentManager } from '../../../consent'
 import { SimpleEventEmitter } from '../../../utils/simple-event-emitter'
+import Mock = jest.Mock
 
 // Type and source defined here designate a non-user-generated recording event
 
@@ -515,7 +515,7 @@ describe('SessionRecording', () => {
             // need to cast as any to mock private methods
             jest.spyOn(sessionRecording as any, '_startCapture')
             jest.spyOn(sessionRecording, 'stopRecording')
-            jest.spyOn(sessionRecording as any, '_tryAddCustomEvent')
+            jest.spyOn(sessionRecording, 'tryAddCustomEvent')
         })
 
         it('call _startCapture if its enabled', () => {
@@ -549,8 +549,7 @@ describe('SessionRecording', () => {
 
         it('sets the window event listeners', () => {
             //mock window add event listener to check if it is called
-            const addEventListener = jest.fn().mockImplementation(() => () => {})
-            window.addEventListener = addEventListener
+            window.addEventListener = jest.fn().mockImplementation(() => () => {})
 
             sessionRecording.startIfEnabledOrStop()
             expect(sessionRecording['_onBeforeUnload']).not.toBeNull()
@@ -563,7 +562,7 @@ describe('SessionRecording', () => {
 
         it('emits an options event', () => {
             sessionRecording.startIfEnabledOrStop()
-            expect((sessionRecording as any)['_tryAddCustomEvent']).toHaveBeenCalledWith('$session_options', {
+            expect(sessionRecording.tryAddCustomEvent).toHaveBeenCalledWith('$session_options', {
                 activePlugins: [],
                 sessionRecordingOptions: {
                     blockClass: 'ph-no-capture',
@@ -2075,18 +2074,18 @@ describe('SessionRecording', () => {
         })
 
         it('queues events', () => {
-            sessionRecording['_tryAddCustomEvent']('test', { test: 'test' })
+            sessionRecording.tryAddCustomEvent('test', { test: 'test' })
 
             expect(sessionRecording['_queuedRRWebEvents']).toHaveLength(2)
         })
 
         it('limits the queue of events', () => {
-            sessionRecording['_tryAddCustomEvent']('test', { test: 'test' })
+            sessionRecording.tryAddCustomEvent('test', { test: 'test' })
 
             expect(sessionRecording['_queuedRRWebEvents']).toHaveLength(2)
 
             for (let i = 0; i < 100; i++) {
-                sessionRecording['_tryAddCustomEvent']('test', { test: 'test' })
+                sessionRecording.tryAddCustomEvent('test', { test: 'test' })
             }
 
             expect(sessionRecording['_queuedRRWebEvents']).toHaveLength(10)
@@ -2124,17 +2123,17 @@ describe('SessionRecording', () => {
 
     describe('when pageview capture is disabled', () => {
         beforeEach(() => {
-            jest.spyOn(sessionRecording as any, '_tryAddCustomEvent')
+            jest.spyOn(sessionRecording, 'tryAddCustomEvent')
             posthog.config.capture_pageview = false
             sessionRecording.startIfEnabledOrStop()
             // clear the spy calls
-            ;(sessionRecording as any)._tryAddCustomEvent.mockClear()
+            ;(sessionRecording.tryAddCustomEvent as any).mockClear()
         })
 
         it('does not capture pageview on meta event', () => {
             _emit(createIncrementalSnapshot({ type: META_EVENT_TYPE }))
 
-            expect((sessionRecording as any)['_tryAddCustomEvent']).not.toHaveBeenCalled()
+            expect(sessionRecording.tryAddCustomEvent).not.toHaveBeenCalled()
         })
 
         it('captures pageview as expected on non-meta event', () => {
@@ -2142,20 +2141,20 @@ describe('SessionRecording', () => {
 
             _emit(createIncrementalSnapshot({ type: 3 }))
 
-            expect((sessionRecording as any)['_tryAddCustomEvent']).toHaveBeenCalledWith('$url_changed', {
+            expect(sessionRecording.tryAddCustomEvent).toHaveBeenCalledWith('$url_changed', {
                 href: 'https://test.com',
             })
-            ;(sessionRecording as any)._tryAddCustomEvent.mockClear()
+            ;(sessionRecording.tryAddCustomEvent as any).mockClear()
 
             _emit(createIncrementalSnapshot({ type: 3 }))
             // the window href has not changed, so we don't capture another pageview
-            expect((sessionRecording as any)['_tryAddCustomEvent']).not.toHaveBeenCalled()
+            expect(sessionRecording.tryAddCustomEvent).not.toHaveBeenCalled()
 
             fakeNavigateTo('https://test.com/other')
             _emit(createIncrementalSnapshot({ type: 3 }))
 
             // the window href has changed, so we capture another pageview
-            expect((sessionRecording as any)['_tryAddCustomEvent']).toHaveBeenCalledWith('$url_changed', {
+            expect(sessionRecording.tryAddCustomEvent).toHaveBeenCalledWith('$url_changed', {
                 href: 'https://test.com/other',
             })
         })
@@ -2163,17 +2162,17 @@ describe('SessionRecording', () => {
 
     describe('when pageview capture is enabled', () => {
         beforeEach(() => {
-            jest.spyOn(sessionRecording as any, '_tryAddCustomEvent')
+            jest.spyOn(sessionRecording, 'tryAddCustomEvent')
             posthog.config.capture_pageview = true
             sessionRecording.startIfEnabledOrStop()
             // clear the spy calls
-            ;(sessionRecording as any)._tryAddCustomEvent.mockClear()
+            ;(sessionRecording.tryAddCustomEvent as any).mockClear()
         })
 
         it('does not capture pageview on rrweb events', () => {
             _emit(createIncrementalSnapshot({ type: 3 }))
 
-            expect((sessionRecording as any)['_tryAddCustomEvent']).not.toHaveBeenCalled()
+            expect(sessionRecording.tryAddCustomEvent).not.toHaveBeenCalled()
         })
     })
 
@@ -2386,7 +2385,7 @@ describe('SessionRecording', () => {
     describe('URL blocking', () => {
         beforeEach(() => {
             sessionRecording.startIfEnabledOrStop()
-            jest.spyOn(sessionRecording as any, '_tryAddCustomEvent')
+            jest.spyOn(sessionRecording, 'tryAddCustomEvent')
         })
 
         it('does not flush buffer and includes pause event when hitting blocked URL', async () => {
@@ -2489,14 +2488,14 @@ describe('SessionRecording', () => {
             expect(sessionRecording.status).toBe('paused')
             expect(sessionRecording['_urlTriggerMatching']['urlBlocked']).toBe(true)
             expect(sessionRecording['_buffer'].data).toHaveLength(0)
-            expect((sessionRecording as any)['_tryAddCustomEvent']).toHaveBeenCalledWith('recording paused', {
+            expect(sessionRecording.tryAddCustomEvent).toHaveBeenCalledWith('recording paused', {
                 reason: 'url blocker',
             })
-            ;(sessionRecording as any)['_tryAddCustomEvent'].mockClear()
+            ;(sessionRecording.tryAddCustomEvent as any).mockClear()
 
             _emit(createIncrementalSnapshot({ data: { source: 1 } }))
             // regression: to check we've not accidentally got stuck in a pausing loop
-            expect((sessionRecording as any)['_tryAddCustomEvent']).not.toHaveBeenCalledWith('recording paused', {
+            expect(sessionRecording.tryAddCustomEvent).not.toHaveBeenCalledWith('recording paused', {
                 reason: 'url blocker',
             })
         })

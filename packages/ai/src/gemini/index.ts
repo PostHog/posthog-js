@@ -6,8 +6,13 @@ import {
   GenerateContentResponseUsageMetadata,
 } from '@google/genai'
 import { PostHog } from 'posthog-node'
-import { v4 as uuidv4 } from 'uuid'
-import { MonitoringParams, sendEventToPosthog, extractAvailableToolCalls, formatResponseGemini } from '../utils'
+import {
+  MonitoringParams,
+  sendEventToPosthog,
+  extractAvailableToolCalls,
+  formatResponseGemini,
+  extractPosthogParams,
+} from '../utils'
 import { sanitizeGemini } from '../sanitization'
 import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessage } from '../types'
 
@@ -43,9 +48,7 @@ export class WrappedModels {
   }
 
   public async generateContent(params: GenerateContentParameters & MonitoringParams): Promise<GeminiResponse> {
-    const { posthogDistinctId, posthogTraceId, posthogCaptureImmediate, ...geminiParams } = params
-
-    const traceId = posthogTraceId ?? uuidv4()
+    const { providerParams: geminiParams, posthogParams } = extractPosthogParams(params)
     const startTime = Date.now()
 
     try {
@@ -57,8 +60,7 @@ export class WrappedModels {
       const metadata = response.usageMetadata
       await sendEventToPosthog({
         client: this.phClient,
-        distinctId: posthogDistinctId,
-        traceId,
+        ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
         input: this.formatInputForPostHog(geminiParams.contents),
@@ -76,7 +78,6 @@ export class WrappedModels {
           cacheReadInputTokens: metadata?.cachedContentTokenCount ?? 0,
         },
         tools: availableTools,
-        captureImmediate: posthogCaptureImmediate,
       })
 
       return response
@@ -84,8 +85,7 @@ export class WrappedModels {
       const latency = (Date.now() - startTime) / 1000
       await sendEventToPosthog({
         client: this.phClient,
-        distinctId: posthogDistinctId,
-        traceId,
+        ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
         input: this.formatInputForPostHog(geminiParams.contents),
@@ -100,7 +100,6 @@ export class WrappedModels {
         },
         isError: true,
         error: JSON.stringify(error),
-        captureImmediate: posthogCaptureImmediate,
       })
       throw error
     }
@@ -109,9 +108,7 @@ export class WrappedModels {
   public async *generateContentStream(
     params: GenerateContentParameters & MonitoringParams
   ): AsyncGenerator<GeminiResponse, void, unknown> {
-    const { posthogDistinctId, posthogTraceId, posthogCaptureImmediate, ...geminiParams } = params
-
-    const traceId = posthogTraceId ?? uuidv4()
+    const { providerParams: geminiParams, posthogParams } = extractPosthogParams(params)
     const startTime = Date.now()
     const accumulatedContent: FormattedContent = []
     let usage: TokenUsage = {
@@ -188,8 +185,7 @@ export class WrappedModels {
 
       await sendEventToPosthog({
         client: this.phClient,
-        distinctId: posthogDistinctId,
-        traceId,
+        ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
         input: this.formatInputForPostHog(geminiParams.contents),
@@ -200,14 +196,12 @@ export class WrappedModels {
         httpStatus: 200,
         usage,
         tools: availableTools,
-        captureImmediate: posthogCaptureImmediate,
       })
     } catch (error: unknown) {
       const latency = (Date.now() - startTime) / 1000
       await sendEventToPosthog({
         client: this.phClient,
-        distinctId: posthogDistinctId,
-        traceId,
+        ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
         input: this.formatInputForPostHog(geminiParams.contents),
@@ -222,7 +216,6 @@ export class WrappedModels {
         },
         isError: true,
         error: JSON.stringify(error),
-        captureImmediate: posthogCaptureImmediate,
       })
       throw error
     }

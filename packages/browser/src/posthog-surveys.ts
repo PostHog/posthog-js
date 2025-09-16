@@ -1,7 +1,13 @@
 import { SURVEYS } from './constants'
 import { SurveyManager } from './extensions/surveys'
 import { PostHog } from './posthog-core'
-import { Survey, SurveyCallback, SurveyRenderReason } from './posthog-surveys-types'
+import {
+    DisplaySurveyOptions,
+    DisplaySurveyType,
+    Survey,
+    SurveyCallback,
+    SurveyRenderReason,
+} from './posthog-surveys-types'
 import { RemoteConfig } from './types'
 import { assignableWindow, document } from './utils/globals'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
@@ -76,8 +82,8 @@ export class PostHogSurveys {
             logger.info('Disabled. Not loading surveys.')
             return
         }
-        if (this._instance.config.cookieless_mode) {
-            logger.info('Not loading surveys in cookieless mode.')
+        if (this._instance.config.cookieless_mode && this._instance.consent.isOptedOut()) {
+            logger.info('Not loading surveys in cookieless mode without consent.')
             return
         }
 
@@ -290,7 +296,7 @@ export class PostHogSurveys {
         return this._surveyManager.checkSurveyEligibility(survey)
     }
 
-    canRenderSurvey(surveyId: string): SurveyRenderReason {
+    canRenderSurvey(surveyId: string | Survey): SurveyRenderReason {
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return { visible: false, disabledReason: 'SDK is not enabled or survey functionality is not yet loaded' }
@@ -325,7 +331,42 @@ export class PostHogSurveys {
         })
     }
 
-    renderSurvey(surveyId: string, selector: string) {
+    renderSurvey(surveyId: string | Survey, selector: string) {
+        if (isNullish(this._surveyManager)) {
+            logger.warn('init was not called')
+            return
+        }
+        const survey = typeof surveyId === 'string' ? this._getSurveyById(surveyId) : surveyId
+        if (!survey?.id) {
+            logger.warn('Survey not found')
+            return
+        }
+        if (!IN_APP_SURVEY_TYPES.includes(survey.type)) {
+            logger.warn(`Surveys of type ${survey.type} cannot be rendered in the app`)
+            return
+        }
+        const elem = document?.querySelector(selector)
+        if (!elem) {
+            logger.warn('Survey element not found')
+            return
+        }
+        if (survey.appearance?.surveyPopupDelaySeconds) {
+            logger.info(
+                `Rendering survey ${survey.id} with delay of ${survey.appearance.surveyPopupDelaySeconds} seconds`
+            )
+            setTimeout(() => {
+                logger.info(
+                    `Rendering survey ${survey.id} with delay of ${survey.appearance?.surveyPopupDelaySeconds} seconds`
+                )
+                this._surveyManager?.renderSurvey(survey, elem)
+                logger.info(`Survey ${survey.id} rendered`)
+            }, survey.appearance.surveyPopupDelaySeconds * 1000)
+            return
+        }
+        this._surveyManager.renderSurvey(survey, elem)
+    }
+
+    displaySurvey(surveyId: string, options: DisplaySurveyOptions) {
         if (isNullish(this._surveyManager)) {
             logger.warn('init was not called')
             return
@@ -335,16 +376,27 @@ export class PostHogSurveys {
             logger.warn('Survey not found')
             return
         }
-        if (!IN_APP_SURVEY_TYPES.includes(survey.type)) {
-            logger.warn(`Surveys of type ${survey.type} cannot be rendered in the app`)
-            return
+        let surveyToDisplay = survey
+        if (survey.appearance?.surveyPopupDelaySeconds && options.ignoreDelay) {
+            surveyToDisplay = {
+                ...survey,
+                appearance: {
+                    ...survey.appearance,
+                    surveyPopupDelaySeconds: 0,
+                },
+            }
+        }
+        if (options.ignoreConditions === false) {
+            const canRender = this.canRenderSurvey(survey)
+            if (!canRender.visible) {
+                logger.warn('Survey is not eligible to be displayed: ', canRender.disabledReason)
+                return
+            }
+        }
+        if (options.displayType === DisplaySurveyType.Inline) {
+            this.renderSurvey(surveyToDisplay, options.selector)
             return
         }
-        const elem = document?.querySelector(selector)
-        if (!elem) {
-            logger.warn('Survey element not found')
-            return
-        }
-        this._surveyManager.renderSurvey(survey, elem)
+        this._surveyManager.handlePopoverSurvey(surveyToDisplay)
     }
 }
