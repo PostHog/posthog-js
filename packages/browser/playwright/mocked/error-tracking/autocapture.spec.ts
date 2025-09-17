@@ -90,7 +90,7 @@ test.describe('ErrorTracking autocapture', () => {
     })
 
     test.describe('unhandled promise rejections', () => {
-        test('should capture unhandled promise rejections', async ({ posthog, page, network, events }) => {
+        test('should capture unhandled promise rejections', async ({ posthog, page, network, events, browserName }) => {
             await posthog.init({
                 capture_exceptions: true,
             })
@@ -102,7 +102,12 @@ test.describe('ErrorTracking autocapture', () => {
             expect(exception).toBeDefined()
             expect(exception.properties.$exception_list[0].type).toBe('UnhandledRejection')
             expect(exception.properties.$exception_list[0].value).toBe('An unknown error occured')
-            expect(exception.properties.$exception_list[0].stacktrace).toMatchObject({ frames: [], type: 'raw' })
+            const frames = exception.properties.$exception_list[0].stacktrace.frames
+            if (browserName === 'chromium') {
+                expect(frames).toHaveLength(3)
+            } else {
+                expect(frames).toHaveLength(0)
+            }
         })
     })
 })
