@@ -358,7 +358,10 @@ export class PostHog extends PostHogCore {
     let throttleDelayMs = options?.sessionReplayConfig?.throttleDelayMs ?? defaultThrottleDelayMs
 
     // if deprecated values are set, we use the higher one for back compatibility
-    if (iOSdebouncerDelayMs !== defaultThrottleDelayMs || androidDebouncerDelayMs !== defaultThrottleDelayMs) {
+    if (
+      throttleDelayMs === defaultThrottleDelayMs &&
+      (iOSdebouncerDelayMs !== defaultThrottleDelayMs || androidDebouncerDelayMs !== defaultThrottleDelayMs)
+    ) {
       throttleDelayMs = Math.max(iOSdebouncerDelayMs, androidDebouncerDelayMs)
     }
 
