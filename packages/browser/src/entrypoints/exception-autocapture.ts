@@ -1,12 +1,10 @@
-import { assignableWindow, window } from '../utils/globals'
+import { assignableWindow, ErrorCaptureFn, window } from '../utils/globals'
 import { ErrorEventArgs } from '../types'
 import { createLogger } from '../utils/logger'
 
 const logger = createLogger('[ExceptionAutocapture]')
 
-type CaptureFn = (input: unknown, hint?: { handled?: boolean; syntheticException?: Error }) => void
-
-const wrapOnError = (captureFn: CaptureFn) => {
+const wrapOnError = (captureFn: ErrorCaptureFn) => {
     const win = window as any
     if (!win) {
         logger.info('window not available, cannot wrap onerror')
@@ -28,7 +26,7 @@ const wrapOnError = (captureFn: CaptureFn) => {
     }
 }
 
-const wrapUnhandledRejection = (captureFn: CaptureFn) => {
+const wrapUnhandledRejection = (captureFn: ErrorCaptureFn) => {
     const win = window as any
     if (!win) {
         logger.info('window not available, cannot wrap onUnhandledRejection')
@@ -50,7 +48,7 @@ const wrapUnhandledRejection = (captureFn: CaptureFn) => {
     }
 }
 
-const wrapConsoleError = (captureFn: CaptureFn) => {
+const wrapConsoleError = (captureFn: ErrorCaptureFn) => {
     const con = console as any
     if (!con) {
         logger.info('console not available, cannot wrap console.error')
