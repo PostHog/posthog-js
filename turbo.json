@@ -11,7 +11,7 @@
         },
         "package": {
             "cache": false,
-            "dependsOn": ["^package"],
+            "dependsOn": ["^package", "build"],
             "inputs": ["dist/**", "package.json"],
             "env": ["PACKAGE_DEST"]
         },
