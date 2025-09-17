@@ -8,10 +8,8 @@ import { isString, isArray, ErrorTracking } from '@posthog/core'
 
 const logger = createLogger('[Error tracking]')
 
-export class PostHogExceptions {
-    private readonly _instance: PostHog
-    private _suppressionRules: ErrorTrackingSuppressionRule[] = []
-    private _errorPropertiesBuilder: ErrorPropertiesBuilder = new ErrorTracking.ErrorPropertiesBuilder(
+export function buildErrorPropertiesBuilder() {
+    return new ErrorTracking.ErrorPropertiesBuilder(
         [
             new ErrorTracking.DOMExceptionCoercer(),
             new ErrorTracking.PromiseRejectionEventCoercer(),
@@ -24,6 +22,11 @@ export class PostHogExceptions {
         ],
         [ErrorTracking.chromeStackLineParser, ErrorTracking.geckoStackLineParser]
     )
+}
+export class PostHogExceptions {
+    private readonly _instance: PostHog
+    private _suppressionRules: ErrorTrackingSuppressionRule[] = []
+    private _errorPropertiesBuilder: ErrorPropertiesBuilder = buildErrorPropertiesBuilder()
 
     constructor(instance: PostHog) {
         this._instance = instance

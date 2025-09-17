@@ -1,9 +1,8 @@
 /* eslint-disable compat/compat */
 
-import { isNull } from '@posthog/core/utils'
+import { isNull, ErrorTracking } from '@posthog/core'
 import { expect } from '@jest/globals'
 import { buildErrorPropertiesBuilder } from '../../../posthog-exceptions'
-import { ErrorProperties } from '@posthog/core/error-tracking'
 
 // ugh, jest
 // can't reference PromiseRejectionEvent to construct it 🤷
@@ -13,6 +12,8 @@ export type PromiseRejectionEventInit = {
     promise: Promise<any>
     reason: any
 }
+
+type ErrorProperties = ErrorTracking.ErrorProperties
 
 export class PromiseRejectionEvent extends Event {
     public readonly promise: Promise<any>
