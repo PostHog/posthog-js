@@ -63,8 +63,8 @@ test.describe('ErrorTracking captureException', () => {
             const exceptionObject = new DOMException('exception message', 'exception name')
             ph.captureException(exceptionObject)
         })
-        if (browserName == 'chromium') {
-            exceptionMatch(exception, 'exception name', 'exception name: exception message')
+        if (browserName === 'firefox') {
+            exceptionMatch(exception, 'exception name', 'exception message')
         } else {
             exceptionMatch(exception, 'DOMException', 'exception name: exception message')
         }
