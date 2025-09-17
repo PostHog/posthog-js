@@ -1,7 +1,7 @@
 // Portions of this file are derived from getsentry/sentry-javascript by Software, Inc. dba Sentry
 // Licensed under the MIT License
 
-import { JsonType } from '../types'
+import type { JsonType } from '../types'
 
 // levels originally copied from Sentry to work with the sentry integration
 // and to avoid relying on a frequently changing @sentry/types dependency
