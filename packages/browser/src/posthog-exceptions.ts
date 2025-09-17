@@ -1,16 +1,29 @@
+import { ErrorPropertiesBuilder } from '@posthog/core/dist/error-tracking'
 import { ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS, ERROR_TRACKING_SUPPRESSION_RULES } from './constants'
-import { Exception } from './extensions/exception-autocapture/error-conversion'
 import { PostHog } from './posthog-core'
 import { CaptureResult, ErrorTrackingSuppressionRule, Properties, RemoteConfig } from './types'
 import { createLogger } from './utils/logger'
 import { propertyComparisons } from './utils/property-utils'
-import { isString, isArray } from '@posthog/core'
+import { isString, isArray, ErrorTracking } from '@posthog/core'
 
 const logger = createLogger('[Error tracking]')
 
 export class PostHogExceptions {
     private readonly _instance: PostHog
     private _suppressionRules: ErrorTrackingSuppressionRule[] = []
+    private _errorPropertiesBuilder: ErrorPropertiesBuilder = new ErrorTracking.ErrorPropertiesBuilder(
+        [
+            new ErrorTracking.DOMExceptionCoercer(),
+            new ErrorTracking.PromiseRejectionEventCoercer(),
+            new ErrorTracking.ErrorEventCoercer(),
+            new ErrorTracking.ErrorCoercer(),
+            new ErrorTracking.EventCoercer(),
+            new ErrorTracking.ObjectCoercer(),
+            new ErrorTracking.StringCoercer(),
+            new ErrorTracking.PrimitiveCoercer(),
+        ],
+        [ErrorTracking.chromeStackLineParser, ErrorTracking.geckoStackLineParser]
+    )
 
     constructor(instance: PostHog) {
         this._instance = instance
@@ -36,6 +49,18 @@ export class PostHogExceptions {
         const enabled_server_side = !!this._instance.get_property(ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS)
         const enabled_client_side = this._instance.config.error_tracking.captureExtensionExceptions
         return enabled_client_side ?? enabled_server_side ?? false
+    }
+
+    buildProperties(
+        input: unknown,
+        metadata?: { handled?: boolean; syntheticException?: Error }
+    ): ErrorTracking.ErrorProperties {
+        return this._errorPropertiesBuilder.buildFromUnknown(input, {
+            syntheticException: metadata?.syntheticException,
+            mechanism: {
+                handled: metadata?.handled,
+            },
+        })
     }
 
     sendExceptionEvent(properties: Properties): CaptureResult | undefined {
@@ -96,7 +121,7 @@ export class PostHogExceptions {
             return false
         }
 
-        const frames = (exceptionList as Exception[]).flatMap((e) => e.stacktrace?.frames ?? [])
+        const frames = (exceptionList as ErrorTracking.Exception[]).flatMap((e) => e.stacktrace?.frames ?? [])
         return frames.some((f) => f.filename && f.filename.startsWith('chrome-extension://'))
     }
 }

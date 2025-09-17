@@ -5,7 +5,6 @@ import { ExceptionAutoCaptureConfig, RemoteConfig } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
 import { isUndefined, BucketedRateLimiter, isObject } from '@posthog/core'
-import { ErrorProperties } from './error-conversion'
 
 const logger = createLogger('[ExceptionAutocapture]')
 
@@ -139,9 +138,10 @@ export class ExceptionObserver {
         this.startIfEnabled()
     }
 
-    captureException(errorProperties: ErrorProperties) {
+    captureException(input: unknown, hint?: { handled?: boolean; syntheticException?: Error }) {
+        const errorProperties = this._instance.exceptions.buildProperties(input, hint)
         const posthogHost = this._instance.requestRouter.endpointFor('ui')
-
+        // @ts-expect-error: Do we still need this?
         errorProperties.$exception_personURL = `${posthogHost}/project/${
             this._instance.config.token
         }/person/${this._instance.get_distinct_id()}`
