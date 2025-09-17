@@ -79,6 +79,40 @@ export class PostHog extends PostHogCore {
   private _disableSurveys: boolean
   private _disableRemoteConfig: boolean
 
+  /**
+   * Creates a new PostHog instance for React Native. You can find all configuration options in the [React Native SDK docs](https://posthog.com/docs/libraries/react-native#configuration-options).
+   *
+   * If you prefer not to use the PostHogProvider, you can initialize PostHog in its own file and import the instance from there.
+   *
+   * {@label Initialization}
+   *
+   * @example
+   * ```ts
+   * // posthog.ts
+   * import PostHog from 'posthog-react-native'
+   *
+   * export const posthog = new PostHog('<ph_project_api_key>', {
+   *   host: '<ph_client_api_host>'
+   * })
+   *
+   * // Then you can access PostHog by importing your instance
+   * // Another file:
+   * import { posthog } from './posthog'
+   *
+   * export function MyApp1() {
+   *     useEffect(async () => {
+   *         posthog.capture('event_name')
+   *     }, [posthog])
+   *
+   *     return <View>Your app code</View>
+   * }
+   * ```
+   *
+   * @public
+   *
+   * @param apiKey - Your PostHog API key
+   * @param options - PostHog configuration options
+   */
   constructor(apiKey: string, options?: PostHogOptions) {
     super(apiKey, options)
     this._isInitialized = false
@@ -167,7 +201,11 @@ export class PostHog extends PostHogCore {
     }
   }
 
-  // NOTE: This is purely a helper method for testing purposes or those who wish to be certain the SDK is fully initialised
+  /**
+   *
+   * @internal
+   *
+   */
   public async ready(): Promise<void> {
     await this._initPromise
   }
@@ -187,6 +225,7 @@ export class PostHog extends PostHogCore {
   getLibraryId(): string {
     return 'posthog-react-native'
   }
+
   getLibraryVersion(): string {
     return version
   }
@@ -206,7 +245,430 @@ export class PostHog extends PostHogCore {
     }
   }
 
-  // Custom methods
+  /**
+   * Registers super properties that are sent with every event.
+   *
+   * Super properties are properties associated with events that are set once and then sent with every capture call.
+   * They persist across sessions and are stored locally.
+   *
+   * {@label Capture}
+   *
+   * @example
+   * ```js
+   * // register super properties
+   * posthog.register({
+   *     'icecream pref': 'vanilla',
+   *     team_id: 22,
+   * })
+   * ```
+   *
+   * @public
+   *
+   * @param properties An associative array of properties to store about the user
+   */
+  register(properties: PostHogEventProperties): Promise<void> {
+    return super.register(properties)
+  }
+
+  /**
+   * Removes a super property so it won't be sent with future events.
+   *
+   * Super Properties are persisted across sessions so you have to explicitly remove them if they are no longer relevant.
+   *
+   * {@label Capture}
+   *
+   * @example
+   * ```js
+   * // remove a super property
+   * posthog.unregister('icecream pref')
+   * ```
+   *
+   * @public
+   *
+   * @param property The name of the super property to remove
+   */
+  unregister(property: string): Promise<void> {
+    return super.unregister(property)
+  }
+
+  /**
+   * Resets the user's ID and anonymous ID after logout.
+   *
+   * To reset the user's ID and anonymous ID, call reset. Usually you would do this right after the user logs out.
+   * This also clears all stored super properties and more.
+   *
+   * {@label Identification}
+   *
+   * @example
+   * ```js
+   * // reset after logout
+   * posthog.reset()
+   * ```
+   *
+   * @public
+   */
+  reset(): void {
+    super.reset()
+  }
+
+  /**
+   * Manually flushes the event queue.
+   *
+   * You can set the number of events in the configuration that should queue before flushing.
+   * Setting this to 1 will send events immediately and will use more battery. This is set to 20 by default.
+   * You can also manually flush the queue. If a flush is already in progress it returns a promise for the existing flush.
+   *
+   * {@label Capture}
+   *
+   * @example
+   * ```js
+   * // manually flush the queue
+   * await posthog.flush()
+   * ```
+   *
+   * @public
+   *
+   * @returns Promise that resolves when the flush is complete
+   */
+  flush(): Promise<void> {
+    return super.flush()
+  }
+
+  /**
+   * Opts the user in to data capture.
+   *
+   * By default, PostHog has tracking enabled unless it is forcefully disabled by default using the option { defaultOptIn: false }.
+   * Once this has been called it is persisted and will be respected until optOut is called again or the reset function is called.
+   *
+   * {@label Privacy}
+   *
+   * @example
+   * ```js
+   * // opt in to tracking
+   * posthog.optIn()
+   * ```
+   *
+   * @public
+   */
+  optIn(): Promise<void> {
+    return super.optIn()
+  }
+
+  /**
+   * Opts the user out of data capture.
+   *
+   * You can completely opt-out users from data capture. Once this has been called it is persisted and will be respected until optIn is called again or the reset function is called.
+   *
+   * {@label Privacy}
+   *
+   * @example
+   * ```js
+   * // opt out of tracking
+   * posthog.optOut()
+   * ```
+   *
+   * @public
+   */
+  optOut(): Promise<void> {
+    return super.optOut()
+  }
+
+  /**
+   * Checks if a feature flag is enabled for the current user.
+   *
+   * Defaults to undefined if not loaded yet or if there was a problem loading.
+   *
+   * {@label Feature flags}
+   *
+   * @example
+   * ```js
+   * // check if feature flag is enabled
+   * const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag')
+   * ```
+   *
+   * @public
+   *
+   * @param key The feature flag key
+   * @returns True if enabled, false if disabled, undefined if not loaded
+   */
+  isFeatureEnabled(key: string): boolean | undefined {
+    return super.isFeatureEnabled(key)
+  }
+
+  /**
+   * Gets the value of a feature flag for the current user.
+   *
+   * Defaults to undefined if not loaded yet or if there was a problem loading.
+   * Multivariant feature flags are returned as a string.
+   *
+   * {@label Feature flags}
+   *
+   * @example
+   * ```js
+   * // get feature flag value
+   * const value = posthog.getFeatureFlag('key-for-your-boolean-flag')
+   * ```
+   *
+   * @public
+   *
+   * @param key The feature flag key
+   * @returns The feature flag value or undefined if not loaded
+   */
+  getFeatureFlag(key: string): boolean | string | undefined {
+    return super.getFeatureFlag(key)
+  }
+
+  /**
+   * Gets the payload of a feature flag for the current user.
+   *
+   * Returns JsonType or undefined if not loaded yet or if there was a problem loading.
+   *
+   * {@label Feature flags}
+   *
+   * @example
+   * ```js
+   * // get feature flag payload
+   * const payload = posthog.getFeatureFlagPayload('key-for-your-multivariate-flag')
+   * ```
+   *
+   * @public
+   *
+   * @param key The feature flag key
+   * @returns The feature flag payload or undefined if not loaded
+   */
+  getFeatureFlagPayload(key: string): JsonType | undefined {
+    return super.getFeatureFlagPayload(key)
+  }
+
+  /**
+   * Reloads feature flags from the server.
+   *
+   * PostHog loads feature flags when instantiated and refreshes whenever methods are called that affect the flag.
+   * If you want to manually trigger a refresh, you can call this method.
+   *
+   * {@label Feature flags}
+   *
+   * @example
+   * ```js
+   * // reload feature flags
+   * posthog.reloadFeatureFlags()
+   * ```
+   *
+   * @public
+   */
+  reloadFeatureFlags(): void {
+    super.reloadFeatureFlags()
+  }
+
+  /**
+   * Reloads feature flags from the server asynchronously.
+   *
+   * PostHog loads feature flags when instantiated and refreshes whenever methods are called that affect the flag.
+   * If you want to manually trigger a refresh and get the result, you can call this method.
+   *
+   * {@label Feature flags}
+   *
+   * @example
+   * ```js
+   * // reload feature flags and get result
+   * posthog.reloadFeatureFlagsAsync().then((refreshedFlags) => console.log(refreshedFlags))
+   * ```
+   *
+   * @public
+   *
+   * @returns Promise that resolves with the refreshed flags
+   */
+  reloadFeatureFlagsAsync(): Promise<Record<string, boolean | string> | undefined> {
+    return super.reloadFeatureFlagsAsync()
+  }
+
+  /**
+   * Associates the current user with a group.
+   *
+   * Group analytics allows you to associate the events for that person's session with a group (e.g. teams, organizations, etc.).
+   * This is a paid feature and is not available on the open-source or free cloud plan.
+   *
+   * {@label Group analytics}
+   *
+   * @example
+   * ```js
+   * // associate with a group
+   * posthog.group('company', 'company_id_in_your_db')
+   * ```
+   *
+   * @example
+   * ```js
+   * // associate with a group and update properties
+   * posthog.group('company', 'company_id_in_your_db', {
+   *   name: 'Awesome Inc.',
+   *   employees: 11,
+   * })
+   * ```
+   *
+   * @public
+   *
+   * @param groupType The type of group (e.g. 'company', 'team')
+   * @param groupKey The unique identifier for the group
+   * @param properties Optional properties to set for the group
+   */
+  group(groupType: string, groupKey: string, properties?: PostHogEventProperties): void {
+    super.group(groupType, groupKey, properties)
+  }
+
+  /**
+   * Assigns an alias to the current user.
+   *
+   * Sometimes, you want to assign multiple distinct IDs to a single user. This is helpful when your primary distinct ID is inaccessible.
+   * For example, if a distinct ID used on the frontend is not available in your backend.
+   *
+   * {@label Identification}
+   *
+   * @example
+   * ```js
+   * // set alias for current user
+   * posthog.alias('distinct_id')
+   * ```
+   *
+   * @public
+   *
+   * @param alias The alias to assign to the current user
+   */
+  alias(alias: string): void {
+    super.alias(alias)
+  }
+
+  /**
+   * Gets the current user's distinct ID.
+   *
+   * You may find it helpful to get the current user's distinct ID. For example, to check whether you've already called identify for a user or not.
+   * This returns either the ID automatically generated by PostHog or the ID that has been passed by a call to identify().
+   *
+   * {@label Identification}
+   *
+   * @example
+   * ```js
+   * // get current distinct ID
+   * const distinctId = posthog.getDistinctId()
+   * ```
+   *
+   * @public
+   *
+   * @returns The current user's distinct ID
+   */
+  getDistinctId(): string {
+    return super.getDistinctId()
+  }
+
+  /**
+   * Sets person properties for feature flag evaluation.
+   *
+   * Sometimes, you might want to evaluate feature flags using properties that haven't been ingested yet, or were set incorrectly earlier.
+   * You can do so by setting properties the flag depends on with this call. These are set for the entire session.
+   * Successive calls are additive: all properties you set are combined together and sent for flag evaluation.
+   *
+   * {@label Feature flags}
+   *
+   * @example
+   * ```js
+   * // set person properties for flags
+   * posthog.setPersonPropertiesForFlags({'property1': 'value', property2: 'value2'})
+   * ```
+   *
+   * @public
+   *
+   * @param properties The person properties to set for flag evaluation
+   */
+  setPersonPropertiesForFlags(properties: Record<string, string>): void {
+    super.setPersonPropertiesForFlags(properties)
+  }
+
+  /**
+   * Resets person properties for feature flag evaluation.
+   *
+   *
+   * {@label Feature flags}
+   *
+   * @example
+   * ```js
+   * // reset person properties for flags
+   * posthog.resetPersonPropertiesForFlags()
+   * ```
+   *
+   * @public
+   */
+  resetPersonPropertiesForFlags(): void {
+    super.resetPersonPropertiesForFlags()
+  }
+
+  /**
+   * Sets group properties for feature flag evaluation.
+   *
+   * These properties are automatically attached to the current group (set via posthog.group()).
+   * When you change the group, these properties are reset.
+   *
+   * {@label Feature flags}
+   *
+   * @example
+   * ```js
+   * // set group properties for flags
+   * posthog.setGroupPropertiesForFlags({'company': {'property1': 'value', property2: 'value2'}})
+   * ```
+   *
+   * @public
+   *
+   * @param properties The group properties to set for flag evaluation
+   */
+  setGroupPropertiesForFlags(properties: Record<string, Record<string, string>>): void {
+    super.setGroupPropertiesForFlags(properties)
+  }
+
+  /**
+   * Resets group properties for feature flag evaluation.
+   *
+   * {@label Feature flags}
+   *
+   * @example
+   * ```js
+   * // reset group properties for flags
+   * posthog.resetGroupPropertiesForFlags()
+   * ```
+   *
+   * @public
+   */
+  resetGroupPropertiesForFlags(): void {
+    super.resetGroupPropertiesForFlags()
+  }
+
+  /**
+   * Captures a screen view event.
+   *
+   * @remarks
+   * This function requires a name. You may also pass in an optional properties object.
+   * Screen name is automatically registered for the session and will be included in subsequent events.
+   *
+   * {@label Capture}
+   *
+   * @example
+   * ```js
+   * // Basic screen capture
+   * posthog.screen('dashboard')
+   * ```
+   *
+   * @example
+   * ```js
+   * // Screen capture with properties
+   * posthog.screen('dashboard', {
+   *     background: 'blue',
+   *     hero: 'superhog',
+   * })
+   * ```
+   *
+   * @public
+   *
+   * @param name - The name of the screen
+   * @param properties - Optional properties to include with the screen event
+   * @param options - Optional capture options
+   */
   async screen(name: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): Promise<void> {
     await this._initPromise
     // Screen name is good to know for all other subsequent events
@@ -283,6 +745,40 @@ export class PostHog extends PostHogCore {
     }
   }
 
+  /**
+   * Associates events with a specific user. Learn more about [identifying users](https://posthog.com/docs/product-analytics/identify)
+   *
+   * {@label Identification}
+   *
+   * @example
+   * ```js
+   * // Basic identify
+   * posthog.identify('distinctID', {
+   *   email: 'user@posthog.com',
+   *   name: 'My Name'
+   * })
+   * ```
+   *
+   * @example
+   * ```js
+   * // Using $set and $set_once
+   * posthog.identify('distinctID', {
+   *   $set: {
+   *     email: 'user@posthog.com',
+   *     name: 'My Name'
+   *   },
+   *   $set_once: {
+   *     date_of_first_log_in: '2024-03-01'
+   *   }
+   * })
+   * ```
+   *
+   * @public
+   *
+   * @param distinctId - A unique identifier for your user. Typically either their email or database ID.
+   * @param properties - Optional dictionary with key:value pairs to set the person properties
+   * @param options - Optional capture options
+   */
   identify(distinctId?: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): void {
     const previousDistinctId = this.getDistinctId()
     super.identify(distinctId, properties, options)
