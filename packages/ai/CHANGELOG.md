@@ -1,5 +1,11 @@
 # posthog-ai
 
+## 6.4.1
+
+### Patch Changes
+
+- [#2299](https://github.com/PostHog/posthog-js/pull/2299) [`80a262c`](https://github.com/PostHog/posthog-js/commit/80a262c728cd893a79090e9019c08640961dada1) Thanks [@k11kirky](https://github.com/k11kirky)! - Fix for zod schema
+
 ## 6.4.0
 
 ### Minor Changes

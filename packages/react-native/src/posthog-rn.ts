@@ -343,15 +343,27 @@ export class PostHog extends PostHogCore {
       return
     }
 
+    const defaultThrottleDelayMs = 1000
+
     const {
       maskAllTextInputs = true,
       maskAllImages = true,
       maskAllSandboxedViews = true,
       captureLog = true,
       captureNetworkTelemetry = true,
-      iOSdebouncerDelayMs = 1000,
-      androidDebouncerDelayMs = 1000,
+      iOSdebouncerDelayMs = defaultThrottleDelayMs,
+      androidDebouncerDelayMs = defaultThrottleDelayMs,
     } = options?.sessionReplayConfig ?? {}
+
+    let throttleDelayMs = options?.sessionReplayConfig?.throttleDelayMs ?? defaultThrottleDelayMs
+
+    // if deprecated values are set, we use the higher one for back compatibility
+    if (
+      throttleDelayMs === defaultThrottleDelayMs &&
+      (iOSdebouncerDelayMs !== defaultThrottleDelayMs || androidDebouncerDelayMs !== defaultThrottleDelayMs)
+    ) {
+      throttleDelayMs = Math.max(iOSdebouncerDelayMs, androidDebouncerDelayMs)
+    }
 
     const sdkReplayConfig = {
       maskAllTextInputs,
@@ -361,6 +373,7 @@ export class PostHog extends PostHogCore {
       captureNetworkTelemetry,
       iOSdebouncerDelayMs,
       androidDebouncerDelayMs,
+      throttleDelayMs,
     }
 
     this.logMsgIfDebug(() =>

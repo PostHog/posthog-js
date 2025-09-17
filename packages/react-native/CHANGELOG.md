@@ -1,5 +1,11 @@
 # posthog-react-native
 
+## 4.6.0
+
+### Minor Changes
+
+- [#2328](https://github.com/PostHog/posthog-js/pull/2328) [`83196aa`](https://github.com/PostHog/posthog-js/commit/83196aa4bb7f7a1642b722cbfa19af1bb13379ae) Thanks [@marandaneto](https://github.com/marandaneto)! - chore: add support for throttleDelayMs
+
 ## 4.5.1
 
 ### Patch Changes
