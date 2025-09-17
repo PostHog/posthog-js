@@ -115,6 +115,7 @@ export type PostHogSessionReplayConfig = {
    * This is used for capturing the view as a screenshot
    * The lower the number more snapshots will be captured but higher the performance impact
    * Defaults to 1s on iOS
+   * @deprecated please use throttleDelayMs instead
    */
   iOSdebouncerDelayMs?: number
   /**
@@ -123,8 +124,16 @@ export type PostHogSessionReplayConfig = {
    * The lower the number more snapshots will be captured but higher the performance impact
    * Defaults to 1000ms (1s)
    * Ps: it was 500ms (0.5s) by default until version 3.3.7
+   * @deprecated please use throttleDelayMs instead
    */
   androidDebouncerDelayMs?: number
+  /**
+   * Throttling delay used to reduce the number of snapshots captured and reduce performance impact
+   * This is used for capturing the view as a wireframe or screenshot
+   * The lower the number more snapshots will be captured but higher the performance impact
+   * Defaults to 1000ms = 1s
+   */
+  throttleDelayMs?: number
   /**
    * Enable capturing network telemetry
    * iOS only
