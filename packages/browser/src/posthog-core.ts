@@ -88,7 +88,6 @@ import {
 } from './utils/survey-utils'
 import {
     isEmptyString,
-    isError,
     isFunction,
     isKnownUnsafeEditableEvent,
     isNullish,
@@ -2667,13 +2666,13 @@ export class PostHog {
     captureException(error: unknown, additionalProperties?: Properties): CaptureResult | undefined {
         const syntheticException = new Error('PostHog syntheticException')
         return this.exceptions.sendExceptionEvent({
-            ...errorToProperties(
-                isError(error) ? { error, event: error.message } : { event: error as Event | string },
+            ...errorToProperties(error, {
+                handled: true,
                 // create synthetic error to get stack in cases where user input does not contain one
                 // creating the exceptions soon into our code as possible means we should only have to
                 // remove a single frame (this 'captureException' method) from the resultant stack
-                { syntheticException }
-            ),
+                syntheticException,
+            }),
             ...additionalProperties,
         })
     }

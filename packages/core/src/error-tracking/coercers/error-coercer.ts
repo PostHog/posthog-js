@@ -11,7 +11,7 @@ export class ErrorCoercer implements ErrorTrackingCoercer<Error> {
       type: this.getType(err),
       value: this.getMessage(err, ctx),
       stack: this.getStack(err),
-      cause: ctx.maybeCoerceUnknown(err.cause),
+      cause: err.cause ? ctx.next(err.cause) : undefined,
       synthetic: false,
     }
   }

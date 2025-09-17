@@ -37,7 +37,7 @@ export class ErrorPropertiesBuilder {
       type: 'generic',
     }
     const coercingContext: CoercingContext = this.buildCoercingContext(mechanism, hint, 0)
-    const exceptionWithCause = coercingContext.coerceUnknown(input) ?? this.coerceFallback(coercingContext)
+    const exceptionWithCause = coercingContext.apply(input)
     const parsingContext: ParsingContext = this.buildParsingContext()
     const exceptionWithStack = this.parseStacktrace(exceptionWithCause, parsingContext)
     const exceptionList = this.convertToExceptionList(exceptionWithStack, mechanism)
@@ -61,18 +61,20 @@ export class ErrorPropertiesBuilder {
     if (err.cause != null) {
       cause = this.parseStacktrace(err.cause, ctx)
     }
-    let stack: StackFrame[] | undefined = undefined
-    if (err.stack != null) {
+    let stack: StackFrame[] = []
+    if (err.stack != '' && err.stack != null) {
       stack = this.applyChunkIds(this.stackParser(err.stack, err.synthetic ? 1 : 0), ctx.chunkIdMap)
     }
     return { ...err, cause, stack }
   }
 
   private applyChunkIds(frames: StackFrame[], chunkIdMap?: ChunkIdMapType): StackFrame[] {
-    return frames.map((frame) => ({
-      ...frame,
-      chunk_id: frame.filename && chunkIdMap ? chunkIdMap[frame.filename] : undefined,
-    }))
+    return frames.map((frame) => {
+      if (frame.filename && chunkIdMap) {
+        frame.chunk_id = chunkIdMap[frame.filename]
+      }
+      return frame
+    })
   }
 
   private applyCoercers(input: unknown, ctx: CoercingContext): ExceptionLike | undefined {
@@ -81,7 +83,7 @@ export class ErrorPropertiesBuilder {
         return adapter.coerce(input, ctx)
       }
     }
-    return undefined
+    return this.coerceFallback(ctx)
   }
 
   private async applyModifiers(frames: StackFrame[]): Promise<StackFrame[]> {
@@ -97,7 +99,7 @@ export class ErrorPropertiesBuilder {
     if (exceptionWithStack.cause != null) {
       cause = await this.modifyFrames(exceptionWithStack.cause)
     }
-    let stack: StackFrame[] | undefined = undefined
+    let stack: StackFrame[] = []
     if (exceptionWithStack.stack != null) {
       stack = await this.applyModifiers(exceptionWithStack.stack)
     }
@@ -105,21 +107,29 @@ export class ErrorPropertiesBuilder {
   }
 
   private convertToExceptionList(exceptionWithStack: ParsedException, mechanism: Mechanism): ExceptionList {
-    const exceptionList: ExceptionList = []
-    exceptionList.push({
-      type: exceptionWithStack.type,
-      value: exceptionWithStack.value,
-      mechanism: {
-        handled: mechanism.handled,
-        synthetic: exceptionWithStack.synthetic,
+    const exceptionList: ExceptionList = [
+      {
+        type: exceptionWithStack.type,
+        value: exceptionWithStack.value,
+        mechanism: {
+          type: mechanism.type ?? 'generic',
+          handled: mechanism.handled ?? true,
+          synthetic: exceptionWithStack.synthetic ?? false,
+        },
+        stacktrace: {
+          type: 'raw',
+          frames: exceptionWithStack.stack,
+        },
       },
-      stacktrace: {
-        type: 'raw',
-        frames: exceptionWithStack.stack,
-      },
-    })
+    ]
     if (exceptionWithStack.cause != null) {
-      exceptionList.push(...this.convertToExceptionList(exceptionWithStack.cause, mechanism))
+      // Cause errors are necessarily handled
+      exceptionList.push(
+        ...this.convertToExceptionList(exceptionWithStack.cause, {
+          ...mechanism,
+          handled: true,
+        })
+      )
     }
     return exceptionList
   }
@@ -132,23 +142,24 @@ export class ErrorPropertiesBuilder {
   }
 
   buildCoercingContext(mechanism: Mechanism, hint: EventHint, depth: number = 0): CoercingContext {
+    const coerce = (input: unknown, depth: number) => {
+      if (depth <= MAX_CAUSE_RECURSION) {
+        const ctx = this.buildCoercingContext(mechanism, hint, depth)
+        return this.applyCoercers(input, ctx)
+      } else {
+        return undefined
+      }
+    }
     const context = {
       ...hint,
+      // Do not propagate synthetic exception as it doesn't make sense
+      syntheticException: depth == 0 ? hint.syntheticException : undefined,
       mechanism,
-      maybeCoerceUnknown: (input?: unknown) => {
-        if (input != null) {
-          return context.coerceUnknown(input)
-        } else {
-          return undefined
-        }
+      apply: (input: unknown) => {
+        return coerce(input, depth)
       },
-      coerceUnknown: (input: unknown) => {
-        if (depth <= MAX_CAUSE_RECURSION) {
-          const ctx = this.buildCoercingContext(mechanism, hint, depth + 1)
-          return this.applyCoercers(input, ctx)
-        } else {
-          return undefined
-        }
+      next: (input: unknown) => {
+        return coerce(input, depth + 1)
       },
     } as CoercingContext
     return context

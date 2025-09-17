@@ -70,8 +70,10 @@ export interface StackFrame {
 }
 
 export interface CoercingContext extends EventHint {
-  maybeCoerceUnknown: (input: unknown) => ExceptionLike | undefined
-  coerceUnknown: (input: unknown) => ExceptionLike | undefined
+  // Used to forward to other types
+  apply: (input: unknown) => ExceptionLike
+  // Used to coerce nested exceptions
+  next: (input: unknown) => ExceptionLike | undefined
 }
 
 export type ChunkIdMapType = Record<string, string>

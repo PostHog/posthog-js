@@ -90,24 +90,90 @@ test.describe('ErrorTracking autocapture', () => {
     })
 
     test.describe('unhandled promise rejections', () => {
-        test('should capture unhandled promise rejections', async ({ posthog, page, network, events, browserName }) => {
+        test('should capture with error', async ({ posthog, page, network, events, browserName }) => {
             await posthog.init({
                 capture_exceptions: true,
             })
             await network.waitForFlags()
             await page.evaluate(() => {
-                Promise.reject(new Error('An unknown error occured'))
+                class CustomError extends Error {
+                    constructor(message: string) {
+                        super(message)
+                        this.name = 'CustomError'
+                    }
+                }
+                Promise.reject(new CustomError('An unknown error occured'))
             })
-            const exception = await events.waitForEvent('$exception')
-            expect(exception).toBeDefined()
-            expect(exception.properties.$exception_list[0].type).toBe('UnhandledRejection')
-            expect(exception.properties.$exception_list[0].value).toBe('An unknown error occured')
-            const frames = exception.properties.$exception_list[0].stacktrace.frames
+            const event = await events.waitForEvent('$exception')
+            const first_exception = event.properties.$exception_list[0]
+            expect(first_exception.type).toBe('CustomError')
+            expect(first_exception.value).toBe('An unknown error occured')
+            expect(first_exception.mechanism.handled).toBe(false)
+            const frames = first_exception.stacktrace.frames
             if (browserName === 'chromium') {
                 expect(frames).toHaveLength(3)
             } else {
                 expect(frames).toHaveLength(0)
             }
+        })
+
+        test('should capture with string', async ({ posthog, page, network, events }) => {
+            await posthog.init({
+                capture_exceptions: true,
+            })
+            await network.waitForFlags()
+            await page.evaluate(() => {
+                Promise.reject('An unknown error occured')
+            })
+            const exception = await events.waitForEvent('$exception')
+            expect(exception).toBeDefined()
+            expect(exception.properties.$exception_list[0].type).toBe('UnhandledRejection')
+            expect(exception.properties.$exception_list[0].value).toBe(
+                'Non-Error promise rejection captured with value: An unknown error occured'
+            )
+            const stacktrace = exception.properties.$exception_list[0].stacktrace
+            expect(stacktrace).toMatchObject({
+                frames: [],
+                type: 'raw',
+            })
+        })
+    })
+
+    test.describe('unhandled errors', () => {
+        test('should capture ReferenceError', async ({ posthog, network, page, events }) => {
+            await posthog.init({
+                capture_exceptions: true,
+            })
+            await network.waitForFlags()
+            await page.addScriptTag({
+                content: 'gibberish',
+                type: 'module',
+            })
+            const event = await events.waitForEvent('$exception')
+            const first_exception = event.properties.$exception_list[0]
+            expect(first_exception.type).toBe('ReferenceError')
+            expect(first_exception.value).toBe('gibberish is not defined')
+            expect(first_exception.mechanism.handled).toBe(false)
+            const frames = first_exception.stacktrace.frames
+            expect(frames).toHaveLength(1)
+        })
+
+        test('should capture SyntaxError', async ({ posthog, network, page, events }) => {
+            await posthog.init({
+                capture_exceptions: true,
+            })
+            await network.waitForFlags()
+            await page.addScriptTag({
+                content: "let toto = 'asdsds; ",
+                type: 'module',
+            })
+            const event = await events.waitForEvent('$exception')
+            const first_exception = event.properties.$exception_list[0]
+            expect(first_exception.type).toBe('SyntaxError')
+            expect(first_exception.value).toBe("Failed to execute 'appendChild' on 'Node': Invalid or unexpected token")
+            expect(first_exception.mechanism.handled).toBe(false)
+            const frames = first_exception.stacktrace.frames
+            expect(frames).toHaveLength(3)
         })
     })
 })

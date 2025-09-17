@@ -1,5 +1,6 @@
 import { isEmptyString, isError, isEvent, isString } from '@/utils'
 import { CoercingContext, ErrorTrackingCoercer, ExceptionLike, SeverityLevel, severityLevels } from '../types'
+import { extractExceptionKeysForMessage } from './utils'
 
 type ObjectLike = Record<string, unknown>
 
@@ -11,7 +12,7 @@ export class ObjectCoercer implements ErrorTrackingCoercer<ObjectLike> {
   coerce(candidate: ObjectLike, ctx: CoercingContext): ExceptionLike | undefined {
     const errorProperty = this.getErrorPropertyFromObject(candidate)
     if (errorProperty) {
-      return ctx.coerceUnknown(errorProperty)
+      return ctx.apply(errorProperty)
     } else {
       return {
         type: this.getType(candidate),
@@ -32,7 +33,7 @@ export class ObjectCoercer implements ErrorTrackingCoercer<ObjectLike> {
       let message = `'${err.name}' captured as exception`
 
       if ('message' in err && typeof err.message === 'string') {
-        message += ` with message '${err.message}'`
+        message += ` with message: '${err.message}'`
       }
 
       return message
@@ -41,36 +42,9 @@ export class ObjectCoercer implements ErrorTrackingCoercer<ObjectLike> {
     }
 
     const className = this.getObjectClassName(err)
-    const keys = this.extractExceptionKeysForMessage(err)
+    const keys = extractExceptionKeysForMessage(err)
 
     return `${className && className !== 'Object' ? `'${className}'` : 'Object'} captured as exception with keys: ${keys}`
-  }
-
-  /**
-   * Given any captured exception, extract its keys and create a sorted
-   * and truncated list that will be used inside the event message.
-   * eg. `Non-error exception captured with keys: foo, bar, baz`
-   */
-  private extractExceptionKeysForMessage(err: object, maxLength = 40): string {
-    const keys = Object.keys(err)
-    keys.sort()
-
-    if (!keys.length) {
-      return '[object has no keys]'
-    }
-
-    for (let i = keys.length; i > 0; i--) {
-      const serialized = keys.slice(0, i).join(', ')
-      if (serialized.length > maxLength) {
-        continue
-      }
-      if (i === keys.length) {
-        return serialized
-      }
-      return serialized.length <= maxLength ? serialized : `${serialized.slice(0, maxLength)}...`
-    }
-
-    return ''
   }
 
   private isSeverityLevel(x: unknown): x is SeverityLevel {

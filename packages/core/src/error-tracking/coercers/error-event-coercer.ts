@@ -9,7 +9,7 @@ export class ErrorEventCoercer implements ErrorTrackingCoercer<ErrorEvent> {
   }
 
   coerce(err: ErrorEvent, ctx: CoercingContext): ExceptionLike {
-    const exceptionLike = ctx.coerceUnknown(err.error)
+    const exceptionLike = ctx.apply(err.error)
     if (!exceptionLike) {
       return {
         type: 'ErrorEvent',

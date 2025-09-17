@@ -1,8 +1,4 @@
-import {
-    ErrorProperties,
-    errorToProperties,
-    unhandledRejectionToProperties,
-} from '../extensions/exception-autocapture/error-conversion'
+import { ErrorProperties, errorToProperties } from '../extensions/exception-autocapture/error-conversion'
 import { assignableWindow, window } from '../utils/globals'
 import { ErrorEventArgs } from '../types'
 import { createLogger } from '../utils/logger'
@@ -17,7 +13,10 @@ const wrapOnError = (captureFn: (props: ErrorProperties) => void) => {
     const originalOnError = win.onerror
 
     win.onerror = function (...args: ErrorEventArgs): boolean {
-        const errorProperties = errorToProperties({ event: args[0], error: args[4] })
+        const input = args[4] || args[0]
+        const errorProperties = errorToProperties(input, {
+            handled: false,
+        })
         captureFn(errorProperties)
         return originalOnError?.(...args) ?? false
     }
@@ -37,10 +36,12 @@ const wrapUnhandledRejection = (captureFn: (props: ErrorProperties) => void) => 
 
     const originalOnUnhandledRejection = win.onunhandledrejection
 
-    win.onunhandledrejection = function (...args: [ev: PromiseRejectionEvent]): boolean {
-        const errorProperties = unhandledRejectionToProperties(args)
+    win.onunhandledrejection = function (evt: PromiseRejectionEvent): boolean {
+        const errorProperties = errorToProperties(evt, {
+            handled: false,
+        })
         captureFn(errorProperties)
-        return originalOnUnhandledRejection?.apply(win, args) ?? false
+        return originalOnUnhandledRejection?.apply(win, evt) ?? false
     }
     win.onunhandledrejection.__POSTHOG_INSTRUMENTED__ = true
 
@@ -59,12 +60,11 @@ const wrapConsoleError = (captureFn: (props: ErrorProperties) => void) => {
     const originalConsoleError = con.error
 
     con.error = function (...args: any[]): void {
-        const event = args.join(' ')
-        const error = args.find((arg) => arg instanceof Error)
-        const errorProperties = error
-            ? errorToProperties({ event, error })
-            : errorToProperties({ event }, { syntheticException: new Error('PostHog syntheticException') })
-
+        const input = args.find((arg) => arg instanceof Error) ?? args.join(' ')
+        const errorProperties = errorToProperties(input, {
+            syntheticException: new Error('PostHog syntheticException'),
+            handled: true,
+        })
         captureFn(errorProperties)
         return originalConsoleError?.(...args)
     }

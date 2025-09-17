@@ -13,7 +13,7 @@ export class DOMExceptionCoercer implements ErrorTrackingCoercer<DOMException> {
       type: this.getType(err),
       value: this.getValue(err),
       stack: hasStack ? err.stack : undefined,
-      cause: ctx.maybeCoerceUnknown(err.cause),
+      cause: err.cause ? ctx.next(err.cause) : undefined,
       synthetic: false,
     }
   }

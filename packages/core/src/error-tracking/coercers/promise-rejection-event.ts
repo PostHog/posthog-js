@@ -13,10 +13,11 @@ export class PromiseRejectionEventCoercer implements ErrorTrackingCoercer<Promis
       return {
         type: 'UnhandledRejection',
         value: `Non-Error promise rejection captured with value: ${String(reason)}`,
+        stack: ctx.syntheticException?.stack,
         synthetic: true,
       }
     } else {
-      return ctx.coerceUnknown(reason)
+      return ctx.apply(reason)
     }
   }
 
