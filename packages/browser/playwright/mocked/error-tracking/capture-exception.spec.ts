@@ -58,6 +58,14 @@ test.describe('ErrorTracking captureException', () => {
         exceptionMatch(exception, 'Error', "Non-Error 'exception' captured with keys: message, name")
     })
 
+    test('captureException(DOMException)', async ({ posthog, events }) => {
+        const exception = await bootstrap(posthog, events, (ph) => {
+            const exceptionObject = new DOMException('exception message', 'exception name')
+            ph.captureException(exceptionObject)
+        })
+        exceptionMatch(exception, 'DOMException', 'exception name: exception message')
+    })
+
     test('captureException(ErrorEvent)', async ({ posthog, events }) => {
         const exception = await bootstrap(posthog, events, (ph) => {
             class CustomError extends Error {
