@@ -16,7 +16,7 @@ const wrapOnError = (captureFn: ErrorCaptureFn) => {
         captureFn(input, {
             handled: false,
         })
-        return originalOnError?.(...args) ?? false
+        return originalOnError?.apply(win, args) ?? false
     }
     win.onerror.__POSTHOG_INSTRUMENTED__ = true
 
@@ -38,7 +38,7 @@ const wrapUnhandledRejection = (captureFn: ErrorCaptureFn) => {
         captureFn(evt, {
             handled: false,
         })
-        return originalOnUnhandledRejection?.apply(win, evt) ?? false
+        return originalOnUnhandledRejection?.apply(win, [evt]) ?? false
     }
     win.onunhandledrejection.__POSTHOG_INSTRUMENTED__ = true
 

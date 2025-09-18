@@ -15,6 +15,7 @@ import {
   ChunkIdMapType,
   Mechanism,
   ParsedException,
+  Exception,
 } from './types'
 
 const MAX_CAUSE_RECURSION = 4
@@ -30,7 +31,7 @@ export class ErrorPropertiesBuilder {
     this.stackParser = createStackParser(...parsers)
   }
 
-  buildFromUnknown(input: unknown, hint: EventHint): ErrorProperties {
+  buildFromUnknown(input: unknown, hint: EventHint = {}): ErrorProperties {
     const providedMechanism = hint && hint.mechanism
     const mechanism = providedMechanism || {
       handled: true,
@@ -61,7 +62,7 @@ export class ErrorPropertiesBuilder {
     if (err.cause != null) {
       cause = this.parseStacktrace(err.cause, ctx)
     }
-    let stack: StackFrame[] = []
+    let stack: StackFrame[] | undefined = undefined
     if (err.stack != '' && err.stack != null) {
       stack = this.applyChunkIds(this.stackParser(err.stack, err.synthetic ? 1 : 0), ctx.chunkIdMap)
     }
@@ -107,21 +108,22 @@ export class ErrorPropertiesBuilder {
   }
 
   private convertToExceptionList(exceptionWithStack: ParsedException, mechanism: Mechanism): ExceptionList {
-    const exceptionList: ExceptionList = [
-      {
-        type: exceptionWithStack.type,
-        value: exceptionWithStack.value,
-        mechanism: {
-          type: mechanism.type ?? 'generic',
-          handled: mechanism.handled ?? true,
-          synthetic: exceptionWithStack.synthetic ?? false,
-        },
-        stacktrace: {
-          type: 'raw',
-          frames: exceptionWithStack.stack,
-        },
+    const currentException: Exception = {
+      type: exceptionWithStack.type,
+      value: exceptionWithStack.value,
+      mechanism: {
+        type: mechanism.type ?? 'generic',
+        handled: mechanism.handled ?? true,
+        synthetic: exceptionWithStack.synthetic ?? false,
       },
-    ]
+    }
+    if (exceptionWithStack.stack) {
+      currentException.stacktrace = {
+        type: 'raw',
+        frames: exceptionWithStack.stack,
+      }
+    }
+    const exceptionList: ExceptionList = [currentException]
     if (exceptionWithStack.cause != null) {
       // Cause errors are necessarily handled
       exceptionList.push(
