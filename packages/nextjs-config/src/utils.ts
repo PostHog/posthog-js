@@ -91,6 +91,7 @@ async function callPosthogCli(args: string[], env: NodeJS.ProcessEnv, verbose: b
   }
 
   const child = spawn(binaryLocation, [...args], {
+    shell: true,
     stdio: verbose ? 'inherit' : 'ignore',
     env,
     cwd: process.cwd(),
