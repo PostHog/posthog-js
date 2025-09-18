@@ -19,7 +19,7 @@ export default function Home() {
                     <button onClick={() => posthog.captureException(new Error('exception captured'))}>
                         Create client exception!
                     </button>
-                    <button onClick={() => throwServerError()}>Create server exception!</button>
+                    <button onClick={() => captureServerError()}>Create server exception!</button>
                 </div>
             </main>
         </div>
