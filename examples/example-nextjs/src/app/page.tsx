@@ -1,6 +1,6 @@
 'use client'
 import { usePostHog } from 'posthog-js/react'
-import { throwServerError } from './actions'
+import { captureServerError } from './actions'
 
 export default function Home() {
     const posthog = usePostHog()
