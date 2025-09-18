@@ -9,7 +9,6 @@ const POSTHOG_PARAMS_MAP: Record<keyof MonitoringParams, string> = {
   posthogGroups: 'groups',
   posthogModelOverride: 'modelOverride',
   posthogProviderOverride: 'providerOverride',
-  posthogCostOverride: 'costOverride',
   posthogCaptureImmediate: 'captureImmediate',
 }
 

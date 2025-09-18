@@ -517,39 +517,4 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$process_person_profile']).toBeUndefined()
   })
 
-  test('Cost Override - passes costs directly without multiplication', async () => {
-    await client.models.generateContent({
-      model: 'gemini-2.0-flash-001',
-      contents: 'Hello',
-      posthogDistinctId: 'test-user',
-      posthogCostOverride: {
-        inputCost: 0.02,
-        outputCost: 0.04,
-      },
-    })
-
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
-    const { properties } = captureArgs[0]
-
-    expect(properties['$ai_input_cost_usd']).toBe(0.02)
-    expect(properties['$ai_output_cost_usd']).toBe(0.04)
-    expect(properties['$ai_total_cost_usd']).toBeCloseTo(0.06)
-    expect(properties['$ai_input_tokens']).toBeDefined()
-    expect(properties['$ai_output_tokens']).toBeDefined()
-  })
-
-  test('Cost Override - no cost properties when override not provided', async () => {
-    await client.models.generateContent({
-      model: 'gemini-2.0-flash-001',
-      contents: 'Hello',
-      posthogDistinctId: 'test-user',
-    })
-
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
-    const { properties } = captureArgs[0]
-
-    expect(properties['$ai_input_cost_usd']).toBeUndefined()
-    expect(properties['$ai_output_cost_usd']).toBeUndefined()
-    expect(properties['$ai_total_cost_usd']).toBeUndefined()
-  })
 })

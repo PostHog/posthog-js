@@ -8,7 +8,7 @@ import type {
 } from '@ai-sdk/provider'
 import { v4 as uuidv4 } from 'uuid'
 import { PostHog } from 'posthog-node'
-import { CostOverride, sendEventToPosthog, truncate, MAX_OUTPUT_SIZE, extractAvailableToolCalls } from '../utils'
+import { sendEventToPosthog, truncate, MAX_OUTPUT_SIZE, extractAvailableToolCalls } from '../utils'
 import { Buffer } from 'buffer'
 import { redactBase64DataUrl } from '../sanitization'
 import { isString } from '../typeGuards'
@@ -22,7 +22,6 @@ interface ClientOptions {
   posthogGroups?: Record<string, any>
   posthogModelOverride?: string
   posthogProviderOverride?: string
-  posthogCostOverride?: CostOverride
   posthogCaptureImmediate?: boolean
 }
 
@@ -34,7 +33,6 @@ interface CreateInstrumentationMiddlewareOptions {
   posthogGroups?: Record<string, any>
   posthogModelOverride?: string
   posthogProviderOverride?: string
-  posthogCostOverride?: CostOverride
   posthogCaptureImmediate?: boolean
 }
 

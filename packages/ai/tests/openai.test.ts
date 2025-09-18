@@ -1178,43 +1178,4 @@ describe('PostHogOpenAI - Jest test suite', () => {
     ;(ChatMock.Completions as any).prototype.create = originalCreate
   })
 
-  test('Cost Override - passes costs directly without multiplication', async () => {
-    await client.chat.completions.create({
-      model: 'gpt-4',
-      messages: [{ role: 'user', content: 'Hello' }],
-      posthogDistinctId: 'test-id',
-      posthogCostOverride: {
-        inputCost: 0.05,
-        outputCost: 0.1,
-      },
-    })
-
-    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
-    const { properties } = captureArgs[0]
-
-    // Cost override values are passed directly (not multiplied by tokens)
-    expect(properties['$ai_input_cost_usd']).toBe(0.05)
-    expect(properties['$ai_output_cost_usd']).toBe(0.1)
-    expect(properties['$ai_total_cost_usd']).toBeCloseTo(0.15)
-
-    // Token counts are still present
-    expect(properties['$ai_input_tokens']).toBe(20)
-    expect(properties['$ai_output_tokens']).toBe(10)
-  })
-
-  test('Cost Override - no cost properties when override not provided', async () => {
-    await client.chat.completions.create({
-      model: 'gpt-4',
-      messages: [{ role: 'user', content: 'Hello' }],
-      posthogDistinctId: 'test-id',
-    })
-
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
-    const { properties } = captureArgs[0]
-
-    expect(properties['$ai_input_cost_usd']).toBeUndefined()
-    expect(properties['$ai_output_cost_usd']).toBeUndefined()
-    expect(properties['$ai_total_cost_usd']).toBeUndefined()
-  })
 })

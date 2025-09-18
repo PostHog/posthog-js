@@ -850,45 +850,4 @@ describe('Vercel AI SDK v5 Middleware - End User Usage', () => {
     })
   })
 
-  test('Cost Override - passes costs directly without multiplication', async () => {
-    const model = createMockModel('test-model')
-    const wrappedModel = withTracing(model, mockPostHogClient, {
-      posthogDistinctId: 'test-user',
-      posthogCostOverride: {
-        inputCost: 0.05,
-        outputCost: 0.1,
-      },
-    })
-
-    await wrappedModel.doGenerate({
-      prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Hello' }] }],
-    })
-
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
-    const { properties } = captureCall[0]
-
-    expect(properties.$ai_input_cost_usd).toBe(0.05)
-    expect(properties.$ai_output_cost_usd).toBe(0.1)
-    expect(properties.$ai_total_cost_usd).toBeCloseTo(0.15)
-    expect(properties.$ai_input_tokens).toBe(5)
-    expect(properties.$ai_output_tokens).toBe(1)
-  })
-
-  test('Cost Override - no cost properties when override not provided', async () => {
-    const model = createMockModel('test-model')
-    const wrappedModel = withTracing(model, mockPostHogClient, {
-      posthogDistinctId: 'test-user',
-    })
-
-    await wrappedModel.doGenerate({
-      prompt: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Hello' }] }],
-    })
-
-    const [captureCall] = (mockPostHogClient.capture as jest.Mock).mock.calls
-    const { properties } = captureCall[0]
-
-    expect(properties.$ai_input_cost_usd).toBeUndefined()
-    expect(properties.$ai_output_cost_usd).toBeUndefined()
-    expect(properties.$ai_total_cost_usd).toBeUndefined()
-  })
 })

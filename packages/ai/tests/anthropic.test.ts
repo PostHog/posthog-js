@@ -901,41 +901,4 @@ describe('PostHogAnthropic', () => {
     })
   })
 
-  test('Cost Override - passes costs directly without multiplication', async () => {
-    await client.messages.create({
-      model: 'claude-3-opus-20240229',
-      messages: [{ role: 'user', content: 'Hello' }],
-      max_tokens: 100,
-      posthogDistinctId: 'test-user',
-      posthogCostOverride: {
-        inputCost: 0.03,
-        outputCost: 0.06,
-      },
-    })
-
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
-    const { properties } = captureArgs[0]
-
-    expect(properties['$ai_input_cost_usd']).toBe(0.03)
-    expect(properties['$ai_output_cost_usd']).toBe(0.06)
-    expect(properties['$ai_total_cost_usd']).toBeCloseTo(0.09)
-    expect(properties['$ai_input_tokens']).toBeDefined()
-    expect(properties['$ai_output_tokens']).toBeDefined()
-  })
-
-  test('Cost Override - no cost properties when override not provided', async () => {
-    await client.messages.create({
-      model: 'claude-3-opus-20240229',
-      messages: [{ role: 'user', content: 'Hello' }],
-      max_tokens: 100,
-      posthogDistinctId: 'test-user',
-    })
-
-    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
-    const { properties } = captureArgs[0]
-
-    expect(properties['$ai_input_cost_usd']).toBeUndefined()
-    expect(properties['$ai_output_cost_usd']).toBeUndefined()
-    expect(properties['$ai_total_cost_usd']).toBeUndefined()
-  })
 })

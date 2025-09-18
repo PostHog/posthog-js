@@ -25,7 +25,6 @@ export interface MonitoringEventPropertiesWithDefaults {
   groups?: Record<string, any>
   modelOverride?: string
   providerOverride?: string
-  costOverride?: CostOverride
   captureImmediate?: boolean
 }
 
@@ -35,10 +34,6 @@ export type MonitoringParams = {
   [K in keyof MonitoringEventProperties as `posthog${Capitalize<string & K>}`]: MonitoringEventProperties[K]
 }
 
-export interface CostOverride {
-  inputCost: number
-  outputCost: number
-}
 
 export const getModelParams = (
   params:
@@ -420,18 +415,6 @@ export const sendEventToPosthog = async ({
     }
   }
 
-  let costOverrideData = {}
-
-  if (params.posthogCostOverride) {
-    const inputCostUSD = params.posthogCostOverride.inputCost ?? 0
-    const outputCostUSD = params.posthogCostOverride.outputCost ?? 0
-
-    costOverrideData = {
-      $ai_input_cost_usd: inputCostUSD,
-      $ai_output_cost_usd: outputCostUSD,
-      $ai_total_cost_usd: inputCostUSD + outputCostUSD,
-    }
-  }
 
   const additionalTokenValues = {
     ...(usage.reasoningTokens ? { $ai_reasoning_tokens: usage.reasoningTokens } : {}),
@@ -458,7 +441,6 @@ export const sendEventToPosthog = async ({
     ...(distinctId ? {} : { $process_person_profile: false }),
     ...(tools ? { $ai_tools: tools } : {}),
     ...errorData,
-    ...costOverrideData,
   }
 
   const event = {
