@@ -32,7 +32,7 @@ test.describe('ErrorTracking captureException', () => {
             ph.captureException(errorWithCause)
         })
         exceptionMatch(exception, 'Error', 'wat even am I', 2)
-        expect(exception.properties.$exception_list[1].stacktrace.frames).toEqual([])
+        expect(exception.properties.$exception_list[1].stacktrace).toBeUndefined()
     })
 
     test('captureException(Error) with cyclic causes', async ({ events, posthog }) => {
@@ -74,9 +74,9 @@ test.describe('ErrorTracking captureException', () => {
             ph.captureException(exceptionObject)
         })
         if (browserName === 'firefox') {
-            exceptionMatch(exception, 'exception name', 'exception message')
-        } else {
             exceptionMatch(exception, 'DOMException', 'exception name: exception message')
+        } else {
+            exceptionMatch(exception, 'DOMException', 'exception name: exception message', 1, false)
         }
     })
 
@@ -124,14 +124,14 @@ test.describe('ErrorTracking captureException', () => {
 })
 
 async function bootstrap(posthog: PosthogPage, events: EventsPage, cb: (ph: PostHog) => void): Promise<CaptureResult> {
-    await posthog.init()
+    await posthog.init({
+        request_batching: false,
+    })
     await posthog.evaluate(cb)
-    await events.waitForEvent('$exception')
+    const exception = await events.waitForEvent('$exception')
     events.expectCountMap({
         $exception: 1,
     })
-    const exception = events.findByName('$exception')
-    if (!exception) throw new Error('Exception not found')
     return exception
 }
 

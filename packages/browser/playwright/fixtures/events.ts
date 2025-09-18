@@ -76,7 +76,11 @@ export class EventsPage {
     }
 
     async waitForEvent(name: string, options?: Partial<WaitOptions>): Promise<CaptureResult> {
-        await this.page.waitForCondition(() => this.eventStore.some((event) => event.event === name), options)
+        try {
+            await this.page.waitForCondition(() => this.eventStore.some((event) => event.event === name), options)
+        } catch (error) {
+            throw new Error(`Error waiting for event '${name}'`, { cause: error })
+        }
         return this.findByName(name)!
     }
 

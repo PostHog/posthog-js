@@ -34,7 +34,7 @@ describe('Error conversion', () => {
 
     function errorToProperties(
         { event, error }: { event: unknown; error?: Error },
-        hint?: { handled: boolean; syntheticException: Error }
+        hint?: { handled?: boolean; syntheticException?: Error }
     ): ErrorProperties {
         return errorPropertiesBuilder.buildFromUnknown(error ?? event, {
             mechanism: {

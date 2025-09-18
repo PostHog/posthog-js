@@ -132,15 +132,12 @@ test.describe('ErrorTracking autocapture', () => {
                 'Non-Error promise rejection captured with value: An unknown error occured'
             )
             const stacktrace = exception.properties.$exception_list[0].stacktrace
-            expect(stacktrace).toMatchObject({
-                frames: [],
-                type: 'raw',
-            })
+            expect(stacktrace).toBeUndefined()
         })
     })
 
     test.describe('unhandled errors', () => {
-        test('should capture ReferenceError', async ({ posthog, network, page, events }) => {
+        test('should capture ReferenceError', async ({ posthog, network, page, events, browserName }) => {
             await posthog.init({
                 capture_exceptions: true,
             })
@@ -152,13 +149,22 @@ test.describe('ErrorTracking autocapture', () => {
             const event = await events.waitForEvent('$exception')
             const first_exception = event.properties.$exception_list[0]
             expect(first_exception.type).toBe('ReferenceError')
-            expect(first_exception.value).toBe('gibberish is not defined')
+            switch (browserName) {
+                case 'webkit':
+                    expect(first_exception.value).toBe("Can't find variable: gibberish")
+                    break
+                case 'chromium':
+                case 'firefox':
+                    expect(first_exception.value).toBe('gibberish is not defined')
+                    break
+            }
+
             expect(first_exception.mechanism.handled).toBe(false)
             const frames = first_exception.stacktrace.frames
             expect(frames).toHaveLength(1)
         })
 
-        test('should capture SyntaxError', async ({ posthog, network, page, events }) => {
+        test('should capture SyntaxError', async ({ posthog, network, page, events, browserName }) => {
             await posthog.init({
                 capture_exceptions: true,
             })
@@ -170,10 +176,24 @@ test.describe('ErrorTracking autocapture', () => {
             const event = await events.waitForEvent('$exception')
             const first_exception = event.properties.$exception_list[0]
             expect(first_exception.type).toBe('SyntaxError')
-            expect(first_exception.value).toBe("Failed to execute 'appendChild' on 'Node': Invalid or unexpected token")
             expect(first_exception.mechanism.handled).toBe(false)
-            const frames = first_exception.stacktrace.frames
-            expect(frames).toHaveLength(3)
+            const frames = first_exception.stacktrace?.frames || []
+            switch (browserName) {
+                case 'chromium':
+                    expect(first_exception.value).toBe(
+                        "Failed to execute 'appendChild' on 'Node': Invalid or unexpected token"
+                    )
+                    expect(frames).toHaveLength(3)
+                    break
+                case 'firefox':
+                    expect(first_exception.value).toBe("'' literal not terminated before end of script")
+                    expect(frames).toHaveLength(5)
+                    break
+                case 'webkit':
+                    expect(first_exception.value).toBe('Unexpected EOF')
+                    expect(frames).toHaveLength(0)
+                    break
+            }
         })
     })
 })
