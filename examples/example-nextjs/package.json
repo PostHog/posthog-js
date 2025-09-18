@@ -5,6 +5,7 @@
     "packageManager": "pnpm@10.15.0",
     "scripts": {
         "dev": "next dev",
+        "dev:turbo": "next dev --turbo",
         "build": "next build",
         "build:turbo": "next build --turbopack",
         "start": "next start",
@@ -13,7 +14,8 @@
     "dependencies": {
         "@posthog/nextjs-config": "*",
         "@posthog/react": "*",
-        "next": "15.4.1",
+        "posthog-node": "*",
+        "next": "^15.5",
         "posthog-js": "*",
         "react": "^19.0.0",
         "react-dom": "^19.0.0"
