@@ -1825,7 +1825,7 @@ export class PostHog {
      *   ignoreDelay: true
      * })
      * ```
-     * 
+     *
      * {@label Surveys}
      */
     displaySurvey(surveyId: string, options: DisplaySurveyOptions = DEFAULT_DISPLAY_SURVEY_OPTIONS): void {
