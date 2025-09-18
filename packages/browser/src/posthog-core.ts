@@ -1802,21 +1802,31 @@ export class PostHog {
      * @param {DisplaySurveyOptions} options - Display configuration
      *
      * @example
+     * ```js
      * // Display as popover (respects all conditions defined in the dashboard)
      * posthog.displaySurvey('survey-id-123')
+     * ```
      *
+     * @example
+     * ```js
      * // Display inline in a specific element
      * posthog.displaySurvey('survey-id-123', {
      *   displayType: DisplaySurveyType.Inline,
      *   selector: '#survey-container'
      * })
+     * ```
      *
+     * @example
+     * ```js
      * // Force display ignoring conditions and delays
      * posthog.displaySurvey('survey-id-123', {
      *   displayType: DisplaySurveyType.Popover,
      *   ignoreConditions: true,
      *   ignoreDelay: true
      * })
+     * ```
+     *
+     * {@label Surveys}
      */
     displaySurvey(surveyId: string, options: DisplaySurveyOptions = DEFAULT_DISPLAY_SURVEY_OPTIONS): void {
         this.surveys.displaySurvey(surveyId, options)
