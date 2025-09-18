@@ -4,7 +4,7 @@ import { PostHogConfig } from 'posthog-js'
 import { PostHogProvider } from 'posthog-js/react'
 
 const posthogConfig: Partial<PostHogConfig> = {
-    api_host: 'http://localhost:8010',
+    api_host: process.env.NEXT_PUBLIC_POSTHOG_API_HOST,
     debug: process.env.NODE_ENV === 'development',
 }
 
