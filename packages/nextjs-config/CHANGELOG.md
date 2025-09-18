@@ -1,5 +1,13 @@
 # @posthog/nextjs-config
 
+## 1.3.1
+
+### Patch Changes
+
+- [#2334](https://github.com/PostHog/posthog-js/pull/2334) [`b1f0c3c`](https://github.com/PostHog/posthog-js/commit/b1f0c3c2e24e2434bb687d9cb24f2d981bb539ed) Thanks [@hpouillot](https://github.com/hpouillot)! - improve posthog-cli location search
+
+- [#2337](https://github.com/PostHog/posthog-js/pull/2337) [`ac1cafe`](https://github.com/PostHog/posthog-js/commit/ac1cafe34aa55a205e6d88d8f3093e350d8a8ae2) Thanks [@hpouillot](https://github.com/hpouillot)! - fix posthog-cli execution on windows
+
 ## 1.3.0
 
 ### Minor Changes
