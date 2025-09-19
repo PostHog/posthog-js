@@ -6,7 +6,7 @@ import { assignableWindow, window } from '../../../utils/globals'
 import { createPosthogInstance } from '../../helpers/posthog-instance'
 import { uuidv7 } from '../../../uuidv7'
 
-import posthogErrorWrappingFunctions from '../../../entrypoints/exception-autocapture'
+import posthogErrorWrappingFunctions from '../../../entrypoints/exception-autocapture-v2'
 import { afterEach } from '@jest/globals'
 
 /** help out jsdom */
