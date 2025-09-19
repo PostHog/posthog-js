@@ -1786,6 +1786,8 @@ export class PostHog {
      * posthog.renderSurvey(coolSurveyID, '#survey-container')
      * ```
      *
+     * @deprecated Use displaySurvey instead - it's more complete and also supports popover surveys.
+     *
      * @public
      *
      * @param {String} surveyId The ID of the survey to render.
@@ -3324,6 +3326,11 @@ const add_dom_loaded_handler = function () {
 }
 
 export function init_from_snippet(): void {
+    if (assignableWindow['posthog'] && assignableWindow['posthog'].__loaded) {
+        logger.warn('PostHog script loaded multiple times, skipping re-initialization')
+        return
+    }
+
     const posthogMain = (instances[PRIMARY_INSTANCE_NAME] = new PostHog())
 
     const snippetPostHog = assignableWindow['posthog']
