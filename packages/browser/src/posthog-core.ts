@@ -13,7 +13,6 @@ import {
 } from './constants'
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { ExceptionObserver } from './extensions/exception-autocapture'
-import { errorToProperties } from './extensions/exception-autocapture/error-conversion'
 import { HistoryAutocapture } from './extensions/history-autocapture'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { setupSegmentIntegration } from './extensions/segment-integration'
@@ -88,7 +87,6 @@ import {
 } from './utils/survey-utils'
 import {
     isEmptyString,
-    isError,
     isFunction,
     isKnownUnsafeEditableEvent,
     isNullish,
@@ -2674,14 +2672,12 @@ export class PostHog {
      */
     captureException(error: unknown, additionalProperties?: Properties): CaptureResult | undefined {
         const syntheticException = new Error('PostHog syntheticException')
+        const errorToProperties = this.exceptions.buildProperties(error, {
+            handled: true,
+            syntheticException,
+        })
         return this.exceptions.sendExceptionEvent({
-            ...errorToProperties(
-                isError(error) ? { error, event: error.message } : { event: error as Event | string },
-                // create synthetic error to get stack in cases where user input does not contain one
-                // creating the exceptions soon into our code as possible means we should only have to
-                // remove a single frame (this 'captureException' method) from the resultant stack
-                { syntheticException }
-            ),
+            ...errorToProperties,
             ...additionalProperties,
         })
     }

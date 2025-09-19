@@ -30,12 +30,12 @@ describe('PromiseRejectionEventCoercer', () => {
     })
 
     const ctx = {
-      coerceUnknown: jest.fn(() => ({
+      apply: jest.fn(() => ({
         type: 'MockType',
         value: 'MockValue',
         synthetic: true,
       })),
-      maybeCoerceUnknown: jest.fn(),
+      next: jest.fn(),
     } as CoercingContext
 
     expect(coercer.coerce(pre, ctx)).toMatchObject({
@@ -59,13 +59,13 @@ describe('PromiseRejectionEventCoercer', () => {
     })
 
     const ctx = {
-      coerceUnknown: jest.fn((err: Error) => ({
+      apply: jest.fn((err: Error) => ({
         type: err.name,
         value: err.message,
         stack: err.stack,
         synthetic: false,
       })),
-      maybeCoerceUnknown: jest.fn(),
+      next: jest.fn(),
     } as CoercingContext
 
     expect(coercer.coerce(pre, ctx)).toMatchObject({

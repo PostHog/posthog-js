@@ -31,7 +31,17 @@ test.describe('ErrorTracking captureException', () => {
             })
             ph.captureException(errorWithCause)
         })
-        exceptionMatch(exception, 'Error', 'wat even am I')
+        exceptionMatch(exception, 'Error', 'wat even am I', 2)
+        expect(exception.properties.$exception_list[1].stacktrace).toBeUndefined()
+    })
+
+    test('captureException(Error) with cyclic causes', async ({ events, posthog }) => {
+        const exception = await bootstrap(posthog, events, (ph) => {
+            const errorWithCause = new Error('wat even am I')
+            errorWithCause.cause = errorWithCause
+            ph.captureException(errorWithCause)
+        })
+        exceptionMatch(exception, 'Error', 'wat even am I', 5)
     })
 
     test('captureException(string)', async ({ posthog, events }) => {
@@ -47,7 +57,7 @@ test.describe('ErrorTracking captureException', () => {
             const exceptionObject = { key: 'foo', value: 'bar' }
             ph.captureException(exceptionObject)
         })
-        exceptionMatch(exception, 'Error', "Non-Error 'exception' captured with keys: key, value")
+        exceptionMatch(exception, 'Error', 'Object captured as exception with keys: key, value')
     })
 
     test('captureException(Object) with name and message', async ({ posthog, events }) => {
@@ -55,7 +65,7 @@ test.describe('ErrorTracking captureException', () => {
             const exceptionObject = { name: 'foo', message: 'bar' }
             ph.captureException(exceptionObject)
         })
-        exceptionMatch(exception, 'Error', "Non-Error 'exception' captured with keys: message, name")
+        exceptionMatch(exception, 'Error', "'foo' captured as exception with message: 'bar'")
     })
 
     test('captureException(DOMException)', async ({ posthog, events, browserName }) => {
@@ -64,9 +74,9 @@ test.describe('ErrorTracking captureException', () => {
             ph.captureException(exceptionObject)
         })
         if (browserName === 'firefox') {
-            exceptionMatch(exception, 'exception name', 'exception message')
-        } else {
             exceptionMatch(exception, 'DOMException', 'exception name: exception message')
+        } else {
+            exceptionMatch(exception, 'DOMException', 'exception name: exception message', 1, false)
         }
     })
 
@@ -95,33 +105,33 @@ test.describe('ErrorTracking captureException', () => {
             const customEvent = new Event('This is an event')
             ph.captureException(customEvent)
         })
-        exceptionMatch(exception, 'Event', "Non-Error 'exception' captured with keys: isTrusted")
+        exceptionMatch(exception, 'Event', 'Event captured as exception with keys: isTrusted')
     })
 
     test('captureException(number)', async ({ posthog, events }) => {
         const exception = await bootstrap(posthog, events, (ph) => {
             ph.captureException(1)
         })
-        exceptionMatch(exception, 'Error', 1)
+        exceptionMatch(exception, 'Error', 'Primitive value captured as exception: 1')
     })
 
     test('captureException(null)', async ({ posthog, events }) => {
         const exception = await bootstrap(posthog, events, (ph) => {
             ph.captureException(null)
         })
-        exceptionMatch(exception, 'Error', undefined)
+        exceptionMatch(exception, 'Error', 'Primitive value captured as exception: null')
     })
 })
 
 async function bootstrap(posthog: PosthogPage, events: EventsPage, cb: (ph: PostHog) => void): Promise<CaptureResult> {
-    await posthog.init()
+    await posthog.init({
+        request_batching: false,
+    })
     await posthog.evaluate(cb)
-    await events.waitForEvent('$exception')
+    const exception = await events.waitForEvent('$exception')
     events.expectCountMap({
         $exception: 1,
     })
-    const exception = events.findByName('$exception')
-    if (!exception) throw new Error('Exception not found')
     return exception
 }
 

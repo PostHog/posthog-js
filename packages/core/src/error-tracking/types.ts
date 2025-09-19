@@ -1,7 +1,7 @@
 // Portions of this file are derived from getsentry/sentry-javascript by Software, Inc. dba Sentry
 // Licensed under the MIT License
 
-import { JsonType } from '../types'
+import type { JsonType } from '../types'
 
 // levels originally copied from Sentry to work with the sentry integration
 // and to avoid relying on a frequently changing @sentry/types dependency
@@ -70,8 +70,10 @@ export interface StackFrame {
 }
 
 export interface CoercingContext extends EventHint {
-  maybeCoerceUnknown: (input: unknown) => ExceptionLike | undefined
-  coerceUnknown: (input: unknown) => ExceptionLike | undefined
+  // Used to forward to other types
+  apply: (input: unknown) => ExceptionLike
+  // Used to coerce nested exceptions
+  next: (input: unknown) => ExceptionLike | undefined
 }
 
 export type ChunkIdMapType = Record<string, string>

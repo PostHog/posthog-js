@@ -35,7 +35,7 @@ describe('ErrorPropertiesBuilder', () => {
           syntheticException: error,
         }
       )
-      return coercingContext.coerceUnknown(input)
+      return coercingContext.apply(input)
     }
 
     it('should handle null values', async () => {
@@ -130,7 +130,7 @@ describe('ErrorPropertiesBuilder', () => {
           type: 'Error',
           value: 'Object captured as exception with keys: foo, test',
           // Do we want to use the stack from the synthetic error?
-          stack: syntheticError.stack,
+          stack: undefined,
         },
       })
     })
@@ -148,7 +148,7 @@ describe('ErrorPropertiesBuilder', () => {
           type: 'Error',
           value: 'My original error',
           // Do we want to use the stack from the synthetic error?
-          stack: syntheticError.stack,
+          stack: undefined,
         },
       })
     })

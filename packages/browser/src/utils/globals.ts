@@ -1,4 +1,3 @@
-import { ErrorProperties } from '../extensions/exception-autocapture/error-conversion'
 import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
 import {
@@ -181,6 +180,8 @@ export interface LazyLoadedDeadClicksAutocaptureInterface {
     stop: () => void
 }
 
+export type ErrorCaptureFn = (input: unknown, hint?: { handled?: boolean; syntheticException?: Error }) => void
+
 interface PostHogExtensions {
     loadExternalDependency?: (
         posthog: PostHog,
@@ -191,9 +192,9 @@ interface PostHogExtensions {
     loadSiteApp?: (posthog: PostHog, appUrl: string, callback: (error?: string | Event, event?: Event) => void) => void
 
     errorWrappingFunctions?: {
-        wrapOnError: (captureFn: (props: ErrorProperties) => void) => () => void
-        wrapUnhandledRejection: (captureFn: (props: ErrorProperties) => void) => () => void
-        wrapConsoleError: (captureFn: (props: ErrorProperties) => void) => () => void
+        wrapOnError: (captureFn: ErrorCaptureFn) => () => void
+        wrapUnhandledRejection: (captureFn: ErrorCaptureFn) => () => void
+        wrapConsoleError: (captureFn: ErrorCaptureFn) => () => void
     }
     rrweb?: { record: any; version: string }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }
