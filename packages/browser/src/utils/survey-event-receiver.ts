@@ -148,36 +148,38 @@ export class SurveyEventReceiver {
         })
 
         const matchedSurveys = surveysToCheck.filter((survey) => {
+            // first, we get the correct event to check
             const eventToCheck = survey.conditions?.events?.values?.find((e) => e.name === event)
             if (!eventToCheck) {
                 return false
             }
 
-            // Handle property filter matching
-            if (eventToCheck.propertyFilters) {
-                return Object.entries(eventToCheck.propertyFilters).every(([propertyName, filter]) => {
-                    const eventPropertyValue = eventPayload?.properties?.[propertyName]
-
-                    // If the event doesn't have this property, consider it a non-match
-                    if (isUndefined(eventPropertyValue) || isUndefined(eventPropertyValue)) {
-                        return false
-                    }
-
-                    // Convert event property to string for comparison
-                    const eventValues = [String(eventPropertyValue)]
-
-                    // Use propertyComparisons utility for sophisticated matching
-                    const comparisonFunction = propertyComparisons[filter.operator]
-                    if (!comparisonFunction) {
-                        logger.warn(`Unknown property comparison operator: ${filter.operator}`)
-                        return false
-                    }
-
-                    return comparisonFunction(filter.values, eventValues)
-                })
+            // if there are no property filters, it means we're only matching on event name
+            if (!eventToCheck.propertyFilters) {
+                return true
             }
 
-            return true
+            // Handle property filter matching
+            return Object.entries(eventToCheck.propertyFilters).every(([propertyName, filter]) => {
+                const eventPropertyValue = eventPayload?.properties?.[propertyName]
+
+                // If the event doesn't have this property, consider it a non-match
+                if (isUndefined(eventPropertyValue) || isUndefined(eventPropertyValue)) {
+                    return false
+                }
+
+                // Convert event property to string for comparison
+                const eventValues = [String(eventPropertyValue)]
+
+                // Use propertyComparisons utility for sophisticated matching
+                const comparisonFunction = propertyComparisons[filter.operator]
+                if (!comparisonFunction) {
+                    logger.warn(`Unknown property comparison operator: ${filter.operator}`)
+                    return false
+                }
+
+                return comparisonFunction(filter.values, eventValues)
+            })
         })
 
         this._updateActivatedSurveys(existingActivatedSurveys.concat(matchedSurveys.map((survey) => survey.id) || []))
