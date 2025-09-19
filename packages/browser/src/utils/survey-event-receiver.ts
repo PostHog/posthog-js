@@ -126,58 +126,61 @@ export class SurveyEventReceiver {
                     this._updateActivatedSurveys(existingActivatedSurveys)
                 }
             }
-        } else {
-            if (this._eventToSurveys.has(event)) {
-                logger.info('survey event name matched', {
-                    event,
-                    eventPayload,
-                    surveys: this._eventToSurveys.get(event),
-                })
 
-                let surveysToCheck: Survey[] = []
+            return
+        }
 
-                this._instance?.getSurveys((surveys) => {
-                    surveysToCheck = surveys.filter((survey) => this._eventToSurveys.get(event)?.includes(survey.id))
-                })
+        // if the event is not in the eventToSurveys map, nothing else to do
+        if (!this._eventToSurveys.has(event)) {
+            return
+        }
 
-                const matchedSurveys = surveysToCheck.filter((survey) => {
-                    const eventToCheck = survey.conditions?.events?.values?.find((e) => e.name === event)
-                    if (!eventToCheck) {
+        logger.info('survey event name matched', {
+            event,
+            eventPayload,
+            surveys: this._eventToSurveys.get(event),
+        })
+
+        let surveysToCheck: Survey[] = []
+
+        this._instance?.getSurveys((surveys) => {
+            surveysToCheck = surveys.filter((survey) => this._eventToSurveys.get(event)?.includes(survey.id))
+        })
+
+        const matchedSurveys = surveysToCheck.filter((survey) => {
+            const eventToCheck = survey.conditions?.events?.values?.find((e) => e.name === event)
+            if (!eventToCheck) {
+                return false
+            }
+
+            // Handle property filter matching
+            if (eventToCheck.propertyFilters) {
+                return Object.entries(eventToCheck.propertyFilters).every(([propertyName, filter]) => {
+                    const eventPropertyValue = eventPayload?.properties?.[propertyName]
+
+                    // If the event doesn't have this property, consider it a non-match
+                    if (isUndefined(eventPropertyValue) || isUndefined(eventPropertyValue)) {
                         return false
                     }
 
-                    // Handle property filter matching
-                    if (eventToCheck.propertyFilters) {
-                        return Object.entries(eventToCheck.propertyFilters).every(([propertyName, filter]) => {
-                            const eventPropertyValue = eventPayload?.properties?.[propertyName]
+                    // Convert event property to string for comparison
+                    const eventValues = [String(eventPropertyValue)]
 
-                            // If the event doesn't have this property, consider it a non-match
-                            if (isUndefined(eventPropertyValue) || isUndefined(eventPropertyValue)) {
-                                return false
-                            }
-
-                            // Convert event property to string for comparison
-                            const eventValues = [String(eventPropertyValue)]
-
-                            // Use propertyComparisons utility for sophisticated matching
-                            const comparisonFunction = propertyComparisons[filter.operator]
-                            if (!comparisonFunction) {
-                                logger.warn(`Unknown property comparison operator: ${filter.operator}`)
-                                return false
-                            }
-
-                            return comparisonFunction(filter.values, eventValues)
-                        })
+                    // Use propertyComparisons utility for sophisticated matching
+                    const comparisonFunction = propertyComparisons[filter.operator]
+                    if (!comparisonFunction) {
+                        logger.warn(`Unknown property comparison operator: ${filter.operator}`)
+                        return false
                     }
 
-                    return true
+                    return comparisonFunction(filter.values, eventValues)
                 })
-
-                this._updateActivatedSurveys(
-                    existingActivatedSurveys.concat(matchedSurveys.map((survey) => survey.id) || [])
-                )
             }
-        }
+
+            return true
+        })
+
+        this._updateActivatedSurveys(existingActivatedSurveys.concat(matchedSurveys.map((survey) => survey.id) || []))
     }
 
     onAction(actionName: string): void {
