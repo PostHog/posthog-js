@@ -10,6 +10,7 @@ import {
 } from '../types'
 import { SessionRecordingStatus, TriggerType } from '../extensions/replay/triggerMatching'
 import { eventWithTime } from '@rrweb/types'
+import { ErrorTracking } from '@posthog/core'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
@@ -151,7 +152,6 @@ export type ExternalExtensionKind = 'intercom-integration' | 'crisp-chat-integra
 export type PostHogExtensionKind =
     | 'toolbar'
     | 'exception-autocapture'
-    | 'exception-autocapture-v2'
     | 'web-vitals'
     | 'recorder'
     | 'tracing-headers'
@@ -181,8 +181,6 @@ export interface LazyLoadedDeadClicksAutocaptureInterface {
     stop: () => void
 }
 
-export type ErrorCaptureFn = (input: unknown, hint?: { handled?: boolean; syntheticException?: Error }) => void
-
 interface PostHogExtensions {
     loadExternalDependency?: (
         posthog: PostHog,
@@ -193,9 +191,9 @@ interface PostHogExtensions {
     loadSiteApp?: (posthog: PostHog, appUrl: string, callback: (error?: string | Event, event?: Event) => void) => void
 
     errorWrappingFunctions?: {
-        wrapOnError: (captureFn: ErrorCaptureFn) => () => void
-        wrapUnhandledRejection: (captureFn: ErrorCaptureFn) => () => void
-        wrapConsoleError: (captureFn: ErrorCaptureFn) => () => void
+        wrapOnError: (captureFn: (props: ErrorTracking.ErrorProperties) => void) => () => void
+        wrapUnhandledRejection: (captureFn: (props: ErrorTracking.ErrorProperties) => void) => () => void
+        wrapConsoleError: (captureFn: (props: ErrorTracking.ErrorProperties) => void) => () => void
     }
     rrweb?: { record: any; version: string }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }

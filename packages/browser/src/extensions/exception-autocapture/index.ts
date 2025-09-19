@@ -5,6 +5,7 @@ import { ExceptionAutoCaptureConfig, RemoteConfig } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
 import { isUndefined, BucketedRateLimiter, isObject } from '@posthog/core'
+import { ErrorTracking } from '@posthog/core'
 
 const logger = createLogger('[ExceptionAutocapture]')
 
@@ -75,7 +76,7 @@ export class ExceptionObserver {
 
         assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
             this._instance,
-            'exception-autocapture-v2',
+            'exception-autocapture',
             (err) => {
                 if (err) {
                     return logger.error('failed to load script', err)
@@ -138,8 +139,7 @@ export class ExceptionObserver {
         this.startIfEnabled()
     }
 
-    captureException(input: unknown, hint?: { handled?: boolean; syntheticException?: Error }) {
-        const errorProperties = this._instance.exceptions.buildProperties(input, hint)
+    captureException(errorProperties: ErrorTracking.ErrorProperties) {
         const exceptionType = errorProperties?.$exception_list?.[0]?.type ?? 'Exception'
         const isRateLimited = this._rateLimiter.consumeRateLimit(exceptionType)
 
