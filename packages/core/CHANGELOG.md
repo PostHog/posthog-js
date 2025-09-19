@@ -1,5 +1,11 @@
 # @posthog/core
 
+## 1.1.0
+
+### Minor Changes
+
+- [#2330](https://github.com/PostHog/posthog-js/pull/2330) [`da07e41`](https://github.com/PostHog/posthog-js/commit/da07e41ac2307803c302557a12b459491657a75f) Thanks [@hpouillot](https://github.com/hpouillot)! - add error tracking processing
+
 ## 1.0.2
 
 ### Patch Changes

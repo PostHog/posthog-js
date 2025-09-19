@@ -1,5 +1,14 @@
 # posthog-js
 
+## 1.266.1
+
+### Patch Changes
+
+- [#2330](https://github.com/PostHog/posthog-js/pull/2330) [`da07e41`](https://github.com/PostHog/posthog-js/commit/da07e41ac2307803c302557a12b459491657a75f) Thanks [@hpouillot](https://github.com/hpouillot)! - use error tracking processing from core
+
+- Updated dependencies [[`da07e41`](https://github.com/PostHog/posthog-js/commit/da07e41ac2307803c302557a12b459491657a75f)]:
+    - @posthog/core@1.1.0
+
 ## 1.266.0
 
 ### Minor Changes
