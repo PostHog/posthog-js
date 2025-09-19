@@ -199,6 +199,13 @@ export interface Survey {
             repeatedActivation?: boolean
             values: {
                 name: string
+                /** Property filters for event matching */
+                propertyFilters?: {
+                    [propertyName: string]: {
+                        values: string[]
+                        operator: PropertyMatchType
+                    }
+                }
             }[]
         } | null
         actions: {

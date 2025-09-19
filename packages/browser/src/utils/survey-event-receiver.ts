@@ -1,13 +1,12 @@
 import { SURVEYS_ACTIVATED } from '../constants'
-import { Survey } from '../posthog-surveys-types'
+import { Survey, SurveyEventName } from '../posthog-surveys-types'
 
 import { ActionMatcher } from '../extensions/surveys/action-matcher'
 import { PostHog } from '../posthog-core'
 import { CaptureResult } from '../types'
 import { SURVEY_LOGGER as logger } from './survey-utils'
+import { propertyComparisons } from './property-utils'
 import { isUndefined } from '@posthog/core'
-
-const SURVEY_SHOWN_EVENT_NAME = 'survey shown'
 
 export class SurveyEventReceiver {
     // eventToSurveys is a mapping of event name to all the surveys that are activated by it
@@ -112,7 +111,7 @@ export class SurveyEventReceiver {
 
     onEvent(event: string, eventPayload?: CaptureResult): void {
         const existingActivatedSurveys: string[] = this._instance?.persistence?.props[SURVEYS_ACTIVATED] || []
-        if (SURVEY_SHOWN_EVENT_NAME === event && eventPayload && existingActivatedSurveys.length > 0) {
+        if (SurveyEventName.SHOWN === event && eventPayload && existingActivatedSurveys.length > 0) {
             // remove survey that from activatedSurveys here.
             logger.info('survey event matched, removing survey from activated surveys', {
                 event,
@@ -129,11 +128,60 @@ export class SurveyEventReceiver {
             }
         } else {
             if (this._eventToSurveys.has(event)) {
-                logger.info('survey event matched, updating activated surveys', {
+                logger.info('survey event name matched', {
                     event,
+                    eventPayload,
                     surveys: this._eventToSurveys.get(event),
                 })
-                this._updateActivatedSurveys(existingActivatedSurveys.concat(this._eventToSurveys.get(event) || []))
+
+                let surveysToCheck: Survey[] = []
+
+                this._instance?.getSurveys((surveys) => {
+                    surveysToCheck = surveys.filter((survey) => this._eventToSurveys.get(event)?.includes(survey.id))
+                })
+
+                const matchedSurveys = surveysToCheck.filter((survey) => {
+                    const eventToCheck = survey.conditions?.events?.values?.find((e) => e.name === event)
+                    if (!eventToCheck) {
+                        return false
+                    }
+
+                    // Handle property filter matching
+                    if (eventToCheck.propertyFilters) {
+                        return Object.entries(eventToCheck.propertyFilters).every(([propertyName, filter]) => {
+                            const eventPropertyValue = eventPayload?.properties?.[propertyName]
+
+                            // If the event doesn't have this property, consider it a non-match
+                            if (isUndefined(eventPropertyValue) || isUndefined(eventPropertyValue)) {
+                                return false
+                            }
+
+                            // Convert event property to string for comparison
+                            const eventValues = [String(eventPropertyValue)]
+
+                            // Use propertyComparisons utility for sophisticated matching
+                            const comparisonFunction = propertyComparisons[filter.operator]
+                            if (!comparisonFunction) {
+                                logger.warn(`Unknown property comparison operator: ${filter.operator}`)
+                                return false
+                            }
+
+                            return comparisonFunction(filter.values, eventValues)
+                        })
+                    }
+
+                    // If no property filters, match based on event name only
+                    logger.info('survey event matched, updating activated surveys', {
+                        event,
+                        surveys: matchedSurveys,
+                    })
+
+                    return true
+                })
+
+                this._updateActivatedSurveys(
+                    existingActivatedSurveys.concat(matchedSurveys.map((survey) => survey.id) || [])
+                )
             }
         }
     }
@@ -147,6 +195,10 @@ export class SurveyEventReceiver {
 
     private _updateActivatedSurveys(activatedSurveys: string[]) {
         // we use a new Set here to remove duplicates.
+        logger.info('updating activated surveys', {
+            activatedSurveys,
+        })
+
         this._instance?.persistence?.register({
             [SURVEYS_ACTIVATED]: [...new Set(activatedSurveys)],
         })
