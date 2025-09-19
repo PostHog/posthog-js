@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.266.2
+
+### Patch Changes
+
+- [#2341](https://github.com/PostHog/posthog-js/pull/2341) [`1cb3b42`](https://github.com/PostHog/posthog-js/commit/1cb3b42ca1db5d2a7824bd506967a00d292ad58f) Thanks [@hpouillot](https://github.com/hpouillot)! - fix exception loop
+
 ## 1.266.1
 
 ### Patch Changes
