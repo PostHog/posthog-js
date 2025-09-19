@@ -151,6 +151,7 @@ export type ExternalExtensionKind = 'intercom-integration' | 'crisp-chat-integra
 export type PostHogExtensionKind =
     | 'toolbar'
     | 'exception-autocapture'
+    | 'exception-autocapture-v2'
     | 'web-vitals'
     | 'recorder'
     | 'tracing-headers'

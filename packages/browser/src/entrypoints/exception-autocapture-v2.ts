@@ -1,21 +1,10 @@
-import { assignableWindow, window } from '../utils/globals'
+import { assignableWindow, ErrorCaptureFn, window } from '../utils/globals'
 import { ErrorEventArgs } from '../types'
 import { createLogger } from '../utils/logger'
-import { ErrorProperties } from '@posthog/core/dist/error-tracking'
-import { buildErrorPropertiesBuilder } from '../posthog-exceptions'
 
-const logger = createLogger('[ExceptionAutocapture]')
-const errorPropertiesBuilder = buildErrorPropertiesBuilder()
+const logger = createLogger('[ExceptionAutocaptureV2]')
 
-function errorToProperties({ event, error }: { event: Event | string; error?: Error }) {
-    return errorPropertiesBuilder.buildFromUnknown(error || event, {
-        mechanism: {
-            handled: false,
-        },
-    })
-}
-
-const wrapOnError = (captureFn: (props: ErrorProperties) => void) => {
+const wrapOnError = (captureFn: ErrorCaptureFn) => {
     const win = window as any
     if (!win) {
         logger.info('window not available, cannot wrap onerror')
@@ -23,9 +12,11 @@ const wrapOnError = (captureFn: (props: ErrorProperties) => void) => {
     const originalOnError = win.onerror
 
     win.onerror = function (...args: ErrorEventArgs): boolean {
-        const errorProperties = errorToProperties({ event: args[0], error: args[4] })
-        captureFn(errorProperties)
-        return originalOnError?.(...args) ?? false
+        const input = args[4] || args[0]
+        captureFn(input, {
+            handled: false,
+        })
+        return originalOnError?.apply(win, args) ?? false
     }
     win.onerror.__POSTHOG_INSTRUMENTED__ = true
 
@@ -35,7 +26,7 @@ const wrapOnError = (captureFn: (props: ErrorProperties) => void) => {
     }
 }
 
-const wrapUnhandledRejection = (captureFn: (props: ErrorProperties) => void) => {
+const wrapUnhandledRejection = (captureFn: ErrorCaptureFn) => {
     const win = window as any
     if (!win) {
         logger.info('window not available, cannot wrap onUnhandledRejection')
@@ -43,10 +34,11 @@ const wrapUnhandledRejection = (captureFn: (props: ErrorProperties) => void) => 
 
     const originalOnUnhandledRejection = win.onunhandledrejection
 
-    win.onunhandledrejection = function (ev: PromiseRejectionEvent): boolean {
-        const errorProperties = errorToProperties({ event: ev })
-        captureFn(errorProperties)
-        return originalOnUnhandledRejection?.apply(win, [ev]) ?? false
+    win.onunhandledrejection = function (evt: PromiseRejectionEvent): boolean {
+        captureFn(evt, {
+            handled: false,
+        })
+        return originalOnUnhandledRejection?.apply(win, [evt]) ?? false
     }
     win.onunhandledrejection.__POSTHOG_INSTRUMENTED__ = true
 
@@ -56,7 +48,7 @@ const wrapUnhandledRejection = (captureFn: (props: ErrorProperties) => void) => 
     }
 }
 
-const wrapConsoleError = (captureFn: (props: ErrorProperties) => void) => {
+const wrapConsoleError = (captureFn: ErrorCaptureFn) => {
     const con = console as any
     if (!con) {
         logger.info('console not available, cannot wrap console.error')
@@ -65,10 +57,11 @@ const wrapConsoleError = (captureFn: (props: ErrorProperties) => void) => {
     const originalConsoleError = con.error
 
     con.error = function (...args: any[]): void {
-        const event = args.join(' ')
-        const error = args.find((arg) => arg instanceof Error)
-        const errorProperties = errorToProperties({ error, event })
-        captureFn(errorProperties)
+        const input = args.find((arg) => arg instanceof Error) ?? args.join(' ')
+        captureFn(input, {
+            syntheticException: new Error('PostHog syntheticException'),
+            handled: true,
+        })
         return originalConsoleError?.(...args)
     }
     con.error.__POSTHOG_INSTRUMENTED__ = true

@@ -75,7 +75,7 @@ export class ExceptionObserver {
 
         assignableWindow.__PosthogExtensions__?.loadExternalDependency?.(
             this._instance,
-            'exception-autocapture',
+            'exception-autocapture-v2',
             (err) => {
                 if (err) {
                     return logger.error('failed to load script', err)
@@ -140,7 +140,7 @@ export class ExceptionObserver {
 
     captureException(input: unknown, hint?: { handled?: boolean; syntheticException?: Error }) {
         const errorProperties = this._instance.exceptions.buildProperties(input, hint)
-        const exceptionType = errorProperties.$exception_list[0].type ?? 'Exception'
+        const exceptionType = errorProperties?.$exception_list?.[0]?.type ?? 'Exception'
         const isRateLimited = this._rateLimiter.consumeRateLimit(exceptionType)
 
         if (isRateLimited) {
