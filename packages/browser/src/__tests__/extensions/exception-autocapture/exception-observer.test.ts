@@ -99,7 +99,6 @@ describe('Exception Observer', () => {
             expect(singleCall[0]).toMatchObject({
                 event: '$exception',
                 properties: {
-                    $exception_personURL: expect.any(String),
                     $exception_list: [
                         {
                             type: 'Error',
@@ -130,7 +129,6 @@ describe('Exception Observer', () => {
             expect(singleCall[0]).toMatchObject({
                 event: '$exception',
                 properties: {
-                    $exception_personURL: expect.any(String),
                     $exception_list: [
                         {
                             type: 'PromiseRejectionEvent',
@@ -152,7 +150,6 @@ describe('Exception Observer', () => {
             expect(request.data).toMatchObject({
                 event: '$exception',
                 properties: {
-                    $exception_personURL: expect.any(String),
                     $exception_list: [
                         {
                             type: 'Error',
