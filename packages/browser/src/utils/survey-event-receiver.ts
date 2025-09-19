@@ -170,12 +170,6 @@ export class SurveyEventReceiver {
                         })
                     }
 
-                    // If no property filters, match based on event name only
-                    logger.info('survey event matched, updating activated surveys', {
-                        event,
-                        surveys: matchedSurveys,
-                    })
-
                     return true
                 })
 
