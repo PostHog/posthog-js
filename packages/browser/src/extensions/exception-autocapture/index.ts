@@ -140,18 +140,12 @@ export class ExceptionObserver {
 
     captureException(input: unknown, hint?: { handled?: boolean; syntheticException?: Error }) {
         const errorProperties = this._instance.exceptions.buildProperties(input, hint)
-        const posthogHost = this._instance.requestRouter.endpointFor('ui')
-        // @ts-expect-error: Do we still need this?
-        errorProperties.$exception_personURL = `${posthogHost}/project/${
-            this._instance.config.token
-        }/person/${this._instance.get_distinct_id()}`
-
         const exceptionType = errorProperties.$exception_list[0].type ?? 'Exception'
         const isRateLimited = this._rateLimiter.consumeRateLimit(exceptionType)
 
         if (isRateLimited) {
             logger.info('Skipping exception capture because of client rate limiting.', {
-                exception: errorProperties.$exception_list[0].type,
+                exception: exceptionType,
             })
             return
         }

@@ -143,7 +143,7 @@ describe('Error conversion', () => {
         expect(Object.keys(errorProperties)).toHaveLength(2)
         expect(errorProperties.$exception_list[0].type).toEqual('DOMException')
         expect(errorProperties.$exception_list[0].value).toEqual('dom-exception: oh no disaster')
-        // expect(errorProperties.$exception_DOMException_code).toEqual('0')
+
         expect(errorProperties.$exception_level).toEqual('error')
         // the stack trace changes between runs, so we just check that it's there
         expect(errorProperties.$exception_list).toBeDefined()
