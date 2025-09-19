@@ -159,19 +159,15 @@ export class SurveyEventReceiver {
                 return true
             }
 
-            // Handle property filter matching
             return Object.entries(eventToCheck.propertyFilters).every(([propertyName, filter]) => {
                 const eventPropertyValue = eventPayload?.properties?.[propertyName]
-
-                // If the event doesn't have this property, consider it a non-match
                 if (isUndefined(eventPropertyValue) || isUndefined(eventPropertyValue)) {
                     return false
                 }
 
-                // Convert event property to string for comparison
+                // convert event property to string for comparison
                 const eventValues = [String(eventPropertyValue)]
 
-                // Use propertyComparisons utility for sophisticated matching
                 const comparisonFunction = propertyComparisons[filter.operator]
                 if (!comparisonFunction) {
                     logger.warn(`Unknown property comparison operator: ${filter.operator}`)
