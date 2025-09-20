@@ -3326,11 +3326,6 @@ const add_dom_loaded_handler = function () {
 }
 
 export function init_from_snippet(): void {
-    if (assignableWindow['posthog'] && assignableWindow['posthog'].__loaded) {
-        logger.warn('PostHog script loaded multiple times, skipping re-initialization')
-        return
-    }
-
     const posthogMain = (instances[PRIMARY_INSTANCE_NAME] = new PostHog())
 
     const snippetPostHog = assignableWindow['posthog']
