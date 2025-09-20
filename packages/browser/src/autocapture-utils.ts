@@ -159,11 +159,12 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
         return false
     }
 
-    const selectorIgnoreList = isBoolean(_config)
-        ? _config
-            ? DEFAULT_RAGE_CLICK_IGNORE_LIST
-            : false
-        : (_config?.css_selector_ignorelist ?? DEFAULT_RAGE_CLICK_IGNORE_LIST)
+    let selectorIgnoreList: string[] | boolean
+    if (isBoolean(_config)) {
+        selectorIgnoreList = _config ? DEFAULT_RAGE_CLICK_IGNORE_LIST : false
+    } else {
+        selectorIgnoreList = _config?.css_selector_ignorelist ?? DEFAULT_RAGE_CLICK_IGNORE_LIST
+    }
 
     if (selectorIgnoreList === false) {
         return false
@@ -291,7 +292,7 @@ export function shouldCaptureDomEvent(
 }
 
 /*
- * Check whether a DOM element should be "captured" or if it may contain sentitive data
+ * Check whether a DOM element should be "captured" or if it may contain sensitive data
  * using a variety of heuristics.
  * @param {Element} el - element to check
  * @returns {boolean} whether the element should be captured
