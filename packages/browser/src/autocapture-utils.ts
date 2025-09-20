@@ -132,19 +132,16 @@ function checkIfElementTreePassesElementAllowList(
  */
 function checkIfElementsMatchCSSSelector(elements: Element[], selectorList: string[] | undefined): boolean {
     if (isUndefined(selectorList)) {
-        // everything is allowed, when there is no allow list
+        // everything is allowed, when there is no selector list
         return true
     }
 
-    // check each element in the tree
-    // if any of the elements are in the allow list, then the tree is allowed
     for (const el of elements) {
         if (selectorList.some((selector) => el.matches(selector))) {
             return true
         }
     }
 
-    // otherwise there is an allow list and this element tree didn't match it
     return false
 }
 
