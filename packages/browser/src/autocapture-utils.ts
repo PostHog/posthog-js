@@ -169,7 +169,7 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
         return false
     }
 
-    const { targetElementList } = getElementsTreeForElement(el, false)
+    const { targetElementList } = getElementAndParentsForElement(el, false)
     if (checkIfElementsMatchCSSSelector(targetElementList, selectorIgnoreList || undefined)) {
         // we don't capture if we match the ignore list
         return false
@@ -181,7 +181,7 @@ const cannotCheckForAutocapture = (el: Element | null) => {
     return !el || isTag(el, 'html') || !isElementNode(el)
 }
 
-const getElementsTreeForElement = (el: Element, captureOnAnyElement: false | true | undefined) => {
+const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false | true | undefined) => {
     if (!window || cannotCheckForAutocapture(el)) {
         return { parentIsUsefulElement: false, targetElementList: [] }
     }
@@ -256,7 +256,7 @@ export function shouldCaptureDomEvent(
         }
     }
 
-    const { parentIsUsefulElement, targetElementList } = getElementsTreeForElement(el, captureOnAnyElement)
+    const { parentIsUsefulElement, targetElementList } = getElementAndParentsForElement(el, captureOnAnyElement)
 
     if (!checkIfElementTreePassesElementAllowList(targetElementList, autocaptureConfig)) {
         return false
