@@ -74,7 +74,7 @@ export default class ErrorTracking {
       (async () => {
         const eventMessage = await ErrorTracking.buildEventMessage(exception, hint)
         const exceptionProperties = eventMessage.properties
-        const exceptionType = exceptionProperties?.$exception_list[0].type ?? 'Exception'
+        const exceptionType = exceptionProperties?.$exception_list[0]?.type ?? 'Exception'
         const isRateLimited = this._rateLimiter.consumeRateLimit(exceptionType)
         if (isRateLimited) {
           this._logger.info('Skipping exception capture because of client rate limiting.', {
