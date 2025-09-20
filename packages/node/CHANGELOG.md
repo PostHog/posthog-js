@@ -1,5 +1,11 @@
 # posthog-node
 
+## 5.8.6
+
+### Patch Changes
+
+- [#2346](https://github.com/PostHog/posthog-js/pull/2346) [`117b150`](https://github.com/PostHog/posthog-js/commit/117b15034e2740f5714b9bb249d8701c3f14c688) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: node onException autocapture safely access the exception_List
+
 ## 5.8.5
 
 ### Patch Changes
