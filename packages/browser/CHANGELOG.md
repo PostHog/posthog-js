@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.266.3
+
+### Patch Changes
+
+- [#2344](https://github.com/PostHog/posthog-js/pull/2344) [`3d3fc37`](https://github.com/PostHog/posthog-js/commit/3d3fc37bfe351d9a464e652d8ec347192596769d) Thanks [@lucasheriques](https://github.com/lucasheriques)! - chore: mark renderSurvey as deprecated
+
 ## 1.266.2
 
 ### Patch Changes
