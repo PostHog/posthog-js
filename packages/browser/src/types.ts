@@ -120,7 +120,7 @@ export interface RageclickConfig {
      * we consider the tree of elements from the root to the target element of the click event
      * so for the tree div > div > button > svg
      * and ignore list config `['[id]']`
-     * we will capture the click if the click-target or its parents has any id
+     * we will ignore the rageclick if the click-target or its parents has any id
      *
      * Nothing is ignored when there's an empty ignorelist, e.g. []
      * If no ignorelist is set, we default to ignoring .ph-no-rageclick
