@@ -166,7 +166,6 @@ export interface LazyLoadedSessionRecordingInterface {
     sessionId: string
     status: SessionRecordingStatus
     onRRwebEmit: (rawEvent: eventWithTime) => void
-    onRemoteConfig: (response: RemoteConfig) => void
     log: (message: string, level: 'log' | 'warn' | 'error') => void
     sdkDebugProperties: Properties
     overrideLinkedFlag: () => void
