@@ -9,7 +9,7 @@ import {
 } from '../../posthog-surveys-types'
 import { PostHogPersistence } from '../../posthog-persistence'
 import { PostHog } from '../../posthog-core'
-import { CaptureResult, PostHogConfig } from '../../types'
+import { CaptureResult, PostHogConfig, PropertyMatchType } from '../../types'
 import { SurveyEventReceiver } from '../../utils/survey-event-receiver'
 
 describe('survey-event-receiver', () => {
@@ -87,6 +87,7 @@ describe('survey-event-receiver', () => {
                 config: config,
                 persistence: new PostHogPersistence(config),
                 _addCaptureHook: mockAddCaptureHook,
+                getSurveys: jest.fn((callback) => callback(surveysWithEvents)),
             } as unknown as PostHog
         })
 
@@ -170,6 +171,199 @@ describe('survey-event-receiver', () => {
         })
     })
 
+    describe('property filter based surveys', () => {
+        let config: PostHogConfig
+        let instance: PostHog
+        let mockAddCaptureHook: jest.Mock
+
+        const createEventPayload = (eventName: string, properties: Record<string, any> = {}): CaptureResult => ({
+            $set: undefined,
+            $set_once: undefined,
+            event: eventName,
+            timestamp: undefined,
+            uuid: '0C984DA5-761F-4F75-9582-D2F95B43B04A',
+            properties,
+        })
+
+        const createSurveyWithPropertyFilters = (
+            id: string,
+            eventName: string,
+            propertyFilters: Record<string, { values: string[]; operator: PropertyMatchType }>
+        ): Survey =>
+            ({
+                name: `${id} survey`,
+                id,
+                description: `${id} survey description`,
+                type: SurveyType.Popover,
+                questions: [{ type: SurveyQuestionType.Open, question: 'test question' }],
+                conditions: {
+                    events: {
+                        values: [
+                            {
+                                name: eventName,
+                                propertyFilters,
+                            },
+                        ],
+                    },
+                },
+            }) as unknown as Survey
+
+        beforeEach(() => {
+            mockAddCaptureHook = jest.fn()
+            config = {
+                token: 'testtoken',
+                api_host: 'https://app.posthog.com',
+                persistence: 'memory',
+            } as unknown as PostHogConfig
+
+            instance = {
+                config: config,
+                persistence: new PostHogPersistence(config),
+                _addCaptureHook: mockAddCaptureHook,
+                getSurveys: jest.fn((callback) => callback([])),
+            } as unknown as PostHog
+        })
+
+        afterEach(() => {
+            instance.persistence?.clear()
+        })
+
+        it('activates survey with exact property match', () => {
+            const survey = createSurveyWithPropertyFilters('exact-test', 'purchase', {
+                product_type: { values: ['premium'], operator: 'exact' },
+            })
+
+            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register([survey])
+            const registeredHook = mockAddCaptureHook.mock.calls[0][0]
+
+            // Set up getSurveys mock to return the survey
+            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) => callback([survey]))
+
+            // Should match exact value
+            registeredHook('purchase', createEventPayload('purchase', { product_type: 'premium' }))
+            expect(surveyEventReceiver.getSurveys()).toContain('exact-test')
+        })
+
+        it('does not activate survey with non-matching exact property', () => {
+            const survey = createSurveyWithPropertyFilters('exact-test', 'purchase', {
+                product_type: { values: ['premium'], operator: 'exact' },
+            })
+
+            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register([survey])
+            const registeredHook = mockAddCaptureHook.mock.calls[0][0]
+
+            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) => callback([survey]))
+
+            // Should not match different value
+            registeredHook('purchase', createEventPayload('purchase', { product_type: 'basic' }))
+            expect(surveyEventReceiver.getSurveys()).not.toContain('exact-test')
+        })
+
+        it('activates survey with is_not property match', () => {
+            const survey = createSurveyWithPropertyFilters('is-not-test', 'purchase', {
+                product_type: { values: ['basic'], operator: 'is_not' },
+            })
+
+            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register([survey])
+            const registeredHook = mockAddCaptureHook.mock.calls[0][0]
+
+            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) => callback([survey]))
+
+            // Should match when value is not 'basic'
+            registeredHook('purchase', createEventPayload('purchase', { product_type: 'premium' }))
+            expect(surveyEventReceiver.getSurveys()).toContain('is-not-test')
+        })
+
+        it('activates survey with regex property match', () => {
+            const survey = createSurveyWithPropertyFilters('regex-test', 'page_view', {
+                url: { values: ['/app/.*'], operator: 'regex' },
+            })
+
+            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register([survey])
+            const registeredHook = mockAddCaptureHook.mock.calls[0][0]
+
+            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) => callback([survey]))
+
+            // Should match regex pattern
+            registeredHook('page_view', createEventPayload('page_view', { url: '/app/dashboard' }))
+            expect(surveyEventReceiver.getSurveys()).toContain('regex-test')
+        })
+
+        it('activates survey with icontains property match', () => {
+            const survey = createSurveyWithPropertyFilters('icontains-test', 'search', {
+                query: { values: ['PRODUCT'], operator: 'icontains' },
+            })
+
+            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register([survey])
+            const registeredHook = mockAddCaptureHook.mock.calls[0][0]
+
+            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) => callback([survey]))
+
+            // Should match case-insensitive contains
+            registeredHook('search', createEventPayload('search', { query: 'new product features' }))
+            expect(surveyEventReceiver.getSurveys()).toContain('icontains-test')
+        })
+
+        it('activates survey with multiple property filters (all must match)', () => {
+            const survey = createSurveyWithPropertyFilters('multi-filter-test', 'purchase', {
+                product_type: { values: ['premium'], operator: 'exact' },
+                amount: { values: ['100'], operator: 'is_not' },
+            })
+
+            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register([survey])
+            const registeredHook = mockAddCaptureHook.mock.calls[0][0]
+
+            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) => callback([survey]))
+
+            // Should match when both conditions are met
+            registeredHook('purchase', createEventPayload('purchase', { product_type: 'premium', amount: '200' }))
+            expect(surveyEventReceiver.getSurveys()).toContain('multi-filter-test')
+
+            // Clear previous activation
+            surveyEventReceiver.getSurveys().length = 0
+
+            // Should not match when one condition fails
+            registeredHook('purchase', createEventPayload('purchase', { product_type: 'premium', amount: '100' }))
+            expect(surveyEventReceiver.getSurveys()).not.toContain('multi-filter-test')
+        })
+
+        it('does not activate survey when required property is missing', () => {
+            const survey = createSurveyWithPropertyFilters('missing-prop-test', 'purchase', {
+                product_type: { values: ['premium'], operator: 'exact' },
+            })
+
+            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register([survey])
+            const registeredHook = mockAddCaptureHook.mock.calls[0][0]
+
+            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) => callback([survey]))
+
+            // Should not match when property is missing
+            registeredHook('purchase', createEventPayload('purchase', { other_prop: 'value' }))
+            expect(surveyEventReceiver.getSurveys()).not.toContain('missing-prop-test')
+        })
+
+        it('activates survey without property filters based on event name only', () => {
+            const survey = createSurveyWithPropertyFilters('no-filters-test', 'purchase', {})
+
+            const surveyEventReceiver = new SurveyEventReceiver(instance)
+            surveyEventReceiver.register([survey])
+            const registeredHook = mockAddCaptureHook.mock.calls[0][0]
+
+            ;(instance.getSurveys as jest.Mock).mockImplementation((callback) => callback([survey]))
+
+            // Should match based on event name only
+            registeredHook('purchase', createEventPayload('purchase', { any_prop: 'any_value' }))
+            expect(surveyEventReceiver.getSurveys()).toContain('no-filters-test')
+        })
+    })
+
     describe('action based surveys', () => {
         let config: PostHogConfig
         let instance: PostHog
@@ -185,6 +379,7 @@ describe('survey-event-receiver', () => {
                 config: config,
                 persistence: new PostHogPersistence(config),
                 _addCaptureHook: jest.fn(),
+                getSurveys: jest.fn((callback) => callback([])),
             } as unknown as PostHog
         })
 
@@ -224,10 +419,6 @@ describe('survey-event-receiver', () => {
                         url_matching: urlMatch || 'exact',
                     },
                 ],
-                created_at: '2024-06-20T14:39:23.616676Z',
-                deleted: false,
-                is_action: true,
-                tags: [],
             }
         }
 
