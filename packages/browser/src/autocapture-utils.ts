@@ -153,7 +153,7 @@ export function getParentElement(curEl: Element): Element | false {
 
 // autocapture check will already filter for ph-no-capture,
 // but we include it here to protect against future changes accidentally removing that check
-const defaultRageClickIgnoreList = ['.ph-no-rageclick', '.ph-no-capture']
+const DEFAULT_RAGE_CLICK_IGNORE_LIST = ['.ph-no-rageclick', '.ph-no-capture']
 export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfig['rageclick']) {
     if (!window || cannotCheckForAutocapture(el)) {
         return false
@@ -161,9 +161,9 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
 
     const selectorIgnoreList = isBoolean(_config)
         ? _config
-            ? defaultRageClickIgnoreList
+            ? DEFAULT_RAGE_CLICK_IGNORE_LIST
             : false
-        : (_config?.css_selector_ignorelist ?? defaultRageClickIgnoreList)
+        : (_config?.css_selector_ignorelist ?? DEFAULT_RAGE_CLICK_IGNORE_LIST)
 
     if (selectorIgnoreList === false) {
         return false
