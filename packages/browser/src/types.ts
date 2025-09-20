@@ -113,6 +113,22 @@ export interface AutocaptureConfig {
     capture_copied_text?: boolean
 }
 
+export interface RageclickConfig {
+    /**
+     * List of CSS selectors to ignore rageclicks on
+     * e.g. ['.my-calendar-button']
+     * we consider the tree of elements from the root to the target element of the click event
+     * so for the tree div > div > button > svg
+     * and ignore list config `['[id]']`
+     * we will ignore the rageclick if the click-target or its parents has any id
+     *
+     * Nothing is ignored when there's an empty ignorelist, e.g. []
+     * If no ignorelist is set, we default to ignoring .ph-no-rageclick
+     * If an element has .ph-no-capture, it will always be ignored by rageclick and autocapture
+     */
+    css_selector_ignorelist?: string[]
+}
+
 export interface BootstrapConfig {
     distinctID?: string
     isIdentifiedID?: boolean
@@ -301,6 +317,7 @@ export interface PostHogConfig {
      * Determines whether PostHog should autocapture events.
      * This setting does not affect capturing pageview events (see `capture_pageview`).
      *
+     * by default autocapture is ignored on elements that match a `ph-no-capture` css class on the element or a parent
      * @default true
      */
     autocapture: boolean | AutocaptureConfig
@@ -308,9 +325,10 @@ export interface PostHogConfig {
     /**
      * Determines whether PostHog should capture rage clicks.
      *
+     * by default rageclicks are ignored on elements that match a `ph-no-capture` or `ph-no-rageclick` css class on the element or a parent
      * @default true
      */
-    rageclick: boolean
+    rageclick: boolean | RageclickConfig
 
     /**
      * Determines if cookie should be set on the top level domain (example.com).

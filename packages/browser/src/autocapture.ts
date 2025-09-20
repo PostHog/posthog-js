@@ -11,6 +11,7 @@ import {
     makeSafeText,
     shouldCaptureDomEvent,
     shouldCaptureElement,
+    shouldCaptureRageclick,
     shouldCaptureValue,
     splitClassString,
 } from './autocapture-utils'
@@ -353,10 +354,12 @@ export class Autocapture {
 
         if (eventName === '$autocapture' && e.type === 'click' && e instanceof MouseEvent) {
             if (
-                this.instance.config.rageclick &&
+                !!this.instance.config.rageclick &&
                 this.rageclicks?.isRageClick(e.clientX, e.clientY, new Date().getTime())
             ) {
-                this._captureEvent(e, '$rageclick')
+                if (shouldCaptureRageclick(target, this.instance.config.rageclick)) {
+                    this._captureEvent(e, '$rageclick')
+                }
             }
         }
 

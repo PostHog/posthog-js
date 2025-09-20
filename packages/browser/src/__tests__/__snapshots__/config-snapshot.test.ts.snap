@@ -51,7 +51,13 @@ exports[`config snapshot for PostHogConfig 1`] = `
   ],
   \\"rageclick\\": [
     \\"false\\",
-    \\"true\\"
+    \\"true\\",
+    {
+      \\"css_selector_ignorelist\\": [
+        \\"undefined\\",
+        \\"string[]\\"
+      ]
+    }
   ],
   \\"cross_subdomain_cookie\\": [
     \\"false\\",

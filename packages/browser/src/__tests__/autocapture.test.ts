@@ -10,7 +10,7 @@ import {
 } from '../autocapture'
 import { shouldCaptureDomEvent } from '../autocapture-utils'
 import { AUTOCAPTURE_DISABLED_SERVER_SIDE } from '../constants'
-import { AutocaptureConfig, FlagsResponse } from '../types'
+import { AutocaptureConfig, FlagsResponse, PostHogConfig } from '../types'
 import { PostHog } from '../posthog-core'
 import { window } from '../utils/globals'
 import { createPosthogInstance } from './helpers/posthog-instance'
@@ -383,30 +383,64 @@ describe('Autocapture system', () => {
             autocapture.onRemoteConfig({} as FlagsResponse)
         })
 
-        it('should capture rageclick', () => {
-            const elTarget = document.createElement('img')
-            const elParent = document.createElement('span')
-            elParent.appendChild(elTarget)
-            const elGrandparent = document.createElement('a')
-            elGrandparent.setAttribute('href', 'https://test.com')
-            elGrandparent.appendChild(elParent)
-            const fakeEvent = makeMouseEvent({
-                target: elTarget,
-                clientX: 5,
-                clientY: 5,
-            })
-            Object.setPrototypeOf(fakeEvent, MouseEvent.prototype)
-            autocapture['_captureEvent'](fakeEvent)
-            autocapture['_captureEvent'](fakeEvent)
-            autocapture['_captureEvent'](fakeEvent)
+        test.each([
+            [
+                'rageclick detection is active',
+                true,
+                null,
+                ['$autocapture', '$autocapture', '$rageclick', '$autocapture'],
+            ],
+            ['rageclick detection is inactive', false, null, ['$autocapture', '$autocapture', '$autocapture']],
+            ['rageclick detection with ph-no-capture', true, 'ph-no-capture', []],
+            [
+                'rageclick detection with ph-no-rageclick',
+                true,
+                'ph-no-rageclick',
+                ['$autocapture', '$autocapture', '$autocapture'],
+            ],
+            [
+                'rageclick detection with custom classname overrides default',
+                {
+                    css_selector_ignorelist: ['.custom-rageclick'],
+                },
+                'ph-no-rageclick',
+                ['$autocapture', '$autocapture', '$rageclick', '$autocapture'],
+            ],
+            [
+                'rageclick detection with custom classname',
+                {
+                    css_selector_ignorelist: ['.custom-rageclick'],
+                },
+                'custom-rageclick',
+                ['$autocapture', '$autocapture', '$autocapture'],
+            ],
+        ])(
+            'autocapture and rageclick testcase: %s',
+            (_title, rageclickConfig: PostHogConfig['rageclick'], parentClassname: string, expectedCaptured) => {
+                posthog.config.rageclick = rageclickConfig
 
-            expect(beforeSendMock.mock.calls.map((args) => args[0].event)).toEqual([
-                '$autocapture',
-                '$autocapture',
-                '$rageclick',
-                '$autocapture',
-            ])
-        })
+                const elTarget = document.createElement('img')
+                const elParent = document.createElement('span')
+                if (parentClassname) {
+                    elParent.className = parentClassname
+                }
+                elParent.appendChild(elTarget)
+                const elGrandparent = document.createElement('a')
+                elGrandparent.setAttribute('href', 'https://test.com')
+                elGrandparent.appendChild(elParent)
+                const fakeEvent = makeMouseEvent({
+                    target: elTarget,
+                    clientX: 5,
+                    clientY: 5,
+                })
+                Object.setPrototypeOf(fakeEvent, MouseEvent.prototype)
+                autocapture['_captureEvent'](fakeEvent)
+                autocapture['_captureEvent'](fakeEvent)
+                autocapture['_captureEvent'](fakeEvent)
+
+                expect(beforeSendMock.mock.calls.map((args) => args[0].event)).toEqual(expectedCaptured)
+            }
+        )
 
         describe('clipboard autocapture', () => {
             let elTarget: HTMLDivElement
