@@ -408,6 +408,80 @@ describe('Autocapture system', () => {
             ])
         })
 
+        it('should not capture rageclick if ph-no-capture', () => {
+            const elTarget = document.createElement('img')
+            const elParent = document.createElement('span')
+            elParent.className = 'ph-no-capture'
+            elParent.appendChild(elTarget)
+            const elGrandparent = document.createElement('a')
+            elGrandparent.setAttribute('href', 'https://test.com')
+            elGrandparent.appendChild(elParent)
+            const fakeEvent = makeMouseEvent({
+                target: elTarget,
+                clientX: 5,
+                clientY: 5,
+            })
+            Object.setPrototypeOf(fakeEvent, MouseEvent.prototype)
+            autocapture['_captureEvent'](fakeEvent)
+            autocapture['_captureEvent'](fakeEvent)
+            autocapture['_captureEvent'](fakeEvent)
+
+            expect(beforeSendMock.mock.calls.map((args) => args[0].event)).toEqual([])
+        })
+
+        it('should not capture rageclick if ph-no-rageclick', () => {
+            const elTarget = document.createElement('img')
+            const elParent = document.createElement('span')
+            elParent.className = 'ph-no-rageclick'
+            elParent.appendChild(elTarget)
+            const elGrandparent = document.createElement('a')
+            elGrandparent.setAttribute('href', 'https://test.com')
+            elGrandparent.appendChild(elParent)
+            const fakeEvent = makeMouseEvent({
+                target: elTarget,
+                clientX: 5,
+                clientY: 5,
+            })
+            Object.setPrototypeOf(fakeEvent, MouseEvent.prototype)
+            autocapture['_captureEvent'](fakeEvent)
+            autocapture['_captureEvent'](fakeEvent)
+            autocapture['_captureEvent'](fakeEvent)
+
+            expect(beforeSendMock.mock.calls.map((args) => args[0].event)).toEqual([
+                '$autocapture',
+                '$autocapture',
+                '$autocapture',
+            ])
+        })
+
+        it('should not capture rageclick if ignorelist configured', () => {
+            posthog.config.rageclick = {
+                css_selector_ignorelist: ['.ignore-rage-click'],
+            }
+            const elTarget = document.createElement('img')
+            const elParent = document.createElement('span')
+            elParent.className = 'ignore-rage-click'
+            elParent.appendChild(elTarget)
+            const elGrandparent = document.createElement('a')
+            elGrandparent.setAttribute('href', 'https://test.com')
+            elGrandparent.appendChild(elParent)
+            const fakeEvent = makeMouseEvent({
+                target: elTarget,
+                clientX: 5,
+                clientY: 5,
+            })
+            Object.setPrototypeOf(fakeEvent, MouseEvent.prototype)
+            autocapture['_captureEvent'](fakeEvent)
+            autocapture['_captureEvent'](fakeEvent)
+            autocapture['_captureEvent'](fakeEvent)
+
+            expect(beforeSendMock.mock.calls.map((args) => args[0].event)).toEqual([
+                '$autocapture',
+                '$autocapture',
+                '$autocapture',
+            ])
+        })
+
         describe('clipboard autocapture', () => {
             let elTarget: HTMLDivElement
 

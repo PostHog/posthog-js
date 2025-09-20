@@ -1,7 +1,7 @@
-import { AutocaptureConfig, Properties } from './types'
+import { AutocaptureConfig, PostHogConfig, Properties } from './types'
 import { each, entries } from './utils'
 
-import { isNullish, isString, isUndefined, isArray } from '@posthog/core'
+import { isNullish, isString, isUndefined, isArray, isBoolean } from '@posthog/core'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
 import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
@@ -126,17 +126,12 @@ function checkIfElementTreePassesElementAllowList(
 }
 
 /*
- if there is no config, then all elements are allowed
- if there is a config, and there is an allow list, then
- only elements that match the css selector in the allow list are allowed
- assumes that some other code is checking this element's parents
+ if there is no selector list (i.e. it is undefined), then any elements matches
+ if there is an empty list, then no elements match
+ if there is a selector list, then check it against each element provided
  */
-function checkIfElementTreePassesCSSSelectorAllowList(
-    elements: Element[],
-    autocaptureConfig: AutocaptureConfig | undefined
-): boolean {
-    const allowlist = autocaptureConfig?.css_selector_allowlist
-    if (isUndefined(allowlist)) {
+function checkIfElementsMatchCSSSelector(elements: Element[], selectorList: string[] | undefined): boolean {
+    if (isUndefined(selectorList)) {
         // everything is allowed, when there is no allow list
         return true
     }
@@ -144,7 +139,7 @@ function checkIfElementTreePassesCSSSelectorAllowList(
     // check each element in the tree
     // if any of the elements are in the allow list, then the tree is allowed
     for (const el of elements) {
-        if (allowlist.some((selector) => el.matches(selector))) {
+        if (selectorList.some((selector) => el.matches(selector))) {
             return true
         }
     }
@@ -159,46 +154,39 @@ export function getParentElement(curEl: Element): Element | false {
     return parentNode
 }
 
-/*
- * Check whether a DOM event should be "captured" or if it may contain sentitive data
- * using a variety of heuristics.
- * @param {Element} el - element to check
- * @param {Event} event - event to check
- * @param {Object} autocaptureConfig - autocapture config
- * @param {boolean} captureOnAnyElement - whether to capture on any element, clipboard autocapture doesn't restrict to "clickable" elements
- * @param {string[]} allowedEventTypes - event types to capture, normally just 'click', but some autocapture types react to different events, some elements have fixed events (e.g., form has "submit")
- * @returns {boolean} whether the event should be captured
- */
-export function shouldCaptureDomEvent(
-    el: Element,
-    event: Event,
-    autocaptureConfig: AutocaptureConfig | undefined = undefined,
-    captureOnAnyElement?: boolean,
-    allowedEventTypes?: string[]
-): boolean {
-    if (!window || !el || isTag(el, 'html') || !isElementNode(el)) {
+// autocapture check will already filter for ph-no-capture,
+// but we include it here to protect against future changes accidentally removing that check
+const defaultRageClickIgnoreList = ['.ph-no-rageclick', '.ph-no-capture']
+export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfig['rageclick']) {
+    if (!window || cannotCheckForAutocapture(el)) {
         return false
     }
 
-    if (autocaptureConfig?.url_allowlist) {
-        // if the current URL is not in the allow list, don't capture
-        if (!checkForURLMatches(autocaptureConfig.url_allowlist)) {
-            return false
-        }
+    const selectorIgnoreList = isBoolean(_config)
+        ? _config
+            ? defaultRageClickIgnoreList
+            : false
+        : (_config?.css_selector_ignorelist ?? defaultRageClickIgnoreList)
+
+    if (selectorIgnoreList === false) {
+        return false
     }
 
-    if (autocaptureConfig?.url_ignorelist) {
-        // if the current URL is in the ignore list, don't capture
-        if (checkForURLMatches(autocaptureConfig.url_ignorelist)) {
-            return false
-        }
+    const { targetElementList } = getElementsTreeForElement(el, false)
+    if (checkIfElementsMatchCSSSelector(targetElementList, selectorIgnoreList || undefined)) {
+        // we don't capture if we match the ignore list
+        return false
     }
+    return true
+}
 
-    if (autocaptureConfig?.dom_event_allowlist) {
-        const allowlist = autocaptureConfig.dom_event_allowlist
-        if (allowlist && !allowlist.some((eventType) => event.type === eventType)) {
-            return false
-        }
+const cannotCheckForAutocapture = (el: Element | null) => {
+    return !el || isTag(el, 'html') || !isElementNode(el)
+}
+
+const getElementsTreeForElement = (el: Element, captureOnAnyElement: false | true | undefined) => {
+    if (!window || cannotCheckForAutocapture(el)) {
+        return { parentIsUsefulElement: false, targetElementList: [] }
     }
 
     let parentIsUsefulElement = false
@@ -226,12 +214,58 @@ export function shouldCaptureDomEvent(
         targetElementList.push(parentNode)
         curEl = parentNode
     }
+    return { parentIsUsefulElement, targetElementList }
+}
+
+/*
+ * Check whether a DOM event should be "captured" or if it may contain sensitive data
+ * using a variety of heuristics.
+ * @param {Element} el - element to check
+ * @param {Event} event - event to check
+ * @param {Object} autocaptureConfig - autocapture config
+ * @param {boolean} captureOnAnyElement - whether to capture on any element, clipboard autocapture doesn't restrict to "clickable" elements
+ * @param {string[]} allowedEventTypes - event types to capture, normally just 'click', but some autocapture types react to different events, some elements have fixed events (e.g., form has "submit")
+ * @returns {boolean} whether the event should be captured
+ */
+export function shouldCaptureDomEvent(
+    el: Element,
+    event: Event,
+    autocaptureConfig: AutocaptureConfig | undefined = undefined,
+    captureOnAnyElement?: boolean,
+    allowedEventTypes?: string[]
+): boolean {
+    if (!window || cannotCheckForAutocapture(el)) {
+        return false
+    }
+
+    if (autocaptureConfig?.url_allowlist) {
+        // if the current URL is not in the allow list, don't capture
+        if (!checkForURLMatches(autocaptureConfig.url_allowlist)) {
+            return false
+        }
+    }
+
+    if (autocaptureConfig?.url_ignorelist) {
+        // if the current URL is in the ignore list, don't capture
+        if (checkForURLMatches(autocaptureConfig.url_ignorelist)) {
+            return false
+        }
+    }
+
+    if (autocaptureConfig?.dom_event_allowlist) {
+        const allowlist = autocaptureConfig.dom_event_allowlist
+        if (allowlist && !allowlist.some((eventType) => event.type === eventType)) {
+            return false
+        }
+    }
+
+    const { parentIsUsefulElement, targetElementList } = getElementsTreeForElement(el, captureOnAnyElement)
 
     if (!checkIfElementTreePassesElementAllowList(targetElementList, autocaptureConfig)) {
         return false
     }
 
-    if (!checkIfElementTreePassesCSSSelectorAllowList(targetElementList, autocaptureConfig)) {
+    if (!checkIfElementsMatchCSSSelector(targetElementList, autocaptureConfig?.css_selector_allowlist)) {
         return false
     }
 
