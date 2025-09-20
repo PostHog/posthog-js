@@ -170,7 +170,7 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
     }
 
     const { targetElementList } = getElementAndParentsForElement(el, false)
-    if (checkIfElementsMatchCSSSelector(targetElementList, selectorIgnoreList || undefined)) {
+    if (checkIfElementsMatchCSSSelector(targetElementList, selectorIgnoreList)) {
         // we don't capture if we match the ignore list
         return false
     }
