@@ -51,7 +51,13 @@ exports[`config snapshot for PostHogConfig 1`] = `
   ],
   \\"rageclick\\": [
     \\"false\\",
-    \\"true\\"
+    \\"true\\",
+    {
+      \\"css_selector_ignorelist\\": [
+        \\"undefined\\",
+        \\"string[]\\"
+      ]
+    }
   ],
   \\"cross_subdomain_cookie\\": [
     \\"false\\",
@@ -152,10 +158,6 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"true\\"
   ],
   \\"secure_cookie\\": [
-    \\"false\\",
-    \\"true\\"
-  ],
-  \\"partitioned_cookie\\": [
     \\"false\\",
     \\"true\\"
   ],
@@ -554,6 +556,16 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"true\\"
   ],
   \\"__preview_eager_load_replay\\": [
+    \\"undefined\\",
+    \\"false\\",
+    \\"true\\"
+  ],
+  \\"__preview_disable_beacon\\": [
+    \\"undefined\\",
+    \\"false\\",
+    \\"true\\"
+  ],
+  \\"__preview_disable_xhr_credentials\\": [
     \\"undefined\\",
     \\"false\\",
     \\"true\\"

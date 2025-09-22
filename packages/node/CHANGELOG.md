@@ -1,5 +1,24 @@
 # posthog-node
 
+## 5.8.6
+
+### Patch Changes
+
+- [#2346](https://github.com/PostHog/posthog-js/pull/2346) [`117b150`](https://github.com/PostHog/posthog-js/commit/117b15034e2740f5714b9bb249d8701c3f14c688) Thanks [@marandaneto](https://github.com/marandaneto)! - fix: node onException autocapture safely access the exception_List
+
+## 5.8.5
+
+### Patch Changes
+
+- Updated dependencies [[`da07e41`](https://github.com/PostHog/posthog-js/commit/da07e41ac2307803c302557a12b459491657a75f)]:
+  - @posthog/core@1.1.0
+
+## 5.8.4
+
+### Patch Changes
+
+- [#2312](https://github.com/PostHog/posthog-js/pull/2312) [`dff84c6`](https://github.com/PostHog/posthog-js/commit/dff84c6c21af9a8f4e3bfb58b4fb85ae2cbcdbc6) Thanks [@daibhin](https://github.com/daibhin)! - chore: allow PostHog exception capture to be skipped in Sentry integration
+
 ## 5.8.3
 
 ### Patch Changes

@@ -138,6 +138,9 @@ describe('cookieless', () => {
             expect(beforeSendMock).toBeCalledTimes(0)
             expect(posthog.has_opted_out_capturing()).toEqual(true)
 
+            // Mock surveys to verify they get loaded
+            const mockSurveysLoadIfEnabled = jest.spyOn(posthog.surveys, 'loadIfEnabled')
+
             // opt in
             posthog.opt_in_capturing()
 
@@ -155,6 +158,9 @@ describe('cookieless', () => {
             expect(initialPageview.properties.$cookieless_mode).toEqual(undefined)
             expect(document.cookie).toContain('distinct_id')
             expect(posthog.sessionRecording).toBeTruthy()
+
+            // Verify surveys are reinitialized after opt in
+            expect(mockSurveysLoadIfEnabled).toHaveBeenCalled()
         })
 
         it('should not send any events before opt out, then send cookieless events', async () => {

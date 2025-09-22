@@ -99,13 +99,12 @@ describe('Exception Observer', () => {
             expect(singleCall[0]).toMatchObject({
                 event: '$exception',
                 properties: {
-                    $exception_personURL: expect.any(String),
                     $exception_list: [
                         {
                             type: 'Error',
                             value: 'test error',
                             stacktrace: { frames: expect.any(Array) },
-                            mechanism: { synthetic: false, handled: true },
+                            mechanism: { synthetic: false, handled: false },
                         },
                     ],
                 },
@@ -114,6 +113,8 @@ describe('Exception Observer', () => {
 
         it('captures an event when an unhandled rejection occurs', () => {
             const error = new Error('test error')
+            // PromiseRejectionEvent does not exists in node, it is treated as an event here
+            // See e2e tests
             const promiseRejectionEvent = new PromiseRejectionEvent('unhandledrejection', {
                 // this is a test not a browser, so we don't care there's no Promise in IE11
                 // eslint-disable-next-line compat/compat
@@ -128,13 +129,11 @@ describe('Exception Observer', () => {
             expect(singleCall[0]).toMatchObject({
                 event: '$exception',
                 properties: {
-                    $exception_personURL: expect.any(String),
                     $exception_list: [
                         {
-                            type: 'UnhandledRejection',
-                            value: 'test error',
-                            stacktrace: { frames: expect.any(Array) },
-                            mechanism: { synthetic: false, handled: false },
+                            type: 'PromiseRejectionEvent',
+                            value: 'PromiseRejectionEvent captured as exception with keys: isTrusted, promise, reason',
+                            mechanism: { synthetic: true, handled: false },
                         },
                     ],
                 },
@@ -151,13 +150,12 @@ describe('Exception Observer', () => {
             expect(request.data).toMatchObject({
                 event: '$exception',
                 properties: {
-                    $exception_personURL: expect.any(String),
                     $exception_list: [
                         {
                             type: 'Error',
                             value: 'test error',
                             stacktrace: { frames: expect.any(Array) },
-                            mechanism: { synthetic: false, handled: true },
+                            mechanism: { synthetic: false, handled: false },
                         },
                     ],
                 },

@@ -1,5 +1,24 @@
 # posthog-react-native
 
+## 4.6.1
+
+### Patch Changes
+
+- Updated dependencies [[`da07e41`](https://github.com/PostHog/posthog-js/commit/da07e41ac2307803c302557a12b459491657a75f)]:
+  - @posthog/core@1.1.0
+
+## 4.6.0
+
+### Minor Changes
+
+- [#2328](https://github.com/PostHog/posthog-js/pull/2328) [`83196aa`](https://github.com/PostHog/posthog-js/commit/83196aa4bb7f7a1642b722cbfa19af1bb13379ae) Thanks [@marandaneto](https://github.com/marandaneto)! - chore: add support for throttleDelayMs
+
+## 4.5.1
+
+### Patch Changes
+
+- [#2325](https://github.com/PostHog/posthog-js/pull/2325) [`a9121df`](https://github.com/PostHog/posthog-js/commit/a9121dfbbe4c549e786124b1a8905c598fada757) Thanks [@marandaneto](https://github.com/marandaneto)! - surveys on react native web renders and get focused correctly
+
 ## 4.5.0
 
 ### Minor Changes
@@ -50,7 +69,7 @@
 
 ### Fixed
 
-1. Fix issue with expo-filesystem on web and macos
+1. Fix issue with expo-file-system on web and macos
 
 ## 4.2.1 - 2025-07-21
 

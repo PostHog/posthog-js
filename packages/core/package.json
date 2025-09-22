@@ -1,6 +1,6 @@
 {
   "name": "@posthog/core",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "license": "MIT",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -15,8 +15,8 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "lint": "eslint src test",
-    "lint:fix": "eslint src test --fix",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
     "build": "rslib build",
     "dev": "rslib build -w",
     "test:unit": "jest",
@@ -27,6 +27,11 @@
       "types": "./dist/index.d.ts",
       "require": "./dist/index.js",
       "import": "./dist/index.mjs"
+    },
+    "./error-tracking": {
+      "types": "./dist/error-tracking/index.d.ts",
+      "require": "./dist/error-tracking/index.js",
+      "import": "./dist/error-tracking/index.mjs"
     },
     "./vendor/*": {
       "types": "./dist/vendor/*.d.ts",

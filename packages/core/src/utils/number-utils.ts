@@ -1,4 +1,4 @@
-import { Logger } from 'types'
+import { Logger } from '../types'
 import { isNumber } from './type-utils'
 
 /**

@@ -119,7 +119,7 @@ const buildLegacyStorage = (filesystem: any): PostHogCustomStorage => {
 }
 
 export const buildOptimisiticAsyncStorage = (): PostHogCustomStorage => {
-  // expo-filesystem is not supported on web and macos, so we need to use the react-native-async-storage package instead
+  // expo-file-system is not supported on web and macos, so we need to use the react-native-async-storage package instead
   // see https://github.com/PostHog/posthog-js-lite/blob/5fb7bee96f739b243dfea5589e2027f16629e8cd/posthog-react-native/src/optional/OptionalExpoFileSystem.ts#L7-L11
   const supportedPlatform = Platform.OS !== 'web' && Platform.OS !== 'macos'
 
@@ -168,6 +168,6 @@ export const buildOptimisiticAsyncStorage = (): PostHogCustomStorage => {
   }
 
   throw new Error(
-    'PostHog: No storage available. Please install expo-filesystem or react-native-async-storage OR implement a custom storage provider.'
+    'PostHog: No storage available. Please install expo-file-system or react-native-async-storage OR implement a custom storage provider.'
   )
 }

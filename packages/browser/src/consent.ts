@@ -62,8 +62,7 @@ export class ConsentManager {
             isOptedIn ? 1 : 0,
             this._config.cookie_expiration,
             this._config.cross_subdomain_cookie,
-            this._config.secure_cookie,
-            this._config.partitioned_cookie
+            this._config.secure_cookie
         )
     }
 

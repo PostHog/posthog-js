@@ -486,17 +486,17 @@ export class SessionRecording {
     }
 
     private _onOffline = (): void => {
-        this._tryAddCustomEvent('browser offline', {})
+        this.tryAddCustomEvent('browser offline', {})
     }
 
     private _onOnline = (): void => {
-        this._tryAddCustomEvent('browser online', {})
+        this.tryAddCustomEvent('browser online', {})
     }
 
     private _onVisibilityChange = (): void => {
         if (document?.visibilityState) {
             const label = 'window ' + document.visibilityState
-            this._tryAddCustomEvent(label, {})
+            this.tryAddCustomEvent(label, {})
         }
     }
 
@@ -531,7 +531,7 @@ export class SessionRecording {
                             if (!href) {
                                 return
                             }
-                            this._tryAddCustomEvent('$pageview', { href })
+                            this.tryAddCustomEvent('$pageview', { href })
                         }
                     } catch (e) {
                         logger.error('Could not add $pageview to rrweb session', e)
@@ -542,7 +542,7 @@ export class SessionRecording {
             if (!this._onSessionIdListener) {
                 this._onSessionIdListener = this._sessionManager.onSessionId((sessionId, windowId, changeReason) => {
                     if (changeReason) {
-                        this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
+                        this.tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
 
                         this._instance?.persistence?.unregister(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
                         this._instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
@@ -622,7 +622,7 @@ export class SessionRecording {
                 )
             }
 
-            this._tryAddCustomEvent('samplingDecisionMade', {
+            this.tryAddCustomEvent('samplingDecisionMade', {
                 sampleRate: currentSampleRate,
                 isSampled: shouldSample,
             })
@@ -634,7 +634,7 @@ export class SessionRecording {
     }
 
     onRemoteConfig(response: RemoteConfig) {
-        this._tryAddCustomEvent('$remote_config_received', response)
+        this.tryAddCustomEvent('$remote_config_received', response)
         this._persistRemoteConfig(response)
 
         if (response.sessionRecording?.endpoint) {
@@ -822,7 +822,7 @@ export class SessionRecording {
                 // don't take full snapshots while idle
                 clearInterval(this._fullSnapshotTimer)
 
-                this._tryAddCustomEvent('sessionIdle', {
+                this.tryAddCustomEvent('sessionIdle', {
                     eventTimestamp: event.timestamp,
                     lastActivityTimestamp: this._lastActivityTimestamp,
                     threshold: this._sessionIdleThresholdMilliseconds,
@@ -845,7 +845,7 @@ export class SessionRecording {
                 // if the idle state was unknown, we don't want to add an event, since we're just in bootup
                 // whereas if it was true, we know we've been idle for a while, and we can mark ourselves as returning from idle
                 if (!idleWasUnknown) {
-                    this._tryAddCustomEvent('sessionNoLongerIdle', {
+                    this.tryAddCustomEvent('sessionNoLongerIdle', {
                         reason: 'user activity',
                         type: event.type,
                     })
@@ -898,7 +898,15 @@ export class SessionRecording {
         }
     }
 
-    private _tryAddCustomEvent(tag: string, payload: any): boolean {
+    /**
+     * This adds a custom event to the session recording
+     *
+     * It is not intended for arbitrary public use - playback only displays known custom events
+     * And is exposed on the public interface only so that other parts of the SDK are able to use it
+     *
+     * if you are calling this from client code, you're probably looking for `posthog.capture('$custom_event', {...})`
+     */
+    tryAddCustomEvent(tag: string, payload: any): boolean {
         return this._tryRRWebMethod(newQueuedEvent(() => getRRWebRecord()!.addCustomEvent(tag, payload)))
     }
 
@@ -990,12 +998,12 @@ export class SessionRecording {
         // stay unknown if we're not sure if we're idle or not
         this._isIdle = isBoolean(this._isIdle) ? this._isIdle : 'unknown'
 
-        this._tryAddCustomEvent('$session_options', {
+        this.tryAddCustomEvent('$session_options', {
             sessionRecordingOptions,
             activePlugins: activePlugins.map((p) => p?.name),
         })
 
-        this._tryAddCustomEvent('$posthog_config', {
+        this.tryAddCustomEvent('$posthog_config', {
             config: this._instance.config,
         })
     }
@@ -1142,7 +1150,7 @@ export class SessionRecording {
         }
         const currentUrl = this._maskUrl(window.location.href)
         if (this._lastHref !== currentUrl) {
-            this._tryAddCustomEvent('$url_changed', { href: currentUrl })
+            this.tryAddCustomEvent('$url_changed', { href: currentUrl })
             this._lastHref = currentUrl
         }
     }
@@ -1296,7 +1304,7 @@ export class SessionRecording {
         clearInterval(this._fullSnapshotTimer)
 
         logger.info('recording paused due to URL blocker')
-        this._tryAddCustomEvent('recording paused', { reason: 'url blocker' })
+        this.tryAddCustomEvent('recording paused', { reason: 'url blocker' })
     }
 
     private _resumeRecording() {
@@ -1310,7 +1318,7 @@ export class SessionRecording {
         this._tryTakeFullSnapshot()
         this._scheduleFullSnapshot()
 
-        this._tryAddCustomEvent('recording resumed', { reason: 'left blocked url' })
+        this.tryAddCustomEvent('recording resumed', { reason: 'left blocked url' })
         logger.info('recording resumed')
     }
 
@@ -1375,7 +1383,7 @@ export class SessionRecording {
         })
         logger.info(startReason.replace('_', ' '), tagPayload)
         if (!includes(['recording_initialized', 'session_id_changed'], startReason)) {
-            this._tryAddCustomEvent(startReason, tagPayload)
+            this.tryAddCustomEvent(startReason, tagPayload)
         }
     }
 

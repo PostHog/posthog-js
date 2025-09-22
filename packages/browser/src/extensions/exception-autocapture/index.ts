@@ -5,7 +5,7 @@ import { ExceptionAutoCaptureConfig, RemoteConfig } from '../../types'
 import { createLogger } from '../../utils/logger'
 import { EXCEPTION_CAPTURE_ENABLED_SERVER_SIDE } from '../../constants'
 import { isUndefined, BucketedRateLimiter, isObject } from '@posthog/core'
-import { ErrorProperties } from './error-conversion'
+import { ErrorTracking } from '@posthog/core'
 
 const logger = createLogger('[ExceptionAutocapture]')
 
@@ -139,19 +139,13 @@ export class ExceptionObserver {
         this.startIfEnabled()
     }
 
-    captureException(errorProperties: ErrorProperties) {
-        const posthogHost = this._instance.requestRouter.endpointFor('ui')
-
-        errorProperties.$exception_personURL = `${posthogHost}/project/${
-            this._instance.config.token
-        }/person/${this._instance.get_distinct_id()}`
-
-        const exceptionType = errorProperties.$exception_list[0].type ?? 'Exception'
+    captureException(errorProperties: ErrorTracking.ErrorProperties) {
+        const exceptionType = errorProperties?.$exception_list?.[0]?.type ?? 'Exception'
         const isRateLimited = this._rateLimiter.consumeRateLimit(exceptionType)
 
         if (isRateLimited) {
             logger.info('Skipping exception capture because of client rate limiting.', {
-                exception: errorProperties.$exception_list[0].type,
+                exception: exceptionType,
             })
             return
         }

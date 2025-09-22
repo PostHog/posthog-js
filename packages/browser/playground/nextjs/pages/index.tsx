@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { cookieConsentGiven, PERSON_PROCESSING_MODE } from '@/src/posthog'
 import { setAllPersonProfilePropertiesAsPersonPropertiesForFlags } from 'posthog-js/lib/src/customizations'
 import { STORED_PERSON_PROPERTIES_KEY } from '../../../src/constants'
+import { DisplaySurveyType, Survey } from 'posthog-js'
 
 export default function Home() {
     const posthog = usePostHog()
@@ -87,6 +88,25 @@ export default function Home() {
                     }
                 >
                     Set user properties
+                </button>
+                <button
+                    onClick={() => {
+                        // display javascript input with survey id input
+                        let survey: Survey | undefined
+                        posthog?.surveys.getSurveys((surveys: Survey[]) => {
+                            survey = surveys[0]
+                        })
+                        if (!survey) {
+                            return
+                        }
+                        posthog?.displaySurvey(survey.id, {
+                            ignoreConditions: true,
+                            ignoreDelay: true,
+                            displayType: DisplaySurveyType.Popover,
+                        })
+                    }}
+                >
+                    Display survey
                 </button>
 
                 <button onClick={() => posthog?.reset()} id="set-user-properties">

@@ -1,4 +1,3 @@
-import { ErrorProperties } from '../extensions/exception-autocapture/error-conversion'
 import type { PostHog } from '../posthog-core'
 import { SessionIdManager } from '../sessionid'
 import {
@@ -11,6 +10,7 @@ import {
 } from '../types'
 import { SessionRecordingStatus, TriggerType } from '../extensions/replay/triggerMatching'
 import { eventWithTime } from '@rrweb/types'
+import { ErrorTracking } from '@posthog/core'
 
 /*
  * Global helpers to protect access to browser globals in a way that is safer for different targets
@@ -172,6 +172,7 @@ export interface LazyLoadedSessionRecordingInterface {
     overrideSampling: () => void
     overrideTrigger: (triggerType: TriggerType) => void
     isStarted: boolean
+    tryAddCustomEvent(tag: string, payload: any): boolean
 }
 
 export interface LazyLoadedDeadClicksAutocaptureInterface {
@@ -189,9 +190,9 @@ interface PostHogExtensions {
     loadSiteApp?: (posthog: PostHog, appUrl: string, callback: (error?: string | Event, event?: Event) => void) => void
 
     errorWrappingFunctions?: {
-        wrapOnError: (captureFn: (props: ErrorProperties) => void) => () => void
-        wrapUnhandledRejection: (captureFn: (props: ErrorProperties) => void) => () => void
-        wrapConsoleError: (captureFn: (props: ErrorProperties) => void) => () => void
+        wrapOnError: (captureFn: (props: ErrorTracking.ErrorProperties) => void) => () => void
+        wrapUnhandledRejection: (captureFn: (props: ErrorTracking.ErrorProperties) => void) => () => void
+        wrapConsoleError: (captureFn: (props: ErrorTracking.ErrorProperties) => void) => () => void
     }
     rrweb?: { record: any; version: string }
     rrwebPlugins?: { getRecordConsolePlugin: any; getRecordNetworkPlugin?: any }

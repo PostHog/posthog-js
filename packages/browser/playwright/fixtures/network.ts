@@ -104,7 +104,7 @@ export class NetworkPage {
     async mockStatic(staticOverrides: Record<string, string | undefined>) {
         await Promise.all(
             files.map((file) => {
-                return this.page.route(`**/static/${file}`, async (route) => {
+                return this.page.route(`**/static/${file}*`, async (route) => {
                     const source = staticOverrides[file] ?? file
                     await route.fulfill({
                         headers: { loaded: 'using relative path by playwright', source: source },

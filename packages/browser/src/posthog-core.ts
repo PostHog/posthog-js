@@ -13,7 +13,6 @@ import {
 } from './constants'
 import { DeadClicksAutocapture, isDeadClicksEnabledForAutocapture } from './extensions/dead-clicks-autocapture'
 import { ExceptionObserver } from './extensions/exception-autocapture'
-import { errorToProperties } from './extensions/exception-autocapture/error-conversion'
 import { HistoryAutocapture } from './extensions/history-autocapture'
 import { SessionRecording } from './extensions/replay/sessionrecording'
 import { setupSegmentIntegration } from './extensions/segment-integration'
@@ -27,7 +26,13 @@ import { PostHogExceptions } from './posthog-exceptions'
 import { PostHogFeatureFlags } from './posthog-featureflags'
 import { PostHogPersistence } from './posthog-persistence'
 import { PostHogSurveys } from './posthog-surveys'
-import { SurveyCallback, SurveyEventName, SurveyEventProperties, SurveyRenderReason } from './posthog-surveys-types'
+import {
+    DisplaySurveyOptions,
+    SurveyCallback,
+    SurveyEventName,
+    SurveyEventProperties,
+    SurveyRenderReason,
+} from './posthog-surveys-types'
 import { RateLimiter } from './rate-limiter'
 import { RemoteConfigLoader } from './remote-config'
 import { extendURLParams, request, SUPPORTS_REQUEST } from './request'
@@ -75,10 +80,13 @@ import { logger } from './utils/logger'
 import { getPersonPropertiesHash } from './utils/property-utils'
 import { RequestRouter, RequestRouterRegion } from './utils/request-router'
 import { SimpleEventEmitter } from './utils/simple-event-emitter'
-import { getSurveyInteractionProperty, setSurveySeenOnLocalStorage } from './utils/survey-utils'
+import {
+    DEFAULT_DISPLAY_SURVEY_OPTIONS,
+    getSurveyInteractionProperty,
+    setSurveySeenOnLocalStorage,
+} from './utils/survey-utils'
 import {
     isEmptyString,
-    isError,
     isFunction,
     isKnownUnsafeEditableEvent,
     isNullish,
@@ -167,7 +175,6 @@ export const defaultConfig = (defaults?: ConfigDefaults): PostHogConfig => ({
     disable_external_dependency_loading: false,
     enable_recording_console_log: undefined, // When undefined, it falls back to the server-side setting
     secure_cookie: window?.location?.protocol === 'https:',
-    partitioned_cookie: false,
     ip: false,
     opt_out_capturing_by_default: false,
     opt_out_persistence_by_default: false,
@@ -777,6 +784,10 @@ export class PostHog {
             ...this.config.request_headers,
         }
         options.compression = options.compression === 'best-available' ? this.compression : options.compression
+        options.disableXHRCredentials = this.config.__preview_disable_xhr_credentials
+        if (this.config.__preview_disable_beacon) {
+            options.disableTransport = ['sendBeacon']
+        }
 
         // Specially useful if you're doing SSR with NextJS
         // Users must be careful when tweaking `cache` because they might get out-of-date feature flags
@@ -1773,6 +1784,8 @@ export class PostHog {
      * posthog.renderSurvey(coolSurveyID, '#survey-container')
      * ```
      *
+     * @deprecated Use displaySurvey instead - it's more complete and also supports popover surveys.
+     *
      * @public
      *
      * @param {String} surveyId The ID of the survey to render.
@@ -1780,6 +1793,43 @@ export class PostHog {
      */
     renderSurvey(surveyId: string, selector: string): void {
         this.surveys.renderSurvey(surveyId, selector)
+    }
+
+    /**
+     * Display a survey programmatically as either a popover or inline element.
+     *
+     * @param {string} surveyId - The survey ID to display
+     * @param {DisplaySurveyOptions} options - Display configuration
+     *
+     * @example
+     * ```js
+     * // Display as popover (respects all conditions defined in the dashboard)
+     * posthog.displaySurvey('survey-id-123')
+     * ```
+     *
+     * @example
+     * ```js
+     * // Display inline in a specific element
+     * posthog.displaySurvey('survey-id-123', {
+     *   displayType: DisplaySurveyType.Inline,
+     *   selector: '#survey-container'
+     * })
+     * ```
+     *
+     * @example
+     * ```js
+     * // Force display ignoring conditions and delays
+     * posthog.displaySurvey('survey-id-123', {
+     *   displayType: DisplaySurveyType.Popover,
+     *   ignoreConditions: true,
+     *   ignoreDelay: true
+     * })
+     * ```
+     *
+     * {@label Surveys}
+     */
+    displaySurvey(surveyId: string, options: DisplaySurveyOptions = DEFAULT_DISPLAY_SURVEY_OPTIONS): void {
+        this.surveys.displaySurvey(surveyId, options)
     }
 
     /**
@@ -2333,11 +2383,9 @@ export class PostHog {
      * This should only be used for informative purposes.
      * Any actual internal use case for the session_id should be handled by the sessionManager.
      *
-     * {@label Session replay}
-     *
      * @public
      *
-     * @returns The current session_id
+     * @returns The stored session ID for the current session. This may be an empty string if the client is not yet fully initialized.
      */
     get_session_id(): string {
         return this.sessionManager?.checkAndGetSessionAndWindowId(true).sessionId ?? ''
@@ -2626,14 +2674,12 @@ export class PostHog {
      */
     captureException(error: unknown, additionalProperties?: Properties): CaptureResult | undefined {
         const syntheticException = new Error('PostHog syntheticException')
+        const errorToProperties = this.exceptions.buildProperties(error, {
+            handled: true,
+            syntheticException,
+        })
         return this.exceptions.sendExceptionEvent({
-            ...errorToProperties(
-                isError(error) ? { error, event: error.message } : { event: error as Event | string },
-                // create synthetic error to get stack in cases where user input does not contain one
-                // creating the exceptions soon into our code as possible means we should only have to
-                // remove a single frame (this 'captureException' method) from the resultant stack
-                { syntheticException }
-            ),
+            ...errorToProperties,
             ...additionalProperties,
         })
     }
@@ -2873,6 +2919,11 @@ export class PostHog {
 
         this.consent.optInOut(true)
         this._sync_opt_out_with_persistence()
+
+        // Reinitialize surveys if we're in cookieless mode and just opted in
+        if (this.config.cookieless_mode == 'on_reject') {
+            this.surveys.loadIfEnabled()
+        }
 
         // Don't capture if captureEventName is null or false
         if (isUndefined(options?.captureEventName) || options?.captureEventName) {

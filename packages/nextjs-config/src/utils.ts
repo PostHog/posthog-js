@@ -8,7 +8,7 @@ import { PostHogNextConfigComplete } from './config'
 export function resolveBinaryPath(envPath: string, cwd: string, binName: string): string {
   const envLocations = envPath.split(path.delimiter)
   const localLocations = buildLocalBinaryPaths(cwd)
-  const directories = [...new Set([...envLocations, ...localLocations])]
+  const directories = [...new Set([...localLocations, ...envLocations])]
   for (const directory of directories) {
     const binaryPath = path.join(directory, binName)
     if (fs.existsSync(binaryPath)) {
@@ -91,6 +91,7 @@ async function callPosthogCli(args: string[], env: NodeJS.ProcessEnv, verbose: b
   }
 
   const child = spawn(binaryLocation, [...args], {
+    shell: true,
     stdio: verbose ? 'inherit' : 'ignore',
     env,
     cwd: process.cwd(),

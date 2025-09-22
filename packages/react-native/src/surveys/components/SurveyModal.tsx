@@ -1,14 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import {
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  TouchableWithoutFeedback,
-  View,
-} from 'react-native'
+import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native'
 
 import { Cancel } from './Cancel'
 import { ConfirmationMessage } from './ConfirmationMessage'
@@ -52,40 +43,39 @@ export function SurveyModal(props: SurveyModalProps): JSX.Element | null {
         style={{ flex: 1, justifyContent: 'flex-end' }}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <View style={styles.modalBackdrop}>
-            <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessible={false} />
-            <View
-              style={[
-                styles.modalContent,
-                {
-                  borderColor: appearance.borderColor,
-                  backgroundColor: appearance.backgroundColor,
-                  marginBottom: insets.bottom + 10,
-                  marginHorizontal: 10,
-                },
-              ]}
-            >
-              {!shouldShowConfirmation ? (
-                <Questions survey={survey} appearance={appearance} onSubmit={() => setIsSurveySent(true)} />
-              ) : (
-                <ConfirmationMessage
-                  appearance={appearance}
-                  header={appearance.thankYouMessageHeader}
-                  description={appearance.thankYouMessageDescription}
-                  contentType={
-                    appearance.thankYouMessageDescriptionContentType ?? SurveyQuestionDescriptionContentType.Text
-                  }
-                  onClose={onClose}
-                  isModal={true}
-                />
-              )}
-              <View style={styles.topIconContainer}>
-                <Cancel onPress={onClose} appearance={appearance} />
+        <View style={styles.modalBackdrop} onTouchStart={Keyboard.dismiss}>
+          <View style={styles.modalRow}>
+            <View style={styles.modalContent} pointerEvents="box-none">
+              <View
+                style={[
+                  styles.modalContentInner,
+                  {
+                    borderColor: appearance.borderColor,
+                    backgroundColor: appearance.backgroundColor,
+                    marginBottom: insets.bottom + 10,
+                    marginHorizontal: 10,
+                  },
+                ]}
+              >
+                {!shouldShowConfirmation ? (
+                  <Questions survey={survey} appearance={appearance} onSubmit={() => setIsSurveySent(true)} />
+                ) : (
+                  <ConfirmationMessage
+                    appearance={appearance}
+                    header={appearance.thankYouMessageHeader}
+                    description={appearance.thankYouMessageDescription}
+                    contentType={appearance.thankYouMessageDescriptionContentType}
+                    onClose={onClose}
+                    isModal={true}
+                  />
+                )}
+                <View style={styles.topIconContainer}>
+                  <Cancel onPress={onClose} appearance={appearance} />
+                </View>
               </View>
             </View>
           </View>
-        </TouchableWithoutFeedback>
+        </View>
       </KeyboardAvoidingView>
     </Modal>
   )
@@ -96,13 +86,18 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'flex-end',
   },
+  modalRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
   modalContent: {
+    width: '90%',
+    maxWidth: 400,
+  },
+  modalContentInner: {
     borderRadius: 10,
     borderWidth: 1,
     padding: 20,
-    width: '90%',
-    maxWidth: 400,
-    marginHorizontal: 20,
   },
   topIconContainer: {
     position: 'absolute',

@@ -1,13 +1,8 @@
 /* eslint-disable compat/compat */
 
-import {
-    ErrorProperties,
-    errorToProperties,
-    unhandledRejectionToProperties,
-} from '../../../extensions/exception-autocapture/error-conversion'
-
-import { isNull } from '@posthog/core'
+import { isNull, ErrorTracking } from '@posthog/core'
 import { expect } from '@jest/globals'
+import { buildErrorPropertiesBuilder } from '../../../posthog-exceptions'
 
 // ugh, jest
 // can't reference PromiseRejectionEvent to construct it 🤷
@@ -17,6 +12,8 @@ export type PromiseRejectionEventInit = {
     promise: Promise<any>
     reason: any
 }
+
+type ErrorProperties = ErrorTracking.ErrorProperties
 
 export class PromiseRejectionEvent extends Event {
     public readonly promise: Promise<any>
@@ -29,9 +26,24 @@ export class PromiseRejectionEvent extends Event {
         this.reason = options.reason
     }
 }
+
 // ugh, jest
 
 describe('Error conversion', () => {
+    const errorPropertiesBuilder = buildErrorPropertiesBuilder()
+
+    function errorToProperties(
+        { event, error }: { event: unknown; error?: Error },
+        hint?: { handled?: boolean; syntheticException?: Error }
+    ): ErrorProperties {
+        return errorPropertiesBuilder.buildFromUnknown(error ?? event, {
+            mechanism: {
+                handled: hint?.handled,
+            },
+            syntheticException: hint?.syntheticException,
+        })
+    }
+
     it('should convert a string to an error', () => {
         const expected: ErrorProperties = {
             $exception_level: 'error',
@@ -39,7 +51,7 @@ describe('Error conversion', () => {
                 {
                     type: 'InternalError',
                     value: 'but somehow still a string',
-                    mechanism: { synthetic: true, handled: true },
+                    mechanism: { synthetic: true, handled: true, type: 'generic' },
                 },
             ],
         }
@@ -54,8 +66,8 @@ describe('Error conversion', () => {
             $exception_list: [
                 {
                     type: 'Error',
-                    value: "Non-Error 'exception' captured with keys: foo, string",
-                    mechanism: { synthetic: true, handled: true },
+                    value: 'Object captured as exception with keys: foo, string',
+                    mechanism: { synthetic: true, handled: true, type: 'generic' },
                 },
             ],
         }
@@ -68,8 +80,8 @@ describe('Error conversion', () => {
             $exception_list: [
                 {
                     type: 'MouseEvent',
-                    value: "Non-Error 'exception' captured with keys: isTrusted",
-                    mechanism: { synthetic: true, handled: true },
+                    value: 'MouseEvent captured as exception with keys: isTrusted',
+                    mechanism: { synthetic: true, handled: true, type: 'generic' },
                 },
             ],
         }
@@ -112,7 +124,7 @@ describe('Error conversion', () => {
                 {
                     type: 'DOMError',
                     value: 'click: foo',
-                    mechanism: { synthetic: true, handled: true },
+                    mechanism: { synthetic: false, handled: true, type: 'generic' },
                 },
             ],
         }
@@ -128,10 +140,10 @@ describe('Error conversion', () => {
             throw new Error("this mustn't be null")
         }
 
-        expect(Object.keys(errorProperties)).toHaveLength(3)
-        expect(errorProperties.$exception_list[0].type).toEqual('dom-exception')
-        expect(errorProperties.$exception_list[0].value).toEqual('oh no disaster')
-        expect(errorProperties.$exception_DOMException_code).toEqual('0')
+        expect(Object.keys(errorProperties)).toHaveLength(2)
+        expect(errorProperties.$exception_list[0].type).toEqual('DOMException')
+        expect(errorProperties.$exception_list[0].value).toEqual('dom-exception: oh no disaster')
+
         expect(errorProperties.$exception_level).toEqual('error')
         // the stack trace changes between runs, so we just check that it's there
         expect(errorProperties.$exception_list).toBeDefined()
@@ -159,43 +171,22 @@ describe('Error conversion', () => {
         expect(errorProperties.$exception_list[0].mechanism.handled).toEqual(true)
     })
 
-    it('should convert unhandled promise rejection that the browser has messed around with', () => {
-        const ce = new CustomEvent('unhandledrejection', {
-            detail: {
-                promise: {},
-                reason: new Error('a wrapped rejection event'),
-            },
-        })
-        const errorProperties: ErrorProperties = unhandledRejectionToProperties([
-            ce as unknown as PromiseRejectionEvent,
-        ])
-        expect(Object.keys(errorProperties)).toHaveLength(2)
-        expect(errorProperties.$exception_list[0].type).toEqual('UnhandledRejection')
-        expect(errorProperties.$exception_list[0].value).toEqual('a wrapped rejection event')
-        expect(errorProperties.$exception_level).toEqual('error')
-        // the stack trace changes between runs, so we just check that it's there
-        expect(errorProperties.$exception_list).toBeDefined()
-        expect(errorProperties.$exception_list[0].stacktrace.frames[0].in_app).toEqual(true)
-        expect(errorProperties.$exception_list[0].stacktrace.frames[0].filename).toBeDefined()
-        expect(errorProperties.$exception_list[0].mechanism.synthetic).toEqual(false)
-        expect(errorProperties.$exception_list[0].mechanism.handled).toEqual(false)
-    })
-
     it('should convert unhandled promise rejection', () => {
         const pre = new PromiseRejectionEvent('unhandledrejection', {
             promise: Promise.resolve('wat'),
             reason: 'My house is on fire',
         })
-        const errorProperties: ErrorProperties = unhandledRejectionToProperties([
-            pre as unknown as PromiseRejectionEvent,
-        ])
+        const errorProperties: ErrorProperties = errorToProperties(
+            { event: pre as unknown as PromiseRejectionEvent },
+            { handled: false }
+        )
         expect(Object.keys(errorProperties)).toHaveLength(2)
-        expect(errorProperties.$exception_list[0].type).toEqual('UnhandledRejection')
+        expect(errorProperties.$exception_list[0].type).toEqual('PromiseRejectionEvent')
         expect(errorProperties.$exception_list[0].value).toEqual(
-            'Non-Error promise rejection captured with value: My house is on fire'
+            'PromiseRejectionEvent captured as exception with keys: isTrusted, promise, reason'
         )
         expect(errorProperties.$exception_level).toEqual('error')
-        expect(errorProperties.$exception_list[0].mechanism.synthetic).toEqual(false)
+        expect(errorProperties.$exception_list[0].mechanism.synthetic).toEqual(true)
         expect(errorProperties.$exception_list[0].mechanism.handled).toEqual(false)
     })
 
@@ -224,24 +215,26 @@ describe('Error conversion', () => {
         const error = new Error('my error', { cause: originalError })
         const errorProperties: ErrorProperties = errorToProperties({ error, event: undefined })
         expect(Object.keys(errorProperties)).toHaveLength(2)
-        expect(errorProperties.$exception_list.length).toEqual(1)
+        expect(errorProperties.$exception_list.length).toEqual(2)
         expect(errorProperties.$exception_list[0].type).toEqual('Error')
         expect(errorProperties.$exception_list[0].value).toEqual('my error')
         expect(errorProperties.$exception_level).toEqual('error')
         expect(errorProperties.$exception_list[0].mechanism.synthetic).toEqual(false)
         expect(errorProperties.$exception_list[0].mechanism.handled).toEqual(true)
+        expect(errorProperties.$exception_list[1].type).toEqual('Error')
+        expect(errorProperties.$exception_list[1].value).toEqual('original test')
     })
 
-    it('should forward synthetic and handled props when using cause', () => {
+    it('should not forward handled prop when using cause', () => {
         const originalError = new Error('my original error')
         const error = new Error('my error', { cause: originalError })
-        const metadata = { handled: false, synthetic: false }
+        const metadata = { handled: false, syntheticException: new Error('Synthetic') }
         const errorProperties: ErrorProperties = errorToProperties({ error, event: undefined }, metadata)
         expect(Object.keys(errorProperties)).toHaveLength(2)
         expect(errorProperties.$exception_list.length).toEqual(2)
         expect(errorProperties.$exception_list[0].mechanism.synthetic).toEqual(false)
         expect(errorProperties.$exception_list[0].mechanism.handled).toEqual(false)
         expect(errorProperties.$exception_list[1].mechanism.synthetic).toEqual(false)
-        expect(errorProperties.$exception_list[1].mechanism.handled).toEqual(false)
+        expect(errorProperties.$exception_list[1].mechanism.handled).toEqual(true)
     })
 })

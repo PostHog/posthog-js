@@ -1,5 +1,23 @@
 # posthog-ai
 
+## 6.4.1
+
+### Patch Changes
+
+- [#2299](https://github.com/PostHog/posthog-js/pull/2299) [`80a262c`](https://github.com/PostHog/posthog-js/commit/80a262c728cd893a79090e9019c08640961dada1) Thanks [@k11kirky](https://github.com/k11kirky)! - Fix for zod schema
+
+## 6.4.0
+
+### Minor Changes
+
+- [#2317](https://github.com/PostHog/posthog-js/pull/2317) [`14bb69e`](https://github.com/PostHog/posthog-js/commit/14bb69ef36d13e08a4af2aa506e5caaa19d1684a) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Dependencies updated to support latest APIs from provider SDKs
+
+## 6.3.3
+
+### Patch Changes
+
+- [#2324](https://github.com/PostHog/posthog-js/pull/2324) [`0b7ec25`](https://github.com/PostHog/posthog-js/commit/0b7ec2513da8c57df33fe578c2f9cbca33a29829) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Ensure Posthog parameters are not passed to any provider
+
 ## 6.3.2
 
 ### Patch Changes

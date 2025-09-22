@@ -79,12 +79,53 @@ export const isFile = (x: unknown): x is File => {
   return x instanceof File
 }
 
-export const isError = (x: unknown): x is Error => {
+export const isPlainError = (x: unknown): x is Error => {
   return x instanceof Error
 }
 
 export const isKnownUnsafeEditableEvent = (x: unknown): x is KnownUnsafeEditableEvent => {
   return includes(knownUnsafeEditableEvent as unknown as string[], x)
+}
+
+export function isInstanceOf(candidate: unknown, base: any): boolean {
+  try {
+    return candidate instanceof base
+  } catch {
+    return false
+  }
+}
+
+export function isPrimitive(value: unknown): boolean {
+  return value === null || typeof value !== 'object'
+}
+
+export function isBuiltin(candidate: unknown, className: string): boolean {
+  return Object.prototype.toString.call(candidate) === `[object ${className}]`
+}
+
+export function isError(candidate: unknown): candidate is Error {
+  switch (Object.prototype.toString.call(candidate)) {
+    case '[object Error]':
+    case '[object Exception]':
+    case '[object DOMException]':
+    case '[object DOMError]':
+    case '[object WebAssembly.Exception]':
+      return true
+    default:
+      return isInstanceOf(candidate, Error)
+  }
+}
+
+export function isErrorEvent(event: unknown): boolean {
+  return isBuiltin(event, 'ErrorEvent')
+}
+
+export function isEvent(candidate: unknown): candidate is Event {
+  return !isUndefined(Event) && isInstanceOf(candidate, Event)
+}
+
+export function isPlainObject(candidate: unknown): candidate is Record<string, unknown> {
+  return isBuiltin(candidate, 'Object')
 }
 
 export const yesLikeValues = [true, 'true', 1, '1', 'yes']

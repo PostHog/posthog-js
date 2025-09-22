@@ -35,7 +35,7 @@ import {
   allSettled,
   assert,
   currentISOTime,
-  isError,
+  isPlainError,
   removeTrailingSlash,
   retriable,
   RetriableOptions,
@@ -50,6 +50,7 @@ import { PromiseQueue } from './utils/promise-queue'
 
 export { getFeatureFlagValue } from './featureFlagUtils'
 export * from './utils'
+export * as ErrorTracking from './error-tracking'
 
 class PostHogFetchHttpError extends Error {
   name = 'PostHogFetchHttpError'
@@ -235,6 +236,31 @@ export abstract class PostHogCoreStateless {
     return this._events.on(event, cb)
   }
 
+  /**
+   * Enables or disables debug mode for detailed logging.
+   *
+   * @remarks
+   * Debug mode logs all PostHog calls to the console for troubleshooting.
+   * This is useful during development to understand what data is being sent.
+   *
+   * {@label Initialization}
+   *
+   * @example
+   * ```js
+   * // enable debug mode
+   * posthog.debug(true)
+   * ```
+   *
+   * @example
+   * ```js
+   * // disable debug mode
+   * posthog.debug(false)
+   * ```
+   *
+   * @public
+   *
+   * @param {boolean} [debug] If true, will enable debug mode.
+   */
   debug(enabled: boolean = true): void {
     this.removeDebugCallback?.()
 
@@ -923,7 +949,7 @@ export abstract class PostHogCoreStateless {
   }
 
   /**
-   * Flushes the queue
+   * Flushes the queue of pending events.
    *
    * This function will return a promise that will resolve when the flush is complete,
    * or reject if there was an error (for example if the server or network is down).
@@ -932,13 +958,19 @@ export abstract class PostHogCoreStateless {
    *
    * It's recommended to do error handling in the callback of the promise.
    *
+   * {@label Initialization}
+   *
    * @example
+   * ```js
+   * // flush with error handling
    * posthog.flush().then(() => {
    *   console.log('Flush complete')
    * }).catch((err) => {
    *   console.error('Flush failed', err)
    * })
+   * ```
    *
+   * @public
    *
    * @throws PostHogFetchHttpError
    * @throws PostHogFetchNetworkError
@@ -1175,9 +1207,27 @@ export abstract class PostHogCoreStateless {
   }
 
   /**
-   *  Call shutdown() once before the node process exits, so ensure that all events have been sent and all promises
-   *  have resolved. Do not use this function if you intend to keep using this PostHog instance after calling it.
-   * @param shutdownTimeoutMs
+   * Shuts down the PostHog instance and ensures all events are sent.
+   *
+   * Call shutdown() once before the process exits to ensure that all events have been sent and all promises
+   * have resolved. Do not use this function if you intend to keep using this PostHog instance after calling it.
+   * Use flush() for per-request cleanup instead.
+   *
+   * {@label Initialization}
+   *
+   * @example
+   * ```js
+   * // shutdown before process exit
+   * process.on('SIGINT', async () => {
+   *   await posthog.shutdown()
+   *   process.exit(0)
+   * })
+   * ```
+   *
+   * @public
+   *
+   * @param {number} [shutdownTimeoutMs=30000] Maximum time to wait for shutdown in milliseconds
+   * @returns {Promise<void>} A promise that resolves when shutdown is complete
    */
   async shutdown(shutdownTimeoutMs: number = 30000): Promise<void> {
     if (this.shutdownPromise) {
@@ -1322,7 +1372,15 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 
   /**
-   * * @returns {string} The stored session ID for the current session. This may be an empty string if the client is not yet fully initialized.
+   * Returns the current session_id.
+   *
+   * @remarks
+   * This should only be used for informative purposes.
+   * Any actual internal use case for the session_id should be handled by the sessionManager.
+   *
+   * @public
+   *
+   * @returns The stored session ID for the current session. This may be an empty string if the client is not yet fully initialized.
    */
   getSessionId(): string {
     if (!this._isInitialized) {
@@ -1358,7 +1416,23 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   }
 
   /**
-   * * @returns {string} The stored anonymous ID. This may be an empty string if the client is not yet fully initialized.
+   * Returns the current anonymous ID.
+   *
+   * This is the ID assigned to users before they are identified. It's used to track
+   * anonymous users and link them to identified users when they sign up.
+   *
+   * {@label Identification}
+   *
+   * @example
+   * ```js
+   * // get the anonymous ID
+   * const anonId = posthog.getAnonymousId()
+   * console.log('Anonymous ID:', anonId)
+   * ```
+   *
+   * @public
+   *
+   * @returns {string} The stored anonymous ID. This may be an empty string if the client is not yet fully initialized.
    */
   getAnonymousId(): string {
     if (!this._isInitialized) {
@@ -1398,6 +1472,7 @@ export abstract class PostHogCore extends PostHogCoreStateless {
   /***
    *** TRACKING
    ***/
+
   identify(distinctId?: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): void {
     this.wrap(() => {
       const previousDistinctId = this.getDistinctId()
@@ -2006,16 +2081,44 @@ export abstract class PostHogCore extends PostHogCoreStateless {
     })
   }
 
-  /***
-   *** ERROR TRACKING
-   ***/
+  /**
+   * Capture a caught exception manually
+   *
+   * {@label Error tracking}
+   *
+   * @public
+   *
+   * @example
+   * ```js
+   * // Capture a caught exception
+   * try {
+   *   // something that might throw
+   * } catch (error) {
+   *   posthog.captureException(error)
+   * }
+   * ```
+   *
+   * @example
+   * ```js
+   * // With additional properties
+   * posthog.captureException(error, {
+   *   customProperty: 'value',
+   *   anotherProperty: ['I', 'can be a list'],
+   *   ...
+   * })
+   * ```
+   *
+   * @param {Error} error The error to capture
+   * @param {Object} [additionalProperties] Any additional properties to add to the error event
+   * @returns {CaptureResult} The result of the capture
+   */
   captureException(error: unknown, additionalProperties?: PostHogEventProperties): void {
     const properties: { [key: string]: any } = {
       $exception_level: 'error',
       $exception_list: [
         {
-          type: isError(error) ? error.name : 'Error',
-          value: isError(error) ? error.message : error,
+          type: isPlainError(error) ? error.name : 'Error',
+          value: isPlainError(error) ? error.message : error,
           mechanism: {
             handled: true,
             synthetic: false,
@@ -2035,6 +2138,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
   /**
    * Capture written user feedback for a LLM trace. Numeric values are converted to strings.
+   *
+   * {@label LLM analytics}
+   *
+   * @public
+   *
    * @param traceId The trace ID to capture feedback for.
    * @param userFeedback The feedback to capture.
    */
@@ -2047,6 +2155,11 @@ export abstract class PostHogCore extends PostHogCoreStateless {
 
   /**
    * Capture a metric for a LLM trace. Numeric values are converted to strings.
+   *
+   * {@label LLM analytics}
+   *
+   * @public
+   *
    * @param traceId The trace ID to capture the metric for.
    * @param metricName The name of the metric to capture.
    * @param metricValue The value of the metric to capture.

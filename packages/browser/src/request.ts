@@ -106,9 +106,11 @@ const xhr = (options: RequestWithOptions) => {
     if (options.timeout) {
         req.timeout = options.timeout
     }
-    // send the ph_optout cookie
-    // withCredentials cannot be modified until after calling .open on Android and Mobile Safari
-    req.withCredentials = true
+    if (!options.disableXHRCredentials) {
+        // send the ph_optout cookie
+        // withCredentials cannot be modified until after calling .open on Android and Mobile Safari
+        req.withCredentials = true
+    }
     req.onreadystatechange = () => {
         // XMLHttpRequest.DONE == 4, except in safari 4
         if (req.readyState === 4) {
@@ -256,8 +258,12 @@ export const request = (_options: RequestWithOptions) => {
 
     const transport = options.transport ?? 'fetch'
 
+    const availableTransports = AVAILABLE_TRANSPORTS.filter(
+        (t) => !options.disableTransport || !t.transport || !options.disableTransport.includes(t.transport)
+    )
+
     const transportMethod =
-        find(AVAILABLE_TRANSPORTS, (t) => t.transport === transport)?.method ?? AVAILABLE_TRANSPORTS[0].method
+        find(availableTransports, (t) => t.transport === transport)?.method ?? availableTransports[0].method
 
     if (!transportMethod) {
         throw new Error('No available transport method')

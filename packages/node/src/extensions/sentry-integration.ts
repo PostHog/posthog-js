@@ -20,6 +20,7 @@
  * @param {Number} [projectId] Optional: The Sentry project id, used to send a direct link from PostHog to Sentry
  * @param {string} [prefix] Optional: Url of a self-hosted sentry instance (default: https://sentry.io/organizations/)
  * @param {SeverityLevel[] | '*'} [severityAllowList] Optional: send events matching the provided levels. Use '*' to send all events (default: ['error'])
+ * @param {boolean} [sendExceptionsToPostHog] Optional: capture exceptions as events in PostHog (default: true)
  */
 
 import { SeverityLevel } from './error-tracking/types'
@@ -70,13 +71,20 @@ export type SentryIntegrationOptions = {
   projectId?: number
   prefix?: string
   severityAllowList?: SeverityLevel[] | '*'
+  sendExceptionsToPostHog?: boolean
 }
 
 const NAME = 'posthog-node'
 
 export function createEventProcessor(
   _posthog: PostHogBackendClient,
-  { organization, projectId, prefix, severityAllowList = ['error'] }: SentryIntegrationOptions = {}
+  {
+    organization,
+    projectId,
+    prefix,
+    severityAllowList = ['error'],
+    sendExceptionsToPostHog = true,
+  }: SentryIntegrationOptions = {}
 ): (event: _SentryEvent) => _SentryEvent {
   return (event) => {
     const shouldProcessLevel = severityAllowList === '*' || severityAllowList.includes(event.level)
@@ -147,7 +155,9 @@ export function createEventProcessor(
         event.event_id
     }
 
-    _posthog.capture({ event: '$exception', distinctId: userId, properties })
+    if (sendExceptionsToPostHog) {
+      _posthog.capture({ event: '$exception', distinctId: userId, properties })
+    }
 
     return event
   }
@@ -182,7 +192,8 @@ export class PostHogSentryIntegration implements _SentryIntegrationClass {
     _posthog: PostHogBackendClient,
     organization?: string,
     prefix?: string,
-    severityAllowList?: SeverityLevel[] | '*'
+    severityAllowList?: SeverityLevel[] | '*',
+    sendExceptionsToPostHog?: boolean
   ) {
     // setupOnce gets called by Sentry when it intializes the plugin
     this.name = NAME
@@ -197,6 +208,7 @@ export class PostHogSentryIntegration implements _SentryIntegrationClass {
           projectId,
           prefix,
           severityAllowList,
+          sendExceptionsToPostHog: sendExceptionsToPostHog ?? true,
         })
       )
     }
