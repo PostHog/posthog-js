@@ -6,7 +6,7 @@ import { PostHog } from '../posthog-core'
 import { CaptureResult } from '../types'
 import { SURVEY_LOGGER as logger } from './survey-utils'
 import { propertyComparisons } from './property-utils'
-import { isUndefined } from '@posthog/core'
+import { isNull, isUndefined } from '@posthog/core'
 
 export class SurveyEventReceiver {
     // eventToSurveys is a mapping of event name to all the surveys that are activated by it
@@ -161,7 +161,7 @@ export class SurveyEventReceiver {
 
             return Object.entries(eventToCheck.propertyFilters).every(([propertyName, filter]) => {
                 const eventPropertyValue = eventPayload?.properties?.[propertyName]
-                if (isUndefined(eventPropertyValue) || isUndefined(eventPropertyValue)) {
+                if (isUndefined(eventPropertyValue) || isNull(eventPropertyValue)) {
                     return false
                 }
 
