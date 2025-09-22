@@ -1,5 +1,11 @@
 # posthog-node
 
+## 5.8.7
+
+### Patch Changes
+
+- fix: don't sort condition sets with variant overrides to the top - conditions are now evaluated in their original order to match server-side logic
+
 ## 5.8.6
 
 ### Patch Changes
