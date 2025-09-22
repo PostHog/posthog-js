@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.268.0
+
+### Minor Changes
+
+- [#2345](https://github.com/PostHog/posthog-js/pull/2345) [`4f37e77`](https://github.com/PostHog/posthog-js/commit/4f37e773107b518d22d29450a11b1439b87a96e7) Thanks [@lucasheriques](https://github.com/lucasheriques)! - feat: surveys matching on event properties
+
 ## 1.267.0
 
 ### Minor Changes
