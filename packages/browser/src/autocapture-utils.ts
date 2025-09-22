@@ -1,7 +1,7 @@
-import { AutocaptureConfig, Properties } from './types'
+import { AutocaptureConfig, PostHogConfig, Properties } from './types'
 import { each, entries } from './utils'
 
-import { isNullish, isString, isUndefined, isArray } from '@posthog/core'
+import { isNullish, isString, isUndefined, isArray, isBoolean } from '@posthog/core'
 import { logger } from './utils/logger'
 import { window } from './utils/globals'
 import { isDocumentFragment, isElementNode, isTag, isTextNode } from './utils/element-utils'
@@ -126,30 +126,22 @@ function checkIfElementTreePassesElementAllowList(
 }
 
 /*
- if there is no config, then all elements are allowed
- if there is a config, and there is an allow list, then
- only elements that match the css selector in the allow list are allowed
- assumes that some other code is checking this element's parents
+ if there is no selector list (i.e. it is undefined), then any elements matches
+ if there is an empty list, then no elements match
+ if there is a selector list, then check it against each element provided
  */
-function checkIfElementTreePassesCSSSelectorAllowList(
-    elements: Element[],
-    autocaptureConfig: AutocaptureConfig | undefined
-): boolean {
-    const allowlist = autocaptureConfig?.css_selector_allowlist
-    if (isUndefined(allowlist)) {
-        // everything is allowed, when there is no allow list
+function checkIfElementsMatchCSSSelector(elements: Element[], selectorList: string[] | undefined): boolean {
+    if (isUndefined(selectorList)) {
+        // everything is allowed, when there is no selector list
         return true
     }
 
-    // check each element in the tree
-    // if any of the elements are in the allow list, then the tree is allowed
     for (const el of elements) {
-        if (allowlist.some((selector) => el.matches(selector))) {
+        if (selectorList.some((selector) => el.matches(selector))) {
             return true
         }
     }
 
-    // otherwise there is an allow list and this element tree didn't match it
     return false
 }
 
@@ -159,8 +151,68 @@ export function getParentElement(curEl: Element): Element | false {
     return parentNode
 }
 
+// autocapture check will already filter for ph-no-capture,
+// but we include it here to protect against future changes accidentally removing that check
+const DEFAULT_RAGE_CLICK_IGNORE_LIST = ['.ph-no-rageclick', '.ph-no-capture']
+export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfig['rageclick']) {
+    if (!window || cannotCheckForAutocapture(el)) {
+        return false
+    }
+
+    let selectorIgnoreList: string[] | boolean
+    if (isBoolean(_config)) {
+        selectorIgnoreList = _config ? DEFAULT_RAGE_CLICK_IGNORE_LIST : false
+    } else {
+        selectorIgnoreList = _config?.css_selector_ignorelist ?? DEFAULT_RAGE_CLICK_IGNORE_LIST
+    }
+
+    if (selectorIgnoreList === false) {
+        return false
+    }
+
+    const { targetElementList } = getElementAndParentsForElement(el, false)
+    // we don't capture if we match the ignore list
+    return !checkIfElementsMatchCSSSelector(targetElementList, selectorIgnoreList)
+}
+
+const cannotCheckForAutocapture = (el: Element | null) => {
+    return !el || isTag(el, 'html') || !isElementNode(el)
+}
+
+const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false | true | undefined) => {
+    if (!window || cannotCheckForAutocapture(el)) {
+        return { parentIsUsefulElement: false, targetElementList: [] }
+    }
+
+    let parentIsUsefulElement = false
+    const targetElementList: Element[] = [el]
+    let curEl: Element = el
+    while (curEl.parentNode && !isTag(curEl, 'body')) {
+        // If element is a shadow root, we skip it
+        if (isDocumentFragment(curEl.parentNode)) {
+            targetElementList.push((curEl.parentNode as any).host)
+            curEl = (curEl.parentNode as any).host
+            continue
+        }
+        const parentNode = getParentElement(curEl)
+        if (!parentNode) break
+        if (captureOnAnyElement || autocaptureCompatibleElements.indexOf(parentNode.tagName.toLowerCase()) > -1) {
+            parentIsUsefulElement = true
+        } else {
+            const compStyles = window.getComputedStyle(parentNode)
+            if (compStyles && compStyles.getPropertyValue('cursor') === 'pointer') {
+                parentIsUsefulElement = true
+            }
+        }
+
+        targetElementList.push(parentNode)
+        curEl = parentNode
+    }
+    return { parentIsUsefulElement, targetElementList }
+}
+
 /*
- * Check whether a DOM event should be "captured" or if it may contain sentitive data
+ * Check whether a DOM event should be "captured" or if it may contain sensitive data
  * using a variety of heuristics.
  * @param {Element} el - element to check
  * @param {Event} event - event to check
@@ -176,7 +228,7 @@ export function shouldCaptureDomEvent(
     captureOnAnyElement?: boolean,
     allowedEventTypes?: string[]
 ): boolean {
-    if (!window || !el || isTag(el, 'html') || !isElementNode(el)) {
+    if (!window || cannotCheckForAutocapture(el)) {
         return false
     }
 
@@ -201,37 +253,13 @@ export function shouldCaptureDomEvent(
         }
     }
 
-    let parentIsUsefulElement = false
-    const targetElementList: Element[] = [el]
-    let parentNode: Element | boolean = true
-    let curEl: Element = el
-    while (curEl.parentNode && !isTag(curEl, 'body')) {
-        // If element is a shadow root, we skip it
-        if (isDocumentFragment(curEl.parentNode)) {
-            targetElementList.push((curEl.parentNode as any).host)
-            curEl = (curEl.parentNode as any).host
-            continue
-        }
-        parentNode = getParentElement(curEl)
-        if (!parentNode) break
-        if (captureOnAnyElement || autocaptureCompatibleElements.indexOf(parentNode.tagName.toLowerCase()) > -1) {
-            parentIsUsefulElement = true
-        } else {
-            const compStyles = window.getComputedStyle(parentNode)
-            if (compStyles && compStyles.getPropertyValue('cursor') === 'pointer') {
-                parentIsUsefulElement = true
-            }
-        }
-
-        targetElementList.push(parentNode)
-        curEl = parentNode
-    }
+    const { parentIsUsefulElement, targetElementList } = getElementAndParentsForElement(el, captureOnAnyElement)
 
     if (!checkIfElementTreePassesElementAllowList(targetElementList, autocaptureConfig)) {
         return false
     }
 
-    if (!checkIfElementTreePassesCSSSelectorAllowList(targetElementList, autocaptureConfig)) {
+    if (!checkIfElementsMatchCSSSelector(targetElementList, autocaptureConfig?.css_selector_allowlist)) {
         return false
     }
 
@@ -260,7 +288,7 @@ export function shouldCaptureDomEvent(
 }
 
 /*
- * Check whether a DOM element should be "captured" or if it may contain sentitive data
+ * Check whether a DOM element should be "captured" or if it may contain sensitive data
  * using a variety of heuristics.
  * @param {Element} el - element to check
  * @returns {boolean} whether the element should be captured
