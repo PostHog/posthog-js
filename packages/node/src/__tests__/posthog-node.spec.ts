@@ -1,9 +1,9 @@
-import { PostHog } from '../src/entrypoints/index.node'
-import { anyFlagsCall, anyLocalEvalCall, apiImplementation, isPending } from './test-utils'
+import { PostHog } from '@/entrypoints/index.node'
+import { anyFlagsCall, anyLocalEvalCall, apiImplementation, isPending } from './utils'
 import { waitForPromises, wait } from '@posthog/core/testing'
 import { randomUUID } from 'crypto'
 
-jest.mock('../package.json', () => ({ version: '1.2.3' }))
+jest.mock('../../package.json', () => ({ version: '1.2.3' }))
 
 const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
 
@@ -368,7 +368,7 @@ describe('PostHog Node.js', () => {
 
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toHaveLength(1)
-      expect(batchEvents[0]).toMatchObject({
+      expect(batchEvents![0]).toMatchObject({
         distinct_id: '123',
         event: 'test-event',
         properties: expect.objectContaining({ foo: 'bar' }),
@@ -410,7 +410,7 @@ describe('PostHog Node.js', () => {
 
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toHaveLength(1)
-      expect(batchEvents[0]).toMatchObject({
+      expect(batchEvents![0]).toMatchObject({
         distinct_id: '123',
         event: 'test-event',
         properties: expect.objectContaining({ foo: 'bar', added1: true, added2: true }),
@@ -452,7 +452,7 @@ describe('PostHog Node.js', () => {
       expect(beforeSendFn).toHaveBeenCalledTimes(1)
       const batchEvents = getLastBatchEvents()
       expect(batchEvents).toHaveLength(1)
-      expect(batchEvents[0]).toMatchObject({
+      expect(batchEvents![0]).toMatchObject({
         distinct_id: '123',
         event: 'modified-event',
         properties: expect.objectContaining({ foo: 'bar' }),

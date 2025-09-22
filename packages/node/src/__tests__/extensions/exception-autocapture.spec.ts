@@ -1,5 +1,5 @@
-import ErrorTracking from '../../src/extensions/error-tracking'
-import { PostHog } from '../../src/entrypoints/index.node'
+import ErrorTracking from '@/extensions/error-tracking'
+import { PostHog } from '@/entrypoints/index.node'
 
 describe('exception autocapture', () => {
   it('should rate limit when more than 10 of the same exception are caught', async () => {

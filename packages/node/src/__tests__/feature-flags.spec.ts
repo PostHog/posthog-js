@@ -1,11 +1,11 @@
-import { PostHogOptions } from '../src/types'
-import { PostHog } from '../src/entrypoints/index.node'
+import { PostHogOptions } from '@/types'
+import { PostHog } from '@/entrypoints/index.node'
 import {
   matchProperty,
   InconclusiveMatchError,
   relativeDateParseForFeatureFlagMatching,
-} from '../src/extensions/feature-flags/feature-flags'
-import { anyFlagsCall, anyLocalEvalCall, apiImplementation } from './test-utils'
+} from '@/extensions/feature-flags/feature-flags'
+import { anyFlagsCall, anyLocalEvalCall, apiImplementation } from './utils'
 import { waitForPromises } from '@posthog/core/testing'
 
 jest.spyOn(console, 'debug').mockImplementation()
@@ -2570,6 +2570,10 @@ describe('consistency tests', () => {
 
   let posthog: PostHog
   jest.useFakeTimers()
+
+  afterEach(async () => {
+    await posthog.shutdown()
+  })
 
   it('is consistent for simple flags', () => {
     const flags = {

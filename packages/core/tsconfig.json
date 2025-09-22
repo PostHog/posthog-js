@@ -1,20 +1,20 @@
 {
   "extends": "@posthog-tooling/tsconfig-base",
   "compilerOptions": {
-    "rootDir": "./src",
+    "rootDir": ".",
     "outDir": "dist",
-    "module": "CommonJS",
-    "moduleResolution": "node",
+    "module": "Node16",
+    "moduleResolution": "Node16",
     "isolatedModules": true,
     "composite": false,
     "declaration": true,
     "declarationMap": true,
-    "target": "ES2022",
+    "target": "ES2023",
     // DOM should be removed here
-    "lib": ["ES2022", "DOM"],
+    "lib": ["ES2023", "DOM"],
     "paths": {
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "rslib.config.ts"]
 }

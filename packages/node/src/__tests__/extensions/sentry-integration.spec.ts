@@ -1,8 +1,8 @@
-import { PostHog } from '../../src/entrypoints/index.node'
-import { PostHogSentryIntegration } from '../../src/extensions/sentry-integration'
+import { PostHog } from '@/entrypoints/index.node'
+import { PostHogSentryIntegration } from '@/extensions/sentry-integration'
 import { waitForPromises } from '@posthog/core/testing'
 
-jest.mock('../../package.json', () => ({ version: '1.2.3' }))
+jest.mock('../../../package.json', () => ({ version: '1.2.3' }))
 
 const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
 

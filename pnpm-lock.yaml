@@ -446,24 +446,18 @@ importers:
         specifier: workspace:*
         version: link:../core
     devDependencies:
-      '@posthog-tooling/rollup-utils':
-        specifier: workspace:*
-        version: link:../../tooling/rollup-utils
       '@posthog-tooling/tsconfig-base':
         specifier: workspace:*
         version: link:../../tooling/tsconfig-base
+      '@rslib/core':
+        specifier: 'catalog:'
+        version: 0.10.6(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(typescript@5.8.2)
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.9
-      commander:
-        specifier: ^9.3.0
-        version: 9.5.0
       jest:
         specifier: 'catalog:'
         version: 29.7.0(@types/node@20.19.9)(node-notifier@8.0.2)(ts-node@10.9.2(@types/node@20.19.9)(typescript@5.8.2))
-      mitata:
-        specifier: ^1.0.21
-        version: 1.0.34
 
   packages/react:
     devDependencies:
@@ -4190,10 +4184,6 @@ packages:
     resolution: {integrity: sha512-OkTL9umf+He2DZkUq8f8J9of7yL6RJKI24dVITBmNfZBmri9zYZQrKkuXiKhyfPSu8tUhnVBB1iKXevvnlR4Ww==}
     engines: {node: '>= 12'}
 
-  commander@9.5.0:
-    resolution: {integrity: sha512-KRs7WVDKg86PWiuAqhDrAQnTXZKraVcCc6vFdL14qrZ/DcWwuRo7VoiYXalXO7S5GKpqYiVEwCbgFDfxNHKJBQ==}
-    engines: {node: ^12.20.0 || >=14}
-
   commondir@1.0.1:
     resolution: {integrity: sha512-W9pAhw0ja1Edb5GVdIF1mjZw/ASI0AlShXM83UUGe2DVr5TdAPEA1OA8m/g8zWp9x6On7gqufY+FatDbC3MDQg==}
 
@@ -7451,9 +7441,6 @@ packages:
   minizlib@2.1.2:
     resolution: {integrity: sha512-bAxsR8BVfj60DWXHE3u30oHzfl4G7khkSuPW+qvpd7jFRHm7dLxOjUk1EHACJ/hxLY8phGJ0YhYHZo7jil7Qdg==}
     engines: {node: '>= 8'}
-
-  mitata@1.0.34:
-    resolution: {integrity: sha512-Mc3zrtNBKIMeHSCQ0XqRLo1vbdIx1wvFV9c8NJAiyho6AjNfMY8bVhbS12bwciUdd1t4rj8099CH3N3NFahaUA==}
 
   mitt@3.0.0:
     resolution: {integrity: sha512-7dX2/10ITVyqh4aOSVI9gdape+t9l2/8QxHrFmUXu4EEUpdlxl6RudZUPZoc+zuY2hk1j7XxVroIVIan/pD/SQ==}
@@ -13111,6 +13098,15 @@ snapshots:
 
   '@mdn/browser-compat-data@5.6.16': {}
 
+  '@microsoft/api-extractor-model@7.30.6(@types/node@20.19.9)':
+    dependencies:
+      '@microsoft/tsdoc': 0.15.1
+      '@microsoft/tsdoc-config': 0.17.1
+      '@rushstack/node-core-library': 5.13.1(@types/node@20.19.9)
+    transitivePeerDependencies:
+      - '@types/node'
+    optional: true
+
   '@microsoft/api-extractor-model@7.30.6(@types/node@22.16.5)':
     dependencies:
       '@microsoft/tsdoc': 0.15.1
@@ -13127,6 +13123,25 @@ snapshots:
       '@rushstack/node-core-library': 5.13.1(@types/node@22.17.0)
     transitivePeerDependencies:
       - '@types/node'
+
+  '@microsoft/api-extractor@7.52.8(@types/node@20.19.9)':
+    dependencies:
+      '@microsoft/api-extractor-model': 7.30.6(@types/node@20.19.9)
+      '@microsoft/tsdoc': 0.15.1
+      '@microsoft/tsdoc-config': 0.17.1
+      '@rushstack/node-core-library': 5.13.1(@types/node@20.19.9)
+      '@rushstack/rig-package': 0.5.3
+      '@rushstack/terminal': 0.15.3(@types/node@20.19.9)
+      '@rushstack/ts-command-line': 5.0.1(@types/node@20.19.9)
+      lodash: 4.17.21
+      minimatch: 3.0.8
+      resolve: 1.22.8
+      semver: 7.5.4
+      source-map: 0.6.1
+      typescript: 5.8.2
+    transitivePeerDependencies:
+      - '@types/node'
+    optional: true
 
   '@microsoft/api-extractor@7.52.8(@types/node@22.16.5)':
     dependencies:
@@ -13775,6 +13790,15 @@ snapshots:
       core-js: 3.44.0
       jiti: 2.4.2
 
+  '@rslib/core@0.10.6(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(typescript@5.8.2)':
+    dependencies:
+      '@rsbuild/core': 1.4.8
+      rsbuild-plugin-dts: 0.10.6(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(@rsbuild/core@1.4.8)(typescript@5.8.2)
+      tinyglobby: 0.2.14
+    optionalDependencies:
+      '@microsoft/api-extractor': 7.52.8(@types/node@20.19.9)
+      typescript: 5.8.2
+
   '@rslib/core@0.10.6(@microsoft/api-extractor@7.52.8(@types/node@22.16.5))(typescript@5.8.2)':
     dependencies:
       '@rsbuild/core': 1.4.8
@@ -13848,6 +13872,20 @@ snapshots:
 
   '@rspack/lite-tapable@1.0.1': {}
 
+  '@rushstack/node-core-library@5.13.1(@types/node@20.19.9)':
+    dependencies:
+      ajv: 8.13.0
+      ajv-draft-04: 1.0.0(ajv@8.13.0)
+      ajv-formats: 3.0.1(ajv@8.13.0)
+      fs-extra: 11.3.0
+      import-lazy: 4.0.0
+      jju: 1.4.0
+      resolve: 1.22.8
+      semver: 7.5.4
+    optionalDependencies:
+      '@types/node': 20.19.9
+    optional: true
+
   '@rushstack/node-core-library@5.13.1(@types/node@22.16.5)':
     dependencies:
       ajv: 8.13.0
@@ -13880,6 +13918,14 @@ snapshots:
       resolve: 1.22.8
       strip-json-comments: 3.1.1
 
+  '@rushstack/terminal@0.15.3(@types/node@20.19.9)':
+    dependencies:
+      '@rushstack/node-core-library': 5.13.1(@types/node@20.19.9)
+      supports-color: 8.1.1
+    optionalDependencies:
+      '@types/node': 20.19.9
+    optional: true
+
   '@rushstack/terminal@0.15.3(@types/node@22.16.5)':
     dependencies:
       '@rushstack/node-core-library': 5.13.1(@types/node@22.16.5)
@@ -13894,6 +13940,16 @@ snapshots:
       supports-color: 8.1.1
     optionalDependencies:
       '@types/node': 22.17.0
+
+  '@rushstack/ts-command-line@5.0.1(@types/node@20.19.9)':
+    dependencies:
+      '@rushstack/terminal': 0.15.3(@types/node@20.19.9)
+      '@types/argparse': 1.0.38
+      argparse: 1.0.10
+      string-argv: 0.3.1
+    transitivePeerDependencies:
+      - '@types/node'
+    optional: true
 
   '@rushstack/ts-command-line@5.0.1(@types/node@22.16.5)':
     dependencies:
@@ -15435,8 +15491,6 @@ snapshots:
   commander@7.2.0: {}
 
   commander@8.3.0: {}
-
-  commander@9.5.0: {}
 
   commondir@1.0.1: {}
 
@@ -20010,8 +20064,6 @@ snapshots:
       minipass: 3.1.6
       yallist: 4.0.0
 
-  mitata@1.0.34: {}
-
   mitt@3.0.0: {}
 
   mixin-deep@1.3.2:
@@ -21694,6 +21746,18 @@ snapshots:
       mitt: 3.0.0
       rrdom: 2.0.0-alpha.17
       rrweb-snapshot: 2.0.0-alpha.17
+
+  rsbuild-plugin-dts@0.10.6(@microsoft/api-extractor@7.52.8(@types/node@20.19.9))(@rsbuild/core@1.4.8)(typescript@5.8.2):
+    dependencies:
+      '@ast-grep/napi': 0.37.0
+      '@rsbuild/core': 1.4.8
+      magic-string: 0.30.17
+      picocolors: 1.1.1
+      tinyglobby: 0.2.14
+      tsconfig-paths: 4.2.0
+    optionalDependencies:
+      '@microsoft/api-extractor': 7.52.8(@types/node@20.19.9)
+      typescript: 5.8.2
 
   rsbuild-plugin-dts@0.10.6(@microsoft/api-extractor@7.52.8(@types/node@22.16.5))(@rsbuild/core@1.4.8)(typescript@5.8.2):
     dependencies:

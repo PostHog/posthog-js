@@ -12,12 +12,12 @@
     "lint": "eslint src test",
     "lint:fix": "eslint src test --fix",
     "test:unit": "jest",
-    "build": "rollup -c",
-    "dev": "rollup -cw",
+    "build": "rslib build",
+    "dev": "rslib build -w",
     "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
-    "gen-specs": "pnpm exec tsc && pnpm exec api-extractor run --config ./api-extractor.json --local",
-    "parse-specs": "node scripts/generate-docs.js"
+    "gen-specs": "pnpm exec api-extractor run --config ./api-extractor.jsonc --local",
+    "parse-specs": "node scripts/generate-docs.mjs"
   },
   "engines": {
     "node": ">=20"
@@ -39,11 +39,9 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "commander": "^9.3.0",
-    "mitata": "^1.0.21",
     "@posthog-tooling/tsconfig-base": "workspace:*",
-    "@posthog-tooling/rollup-utils": "workspace:*",
-    "jest": "catalog:"
+    "jest": "catalog:",
+    "@rslib/core": "catalog:"
   },
   "keywords": [
     "posthog",
@@ -53,29 +51,29 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./dist/index.node.d.ts",
       "edge": {
-        "import": "./dist/edge/index.mjs",
-        "require": "./dist/edge/index.cjs",
-        "default": "./dist/edge/index.mjs"
+        "import": "./dist/entrypoints/index.edge.mjs",
+        "require": "./dist/entrypoints/index.edge.cjs",
+        "default": "./dist/entrypoints/index.edge.mjs"
       },
       "node": {
-        "import": "./dist/node/index.mjs",
-        "require": "./dist/node/index.cjs",
-        "default": "./dist/node/index.mjs"
+        "import": "./dist/entrypoints/index.node.mjs",
+        "require": "./dist/entrypoints/index.node.cjs",
+        "default": "./dist/entrypoints/index.node.mjs"
       },
       "edge-light": {
-        "import": "./dist/edge/index.mjs",
-        "require": "./dist/edge/index.cjs",
-        "default": "./dist/edge/index.mjs"
+        "import": "./dist/entrypoints/index.edge.mjs",
+        "require": "./dist/entrypoints/index.edge.cjs",
+        "default": "./dist/entrypoints/index.edge.mjs"
       },
       "workerd": {
-        "import": "./dist/edge/index.mjs",
-        "require": "./dist/edge/index.cjs",
-        "default": "./dist/edge/index.mjs"
+        "import": "./dist/entrypoints/index.edge.mjs",
+        "require": "./dist/entrypoints/index.edge.cjs",
+        "default": "./dist/entrypoints/index.edge.mjs"
       },
-      "import": "./dist/node/index.mjs",
-      "require": "./dist/node/index.cjs"
+      "import": "./dist/entrypoints/index.node.mjs",
+      "require": "./dist/entrypoints/index.node.cjs"
     }
   }
 }

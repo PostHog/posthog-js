@@ -1,6 +1,6 @@
-import { PostHog } from '../src/entrypoints/index.node'
-import { PostHogOptions } from '../src/types'
-import { apiImplementation, apiImplementationV4 } from './test-utils'
+import { PostHog } from '@/entrypoints/index.node'
+import { PostHogOptions } from '@/types'
+import { apiImplementation, apiImplementationV4 } from './utils'
 import { waitForPromises } from '@posthog/core/testing'
 import { PostHogV2FlagsResponse } from '@posthog/core'
 
