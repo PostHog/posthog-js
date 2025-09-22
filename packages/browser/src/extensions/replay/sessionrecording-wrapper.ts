@@ -214,7 +214,8 @@ export class SessionRecordingWrapper {
 
     /**
      * this is maintained on the public API only because it has always been on the public API
-     * if you are calling this directly you are probably doing something wrong
+     * if you are calling this directly you are certainly doing something wrong
+     * @deprecated
      */
     onRRwebEmit(rawEvent: eventWithTime) {
         this._lazyLoadedSessionRecording?.onRRwebEmit?.(rawEvent)
