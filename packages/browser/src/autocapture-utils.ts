@@ -171,11 +171,8 @@ export function shouldCaptureRageclick(el: Element | null, _config: PostHogConfi
     }
 
     const { targetElementList } = getElementAndParentsForElement(el, false)
-    if (checkIfElementsMatchCSSSelector(targetElementList, selectorIgnoreList)) {
-        // we don't capture if we match the ignore list
-        return false
-    }
-    return true
+    // we don't capture if we match the ignore list
+    return !checkIfElementsMatchCSSSelector(targetElementList, selectorIgnoreList)
 }
 
 const cannotCheckForAutocapture = (el: Element | null) => {
@@ -189,7 +186,6 @@ const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false 
 
     let parentIsUsefulElement = false
     const targetElementList: Element[] = [el]
-    let parentNode: Element | boolean = true
     let curEl: Element = el
     while (curEl.parentNode && !isTag(curEl, 'body')) {
         // If element is a shadow root, we skip it
@@ -198,7 +194,7 @@ const getElementAndParentsForElement = (el: Element, captureOnAnyElement: false 
             curEl = (curEl.parentNode as any).host
             continue
         }
-        parentNode = getParentElement(curEl)
+        const parentNode = getParentElement(curEl)
         if (!parentNode) break
         if (captureOnAnyElement || autocaptureCompatibleElements.indexOf(parentNode.tagName.toLowerCase()) > -1) {
             parentIsUsefulElement = true
