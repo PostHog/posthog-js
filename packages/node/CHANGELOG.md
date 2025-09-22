@@ -1,5 +1,11 @@
 # posthog-node
 
+## 5.8.8
+
+### Patch Changes
+
+- [#2350](https://github.com/PostHog/posthog-js/pull/2350) [`a1ae750`](https://github.com/PostHog/posthog-js/commit/a1ae750ee37fad9b91579dc38310e23e790b2fcd) Thanks [@andyzzhao](https://github.com/andyzzhao)! - feature flag local evaluation will not sort condition sets with variant overrides to the top
+
 ## 5.8.7
 
 ### Patch Changes
