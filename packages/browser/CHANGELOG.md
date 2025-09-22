@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.267.0
+
+### Minor Changes
+
+- [#2347](https://github.com/PostHog/posthog-js/pull/2347) [`5d13bed`](https://github.com/PostHog/posthog-js/commit/5d13beda6661f389bd75c103728c7d45a241e1b1) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: allow ignoring rageclicks on elements by css selector
+
 ## 1.266.3
 
 ### Patch Changes
