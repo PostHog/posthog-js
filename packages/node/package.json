@@ -51,29 +51,29 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/index.node.d.ts",
+      "types": "./dist/entrypoints/index.node.d.ts",
       "edge": {
         "import": "./dist/entrypoints/index.edge.mjs",
-        "require": "./dist/entrypoints/index.edge.cjs",
-        "default": "./dist/entrypoints/index.edge.mjs"
+        "require": "./dist/entrypoints/index.edge.js",
+        "default": "./dist/entrypoints/index.edge.js"
       },
       "node": {
         "import": "./dist/entrypoints/index.node.mjs",
-        "require": "./dist/entrypoints/index.node.cjs",
-        "default": "./dist/entrypoints/index.node.mjs"
+        "require": "./dist/entrypoints/index.node.js",
+        "default": "./dist/entrypoints/index.node.js"
       },
       "edge-light": {
         "import": "./dist/entrypoints/index.edge.mjs",
-        "require": "./dist/entrypoints/index.edge.cjs",
-        "default": "./dist/entrypoints/index.edge.mjs"
+        "require": "./dist/entrypoints/index.edge.js",
+        "default": "./dist/entrypoints/index.edge.js"
       },
       "workerd": {
         "import": "./dist/entrypoints/index.edge.mjs",
-        "require": "./dist/entrypoints/index.edge.cjs",
-        "default": "./dist/entrypoints/index.edge.mjs"
+        "require": "./dist/entrypoints/index.edge.js",
+        "default": "./dist/entrypoints/index.edge.js"
       },
       "import": "./dist/entrypoints/index.node.mjs",
-      "require": "./dist/entrypoints/index.node.cjs"
+      "require": "./dist/entrypoints/index.node.js"
     }
   }
 }
