@@ -1554,53 +1554,43 @@ describe('local evaluation', () => {
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
 
-  it('gets feature flag with multiple variant overrides', async () => {
+  it('evaluates conditions in user defined order', async () => {
     const flags = {
       flags: [
         {
           id: 1,
-          name: 'Beta Feature',
-          key: 'beta-feature',
+          name: 'Test Feature',
+          key: 'test-feature',
           active: true,
           filters: {
             groups: [
               {
                 rollout_percentage: 100,
-                // # The override applies even if the first condition matches all and gives everyone their default group
               },
               {
                 properties: [
                   {
                     key: 'email',
                     operator: 'exact',
-                    value: 'test@posthog.com',
+                    value: 'override@example.com',
                     type: 'person',
                   },
                 ],
                 rollout_percentage: 100,
-                variant: 'second-variant',
-              },
-              {
-                rollout_percentage: 50,
-                variant: 'third-variant',
+                variant: 'override-variant',
               },
             ],
             multivariate: {
               variants: [
                 {
-                  key: 'first-variant',
-                  name: 'First Variant',
-                  rollout_percentage: 50,
+                  key: 'default-variant',
+                  name: 'Default Variant',
+                  rollout_percentage: 100,
                 },
                 {
-                  key: 'second-variant',
-                  name: 'Second Variant',
-                  rollout_percentage: 25,
-                },
-                {
-                  key: 'third-variant',
-                  name: 'Third Variant',
-                  rollout_percentage: 25,
+                  key: 'override-variant',
+                  name: 'Override Variant',
+                  rollout_percentage: 0,
                 },
               ],
             },
@@ -1616,14 +1606,14 @@ describe('local evaluation', () => {
       ...posthogImmediateResolveOptions,
     })
 
-    expect(
-      await posthog.getFeatureFlag('beta-feature', 'test_id', { personProperties: { email: 'test@posthog.com' } })
-    ).toEqual('second-variant')
-    expect(await posthog.getFeatureFlag('beta-feature', 'example_id')).toEqual('third-variant')
-    expect(await posthog.getFeatureFlag('beta-feature', 'another_id')).toEqual('second-variant')
+    // Even though the person has the email that would trigger the override variant,
+    // they should get the result from the first matching condition (which matches everyone)
+    const result = await posthog.getFeatureFlag('test-feature', 'test_id', {
+      personProperties: { email: 'override@example.com' },
+    })
 
+    expect('default-variant').toEqual(result)
     expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
-    // flags not called
     expect(mockedFetch).not.toHaveBeenCalledWith(...anyFlagsCall)
   })
 
