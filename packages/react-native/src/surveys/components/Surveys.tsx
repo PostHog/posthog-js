@@ -25,6 +25,21 @@ export const sendSurveyShownEvent = (survey: Survey, posthog: PostHog): void => 
   })
 }
 
+function getSurveyResponseKey(questionId: string) {
+  return `$survey_response_${questionId}`
+}
+
+const getSurveyResponseValue = (responses: Record<string, string | number | string[] | null>, questionId?: string) => {
+  if (!questionId) {
+    return null
+  }
+  const response = responses[getSurveyResponseKey(questionId)]
+  if (Array.isArray(response)) {
+    return [...response]
+  }
+  return response
+}
+
 export const sendSurveyEvent = (
   responses: Record<string, string | number | string[] | null> = {},
   survey: Survey,
@@ -35,8 +50,11 @@ export const sendSurveyEvent = (
     $survey_id: survey.id,
     ...maybeAdd('$survey_iteration', survey.current_iteration),
     ...maybeAdd('$survey_iteration_start_date', survey.current_iteration_start_date),
-    // TODO: $survey_questions still using the old format, it should be [{id, question, response}]
-    $survey_questions: survey.questions.map((question: SurveyQuestion) => question.question),
+    $survey_questions: survey.questions.map((question: SurveyQuestion) => ({
+      id: question.id,
+      question: question.question,
+      response: getSurveyResponseValue(responses, question.id),
+    })),
     ...responses,
     $set: {
       [getSurveyInteractionProperty(survey, 'responded')]: true,
@@ -83,7 +101,7 @@ export function Questions({
     questionId: string
     // displayQuestionIndex: number
   }): void => {
-    const responseKey = `$survey_response_${questionId}`
+    const responseKey = getSurveyResponseKey(questionId)
 
     setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
 
