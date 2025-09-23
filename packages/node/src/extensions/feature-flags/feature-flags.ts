@@ -419,24 +419,7 @@ class FeatureFlagsPoller {
     let isInconclusive = false
     let result = undefined
 
-    // # Stable sort conditions with variant overrides to the top. This ensures that if overrides are present, they are
-    // # evaluated first, and the variant override is applied to the first matching condition.
-    const sortedFlagConditions = [...flagConditions].sort((conditionA, conditionB) => {
-      const AHasVariantOverride = !!conditionA.variant
-      const BHasVariantOverride = !!conditionB.variant
-
-      if (AHasVariantOverride && BHasVariantOverride) {
-        return 0
-      } else if (AHasVariantOverride) {
-        return -1
-      } else if (BHasVariantOverride) {
-        return 1
-      } else {
-        return 0
-      }
-    })
-
-    for (const condition of sortedFlagConditions) {
+    for (const condition of flagConditions) {
       try {
         if (await this.isConditionMatch(flag, distinctId, condition, properties, evaluationCache)) {
           const variantOverride = condition.variant

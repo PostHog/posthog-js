@@ -113,6 +113,22 @@ export interface AutocaptureConfig {
     capture_copied_text?: boolean
 }
 
+export interface RageclickConfig {
+    /**
+     * List of CSS selectors to ignore rageclicks on
+     * e.g. ['.my-calendar-button']
+     * we consider the tree of elements from the root to the target element of the click event
+     * so for the tree div > div > button > svg
+     * and ignore list config `['[id]']`
+     * we will ignore the rageclick if the click-target or its parents has any id
+     *
+     * Nothing is ignored when there's an empty ignorelist, e.g. []
+     * If no ignorelist is set, we default to ignoring .ph-no-rageclick
+     * If an element has .ph-no-capture, it will always be ignored by rageclick and autocapture
+     */
+    css_selector_ignorelist?: string[]
+}
+
 export interface BootstrapConfig {
     distinctID?: string
     isIdentifiedID?: boolean
@@ -301,6 +317,7 @@ export interface PostHogConfig {
      * Determines whether PostHog should autocapture events.
      * This setting does not affect capturing pageview events (see `capture_pageview`).
      *
+     * by default autocapture is ignored on elements that match a `ph-no-capture` css class on the element or a parent
      * @default true
      */
     autocapture: boolean | AutocaptureConfig
@@ -308,9 +325,10 @@ export interface PostHogConfig {
     /**
      * Determines whether PostHog should capture rage clicks.
      *
+     * by default rageclicks are ignored on elements that match a `ph-no-capture` or `ph-no-rageclick` css class on the element or a parent
      * @default true
      */
-    rageclick: boolean
+    rageclick: boolean | RageclickConfig
 
     /**
      * Determines if cookie should be set on the top level domain (example.com).
@@ -1362,6 +1380,55 @@ export type SessionRecordingCanvasOptions = {
     canvasQuality?: string | null
 }
 
+/** the config stored in persistence when session recording remote config is received */
+export type SessionRecordingPersistedConfig = Omit<
+    SessionRecordingRemoteConfig,
+    | 'recordCanvas'
+    | 'canvasFps'
+    | 'canvasQuality'
+    | 'networkPayloadCapture'
+    | 'sampleRate'
+    | 'minimumDurationMilliseconds'
+> & {
+    enabled: boolean
+    networkPayloadCapture: SessionRecordingRemoteConfig['networkPayloadCapture'] & {
+        capturePerformance: RemoteConfig['capturePerformance']
+    }
+    canvasRecording: {
+        enabled: SessionRecordingRemoteConfig['recordCanvas']
+        fps: SessionRecordingRemoteConfig['canvasFps']
+        quality: SessionRecordingRemoteConfig['canvasQuality']
+    }
+    // we don't allow string config here
+    sampleRate: number | null
+    minimumDurationMilliseconds: number | null | undefined
+}
+
+export type SessionRecordingRemoteConfig = SessionRecordingCanvasOptions & {
+    endpoint?: string
+    consoleLogRecordingEnabled?: boolean
+    // the API returns a decimal between 0 and 1 as a string
+    sampleRate?: string | null
+    minimumDurationMilliseconds?: number
+    linkedFlag?: string | FlagVariant | null
+    networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
+    masking?: Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector' | 'blockSelector'>
+    urlTriggers?: SessionRecordingUrlTrigger[]
+    scriptConfig?: { script?: string | undefined }
+    urlBlocklist?: SessionRecordingUrlTrigger[]
+    eventTriggers?: string[]
+    /**
+     * Controls how event, url, sampling, and linked flag triggers are combined
+     *
+     * `any` means that if any of the triggers match, the session will be recorded
+     * `all` means that all the triggers must match for the session to be recorded
+     *
+     * originally it was (event || url) && (sampling || linked flag)
+     * which nobody wanted, now the default is all
+     */
+    triggerMatchType?: 'any' | 'all'
+}
+
 /**
  * Remote configuration for the PostHog instance
  *
@@ -1423,30 +1490,7 @@ export interface RemoteConfig {
     /**
      * Session recording configuration options
      */
-    sessionRecording?: SessionRecordingCanvasOptions & {
-        endpoint?: string
-        consoleLogRecordingEnabled?: boolean
-        // the API returns a decimal between 0 and 1 as a string
-        sampleRate?: string | null
-        minimumDurationMilliseconds?: number
-        linkedFlag?: string | FlagVariant | null
-        networkPayloadCapture?: Pick<NetworkRecordOptions, 'recordBody' | 'recordHeaders'>
-        masking?: Pick<SessionRecordingOptions, 'maskAllInputs' | 'maskTextSelector'>
-        urlTriggers?: SessionRecordingUrlTrigger[]
-        scriptConfig?: { script?: string | undefined }
-        urlBlocklist?: SessionRecordingUrlTrigger[]
-        eventTriggers?: string[]
-        /**
-         * Controls how event, url, sampling, and linked flag triggers are combined
-         *
-         * `any` means that if any of the triggers match, the session will be recorded
-         * `all` means that all the triggers must match for the session to be recorded
-         *
-         * originally it was (event || url) && (sampling || linked flag)
-         * which nobody wanted, now the default is all
-         */
-        triggerMatchType?: 'any' | 'all'
-    }
+    sessionRecording?: SessionRecordingRemoteConfig
 
     /**
      * Whether surveys are enabled

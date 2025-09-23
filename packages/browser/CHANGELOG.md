@@ -1,5 +1,23 @@
 # posthog-js
 
+## 1.268.1
+
+### Patch Changes
+
+- [#2315](https://github.com/PostHog/posthog-js/pull/2315) [`fd2c51d`](https://github.com/PostHog/posthog-js/commit/fd2c51db4383779aabf9c2dc7fc619bd88ff10f4) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: lazy loaded replay relies on remote config having been persisted in storage to avoid race with config on restart
+
+## 1.268.0
+
+### Minor Changes
+
+- [#2345](https://github.com/PostHog/posthog-js/pull/2345) [`4f37e77`](https://github.com/PostHog/posthog-js/commit/4f37e773107b518d22d29450a11b1439b87a96e7) Thanks [@lucasheriques](https://github.com/lucasheriques)! - feat: surveys matching on event properties
+
+## 1.267.0
+
+### Minor Changes
+
+- [#2347](https://github.com/PostHog/posthog-js/pull/2347) [`5d13bed`](https://github.com/PostHog/posthog-js/commit/5d13beda6661f389bd75c103728c7d45a241e1b1) Thanks [@pauldambra](https://github.com/pauldambra)! - feat: allow ignoring rageclicks on elements by css selector
+
 ## 1.266.3
 
 ### Patch Changes

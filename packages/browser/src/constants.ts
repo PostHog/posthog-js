@@ -18,20 +18,27 @@ export const ERROR_TRACKING_CAPTURE_EXTENSION_EXCEPTIONS = '$error_tracking_capt
 export const WEB_VITALS_ENABLED_SERVER_SIDE = '$web_vitals_enabled_server_side'
 export const DEAD_CLICKS_ENABLED_SERVER_SIDE = '$dead_clicks_enabled_server_side'
 export const WEB_VITALS_ALLOWED_METRICS = '$web_vitals_allowed_metrics'
+export const SESSION_RECORDING_REMOTE_CONFIG = '$session_recording_remote_config'
+// @deprecated can be removed along with eager loaded replay
 export const SESSION_RECORDING_ENABLED_SERVER_SIDE = '$session_recording_enabled_server_side'
+// @deprecated can be removed along with eager loaded replay
 export const CONSOLE_LOG_RECORDING_ENABLED_SERVER_SIDE = '$console_log_recording_enabled_server_side'
+// @deprecated can be removed along with eager loaded replay
 export const SESSION_RECORDING_NETWORK_PAYLOAD_CAPTURE = '$session_recording_network_payload_capture'
+// @deprecated can be removed along with eager loaded replay
 export const SESSION_RECORDING_MASKING = '$session_recording_masking'
+// @deprecated can be removed along with eager loaded replay
 export const SESSION_RECORDING_CANVAS_RECORDING = '$session_recording_canvas_recording'
+// @deprecated can be removed along with eager loaded replay
 export const SESSION_RECORDING_SAMPLE_RATE = '$replay_sample_rate'
+// @deprecated can be removed along with eager loaded replay
 export const SESSION_RECORDING_MINIMUM_DURATION = '$replay_minimum_duration'
+// @deprecated can be removed along with eager loaded replay
 export const SESSION_RECORDING_SCRIPT_CONFIG = '$replay_script_config'
 export const SESSION_ID = '$sesid'
 export const SESSION_RECORDING_IS_SAMPLED = '$session_is_sampled'
 export const SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION = '$session_recording_url_trigger_activated_session'
-export const SESSION_RECORDING_URL_TRIGGER_STATUS = '$session_recording_url_trigger_status'
 export const SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION = '$session_recording_event_trigger_activated_session'
-export const SESSION_RECORDING_EVENT_TRIGGER_STATUS = '$session_recording_event_trigger_status'
 export const ENABLED_FEATURE_FLAGS = '$enabled_feature_flags'
 export const PERSISTENCE_EARLY_ACCESS_FEATURES = '$early_access_features'
 export const PERSISTENCE_FEATURE_FLAG_DETAILS = '$feature_flag_details'
