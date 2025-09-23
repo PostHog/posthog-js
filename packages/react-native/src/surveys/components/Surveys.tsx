@@ -2,7 +2,14 @@ import React, { useMemo, useState } from 'react'
 import { ScrollView, StyleProp, ViewStyle } from 'react-native'
 
 import { getDisplayOrderQuestions, getNextSurveyStep, SurveyAppearanceTheme } from '../surveys-utils'
-import { Survey, SurveyAppearance, SurveyQuestion, maybeAdd, SurveyQuestionBranchingType } from '@posthog/core'
+import {
+  Survey,
+  SurveyAppearance,
+  SurveyQuestion,
+  maybeAdd,
+  SurveyQuestionBranchingType,
+  isUndefined,
+} from '@posthog/core'
 import { LinkQuestion, MultipleChoiceQuestion, OpenTextQuestion, RatingQuestion } from './QuestionTypes'
 import { PostHog } from '../../posthog-rn'
 import { usePostHog } from '../../hooks/usePostHog'
@@ -25,15 +32,19 @@ export const sendSurveyShownEvent = (survey: Survey, posthog: PostHog): void => 
   })
 }
 
-function getSurveyResponseKey(questionId: string) {
+function getSurveyNewResponseKey(questionId: string) {
   return `$survey_response_${questionId}`
+}
+
+function getSurveyOldResponseKey(originalQuestionIndex: number) {
+  return originalQuestionIndex === 0 ? '$survey_response' : `$survey_response_${originalQuestionIndex}`
 }
 
 const getSurveyResponseValue = (responses: Record<string, string | number | string[] | null>, questionId?: string) => {
   if (!questionId) {
     return null
   }
-  const response = responses[getSurveyResponseKey(questionId)]
+  const response = responses[getSurveyNewResponseKey(questionId)]
   if (Array.isArray(response)) {
     return [...response]
   }
@@ -45,6 +56,22 @@ export const sendSurveyEvent = (
   survey: Survey,
   posthog: PostHog
 ): void => {
+  let allResponses = {}
+  survey.questions.map((question: SurveyQuestion) => {
+    const oldResponseKey = getSurveyOldResponseKey(question.originalQuestionIndex)
+    const response = getSurveyResponseValue(responses, question.id)
+    if (!isUndefined(response)) {
+      allResponses = {
+        ...allResponses,
+        [oldResponseKey]: response,
+      }
+    }
+  })
+  allResponses = {
+    ...responses,
+    ...allResponses,
+  }
+
   posthog.capture('survey sent', {
     $survey_name: survey.name,
     $survey_id: survey.id,
@@ -55,7 +82,7 @@ export const sendSurveyEvent = (
       question: question.question,
       response: getSurveyResponseValue(responses, question.id),
     })),
-    ...responses,
+    ...allResponses,
     $set: {
       [getSurveyInteractionProperty(survey, 'responded')]: true,
     },
@@ -101,16 +128,20 @@ export function Questions({
     questionId: string
     // displayQuestionIndex: number
   }): void => {
-    const responseKey = getSurveyResponseKey(questionId)
+    const responseKey = getSurveyNewResponseKey(questionId)
 
-    setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
+    const allResponses = {
+      ...questionsResponses,
+      [responseKey]: res,
+    }
+    setQuestionsResponses(allResponses)
 
     // Get the next question index based on conditional logic
     const nextStep = getNextSurveyStep(survey, originalQuestionIndex, res)
 
     if (nextStep === SurveyQuestionBranchingType.End) {
       // End the survey
-      sendSurveyEvent({ ...questionsResponses, [responseKey]: res }, survey, posthog)
+      sendSurveyEvent(allResponses, survey, posthog)
       onSubmit()
     } else {
       // Move to the next question
