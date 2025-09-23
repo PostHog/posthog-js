@@ -1,6 +1,6 @@
 import { PostHog } from '@/entrypoints/index.node'
 import { PostHogSentryIntegration } from '@/extensions/sentry-integration'
-import { waitForPromises } from '@posthog/core/testing'
+import { testing } from '@posthog/core'
 
 jest.mock('../../../package.json', () => ({ version: '1.2.3' }))
 
@@ -108,9 +108,9 @@ describe('PostHogSentryIntegration', () => {
 
     processorFunction(createMockSentryException())
 
-    await waitForPromises() // First flush
+    await testing.waitForPromises() // First flush
     jest.runOnlyPendingTimers() // Flush timer
-    await waitForPromises() // Second flush
+    await testing.waitForPromises() // Second flush
     const batchEvents = getLastBatchEvents()
 
     expect(batchEvents).toEqual([

@@ -336,11 +336,11 @@ packages:
     hasBin: true
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-cJ/8oC3YdNnVQ5JLnXtOeOdMTj+6iE3INF0H4tBSFi+/uyMICY9dbAkT5NDBu3buZsnaaenxPCdrqPV9vJzk0w==, tarball: file:../../target/posthog-core.tgz}
-    version: 1.0.2
+    resolution: {integrity: sha512-GZ3Wb46uFSZ6a6KdsH/vdGRN67K2iGaVzVk8UM7BMtFDS3pUudxtZDoRFKpPyedO/BOzVz878dD8xLLcxl/XaA==, tarball: file:../../target/posthog-core.tgz}
+    version: 1.1.0
 
   '@posthog/nextjs-config@file:../../target/posthog-nextjs-config.tgz':
-    resolution: {integrity: sha512-xkOqr9A5luixsXHma0o2aCvpEIsGHe4sn0MK6id0GW6626POcZMKtpYKrTt39hOW3H8QaEQJK2HPne1q+olNxA==, tarball: file:../../target/posthog-nextjs-config.tgz}
+    resolution: {integrity: sha512-VEFW0hlPbar8fwpbijBwSXhmS/HnPtukjeAUbcowY9hj5K/CWLGcJnVkU8gpFneI8vMaqkEBWAtrCVPI/2QCrg==, tarball: file:../../target/posthog-nextjs-config.tgz}
     version: 1.3.0
     engines: {node: '>=20'}
     peerDependencies:
@@ -1456,7 +1456,7 @@ packages:
     engines: {node: ^10 || ^12 || >=14}
 
   posthog-js@file:../../target/posthog-js.tgz:
-    resolution: {integrity: sha512-TqxO4V8PuAiaVghHHFXxJDq9b9TyHHWDs2QkPw/JwLGuxxVRIyxmhkJ24oORQO6SmBJCoilQ+tAdUXeyUtiz3Q==, tarball: file:../../target/posthog-js.tgz}
+    resolution: {integrity: sha512-1WC/l3ajmsFvpQYrxNcb+0+ePhYA0mclyLgOODUEejUodLapgCHnhFsFtU5n5ZawOZ4tNYzZj6oAUHc9ofajnQ==, tarball: file:../../target/posthog-js.tgz}
     version: 1.266.0
     peerDependencies:
       '@rrweb/types': 2.0.0-alpha.17
@@ -1468,8 +1468,8 @@ packages:
         optional: true
 
   posthog-node@file:../../target/posthog-node.tgz:
-    resolution: {integrity: sha512-GO29d/CV7BG1iIT9meeqWVlvoLngziy41rrVwUPQHRQYoDgbqzvMOhRxSq+2BXN17fp52mus9JZp3g3s7jl0PA==, tarball: file:../../target/posthog-node.tgz}
-    version: 5.8.4
+    resolution: {integrity: sha512-W+QRzi60U7Xh8mOYmPTTl4ipeQEnxIr0uS4npOQx5Csf2sO9k/0eo2GkYSY3Rf5IA7MGg0PUFOKb5DU9qthZAA==, tarball: file:../../target/posthog-node.tgz}
+    version: 5.8.6
     engines: {node: '>=20'}
 
   preact@10.26.9:

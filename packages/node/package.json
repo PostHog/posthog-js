@@ -12,6 +12,7 @@
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "test:unit": "jest",
+    "prebuild": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/version.ts",
     "build": "rslib build",
     "dev": "rslib build -w",
     "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
@@ -23,7 +24,9 @@
     "node": ">=20"
   },
   "files": [
-    "dist"
+    "src",
+    "dist",
+    "!src/__tests__"
   ],
   "license": "MIT",
   "author": {

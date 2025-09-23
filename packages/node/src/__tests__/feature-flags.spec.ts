@@ -6,7 +6,7 @@ import {
   relativeDateParseForFeatureFlagMatching,
 } from '@/extensions/feature-flags/feature-flags'
 import { anyFlagsCall, anyLocalEvalCall, apiImplementation } from './utils'
-import { waitForPromises } from '@posthog/core/testing'
+import { testing } from '@posthog/core'
 
 jest.spyOn(console, 'debug').mockImplementation()
 
@@ -1910,7 +1910,7 @@ describe('local evaluation', () => {
     posthog.on('localEvaluationFlagsLoaded', eventHandler)
 
     // Wait for initial load
-    await waitForPromises()
+    await testing.waitForPromises()
 
     expect(eventHandler).toHaveBeenCalledWith(2) // Should be called with number of flags loaded
   })
@@ -1930,7 +1930,7 @@ describe('local evaluation', () => {
     posthog.on('localEvaluationFlagsLoaded', eventHandler)
 
     // Wait for initial load
-    await waitForPromises()
+    await testing.waitForPromises()
 
     expect(eventHandler).not.toHaveBeenCalled()
   })
@@ -1966,7 +1966,7 @@ describe('local evaluation', () => {
     posthog.on('localEvaluationFlagsLoaded', eventHandler)
 
     // Wait for initial load
-    await waitForPromises()
+    await testing.waitForPromises()
     eventHandler.mockClear() // Clear initial call
 
     // Reload flags
@@ -2031,7 +2031,7 @@ describe('getFeatureFlag', () => {
       })
     ).toEqual(true)
 
-    await waitForPromises()
+    await testing.waitForPromises()
 
     expect(capturedMessage).toMatchObject({
       distinct_id: 'some-distinct-id',

@@ -5,7 +5,7 @@ import {
   PostHogFetchOptions,
   PostHogFetchResponse,
   PostHogFlagsResponse,
-} from '../../src'
+} from '@/index'
 
 const version = '2.0.0-alpha'
 
