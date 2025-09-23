@@ -2919,6 +2919,7 @@ export class PostHog {
 
         this.consent.optInOut(true)
         this._sync_opt_out_with_persistence()
+        this._start_queue_if_opted_in()
 
         // Reinitialize surveys if we're in cookieless mode and just opted in
         if (this.config.cookieless_mode == 'on_reject') {
