@@ -56,20 +56,18 @@ export const sendSurveyEvent = (
   survey: Survey,
   posthog: PostHog
 ): void => {
-  let allResponses = {}
-  survey.questions.map((question: SurveyQuestion) => {
+  // map question ids also to the old format for back
+  const oldFormatResponses: Record<string, string | number | string[] | null> = {}
+  survey.questions.forEach((question: SurveyQuestion) => {
     const oldResponseKey = getSurveyOldResponseKey(question.originalQuestionIndex)
     const response = getSurveyResponseValue(responses, question.id)
     if (!isUndefined(response)) {
-      allResponses = {
-        ...allResponses,
-        [oldResponseKey]: response,
-      }
+      oldFormatResponses[oldResponseKey] = response
     }
   })
-  allResponses = {
+  const allResponses = {
     ...responses,
-    ...allResponses,
+    ...oldFormatResponses,
   }
 
   posthog.capture('survey sent', {
