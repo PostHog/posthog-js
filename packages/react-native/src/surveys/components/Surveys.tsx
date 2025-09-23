@@ -35,6 +35,7 @@ export const sendSurveyEvent = (
     $survey_id: survey.id,
     ...maybeAdd('$survey_iteration', survey.current_iteration),
     ...maybeAdd('$survey_iteration_start_date', survey.current_iteration_start_date),
+    // TODO: $survey_questions still using the old format, it should be [{id, question, response}]
     $survey_questions: survey.questions.map((question: SurveyQuestion) => question.question),
     ...responses,
     $set: {
@@ -74,13 +75,15 @@ export function Questions({
   const onNextButtonClick = ({
     res,
     originalQuestionIndex,
+    questionId,
   }: // displayQuestionIndex,
   {
     res: string | string[] | number | null
     originalQuestionIndex: number
+    questionId: string
     // displayQuestionIndex: number
   }): void => {
-    const responseKey = originalQuestionIndex === 0 ? `$survey_response` : `$survey_response_${originalQuestionIndex}`
+    const responseKey = `$survey_response_${questionId}`
 
     setQuestionsResponses({ ...questionsResponses, [responseKey]: res })
 
@@ -108,6 +111,7 @@ export function Questions({
           onNextButtonClick({
             res,
             originalQuestionIndex: question.originalQuestionIndex,
+            questionId: question.id,
             // displayQuestionIndex: currentQuestionIndex,
           }),
       })}
