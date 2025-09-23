@@ -530,7 +530,7 @@ export const canActivateRepeatedly = (
 }
 
 /**
- * getSurveySeen checks storage for the surveySeen Key a
+ * getSurveySeen checks persistence for the surveySeenKey
  * and overrides this value if the survey can be repeatedly activated by its events.
  * @param survey
  * @param posthog

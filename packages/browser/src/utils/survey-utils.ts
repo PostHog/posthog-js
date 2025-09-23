@@ -93,6 +93,7 @@ export const setSurveySeenOnLocalStorage = (survey: Pick<Survey, 'id' | 'current
     if (isSurveySeen) {
         return
     }
+
     setOnPersistenceWithLocalStorageFallback(getSurveySeenKey(survey), true, posthog)
 }
 

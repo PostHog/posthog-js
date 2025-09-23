@@ -865,7 +865,6 @@ export function usePopupVisibility(
                 [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
                 sessionRecordingUrl: posthog.get_session_replay_url?.(),
             })
-
             setOnPersistenceWithLocalStorageFallback('lastSeenSurveyDate', new Date().toISOString(), posthog)
         }
 
