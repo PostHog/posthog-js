@@ -530,4 +530,65 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(distinctId).toBe('user-456')
     expect(properties['$process_person_profile']).toBeUndefined()
   })
+
+  conditionalTest('system_instruction parameter', async () => {
+    await client.models.generateContent({
+      model: 'gemini-2.0-flash-001',
+      contents: 'What is the weather?',
+      system_instruction: 'You are a helpful weather assistant.',
+      posthogDistinctId: 'test-system-instruction',
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { distinctId, properties } = captureArgs[0]
+
+    expect(distinctId).toBe('test-system-instruction')
+    expect(properties['$ai_input']).toEqual([
+      { role: 'system', content: 'You are a helpful weather assistant.' },
+      { role: 'user', content: 'What is the weather?' },
+    ])
+  })
+
+  conditionalTest('systemInstruction parameter', async () => {
+    await client.models.generateContent({
+      model: 'gemini-2.0-flash-001',
+      contents: 'What is the capital of France?',
+      systemInstruction: 'You are a geography expert.',
+      posthogDistinctId: 'test-systemInstruction',
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { distinctId, properties } = captureArgs[0]
+
+    expect(distinctId).toBe('test-systemInstruction')
+    expect(properties['$ai_input']).toEqual([
+      { role: 'system', content: 'You are a geography expert.' },
+      { role: 'user', content: 'What is the capital of France?' },
+    ])
+  })
+
+  conditionalTest('streaming with system_instruction parameter', async () => {
+    const stream = client.models.generateContentStream({
+      model: 'gemini-2.0-flash-001',
+      contents: 'Tell me about AI',
+      system_instruction: 'You are an AI expert.',
+      posthogDistinctId: 'test-stream-system',
+    })
+
+    for await (const _chunk of stream) {
+      // Just consume the stream
+    }
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { distinctId, properties } = captureArgs[0]
+
+    expect(distinctId).toBe('test-stream-system')
+    expect(properties['$ai_input']).toEqual([
+      { role: 'system', content: 'You are an AI expert.' },
+      { role: 'user', content: 'Tell me about AI' },
+    ])
+  })
 })

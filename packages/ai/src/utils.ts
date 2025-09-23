@@ -528,3 +528,35 @@ export const sendEventToPosthog = async ({
     client.capture(event)
   }
 }
+
+export function formatOpenAIResponsesInput(input: unknown, instructions?: string | null): FormattedMessage[] {
+  const messages: FormattedMessage[] = []
+
+  if (instructions) {
+    messages.push({
+      role: 'system',
+      content: instructions,
+    })
+  }
+
+  if (Array.isArray(input)) {
+    for (const item of input) {
+      if (typeof item === 'string') {
+        messages.push({ role: 'user', content: item })
+      } else if (item && typeof item === 'object') {
+        const obj = item as Record<string, unknown>
+        const role = (obj.role as string) || 'user'
+        const content = obj.content || obj.text || String(item)
+        messages.push({ role, content: String(content) })
+      } else {
+        messages.push({ role: 'user', content: String(item) })
+      }
+    }
+  } else if (typeof input === 'string') {
+    messages.push({ role: 'user', content: input })
+  } else if (input) {
+    messages.push({ role: 'user', content: String(input) })
+  }
+
+  return messages
+}

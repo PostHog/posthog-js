@@ -608,6 +608,47 @@ describe('PostHogOpenAI - Jest test suite', () => {
     expect(typeof properties['$ai_latency']).toBe('number')
   })
 
+  conditionalTest('responses parse with instructions parameter', async () => {
+    const response = await client.responses.parse({
+      model: 'gpt-4o-2024-08-06',
+      input: [{ role: 'user', content: 'Alice and Bob are going to a science fair on Friday.' }],
+      instructions: 'Extract the event information.',
+      text: {
+        format: {
+          type: 'json_object',
+          json_schema: {
+            name: 'event',
+            schema: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                date: { type: 'string' },
+                participants: { type: 'array', items: { type: 'string' } },
+              },
+              required: ['name', 'date', 'participants'],
+            },
+          },
+        },
+      },
+      posthogDistinctId: 'test-instructions-id',
+    })
+
+    expect(response).toEqual(mockOpenAiParsedResponse)
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { distinctId, event, properties } = captureArgs[0]
+
+    expect(distinctId).toBe('test-instructions-id')
+    expect(event).toBe('$ai_generation')
+    expect(properties['$ai_provider']).toBe('openai')
+    expect(properties['$ai_model']).toBe('gpt-4o-2024-08-06')
+    expect(properties['$ai_input']).toEqual([
+      { role: 'system', content: 'Extract the event information.' },
+      { role: 'user', content: 'Alice and Bob are going to a science fair on Friday.' },
+    ])
+  })
+
   conditionalTest('anonymous user - $process_person_profile set to false', async () => {
     await client.chat.completions.create({
       model: 'gpt-4',

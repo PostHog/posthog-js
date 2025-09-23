@@ -63,7 +63,7 @@ export class WrappedModels {
         ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
-        input: this.formatInputForPostHog(geminiParams.contents),
+        input: this.formatInputForPostHog(geminiParams),
         output: formatResponseGemini(response),
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -88,7 +88,7 @@ export class WrappedModels {
         ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
-        input: this.formatInputForPostHog(geminiParams.contents),
+        input: this.formatInputForPostHog(geminiParams),
         output: [],
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -188,7 +188,7 @@ export class WrappedModels {
         ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
-        input: this.formatInputForPostHog(geminiParams.contents),
+        input: this.formatInputForPostHog(geminiParams),
         output,
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -204,7 +204,7 @@ export class WrappedModels {
         ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
-        input: this.formatInputForPostHog(geminiParams.contents),
+        input: this.formatInputForPostHog(geminiParams),
         output: [],
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -273,9 +273,34 @@ export class WrappedModels {
     return [{ role: 'user', content: String(contents) }]
   }
 
-  private formatInputForPostHog(contents: unknown): unknown {
-    const sanitized = sanitizeGemini(contents)
-    return this.formatInput(sanitized)
+  private extractSystemInstruction(params: GenerateContentParameters): string | null {
+    if (!params || typeof params !== 'object') {
+      return null
+    }
+    if ('system_instruction' in params && typeof params.system_instruction === 'string') {
+      return params.system_instruction
+    }
+    if ('systemInstruction' in params && typeof params.systemInstruction === 'string') {
+      return params.systemInstruction
+    }
+    return null
+  }
+
+  private formatInputForPostHog(params: GenerateContentParameters): FormattedMessage[] {
+    const sanitized = sanitizeGemini(params.contents)
+    const messages = this.formatInput(sanitized)
+
+    const systemInstruction = this.extractSystemInstruction(params)
+
+    if (systemInstruction) {
+      const hasSystemMessage = messages.some((msg: FormattedMessage) => msg.role === 'system')
+
+      if (!hasSystemMessage) {
+        return [{ role: 'system', content: systemInstruction }, ...messages]
+      }
+    }
+
+    return messages
   }
 }
 

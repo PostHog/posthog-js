@@ -458,6 +458,56 @@ describe('PostHogAzureOpenAI - Embeddings test suite', () => {
     expect(properties['$process_person_profile']).toBeUndefined()
   })
 
+  conditionalTest('system prompt handling', async () => {
+    const mockAzureChatResponse = {
+      id: 'test-response-id',
+      model: 'gpt-4',
+      object: 'chat.completion',
+      created: Date.now() / 1000,
+      choices: [
+        {
+          index: 0,
+          finish_reason: 'stop',
+          message: {
+            role: 'assistant',
+            content: 'Paris is the capital of France.',
+            refusal: null,
+          },
+          logprobs: null,
+        },
+      ],
+      usage: {
+        prompt_tokens: 25,
+        completion_tokens: 8,
+        total_tokens: 33,
+      },
+    }
+
+    const ChatMock: any = openaiModule.Chat
+    ;(ChatMock.Completions as any).prototype.create = jest.fn().mockResolvedValue(mockAzureChatResponse)
+
+    await client.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        { role: 'system', content: 'You are a helpful geography assistant.' },
+        { role: 'user', content: 'What is the capital of France?' },
+      ],
+      posthogDistinctId: 'test-system-prompt',
+    })
+
+    expect(mockPostHogClient.capture).toHaveBeenCalledTimes(1)
+    const [captureArgs] = (mockPostHogClient.capture as jest.Mock).mock.calls
+    const { distinctId, properties } = captureArgs[0]
+
+    expect(distinctId).toBe('test-system-prompt')
+    expect(properties['$ai_input']).toEqual([
+      { role: 'system', content: 'You are a helpful geography assistant.' },
+      { role: 'user', content: 'What is the capital of France?' },
+    ])
+    expect(properties['$ai_provider']).toBe('azure')
+    expect(properties['$ai_model']).toBe('gpt-4')
+  })
+
   describe('Embeddings', () => {
     conditionalTest('basic embeddings', async () => {
       const response = await client.embeddings.create({
