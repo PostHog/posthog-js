@@ -34,9 +34,9 @@
     "email": "hey@posthog.com",
     "url": "https://posthog.com"
   },
-  "main": "dist/node/index.cjs",
-  "module": "dist/node/index.mjs",
-  "types": "dist/index.d.ts",
+  "main": "dist/entrypoints/index.node.js",
+  "module": "dist/entrypoints/index.node.mjs",
+  "types": "dist/entrypoints/index.node.d.ts",
   "dependencies": {
     "@posthog/core": "workspace:*"
   },

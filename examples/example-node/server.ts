@@ -44,11 +44,6 @@ app.get('/unhandled-error', () => {
 
 app.get('/error', (req, res) => {
     const error = new Error('example error')
-    Sentry.captureException(error, {
-        tags: {
-            [PostHogSentryIntegration.POSTHOG_ID_TAG]: 'EXAMPLE_APP_GLOBAL',
-        },
-    })
     posthog.captureException(error, 'EXAMPLE_APP_GLOBAL')
     res.send({ status: 'error!!' })
 })

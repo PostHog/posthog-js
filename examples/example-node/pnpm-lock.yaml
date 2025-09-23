@@ -106,7 +106,7 @@ packages:
     engines: {node: '>= 8'}
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-GZ3Wb46uFSZ6a6KdsH/vdGRN67K2iGaVzVk8UM7BMtFDS3pUudxtZDoRFKpPyedO/BOzVz878dD8xLLcxl/XaA==, tarball: file:../../target/posthog-core.tgz}
+    resolution: {integrity: sha512-X4YAwNuvsxrXb7I741ulhJpHMg7RXiB2DN7hL5H2Bdb0KTEfyZI87xH5ns33FKee6O0Hjqw2mzpz5/K94+BcOw==, tarball: file:../../target/posthog-core.tgz}
     version: 1.1.0
 
   '@tsconfig/node10@1.0.11':
@@ -623,8 +623,8 @@ packages:
     resolution: {integrity: sha512-RA1GjUVMnvYFxuqovrEqZoxxW5NUZqbwKtYz/Tt7nXerk0LbLblQmrsgdeOxV5SFHf0UDggjS/bSeOZwt1pmEQ==}
 
   posthog-node@file:../../target/posthog-node.tgz:
-    resolution: {integrity: sha512-W+QRzi60U7Xh8mOYmPTTl4ipeQEnxIr0uS4npOQx5Csf2sO9k/0eo2GkYSY3Rf5IA7MGg0PUFOKb5DU9qthZAA==, tarball: file:../../target/posthog-node.tgz}
-    version: 5.8.6
+    resolution: {integrity: sha512-E1cOcbo8c6kO8RKE9HjzGLkBxjqbGf6QThrjgT/wux36DWgDmwyZ4+jysk0QoPhMxQP6DHtb9z1UUY7PBBM59w==, tarball: file:../../target/posthog-node.tgz}
+    version: 5.8.8
     engines: {node: '>=20'}
 
   prelude-ls@1.2.1:
