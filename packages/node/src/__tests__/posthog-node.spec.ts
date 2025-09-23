@@ -3,7 +3,7 @@ import { anyFlagsCall, anyLocalEvalCall, apiImplementation, isPending } from './
 import { testing } from '@posthog/core'
 import { randomUUID } from 'crypto'
 
-jest.mock('../../package.json', () => ({ version: '1.2.3' }))
+jest.mock('../version', () => ({ version: '1.2.3' }))
 
 const mockedFetch = jest.spyOn(globalThis, 'fetch').mockImplementation()
 
