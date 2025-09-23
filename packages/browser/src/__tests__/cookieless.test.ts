@@ -310,5 +310,33 @@ describe('cookieless', () => {
             expect(beforeSendMock.mock.calls[3][0].properties.$cookieless_mode).toEqual(true)
             expect(posthog.sessionRecording).toBeFalsy()
         })
+
+        it('should enable request queue immediately after opt_in_capturing in cookieless mode', async () => {
+            const { posthog } = await setup({
+                cookieless_mode: 'on_reject',
+                request_batching: true,
+            })
+
+            // Mock the request queue enable method
+            const mockEnable = jest.fn()
+            const originalEnable = posthog._requestQueue?.enable
+            if (posthog._requestQueue) {
+                posthog._requestQueue.enable = mockEnable
+            }
+
+            // Clear any previous enable calls
+            mockEnable.mockClear()
+
+            // Opt in
+            posthog.opt_in_capturing()
+
+            // Queue should be enabled immediately after opt-in
+            expect(mockEnable).toHaveBeenCalledTimes(1)
+
+            // Restore original method
+            if (posthog._requestQueue && originalEnable) {
+                posthog._requestQueue.enable = originalEnable
+            }
+        })
     })
 })
