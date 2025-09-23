@@ -23,6 +23,7 @@ import {
     IN_APP_SURVEY_TYPES,
     isSurveyRunning,
     SURVEY_LOGGER as logger,
+    setOnPersistenceWithLocalStorageFallback,
 } from '../utils/survey-utils'
 import { isNull, isUndefined } from '@posthog/core'
 import { uuidv7 } from '../uuidv7'
@@ -865,13 +866,7 @@ export function usePopupVisibility(
                 sessionRecordingUrl: posthog.get_session_replay_url?.(),
             })
 
-            // Use persistence API if available, otherwise fallback to localStorage
-            const dateString = new Date().toISOString()
-            if (posthog.persistence && !posthog.persistence.isDisabled()) {
-                posthog.persistence.set_property('lastSeenSurveyDate', dateString)
-            } else {
-                localStorage.setItem('lastSeenSurveyDate', dateString)
-            }
+            setOnPersistenceWithLocalStorageFallback('lastSeenSurveyDate', new Date().toISOString(), posthog)
         }
 
         addEventListener(window, 'PHSurveyClosed', handleSurveyClosed as EventListener)
