@@ -1,4 +1,5 @@
 module.exports = {
+    testRunner: 'jest-circus/runner',
     testPathIgnorePatterns: ['/node_modules/', '/cypress/', '/react/', '/test_data/', '/testcafe/'],
     moduleFileExtensions: ['js', 'json', 'ts', 'tsx'],
     setupFilesAfterEnv: ['./src/__tests__/setup.js'],
