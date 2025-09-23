@@ -12,6 +12,7 @@ import { RemoteConfig } from './types'
 import { assignableWindow, document } from './utils/globals'
 import { SurveyEventReceiver } from './utils/survey-event-receiver'
 import {
+    clearFromPersistenceWithLocalStorageFallback,
     doesSurveyActivateByAction,
     doesSurveyActivateByEvent,
     IN_APP_SURVEY_TYPES,
@@ -57,16 +58,21 @@ export class PostHogSurveys {
     }
 
     reset(): void {
-        localStorage.removeItem('lastSeenSurveyDate')
-        const surveyKeys = []
+        clearFromPersistenceWithLocalStorageFallback('lastSeenSurveyDate', this._instance)
+        const surveyKeys = new Set<string>()
+        for (let i = 0; i < this._instance.persistence?.props.length; i++) {
+            const key = this._instance.persistence?.props[i]
+            if (key?.startsWith(SURVEY_SEEN_PREFIX) || key?.startsWith(SURVEY_IN_PROGRESS_PREFIX)) {
+                surveyKeys.add(key)
+            }
+        }
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i)
             if (key?.startsWith(SURVEY_SEEN_PREFIX) || key?.startsWith(SURVEY_IN_PROGRESS_PREFIX)) {
-                surveyKeys.push(key)
+                surveyKeys.add(key)
             }
         }
-
-        surveyKeys.forEach((key) => localStorage.removeItem(key))
+        surveyKeys.forEach((key) => clearFromPersistenceWithLocalStorageFallback(key, this._instance))
     }
 
     loadIfEnabled() {
