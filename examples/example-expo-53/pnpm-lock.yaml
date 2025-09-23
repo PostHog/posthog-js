@@ -4,7 +4,7 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-pnpmfileChecksum: sha256-yfpGjq0znENhKW1iI3G9Z2t5P3Tm3nxthj83jvlbMuk=
+pnpmfileChecksum: sha256-51V53DYAleXHgPrntlBZSmeS8lOCPoT1zhKZkbvcJZs=
 
 importers:
 
@@ -91,9 +91,6 @@ importers:
       react-native:
         specifier: 0.79.5
         version: 0.79.5(@babel/core@7.28.4)(@types/react@19.0.14)(react@19.0.0)
-      react-native-async-storage:
-        specifier: ^0.0.1
-        version: 0.0.1(react-native@0.79.5(@babel/core@7.28.4)(@types/react@19.0.14)(react@19.0.0))
       react-native-gesture-handler:
         specifier: ~2.24.0
         version: 2.24.0(react-native@0.79.5(@babel/core@7.28.4)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
@@ -879,7 +876,7 @@ packages:
     engines: {node: '>=14'}
 
   '@posthog/core@file:../../target/posthog-core.tgz':
-    resolution: {integrity: sha512-GZ3Wb46uFSZ6a6KdsH/vdGRN67K2iGaVzVk8UM7BMtFDS3pUudxtZDoRFKpPyedO/BOzVz878dD8xLLcxl/XaA==, tarball: file:../../target/posthog-core.tgz}
+    resolution: {integrity: sha512-Q+IAWfDePZi22IBYJjgOq8HUje3I0sMw91hVAqLPW9f28besNPbFwf4fHURS1QeX52DYJXNJ9sBHhENwWnhmQw==, tarball: file:../../target/posthog-core.tgz}
     version: 1.1.0
 
   '@radix-ui/react-compose-refs@1.1.2':
@@ -3162,7 +3159,7 @@ packages:
       react-native: '*'
 
   posthog-react-native@file:../../target/posthog-react-native.tgz:
-    resolution: {integrity: sha512-DLIbQSzbbwzy/h2J7tULD7bgmANqJysNbExUUw4IdRuMH2aHC1+0EejB0ovKtrkN/FEba1zTdyiF0aN2JatjjA==, tarball: file:../../target/posthog-react-native.tgz}
+    resolution: {integrity: sha512-GMQqbkArcmSE552zvub3b81bHfXAFLONwG9q9mqLFPe0z2qPDMWufKB4kL1NPaIRR2Pn0iTCl09Lvo07FbrCXw==, tarball: file:../../target/posthog-react-native.tgz}
     version: 4.6.1
     peerDependencies:
       '@react-native-async-storage/async-storage': '>=1.0.0'
@@ -3285,11 +3282,6 @@ packages:
 
   react-is@19.1.1:
     resolution: {integrity: sha512-tr41fA15Vn8p4X9ntI+yCyeGSf1TlYaY5vlTZfQmeLBrFo3psOPX6HhTDnFNL9uj3EhP0KAQ80cugCl4b4BERA==}
-
-  react-native-async-storage@0.0.1:
-    resolution: {integrity: sha512-EwOIpNfwMiELMnS7HDzgyX2xO4TALK95O473Z6Kai5Il5j/03yTTErwMtvoYnA0OKUHd1R54ptmbbMukUH03Xg==}
-    peerDependencies:
-      react-native: '>=0.5.0'
 
   react-native-edge-to-edge@1.6.0:
     resolution: {integrity: sha512-2WCNdE3Qd6Fwg9+4BpbATUxCLcouF6YRY7K+J36KJ4l3y+tWN6XCqAC4DuoGblAAbb2sLkhEDp4FOlbOIot2Og==}
@@ -3734,8 +3726,8 @@ packages:
     resolution: {integrity: sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==}
     engines: {node: '>= 0.4'}
 
-  tar@7.4.4:
-    resolution: {integrity: sha512-O1z7ajPkjTgEgmTGz0v9X4eqeEXTDREPTO77pVC1Nbs86feBU1Zhdg+edzavPmYW1olxkwsqA2v4uOw6E8LeDg==}
+  tar@7.5.1:
+    resolution: {integrity: sha512-nlGpxf+hv0v7GkWBK2V9spgactGOp0qvfWRxUMjqHyzrt3SgwE48DIv/FhqPHJYLHpgW1opq3nERbz5Anq7n1g==}
     engines: {node: '>=18'}
 
   temp-dir@2.0.0:
@@ -4795,7 +4787,7 @@ snapshots:
       source-map-support: 0.5.21
       stacktrace-parser: 0.1.11
       structured-headers: 0.4.1
-      tar: 7.4.4
+      tar: 7.5.1
       terminal-link: 2.1.1
       undici: 6.21.3
       wrap-ansi: 7.0.0
@@ -7953,10 +7945,6 @@ snapshots:
 
   react-is@19.1.1: {}
 
-  react-native-async-storage@0.0.1(react-native@0.79.5(@babel/core@7.28.4)(@types/react@19.0.14)(react@19.0.0)):
-    dependencies:
-      react-native: 0.79.5(@babel/core@7.28.4)(@types/react@19.0.14)(react@19.0.0)
-
   react-native-edge-to-edge@1.6.0(react-native@0.79.5(@babel/core@7.28.4)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0):
     dependencies:
       react: 19.0.0
@@ -8506,7 +8494,7 @@ snapshots:
 
   supports-preserve-symlinks-flag@1.0.0: {}
 
-  tar@7.4.4:
+  tar@7.5.1:
     dependencies:
       '@isaacs/fs-minipass': 4.0.1
       chownr: 3.0.0
