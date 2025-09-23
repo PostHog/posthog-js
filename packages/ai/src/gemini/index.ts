@@ -274,14 +274,41 @@ export class WrappedModels {
   }
 
   private extractSystemInstruction(params: GenerateContentParameters): string | null {
-    if (!params || typeof params !== 'object') {
+    if (!params || typeof params !== 'object' || !params.config) {
       return null
     }
-    if ('system_instruction' in params && typeof params.system_instruction === 'string') {
-      return params.system_instruction
+    const config = params.config as any
+    if (!('systemInstruction' in config)) {
+      return null
     }
-    if ('systemInstruction' in params && typeof params.systemInstruction === 'string') {
-      return params.systemInstruction
+    const systemInstruction = config.systemInstruction
+    if (typeof systemInstruction === 'string') {
+      return systemInstruction
+    }
+    if (systemInstruction && typeof systemInstruction === 'object' && 'text' in systemInstruction) {
+      return systemInstruction.text
+    }
+    if (
+      systemInstruction &&
+      typeof systemInstruction === 'object' &&
+      'parts' in systemInstruction &&
+      Array.isArray(systemInstruction.parts)
+    ) {
+      for (const part of systemInstruction.parts) {
+        if (part && typeof part === 'object' && 'text' in part && typeof part.text === 'string') {
+          return part.text
+        }
+      }
+    }
+    if (Array.isArray(systemInstruction)) {
+      for (const part of systemInstruction) {
+        if (typeof part === 'string') {
+          return part
+        }
+        if (part && typeof part === 'object' && 'text' in part && typeof part.text === 'string') {
+          return part.text
+        }
+      }
     }
     return null
   }

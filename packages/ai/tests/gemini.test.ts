@@ -531,11 +531,11 @@ describe('PostHogGemini - Jest test suite', () => {
     expect(properties['$process_person_profile']).toBeUndefined()
   })
 
-  conditionalTest('system_instruction parameter', async () => {
+  conditionalTest('systemInstruction parameter as string', async () => {
     await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
       contents: 'What is the weather?',
-      system_instruction: 'You are a helpful weather assistant.',
+      config: { systemInstruction: 'You are a helpful weather assistant.' },
       posthogDistinctId: 'test-system-instruction',
     })
 
@@ -550,11 +550,11 @@ describe('PostHogGemini - Jest test suite', () => {
     ])
   })
 
-  conditionalTest('systemInstruction parameter', async () => {
+  conditionalTest('systemInstruction parameter as ContentUnion', async () => {
     await client.models.generateContent({
       model: 'gemini-2.0-flash-001',
       contents: 'What is the capital of France?',
-      systemInstruction: 'You are a geography expert.',
+      config: { systemInstruction: { parts: [{ text: 'You are a geography expert.' }] } },
       posthogDistinctId: 'test-systemInstruction',
     })
 
@@ -569,11 +569,11 @@ describe('PostHogGemini - Jest test suite', () => {
     ])
   })
 
-  conditionalTest('streaming with system_instruction parameter', async () => {
+  conditionalTest('streaming with systemInstruction parameter', async () => {
     const stream = client.models.generateContentStream({
       model: 'gemini-2.0-flash-001',
       contents: 'Tell me about AI',
-      system_instruction: 'You are an AI expert.',
+      config: { systemInstruction: 'You are an AI expert.' },
       posthogDistinctId: 'test-stream-system',
     })
 
