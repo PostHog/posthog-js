@@ -1,11 +1,11 @@
-import {
+import { PostHogCore } from '@/posthog-core'
+import type {
   JsonType,
-  PostHogCore,
   PostHogCoreOptions,
   PostHogFetchOptions,
   PostHogFetchResponse,
   PostHogFlagsResponse,
-} from '@/index'
+} from '@/types'
 
 const version = '2.0.0-alpha'
 

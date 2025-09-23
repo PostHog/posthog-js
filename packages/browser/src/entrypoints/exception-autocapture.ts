@@ -1,7 +1,7 @@
 import { assignableWindow, window } from '../utils/globals'
 import { ErrorEventArgs } from '../types'
 import { createLogger } from '../utils/logger'
-import { ErrorProperties } from '@posthog/core/dist/error-tracking'
+import type { ErrorTracking } from '@posthog/core'
 import { buildErrorPropertiesBuilder } from '../posthog-exceptions'
 
 const logger = createLogger('[ExceptionAutocapture]')
@@ -15,7 +15,7 @@ function errorToProperties({ event, error }: { event: Event | string; error?: Er
     })
 }
 
-const wrapOnError = (captureFn: (props: ErrorProperties) => void) => {
+const wrapOnError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) => {
     const win = window as any
     if (!win) {
         logger.info('window not available, cannot wrap onerror')
@@ -35,7 +35,7 @@ const wrapOnError = (captureFn: (props: ErrorProperties) => void) => {
     }
 }
 
-const wrapUnhandledRejection = (captureFn: (props: ErrorProperties) => void) => {
+const wrapUnhandledRejection = (captureFn: (props: ErrorTracking.ErrorProperties) => void) => {
     const win = window as any
     if (!win) {
         logger.info('window not available, cannot wrap onUnhandledRejection')
@@ -56,7 +56,7 @@ const wrapUnhandledRejection = (captureFn: (props: ErrorProperties) => void) => 
     }
 }
 
-const wrapConsoleError = (captureFn: (props: ErrorProperties) => void) => {
+const wrapConsoleError = (captureFn: (props: ErrorTracking.ErrorProperties) => void) => {
     const con = console as any
     if (!con) {
         logger.info('console not available, cannot wrap console.error')
