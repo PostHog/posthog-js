@@ -1,5 +1,6 @@
-import { BucketedRateLimiter, isNullish, isObject, Logger } from '@posthog/core'
+import { BucketedRateLimiter, isNullish, isObject, isUndefined, Logger } from '@posthog/core'
 import { createLogger } from '../utils/logger'
+import { PostHog } from 'posthog-js'
 
 // types copied from redux toolkit so we can avoid taking a dependency in the library and confusing people using the SDK
 
@@ -58,11 +59,13 @@ export interface StateEvent {
     nextState: any
 }
 
+export type PostHogStateLogger = (title: string, stateEvent: StateEvent) => void
+
 export interface PostHogStateLoggerConfig<S = any> {
     maskAction?: (action: UnknownAction) => UnknownAction | null
     maskState?: (state: S, action?: UnknownAction) => S
     titleFunction?: (stateEvent: StateEvent) => string
-    logger?: (title: string, stateEvent: StateEvent) => void
+    logger?: PostHogStateLogger
     diffState?: boolean
     /**
      * actions logging is token bucket rate limited to avoid flooding
@@ -90,7 +93,7 @@ function defaultTitleFunction(stateEvent: StateEvent): string {
 // we need a posthog logger for the rate limiter
 const phConsoleLogger: Logger = createLogger('[PostHog Action RateLimiting]')
 
-function defaultLogger(title: string, stateEvent: StateEvent): void {
+export function browserConsoleLogger(title: string, stateEvent: StateEvent): void {
     // but the posthog logger swallows messages unless debug is on
     // so we don't want to use it in this default logger
     // eslint-disable-next-line no-console
@@ -98,60 +101,75 @@ function defaultLogger(title: string, stateEvent: StateEvent): void {
 }
 
 /**
+ * Logger that sends state events to PostHog session recordings
+ * Requires that the loaded posthog instance is provided
+ * And returns the function to use as the logger
+ *
+ * e.g. const config = { logger: sessionRecordingLoggerForPostHogInstance(posthog) }
+ */
+export const sessionRecordingLoggerForPostHogInstance: (posthog: PostHog) => PostHogStateLogger =
+    (postHogInstance: PostHog) =>
+    (title: string, stateEvent: StateEvent): void => {
+        postHogInstance?.sessionRecording?.tryAddCustomEvent('app-state', { title, stateEvent })
+    }
+
+/**
  * Get only the changed keys from two states
+ * NB exported for testing purposes only, not part of the public API and may change without warning
+ *
  * Returns { prevState: changedKeysOnly, nextState: changedKeysOnly }
  */
-function getChangedStateKeys<S>(prevState: S, nextState: S): { prevState?: Partial<S>; nextState?: Partial<S> } {
-    if (!isObject(prevState) || !isObject(nextState)) {
-        // we only support objects as state, but can't guarantee that's what we'll get
-        return {}
-    }
+export function getChangedStateKeys<S>(
+    prevState: S,
+    nextState: S,
+    maxDepth: number = 3
+): { prevState?: Partial<S>; nextState?: Partial<S> } {
+    // Fast bailouts
+    if (prevState === nextState) return { prevState: {}, nextState: {} }
+    if (!prevState || !nextState) return { prevState: prevState as Partial<S>, nextState: nextState as Partial<S> }
+    if (typeof prevState !== 'object' || typeof nextState !== 'object') return {}
+    if (maxDepth <= 0) return { prevState: prevState as Partial<S>, nextState: nextState as Partial<S> }
 
-    if (prevState === nextState) {
-        return { prevState: {} as Partial<S>, nextState: {} as Partial<S> }
-    }
+    const prev: any = {}
+    const next: any = {}
+    let hasChanges = false
 
-    if (isNullish(prevState) || isNullish(nextState)) {
-        return { prevState: prevState as Partial<S>, nextState: nextState as Partial<S> }
-    }
-
-    const prevFiltered: Record<string, any> = {}
-    const nextFiltered: Record<string, any> = {}
-    const allKeys = new Set([...Object.keys(prevState as any), ...Object.keys(nextState as any)])
+    // Single pass: check all keys from both objects
+    const allKeys = new Set([...Object.keys(prevState), ...Object.keys(nextState)])
 
     for (const key of allKeys) {
-        const prevValue = (prevState as any)[key]
-        const nextValue = (nextState as any)[key]
+        const prevVal = (prevState as any)[key]
+        const nextVal = (nextState as any)[key]
 
-        if (!(key in (prevState as any))) {
-            // Key was added
-            nextFiltered[key] = nextValue
-        } else if (!(key in (nextState as any))) {
-            // Key was removed
-            prevFiltered[key] = prevValue
-        } else if (prevValue !== nextValue) {
-            // Key was changed
-            if (isObject(prevValue) && isObject(nextValue) && !isNullish(prevValue) && !isNullish(nextValue)) {
-                // Recursively handle nested objects
-                const nested = getChangedStateKeys(prevValue, nextValue)
-                const nestedPrevState = nested.prevState ?? {}
-                const nestedNextState = nested.nextState ?? {}
-                if (Object.keys(nestedPrevState).length > 0 || Object.keys(nestedNextState).length > 0) {
-                    if (Object.keys(nestedPrevState).length > 0) prevFiltered[key] = nestedPrevState
-                    if (Object.keys(nestedNextState).length > 0) nextFiltered[key] = nestedNextState
-                }
-            } else {
-                // Primitive values or arrays - include both
-                prevFiltered[key] = prevValue
-                nextFiltered[key] = nextValue
-            }
+        if (prevVal === nextVal) continue // No change
+
+        hasChanges = true
+
+        // Handle missing keys
+        if (isUndefined(prevVal)) {
+            next[key] = nextVal
+            continue
+        }
+        if (isUndefined(nextVal)) {
+            prev[key] = prevVal
+            continue
+        }
+
+        // For objects, recurse once more, otherwise treat as primitive
+        if (isObject(prevVal) && isObject(nextVal)) {
+            const nested = getChangedStateKeys(prevVal, nextVal, maxDepth - 1)
+
+            // Only include if there are actual changes
+            if (nested.prevState && Object.keys(nested.prevState).length > 0) prev[key] = nested.prevState
+            if (nested.nextState && Object.keys(nested.nextState).length > 0) next[key] = nested.nextState
+        } else {
+            // Primitive or array - include both values
+            prev[key] = prevVal
+            next[key] = nextVal
         }
     }
 
-    return {
-        prevState: prevFiltered as Partial<S>,
-        nextState: nextFiltered as Partial<S>,
-    }
+    return hasChanges ? { prevState: prev, nextState: next } : { prevState: {}, nextState: {} }
 }
 
 // Debounced logger for rate limit messages
@@ -227,7 +245,7 @@ export function posthogReduxLogger<S = any>(
         maskAction,
         maskState,
         titleFunction = defaultTitleFunction,
-        logger = defaultLogger,
+        logger = browserConsoleLogger,
         diffState = true,
         rateLimiterRefillRate = 1,
         rateLimiterBucketSize = 10,
