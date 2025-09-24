@@ -5,6 +5,27 @@ import { PostHogPersistence } from '../posthog-persistence'
 import { WebExperiment } from '../web-experiments-types'
 import { RequestRouter } from '../utils/request-router'
 import { ConsentManager } from '../consent'
+import resetAllMocks = jest.resetAllMocks
+
+let mockLocation: jest.Mock
+
+jest.mock('../utils/globals', () => {
+    const original = jest.requireActual('../utils/globals')
+    mockLocation = jest.fn().mockReturnValue({
+        protocol: 'http:',
+        host: 'localhost',
+        pathname: '/',
+        search: '',
+        hash: '',
+        href: 'http://localhost/',
+    })
+    return {
+        ...original,
+        get location() {
+            return mockLocation()
+        },
+    }
+})
 
 describe('Web Experimentation', () => {
     let webExperiment: WebExperiments
@@ -105,10 +126,15 @@ describe('Web Experimentation', () => {
         },
     } as unknown as WebExperiment
 
-    const simulateFeatureFlags: jest.Mock = jest.fn()
+    let cachedFlags
+
+    const simulateFeatureFlags = (flags) => {
+        cachedFlags = flags
+        webExperiment.onFeatureFlags(Object.keys(flags))
+    }
 
     beforeEach(() => {
-        let cachedFlags = {}
+        resetAllMocks()
         persistence = { props: {}, register: jest.fn() } as unknown as PostHogPersistence
         posthog = makePostHog({
             config: {
@@ -130,14 +156,16 @@ describe('Web Experimentation', () => {
                 return cachedFlags[key]
             },
         })
-
-        simulateFeatureFlags.mockImplementation((flags) => {
-            cachedFlags = flags
-            webExperiment.onFeatureFlags(Object.keys(flags))
-        })
+        cachedFlags = {}
 
         posthog.requestRouter = new RequestRouter(posthog)
         webExperiment = new WebExperiments(posthog)
+    })
+
+    afterEach(() => {
+        posthog = undefined
+        webExperiment = undefined
+        cachedFlags = undefined
     })
 
     function createTestDocument() {
@@ -156,10 +184,7 @@ describe('Web Experimentation', () => {
         const webExperiment = new WebExperiments(posthog)
         const elParent = createTestDocument()
 
-        WebExperiments.getWindowLocation = () => {
-            // eslint-disable-next-line compat/compat
-            return new URL(testLocation) as unknown as Location
-        }
+        mockLocation.mockReturnValue(new URL(testLocation) as unknown as Location)
 
         webExperiment.getWebExperimentsAndEvaluateDisplayLogic(false)
         expect(elParent.innerHTML).toEqual(expectedInnerHTML)
@@ -284,19 +309,15 @@ describe('Web Experimentation', () => {
 
             const webExperiment = new WebExperiments(posthog)
             const elParent = createTestDocument()
-            const original = WebExperiments.getWindowLocation
-
-            WebExperiments.getWindowLocation = () => {
-                // eslint-disable-next-line compat/compat
-                return new URL(
+            mockLocation.mockReturnValue(
+                new URL(
                     'https://example.com/landing-page?__experiment_id=3&__experiment_variant=variant-sign-up'
                 ) as unknown as Location
-            }
+            )
 
             // This forces a preview of 'variant-sign-up', ignoring real flags.
             webExperiment.previewWebExperiment()
 
-            WebExperiments.getWindowLocation = original
             expect(elParent.innerHTML).toEqual('Sign me up')
             expect(posthog.capture).not.toHaveBeenCalled()
         })

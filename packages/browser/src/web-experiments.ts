@@ -1,5 +1,5 @@
 import { PostHog } from './posthog-core'
-import { navigator, window } from './utils/globals'
+import { navigator, window, location } from './utils/globals'
 import {
     WebExperiment,
     WebExperimentsCallback,
@@ -73,7 +73,6 @@ export class WebExperiments {
     }
 
     previewWebExperiment() {
-        const location = WebExperiments.getWindowLocation()
         if (location?.search) {
             const experimentID = getQueryParam(location?.search, '__experiment_id')
             const variant = getQueryParam(location?.search, '__experiment_variant')
@@ -126,7 +125,7 @@ export class WebExperiments {
                 } else if (webExperiment.variants) {
                     for (const variant in webExperiment.variants) {
                         const testVariant = webExperiment.variants[variant]
-                        const matchTest = WebExperiments._matchesTestVariant(testVariant)
+                        const matchTest = this._matchesTestVariant(testVariant)
                         if (matchTest) {
                             this._applyTransforms(webExperiment.name, variant, testVariant.transforms)
                         }
@@ -175,19 +174,18 @@ export class WebExperiments {
             )
         }
     }
-    private static _matchesTestVariant(testVariant: WebExperimentVariant) {
+    private _matchesTestVariant(testVariant: WebExperimentVariant) {
         if (isNullish(testVariant.conditions)) {
             return false
         }
-        return WebExperiments._matchUrlConditions(testVariant) && WebExperiments._matchUTMConditions(testVariant)
+        return this._matchUrlConditions(testVariant) && this._matchUTMConditions(testVariant)
     }
 
-    private static _matchUrlConditions(testVariant: WebExperimentVariant): boolean {
+    private _matchUrlConditions(testVariant: WebExperimentVariant): boolean {
         if (isNullish(testVariant.conditions) || isNullish(testVariant.conditions?.url)) {
             return true
         }
 
-        const location = WebExperiments.getWindowLocation()
         if (location) {
             const urlCheck = testVariant.conditions?.url
                 ? webExperimentUrlValidationMap[testVariant.conditions?.urlMatchType ?? 'icontains'](
@@ -201,15 +199,11 @@ export class WebExperiments {
         return false
     }
 
-    public static getWindowLocation(): Location | undefined {
-        return window?.location
-    }
-
-    private static _matchUTMConditions(testVariant: WebExperimentVariant): boolean {
+    private _matchUTMConditions(testVariant: WebExperimentVariant): boolean {
         if (isNullish(testVariant.conditions) || isNullish(testVariant.conditions?.utm)) {
             return true
         }
-        const campaignParams = getCampaignParams()
+        const campaignParams = getCampaignParams(this._instance.config)
         if (campaignParams['utm_source']) {
             // eslint-disable-next-line compat/compat
             const utmCampaignMatched = testVariant.conditions?.utm?.utm_campaign
