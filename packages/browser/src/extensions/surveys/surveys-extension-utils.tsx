@@ -18,6 +18,7 @@ import {
     getFromPersistenceWithLocalStorageFallback,
     getSurveyInteractionProperty,
     getSurveySeenKey,
+    LAST_SEEN_SURVEY_DATE_KEY,
     SURVEY_LOGGER as logger,
     setOnPersistenceWithLocalStorageFallback,
     setSurveySeenOnLocalStorage,
@@ -545,8 +546,6 @@ export const getSurveySeen = (survey: Survey, posthog?: PostHog): boolean => {
 
     return false
 }
-
-const LAST_SEEN_SURVEY_DATE_KEY = 'lastSeenSurveyDate'
 
 export const hasWaitPeriodPassed = (waitPeriodInDays: number | undefined, posthog?: PostHog): boolean => {
     const lastSeenSurveyDate = getFromPersistenceWithLocalStorageFallback(LAST_SEEN_SURVEY_DATE_KEY, posthog)

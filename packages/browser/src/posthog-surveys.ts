@@ -17,6 +17,7 @@ import {
     doesSurveyActivateByEvent,
     IN_APP_SURVEY_TYPES,
     isSurveyRunning,
+    LAST_SEEN_SURVEY_DATE_KEY,
     SURVEY_LOGGER as logger,
     SURVEY_IN_PROGRESS_PREFIX,
     SURVEY_SEEN_PREFIX,
@@ -58,17 +59,13 @@ export class PostHogSurveys {
     }
 
     reset(): void {
-        clearFromPersistenceWithLocalStorageFallback('lastSeenSurveyDate', this._instance)
-        const surveyKeys = []
+        clearFromPersistenceWithLocalStorageFallback(LAST_SEEN_SURVEY_DATE_KEY, this._instance)
         if (!this._instance.persistence?.props || this._instance.persistence?.props.length === 0) {
             return
         }
-        for (let i = 0; i < this._instance.persistence?.props.length; i++) {
-            const key = this._instance.persistence?.props[i]
-            if (key?.startsWith(SURVEY_SEEN_PREFIX) || key?.startsWith(SURVEY_IN_PROGRESS_PREFIX)) {
-                surveyKeys.push(key)
-            }
-        }
+        const surveyKeys = Object.keys(this._instance.persistence?.props).filter(
+            (key) => key.startsWith(SURVEY_SEEN_PREFIX) || key.startsWith(SURVEY_IN_PROGRESS_PREFIX)
+        )
         surveyKeys.forEach((key) => clearFromPersistenceWithLocalStorageFallback(key, this._instance))
     }
 

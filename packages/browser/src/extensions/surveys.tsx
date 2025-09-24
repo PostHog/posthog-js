@@ -22,6 +22,7 @@ import {
     doesSurveyActivateByEvent,
     IN_APP_SURVEY_TYPES,
     isSurveyRunning,
+    LAST_SEEN_SURVEY_DATE_KEY,
     SURVEY_LOGGER as logger,
     setOnPersistenceWithLocalStorageFallback,
 } from '../utils/survey-utils'
@@ -865,7 +866,7 @@ export function usePopupVisibility(
                 [SurveyEventProperties.SURVEY_ITERATION_START_DATE]: survey.current_iteration_start_date,
                 sessionRecordingUrl: posthog.get_session_replay_url?.(),
             })
-            setOnPersistenceWithLocalStorageFallback('lastSeenSurveyDate', new Date().toISOString(), posthog)
+            setOnPersistenceWithLocalStorageFallback(LAST_SEEN_SURVEY_DATE_KEY, new Date().toISOString(), posthog)
         }
 
         addEventListener(window, 'PHSurveyClosed', handleSurveyClosed as EventListener)

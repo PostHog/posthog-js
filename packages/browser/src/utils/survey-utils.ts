@@ -18,6 +18,7 @@ export function doesSurveyActivateByAction(survey: Pick<Survey, 'conditions'>): 
 
 export const SURVEY_SEEN_PREFIX = 'seenSurvey_'
 export const SURVEY_IN_PROGRESS_PREFIX = 'inProgressSurvey_'
+export const LAST_SEEN_SURVEY_DATE_KEY = 'lastSeenSurveyDate'
 
 export const getSurveyInteractionProperty = (
     survey: Pick<Survey, 'id' | 'current_iteration'>,
