@@ -1,12 +1,12 @@
 // Portions of this file are derived from getsentry/sentry-javascript by Software, Inc. dba Sentry
 // Licensed under the MIT License
 
-import { EventHint } from './types'
+import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 
 type ErrorHandler = { _posthogErrorHandler: boolean } & ((error: Error) => void)
 
 function makeUncaughtExceptionHandler(
-  captureFn: (exception: Error, hint: EventHint) => void,
+  captureFn: (exception: Error, hint: CoreErrorTracking.EventHint) => void,
   onFatalFn: (exception: Error) => void
 ): ErrorHandler {
   let calledFatalError: boolean = false
@@ -47,13 +47,15 @@ function makeUncaughtExceptionHandler(
 }
 
 export function addUncaughtExceptionListener(
-  captureFn: (exception: Error, hint: EventHint) => void,
+  captureFn: (exception: Error, hint: CoreErrorTracking.EventHint) => void,
   onFatalFn: (exception: Error) => void
 ): void {
   global.process.on('uncaughtException', makeUncaughtExceptionHandler(captureFn, onFatalFn))
 }
 
-export function addUnhandledRejectionListener(captureFn: (exception: unknown, hint: EventHint) => void): void {
+export function addUnhandledRejectionListener(
+  captureFn: (exception: unknown, hint: CoreErrorTracking.EventHint) => void
+): void {
   global.process.on('unhandledRejection', (reason: unknown) => {
     return captureFn(reason, {
       mechanism: {

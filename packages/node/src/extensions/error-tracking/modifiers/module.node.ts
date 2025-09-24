@@ -1,10 +1,21 @@
 // Portions of this file are derived from getsentry/sentry-javascript by Software, Inc. dba Sentry
 // Licensed under the MIT License
 
+import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { posix, sep, dirname } from 'path'
 
+export function createModulerModifier() {
+  const getModuleFromFileName = createGetModuleFromFilename()
+  return async (frames: CoreErrorTracking.StackFrame[]): Promise<CoreErrorTracking.StackFrame[]> => {
+    for (const frame of frames) {
+      frame.module = getModuleFromFileName(frame.filename)
+    }
+    return frames
+  }
+}
+
 /** Creates a function that gets the module name from a filename */
-export function createGetModuleFromFilename(
+function createGetModuleFromFilename(
   basePath: string = process.argv[1] ? dirname(process.argv[1]) : process.cwd(),
   isWindows: boolean = sep === '\\'
 ): (filename: string | undefined) => string | undefined {
