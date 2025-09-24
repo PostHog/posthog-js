@@ -59,17 +59,14 @@ export class PostHogSurveys {
 
     reset(): void {
         clearFromPersistenceWithLocalStorageFallback('lastSeenSurveyDate', this._instance)
-        const surveyKeys = new Set<string>()
+        const surveyKeys = []
+        if (!this._instance.persistence?.props || this._instance.persistence?.props.length === 0) {
+            return
+        }
         for (let i = 0; i < this._instance.persistence?.props.length; i++) {
             const key = this._instance.persistence?.props[i]
             if (key?.startsWith(SURVEY_SEEN_PREFIX) || key?.startsWith(SURVEY_IN_PROGRESS_PREFIX)) {
-                surveyKeys.add(key)
-            }
-        }
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i)
-            if (key?.startsWith(SURVEY_SEEN_PREFIX) || key?.startsWith(SURVEY_IN_PROGRESS_PREFIX)) {
-                surveyKeys.add(key)
+                surveyKeys.push(key)
             }
         }
         surveyKeys.forEach((key) => clearFromPersistenceWithLocalStorageFallback(key, this._instance))
