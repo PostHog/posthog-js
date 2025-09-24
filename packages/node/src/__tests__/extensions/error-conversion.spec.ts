@@ -1,6 +1,6 @@
-import { propertiesFromUnknownInput } from '../../src/extensions/error-tracking/error-conversion'
-import { ErrorProperties } from '../../src/extensions/error-tracking/types'
-import { createStackParser } from '../../src/extensions/error-tracking/stack-parser'
+import { propertiesFromUnknownInput } from '@/extensions/error-tracking/error-conversion'
+import { ErrorProperties } from '@/extensions/error-tracking/types'
+import { createStackParser } from '@/extensions/error-tracking/stack-parser'
 
 describe('error conversion', () => {
   async function getExceptionList(error: unknown): Promise<ErrorProperties['$exception_list']> {

@@ -1,6 +1,6 @@
-import { PostHogOptions } from '../src/types'
-import { PostHog } from '../src/entrypoints/index.node'
-import { anyFlagsCall, anyLocalEvalCall, apiImplementation } from './test-utils'
+import { PostHogOptions } from '@/types'
+import { PostHog } from '@/entrypoints/index.node'
+import { anyFlagsCall, anyLocalEvalCall, apiImplementation } from './utils'
 
 jest.spyOn(console, 'debug').mockImplementation()
 
@@ -10,8 +10,20 @@ const posthogImmediateResolveOptions: PostHogOptions = {
   fetchRetryCount: 0,
 }
 
+type LocalPostHog = Omit<PostHog, 'featureFlagsPoller'> & {
+  featureFlagsPoller: PostHog['featureFlagsPoller']
+}
+
+function buildClient(options: Partial<PostHogOptions> = posthogImmediateResolveOptions): LocalPostHog {
+  return new PostHog('TEST_API_KEY', {
+    host: 'http://example.com',
+    personalApiKey: 'TEST_PERSONAL_API_KEY',
+    ...options,
+  }) as unknown as LocalPostHog
+}
+
 describe('feature flag dependencies', () => {
-  let posthog: PostHog
+  let posthog: LocalPostHog
 
   jest.useFakeTimers()
 
@@ -64,11 +76,7 @@ describe('feature flag dependencies', () => {
       }
       mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        personalApiKey: 'TEST_PERSONAL_API_KEY',
-        ...posthogImmediateResolveOptions,
-      })
+      posthog = buildClient()
 
       expect(await posthog.getFeatureFlag('dependent-flag', 'distinct-id')).toEqual(true)
       expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
@@ -132,11 +140,7 @@ describe('feature flag dependencies', () => {
       }
       mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        personalApiKey: 'TEST_PERSONAL_API_KEY',
-        ...posthogImmediateResolveOptions,
-      })
+      posthog = buildClient()
 
       expect(
         await posthog.getFeatureFlag('multivariate-leaf-flag', 'test-user', {
@@ -205,11 +209,7 @@ describe('feature flag dependencies', () => {
       }
       mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        personalApiKey: 'TEST_PERSONAL_API_KEY',
-        ...posthogImmediateResolveOptions,
-      })
+      posthog = buildClient()
 
       expect(await posthog.getFeatureFlag('base-flag', 'distinct-id')).toEqual(false)
       expect(await posthog.getFeatureFlag('dependent-flag', 'distinct-id')).toEqual(false)
@@ -259,11 +259,7 @@ describe('feature flag dependencies', () => {
       }
       mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        personalApiKey: 'TEST_PERSONAL_API_KEY',
-        ...posthogImmediateResolveOptions,
-      })
+      posthog = buildClient()
 
       expect(await posthog.getFeatureFlag('dependent-flag', 'distinct-id')).toEqual(undefined)
       expect(mockedFetch).toHaveBeenCalledWith(...anyFlagsCall)
@@ -298,11 +294,7 @@ describe('feature flag dependencies', () => {
       }
       mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        personalApiKey: 'TEST_PERSONAL_API_KEY',
-        ...posthogImmediateResolveOptions,
-      })
+      posthog = buildClient()
 
       expect(await posthog.getFeatureFlag('dependent-flag', 'distinct-id')).toBeUndefined()
       expect(mockedFetch).toHaveBeenCalledWith(...anyLocalEvalCall)
@@ -373,11 +365,7 @@ describe('feature flag dependencies', () => {
       }
       mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        personalApiKey: 'TEST_PERSONAL_API_KEY',
-        ...posthogImmediateResolveOptions,
-      })
+      posthog = buildClient()
 
       // flag-c depends on flag-b, which depends on flag-a - all should be true
       expect(await posthog.getFeatureFlag('flag-c', 'distinct-id')).toEqual(true)
@@ -454,11 +442,7 @@ describe('feature flag dependencies', () => {
       }
       mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        personalApiKey: 'TEST_PERSONAL_API_KEY',
-        ...posthogImmediateResolveOptions,
-      })
+      posthog = buildClient()
 
       // When base flag (flag-a) is disabled, the whole chain should fail
       expect(await posthog.getFeatureFlag('flag-a', 'distinct-id')).toEqual(false)
@@ -517,11 +501,7 @@ describe('feature flag dependencies', () => {
       }
       mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        personalApiKey: 'TEST_PERSONAL_API_KEY',
-        ...posthogImmediateResolveOptions,
-      })
+      posthog = buildClient()
 
       // Both conditions satisfied
       expect(
@@ -583,11 +563,7 @@ describe('feature flag dependencies', () => {
       }
       mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        personalApiKey: 'TEST_PERSONAL_API_KEY',
-        ...posthogImmediateResolveOptions,
-      })
+      posthog = buildClient()
 
       // base-flag returns false, so exact match with false should return true
       expect(await posthog.getFeatureFlag('dependent-flag', 'distinct-id')).toEqual(true)
@@ -687,11 +663,7 @@ describe('feature flag dependencies', () => {
       }
       mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        personalApiKey: 'TEST_PERSONAL_API_KEY',
-        ...posthogImmediateResolveOptions,
-      })
+      posthog = buildClient()
 
       // All dependencies satisfied - should return true
       expect(
@@ -740,11 +712,7 @@ describe('feature flag dependencies', () => {
 
       mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-      const posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        personalApiKey: 'TEST_PERSONAL_API_KEY',
-        ...posthogImmediateResolveOptions,
-      })
+      const posthog = buildClient()
 
       // Should return undefined since the dependency chain is missing (InconclusiveMatchError)
       const result = await posthog.getFeatureFlag('dependent-flag', 'some-distinct-id')
@@ -918,11 +886,7 @@ describe('feature flag dependencies', () => {
 
       mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-      posthog = new PostHog('TEST_API_KEY', {
-        host: 'http://example.com',
-        personalApiKey: 'TEST_PERSONAL_API_KEY',
-        ...posthogImmediateResolveOptions,
-      })
+      posthog = buildClient()
 
       // Test successful pineapple -> blue -> breaking-bad chain
       const leafResult = await posthog.getFeatureFlag('multivariate-leaf-flag', 'test-user', {
@@ -988,11 +952,7 @@ describe('feature flag dependencies', () => {
         }
         mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-        posthog = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          personalApiKey: 'TEST_PERSONAL_API_KEY',
-          ...posthogImmediateResolveOptions,
-        })
+        posthog = buildClient()
 
         // Access the private method for testing
         expect((posthog.featureFlagsPoller as any).flagEvaluatesToExpectedValue('control', 'control')).toBe(true)
@@ -1013,11 +973,7 @@ describe('feature flag dependencies', () => {
         }
         mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-        posthog = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          personalApiKey: 'TEST_PERSONAL_API_KEY',
-          ...posthogImmediateResolveOptions,
-        })
+        posthog = buildClient()
 
         expect((posthog.featureFlagsPoller as any).flagEvaluatesToExpectedValue('control', 'Control')).toBe(false)
         expect((posthog.featureFlagsPoller as any).flagEvaluatesToExpectedValue('Control', 'CONTROL')).toBe(false)
@@ -1037,11 +993,7 @@ describe('feature flag dependencies', () => {
         }
         mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-        posthog = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          personalApiKey: 'TEST_PERSONAL_API_KEY',
-          ...posthogImmediateResolveOptions,
-        })
+        posthog = buildClient()
 
         expect((posthog.featureFlagsPoller as any).flagEvaluatesToExpectedValue('control', 'test')).toBe(false)
       })
@@ -1062,11 +1014,7 @@ describe('feature flag dependencies', () => {
         }
         mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-        posthog = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          personalApiKey: 'TEST_PERSONAL_API_KEY',
-          ...posthogImmediateResolveOptions,
-        })
+        posthog = buildClient()
 
         expect((posthog.featureFlagsPoller as any).flagEvaluatesToExpectedValue(true, 'control')).toBe(true)
         expect((posthog.featureFlagsPoller as any).flagEvaluatesToExpectedValue(true, 'test')).toBe(true)
@@ -1086,11 +1034,7 @@ describe('feature flag dependencies', () => {
         }
         mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-        posthog = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          personalApiKey: 'TEST_PERSONAL_API_KEY',
-          ...posthogImmediateResolveOptions,
-        })
+        posthog = buildClient()
 
         expect((posthog.featureFlagsPoller as any).flagEvaluatesToExpectedValue(false, 'control')).toBe(false)
       })
@@ -1111,11 +1055,7 @@ describe('feature flag dependencies', () => {
         }
         mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-        posthog = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          personalApiKey: 'TEST_PERSONAL_API_KEY',
-          ...posthogImmediateResolveOptions,
-        })
+        posthog = buildClient()
 
         expect((posthog.featureFlagsPoller as any).flagEvaluatesToExpectedValue(true, true)).toBe(true)
       })
@@ -1134,11 +1074,7 @@ describe('feature flag dependencies', () => {
         }
         mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-        posthog = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          personalApiKey: 'TEST_PERSONAL_API_KEY',
-          ...posthogImmediateResolveOptions,
-        })
+        posthog = buildClient()
 
         expect((posthog.featureFlagsPoller as any).flagEvaluatesToExpectedValue(false, false)).toBe(true)
       })
@@ -1157,11 +1093,7 @@ describe('feature flag dependencies', () => {
         }
         mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-        posthog = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          personalApiKey: 'TEST_PERSONAL_API_KEY',
-          ...posthogImmediateResolveOptions,
-        })
+        posthog = buildClient()
 
         expect((posthog.featureFlagsPoller as any).flagEvaluatesToExpectedValue(false, true)).toBe(false)
       })
@@ -1180,11 +1112,7 @@ describe('feature flag dependencies', () => {
         }
         mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-        posthog = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          personalApiKey: 'TEST_PERSONAL_API_KEY',
-          ...posthogImmediateResolveOptions,
-        })
+        posthog = buildClient()
 
         expect((posthog.featureFlagsPoller as any).flagEvaluatesToExpectedValue(true, false)).toBe(false)
       })
@@ -1205,11 +1133,7 @@ describe('feature flag dependencies', () => {
         }
         mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-        posthog = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          personalApiKey: 'TEST_PERSONAL_API_KEY',
-          ...posthogImmediateResolveOptions,
-        })
+        posthog = buildClient()
 
         expect((posthog.featureFlagsPoller as any).flagEvaluatesToExpectedValue(true, '')).toBe(false)
       })
@@ -1228,11 +1152,7 @@ describe('feature flag dependencies', () => {
         }
         mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-        posthog = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          personalApiKey: 'TEST_PERSONAL_API_KEY',
-          ...posthogImmediateResolveOptions,
-        })
+        posthog = buildClient()
 
         expect((posthog.featureFlagsPoller as any).flagEvaluatesToExpectedValue('control', '')).toBe(false)
       })
@@ -1253,11 +1173,7 @@ describe('feature flag dependencies', () => {
         }
         mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-        posthog = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          personalApiKey: 'TEST_PERSONAL_API_KEY',
-          ...posthogImmediateResolveOptions,
-        })
+        posthog = buildClient()
 
         expect((posthog.featureFlagsPoller as any).flagEvaluatesToExpectedValue(123, 'control')).toBe(false)
       })
@@ -1276,11 +1192,7 @@ describe('feature flag dependencies', () => {
         }
         mockedFetch.mockImplementation(apiImplementation({ localFlags: flags }))
 
-        posthog = new PostHog('TEST_API_KEY', {
-          host: 'http://example.com',
-          personalApiKey: 'TEST_PERSONAL_API_KEY',
-          ...posthogImmediateResolveOptions,
-        })
+        posthog = buildClient()
 
         expect((posthog.featureFlagsPoller as any).flagEvaluatesToExpectedValue('control', true)).toBe(false)
       })

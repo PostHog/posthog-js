@@ -13,14 +13,13 @@
 /* eslint-disable no-console */
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { PostHog } = require('../../packages/node/dist/node/index.cjs')
+import { PostHog } from 'posthog-node'
 
 // Helper function to satisfy ESLint rule
 const isUndefined = (x: unknown): x is undefined => x === void 0
 import { readFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { createInterface as createReadlineInterface } from 'readline'
-// @ts-expect-error wtfnode module has no type definitions
 import wtf from 'wtfnode'
 
 function loadEnvFile(): void {
