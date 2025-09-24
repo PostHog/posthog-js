@@ -59,6 +59,33 @@ function modifyStateForDrag(state: Record<string, any>, modifications: number = 
     return newState
 }
 
+// Helper functions for timing measurements
+function measureExecutionTime<T>(fn: () => T): { result: T; executionTime: number } {
+    const startTime = performance.now()
+    const result = fn()
+    const endTime = performance.now()
+    return { result, executionTime: endTime - startTime }
+}
+
+function measureMultipleExecutions<T>(
+    fn: () => T,
+    iterations: number = 10
+): { result: T; avgTime: number; maxTime: number; times: number[] } {
+    const times: number[] = []
+    let lastResult: T
+
+    for (let i = 0; i < iterations; i++) {
+        const { result, executionTime } = measureExecutionTime(fn)
+        times.push(executionTime)
+        lastResult = result
+    }
+
+    const avgTime = times.reduce((a, b) => a + b) / times.length
+    const maxTime = Math.max(...times)
+
+    return { result: lastResult!, avgTime, maxTime, times }
+}
+
 describe('getChangeStateKeys', () => {
     describe('performance tests', () => {
         test('should handle realistic UI state efficiently', () => {
@@ -95,11 +122,7 @@ describe('getChangeStateKeys', () => {
                 },
             }
 
-            const startTime = performance.now()
-            const result = getChangedStateKeys(prevState, nextState)
-            const endTime = performance.now()
-
-            const executionTime = endTime - startTime
+            const { result, executionTime } = measureExecutionTime(() => getChangedStateKeys(prevState, nextState))
 
             // Performance assertion - should complete within 5ms for realistic UI state
             expect(executionTime).toBeLessThan(5)
@@ -116,19 +139,11 @@ describe('getChangeStateKeys', () => {
             const prevState = createComplexState(3, 8, true)
             const nextState = modifyStateForDrag(prevState, 5)
 
-            const startTime = performance.now()
-            const result = getChangedStateKeys(prevState, nextState)
-            const endTime = performance.now()
-
-            const executionTime = endTime - startTime
+            const { result, executionTime } = measureExecutionTime(() => getChangedStateKeys(prevState, nextState))
 
             expect(executionTime).toBeLessThan(30)
 
-            // Correctness assertions
-            expect(result.nextState).toBeDefined()
-            expect(Object.keys(result.nextState || {})).toEqual(
-                expect.arrayContaining(['drag_operation_0', 'drag_operation_1', 'drag_operation_2'])
-            )
+            expect(result).toMatchSnapshot()
 
             console.log(`Medium state diff took: ${executionTime.toFixed(2)}ms`)
         })
@@ -137,19 +152,11 @@ describe('getChangeStateKeys', () => {
             const prevState = createComplexState(4, 10, true)
             const nextState = modifyStateForDrag(prevState, 8)
 
-            const startTime = performance.now()
-            const result = getChangedStateKeys(prevState, nextState)
-            const endTime = performance.now()
+            const { result, executionTime } = measureExecutionTime(() => getChangedStateKeys(prevState, nextState))
 
-            const executionTime = endTime - startTime
-
-            // Performance assertion - should complete quickly even for large objects
-            // This is the threshold where UI lag would become noticeable during drag operations
             expect(executionTime).toBeLessThan(30)
 
-            // Correctness assertions
-            expect(result.nextState).toBeDefined()
-            expect(Object.keys(result.nextState || {}).length).toBeGreaterThan(5)
+            expect(result).toMatchSnapshot()
 
             console.log(`Large state diff took: ${executionTime.toFixed(2)}ms`)
             console.log(`State size: ~${JSON.stringify(prevState).length} characters`)
@@ -191,27 +198,11 @@ describe('getChangeStateKeys', () => {
                 },
             }
 
-            // Test performance with multiple runs
-            const iterations = 10
-            const times: number[] = []
+            const { result, avgTime, maxTime } = measureMultipleExecutions(() =>
+                getChangedStateKeys(prevState, nextState)
+            )
 
-            for (let i = 0; i < iterations; i++) {
-                const startTime = performance.now()
-                const result = getChangedStateKeys(prevState, nextState)
-                const endTime = performance.now()
-                times.push(endTime - startTime)
-
-                // Verify correctness on first run
-                if (i === 0) {
-                    expect(result.nextState).toHaveProperty('app')
-                    expect(result.nextState).toHaveProperty('ui')
-                    expect(result.nextState.app).toHaveProperty('user')
-                    expect(result.nextState.app).toHaveProperty('data')
-                }
-            }
-
-            const avgTime = times.reduce((a, b) => a + b) / times.length
-            const maxTime = Math.max(...times)
+            expect(result).toMatchSnapshot()
 
             // Should be fast for realistic complex state
             expect(avgTime).toBeLessThan(10)
