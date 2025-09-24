@@ -6,6 +6,7 @@ import type { Stream } from 'openai/streaming'
 import type { ParsedResponse } from 'openai/resources/responses/responses'
 import type { ResponseCreateParamsWithTools, ExtractParsedContentFromParams } from 'openai/lib/ResponsesParser'
 import type { FormattedMessage, FormattedContent, FormattedFunctionCall } from '../types'
+import { sanitizeOpenAI } from '../sanitization'
 import { extractPosthogParams } from '../utils'
 
 type ChatCompletion = OpenAIOrignal.ChatCompletion
@@ -210,7 +211,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 ...posthogParams,
                 model: openAIParams.model,
                 provider: 'azure',
-                input: openAIParams.messages,
+                input: sanitizeOpenAI(openAIParams.messages),
                 output: formattedOutput,
                 latency,
                 baseURL: this.baseURL,
@@ -229,7 +230,7 @@ export class WrappedCompletions extends AzureOpenAI.Chat.Completions {
                 ...posthogParams,
                 model: openAIParams.model,
                 provider: 'azure',
-                input: openAIParams.messages,
+                input: sanitizeOpenAI(openAIParams.messages),
                 output: [],
                 latency: 0,
                 baseURL: this.baseURL,

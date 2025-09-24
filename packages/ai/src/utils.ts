@@ -8,6 +8,7 @@ import type { Tool as GeminiTool } from '@google/genai'
 import type { FormattedMessage, FormattedContent, TokenUsage } from './types'
 import { version } from '../package.json'
 import { v4 as uuidv4 } from 'uuid'
+import { isString } from './typeGuards'
 
 type ChatCompletionCreateParamsBase = OpenAIOrignal.Chat.Completions.ChatCompletionCreateParams
 type MessageCreateParams = AnthropicOriginal.Messages.MessageCreateParams
@@ -527,4 +528,36 @@ export const sendEventToPosthog = async ({
   } else {
     client.capture(event)
   }
+}
+
+export function formatOpenAIResponsesInput(input: unknown, instructions?: string | null): FormattedMessage[] {
+  const messages: FormattedMessage[] = []
+
+  if (instructions) {
+    messages.push({
+      role: 'system',
+      content: instructions,
+    })
+  }
+
+  if (Array.isArray(input)) {
+    for (const item of input) {
+      if (typeof item === 'string') {
+        messages.push({ role: 'user', content: item })
+      } else if (item && typeof item === 'object') {
+        const obj = item as Record<string, unknown>
+        const role = isString(obj.role) ? obj.role : 'user'
+        const content = obj.content || obj.text || String(item)
+        messages.push({ role, content: String(content) })
+      } else {
+        messages.push({ role: 'user', content: String(item) })
+      }
+    }
+  } else if (typeof input === 'string') {
+    messages.push({ role: 'user', content: input })
+  } else if (input) {
+    messages.push({ role: 'user', content: String(input) })
+  }
+
+  return messages
 }

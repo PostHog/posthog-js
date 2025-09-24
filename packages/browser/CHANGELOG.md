@@ -1,5 +1,18 @@
 # posthog-js
 
+## 1.268.2
+
+### Patch Changes
+
+- Updated dependencies [[`ac48d8f`](https://github.com/PostHog/posthog-js/commit/ac48d8fda3a4543f300ced705bce314a206cce6f)]:
+    - @posthog/core@1.2.0
+
+## 1.268.1
+
+### Patch Changes
+
+- [#2315](https://github.com/PostHog/posthog-js/pull/2315) [`fd2c51d`](https://github.com/PostHog/posthog-js/commit/fd2c51db4383779aabf9c2dc7fc619bd88ff10f4) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: lazy loaded replay relies on remote config having been persisted in storage to avoid race with config on restart
+
 ## 1.268.0
 
 ### Minor Changes

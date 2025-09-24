@@ -10,16 +10,16 @@ import { PostHog } from 'posthog-node';
  */
 
 export interface Env {
-	PH_API_KEY: string;
-	PH_HOST: string;
-	PH_PERSONAL_API_KEY: string;
+	POSTHOG_PROJECT_API_KEY: string;
+	POSTHOG_API_HOST: string;
+	POSTHOG_PERSONAL_API_KEY: string;
 }
 
 export default {
-	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		const posthog = new PostHog(env.PH_API_KEY, {
-			host: env.PH_HOST,
-			personalApiKey: env.PH_PERSONAL_API_KEY,
+	async fetch(request: Request, env: Env): Promise<Response> {
+		const posthog = new PostHog(env.POSTHOG_PROJECT_API_KEY, {
+			host: env.POSTHOG_API_HOST,
+			personalApiKey: env.POSTHOG_PERSONAL_API_KEY,
 			featureFlagsPollingInterval: 10000,
 		});
 

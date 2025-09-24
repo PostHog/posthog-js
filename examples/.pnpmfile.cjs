@@ -29,6 +29,7 @@ module.exports = {
                 packages: ['.'],
                 preferFrozenLockfile: false,
                 verifyDepsBeforeRun: true,
+                nodeLinker: 'hoisted',
             })
         },
     },

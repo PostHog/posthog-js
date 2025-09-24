@@ -1,11 +1,11 @@
 import { EventHint, StackFrameModifierFn, StackParser } from './types'
 import { addUncaughtExceptionListener, addUnhandledRejectionListener } from './autocapture'
 import { PostHogBackendClient } from '../../client'
-import { uuidv7 } from '@posthog/core/vendor/uuidv7'
+import { uuidv7 } from '@posthog/core'
 import { propertiesFromUnknownInput } from './error-conversion'
 import { EventMessage, PostHogOptions } from '../../types'
 import type { Logger } from '@posthog/core'
-import { BucketedRateLimiter } from '@posthog/core/utils'
+import { BucketedRateLimiter } from '@posthog/core'
 
 const SHUTDOWN_TIMEOUT = 2000
 
