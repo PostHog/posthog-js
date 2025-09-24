@@ -1,6 +1,7 @@
 import { DisplaySurveyOptions, DisplaySurveyType, Survey, SurveyType } from '../posthog-surveys-types'
 import { createLogger } from '../utils/logger'
 import { PostHog } from '../posthog-core'
+import { PostHogPersistence } from '../posthog-persistence'
 
 export const SURVEY_LOGGER = createLogger('[Surveys]')
 
@@ -41,19 +42,29 @@ export const getSurveySeenKey = (survey: Pick<Survey, 'id' | 'current_iteration'
     return surveySeenKey
 }
 
+function isPersistenceEnabled(posthog?: PostHog): posthog is PostHog & { persistence: PostHogPersistence } {
+    return !!(posthog?.persistence && !posthog.persistence.isDisabled())
+}
+
 /**
  * We used to retrieve from localStorage directly. Now, we instead rely on the persistence API, since this is the preferred way to store data.
  * But, since we might have customers that might be using surveys with persistence disabled, we need to fallback to localStorage
  * to maintain backwards compatibility.
  */
 export const getFromPersistenceWithLocalStorageFallback = (key: string, posthog?: PostHog) => {
-    try {
-        if (posthog?.persistence && !posthog.persistence.isDisabled()) {
-            return posthog.persistence.get_property(key)
+    if (!isPersistenceEnabled(posthog)) {
+        try {
+            return localStorage.getItem(key)
+        } catch (e) {
+            SURVEY_LOGGER.error('Error getting property from localStorage', e)
+            return null
         }
-        return localStorage.getItem(key)
+    }
+
+    try {
+        return posthog.persistence.get_property(key)
     } catch (e) {
-        SURVEY_LOGGER.error('Error getting property from persistence or localStorage', e)
+        SURVEY_LOGGER.error('Error getting property from persistence', e)
         return null
     }
 }
@@ -64,14 +75,20 @@ export const getFromPersistenceWithLocalStorageFallback = (key: string, posthog?
  * to maintain backwards compatibility.
  */
 export const setOnPersistenceWithLocalStorageFallback = (key: string, value: any, posthog?: PostHog) => {
-    try {
-        if (posthog?.persistence && !posthog.persistence.isDisabled()) {
-            posthog.persistence.set_property(key, value)
-        } else {
+    if (!isPersistenceEnabled(posthog)) {
+        try {
             localStorage.setItem(key, value)
+        } catch (e) {
+            SURVEY_LOGGER.error('Error setting property on localStorage', e)
         }
+
+        return
+    }
+
+    try {
+        posthog.persistence.set_property(key, value)
     } catch (e) {
-        SURVEY_LOGGER.error('Error setting survey seen on persistence', e)
+        SURVEY_LOGGER.error('Error setting property on persistence', e)
     }
 }
 
@@ -79,13 +96,20 @@ export const setOnPersistenceWithLocalStorageFallback = (key: string, value: any
  * When removing a property from persistence, remove from localStorage for backwards compatibility.
  */
 export const clearFromPersistenceWithLocalStorageFallback = (key: string, posthog?: PostHog) => {
-    try {
-        if (posthog?.persistence && !posthog.persistence.isDisabled()) {
-            posthog.persistence.unregister(key)
+    if (!isPersistenceEnabled(posthog)) {
+        try {
+            localStorage.removeItem(key)
+        } catch (e) {
+            SURVEY_LOGGER.error('Error clearing property from localStorage', e)
         }
-        localStorage.removeItem(key)
+
+        return
+    }
+
+    try {
+        posthog.persistence.unregister(key)
     } catch (e) {
-        SURVEY_LOGGER.error('Error clearing property from persistence or localStorage', e)
+        SURVEY_LOGGER.error('Error clearing property from persistence', e)
     }
 }
 
