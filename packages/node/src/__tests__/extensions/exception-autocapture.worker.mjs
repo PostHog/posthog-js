@@ -9,7 +9,9 @@ parentPort.on('message', (msg) => {
   if (msg.action == 'throw_error') {
     throw new Error(msg.data)
   } else if (msg.action == 'reject_promise') {
-    return Promise.reject(new Error(msg.data))
+    Promise.resolve().then(() => {
+      throw new Error(msg.data)
+    })
   } else {
     console.error('Unrecognized message from main thread:', msg)
   }
