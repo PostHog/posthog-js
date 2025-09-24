@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.268.3
+
+### Patch Changes
+
+- [#2357](https://github.com/PostHog/posthog-js/pull/2357) [`d5d523c`](https://github.com/PostHog/posthog-js/commit/d5d523cdd86732827a48a9c7c39e6c5fceccab78) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: app state logging diff performance
+
 ## 1.268.2
 
 ### Patch Changes
