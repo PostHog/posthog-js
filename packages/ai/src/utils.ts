@@ -8,6 +8,7 @@ import type { Tool as GeminiTool } from '@google/genai'
 import type { FormattedMessage, FormattedContent, TokenUsage } from './types'
 import { version } from '../package.json'
 import { v4 as uuidv4 } from 'uuid'
+import { isString } from './typeGuards'
 
 type ChatCompletionCreateParamsBase = OpenAIOrignal.Chat.Completions.ChatCompletionCreateParams
 type MessageCreateParams = AnthropicOriginal.Messages.MessageCreateParams
@@ -545,7 +546,7 @@ export function formatOpenAIResponsesInput(input: unknown, instructions?: string
         messages.push({ role: 'user', content: item })
       } else if (item && typeof item === 'object') {
         const obj = item as Record<string, unknown>
-        const role = (obj.role as string) || 'user'
+        const role = isString(obj.role) ? obj.role : 'user'
         const content = obj.content || obj.text || String(item)
         messages.push({ role, content: String(content) })
       } else {

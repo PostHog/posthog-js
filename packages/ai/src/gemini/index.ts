@@ -15,6 +15,7 @@ import {
 } from '../utils'
 import { sanitizeGemini } from '../sanitization'
 import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessage } from '../types'
+import { isString } from '../typeGuards'
 
 interface MonitoringGeminiConfig {
   apiKey?: string
@@ -235,16 +236,16 @@ export class WrappedModels {
         if (item && typeof item === 'object') {
           const obj = item as Record<string, unknown>
           if ('text' in obj && obj.text) {
-            return { role: (obj.role as string) || 'user', content: obj.text }
+            return { role: isString(obj.role) ? obj.role : 'user', content: obj.text }
           }
 
           if ('content' in obj && obj.content) {
-            return { role: (obj.role as string) || 'user', content: obj.content }
+            return { role: isString(obj.role) ? obj.role : 'user', content: obj.content }
           }
 
           if ('parts' in obj && Array.isArray(obj.parts)) {
             return {
-              role: (obj.role as string) || 'user',
+              role: isString(obj.role) ? obj.role : 'user',
               content: obj.parts.map((part: unknown) => {
                 if (part && typeof part === 'object' && 'text' in part) {
                   return (part as { text: unknown }).text
