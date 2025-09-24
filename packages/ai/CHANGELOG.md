@@ -1,5 +1,11 @@
 # posthog-ai
 
+## 6.4.2
+
+### Patch Changes
+
+- [#2354](https://github.com/PostHog/posthog-js/pull/2354) [`1118d4d`](https://github.com/PostHog/posthog-js/commit/1118d4d0e9dad1bb0471fab0036695722c52ad85) Thanks [@carlos-marchal-ph](https://github.com/carlos-marchal-ph)! - Ensure consistent hadling of system prompts
+
 ## 6.4.1
 
 ### Patch Changes
