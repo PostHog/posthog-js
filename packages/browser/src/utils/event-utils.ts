@@ -78,17 +78,17 @@ export const COOKIE_CAMPAIGN_PARAMS = [
     'li_fat_id', // linkedin
 ]
 
-export function getCampaignParams(config?: PostHogConfig): Record<string, string> {
+export function getCampaignParams(config: PostHogConfig): Record<string, string> {
     if (!document) {
         return {}
     }
 
-    const paramsToMask = config?.mask_personal_data_properties
-        ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, config?.custom_personal_data_properties || [])
+    const paramsToMask = config.mask_personal_data_properties
+        ? extendArray([], PERSONAL_DATA_CAMPAIGN_PARAMS, config.custom_personal_data_properties || [])
         : []
 
     // Initially get campaign params from the URL
-    const urlCampaignParams = _getCampaignParamsFromUrl(document.URL, config?.custom_campaign_params)
+    const urlCampaignParams = _getCampaignParamsFromUrl(document.URL, config.custom_campaign_params)
 
     // But we can also get some of them from the cookie store
     // For example: https://learn.microsoft.com/en-us/linkedin/marketing/conversions/enabling-first-party-cookies?view=li-lms-2025-05#reading-li_fat_id-from-cookies
