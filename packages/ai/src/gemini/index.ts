@@ -15,6 +15,7 @@ import {
 } from '../utils'
 import { sanitizeGemini } from '../sanitization'
 import type { TokenUsage, FormattedContent, FormattedContentItem, FormattedMessage } from '../types'
+import { isString } from '../typeGuards'
 
 interface MonitoringGeminiConfig {
   apiKey?: string
@@ -63,7 +64,7 @@ export class WrappedModels {
         ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
-        input: this.formatInputForPostHog(geminiParams.contents),
+        input: this.formatInputForPostHog(geminiParams),
         output: formatResponseGemini(response),
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -88,7 +89,7 @@ export class WrappedModels {
         ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
-        input: this.formatInputForPostHog(geminiParams.contents),
+        input: this.formatInputForPostHog(geminiParams),
         output: [],
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -188,7 +189,7 @@ export class WrappedModels {
         ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
-        input: this.formatInputForPostHog(geminiParams.contents),
+        input: this.formatInputForPostHog(geminiParams),
         output,
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -204,7 +205,7 @@ export class WrappedModels {
         ...posthogParams,
         model: geminiParams.model,
         provider: 'gemini',
-        input: this.formatInputForPostHog(geminiParams.contents),
+        input: this.formatInputForPostHog(geminiParams),
         output: [],
         latency,
         baseURL: 'https://generativelanguage.googleapis.com',
@@ -235,16 +236,16 @@ export class WrappedModels {
         if (item && typeof item === 'object') {
           const obj = item as Record<string, unknown>
           if ('text' in obj && obj.text) {
-            return { role: (obj.role as string) || 'user', content: obj.text }
+            return { role: isString(obj.role) ? obj.role : 'user', content: obj.text }
           }
 
           if ('content' in obj && obj.content) {
-            return { role: (obj.role as string) || 'user', content: obj.content }
+            return { role: isString(obj.role) ? obj.role : 'user', content: obj.content }
           }
 
           if ('parts' in obj && Array.isArray(obj.parts)) {
             return {
-              role: (obj.role as string) || 'user',
+              role: isString(obj.role) ? obj.role : 'user',
               content: obj.parts.map((part: unknown) => {
                 if (part && typeof part === 'object' && 'text' in part) {
                   return (part as { text: unknown }).text
@@ -273,9 +274,61 @@ export class WrappedModels {
     return [{ role: 'user', content: String(contents) }]
   }
 
-  private formatInputForPostHog(contents: unknown): unknown {
-    const sanitized = sanitizeGemini(contents)
-    return this.formatInput(sanitized)
+  private extractSystemInstruction(params: GenerateContentParameters): string | null {
+    if (!params || typeof params !== 'object' || !params.config) {
+      return null
+    }
+    const config = params.config as any
+    if (!('systemInstruction' in config)) {
+      return null
+    }
+    const systemInstruction = config.systemInstruction
+    if (typeof systemInstruction === 'string') {
+      return systemInstruction
+    }
+    if (systemInstruction && typeof systemInstruction === 'object' && 'text' in systemInstruction) {
+      return systemInstruction.text
+    }
+    if (
+      systemInstruction &&
+      typeof systemInstruction === 'object' &&
+      'parts' in systemInstruction &&
+      Array.isArray(systemInstruction.parts)
+    ) {
+      for (const part of systemInstruction.parts) {
+        if (part && typeof part === 'object' && 'text' in part && typeof part.text === 'string') {
+          return part.text
+        }
+      }
+    }
+    if (Array.isArray(systemInstruction)) {
+      for (const part of systemInstruction) {
+        if (typeof part === 'string') {
+          return part
+        }
+        if (part && typeof part === 'object' && 'text' in part && typeof part.text === 'string') {
+          return part.text
+        }
+      }
+    }
+    return null
+  }
+
+  private formatInputForPostHog(params: GenerateContentParameters): FormattedMessage[] {
+    const sanitized = sanitizeGemini(params.contents)
+    const messages = this.formatInput(sanitized)
+
+    const systemInstruction = this.extractSystemInstruction(params)
+
+    if (systemInstruction) {
+      const hasSystemMessage = messages.some((msg: FormattedMessage) => msg.role === 'system')
+
+      if (!hasSystemMessage) {
+        return [{ role: 'system', content: systemInstruction }, ...messages]
+      }
+    }
+
+    return messages
   }
 }
 

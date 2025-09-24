@@ -1,5 +1,16 @@
 # posthog-node
 
+## 5.9.0
+
+### Minor Changes
+
+- [#2348](https://github.com/PostHog/posthog-js/pull/2348) [`ac48d8f`](https://github.com/PostHog/posthog-js/commit/ac48d8fda3a4543f300ced705bce314a206cce6f) Thanks [@hpouillot](https://github.com/hpouillot)! - chore: align js syntax with package support
+
+### Patch Changes
+
+- Updated dependencies [[`ac48d8f`](https://github.com/PostHog/posthog-js/commit/ac48d8fda3a4543f300ced705bce314a206cce6f)]:
+  - @posthog/core@1.2.0
+
 ## 5.8.8
 
 ### Patch Changes
