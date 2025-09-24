@@ -1,0 +1,34 @@
+version: 2
+updates:
+    - package-ecosystem: 'npm'
+      directory: '/packages/ai'
+      schedule:
+          interval: 'daily'
+          time: '10:00'
+          timezone: 'UTC'
+      groups:
+          ai-providers:
+              patterns:
+                  - '@anthropic-ai/sdk'
+                  - '@google/genai'
+                  - 'openai'
+                  - '@ai-sdk/provider'
+                  - 'ai'
+                  - '@langchain/core'
+                  - 'langchain'
+      allow:
+          - dependency-name: '@anthropic-ai/sdk'
+          - dependency-name: '@google/genai'
+          - dependency-name: 'openai'
+          - dependency-name: '@ai-sdk/provider'
+          - dependency-name: 'ai'
+          - dependency-name: '@langchain/core'
+          - dependency-name: 'langchain'
+      # Uncomment below to enable auto-merge for minor updates when CI passes
+      # open-pull-requests-limit: 1
+      # pull-request-branch-name:
+      #   separator: "/"
+      # reviewers:
+      #   - "PostHog/ai-team"
+      # assignees:
+      #   - "PostHog/ai-team"
