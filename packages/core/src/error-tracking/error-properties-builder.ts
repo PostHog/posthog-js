@@ -1,3 +1,4 @@
+import { isArray } from '@/utils'
 import { getFilenameToChunkIdMap } from './chunk-ids'
 import { createStackParser } from './parsers'
 import {
@@ -48,7 +49,16 @@ export class ErrorPropertiesBuilder {
     }
   }
 
-  coerceFallback(ctx: CoercingContext): ExceptionLike {
+  async modifyFrames(exceptionList: ErrorProperties['$exception_list']): Promise<ErrorProperties['$exception_list']> {
+    for (const exc of exceptionList) {
+      if (exc.stacktrace && exc.stacktrace.frames && isArray(exc.stacktrace.frames)) {
+        exc.stacktrace.frames = await this.applyModifiers(exc.stacktrace.frames)
+      }
+    }
+    return exceptionList
+  }
+
+  private coerceFallback(ctx: CoercingContext): ExceptionLike {
     return {
       type: 'Error',
       value: 'Unknown error',
@@ -57,7 +67,7 @@ export class ErrorPropertiesBuilder {
     }
   }
 
-  parseStacktrace(err: ExceptionLike, ctx: ParsingContext): ParsedException {
+  private parseStacktrace(err: ExceptionLike, ctx: ParsingContext): ParsedException {
     let cause: ParsedException | undefined = undefined
     if (err.cause != null) {
       cause = this.parseStacktrace(err.cause, ctx)
@@ -95,18 +105,6 @@ export class ErrorPropertiesBuilder {
     return newFrames
   }
 
-  private async modifyFrames(exceptionWithStack: ParsedException): Promise<ParsedException> {
-    let cause: ParsedException | undefined = undefined
-    if (exceptionWithStack.cause != null) {
-      cause = await this.modifyFrames(exceptionWithStack.cause)
-    }
-    let stack: StackFrame[] = []
-    if (exceptionWithStack.stack != null) {
-      stack = await this.applyModifiers(exceptionWithStack.stack)
-    }
-    return { ...exceptionWithStack, cause, stack }
-  }
-
   private convertToExceptionList(exceptionWithStack: ParsedException, mechanism: Mechanism): ExceptionList {
     const currentException: Exception = {
       type: exceptionWithStack.type,
@@ -136,14 +134,14 @@ export class ErrorPropertiesBuilder {
     return exceptionList
   }
 
-  buildParsingContext(): ParsingContext {
+  private buildParsingContext(): ParsingContext {
     const context = {
       chunkIdMap: getFilenameToChunkIdMap(this.stackParser),
     } as ParsingContext
     return context
   }
 
-  buildCoercingContext(mechanism: Mechanism, hint: EventHint, depth: number = 0): CoercingContext {
+  private buildCoercingContext(mechanism: Mechanism, hint: EventHint, depth: number = 0): CoercingContext {
     const coerce = (input: unknown, depth: number) => {
       if (depth <= MAX_CAUSE_RECURSION) {
         const ctx = this.buildCoercingContext(mechanism, hint, depth)

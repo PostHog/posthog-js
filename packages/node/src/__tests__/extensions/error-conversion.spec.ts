@@ -1,14 +1,26 @@
-import { propertiesFromUnknownInput } from '@/extensions/error-tracking/error-conversion'
-import { ErrorProperties } from '@/extensions/error-tracking/types'
-import { createStackParser } from '@/extensions/error-tracking/stack-parser'
+import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
+import { createModulerModifier } from '@/extensions/error-tracking/modifiers/module.node'
+import { addSourceContext } from '@/extensions/error-tracking/modifiers/context-lines.node'
 
 describe('error conversion', () => {
-  async function getExceptionList(error: unknown): Promise<ErrorProperties['$exception_list']> {
+  const errorPropertiesBuilder = new CoreErrorTracking.ErrorPropertiesBuilder(
+    [
+      new CoreErrorTracking.EventCoercer(),
+      new CoreErrorTracking.ErrorCoercer(),
+      new CoreErrorTracking.ObjectCoercer(),
+      new CoreErrorTracking.StringCoercer(),
+      new CoreErrorTracking.PrimitiveCoercer(),
+    ],
+    [CoreErrorTracking.nodeStackLineParser],
+    [createModulerModifier(), addSourceContext]
+  )
+
+  async function getExceptionList(error: unknown): Promise<CoreErrorTracking.ErrorProperties['$exception_list']> {
     const syntheticException = new Error('PostHog syntheticException')
-    const exceptionProperties = await propertiesFromUnknownInput(createStackParser(), [], error, {
+    const { $exception_list } = errorPropertiesBuilder.buildFromUnknown(error, {
       syntheticException,
     })
-    return exceptionProperties.$exception_list
+    return await errorPropertiesBuilder.modifyFrames($exception_list)
   }
 
   it('should create an exception list from a string', async () => {

@@ -1,13 +1,12 @@
 // Portions of this file are derived from getsentry/sentry-javascript by Software, Inc. dba Sentry
 // Licensed under the MIT License
 
-import { StackFrame } from './types'
-import { ReduceableCache } from './reduceable-cache'
+import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { createReadStream } from 'node:fs'
 import { createInterface } from 'node:readline'
 
-const LRU_FILE_CONTENTS_CACHE = new ReduceableCache<string, Record<number, string>>(25)
-const LRU_FILE_CONTENTS_FS_READ_FAILED = new ReduceableCache<string, 1>(20)
+const LRU_FILE_CONTENTS_CACHE = new CoreErrorTracking.ReduceableCache<string, Record<number, string>>(25)
+const LRU_FILE_CONTENTS_FS_READ_FAILED = new CoreErrorTracking.ReduceableCache<string, 1>(20)
 const DEFAULT_LINES_OF_CONTEXT = 7
 // Determines the upper bound of lineno/colno that we will attempt to read. Large colno values are likely to be
 // minified code while large lineno values are likely to be bundled code.
@@ -17,7 +16,9 @@ export const MAX_CONTEXTLINES_LINENO: number = 10000
 
 type ReadlineRange = [start: number, end: number]
 
-export async function addSourceContext(frames: StackFrame[]): Promise<StackFrame[]> {
+export async function addSourceContext(
+  frames: CoreErrorTracking.StackFrame[]
+): Promise<CoreErrorTracking.StackFrame[]> {
   // keep a lookup map of which files we've already enqueued to read,
   // so we don't enqueue the same file multiple times which would cause multiple i/o reads
   const filesToLines: Record<string, number[]> = {}
@@ -25,7 +26,7 @@ export async function addSourceContext(frames: StackFrame[]): Promise<StackFrame
   // Maps preserve insertion order, so we iterate in reverse, starting at the
   // outermost frame and closer to where the exception has occurred (poor mans priority)
   for (let i = frames.length - 1; i >= 0; i--) {
-    const frame: StackFrame | undefined = frames[i]
+    const frame: CoreErrorTracking.StackFrame | undefined = frames[i]
     const filename = frame?.filename
 
     if (
@@ -171,7 +172,10 @@ function getContextLinesFromFile(path: string, ranges: ReadlineRange[], output: 
 }
 
 /** Adds context lines to frames */
-function addSourceContextToFrames(frames: StackFrame[], cache: ReduceableCache<string, Record<number, string>>): void {
+function addSourceContextToFrames(
+  frames: CoreErrorTracking.StackFrame[],
+  cache: CoreErrorTracking.ReduceableCache<string, Record<number, string>>
+): void {
   for (const frame of frames) {
     // Only add context if we have a filename and it hasn't already been added
     if (frame.filename && frame.context_line === undefined && typeof frame.lineno === 'number') {
@@ -188,7 +192,11 @@ function addSourceContextToFrames(frames: StackFrame[], cache: ReduceableCache<s
 /**
  * Resolves context lines before and after the given line number and appends them to the frame;
  */
-function addContextToFrame(lineno: number, frame: StackFrame, contents: Record<number, string> | undefined): void {
+function addContextToFrame(
+  lineno: number,
+  frame: CoreErrorTracking.StackFrame,
+  contents: Record<number, string> | undefined
+): void {
   // When there is no line number in the frame, attaching context is nonsensical and will even break grouping.
   // We already check for lineno before calling this, but since StackFrame lineno is optional, we check it again.
   if (frame.lineno === undefined || contents === undefined) {
@@ -234,7 +242,7 @@ function addContextToFrame(lineno: number, frame: StackFrame, contents: Record<n
  * Clears the context lines from a frame, used to reset a frame to its original state
  * if we fail to resolve all context lines for it.
  */
-function clearLineContext(frame: StackFrame): void {
+function clearLineContext(frame: CoreErrorTracking.StackFrame): void {
   delete frame.pre_context
   delete frame.context_line
   delete frame.post_context
@@ -261,7 +269,7 @@ function shouldSkipContextLinesForFile(path: string): boolean {
 /**
  * Determines if we should skip contextlines based off the max lineno and colno values.
  */
-function shouldSkipContextLinesForFrame(frame: StackFrame): boolean {
+function shouldSkipContextLinesForFrame(frame: CoreErrorTracking.StackFrame): boolean {
   if (frame.lineno !== undefined && frame.lineno > MAX_CONTEXTLINES_LINENO) {
     return true
   }
@@ -346,7 +354,11 @@ function makeRangeEnd(line: number): number {
 /**
  * Get or init map value
  */
-function emplace<T extends ReduceableCache<K, V>, K extends string, V>(map: T, key: K, contents: V): V {
+function emplace<T extends CoreErrorTracking.ReduceableCache<K, V>, K extends string, V>(
+  map: T,
+  key: K,
+  contents: V
+): V {
   const value = map.get(key)
 
   if (value === undefined) {
