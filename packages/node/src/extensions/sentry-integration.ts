@@ -23,7 +23,7 @@
  * @param {boolean} [sendExceptionsToPostHog] Optional: capture exceptions as events in PostHog (default: true)
  */
 
-import { SeverityLevel } from './error-tracking/types'
+import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 import { type PostHogBackendClient } from '../client'
 
 // NOTE - we can't import from @sentry/types because it changes frequently and causes clashes
@@ -70,7 +70,7 @@ export type SentryIntegrationOptions = {
   organization?: string
   projectId?: number
   prefix?: string
-  severityAllowList?: SeverityLevel[] | '*'
+  severityAllowList?: CoreErrorTracking.SeverityLevel[] | '*'
   sendExceptionsToPostHog?: boolean
 }
 
@@ -129,7 +129,7 @@ export function createEventProcessor(
       $exception_type: any
       $exception_list: any
       $exception_personURL: string
-      $exception_level: SeverityLevel
+      $exception_level: CoreErrorTracking.SeverityLevel
     } = {
       // PostHog Exception Properties,
       $exception_message: exceptions[0]?.value || event.message,
@@ -192,7 +192,7 @@ export class PostHogSentryIntegration implements _SentryIntegrationClass {
     _posthog: PostHogBackendClient,
     organization?: string,
     prefix?: string,
-    severityAllowList?: SeverityLevel[] | '*',
+    severityAllowList?: CoreErrorTracking.SeverityLevel[] | '*',
     sendExceptionsToPostHog?: boolean
   ) {
     // setupOnce gets called by Sentry when it intializes the plugin
