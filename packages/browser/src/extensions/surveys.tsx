@@ -1036,7 +1036,7 @@ export function Questions({
     forceDisableHtml: boolean
     posthog?: PostHog
 }) {
-    // Initialize responses from storage or empty object
+    // Initialize responses from persistence or empty object
     const [questionsResponses, setQuestionsResponses] = useState(() => {
         const inProgressSurveyData = getInProgressSurveyState(survey, posthog)
         if (inProgressSurveyData?.responses) {
