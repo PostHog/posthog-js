@@ -239,248 +239,157 @@ describe('getChangeStateKeys', () => {
     })
 
     describe('correctness tests', () => {
-        test('should return empty objects for identical states', () => {
-            const state = { a: 1, b: { c: 2 } }
-            const result = getChangedStateKeys(state, state)
-
-            expect(result.prevState).toEqual({})
-            expect(result.nextState).toEqual({})
-        })
-
-        test('should handle null and undefined values', () => {
-            const prevState = { a: null, b: undefined, c: 'value' }
-            const nextState = { a: 'changed', b: 'defined', c: null }
-
-            const result = getChangedStateKeys(prevState, nextState)
-
-            expect(result.prevState).toEqual({ a: null, b: undefined, c: 'value' })
-            expect(result.nextState).toEqual({ a: 'changed', b: 'defined', c: null })
-        })
-
-        test('should correctly identify added keys', () => {
-            const prevState = { a: 1, b: 2 }
-            const nextState = { a: 1, b: 2, c: 3 }
-
-            const result = getChangedStateKeys(prevState, nextState)
-
-            expect(result.nextState).toEqual({ c: 3 })
-            expect(result.prevState).toEqual({})
-        })
-
-        test('should correctly identify removed keys', () => {
-            const prevState = { a: 1, b: 2, c: 3 }
-            const nextState = { a: 1, b: 2 }
-
-            const result = getChangedStateKeys(prevState, nextState)
-
-            expect(result.prevState).toEqual({ c: 3 })
-            expect(result.nextState).toEqual({})
-        })
-
-        test('should correctly identify changed keys', () => {
-            const prevState = { a: 1, b: 2, c: 3 }
-            const nextState = { a: 1, b: 5, c: 3 }
-
-            const result = getChangedStateKeys(prevState, nextState)
-
-            expect(result.prevState).toEqual({ b: 2 })
-            expect(result.nextState).toEqual({ b: 5 })
-        })
-
-        test('should handle arrays as primitive values', () => {
-            const prevState = {
-                list: [1, 2, 3],
-                obj: { a: 1 },
-            }
-            const nextState = {
-                list: [1, 2, 3, 4],
-                obj: { a: 1 },
-            }
-
-            const result = getChangedStateKeys(prevState, nextState)
-
-            expect(result.prevState).toEqual({ list: [1, 2, 3] })
-            expect(result.nextState).toEqual({ list: [1, 2, 3, 4] })
-        })
-
-        test('should handle nested object changes', () => {
-            const prevState = {
-                user: { name: 'John', age: 30 },
-                settings: { theme: 'dark', notifications: { email: true } },
-            }
-            const nextState = {
-                user: { name: 'John', age: 31 },
-                settings: { theme: 'light', notifications: { email: true } },
-            }
-
-            const result = getChangedStateKeys(prevState, nextState)
-
-            expect(result.prevState).toEqual({
-                user: { age: 30 },
-                settings: { theme: 'dark' },
-            })
-            expect(result.nextState).toEqual({
-                user: { age: 31 },
-                settings: { theme: 'light' },
-            })
-        })
-
-        test('should handle deeply nested changes within depth limit', () => {
-            const prevState = {
-                level1: {
-                    level2: {
-                        level3: {
-                            value: 'old',
+        test.each([
+            {
+                name: 'identical states',
+                prevState: { a: 1, b: { c: 2 } },
+                nextState: { a: 1, b: { c: 2 } },
+            },
+            {
+                name: 'null and undefined values',
+                prevState: { a: null, b: undefined, c: 'value' },
+                nextState: { a: 'changed', b: 'defined', c: null },
+            },
+            {
+                name: 'added keys',
+                prevState: { a: 1, b: 2 },
+                nextState: { a: 1, b: 2, c: 3 },
+            },
+            {
+                name: 'removed keys',
+                prevState: { a: 1, b: 2, c: 3 },
+                nextState: { a: 1, b: 2 },
+            },
+            {
+                name: 'changed keys',
+                prevState: { a: 1, b: 2, c: 3 },
+                nextState: { a: 1, b: 5, c: 3 },
+            },
+            {
+                name: 'arrays as primitive values',
+                prevState: {
+                    list: [1, 2, 3],
+                    obj: { a: 1 },
+                },
+                nextState: {
+                    list: [1, 2, 3, 4],
+                    obj: { a: 1 },
+                },
+            },
+            {
+                name: 'nested object changes',
+                prevState: {
+                    user: { name: 'John', age: 30 },
+                    settings: { theme: 'dark', notifications: { email: true } },
+                },
+                nextState: {
+                    user: { name: 'John', age: 31 },
+                    settings: { theme: 'light', notifications: { email: true } },
+                },
+            },
+            {
+                name: 'deeply nested changes within depth limit',
+                prevState: {
+                    level1: {
+                        level2: {
+                            level3: {
+                                value: 'old',
+                            },
                         },
                     },
                 },
-            }
-            const nextState = {
-                level1: {
-                    level2: {
-                        level3: {
-                            value: 'new',
+                nextState: {
+                    level1: {
+                        level2: {
+                            level3: {
+                                value: 'new',
+                            },
                         },
                     },
                 },
-            }
-
-            const result = getChangedStateKeys(prevState, nextState)
-
-            expect(result.prevState).toEqual({
-                level1: {
-                    level2: {
-                        level3: { value: 'old' },
+            },
+            {
+                name: 'depth limit respected',
+                prevState: {
+                    l1: { l2: { l3: { l4: { l5: 'old' } } } },
+                },
+                nextState: {
+                    l1: { l2: { l3: { l4: { l5: 'new' } } } },
+                },
+                maxDepth: 2,
+            },
+            {
+                name: 'mixed data types',
+                prevState: {
+                    string: 'hello',
+                    number: 42,
+                    boolean: true,
+                    array: [1, 2, 3],
+                    object: { nested: 'value' },
+                    nullValue: null,
+                    undefinedValue: undefined,
+                },
+                nextState: {
+                    string: 'world',
+                    number: 42,
+                    boolean: false,
+                    array: [4, 5, 6],
+                    object: { nested: 'changed' },
+                    nullValue: 'not null',
+                    undefinedValue: 'defined',
+                },
+            },
+            {
+                name: 'empty objects',
+                prevState: {},
+                nextState: { a: 1 },
+            },
+            {
+                name: 'string vs object (non-object input)',
+                prevState: 'string' as any,
+                nextState: { a: 1 },
+            },
+            {
+                name: 'object vs null (non-object input)',
+                prevState: { a: 1 },
+                nextState: null as any,
+            },
+            {
+                name: 'number vs boolean (non-object input)',
+                prevState: 42 as any,
+                nextState: true as any,
+            },
+            {
+                name: 'Redux-style state changes',
+                prevState: {
+                    todos: [
+                        { id: 1, text: 'Learn React', completed: false },
+                        { id: 2, text: 'Learn Redux', completed: true },
+                    ],
+                    visibilityFilter: 'SHOW_ALL',
+                    user: {
+                        id: 123,
+                        name: 'John',
+                        profile: { avatar: 'old.jpg', theme: 'dark' },
                     },
                 },
-            })
-            expect(result.nextState).toEqual({
-                level1: {
-                    level2: {
-                        level3: { value: 'new' },
+                nextState: {
+                    todos: [
+                        { id: 1, text: 'Learn React', completed: true },
+                        { id: 2, text: 'Learn Redux', completed: true },
+                        { id: 3, text: 'Learn Testing', completed: false },
+                    ],
+                    visibilityFilter: 'SHOW_COMPLETED',
+                    user: {
+                        id: 123,
+                        name: 'John',
+                        profile: { avatar: 'new.jpg', theme: 'dark' },
                     },
                 },
-            })
-        })
-
-        test('should respect depth limit', () => {
-            const prevState = {
-                l1: { l2: { l3: { l4: { l5: 'old' } } } },
-            }
-            const nextState = {
-                l1: { l2: { l3: { l4: { l5: 'new' } } } },
-            }
-
-            // With default maxDepth=3, should stop at level 3
-            const result = getChangedStateKeys(prevState, nextState, 2)
-
-            expect(result.prevState).toEqual({
-                l1: { l2: { l3: { l4: { l5: 'old' } } } },
-            })
-            expect(result.nextState).toEqual({
-                l1: { l2: { l3: { l4: { l5: 'new' } } } },
-            })
-        })
-
-        test('should handle mixed data types', () => {
-            const prevState = {
-                string: 'hello',
-                number: 42,
-                boolean: true,
-                array: [1, 2, 3],
-                object: { nested: 'value' },
-                nullValue: null,
-                undefinedValue: undefined,
-            }
-            const nextState = {
-                string: 'world',
-                number: 42,
-                boolean: false,
-                array: [4, 5, 6],
-                object: { nested: 'changed' },
-                nullValue: 'not null',
-                undefinedValue: 'defined',
-            }
-
-            const result = getChangedStateKeys(prevState, nextState)
-
-            expect(result.prevState).toEqual({
-                string: 'hello',
-                boolean: true,
-                array: [1, 2, 3],
-                object: { nested: 'value' },
-                nullValue: null,
-                undefinedValue: undefined,
-            })
-            expect(result.nextState).toEqual({
-                string: 'world',
-                boolean: false,
-                array: [4, 5, 6],
-                object: { nested: 'changed' },
-                nullValue: 'not null',
-                undefinedValue: 'defined',
-            })
-        })
-
-        test('should handle edge case - empty objects', () => {
-            const prevState = {}
-            const nextState = { a: 1 }
-
-            const result = getChangedStateKeys(prevState, nextState)
-
-            expect(result.prevState).toEqual({})
-            expect(result.nextState).toEqual({ a: 1 })
-        })
-
-        test('should handle edge case - non-object inputs', () => {
-            const result1 = getChangedStateKeys('string', { a: 1 })
-            const result2 = getChangedStateKeys({ a: 1 }, null)
-            const result3 = getChangedStateKeys(42, true)
-
-            expect(result1).toEqual({})
-            expect(result2).toEqual({ prevState: { a: 1 }, nextState: null })
-            expect(result3).toEqual({})
-        })
-
-        test('should handle Redux-style state changes', () => {
-            // Simulate a typical Redux state change
-            const prevState = {
-                todos: [
-                    { id: 1, text: 'Learn React', completed: false },
-                    { id: 2, text: 'Learn Redux', completed: true },
-                ],
-                visibilityFilter: 'SHOW_ALL',
-                user: {
-                    id: 123,
-                    name: 'John',
-                    profile: { avatar: 'old.jpg', theme: 'dark' },
-                },
-            }
-
-            const nextState = {
-                todos: [
-                    { id: 1, text: 'Learn React', completed: true }, // completed changed
-                    { id: 2, text: 'Learn Redux', completed: true },
-                    { id: 3, text: 'Learn Testing', completed: false }, // new todo added
-                ],
-                visibilityFilter: 'SHOW_COMPLETED', // filter changed
-                user: {
-                    id: 123,
-                    name: 'John',
-                    profile: { avatar: 'new.jpg', theme: 'dark' }, // avatar changed
-                },
-            }
-
-            const result = getChangedStateKeys(prevState, nextState)
-
-            // Should detect array changes as primitive (entire array replaced)
-            expect(result.prevState).toHaveProperty('todos')
-            expect(result.nextState).toHaveProperty('todos')
-            expect(result.prevState).toHaveProperty('visibilityFilter', 'SHOW_ALL')
-            expect(result.nextState).toHaveProperty('visibilityFilter', 'SHOW_COMPLETED')
-            expect(result.prevState.user).toHaveProperty('profile')
-            expect(result.nextState.user).toHaveProperty('profile')
-            expect(result.nextState.user.profile).toHaveProperty('avatar', 'new.jpg')
+            },
+        ])('should handle $name', ({ prevState, nextState, maxDepth }) => {
+            const result = getChangedStateKeys(prevState, nextState, maxDepth)
+            expect(result).toMatchSnapshot()
         })
     })
 })
