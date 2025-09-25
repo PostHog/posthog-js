@@ -141,10 +141,7 @@ describe('getChangeStateKeys', () => {
             const { result, executionTime } = measureExecutionTime(() => getChangedStateKeys(prevState, nextState))
 
             expect(executionTime).toBeLessThan(45)
-
             expect(result).toMatchSnapshot()
-
-            console.log(`Medium state diff took: ${executionTime.toFixed(2)}ms`)
         })
 
         test('should handle large complex state objects (stress test)', () => {
@@ -156,9 +153,6 @@ describe('getChangeStateKeys', () => {
             expect(executionTime).toBeLessThan(45)
 
             expect(result).toMatchSnapshot()
-
-            console.log(`Large state diff took: ${executionTime.toFixed(2)}ms`)
-            console.log(`State size: ~${JSON.stringify(prevState).length} characters`)
         })
 
         test('should handle complex state changes efficiently', () => {
@@ -206,8 +200,6 @@ describe('getChangeStateKeys', () => {
             // Should be fast for realistic complex state
             expect(avgTime).toBeLessThan(20)
             expect(maxTime).toBeLessThan(40)
-
-            console.log(`Complex state diff - Avg: ${avgTime.toFixed(2)}ms, Max: ${maxTime.toFixed(2)}ms`)
         })
 
         test('should handle identical states efficiently', () => {
@@ -223,8 +215,6 @@ describe('getChangeStateKeys', () => {
             expect(executionTime).toBeLessThan(5)
             expect(result.prevState).toEqual({})
             expect(result.nextState).toEqual({})
-
-            console.log(`Identical state diff took: ${executionTime.toFixed(2)}ms`)
         })
     })
 
