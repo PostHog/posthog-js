@@ -179,13 +179,19 @@ function restoreDistFiles() {
     }
 }
 
-function runPlaywrightTests() {
+function runPlaywrightTests(isCI = false) {
     log('Running Playwright tests')
 
     return new Promise((resolve, reject) => {
-        const playwrightProcess = spawn('pnpm', ['playwright'], {
+        const args = ['playwright']
+        if (isCI || process.env.CI) {
+            // CI-friendly options: no interactive UI, no HTML report server
+            args.push('--reporter=dot')
+        }
+
+        const playwrightProcess = spawn('pnpm', args, {
             cwd: BROWSER_ROOT,
-            stdio: 'inherit'
+            stdio: isCI ? 'pipe' : 'inherit'
         })
 
         playwrightProcess.on('close', (code) => {
@@ -200,7 +206,7 @@ function runPlaywrightTests() {
     })
 }
 
-async function runTestsForAllVersions(releases) {
+async function runTestsForAllVersions(releases, isCI = false) {
     const results = []
 
     for (const release of releases) {
@@ -211,7 +217,7 @@ async function runTestsForAllVersions(releases) {
             setupDistFiles(release.version)
 
             // Run tests
-            await runPlaywrightTests()
+            await runPlaywrightTests(isCI)
 
             results.push({
                 version: release.version,
@@ -278,12 +284,14 @@ Usage: node backwards-compatibility-test.mjs [OPTIONS]
 
 Options:
   --count=N     Test against the last N releases (default: 5)
+  --ci          Run in CI mode (non-interactive, no HTML report server)
   --help        Show this help message
 
 Examples:
-  node backwards-compatibility-test.mjs                # Test last 5 releases
+  node backwards-compatibility-test.mjs                # Test last 5 releases (interactive)
+  node backwards-compatibility-test.mjs --ci           # Test last 5 releases (CI mode)
   node backwards-compatibility-test.mjs --count=3      # Test last 3 releases
-  node backwards-compatibility-test.mjs --count=10     # Test last 10 releases
+  node backwards-compatibility-test.mjs --count=10 --ci # Test 10 releases in CI mode
 `)
 }
 
@@ -299,6 +307,7 @@ async function main() {
 
         const countArg = args.find(arg => arg.startsWith('--count='))
         const releaseCount = countArg ? parseInt(countArg.split('=')[1]) : 5
+        const isCI = args.includes('--ci') || !!process.env.CI
 
         log('Starting backwards compatibility test')
 
@@ -323,7 +332,7 @@ async function main() {
 
         // Run tests for each version
         log('\n=== Running tests for each version ===')
-        const results = await runTestsForAllVersions(releases)
+        const results = await runTestsForAllVersions(releases, isCI)
 
         // Print summary
         const allPassed = printSummary(results)

@@ -39,7 +39,8 @@
         "write-mangled-property-names": "WRITE_MANGLED_PROPERTIES=1 pnpm build",
         "gen-specs": "pnpm exec tsc && pnpm exec api-extractor run --config ./api-extractor.json --local",
         "parse-specs": "node scripts/generate-docs.js",
-        "test:backwards-compatibility": "node scripts/backwards-compatibility-test.mjs"
+        "test:backwards-compatibility": "node scripts/backwards-compatibility-test.mjs",
+        "test:backwards-compatibility:ci": "node scripts/backwards-compatibility-test.mjs --ci"
     },
     "main": "dist/main.js",
     "module": "dist/module.js",

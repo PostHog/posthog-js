@@ -694,6 +694,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
 
                     this._instance?.persistence?.unregister(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
                     this._instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
+                    this._makeSamplingDecision(sessionId)
                 }
             })
         }

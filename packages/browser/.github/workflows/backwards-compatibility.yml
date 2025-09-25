@@ -1,0 +1,106 @@
+name: Backwards Compatibility Tests
+
+on:
+  pull_request:
+    types: [labeled, synchronize]
+
+jobs:
+  check-backwards-compatibility:
+    # Only run if the PR has a release label (either just added or already exists on sync)
+    if: |
+      (github.event.action == 'labeled' && contains(github.event.label.name, 'release')) ||
+      (github.event.action == 'synchronize' && contains(join(github.event.pull_request.labels.*.name, ','), 'release'))
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Fetch full history so we can access release tags
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: |
+          cd packages/browser
+          pnpm exec playwright install --with-deps
+
+      - name: Build current version
+        run: |
+          cd packages/browser
+          pnpm build
+
+      - name: Run backwards compatibility tests
+        run: |
+          cd packages/browser
+          pnpm test:backwards-compatibility:ci --count=3
+        env:
+          CI: true
+
+      - name: Comment on PR with results
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const jobStatus = '${{ job.status }}';
+
+            let comment = '## 🔄 Backwards Compatibility Test Results\n\n';
+
+            if (jobStatus === 'success') {
+              comment += '✅ **All backwards compatibility tests passed!**\n\n';
+              comment += 'The changes in this PR are compatible with the last 3 released versions of array.js.\n';
+              comment += 'Users with cached older versions should continue to work correctly.';
+            } else {
+              comment += '❌ **Backwards compatibility tests failed!**\n\n';
+              comment += 'This PR introduces changes that may break compatibility with older versions of array.js that users might have cached.\n\n';
+              comment += '**What this means:**\n';
+              comment += '- Users with older cached array.js files may experience issues\n';
+              comment += '- Consider if this is an acceptable breaking change for a release\n';
+              comment += '- Review the test output above for specific failure details\n\n';
+              comment += '**Next steps:**\n';
+              comment += '1. Review the failing tests to understand the compatibility issue\n';
+              comment += '2. Either fix the compatibility issue or document it as a breaking change\n';
+              comment += '3. If this is intentionally breaking, ensure it\'s properly communicated in release notes';
+            }
+
+            // Find existing comment to update or create new one
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existingComment = comments.find(comment =>
+              comment.body.includes('🔄 Backwards Compatibility Test Results')
+            );
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: comment
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            }
