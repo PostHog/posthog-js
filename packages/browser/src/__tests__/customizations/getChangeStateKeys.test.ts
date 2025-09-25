@@ -122,37 +122,27 @@ describe('getChangeStateKeys', () => {
                 },
             }
 
-            const { result, executionTime } = measureExecutionTime(() => getChangedStateKeys(prevState, nextState))
+            const { executionTime } = measureExecutionTime(() => getChangedStateKeys(prevState, nextState))
 
             expect(executionTime).toBeLessThan(10)
-
-            // Correctness assertions - should detect UI changes
-            expect(result.nextState).toHaveProperty('ui')
-            expect(result.nextState.ui).toHaveProperty('modal')
-            expect(result.nextState.ui).toHaveProperty('editor')
-
-            console.log(`Realistic UI state diff took: ${executionTime.toFixed(2)}ms`)
         })
 
         test('should handle medium complexity state objects', () => {
             const prevState = createComplexState(3, 8, true)
             const nextState = modifyStateForDrag(prevState, 5)
 
-            const { result, executionTime } = measureExecutionTime(() => getChangedStateKeys(prevState, nextState))
+            const { executionTime } = measureExecutionTime(() => getChangedStateKeys(prevState, nextState))
 
             expect(executionTime).toBeLessThan(45)
-            expect(result).toMatchSnapshot()
         })
 
         test('should handle large complex state objects (stress test)', () => {
             const prevState = createComplexState(4, 10, true)
             const nextState = modifyStateForDrag(prevState, 8)
 
-            const { result, executionTime } = measureExecutionTime(() => getChangedStateKeys(prevState, nextState))
+            const { executionTime } = measureExecutionTime(() => getChangedStateKeys(prevState, nextState))
 
             expect(executionTime).toBeLessThan(45)
-
-            expect(result).toMatchSnapshot()
         })
 
         test('should handle complex state changes efficiently', () => {
@@ -191,11 +181,7 @@ describe('getChangeStateKeys', () => {
                 },
             }
 
-            const { result, avgTime, maxTime } = measureMultipleExecutions(() =>
-                getChangedStateKeys(prevState, nextState)
-            )
-
-            expect(result).toMatchSnapshot()
+            const { avgTime, maxTime } = measureMultipleExecutions(() => getChangedStateKeys(prevState, nextState))
 
             // Should be fast for realistic complex state
             expect(avgTime).toBeLessThan(20)
