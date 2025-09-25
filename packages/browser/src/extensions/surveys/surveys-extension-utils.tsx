@@ -521,12 +521,13 @@ export const hasEvents = (survey: Pick<Survey, 'conditions'>): boolean => {
 }
 
 export const canActivateRepeatedly = (
-    survey: Pick<Survey, 'schedule' | 'conditions' | 'id' | 'current_iteration'>
+    survey: Pick<Survey, 'schedule' | 'conditions' | 'id' | 'current_iteration'>,
+    posthog?: PostHog
 ): boolean => {
     return (
         !!(survey.conditions?.events?.repeatedActivation && hasEvents(survey)) ||
         survey.schedule === SurveySchedule.Always ||
-        isSurveyInProgress(survey)
+        isSurveyInProgress(survey, posthog)
     )
 }
 
@@ -541,7 +542,7 @@ export const getSurveySeen = (survey: Survey, posthog?: PostHog): boolean => {
     if (surveySeen) {
         // if a survey has already been seen,
         // we will override it with the event repeated activation value.
-        return !canActivateRepeatedly(survey)
+        return !canActivateRepeatedly(survey, posthog)
     }
 
     return false

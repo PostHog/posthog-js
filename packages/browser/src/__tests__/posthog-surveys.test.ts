@@ -90,6 +90,7 @@ describe('posthog-surveys', () => {
                     disable_surveys: false,
                     token: 'test-token',
                     surveys_request_timeout_ms: SURVEYS_REQUEST_TIMEOUT_MS,
+                    persistence: 'localStorage+cookie',
                 },
                 persistence: {
                     register: jest.fn(),

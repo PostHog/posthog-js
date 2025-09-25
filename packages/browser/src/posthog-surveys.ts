@@ -16,6 +16,7 @@ import {
     doesSurveyActivateByAction,
     doesSurveyActivateByEvent,
     IN_APP_SURVEY_TYPES,
+    isPersistenceEnabledWithLocalStorage,
     isSurveyRunning,
     LAST_SEEN_SURVEY_DATE_KEY,
     SURVEY_LOGGER as logger,
@@ -85,6 +86,11 @@ export class PostHogSurveys {
         if (this._instance.config.cookieless_mode && this._instance.consent.isOptedOut()) {
             logger.info('Not loading surveys in cookieless mode without consent.')
             return
+        }
+        if (isPersistenceEnabledWithLocalStorage(this._instance)) {
+            logger.warn(
+                'Persistence does not include localStorage, but surveys it to work properly. Please set persistence to include localStorage to avoid this warning, or set disable_surveys to true. Falling back to localStorage usage directly to maintain backwards compatibility.'
+            )
         }
 
         const phExtensions = assignableWindow?.__PosthogExtensions__

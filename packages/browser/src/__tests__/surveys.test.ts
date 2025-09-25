@@ -189,7 +189,7 @@ describe('surveys', () => {
         config = {
             token: 'testtoken',
             api_host: 'https://app.posthog.com',
-            persistence: 'memory',
+            persistence: 'localStorage+cookie',
             surveys_request_timeout_ms: SURVEYS_REQUEST_TIMEOUT_MS,
         } as unknown as PostHogConfig
 

@@ -16,7 +16,7 @@ describe('Surveys Persistence Migration - Simple Test', () => {
 
     const config = {
         token: 'test-token',
-        persistence: 'memory',
+        persistence: 'localStorage+cookie',
         api_host: 'https://app.posthog.com',
     } as PostHogConfig
 

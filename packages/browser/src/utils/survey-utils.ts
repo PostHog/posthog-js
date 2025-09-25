@@ -42,8 +42,14 @@ export const getSurveySeenKey = (survey: Pick<Survey, 'id' | 'current_iteration'
     return surveySeenKey
 }
 
-function isPersistenceEnabled(posthog?: PostHog): posthog is PostHog & { persistence: PostHogPersistence } {
-    return !!(posthog?.persistence && !posthog.persistence.isDisabled())
+export function isPersistenceEnabledWithLocalStorage(
+    posthog?: PostHog
+): posthog is PostHog & { persistence: PostHogPersistence } {
+    return !!(
+        posthog?.persistence &&
+        !posthog.persistence.isDisabled() &&
+        posthog.config?.persistence?.includes('localStorage')
+    )
 }
 
 /**
@@ -52,7 +58,7 @@ function isPersistenceEnabled(posthog?: PostHog): posthog is PostHog & { persist
  * to maintain backwards compatibility.
  */
 export const getFromPersistenceWithLocalStorageFallback = (key: string, posthog?: PostHog) => {
-    if (!isPersistenceEnabled(posthog)) {
+    if (!isPersistenceEnabledWithLocalStorage(posthog)) {
         try {
             return localStorage.getItem(key)
         } catch (e) {
@@ -75,7 +81,7 @@ export const getFromPersistenceWithLocalStorageFallback = (key: string, posthog?
  * to maintain backwards compatibility.
  */
 export const setOnPersistenceWithLocalStorageFallback = (key: string, value: any, posthog?: PostHog) => {
-    if (!isPersistenceEnabled(posthog)) {
+    if (!isPersistenceEnabledWithLocalStorage(posthog)) {
         try {
             localStorage.setItem(key, value)
         } catch (e) {
@@ -96,7 +102,7 @@ export const setOnPersistenceWithLocalStorageFallback = (key: string, value: any
  * When removing a property from persistence, remove from localStorage for backwards compatibility.
  */
 export const clearFromPersistenceWithLocalStorageFallback = (key: string, posthog?: PostHog) => {
-    if (!isPersistenceEnabled(posthog)) {
+    if (!isPersistenceEnabledWithLocalStorage(posthog)) {
         try {
             localStorage.removeItem(key)
         } catch (e) {

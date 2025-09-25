@@ -420,7 +420,7 @@ export class SurveyManager {
 
     private _internalFlagCheckSatisfied(survey: Survey): boolean {
         return (
-            canActivateRepeatedly(survey) ||
+            canActivateRepeatedly(survey, this._posthog) ||
             this._isSurveyFeatureFlagEnabled(survey.internal_targeting_flag_key) ||
             isSurveyInProgress(survey, this._posthog)
         )
