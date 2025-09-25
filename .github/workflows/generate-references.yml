@@ -1,0 +1,43 @@
+name: "Generate References"
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  generate-references:
+    name: Generate SDK references
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup environment
+        uses: ./.github/actions/setup
+        with:
+          build: false
+
+      - name: Build packages
+        run: pnpm build
+        
+      - name: Generate SDK references
+        run: pnpm generate-references
+
+      - name: Check for changes in references
+        id: changes
+        run: |
+          if [ -n "$(git status --porcelain packages/*/references/)" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "New references generated in packages references directories:"
+            git status --porcelain packages/*/references/
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No new references generated in packages references directories"
+          fi
+      - uses: stefanzweifel/git-auto-commit-action@v6
+        if: steps.changes.outputs.changed == 'true'
+        with:
+          commit_message: "Update generated references"
+          file_pattern: "packages/*/references/**"
