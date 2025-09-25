@@ -26,6 +26,9 @@ export default defineNuxtModule<ModuleOptions>({
   meta: {
     name: '@posthog/nuxt',
     configKey: 'posthog',
+    compatibility: {
+      nuxt: '>=3.7.0',
+    },
   },
   defaults: () => ({
     host: 'https://us.i.posthog.com',
