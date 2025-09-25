@@ -3,8 +3,6 @@ import { defineNuxtPlugin, useRuntimeConfig } from '#app'
 import posthog from 'posthog-js'
 
 export default defineNuxtPlugin((nuxtApp) => {
-  console.log('--------- CUSTOM PLUGIN START1 ------------')
-
   const runtimeConfig = useRuntimeConfig()
 
   const publicApiKey = runtimeConfig.public.posthogPublicKey as string
@@ -17,7 +15,6 @@ export default defineNuxtPlugin((nuxtApp) => {
 
   nuxtApp.hooks.hook('vue:error', async (error) => {
     console.log('----------- HOOK vue:error START ------------')
-    console.log(runtimeConfig.public.posthogPublicKey, runtimeConfig.public.posthogHost)
 
     console.log(error)
     client.captureException(error)
