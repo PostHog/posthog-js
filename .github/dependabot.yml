@@ -24,11 +24,11 @@ updates:
           - dependency-name: 'ai'
           - dependency-name: '@langchain/core'
           - dependency-name: 'langchain'
+      open-pull-requests-limit: 1
+      reviewers:
+          - 'PostHog/team-llm-analytics'
       # Uncomment below to enable auto-merge for minor updates when CI passes
-      # open-pull-requests-limit: 1
       # pull-request-branch-name:
       #   separator: "/"
-      # reviewers:
-      #   - "PostHog/ai-team"
       # assignees:
       #   - "PostHog/ai-team"
