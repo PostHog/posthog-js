@@ -1,5 +1,11 @@
 # posthog-react-native
 
+## 4.7.0
+
+### Minor Changes
+
+- [#2352](https://github.com/PostHog/posthog-js/pull/2352) [`c01c728`](https://github.com/PostHog/posthog-js/commit/c01c728616673e20cd4b91a6050c0e194908c4b3) Thanks [@marandaneto](https://github.com/marandaneto)! - chore: rn surveys use the new response question id format
+
 ## 4.6.3
 
 ### Patch Changes
