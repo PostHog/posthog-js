@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.268.5
+
+### Patch Changes
+
+- [#2362](https://github.com/PostHog/posthog-js/pull/2362) [`8b570b8`](https://github.com/PostHog/posthog-js/commit/8b570b832532d2827fd03a7da0d5554028ce7d77) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: over eager rename left a couple of old versions trying to call onRemoteConfig that doesn't exist
+
 ## 1.268.4
 
 ### Patch Changes

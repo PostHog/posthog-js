@@ -9,6 +9,24 @@
             "outputs": ["dist/**", "lib/**", "react/**"],
             "env": ["WRITE_MANGLED_PROPERTIES"]
         },
+        "posthog-js#generate-references": {
+            "dependsOn": ["build"],
+            "inputs": ["dist/**", "package.json", "scripts/**", "docs/**"],
+            "outputs": ["references/**"],
+            "cache": false
+        },
+        "posthog-node#generate-references": {
+            "dependsOn": ["build"],
+            "inputs": ["dist/**", "package.json", "scripts/**", "docs/**"],
+            "outputs": ["references/**"],
+            "cache": false
+        },
+        "posthog-react-native#generate-references": {
+            "dependsOn": ["build"],
+            "inputs": ["dist/**", "package.json", "scripts/**", "docs/**"],
+            "outputs": ["references/**"],
+            "cache": false
+        },
         "package": {
             "cache": false,
             "dependsOn": ["^package", "build"],
