@@ -1,8 +1,10 @@
 <template>
-  <div>Nuxt module playground!</div>
+  <div>
+    <h1>Nuxt Module Playground</h1>
+    <NuxtPage />
+  </div>
 </template>
 
 <script setup>
-// Throw an error in the frontend
-throw new Error('Frontend error thrown intentionally for testing!')
+// This is now the root layout
 </script>

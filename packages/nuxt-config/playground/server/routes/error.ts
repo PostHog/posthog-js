@@ -1,9 +1,9 @@
-import { eventHandler } from "h3";
+import { eventHandler } from 'h3'
 
 export default eventHandler((event) => {
   // This route intentionally throws an error for testing purposes
-  throw new Error("Test error - 4");
-});
+  throw new Error('Test error')
+})
 
 // posthog-cli --host http://localhost:8010 sourcemap inject --directory ./.output
 // posthog-cli --host http://localhost:8010 sourcemap upload --directory ./.output --version versionNitro7 --project projectNitro7
