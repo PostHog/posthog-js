@@ -311,31 +311,30 @@ describe('cookieless', () => {
             expect(posthog.sessionRecording).toBeFalsy()
         })
 
-        it('should enable request queue immediately after opt_in_capturing in cookieless mode', async () => {
+        it('should restart autocapture after opt_in_capturing in cookieless mode', async () => {
             const { posthog } = await setup({
                 cookieless_mode: 'on_reject',
-                request_batching: true,
             })
 
-            // Mock the request queue enable method
-            const mockEnable = jest.fn()
-            const originalEnable = posthog._requestQueue?.enable
-            if (posthog._requestQueue) {
-                posthog._requestQueue.enable = mockEnable
+            // Mock the autocapture startIfEnabled method
+            const mockStartIfEnabled = jest.fn()
+            const originalStartIfEnabled = posthog.autocapture?.startIfEnabled
+            if (posthog.autocapture) {
+                posthog.autocapture.startIfEnabled = mockStartIfEnabled
             }
 
-            // Clear any previous enable calls
-            mockEnable.mockClear()
+            // Clear any previous startIfEnabled calls
+            mockStartIfEnabled.mockClear()
 
             // Opt in
             posthog.opt_in_capturing()
 
-            // Queue should be enabled immediately after opt-in
-            expect(mockEnable).toHaveBeenCalledTimes(1)
+            // Autocapture should be restarted immediately after opt-in
+            expect(mockStartIfEnabled).toHaveBeenCalledTimes(1)
 
             // Restore original method
-            if (posthog._requestQueue && originalEnable) {
-                posthog._requestQueue.enable = originalEnable
+            if (posthog.autocapture && originalStartIfEnabled) {
+                posthog.autocapture.startIfEnabled = originalStartIfEnabled
             }
         })
     })

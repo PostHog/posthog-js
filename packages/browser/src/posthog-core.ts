@@ -2919,12 +2919,14 @@ export class PostHog {
 
         this.consent.optInOut(true)
         this._sync_opt_out_with_persistence()
-        this._start_queue_if_opted_in()
 
         // Reinitialize surveys if we're in cookieless mode and just opted in
         if (this.config.cookieless_mode == 'on_reject') {
             this.surveys.loadIfEnabled()
         }
+
+        // Restart autocapture after opting in
+        this.autocapture?.startIfEnabled()
 
         // Don't capture if captureEventName is null or false
         if (isUndefined(options?.captureEventName) || options?.captureEventName) {
