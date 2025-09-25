@@ -9,12 +9,8 @@ export default defineNuxtConfig({
       enabled: true,
       version: 'V1',
       envId: '2',
+      projectName: 'i-love-nuxt-1',
       privateApiKey: 'phx_YZZHl8xzLkCWHSpVahmkggLGaS6gmSxCNmH26N0RUGZnqAs',
-    },
-  },
-  vite: {
-    build: {
-      sourcemap: true,
     },
   },
 })

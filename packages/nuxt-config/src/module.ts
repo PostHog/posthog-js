@@ -42,9 +42,11 @@ export default defineNuxtModule<ModuleOptions>({
       return
     }
 
-    nuxt.hooks.hook('close', async () => {
+    nuxt.hooks.hook('nitro:build:public-assets', async () => {
       execSync('posthog-cli sourcemap inject --directory .output/public')
+    })
 
+    nuxt.hooks.hook('close', async () => {
       execSync('posthog-cli sourcemap inject --directory .output/server/chunks')
 
       execSync(
