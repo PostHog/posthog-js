@@ -337,7 +337,7 @@ export enum SurveyQuestionDescriptionContentType {
 
 type SurveyQuestionBase = {
   question: string
-  id?: string // TODO: use this for the question id
+  id: string
   description?: string
   descriptionContentType?: SurveyQuestionDescriptionContentType
   optional?: boolean
