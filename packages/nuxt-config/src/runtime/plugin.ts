@@ -1,30 +1,33 @@
-import { defineNuxtPlugin } from '#app'
+import { defineNuxtPlugin, useRuntimeConfig } from '#app'
+
+import posthog from 'posthog-js'
 
 export default defineNuxtPlugin((nuxtApp) => {
   console.log('--------- CUSTOM PLUGIN START1 ------------')
-  // const client = new PostHog('phc_VXlGk6yOu3agIn0h7lTmSOECAGWCtJonUJDAN4CexlJ', {
-  //   host: 'http://localhost:8010',
-  // })
 
-  // client.debug(true)
+  const runtimeConfig = useRuntimeConfig()
 
-  nuxtApp.hooks.hook('page:loading:start', async () => {
-    console.log('----------- HOOK page:loading:start START ------------')
-    console.log('page is loading')
-    console.log('----------- HOOK page:loading:start END ------------')
+  const publicApiKey = runtimeConfig.public.posthogPublicKey as string
+  const host = runtimeConfig.public.posthogHost as string
+
+  const client = posthog.init(publicApiKey, {
+    api_host: host,
+    debug: true,
   })
 
   nuxtApp.hooks.hook('vue:error', async (error) => {
     console.log('----------- HOOK vue:error START ------------')
+    console.log(runtimeConfig.public.posthogPublicKey, runtimeConfig.public.posthogHost)
+
     console.log(error)
+    client.captureException(error)
+
     console.log('----------- HOOK vue:error END ------------')
   })
 
-  nuxtApp.hooks.hook('app:error', async (error) => {
-    console.log('----------- HOOK app:error START ------------')
-    console.log(error)
-    console.log('----------- HOOK app:error END ------------')
-  })
-
-  console.log('--------- CUSTOM PLUGIN END ------------')
+  return {
+    provide: {
+      posthog: () => client,
+    },
+  }
 })

@@ -4,6 +4,13 @@ import { exec, execSync } from 'child_process'
 // Module options TypeScript interface definition
 export interface ModuleOptions {
   host: string
+  publicApiKey: string
+  sourceMaps: {
+    enabled: boolean
+    version: string
+    envId: string
+    privateApiKey: string
+  }
 }
 
 export default defineNuxtModule<ModuleOptions>({
@@ -11,23 +18,30 @@ export default defineNuxtModule<ModuleOptions>({
     name: '@posthog/nuxt',
     configKey: 'posthog',
   },
-  defaults: (nuxt) => ({
-    host: 'https://from-defaults.i.posthog.com',
+  defaults: () => ({
+    host: 'https://us.i.posthog.com',
   }),
-  setup(_options, nuxt) {
+  setup(options, nuxt) {
     const resolver = createResolver(import.meta.url)
-
-    // Do not add the extension since the `.ts` will be transpiled to `.mjs` after `npm run prepack`
     addPlugin(resolver.resolve('./runtime/plugin'))
 
-    nuxt.hooks.hook('close', async (nuxt) => {
-      console.log('Injecting frontend sourcemaps')
-      execSync('posthog-cli sourcemap inject --directory .output/public/_nuxt')
-      console.log('After injecting')
+    nuxt.options.runtimeConfig.public.posthogPublicKey =
+      nuxt.options.runtimeConfig.public.posthogPublicKey || options.publicApiKey
+    nuxt.options.runtimeConfig.public.posthogHost = nuxt.options.runtimeConfig.public.posthogHost || options.host
 
-      console.log('Injecting backend sourcemaps')
+    nuxt.hooks.hook('close', async () => {
+      execSync('posthog-cli sourcemap inject --directory .output/public/_nuxt')
+
       execSync('posthog-cli sourcemap inject --directory .output/server/chunks')
-      console.log('After injecting')
+
+      execSync(
+        `POSTHOG_CLI_ENV_ID=${options.sourceMaps.envId} POSTHOG_CLI_TOKEN=${options.sourceMaps.privateApiKey} posthog-cli --host ${options.host} sourcemap upload --directory .output/public/_nuxt --version ${options.sourceMaps.version}`
+      )
+
+      console.log('Uploading backend sourcemaps')
+      execSync(
+        `POSTHOG_CLI_ENV_ID=${options.sourceMaps.envId} POSTHOG_CLI_TOKEN=${options.sourceMaps.privateApiKey} posthog-cli --host ${options.host} sourcemap upload --directory .output/server/chunks --version ${options.sourceMaps.version}`
+      )
     })
   },
 })
