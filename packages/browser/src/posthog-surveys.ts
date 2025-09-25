@@ -87,7 +87,7 @@ export class PostHogSurveys {
             logger.info('Not loading surveys in cookieless mode without consent.')
             return
         }
-        if (isPersistenceEnabledWithLocalStorage(this._instance)) {
+        if (!isPersistenceEnabledWithLocalStorage(this._instance)) {
             logger.warn(
                 'Persistence does not include localStorage, but surveys it to work properly. Please set persistence to include localStorage to avoid this warning, or set disable_surveys to true. Falling back to localStorage usage directly to maintain backwards compatibility.'
             )
