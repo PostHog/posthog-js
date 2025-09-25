@@ -43,12 +43,12 @@ export default defineNuxtModule<ModuleOptions>({
     }
 
     nuxt.hooks.hook('close', async () => {
-      execSync('posthog-cli sourcemap inject --directory .output/public/_nuxt')
+      execSync('posthog-cli sourcemap inject --directory .output/public')
 
       execSync('posthog-cli sourcemap inject --directory .output/server/chunks')
 
       execSync(
-        `POSTHOG_CLI_ENV_ID=${options.sourceMaps.envId} POSTHOG_CLI_TOKEN=${options.sourceMaps.privateApiKey} posthog-cli --host ${options.host} sourcemap upload --directory .output/public/_nuxt --version ${options.sourceMaps.version} --project ${options.sourceMaps.projectName}`
+        `POSTHOG_CLI_ENV_ID=${options.sourceMaps.envId} POSTHOG_CLI_TOKEN=${options.sourceMaps.privateApiKey} posthog-cli --host ${options.host} sourcemap upload --directory .output/public --version ${options.sourceMaps.version} --project ${options.sourceMaps.projectName}`
       )
 
       execSync(

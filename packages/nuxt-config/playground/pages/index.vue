@@ -7,9 +7,9 @@
 </template>
 
 <script setup lang="ts">
-import { throwSimpleError } from '~/utils/errorUtils'
+import { throwSimpleError3 } from '~/utils/errorUtils3'
 
 const handleError = () => {
-  throwSimpleError()
+  throwSimpleError3()
 }
 </script>
