@@ -1,12 +1,19 @@
 export * from '../exports'
 
 import ErrorTracking from '../extensions/error-tracking'
-
 import { PostHogBackendClient } from '../client'
-import { createStackParser } from '../extensions/error-tracking/stack-parser'
+import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 
-ErrorTracking.stackParser = createStackParser()
-ErrorTracking.frameModifiers = []
+ErrorTracking.errorPropertiesBuilder = new CoreErrorTracking.ErrorPropertiesBuilder(
+  [
+    new CoreErrorTracking.EventCoercer(),
+    new CoreErrorTracking.ErrorCoercer(),
+    new CoreErrorTracking.ObjectCoercer(),
+    new CoreErrorTracking.StringCoercer(),
+    new CoreErrorTracking.PrimitiveCoercer(),
+  ],
+  [CoreErrorTracking.nodeStackLineParser]
+)
 
 export class PostHog extends PostHogBackendClient {
   getLibraryId(): string {

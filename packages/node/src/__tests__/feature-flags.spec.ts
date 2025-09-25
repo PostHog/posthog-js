@@ -1,12 +1,12 @@
-import { PostHogOptions } from '../src/types'
-import { PostHog } from '../src/entrypoints/index.node'
+import { PostHogOptions } from '@/types'
+import { PostHog } from '@/entrypoints/index.node'
 import {
   matchProperty,
   InconclusiveMatchError,
   relativeDateParseForFeatureFlagMatching,
-} from '../src/extensions/feature-flags/feature-flags'
-import { anyFlagsCall, anyLocalEvalCall, apiImplementation } from './test-utils'
-import { waitForPromises } from '@posthog/core/testing'
+} from '@/extensions/feature-flags/feature-flags'
+import { anyFlagsCall, anyLocalEvalCall, apiImplementation } from './utils'
+import { testing } from '@posthog/core'
 
 jest.spyOn(console, 'debug').mockImplementation()
 
@@ -1900,7 +1900,7 @@ describe('local evaluation', () => {
     posthog.on('localEvaluationFlagsLoaded', eventHandler)
 
     // Wait for initial load
-    await waitForPromises()
+    await testing.waitForPromises()
 
     expect(eventHandler).toHaveBeenCalledWith(2) // Should be called with number of flags loaded
   })
@@ -1920,7 +1920,7 @@ describe('local evaluation', () => {
     posthog.on('localEvaluationFlagsLoaded', eventHandler)
 
     // Wait for initial load
-    await waitForPromises()
+    await testing.waitForPromises()
 
     expect(eventHandler).not.toHaveBeenCalled()
   })
@@ -1956,7 +1956,7 @@ describe('local evaluation', () => {
     posthog.on('localEvaluationFlagsLoaded', eventHandler)
 
     // Wait for initial load
-    await waitForPromises()
+    await testing.waitForPromises()
     eventHandler.mockClear() // Clear initial call
 
     // Reload flags
@@ -2021,7 +2021,7 @@ describe('getFeatureFlag', () => {
       })
     ).toEqual(true)
 
-    await waitForPromises()
+    await testing.waitForPromises()
 
     expect(capturedMessage).toMatchObject({
       distinct_id: 'some-distinct-id',
@@ -2560,6 +2560,10 @@ describe('consistency tests', () => {
 
   let posthog: PostHog
   jest.useFakeTimers()
+
+  afterEach(async () => {
+    await posthog.shutdown()
+  })
 
   it('is consistent for simple flags', () => {
     const flags = {

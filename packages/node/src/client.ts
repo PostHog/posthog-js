@@ -1,4 +1,4 @@
-import { version } from '../package.json'
+import { version } from './version'
 
 import {
   JsonType,
@@ -10,6 +10,7 @@ import {
   PostHogPersistedProperty,
   Logger,
   PostHogCaptureOptions,
+  isPlainObject,
 } from '@posthog/core'
 import {
   EventMessage,
@@ -22,7 +23,6 @@ import {
 import { FeatureFlagDetail, FeatureFlagValue, getFeatureFlagValue } from '@posthog/core'
 import { FeatureFlagsPoller } from './extensions/feature-flags/feature-flags'
 import ErrorTracking from './extensions/error-tracking'
-import { isPlainObject } from './extensions/error-tracking/type-checking'
 import { safeSetTimeout, PostHogEventProperties } from '@posthog/core'
 import { PostHogMemoryStorage } from './storage-memory'
 import { createLogger } from './utils/logger'

@@ -1,5 +1,31 @@
 # posthog-js
 
+## 1.268.5
+
+### Patch Changes
+
+- [#2362](https://github.com/PostHog/posthog-js/pull/2362) [`8b570b8`](https://github.com/PostHog/posthog-js/commit/8b570b832532d2827fd03a7da0d5554028ce7d77) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: over eager rename left a couple of old versions trying to call onRemoteConfig that doesn't exist
+
+## 1.268.4
+
+### Patch Changes
+
+- Updated dependencies [[`caecb94`](https://github.com/PostHog/posthog-js/commit/caecb94493f6b85003ecbd6750a81e27139b1fa5)]:
+    - @posthog/core@1.2.1
+
+## 1.268.3
+
+### Patch Changes
+
+- [#2357](https://github.com/PostHog/posthog-js/pull/2357) [`d5d523c`](https://github.com/PostHog/posthog-js/commit/d5d523cdd86732827a48a9c7c39e6c5fceccab78) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: app state logging diff performance
+
+## 1.268.2
+
+### Patch Changes
+
+- Updated dependencies [[`ac48d8f`](https://github.com/PostHog/posthog-js/commit/ac48d8fda3a4543f300ced705bce314a206cce6f)]:
+    - @posthog/core@1.2.0
+
 ## 1.268.1
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "posthog-node",
-  "version": "5.8.8",
+  "version": "5.9.1",
   "description": "PostHog Node.js integration",
   "repository": {
     "type": "git",
@@ -9,21 +9,24 @@
   },
   "scripts": {
     "clean": "rimraf dist coverage",
-    "lint": "eslint src test",
-    "lint:fix": "eslint src test --fix",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
     "test:unit": "jest",
-    "build": "rollup -c",
-    "dev": "rollup -cw",
+    "prebuild": "node -p \"'export const version = \\'' + require('./package.json').version + '\\''\" > src/version.ts",
+    "build": "rslib build",
+    "dev": "rslib build -w",
     "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm build",
     "package": "pnpm pack --out $PACKAGE_DEST/%s.tgz",
-    "gen-specs": "pnpm exec tsc && pnpm exec api-extractor run --config ./api-extractor.json --local",
-    "parse-specs": "node scripts/generate-docs.js"
+    "gen-specs": "pnpm build && pnpm exec api-extractor run --config ./api-extractor.jsonc --local",
+    "parse-specs": "node scripts/generate-docs.mjs"
   },
   "engines": {
     "node": ">=20"
   },
   "files": [
-    "dist"
+    "src",
+    "dist",
+    "!src/__tests__"
   ],
   "license": "MIT",
   "author": {
@@ -31,19 +34,17 @@
     "email": "hey@posthog.com",
     "url": "https://posthog.com"
   },
-  "main": "dist/node/index.cjs",
-  "module": "dist/node/index.mjs",
-  "types": "dist/index.d.ts",
+  "main": "dist/entrypoints/index.node.js",
+  "module": "dist/entrypoints/index.node.mjs",
+  "types": "dist/entrypoints/index.node.d.ts",
   "dependencies": {
     "@posthog/core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "commander": "^9.3.0",
-    "mitata": "^1.0.21",
     "@posthog-tooling/tsconfig-base": "workspace:*",
-    "@posthog-tooling/rollup-utils": "workspace:*",
-    "jest": "catalog:"
+    "jest": "catalog:",
+    "@rslib/core": "catalog:"
   },
   "keywords": [
     "posthog",
@@ -53,29 +54,29 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./dist/entrypoints/index.node.d.ts",
       "edge": {
-        "import": "./dist/edge/index.mjs",
-        "require": "./dist/edge/index.cjs",
-        "default": "./dist/edge/index.mjs"
+        "import": "./dist/entrypoints/index.edge.mjs",
+        "require": "./dist/entrypoints/index.edge.js",
+        "default": "./dist/entrypoints/index.edge.js"
       },
       "node": {
-        "import": "./dist/node/index.mjs",
-        "require": "./dist/node/index.cjs",
-        "default": "./dist/node/index.mjs"
+        "import": "./dist/entrypoints/index.node.mjs",
+        "require": "./dist/entrypoints/index.node.js",
+        "default": "./dist/entrypoints/index.node.js"
       },
       "edge-light": {
-        "import": "./dist/edge/index.mjs",
-        "require": "./dist/edge/index.cjs",
-        "default": "./dist/edge/index.mjs"
+        "import": "./dist/entrypoints/index.edge.mjs",
+        "require": "./dist/entrypoints/index.edge.js",
+        "default": "./dist/entrypoints/index.edge.js"
       },
       "workerd": {
-        "import": "./dist/edge/index.mjs",
-        "require": "./dist/edge/index.cjs",
-        "default": "./dist/edge/index.mjs"
+        "import": "./dist/entrypoints/index.edge.mjs",
+        "require": "./dist/entrypoints/index.edge.js",
+        "default": "./dist/entrypoints/index.edge.js"
       },
-      "import": "./dist/node/index.mjs",
-      "require": "./dist/node/index.cjs"
+      "import": "./dist/entrypoints/index.node.mjs",
+      "require": "./dist/entrypoints/index.node.js"
     }
   }
 }

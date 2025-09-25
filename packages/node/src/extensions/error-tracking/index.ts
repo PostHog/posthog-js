@@ -1,11 +1,10 @@
-import { EventHint, StackFrameModifierFn, StackParser } from './types'
 import { addUncaughtExceptionListener, addUnhandledRejectionListener } from './autocapture'
-import { PostHogBackendClient } from '../../client'
-import { uuidv7 } from '@posthog/core/vendor/uuidv7'
-import { propertiesFromUnknownInput } from './error-conversion'
-import { EventMessage, PostHogOptions } from '../../types'
+import { PostHogBackendClient } from '@/client'
+import { uuidv7 } from '@posthog/core'
+import { EventMessage, PostHogOptions } from '@/types'
 import type { Logger } from '@posthog/core'
-import { BucketedRateLimiter } from '@posthog/core/utils'
+import { BucketedRateLimiter } from '@posthog/core'
+import { ErrorTracking as CoreErrorTracking } from '@posthog/core'
 
 const SHUTDOWN_TIMEOUT = 2000
 
@@ -15,8 +14,7 @@ export default class ErrorTracking {
   private _rateLimiter: BucketedRateLimiter<string>
   private _logger: Logger
 
-  static stackParser: StackParser
-  static frameModifiers: StackFrameModifierFn[]
+  static errorPropertiesBuilder: CoreErrorTracking.ErrorPropertiesBuilder
 
   constructor(client: PostHogBackendClient, options: PostHogOptions, _logger: Logger) {
     this.client = client
@@ -38,7 +36,7 @@ export default class ErrorTracking {
 
   static async buildEventMessage(
     error: unknown,
-    hint: EventHint,
+    hint: CoreErrorTracking.EventHint,
     distinctId?: string,
     additionalProperties?: Record<string | number, any>
   ): Promise<EventMessage> {
@@ -50,7 +48,10 @@ export default class ErrorTracking {
       properties.$process_person_profile = false
     }
 
-    const exceptionProperties = await propertiesFromUnknownInput(this.stackParser, this.frameModifiers, error, hint)
+    const exceptionProperties = this.errorPropertiesBuilder.buildFromUnknown(error, hint)
+    exceptionProperties.$exception_list = await this.errorPropertiesBuilder.modifyFrames(
+      exceptionProperties.$exception_list
+    )
 
     return {
       event: '$exception',
@@ -69,7 +70,7 @@ export default class ErrorTracking {
     }
   }
 
-  private async onException(exception: unknown, hint: EventHint): Promise<void> {
+  private onException(exception: unknown, hint: CoreErrorTracking.EventHint): void {
     this.client.addPendingPromise(
       (async () => {
         const eventMessage = await ErrorTracking.buildEventMessage(exception, hint)

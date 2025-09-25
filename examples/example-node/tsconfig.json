@@ -8,5 +8,6 @@
         "allowJs": true,
         "resolveJsonModule": true
     },
-    "exclude": ["node_modules"]
+    "include": ["server.ts", "example.ts"],
+    "exclude": ["diagnostics"]
 }
