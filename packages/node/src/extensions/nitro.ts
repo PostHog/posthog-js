@@ -22,6 +22,7 @@ export interface NitroApp {
 }
 
 export function PostHogPlugin(config: PostHogPluginConfig) {
+  console.log('Initializing posthog plugin...')
   const clientWasProvided = 'client' in config
 
   const client = clientWasProvided
