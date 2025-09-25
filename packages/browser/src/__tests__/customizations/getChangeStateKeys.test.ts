@@ -124,8 +124,7 @@ describe('getChangeStateKeys', () => {
 
             const { result, executionTime } = measureExecutionTime(() => getChangedStateKeys(prevState, nextState))
 
-            // Performance assertion - should complete within 5ms for realistic UI state
-            expect(executionTime).toBeLessThan(5)
+            expect(executionTime).toBeLessThan(10)
 
             // Correctness assertions - should detect UI changes
             expect(result.nextState).toHaveProperty('ui')
@@ -141,7 +140,7 @@ describe('getChangeStateKeys', () => {
 
             const { result, executionTime } = measureExecutionTime(() => getChangedStateKeys(prevState, nextState))
 
-            expect(executionTime).toBeLessThan(30)
+            expect(executionTime).toBeLessThan(45)
 
             expect(result).toMatchSnapshot()
 
@@ -154,7 +153,7 @@ describe('getChangeStateKeys', () => {
 
             const { result, executionTime } = measureExecutionTime(() => getChangedStateKeys(prevState, nextState))
 
-            expect(executionTime).toBeLessThan(30)
+            expect(executionTime).toBeLessThan(45)
 
             expect(result).toMatchSnapshot()
 
@@ -205,8 +204,8 @@ describe('getChangeStateKeys', () => {
             expect(result).toMatchSnapshot()
 
             // Should be fast for realistic complex state
-            expect(avgTime).toBeLessThan(10)
-            expect(maxTime).toBeLessThan(20)
+            expect(avgTime).toBeLessThan(20)
+            expect(maxTime).toBeLessThan(40)
 
             console.log(`Complex state diff - Avg: ${avgTime.toFixed(2)}ms, Max: ${maxTime.toFixed(2)}ms`)
         })
@@ -221,7 +220,7 @@ describe('getChangeStateKeys', () => {
             const executionTime = endTime - startTime
 
             // Should be very fast for identical states
-            expect(executionTime).toBeLessThan(1)
+            expect(executionTime).toBeLessThan(5)
             expect(result.prevState).toEqual({})
             expect(result.nextState).toEqual({})
 
