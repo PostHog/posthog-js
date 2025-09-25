@@ -142,6 +142,13 @@ export class URLTriggerMatching implements TriggerStatusMatching {
             (isEagerLoadedConfig(config) ? config.sessionRecording?.urlBlocklist : config?.urlBlocklist) || []
     }
 
+    /**
+     * @deprecated Use onConfig instead
+     */
+    onRemoteConfig(response: RemoteConfig) {
+        this.onConfig(response)
+    }
+
     private _urlTriggerStatus(sessionId: string): TriggerStatus {
         if (this._urlTriggers.length === 0) {
             return TRIGGER_DISABLED
@@ -245,6 +252,13 @@ export class LinkedFlagMatching implements TriggerStatusMatching {
         }
     }
 
+    /**
+     * @deprecated Use onConfig instead
+     */
+    onRemoteConfig(response: RemoteConfig, onStarted: (flag: string, variant: string | null) => void) {
+        this.onConfig(response, onStarted)
+    }
+
     stop(): void {
         this._flaglistenerCleanup()
     }
@@ -258,6 +272,13 @@ export class EventTriggerMatching implements TriggerStatusMatching {
     onConfig(config: ReplayConfigType) {
         this._eventTriggers =
             (isEagerLoadedConfig(config) ? config.sessionRecording?.eventTriggers : config?.eventTriggers) || []
+    }
+
+    /**
+     * @deprecated Use onConfig instead
+     */
+    onRemoteConfig(response: RemoteConfig) {
+        this.onConfig(response)
     }
 
     private _eventTriggerStatus(sessionId: string): TriggerStatus {
