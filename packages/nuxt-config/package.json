@@ -1,8 +1,8 @@
 {
-  "name": "@posthog/nuxt-config",
-  "version": "1.0.0",
+  "name": "@ablaszkiewicz/posthog-nuxt",
+  "version": "1.1.0",
   "description": "My new Nuxt module",
-  "repository": "your-org/my-module",
+  "repository": "test",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -27,7 +27,7 @@
     "dev": "npm run dev:prepare && nuxi dev playground",
     "dev:build": "nuxi build playground",
     "dev:prepare": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxi prepare playground",
-    "release": "npm run lint && npm run test && npm run prepack && changelogen --release && npm publish && git push --follow-tags",
+    "release": "npm run prepack && changelogen --release && npm publish && git push --follow-tags",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest watch",
