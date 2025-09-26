@@ -694,11 +694,13 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
                 this._isIdle = 'unknown'
                 this.stop()
                 // then we want a session id listener to restart the recording when a new session starts
-                this._onSessionIdListener = this._sessionManager.onSessionId((sessionId, windowId, changeReason) => {
-                    // this should first unregister itself
-                    this._onSessionIdListener?.()
-                    this._onSessionIdCallback(sessionId, windowId, changeReason)
-                })
+                const waitForSessionIdListener = this._sessionManager.onSessionId(
+                    (sessionId, windowId, changeReason) => {
+                        // this should first unregister itself
+                        waitForSessionIdListener()
+                        this._onSessionIdCallback(sessionId, windowId, changeReason)
+                    }
+                )
             })
         }
 
