@@ -147,7 +147,7 @@ export class PostHogSurveys {
         this._surveyEventReceiver = new SurveyEventReceiver(this._instance)
         if (!isPersistenceEnabledWithLocalStorage(this._instance)) {
             logger.warn(
-                'Persistence does not include localStorage, but surveys it to work properly. Please set persistence to include localStorage to avoid this warning, or set disable_surveys to true. Falling back to localStorage usage directly to maintain backwards compatibility.'
+                "Surveys require localStorage to maintain full functionality. Please set the PostHog config.persistence to 'localStorage' or 'localStorage+cookie' to avoid this warning. localStorage will be used directly to maintain backwards compatibility."
             )
         }
         logger.info('Surveys loaded successfully')
