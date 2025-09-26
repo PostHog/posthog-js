@@ -42,7 +42,7 @@
   },
   "dependencies": {
     "@ai-sdk/provider": "^2.0.0",
-    "@anthropic-ai/sdk": "^0.62.0",
+    "@anthropic-ai/sdk": "^0.63.1",
     "@google/genai": "^1.19.0",
     "@langchain/core": "^0.3.75",
     "ai": "^5.0.42",
