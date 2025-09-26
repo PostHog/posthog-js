@@ -1,5 +1,5 @@
 import { defineNuxtModule, addPlugin, createResolver } from '@nuxt/kit'
-import { execSync } from 'child_process'
+import { execSync } from 'node:child_process'
 
 // Module options TypeScript interface definition
 export interface ModuleOptions {
@@ -24,7 +24,7 @@ export interface ModuleOptions {
 
 export default defineNuxtModule<ModuleOptions>({
   meta: {
-    name: '@posthog/nuxt',
+    name: '@ablaszkiewicz/posthog-nuxt',
     configKey: 'posthog',
     compatibility: {
       nuxt: '>=3.7.0',
