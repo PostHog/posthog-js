@@ -38,8 +38,8 @@ export class SessionIdManager {
     private _enforceIdleTimeout: ReturnType<typeof setTimeout> | undefined
 
     private _eventEmitter: SimpleEventEmitter = new SimpleEventEmitter()
-    public on(event: 'forcedIdleReset', handler: () => void): void {
-        this._eventEmitter.on(event, handler)
+    public on(event: 'forcedIdleReset', handler: () => void): () => void {
+        return this._eventEmitter.on(event, handler)
     }
 
     constructor(instance: PostHog, sessionIdGenerator?: () => string, windowIdGenerator?: () => string) {

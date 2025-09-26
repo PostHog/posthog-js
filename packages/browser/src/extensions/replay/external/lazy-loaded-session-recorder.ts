@@ -688,7 +688,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
 
         if (!this._onSessionIdleResetForcedListener) {
-            this._sessionManager.on('forcedIdleReset', () => {
+            this._onSessionIdleResetForcedListener = this._sessionManager.on('forcedIdleReset', () => {
                 // a session was forced to reset due to idle timeout and lack of activity
                 this._clearConditionalRecordingPersistence()
                 this._isIdle = 'unknown'
@@ -761,6 +761,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._removeEventTriggerCaptureHook = undefined
         this._onSessionIdListener?.()
         this._onSessionIdListener = undefined
+        this._onSessionIdleResetForcedListener?.()
+        this._onSessionIdleResetForcedListener = undefined
         this._samplingSessionListener?.()
         this._samplingSessionListener = undefined
 
