@@ -13,6 +13,7 @@ Please see the main [PostHog Error Tracking docs](https://posthog.com/docs/error
 export default defineNuxtConfig({
   modules: ['@ablaszkiewicz/posthog-nuxt'], // Add module reference here
   sourcemap: { client: 'hidden' }, // Make sure to set it (otherwise client sourcemaps will not be generated)
+  enableAutoCapture: true, // enables vue runtime plugin which forwards exceptions caught via vue:error
   posthog: {
     host: 'http://localhost:8010', // (optional) Host URL, defaults to https://us.posthog.com
     publicApiKey: 'phc_VXlGk6yOu3agIn0h7lTmSOECAGWCtJonUJDAN4CexlJ',
