@@ -380,6 +380,10 @@ exports[`config snapshot for PostHogConfig 1`] = `
     \\"false\\",
     \\"true\\"
   ],
+  \\"evaluation_environments\\": [
+    \\"undefined\\",
+    \\"string[]\\"
+  ],
   \\"advanced_disable_toolbar_metrics\\": [
     \\"false\\",
     \\"true\\"
