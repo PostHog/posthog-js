@@ -6,6 +6,7 @@ export default defineNuxtPlugin((nuxtApp) => {
   const runtimeConfig = useRuntimeConfig()
   const publicApiKey = runtimeConfig.public.posthogPublicKey as string
   const host = runtimeConfig.public.posthogHost as string
+  const exceptionAutoCaptureEnabled = (runtimeConfig.public.exceptionAutoCaptureEnabled as boolean) || false
 
   if (!window || posthog.__loaded) {
     return
@@ -13,12 +14,15 @@ export default defineNuxtPlugin((nuxtApp) => {
 
   posthog.init(publicApiKey, {
     api_host: host,
-    debug: true,
   })
 
   nuxtApp.hooks.hook('vue:error', async (error) => {
+    if (!exceptionAutoCaptureEnabled) {
+      return
+    }
     posthog.captureException(error)
   })
+
   return {
     provide: {
       posthog: () => posthog,
