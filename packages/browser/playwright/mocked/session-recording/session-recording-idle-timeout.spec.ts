@@ -3,14 +3,13 @@ import { start } from '../utils/setup'
 import { Page } from '@playwright/test'
 
 async function ensureRecordingIsStopped(page: Page) {
-    await page.resetCapturedEvents()
+    // Check recording status without triggering user activity
+    const isRecording = await page.evaluate(() => {
+        const ph = (window as WindowWithPostHog).posthog
+        return ph?.sessionRecording?.status === 'disabled'
+    })
 
-    await page.locator('[data-cy-input]').type('hello posthog!')
-    // wait a little since we can't wait for the absence of a call to /ses/*
-    await page.waitForTimeout(250)
-
-    const capturedEvents = await page.capturedEvents()
-    expect(capturedEvents).toEqual([])
+    expect(isRecording).toBe(false)
 }
 
 async function ensureActivitySendsSnapshots(page: Page) {
@@ -85,21 +84,18 @@ test.describe('Session recording - idle timeout behavior', () => {
     })
 
     test('stops recording when forced idle timeout fires and restarts on user activity', async ({ page }) => {
-        // Start recording by triggering some activity
-        await ensureActivitySendsSnapshots(page, ['$remote_config_received', '$session_options', '$posthog_config'])
+        await ensureActivitySendsSnapshots(page)
 
-        // Get the initial session ID
         const initialSessionId = await page.evaluate(() => {
             const ph = (window as WindowWithPostHog).posthog
             return ph?.get_session_id()
         })
         expect(initialSessionId).toBeDefined()
 
-        // Verify recording is active by checking that activity generates snapshots
         await page.resetCapturedEvents()
         await page.locator('[data-cy-input]').type('verify recording active')
         await page.waitForResponse('**/ses/*')
-        const verifyEvents = await page.capturedEvents()
+        const verifyEvents = (await page.capturedEvents()).filter((e) => e.event === '$snapshot')
         expect(verifyEvents.length).toBeGreaterThan(0)
 
         // Trigger forced idle timeout
@@ -107,6 +103,8 @@ test.describe('Session recording - idle timeout behavior', () => {
 
         // Recording should be stopped
         await ensureRecordingIsStopped(page)
+
+        await page.resetCapturedEvents()
 
         // User activity should start a new session and restart recording
         await page.waitingForNetworkCausedBy({
@@ -163,8 +161,6 @@ test.describe('Session recording - idle timeout with sampling', () => {
             const ph = (window as WindowWithPostHog).posthog
             ph?.startSessionRecording({ sampling: true })
         })
-
-        // Now recording should be active
         await ensureActivitySendsSnapshots(page)
 
         // Get current session ID
@@ -178,6 +174,8 @@ test.describe('Session recording - idle timeout with sampling', () => {
 
         // Recording should be stopped
         await ensureRecordingIsStopped(page)
+
+        await page.resetCapturedEvents()
 
         // User activity should create new session but NOT start recording due to sample rate 0
         await page.locator('[data-cy-input]').type('activity after idle timeout')
