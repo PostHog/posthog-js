@@ -391,6 +391,11 @@ export class PostHogFeatureFlags {
             data.disable_flags = true
         }
 
+        // Add evaluation environments if configured
+        if (this._instance.config.evaluation_environments && this._instance.config.evaluation_environments.length > 0) {
+            data.evaluation_environments = this._instance.config.evaluation_environments
+        }
+
         // flags supports loading config data with the `config` query param, but if you're using remote config, you
         // don't need to add that parameter because all the config data is loaded from the remote config endpoint.
         const useRemoteConfigWithFlags = this._instance.config.__preview_remote_config
@@ -575,13 +580,20 @@ export class PostHogFeatureFlags {
      */
     getRemoteConfigPayload(key: string, callback: RemoteConfigFeatureFlagCallback): void {
         const token = this._instance.config.token
+        const data: Record<string, any> = {
+            distinct_id: this._instance.get_distinct_id(),
+            token,
+        }
+
+        // Add evaluation environments if configured
+        if (this._instance.config.evaluation_environments && this._instance.config.evaluation_environments.length > 0) {
+            data.evaluation_environments = this._instance.config.evaluation_environments
+        }
+
         this._instance._send_request({
             method: 'POST',
             url: this._instance.requestRouter.endpointFor('api', '/flags/?v=2&config=true'),
-            data: {
-                distinct_id: this._instance.get_distinct_id(),
-                token,
-            },
+            data,
             compression: this._instance.config.disable_compression ? undefined : Compression.Base64,
             timeout: this._instance.config.feature_flag_request_timeout_ms,
             callback: (response) => {
