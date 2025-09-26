@@ -36,17 +36,14 @@
   "dependencies": {
     "@nuxt/kit": "^4.1.2",
     "@posthog/cli": "^0.4.8",
-    "@posthog-node": "workspace:*"
+    "posthog-node": "workspace:*"
   },
   "devDependencies": {
     "@nuxt/devtools": "^2.6.5",
-    "@nuxt/eslint-config": "^1.9.0",
     "@nuxt/module-builder": "^1.0.2",
     "@nuxt/schema": "^4.1.2",
-    "@nuxt/test-utils": "^3.19.2",
     "@types/node": "^20.0.0",
     "nuxt": "^4.1.2",
-    "vitest": "^3.2.4",
     "vue-tsc": "^3.0.8"
   }
 }
