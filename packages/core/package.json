@@ -12,7 +12,8 @@
   },
   "files": [
     "dist",
-    "src"
+    "src",
+    "!src/__tests__"
   ],
   "scripts": {
     "clean": "rimraf dist",

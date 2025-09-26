@@ -1,7 +1,6 @@
 import { PostHog } from '@/entrypoints/index.node'
 import { PostHogOptions } from '@/types'
-import { apiImplementation, apiImplementationV4 } from './utils'
-import { testing } from '@posthog/core'
+import { apiImplementation, apiImplementationV4, waitForPromises } from './utils'
 import { PostHogV2FlagsResponse } from '@posthog/core'
 
 jest.spyOn(console, 'debug').mockImplementation()
@@ -36,7 +35,7 @@ describe('flags v2', () => {
       expect(result).toBe(undefined)
       expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2&config=true', expect.any(Object))
 
-      await testing.waitForPromises()
+      await waitForPromises()
       expect(capturedMessage).toMatchObject({
         distinct_id: 'some-distinct-id',
         event: '$feature_flag_called',
@@ -150,7 +149,7 @@ describe('flags v2', () => {
         expect(result).toBe(expectedResponse)
         expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2&config=true', expect.any(Object))
 
-        await testing.waitForPromises()
+        await waitForPromises()
         expect(capturedMessage).toMatchObject({
           distinct_id: 'some-distinct-id',
           event: '$feature_flag_called',
@@ -213,7 +212,7 @@ describe('flags v2', () => {
         expect(result).toEqual([0, 1, 2])
         expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2&config=true', expect.any(Object))
 
-        await testing.waitForPromises()
+        await waitForPromises()
         expect(capturedMessage).toBeUndefined()
       })
     })
@@ -300,7 +299,7 @@ describe('flags v2', () => {
         })
 
         await posthog.getFeatureFlag('error-flag', 'some-distinct-id')
-        await testing.waitForPromises()
+        await waitForPromises()
         expect(capturedMessage).toBeUndefined()
       })
     })
@@ -326,7 +325,7 @@ describe('flags v1', () => {
       expect(result).toBe(undefined)
       expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2&config=true', expect.any(Object))
 
-      await testing.waitForPromises()
+      await waitForPromises()
       expect(capturedMessage).toMatchObject({
         distinct_id: 'some-distinct-id',
         event: '$feature_flag_called',
@@ -372,7 +371,7 @@ describe('flags v1', () => {
       expect(result).toEqual([0, 1, 2])
       expect(mockedFetch).toHaveBeenCalledWith('http://example.com/flags/?v=2&config=true', expect.any(Object))
 
-      await testing.waitForPromises()
+      await waitForPromises()
       expect(capturedMessage).toBeUndefined()
     })
   })
