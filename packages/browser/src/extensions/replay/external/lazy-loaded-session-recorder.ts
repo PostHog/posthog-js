@@ -508,13 +508,23 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     }
 
     private _pageViewFallBack() {
-        if (this._instance.config.capture_pageview || !window) {
-            return
-        }
-        const currentUrl = this._maskUrl(window.location.href)
-        if (this._lastHref !== currentUrl) {
-            this._lastHref = currentUrl
-            this._tryAddCustomEvent('$url_changed', { href: currentUrl })
+        try {
+            if (this._instance.config.capture_pageview || !window) {
+                return
+            }
+            // Strip hash parameters from URL since they often aren't helpful
+            // Use URL constructor for proper parsing to handle edge cases
+            // recording doesn't run in IE11, so we don't need compat here
+            // eslint-disable-next-line compat/compat
+            const url = new URL(window.location.href)
+            const hrefWithoutHash = url.origin + url.pathname + url.search
+            const currentUrl = this._maskUrl(hrefWithoutHash)
+            if (this._lastHref !== currentUrl) {
+                this._lastHref = currentUrl
+                this._tryAddCustomEvent('$url_changed', { href: currentUrl })
+            }
+        } catch {
+            // If URL processing fails, don't capture anything
         }
     }
 
