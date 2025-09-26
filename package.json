@@ -13,7 +13,8 @@
         "build": "turbo build",
         "dev": "turbo dev",
         "package": "export PACKAGE_DEST=$(pwd)/target && turbo package",
-        "package:watch": "export PACKAGE_DEST=$(pwd)/target && turbo watch package"
+        "package:watch": "export PACKAGE_DEST=$(pwd)/target && turbo watch package",
+        "generate-references": "turbo posthog-js#generate-references posthog-node#generate-references posthog-react-native#generate-references"
     },
     "pnpm": {
         "patchedDependencies": {
