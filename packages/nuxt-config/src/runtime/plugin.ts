@@ -17,10 +17,7 @@ export default defineNuxtPlugin((nuxtApp) => {
   })
 
   nuxtApp.hooks.hook('vue:error', async (error) => {
-    console.log('----------- HOOK vue:error START ------------')
-    console.log(error)
     posthog.captureException(error)
-    console.log('----------- HOOK vue:error END ------------')
   })
   return {
     provide: {

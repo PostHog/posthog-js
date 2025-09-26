@@ -1,8 +1,12 @@
 {
   "name": "@ablaszkiewicz/posthog-nuxt",
   "version": "1.1.0",
-  "description": "My new Nuxt module",
-  "repository": "test",
+  "description": "Nuxt module for Posthog 🦔",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PostHog/posthog-js.git",
+    "directory": "packages/nuxt-config"
+  },
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -23,15 +27,8 @@
     "dist"
   ],
   "scripts": {
-    "prepack": "nuxt-module-build build",
-    "dev": "npm run dev:prepare && nuxi dev playground",
-    "dev:build": "nuxi build playground",
-    "dev:prepare": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxi prepare playground",
-    "release": "npm run prepack && npm publish",
-    "lint": "eslint .",
-    "test": "vitest run",
-    "test:watch": "vitest watch",
-    "test:types": "vue-tsc --noEmit && cd playground && vue-tsc --noEmit"
+    "prepare": "nuxt prepare",
+    "prepack": "nuxt-module-build build"
   },
   "dependencies": {
     "posthog-node": "workspace:*",
