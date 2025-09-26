@@ -10,6 +10,7 @@ import { createLogger } from './utils/logger'
 import { isArray, isNumber, isUndefined, clampToRange } from '@posthog/core'
 import { PostHog } from './posthog-core'
 import { addEventListener } from './utils'
+import { SimpleEventEmitter } from './utils/simple-event-emitter'
 
 const logger = createLogger('[SessionId]')
 
@@ -35,6 +36,11 @@ export class SessionIdManager {
 
     // we track activity so we can end the session proactively when it has passed the idle timeout
     private _enforceIdleTimeout: ReturnType<typeof setTimeout> | undefined
+
+    private _eventEmitter: SimpleEventEmitter = new SimpleEventEmitter()
+    public on(event: 'forcedIdleReset', handler: () => void): () => void {
+        return this._eventEmitter.on(event, handler)
+    }
 
     constructor(instance: PostHog, sessionIdGenerator?: () => string, windowIdGenerator?: () => string) {
         if (!instance.persistence) {
@@ -302,7 +308,9 @@ export class SessionIdManager {
             // while this window has been idle - and the timer has not progressed - e.g. window memory frozen while hidden
             const [lastActivityTimestamp] = this._getSessionId()
             if (this._sessionHasBeenIdleTooLong(new Date().getTime(), lastActivityTimestamp)) {
+                const idleSessionId = this._sessionId
                 this.resetSessionId()
+                this._eventEmitter.emit('forcedIdleReset', { idleSessionId })
             }
         }, this.sessionTimeoutMs * 1.1)
     }

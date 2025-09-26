@@ -57,6 +57,7 @@ import {
     NetworkRecordOptions,
     NetworkRequest,
     Properties,
+    SessionIdChangedCallback,
     SessionRecordingOptions,
     SessionRecordingPersistedConfig,
     SessionStartReason,
@@ -337,6 +338,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
     private _receivedFlags: boolean = false
 
     private _onSessionIdListener: (() => void) | undefined = undefined
+    private _onSessionIdleResetForcedListener: (() => void) | undefined = undefined
     private _samplingSessionListener: (() => void) | undefined = undefined
 
     constructor(private readonly _instance: PostHog) {
@@ -656,8 +658,6 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             this._endpoint = config?.endpoint
         }
 
-        this._setupSampling()
-
         if (config?.triggerMatchType === 'any') {
             this._statusMatcher = anyMatchSessionRecordingStatus
             this._triggerMatching = new OrTriggerMatching([this._eventTriggerMatching, this._urlTriggerMatching])
@@ -693,18 +693,24 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         addEventListener(window, 'online', this._onOnline)
         addEventListener(window, 'visibilitychange', this._onVisibilityChange)
 
-        // on reload there might be an already sampled session that should be continued before flags response,
-        // so we call this here _and_ in the flags response
-        this._setupSampling()
-
         if (!this._onSessionIdListener) {
-            this._onSessionIdListener = this._sessionManager.onSessionId((sessionId, windowId, changeReason) => {
-                if (changeReason) {
-                    this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
+            this._onSessionIdListener = this._sessionManager.onSessionId(this._onSessionIdCallback)
+        }
 
-                    this._instance?.persistence?.unregister(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
-                    this._instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
-                }
+        if (!this._onSessionIdleResetForcedListener) {
+            this._onSessionIdleResetForcedListener = this._sessionManager.on('forcedIdleReset', () => {
+                // a session was forced to reset due to idle timeout and lack of activity
+                this._clearConditionalRecordingPersistence()
+                this._isIdle = 'unknown'
+                this.stop()
+                // then we want a session id listener to restart the recording when a new session starts
+                const waitForSessionIdListener = this._sessionManager.onSessionId(
+                    (sessionId, windowId, changeReason) => {
+                        // this should first unregister itself
+                        waitForSessionIdListener()
+                        this._onSessionIdCallback(sessionId, windowId, changeReason)
+                    }
+                )
             })
         }
 
@@ -734,6 +740,22 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
     }
 
+    private _onSessionIdCallback: SessionIdChangedCallback = (sessionId, windowId, changeReason) => {
+        if (changeReason) {
+            this._tryAddCustomEvent('$session_id_change', { sessionId, windowId, changeReason })
+
+            this._clearConditionalRecordingPersistence()
+
+            if (!this._stopRrweb) {
+                this.start('session_id_changed')
+            }
+
+            if (isNumber(this._sampleRate) && isNullish(this._samplingSessionListener)) {
+                this._makeSamplingDecision(sessionId)
+            }
+        }
+    }
+
     stop() {
         window?.removeEventListener('beforeunload', this._onBeforeUnload)
         window?.removeEventListener('offline', this._onOffline)
@@ -749,6 +771,8 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         this._removeEventTriggerCaptureHook = undefined
         this._onSessionIdListener?.()
         this._onSessionIdListener = undefined
+        this._onSessionIdleResetForcedListener?.()
+        this._onSessionIdleResetForcedListener = undefined
         this._samplingSessionListener?.()
         this._samplingSessionListener = undefined
 
@@ -1117,15 +1141,10 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
         }
     }
 
-    /**
-     * This might be called more than once so needs to be idempotent
-     */
-    private _setupSampling() {
-        if (isNumber(this._sampleRate) && isNullish(this._samplingSessionListener)) {
-            this._samplingSessionListener = this._sessionManager.onSessionId((sessionId) => {
-                this._makeSamplingDecision(sessionId)
-            })
-        }
+    private _clearConditionalRecordingPersistence(): void {
+        this._instance?.persistence?.unregister(SESSION_RECORDING_EVENT_TRIGGER_ACTIVATED_SESSION)
+        this._instance?.persistence?.unregister(SESSION_RECORDING_URL_TRIGGER_ACTIVATED_SESSION)
+        this._instance?.persistence?.unregister(SESSION_RECORDING_IS_SAMPLED)
     }
 
     private _makeSamplingDecision(sessionId: string): void {
