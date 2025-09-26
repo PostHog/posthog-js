@@ -1,0 +1,48 @@
+{
+  "name": "@ablaszkiewicz/posthog-nuxt",
+  "version": "1.1.0",
+  "description": "My new Nuxt module",
+  "repository": "test",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/types.d.mts",
+      "import": "./dist/module.mjs"
+    }
+  },
+  "main": "./dist/module.mjs",
+  "typesVersions": {
+    "*": {
+      ".": [
+        "./dist/types.d.mts"
+      ]
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "prepack": "nuxt-module-build build",
+    "dev": "npm run dev:prepare && nuxi dev playground",
+    "dev:build": "nuxi build playground",
+    "dev:prepare": "nuxt-module-build build --stub && nuxt-module-build prepare && nuxi prepare playground",
+    "release": "npm run prepack && npm publish",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:types": "vue-tsc --noEmit && cd playground && vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "posthog-node": "workspace:*",
+    "@posthog/cli": "^0.4.7",
+    "@nuxt/kit": "^4.1.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "nuxt": "^4.1.2",
+    "@nuxt/devtools": "^2.6.5",
+    "@nuxt/module-builder": "^1.0.2",
+    "@nuxt/schema": "^4.1.2"
+  }
+}

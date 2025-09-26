@@ -1,0 +1,3 @@
+# posthog nuxt module
+
+todo
