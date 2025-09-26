@@ -1,5 +1,11 @@
 # posthog-js
 
+## 1.268.6
+
+### Patch Changes
+
+- [#2368](https://github.com/PostHog/posthog-js/pull/2368) [`2102ee4`](https://github.com/PostHog/posthog-js/commit/2102ee4ad300dfa1f6ee9260b332b27d780ff583) Thanks [@pauldambra](https://github.com/pauldambra)! - fix: recorder behaviour when idle session is force terminated then restarted
+
 ## 1.268.5
 
 ### Patch Changes
