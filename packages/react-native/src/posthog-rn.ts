@@ -25,6 +25,7 @@ import {
 } from './types'
 import { withReactNativeNavigation } from './frameworks/wix-navigation'
 import { OptionalReactNativeSessionReplay } from './optional/OptionalSessionReplay'
+import { ErrorTracking } from './error-tracking'
 
 export { PostHogPersistedProperty }
 
@@ -78,6 +79,7 @@ export class PostHog extends PostHogCore {
   private _enableSessionReplay?: boolean
   private _disableSurveys: boolean
   private _disableRemoteConfig: boolean
+  private _errorTracking: ErrorTracking
 
   /**
    * Creates a new PostHog instance for React Native. You can find all configuration options in the [React Native SDK docs](https://posthog.com/docs/libraries/react-native#configuration-options).
@@ -119,6 +121,7 @@ export class PostHog extends PostHogCore {
     this._persistence = options?.persistence ?? 'file'
     this._disableSurveys = options?.disableSurveys ?? false
     this._disableRemoteConfig = options?.disableRemoteConfig ?? false
+    this._errorTracking = new ErrorTracking(this)
 
     // Either build the app properties from the existing ones
     this._appProperties =
@@ -798,6 +801,48 @@ export class PostHog extends PostHogCore {
         this.logMsgIfDebug(() => console.error('PostHog Debug', `Session replay failed to identify: ${e}.`))
       }
     }
+  }
+
+  /**
+   * Capture a caught exception manually
+   *
+   * {@label Error tracking}
+   *
+   * @public
+   *
+   * @example
+   * ```js
+   * // Capture a caught exception
+   * try {
+   *   // something that might throw
+   * } catch (error) {
+   *   posthog.captureException(error)
+   * }
+   * ```
+   *
+   * @example
+   * ```js
+   * // With additional properties
+   * posthog.captureException(error, {
+   *   customProperty: 'value',
+   *   anotherProperty: ['I', 'can be a list'],
+   *   ...
+   * })
+   * ```
+   *
+   * @param {Error} error The error to capture
+   * @param {Object} [additionalProperties] Any additional properties to add to the error event
+   * @returns {void}
+   */
+  captureException(error: Error | unknown, additionalProperties: PostHogEventProperties = {}): void {
+    const syntheticException = new Error('Synthetic Error')
+    this._errorTracking.captureException(error, additionalProperties, {
+      mechanism: {
+        handled: true,
+        type: 'generic',
+      },
+      syntheticException,
+    })
   }
 
   initReactNativeNavigation(options: PostHogAutocaptureOptions): boolean {
