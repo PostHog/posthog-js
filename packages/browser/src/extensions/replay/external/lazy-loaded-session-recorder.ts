@@ -690,6 +690,7 @@ export class LazyLoadedSessionRecording implements LazyLoadedSessionRecordingInt
             })
         })
 
+        this._makeSamplingDecision(this.sessionId)
         this._receivedFlags = true
         this._startRecorder()
 
